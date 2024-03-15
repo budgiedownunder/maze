@@ -17,13 +17,8 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
       
-   # - name: Install Rust
-   #   uses: actions/setup-rust@v1
-   #   with:
-   #     rust-version: stable
-    
     - name: Change to project directory
-      run: cd src/lib/solvers/solver-rust
+      run: cd $GITHUB_WORKSPACE/src/lib/solvers/solver-rust
 
     - name: Build
       run: cargo build --verbose
