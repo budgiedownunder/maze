@@ -1,0 +1,27 @@
+name: build-solver-rust-in-add_dummy_rust_library-branch
+run-name: ${{ github.actor }} is running the build workflow for solver-rust within the branch ${{  github.ref }}
+
+on:
+  push:
+    branches:
+      - add_dummy_rust_library
+    paths:
+      - '**.rs'
+      - '**.toml'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      
+    - name: Install Rust
+      uses: actions/setup-rust@v1
+      with:
+        rust-version: stable
+      
+    - name: Build
+      run: cargo build --verbose
+      
