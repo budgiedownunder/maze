@@ -23,6 +23,13 @@ jobs:
     - name: List project directory content
       run: ls -l
 
+    - name: Print project README.md
+      run: cat README.md
+
+    - name: Chaneg to src directory
+      run: cd src
+
+
   #  - name: Build
   #    run: cargo build --verbose
       
