@@ -24,6 +24,6 @@ jobs:
     - name: List project directory content
       run: ls -l
 
-  #  - name: Build
-  #    run: cargo build --verbose
+    - name: Build
+      run: cargo build --verbose
       
