@@ -21,9 +21,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
       
-    - name: List project directory content
-      run: ls -l
-
     - name: Build
       run: cargo build --verbose
       
