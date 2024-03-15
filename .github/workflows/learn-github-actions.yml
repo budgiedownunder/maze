@@ -1,5 +1,5 @@
 name: learn-github-actions
-run-name: ${{ github.actor }} is learning GitHub Actions (triggered by any branch changes
+run-name: ${{ github.actor }} is learning GitHub Actions (triggered by any branch changes)
 on: [push]
 jobs:
   check-bats-version:
