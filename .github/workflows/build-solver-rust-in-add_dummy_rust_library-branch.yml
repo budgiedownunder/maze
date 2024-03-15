@@ -21,7 +21,10 @@ jobs:
    #   uses: actions/setup-rust@v1
    #   with:
    #     rust-version: stable
-      
+    
+    - name: Change to project directory
+      run: cd src/lib/solvers/solver-rust
+
     - name: Build
       run: cargo build --verbose
       
