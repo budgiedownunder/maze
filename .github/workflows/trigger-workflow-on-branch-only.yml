@@ -3,7 +3,7 @@ run-name: ${{ github.actor }} is running the GitHub Actions triggered by changes
 on: 
   push:
     branches:
-      - add_dummyy_rust_library
+      - add_dummy_rust_library
 jobs:
   check-bats-version:
     runs-on: ubuntu-latest
