@@ -1,5 +1,5 @@
 name: build-and-test-solver-rust-in-add_dummy_rust_library-branch
-run-name: ${{ github.actor }} is running the build and testt workflow for solver-rust within the branch ${{  github.ref }}
+run-name: ${{ github.actor }} is running the build and test workflow for solver-rust within the branch ${{  github.ref }}
 
 on:
   push:
@@ -14,7 +14,7 @@ defaults:
     working-directory: ./src/lib/solvers/solver-rust
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     
     steps:
