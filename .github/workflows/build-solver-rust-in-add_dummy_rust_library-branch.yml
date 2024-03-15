@@ -9,6 +9,10 @@ on:
       - '**.rs'
       - '**.toml'
 
+defaults:
+  run:
+    working-directory: ./src/lib/solvers/solver-rust
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,36 +21,6 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
       
-    - name: Change to project directory
-      run: cd $GITHUB_WORKSPACE/src/lib/solvers/solver-rust
-
-    - name: List project directory content
-      run: ls -l
-
-    - name: Print project README.md
-      run: cat README.md
-
-    - name: Change to src directory
-      run: cd src
-
-    - name: List project directory content
-      run: ls -l
-
-    - name: Change to lib directory
-      run: cd lib
-
-    - name: List project directory content
-      run: ls -l
-
-    - name: Change to solvers directory
-      run: cd solvers
-
-    - name: List project directory content
-      run: ls -l
-
-    - name: Change to solver-rust directory
-      run: cd solver-rust
-
     - name: List project directory content
       run: ls -l
 
