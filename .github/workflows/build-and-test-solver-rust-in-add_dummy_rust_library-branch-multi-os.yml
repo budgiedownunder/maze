@@ -1,0 +1,42 @@
+name: build-and-test-solver-rust-in-add_dummy_rust_library-branch-multi-os
+run-name: ${{ github.actor }} is running the build and test workflow for solver-rust within the branch ${{  github.ref }} on mutliple operating systems
+
+on:
+  push:
+    branches:
+      - add_dummy_rust_library
+    paths:
+      - '**.rs'
+      - '**.toml'
+
+defaults:
+  run:
+    working-directory: ./src/lib/solvers/solver-rust
+
+jobs:
+  build-and-test:
+    #runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+     
+    - name: Handle Ubuntu-specifics
+      if: matrix.os == 'ubuntu-latest'
+      run: echo "Running on Ubuntu"
+    - name: Handle Mac OS-specifics
+      if: matrix.os == 'macos-latest'
+      run: echo "Running on Mac OS"
+    - name: Handle Windows OS-specifics
+      if: matrix.os == 'windows-latest'
+      run: echo "Running on Windows OS"
+      
+    - name: Build
+      run: cargo build --verbose
+      
+    - name: Test
+      run: cargo test
