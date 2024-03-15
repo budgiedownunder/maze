@@ -26,9 +26,29 @@ jobs:
     - name: Print project README.md
       run: cat README.md
 
-    - name: Chaneg to src directory
+    - name: Change to src directory
       run: cd src
 
+    - name: List project directory content
+      run: ls -l
+
+    - name: Change to lib directory
+      run: cd lib
+
+    - name: List project directory content
+      run: ls -l
+
+    - name: Change to solvers directory
+      run: cd solvers
+
+    - name: List project directory content
+      run: ls -l
+
+    - name: Change to solver-rust directory
+      run: cd solver-rust
+
+    - name: List project directory content
+      run: ls -l
 
   #  - name: Build
   #    run: cargo build --verbose
