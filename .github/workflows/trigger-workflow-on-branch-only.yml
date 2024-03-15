@@ -3,14 +3,18 @@ run-name: ${{ github.actor }} is running the GitHub Actions triggered by changes
 on: 
   push:
     branches:
-      - add_dummmy_rust_library
+      - add_dummyy_rust_library
 jobs:
   check-bats-version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
         with:
           node-version: '14'
-      - run: npm install -g bats
-      - run: bats -v
+      - name: Install Bats
+        run: npm install -g bats
+      - name: Run Bats
+        run: bats -v
