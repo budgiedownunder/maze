@@ -10,7 +10,7 @@ on:
       - '**.toml'
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
     
     steps:
