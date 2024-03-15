@@ -17,10 +17,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
       
-    - name: Install Rust
-      uses: actions/setup-rust@v1
-      with:
-        rust-version: stable
+   # - name: Install Rust
+   #   uses: actions/setup-rust@v1
+   #   with:
+   #     rust-version: stable
       
     - name: Build
       run: cargo build --verbose
