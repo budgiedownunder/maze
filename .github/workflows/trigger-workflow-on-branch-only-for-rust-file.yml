@@ -6,6 +6,7 @@ on:
       - add_dummy_rust_library
     paths:
       - '**.rs' # Trigger only if changes are made to .rs files      
+      - '**.toml' # Trigger only if changes are made to .toml files      
 jobs:
   check-bats-version:
     runs-on: ubuntu-latest
