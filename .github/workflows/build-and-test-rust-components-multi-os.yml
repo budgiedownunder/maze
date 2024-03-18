@@ -1,10 +1,10 @@
-name: build-and-test-rust-in-add_dummy_rust_library-branch-multi-os
+name: build-and-test-rust-components-multi-os
 run-name: ${{ github.actor }} is running the build and test workflow for Rust components within the branch ${{  github.ref }} on mutliple operating systems
 
 on:
   push:
     branches:
-      - add_dummy_rust_library
+      
     paths:
       - '**.rs'
       - '**.toml'
