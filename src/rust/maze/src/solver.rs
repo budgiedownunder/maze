@@ -1,4 +1,5 @@
 use crate::Maze;
+use crate::solution::Solution;
 
 use std::error::Error;
 
@@ -29,7 +30,7 @@ pub struct Solver <'a>{
 }
 
 impl Solver <'_> {
-    pub fn solve(&self) -> Result<(), SolveError> {
+    pub fn solve(&self) -> Result<Solution, SolveError> {
         Err(SolveError::new("Not implemented"))
         //Ok(())
     }

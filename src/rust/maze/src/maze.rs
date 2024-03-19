@@ -1,4 +1,5 @@
 use crate::Definition;
+use crate::solution::Solution;
 use crate::Solver;
 use crate::solver::SolveError;
 
@@ -13,7 +14,7 @@ impl Maze {
             definition
         }
     }
-    pub fn solve(&self) -> Result<(), SolveError> {
+    pub fn solve(&self) -> Result<Solution, SolveError> {
         let s = Solver{ maze: &self };
         s.solve()
     }
