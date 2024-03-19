@@ -1,4 +1,6 @@
 use crate::Definition;
+use crate::Solver;
+use crate::solver::SolveError;
 
 #[allow(dead_code)]
 pub struct Maze {
@@ -10,5 +12,9 @@ impl Maze {
         Maze {
             definition
         }
+    }
+    pub fn solve(&self) -> Result<(), SolveError> {
+        let s = Solver{ maze: &self };
+        s.solve()
     }
 }
