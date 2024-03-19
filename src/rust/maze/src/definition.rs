@@ -12,3 +12,16 @@ impl Definition {
         Definition { width, height, walls: Vec::new(), }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn can_create_new_maze_definition() {
+        let d = Definition::new(2, 3);
+        assert_eq!(d.width, 2);
+        assert_eq!(d.height, 3);
+    }
+}
