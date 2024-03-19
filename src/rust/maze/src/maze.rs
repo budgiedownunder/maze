@@ -1,7 +1,7 @@
-use crate::Definition;
 use crate::solution::Solution;
-use crate::Solver;
 use crate::solver::SolveError;
+use crate::Definition;
+use crate::Solver;
 
 #[allow(dead_code)]
 pub struct Maze {
@@ -10,12 +10,13 @@ pub struct Maze {
 
 impl Maze {
     pub fn new(definition: Definition) -> Maze {
-        Maze {
-            definition
-        }
+        Maze { definition }
+    }
+    pub fn from_vec(grid: Vec<Vec<i32>>) -> Self {
+        Maze { definition: Definition::from_vec(grid) }
     }
     pub fn solve(&self) -> Result<Solution, SolveError> {
-        let s = Solver{ maze: &self };
+        let s = Solver { maze: &self };
         s.solve()
     }
 }
@@ -25,21 +26,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn can_create_new_maze_from_stack_definition() {
-        let m = Maze::new(Definition {
-            width: 2,
-            height: 3,
-            walls: Vec::new(),
-        });
-        assert_eq!(m.definition.width, 2);
-        assert_eq!(m.definition.height, 3);
+    fn can_create_new_maze_from_stack_vector() {
+        let grid: Vec<Vec<i32>> = vec![
+            vec![1, 2, 3],
+            vec![4, 5, 6],
+        ];
+        let m = Maze::from_vec(grid);
+        assert_eq!(m.definition.rows, 2);
+        assert_eq!(m.definition.cols, 3);
     }
 
     #[test]
     fn can_create_new_maze_from_heap_definition() {
         let m = Maze::new(Definition::new(2, 3));
-        assert_eq!(m.definition.width, 2);
-        assert_eq!(m.definition.height, 3);
+        assert_eq!(m.definition.rows, 2);
+        assert_eq!(m.definition.cols, 3);
     }
 
     #[test]
@@ -52,9 +53,9 @@ mod tests {
                 panic!("Expected solve() to return Err, but it returned Ok");
             }
             Err(e) => {
-                // Assert if "Not implemented" is not returned 
+                // Assert if "Not implemented" is not returned
                 assert_eq!(e.message, "Not implemented");
             }
-        }        
+        }
     }
 }

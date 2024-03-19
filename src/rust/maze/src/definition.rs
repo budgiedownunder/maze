@@ -1,18 +1,33 @@
-use crate::Wall;
-
 #[allow(dead_code)]
 pub struct Definition {
-    pub width: usize,
-    pub height: usize,
-    pub walls:Vec<Wall>,
+    pub rows: usize,
+    pub cols: usize,
+    pub grid: Vec<Vec<i32>>,
 }
 
 impl Definition {
-    pub fn new(width: usize, height: usize) -> Self {
-        Definition { width, height, walls: Vec::new(), }
+    pub fn new(rows: usize, cols: usize) -> Self {
+        Definition {
+            rows,
+            cols,
+            grid: vec![vec![0; cols]; rows],
+        }
+    }
+    pub fn from_vec(grid: Vec<Vec<i32>>) -> Self {
+        let first_row_cols = grid.get(0).map_or(0, |inner_vec| inner_vec.len());
+        let same_col_counts = grid
+            .iter()
+            .all(|inner_vec| inner_vec.len() == first_row_cols);
+        if !same_col_counts {
+            panic!("Grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_cols);
+        }
+        Definition {
+            rows: grid.len(),
+            cols: first_row_cols,
+            grid: grid,
+        }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -21,7 +36,18 @@ mod tests {
     #[test]
     fn can_create_new_maze_definition() {
         let d = Definition::new(2, 3);
-        assert_eq!(d.width, 2);
-        assert_eq!(d.height, 3);
+        assert_eq!(d.rows, 2);
+        assert_eq!(d.cols, 3);
+    }
+    
+    #[test]
+    fn can_create_new_maze_definition_from_vector() {
+        let grid: Vec<Vec<i32>> = vec![
+            vec![1, 2, 3],
+            vec![4, 5, 6],
+        ];
+        let d = Definition::from_vec(grid);
+        assert_eq!(d.rows, 2);
+        assert_eq!(d.cols, 3);
     }
 }
