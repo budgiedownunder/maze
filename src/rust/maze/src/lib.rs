@@ -2,6 +2,7 @@
 mod definition;
 mod maze;
 mod path;
+mod point;
 mod solution;
 mod solver;
 
@@ -9,5 +10,6 @@ mod solver;
 pub use definition::Definition;
 pub use maze::Maze;
 pub use path::Path;
+pub use point::Point;
 pub use solution::Solution;
 pub use solver::Solver;

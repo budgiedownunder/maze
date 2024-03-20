@@ -1,3 +1,5 @@
+use crate::path::Path;
+use crate::point::Point;
 use crate::solution::Solution;
 use crate::Maze;
 
@@ -54,8 +56,12 @@ impl Solver<'_> {
                 format!("End location [{}, {}] is invalid", end_row, end_col,).as_str(),
             ));
         }
+        // Create a dummy result
+        let mut points: Vec<Point> = vec![];
+        points.push(Point { row: 0, col: 0 });
+        let path = Path::new(points);
+        Ok(Solution::new(path))
 
-        Err(SolveError::new("Not implemented"))
-        //Ok(())
+        //Err(SolveError::new("Not implemented"))
     }
 }

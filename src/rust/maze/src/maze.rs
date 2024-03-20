@@ -86,15 +86,16 @@ mod tests {
     }
 
     #[test]
-    fn maze_solve_should_fail_with_not_implemented() {
+    fn maze_solve_should_succeed() {
         let m = Maze::new(Definition::new(2, 3));
         let result = m.solve(1, 0, 0, 2);
         match result {
-            Ok(_) => {
-                panic!("Expected solve() to return Err, but it returned Ok");
+            Ok(s) => {
+                // Dummy solution should return a path with a single point
+                assert_eq!(s.path.points.len(), 1);
             }
-            Err(e) => {
-                assert_eq!(e.message, "Not implemented");
+            Err(_) => {
+                panic!("Expected solve() to succeed, but it returned Err");
             }
         }
     }
