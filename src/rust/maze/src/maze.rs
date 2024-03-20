@@ -26,7 +26,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn can_create_new_maze_from_stack_vector() {
+    fn can_create_new_maze_from_vector() {
         let grid: Vec<Vec<i32>> = vec![
             vec![1, 2, 3],
             vec![4, 5, 6],
@@ -37,7 +37,17 @@ mod tests {
     }
 
     #[test]
-    fn can_create_new_maze_from_heap_definition() {
+    #[should_panic(expected = "Grid vector contains rows with different numbers of columns (expected 3 for all rows)")]
+    fn cannot_create_new_maze_definition_from_vector_with_diff_row_counts() {
+        let grid: Vec<Vec<i32>> = vec![
+            vec![1, 2, 3],
+            vec![4, 5, 6, 7],
+        ];
+        let _d = Definition::from_vec(grid);
+    }
+
+    #[test]
+    fn can_create_new_maze_from_definition() {
         let m = Maze::new(Definition::new(2, 3));
         assert_eq!(m.definition.rows, 2);
         assert_eq!(m.definition.cols, 3);

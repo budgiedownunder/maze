@@ -50,4 +50,15 @@ mod tests {
         assert_eq!(d.rows, 2);
         assert_eq!(d.cols, 3);
     }
+
+    #[test]
+    #[should_panic(expected = "Grid vector contains rows with different numbers of columns (expected 3 for all rows)")]
+    fn cannot_create_new_maze_definition_from_vector_with_diff_row_counts() {
+        let grid: Vec<Vec<i32>> = vec![
+            vec![1, 2, 3],
+            vec![4, 5, 6, 7],
+        ];
+        let _d = Definition::from_vec(grid);
+    }
+
 }
