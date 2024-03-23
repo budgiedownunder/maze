@@ -112,27 +112,6 @@ mod tests {
     }
 
     #[test]
-    fn solve_should_fail_as_no_solution() {
-        let grid: Vec<Vec<i32>> = vec![
-            vec![-1, -1, -2, -1],
-            vec![-1, -1, -2, -1],
-            vec![-1, -1, -2, -1],
-        ];
-        let m = Maze::new(Definition::from_vec(grid));
-        let start = Point { row: 1, col: 0 };
-        let end = Point { row: 0, col: 2 };
-        let result = m.solve(start, end);
-        match result {
-            Ok(_) => {
-                panic!("expected solve() to return Err, but it returned Ok");
-            }
-            Err(e) => {
-                assert_eq!(e.message, "no solution found");
-            }
-        }
-    }
-
-    #[test]
     fn solve_should_succeed_for_maze_with_no_walls_1() {
         let m = Maze::new(Definition::new(2, 3));
         let start = Point { row: 1, col: 0 };
@@ -220,6 +199,168 @@ mod tests {
                         "expected solve() to succeed, but it returned the error: {}",
                         error
                     )
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn solve_should_fail_as_no_solution_due_to_blocking_wall() {
+        let grid: Vec<Vec<i32>> = vec![
+            vec![-1, -1, -2, -1],
+            vec![-1, -1, -2, -1],
+            vec![-1, -1, -2, -1],
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let start = Point { row: 1, col: 0 };
+        let end = Point { row: 0, col: 2 };
+        let result = m.solve(start, end);
+        match result {
+            Ok(_) => {
+                panic!("expected solve() to return Err, but it returned Ok");
+            }
+            Err(error) => {
+                assert_eq!(error.message, "no solution found");
+            }
+        }
+    }
+
+    #[test]
+    fn solve_should_succeed_with_walls_1() {
+        let grid: Vec<Vec<i32>> = vec![
+            vec![-1, -2, -1, -1, -2],
+            vec![-1, -2, -1, -2, -1],
+            vec![-1, -1, -1, -2, -1],
+            vec![-2, -1, -2, -1, -1],
+            vec![-1, -1, -1, -2, -1],
+            vec![-2, -2, -1, -1, -1],
+            vec![-2, -2, -1, -2, -1],
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let start = Point { row: 0, col: 0 };
+        let end = Point { row: 2, col: 4 };
+        let result = m.solve(start, end);
+        match result {
+            Ok(s) => {
+                let expected_solution_path = Path {
+                    points: vec![
+                        Point { row: 0, col: 0 },
+                        Point { row: 1, col: 0 },
+                        Point { row: 2, col: 0 },
+                        Point { row: 2, col: 1 },
+                        Point { row: 3, col: 1 },
+                        Point { row: 4, col: 1 },
+                        Point { row: 4, col: 2 },
+                        Point { row: 5, col: 2 },
+                        Point { row: 5, col: 3 },
+                        Point { row: 5, col: 4 },
+                        Point { row: 4, col: 4 },
+                        Point { row: 3, col: 4 },
+                        Point { row: 2, col: 4 },
+                    ],
+                };
+                assert_eq!(s.path.points.len(), 13);
+                assert_eq!(s.path, expected_solution_path);
+            }
+            Err(error) => {
+                panic!(
+                    "expected solve() to succeed but it returned the error {}",
+                    error.message
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn solve_should_succeed_with_walls_2() {
+        let grid: Vec<Vec<i32>> = vec![
+            vec![-1, -1, -2, -1, -2],
+            vec![-1, -2, -1, -2, -1],
+            vec![-1, -1, -1, -2, -1],
+            vec![-2, -2, -1, -2, -1],
+            vec![-1, -1, -1, -2, -1],
+            vec![-1, -2, -2, -2, -1],
+            vec![-1, -1, -1, -1, -1],
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let start = Point { row: 0, col: 1 };
+        let end = Point { row: 2, col: 4 };
+        let result = m.solve(start, end);
+        match result {
+            Ok(s) => {
+                let expected_solution_path = Path {
+                    points: vec![
+                        Point { row: 0, col: 1 },
+                        Point { row: 0, col: 0 },
+                        Point { row: 1, col: 0 },
+                        Point { row: 2, col: 0 },
+                        Point { row: 2, col: 1 },
+                        Point { row: 2, col: 2 },
+                        Point { row: 3, col: 2 },
+                        Point { row: 4, col: 2 },
+                        Point { row: 4, col: 1 },
+                        Point { row: 4, col: 0 },
+                        Point { row: 5, col: 0 },
+                        Point { row: 6, col: 0 },
+                        Point { row: 6, col: 1 },
+                        Point { row: 6, col: 2 },
+                        Point { row: 6, col: 3 },
+                        Point { row: 6, col: 4 },
+                        Point { row: 5, col: 4 },
+                        Point { row: 4, col: 4 },
+                        Point { row: 3, col: 4 },
+                        Point { row: 2, col: 4 },
+                    ],
+                };
+                assert_eq!(s.path.points.len(), 20);
+                assert_eq!(s.path, expected_solution_path);
+            }
+            Err(error) => {
+                panic!(
+                    "expected solve() to succeed but it returned the error {}",
+                    error.message
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn solve_should_succeed_with_walls_3() {
+        let grid: Vec<Vec<i32>> = vec![
+            vec![-1, -1, -2, -1, -2],
+            vec![-1, -2, -1, -2, -1],
+            vec![-1, -1, -1, -1, -1],
+            vec![-2, -2, -1, -2, -1],
+            vec![-1, -1, -1, -2, -1],
+            vec![-1, -2, -2, -2, -1],
+            vec![-1, -1, -1, -1, -1],
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let start = Point { row: 0, col: 1 };
+        let end = Point { row: 1, col: 4 };
+        let result = m.solve(start, end);
+        match result {
+            Ok(s) => {
+                let expected_solution_path = Path {
+                    points: vec![
+                        Point { row: 0, col: 1 },
+                        Point { row: 0, col: 0 },
+                        Point { row: 1, col: 0 },
+                        Point { row: 2, col: 0 },
+                        Point { row: 2, col: 1 },
+                        Point { row: 2, col: 2 },
+                        Point { row: 2, col: 3 },
+                        Point { row: 2, col: 4 },
+                        Point { row: 1, col: 4 },
+                    ],
+                };
+                assert_eq!(s.path.points.len(), 9);
+                assert_eq!(s.path, expected_solution_path);
+            }
+            Err(error) => {
+                panic!(
+                    "expected solve() to succeed but it returned the error {}",
+                    error.message
                 );
             }
         }
