@@ -1,3 +1,4 @@
+use crate::Point;
 #[allow(dead_code)]
 pub struct Definition {
     pub rows: usize,
@@ -26,6 +27,28 @@ impl Definition {
             cols: first_row_cols,
             grid: grid,
         }
+    }
+    pub fn is_valid(&self, pt: &Point) -> bool {
+        if pt.row >= self.rows || pt.col >= self.cols {
+            return false;
+        }
+        true
+    }
+    pub fn display_grid(&self) -> Vec<Vec<char>> {
+        return self
+            .grid
+            .iter()
+            .map(|inner_vec| {
+                inner_vec
+                    .iter()
+                    .map(|&value| match value {
+                        -1 => '\u{2591}',
+                        -2 => '\u{2588}',
+                        _ => '-',
+                    })
+                    .collect::<Vec<char>>()
+            })
+            .collect();
     }
 }
 

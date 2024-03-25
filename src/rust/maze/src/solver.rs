@@ -34,11 +34,8 @@ pub struct Solver<'a> {
 }
 
 impl Solver<'_> {
-    fn is_valid_point(&self, pt: &Point) -> bool {
-        if pt.row >= self.maze.definition.rows || pt.col >= self.maze.definition.cols {
-            return false;
-        }
-        true
+    fn is_valid(&self, pt: &Point) -> bool {
+        self.maze.definition.is_valid(pt)
     }
 
     fn calc_location(&self, pt: &Point, offset: &Offset) -> Result<Point, SolveError> {
@@ -61,7 +58,7 @@ impl Solver<'_> {
             },
         };
 
-        if !self.is_valid_point(&pt_check) {
+        if !self.is_valid(&pt_check) {
             return Err(SolveError::new("location is out of bounds"));
         }
         Ok(pt_check)
@@ -154,12 +151,12 @@ impl Solver<'_> {
     }
 
     pub fn solve(&self, start: Point, end: Point) -> Result<Solution, SolveError> {
-        if !self.is_valid_point(&start) {
+        if !self.is_valid(&start) {
             return Err(SolveError::new(
                 format!("start location {} is invalid", start).as_str(),
             ));
         }
-        if !self.is_valid_point(&end) {
+        if !self.is_valid(&end) {
             return Err(SolveError::new(
                 format!("end location {} is invalid", end,).as_str(),
             ));

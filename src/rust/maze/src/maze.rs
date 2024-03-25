@@ -1,6 +1,8 @@
 use crate::solution::Solution;
 use crate::solver::SolveError;
 use crate::Definition;
+use crate::Direction;
+use crate::Path;
 use crate::Point;
 use crate::Solver;
 
@@ -22,12 +24,57 @@ impl Maze {
         let s = Solver { maze: &self };
         s.solve(start, end)
     }
+
+    pub fn print(&self, start: Point, end: Point, path: Path) {
+        let mut base = self.definition.display_grid();
+        let mut path_idx = 0;
+
+        for pt in &path.points {
+            if self.definition.is_valid(pt) && *pt != start && *pt != end {
+                let mut direction = Direction::None;
+                if (path_idx + 1) < path.points.len() {
+                    let next_pt = &path.points[path_idx + 1];
+                    if next_pt.row == pt.row {
+                        direction = if pt.col < next_pt.col {
+                            Direction::Right
+                        } else if pt.col > next_pt.col {
+                            Direction::Left
+                        } else {
+                            Direction::None
+                        };
+                    } else if next_pt.col == pt.col {
+                        direction = if pt.row < next_pt.row {
+                            Direction::Down
+                        } else if pt.row > next_pt.row {
+                            Direction::Up
+                        } else {
+                            Direction::None
+                        };
+                    }
+                }
+
+                base[pt.row][pt.col] = direction.unicode_char();
+            }
+            path_idx += 1;
+        }
+        if self.definition.is_valid(&start) {
+            base[start.row][start.col] = 'S';
+        }
+        if self.definition.is_valid(&end) {
+            base[end.row][end.col] = 'F';
+        }
+        for row in base.iter() {
+            println!();
+            for col in row {
+                print!("{}", col);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Path;
 
     #[test]
     fn can_create_new_maze_from_vector() {
@@ -51,6 +98,65 @@ mod tests {
         let m = Maze::new(Definition::new(2, 3));
         assert_eq!(m.definition.rows, 2);
         assert_eq!(m.definition.cols, 3);
+    }
+
+    #[test]
+    fn can_print_maze_with_empty_solution_path() {
+        let grid: Vec<Vec<i32>> = vec![
+            vec![-1, -1, -2, -1, -2],
+            vec![-1, -2, -1, -2, -1],
+            vec![-1, -1, -1, -2, -1],
+            vec![-2, -2, -1, -2, -1],
+            vec![-1, -1, -1, -2, -1],
+            vec![-1, -2, -2, -2, -1],
+            vec![-1, -1, -1, -1, -1],
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let start = Point { row: 0, col: 1 };
+        let end = Point { row: 2, col: 4 };
+        let path = Path { points: vec![] };
+        m.print(start, end, path);
+    }
+
+    #[test]
+    fn can_print_maze_with_solution_path() {
+        let grid: Vec<Vec<i32>> = vec![
+            vec![-1, -1, -2, -1, -2],
+            vec![-1, -2, -1, -2, -1],
+            vec![-1, -1, -1, -2, -1],
+            vec![-2, -2, -1, -2, -1],
+            vec![-1, -1, -1, -2, -1],
+            vec![-1, -2, -2, -2, -1],
+            vec![-1, -1, -1, -1, -1],
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let start = Point { row: 0, col: 1 };
+        let end = Point { row: 2, col: 4 };
+        let path = Path {
+            points: vec![
+                Point { row: 0, col: 1 },
+                Point { row: 0, col: 0 },
+                Point { row: 1, col: 0 },
+                Point { row: 2, col: 0 },
+                Point { row: 2, col: 1 },
+                Point { row: 2, col: 2 },
+                Point { row: 3, col: 2 },
+                Point { row: 4, col: 2 },
+                Point { row: 4, col: 1 },
+                Point { row: 4, col: 0 },
+                Point { row: 5, col: 0 },
+                Point { row: 6, col: 0 },
+                Point { row: 6, col: 1 },
+                Point { row: 6, col: 2 },
+                Point { row: 6, col: 3 },
+                Point { row: 6, col: 4 },
+                Point { row: 5, col: 4 },
+                Point { row: 4, col: 4 },
+                Point { row: 3, col: 4 },
+                Point { row: 2, col: 4 },
+            ],
+        };
+        m.print(start, end, path);
     }
 
     #[test]
