@@ -161,13 +161,11 @@ impl Solver<'_> {
                 format!("end location {} is invalid", end,).as_str(),
             ));
         }
-
         if start == end {
             let points = vec![start.clone()];
 
             return Ok(Solution::new(Path::new(points)));
         }
-
         self.solve_lee(&start, &end)
     }
 }
