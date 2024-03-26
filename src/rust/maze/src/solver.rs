@@ -1,11 +1,11 @@
+use std::collections::VecDeque;
+use std::error::Error;
+
 use crate::Maze;
 use crate::Offset;
 use crate::Path;
 use crate::Point;
 use crate::Solution;
-
-use std::collections::VecDeque;
-use std::error::Error;
 
 #[derive(Debug)]
 pub struct SolveError {

@@ -1,5 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::Point;
 #[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
 pub struct Definition {
     pub rows: usize,
     pub cols: usize,
@@ -57,10 +60,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn can_create_empty_from_dimensions() {
+        let d = Definition::new(0, 0);
+        assert_eq!(d.rows, 0);
+        assert_eq!(d.cols, 0);
+    }
+
+    #[test]
     fn can_create_new_from_dimensions() {
         let d = Definition::new(2, 3);
         assert_eq!(d.rows, 2);
         assert_eq!(d.cols, 3);
+    }
+
+    #[test]
+    fn can_create_empty_from_vector() {
+        let grid: Vec<Vec<i32>> = vec![];
+        let d = Definition::from_vec(grid);
+        assert_eq!(d.rows, 0);
+        assert_eq!(d.cols, 0);
     }
 
     #[test]
@@ -78,5 +96,31 @@ mod tests {
     fn cannot_create_new_from_vector_with_diff_row_counts() {
         let grid: Vec<Vec<i32>> = vec![vec![-1, -1, -1], vec![-1, -1, -1, -1]];
         let _d = Definition::from_vec(grid);
+    }
+
+    #[test]
+    fn can_serialize_empty_1() {
+        let d = Definition::new(0, 0);
+        let s = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(s, "{\"rows\":0,\"cols\":0,\"grid\":[]}");
+    }
+
+    #[test]
+    fn can_serialize_empty_2() {
+        let grid: Vec<Vec<i32>> = vec![];
+        let d = Definition::from_vec(grid);
+        let s = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(s, "{\"rows\":0,\"cols\":0,\"grid\":[]}");
+    }
+
+    #[test]
+    fn can_serialize_non_empty() {
+        let grid: Vec<Vec<i32>> = vec![vec![-1, -1, -1], vec![-1, -1, -1]];
+        let d = Definition::from_vec(grid);
+        let s = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(
+            s,
+            "{\"rows\":2,\"cols\":3,\"grid\":[[-1,-1,-1],[-1,-1,-1]]}"
+        );
     }
 }
