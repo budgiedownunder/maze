@@ -1,13 +1,12 @@
 use std::fmt;
 
 #[allow(dead_code)]
-#[derive(Clone, Debug)] // Derive automatically as all fields implement the Clone trait
+#[derive(Clone, Debug)]
 pub struct Offset {
     pub row: i32,
     pub col: i32,
 }
 
-// Implement the Display trait for the Point struct
 impl fmt::Display for Offset {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{}, {}]", self.row, self.col)

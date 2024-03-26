@@ -8,7 +8,6 @@ pub struct Point {
     pub col: usize, // Zero-based index
 }
 
-// Implement the Display trait for the Point struct
 impl fmt::Display for Point {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{}, {}]", self.row, self.col)
