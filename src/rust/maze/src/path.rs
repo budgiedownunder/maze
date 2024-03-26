@@ -17,6 +17,7 @@ impl fmt::Display for Path {
         result
     }
 }
+
 impl Path {
     pub fn new(points: Vec<Point>) -> Path {
         Path { points }
