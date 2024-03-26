@@ -18,16 +18,16 @@ impl Definition {
         }
     }
     pub fn from_vec(grid: Vec<Vec<i32>>) -> Self {
-        let first_row_cols = grid.get(0).map_or(0, |inner_vec| inner_vec.len());
+        let first_row_col_count = grid.get(0).map_or(0, |inner_vec| inner_vec.len());
         let same_col_counts = grid
             .iter()
-            .all(|inner_vec| inner_vec.len() == first_row_cols);
+            .all(|inner_vec| inner_vec.len() == first_row_col_count);
         if !same_col_counts {
-            panic!("grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_cols);
+            panic!("grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_col_count);
         }
         Definition {
             rows: grid.len(),
-            cols: first_row_cols,
+            cols: first_row_col_count,
             grid: grid,
         }
     }
