@@ -1,14 +1,16 @@
 // Re-export modules
+mod cell_state;
 mod definition;
 mod direction;
 mod maze;
-mod path;
 mod offset;
+mod path;
 mod point;
 mod solution;
 mod solver;
 
 // Re-export structs
+pub use cell_state::CellState;
 pub use definition::Definition;
 pub use direction::Direction;
 pub use maze::Maze;

@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::error::Error;
 
+use crate::CellState;
 use crate::Maze;
 use crate::Offset;
 use crate::Path;
@@ -66,47 +67,55 @@ impl Solver<'_> {
 
     fn get_lee_solution(
         &self,
-        grid: &Vec<Vec<i32>>,
+        grid: &Vec<Vec<CellState>>,
         start: &Point,
         end: &Point,
         offsets: &[Offset],
     ) -> Result<Solution, SolveError> {
         let mut points: Vec<Point> = vec![];
-        let mut step_pt: Point = end.clone();
-        let mut step_value = grid[step_pt.row][step_pt.col];
-        if step_value < 0 {
-            return Err(SolveError::new(
-                "solution path not found (end point not processed)",
-            ));
+        match grid[end.row][end.col].step_value() {
+            None => {
+                return Err(SolveError::new(
+                    "solution path not found (end point not processed)",
+                ));
+            }
+            _ => {}
         }
+        let mut step_pt: Point = end.clone();
         points.push(end.clone());
         loop {
-            step_value = grid[step_pt.row][step_pt.col];
-            if step_value >= 0 {
-                let mut found_neighbour = false;
-                for offset in offsets.iter() {
-                    match self.calc_location(&step_pt, &offset) {
-                        Ok(offset_pt) => {
-                            let offset_pt_value = grid[offset_pt.row][offset_pt.col];
-                            if offset_pt_value >= 0 {
-                                if step_pt == *start {
-                                    points.reverse();
-                                    return Ok(Solution::new(Path::new(points)));
-                                }
-                                if offset_pt_value == step_value - 1 {
-                                    step_pt = offset_pt;
-                                    points.push(step_pt.clone());
-                                    found_neighbour = true;
-                                    break;
+            match grid[step_pt.row][step_pt.col] {
+                CellState::Step { value } => {
+                    let mut found_neighbour = false;
+                    for offset in offsets.iter() {
+                        match self.calc_location(&step_pt, &offset) {
+                            Ok(offset_pt) => {
+                                let offset_pt_step_value =
+                                    grid[offset_pt.row][offset_pt.col].step_value();
+                                match offset_pt_step_value {
+                                    Some(offset_pt_value) => {
+                                        if step_pt == *start {
+                                            points.reverse();
+                                            return Ok(Solution::new(Path::new(points)));
+                                        }
+                                        if offset_pt_value == value - 1 {
+                                            step_pt = offset_pt;
+                                            points.push(step_pt.clone());
+                                            found_neighbour = true;
+                                            break;
+                                        }
+                                    }
+                                    _ => (),
                                 }
                             }
+                            Err(_) => {} // Skip
                         }
-                        Err(_) => {} // Skip
+                    }
+                    if !found_neighbour {
+                        return Err(SolveError::new(format!("solution path not found (no path sequence neighbour exists for point {})", step_pt).as_str()));
                     }
                 }
-                if !found_neighbour {
-                    return Err(SolveError::new(format!("solution path not found (no path sequence neighbour exists for point {})", step_pt).as_str()));
-                }
+                _ => (),
             }
         }
     }
@@ -123,24 +132,33 @@ impl Solver<'_> {
         ];
 
         q.push_back(start.clone());
-        grid[start.row][start.col] = 0;
+        grid[start.row][start.col] = CellState::Step { value: 0 };
         while q.len() > 0 {
             let opt_pt = q.pop_front();
             match opt_pt {
                 Some(pt) => {
-                    for offset in offsets.iter() {
-                        match self.calc_location(&pt, &offset) {
-                            Ok(offset_pt) => {
-                                if grid[offset_pt.row][offset_pt.col] == -1 {
-                                    grid[offset_pt.row][offset_pt.col] = grid[pt.row][pt.col] + 1;
-                                    if offset_pt == *end {
-                                        return self.get_lee_solution(&grid, start, end, &offsets);
-                                    }
-                                    q.push_back(offset_pt.clone());
+                    let pt_step_value = grid[pt.row][pt.col].step_value();
+                    match pt_step_value {
+                        Some(value) => {
+                            for offset in offsets.iter() {
+                                match self.calc_location(&pt, &offset) {
+                                    Ok(offset_pt) => match grid[offset_pt.row][offset_pt.col] {
+                                        CellState::Empty => {
+                                            grid[offset_pt.row][offset_pt.col] =
+                                                CellState::Step { value: value + 1 };
+                                            if offset_pt == *end {
+                                                return self
+                                                    .get_lee_solution(&grid, start, end, &offsets);
+                                            }
+                                            q.push_back(offset_pt.clone());
+                                        }
+                                        _ => (),
+                                    },
+                                    Err(_) => {} // Skip
                                 }
                             }
-                            Err(_) => {} // Skip
                         }
+                        None => (),
                     }
                 }
                 None => {}

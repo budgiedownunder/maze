@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+use crate::CellState;
 use crate::Point;
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 pub struct Definition {
     pub rows: usize,
     pub cols: usize,
-    pub grid: Vec<Vec<i32>>,
+    pub grid: Vec<Vec<CellState>>,
 }
 
 impl Definition {
@@ -14,10 +15,10 @@ impl Definition {
         Definition {
             rows,
             cols,
-            grid: vec![vec![-1; cols]; rows],
+            grid: vec![vec![CellState::Empty; cols]; rows],
         }
     }
-    pub fn from_vec(grid: Vec<Vec<i32>>) -> Self {
+    pub fn from_vec(grid: Vec<Vec<CellState>>) -> Self {
         let first_row_col_count = grid.get(0).map_or(0, |inner_vec| inner_vec.len());
         let same_col_counts = grid
             .iter()
@@ -44,9 +45,9 @@ impl Definition {
             .map(|inner_vec| {
                 inner_vec
                     .iter()
-                    .map(|&value| match value {
-                        -1 => '\u{2591}',
-                        -2 => '\u{2588}',
+                    .map(|value| match value {
+                        CellState::Blocked => '\u{2588}',
+                        CellState::Empty => '\u{2591}',
                         _ => '-',
                     })
                     .collect::<Vec<char>>()
@@ -75,7 +76,7 @@ mod tests {
 
     #[test]
     fn can_create_empty_from_vector() {
-        let grid: Vec<Vec<i32>> = vec![];
+        let grid: Vec<Vec<CellState>> = vec![];
         let d = Definition::from_vec(grid);
         assert_eq!(d.rows, 0);
         assert_eq!(d.cols, 0);
@@ -83,7 +84,10 @@ mod tests {
 
     #[test]
     fn can_create_new_from_vector() {
-        let grid: Vec<Vec<i32>> = vec![vec![-1, -1, -1], vec![-1, -1, -1]];
+        let grid: Vec<Vec<CellState>> = vec![
+            vec![CellState::Empty, CellState::Empty, CellState::Empty],
+            vec![CellState::Empty, CellState::Empty, CellState::Empty],
+        ];
         let d = Definition::from_vec(grid);
         assert_eq!(d.rows, 2);
         assert_eq!(d.cols, 3);
@@ -94,7 +98,15 @@ mod tests {
         expected = "grid vector contains rows with different numbers of columns (expected 3 for all rows)"
     )]
     fn cannot_create_new_from_vector_with_diff_row_counts() {
-        let grid: Vec<Vec<i32>> = vec![vec![-1, -1, -1], vec![-1, -1, -1, -1]];
+        let grid: Vec<Vec<CellState>> = vec![
+            vec![CellState::Empty, CellState::Empty, CellState::Empty],
+            vec![
+                CellState::Empty,
+                CellState::Empty,
+                CellState::Empty,
+                CellState::Empty,
+            ],
+        ];
         let _d = Definition::from_vec(grid);
     }
 
@@ -107,7 +119,7 @@ mod tests {
 
     #[test]
     fn can_serialize_empty_2() {
-        let grid: Vec<Vec<i32>> = vec![];
+        let grid: Vec<Vec<CellState>> = vec![];
         let d = Definition::from_vec(grid);
         let s = serde_json::to_string(&d).expect("Failed to serialize");
         assert_eq!(s, "{\"rows\":0,\"cols\":0,\"grid\":[]}");
@@ -115,12 +127,15 @@ mod tests {
 
     #[test]
     fn can_serialize_non_empty() {
-        let grid: Vec<Vec<i32>> = vec![vec![-1, -1, -1], vec![-1, -1, -1]];
+        let grid: Vec<Vec<CellState>> = vec![
+            vec![CellState::Empty, CellState::Empty, CellState::Empty],
+            vec![CellState::Empty, CellState::Empty, CellState::Empty],
+        ];
         let d = Definition::from_vec(grid);
         let s = serde_json::to_string(&d).expect("Failed to serialize");
         assert_eq!(
             s,
-            "{\"rows\":2,\"cols\":3,\"grid\":[[-1,-1,-1],[-1,-1,-1]]}"
+            "{\"rows\":2,\"cols\":3,\"grid\":[[\"Empty\",\"Empty\",\"Empty\"],[\"Empty\",\"Empty\",\"Empty\"]]}"
         );
     }
 }
