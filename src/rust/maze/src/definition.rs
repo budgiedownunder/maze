@@ -174,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn can_serialize_non_empty() {
+    fn can_serialize_non_empty_1() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
             vec![' ', ' ', ' '],
@@ -183,5 +183,17 @@ mod tests {
         let d = Definition::from_vec(grid);
         let s = serde_json::to_string(&d).expect("Failed to serialize");
         assert_eq!(s, "{\"grid\":[[\" \",\" \",\" \"],[\" \",\" \",\" \"]]}");
+    }
+
+    #[test]
+    fn can_serialize_non_empty_2() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', 'W', ' '],
+            vec![' ', ' ', 'W']
+        ];
+        let d = Definition::from_vec(grid);
+        let s = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(s, "{\"grid\":[[\" \",\"W\",\" \"],[\" \",\" \",\"W\"]]}");
     }
 }
