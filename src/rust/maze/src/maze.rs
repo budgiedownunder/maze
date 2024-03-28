@@ -93,7 +93,11 @@ mod tests {
         expected = "grid vector contains rows with different numbers of columns (expected 3 for all rows)"
     )]
     fn cannot_create_new_from_vector_with_diff_row_counts() {
-        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', ' '], vec![' ', ' ', ' ', ' ']];
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' '],
+            vec![' ', ' ', ' ', ' ']
+        ];
         let _d = Definition::from_vec(grid);
     }
 
