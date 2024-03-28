@@ -85,7 +85,7 @@ impl Solver<'_> {
         points.push(end.clone());
         loop {
             match grid_state[step_pt.row][step_pt.col] {
-                CellState::Step { value } => {
+                CellState::SolutionStep { value } => {
                     let mut found_neighbour = false;
                     for offset in offsets.iter() {
                         match self.calc_location(&step_pt, &offset) {
@@ -132,7 +132,7 @@ impl Solver<'_> {
         ];
 
         q.push_back(start.clone());
-        grid_state[start.row][start.col] = CellState::Step { value: 0 };
+        grid_state[start.row][start.col] = CellState::SolutionStep { value: 0 };
         while q.len() > 0 {
             let opt_pt = q.pop_front();
             match opt_pt {
@@ -145,7 +145,7 @@ impl Solver<'_> {
                                     Ok(offset_pt) => match grid_state[offset_pt.row][offset_pt.col] {
                                         CellState::Empty => {
                                             grid_state[offset_pt.row][offset_pt.col] =
-                                                CellState::Step { value: value + 1 };
+                                                CellState::SolutionStep { value: value + 1 };
                                             if offset_pt == *end {
                                                 return self
                                                     .get_lee_solution(&grid_state, start, end, &offsets);
