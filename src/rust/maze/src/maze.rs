@@ -1,6 +1,5 @@
 use crate::solution::Solution;
 use crate::solver::SolveError;
-use crate::CellState;
 use crate::Definition;
 use crate::Direction;
 use crate::Path;
@@ -16,7 +15,7 @@ impl Maze {
     pub fn new(definition: Definition) -> Maze {
         Maze { definition }
     }
-    pub fn from_vec(grid: Vec<Vec<CellState>>) -> Self {
+    pub fn from_vec(grid: Vec<Vec<char>>) -> Self {
         Maze {
             definition: Definition::from_vec(grid),
         }
@@ -79,13 +78,14 @@ mod tests {
 
     #[test]
     fn can_create_new_maze_from_vector() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![CellState::Empty, CellState::Empty, CellState::Empty],
-            vec![CellState::Empty, CellState::Empty, CellState::Empty],
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' '],
+            vec![' ', ' ', ' ']
         ];
         let m = Maze::from_vec(grid);
-        assert_eq!(m.definition.rows, 2);
-        assert_eq!(m.definition.cols, 3);
+        assert_eq!(m.definition.row_count(), 2);
+        assert_eq!(m.definition.col_count(), 3);
     }
 
     #[test]
@@ -93,77 +93,28 @@ mod tests {
         expected = "grid vector contains rows with different numbers of columns (expected 3 for all rows)"
     )]
     fn cannot_create_new_from_vector_with_diff_row_counts() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![CellState::Empty, CellState::Empty, CellState::Empty],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-            ],
-        ];
+        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', ' '], vec![' ', ' ', ' ', ' ']];
         let _d = Definition::from_vec(grid);
     }
 
     #[test]
     fn can_create_new_from_definition() {
         let m = Maze::new(Definition::new(2, 3));
-        assert_eq!(m.definition.rows, 2);
-        assert_eq!(m.definition.cols, 3);
+        assert_eq!(m.definition.row_count(), 2);
+        assert_eq!(m.definition.col_count(), 3);
     }
 
     #[test]
     fn can_print_maze_with_empty_solution_path() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-            ],
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', 'W', ' ', 'W'],
+            vec![' ', 'W', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', 'W', ' '],
+            vec!['W', 'W', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', 'W', ' '],
+            vec![' ', 'W', 'W', 'W', ' '],
+            vec![' ', ' ', ' ', ' ', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
         let start = Point { row: 0, col: 1 };
@@ -174,56 +125,15 @@ mod tests {
 
     #[test]
     fn can_print_maze_with_solution_path() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-            ],
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', 'W', ' ', 'W'],
+            vec![' ', 'W', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', 'W', ' '],
+            vec!['W', 'W', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', 'W', ' '],
+            vec![' ', 'W', 'W', 'W', ' '],
+            vec![' ', ' ', ' ', ' ', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
         let start = Point { row: 0, col: 1 };
@@ -408,25 +318,11 @@ mod tests {
 
     #[test]
     fn solve_should_fail_as_no_solution_due_to_blocking_wall() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', 'W', ' '],
+            vec![' ', ' ', 'W', ' '],
+            vec![' ', ' ', 'W', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
         let start = Point { row: 1, col: 0 };
@@ -444,56 +340,15 @@ mod tests {
 
     #[test]
     fn solve_should_succeed_with_walls_1() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', 'W', ' ', ' ', 'W'],
+            vec![' ', 'W', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', 'W', ' '],
+            vec!['W', ' ', 'W', ' ', ' '],
+            vec![' ', ' ', ' ', 'W', ' '],
+            vec!['W', 'W', ' ', ' ', ' '],
+            vec!['W', 'W', ' ', 'W', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
         let start = Point { row: 0, col: 0 };
@@ -532,56 +387,15 @@ mod tests {
 
     #[test]
     fn solve_should_succeed_with_walls_2() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-            ],
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', 'W', ' ', 'W'],
+            vec![' ', 'W', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', 'W', ' '],
+            vec!['W', 'W', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', 'W', ' '],
+            vec![' ', 'W', 'W', 'W', ' '],
+            vec![' ', ' ', ' ', ' ', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
         let start = Point { row: 0, col: 1 };
@@ -627,56 +441,15 @@ mod tests {
 
     #[test]
     fn solve_should_succeed_with_walls_3() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Blocked,
-                CellState::Empty,
-            ],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-            ],
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', 'W', ' ', 'W'],
+            vec![' ', 'W', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', ' ', ' '],
+            vec!['W', 'W', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', 'W', ' '],
+            vec![' ', 'W', 'W', 'W', ' '],
+            vec![' ', ' ', ' ', ' ', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
         let start = Point { row: 0, col: 1 };

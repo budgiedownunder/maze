@@ -67,13 +67,13 @@ impl Solver<'_> {
 
     fn get_lee_solution(
         &self,
-        grid: &Vec<Vec<CellState>>,
+        grid_state: &Vec<Vec<CellState>>,
         start: &Point,
         end: &Point,
         offsets: &[Offset],
     ) -> Result<Solution, SolveError> {
         let mut points: Vec<Point> = vec![];
-        match grid[end.row][end.col].step_value() {
+        match grid_state[end.row][end.col].step_value() {
             None => {
                 return Err(SolveError::new(
                     "solution path not found (end point not processed)",
@@ -84,14 +84,14 @@ impl Solver<'_> {
         let mut step_pt: Point = end.clone();
         points.push(end.clone());
         loop {
-            match grid[step_pt.row][step_pt.col] {
+            match grid_state[step_pt.row][step_pt.col] {
                 CellState::Step { value } => {
                     let mut found_neighbour = false;
                     for offset in offsets.iter() {
                         match self.calc_location(&step_pt, &offset) {
                             Ok(offset_pt) => {
                                 let offset_pt_step_value =
-                                    grid[offset_pt.row][offset_pt.col].step_value();
+                                grid_state[offset_pt.row][offset_pt.col].step_value();
                                 match offset_pt_step_value {
                                     Some(offset_pt_value) => {
                                         if step_pt == *start {
@@ -123,7 +123,7 @@ impl Solver<'_> {
     // Assumes 'start' and 'end' are valid
     fn solve_lee(&self, start: &Point, end: &Point) -> Result<Solution, SolveError> {
         let mut q: VecDeque<Point> = VecDeque::new();
-        let mut grid = self.maze.definition.grid.clone();
+        let mut grid_state = self.maze.definition.to_state();
         let offsets = [
             Offset { row: -1, col: 0 }, // Up
             Offset { row: 0, col: -1 }, // Left
@@ -132,23 +132,23 @@ impl Solver<'_> {
         ];
 
         q.push_back(start.clone());
-        grid[start.row][start.col] = CellState::Step { value: 0 };
+        grid_state[start.row][start.col] = CellState::Step { value: 0 };
         while q.len() > 0 {
             let opt_pt = q.pop_front();
             match opt_pt {
                 Some(pt) => {
-                    let pt_step_value = grid[pt.row][pt.col].step_value();
+                    let pt_step_value = grid_state[pt.row][pt.col].step_value();
                     match pt_step_value {
                         Some(value) => {
                             for offset in offsets.iter() {
                                 match self.calc_location(&pt, &offset) {
-                                    Ok(offset_pt) => match grid[offset_pt.row][offset_pt.col] {
+                                    Ok(offset_pt) => match grid_state[offset_pt.row][offset_pt.col] {
                                         CellState::Empty => {
-                                            grid[offset_pt.row][offset_pt.col] =
+                                            grid_state[offset_pt.row][offset_pt.col] =
                                                 CellState::Step { value: value + 1 };
                                             if offset_pt == *end {
                                                 return self
-                                                    .get_lee_solution(&grid, start, end, &offsets);
+                                                    .get_lee_solution(&grid_state, start, end, &offsets);
                                             }
                                             q.push_back(offset_pt.clone());
                                         }

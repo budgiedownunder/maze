@@ -5,35 +5,49 @@ use crate::Point;
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 pub struct Definition {
-    pub rows: usize,
-    pub cols: usize,
-    pub grid: Vec<Vec<CellState>>,
+    pub grid: Vec<Vec<char>>,
 }
 
 impl Definition {
+    // Public interface functions
     pub fn new(rows: usize, cols: usize) -> Self {
         Definition {
-            rows,
-            cols,
-            grid: vec![vec![CellState::Empty; cols]; rows],
+            grid: vec![vec![' '; cols]; rows],
         }
     }
-    pub fn from_vec(grid: Vec<Vec<CellState>>) -> Self {
-        let first_row_col_count = grid.get(0).map_or(0, |inner_vec| inner_vec.len());
-        let same_col_counts = grid
+
+    pub fn row_count(&self) -> usize {
+        self.grid.len()
+    }
+
+    pub fn col_count(&self) -> usize {
+        Self::first_row_col_count(&self.grid)
+    }
+
+    pub fn from_vec(grid: Vec<Vec<char>>) -> Self {
+        Self::validate_grid(&grid);
+
+        Definition { grid: grid }
+    }
+    pub fn to_state(&self) -> Vec<Vec<CellState>> {
+        return self
+            .grid
             .iter()
-            .all(|inner_vec| inner_vec.len() == first_row_col_count);
-        if !same_col_counts {
-            panic!("grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_col_count);
-        }
-        Definition {
-            rows: grid.len(),
-            cols: first_row_col_count,
-            grid: grid,
-        }
+            .map(|inner_vec| {
+                inner_vec
+                    .iter()
+                    .map(|value| match value {
+                        'W' => CellState::Blocked,
+                        ' ' => CellState::Empty,
+                        _ => panic!("grid contains unsupported cell character: {}", value),
+                    })
+                    .collect::<Vec<CellState>>()
+            })
+            .collect();
     }
+
     pub fn is_valid(&self, pt: &Point) -> bool {
-        if pt.row >= self.rows || pt.col >= self.cols {
+        if pt.row >= self.row_count() || pt.col >= self.col_count() {
             return false;
         }
         true
@@ -46,13 +60,39 @@ impl Definition {
                 inner_vec
                     .iter()
                     .map(|value| match value {
-                        CellState::Blocked => '\u{2588}',
-                        CellState::Empty => '\u{2591}',
+                        'B' => '\u{2588}',
+                        ' ' => '\u{2591}',
                         _ => '-',
                     })
                     .collect::<Vec<char>>()
             })
             .collect();
+    }
+
+    // Private helper functions
+
+    fn first_row_col_count(grid: &Vec<Vec<char>>) -> usize {
+        grid.get(0).map_or(0, |inner_vec| inner_vec.len())
+    }
+
+    fn validate_grid(grid: &Vec<Vec<char>>) {
+        let first_row_col_count = Self::first_row_col_count(&grid);
+        let same_col_counts = grid
+            .iter()
+            .all(|inner_vec| inner_vec.len() == first_row_col_count);
+        if !same_col_counts {
+            panic!("grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_col_count);
+        }
+        for (row_idx, row) in grid.iter().enumerate() {
+            for (col_idx, &item) in row.iter().enumerate() {
+                if item != ' ' && item != 'W' {
+                    panic!(
+                        "grid vector contains an invalid character '{}' at location [{}, {}]",
+                        item, row_idx, col_idx
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -63,34 +103,35 @@ mod tests {
     #[test]
     fn can_create_empty_from_dimensions() {
         let d = Definition::new(0, 0);
-        assert_eq!(d.rows, 0);
-        assert_eq!(d.cols, 0);
+        assert_eq!(d.row_count(), 0);
+        assert_eq!(d.col_count(), 0);
     }
 
     #[test]
     fn can_create_new_from_dimensions() {
         let d = Definition::new(2, 3);
-        assert_eq!(d.rows, 2);
-        assert_eq!(d.cols, 3);
+        assert_eq!(d.row_count(), 2);
+        assert_eq!(d.col_count(), 3);
     }
 
     #[test]
     fn can_create_empty_from_vector() {
-        let grid: Vec<Vec<CellState>> = vec![];
+        let grid: Vec<Vec<char>> = vec![];
         let d = Definition::from_vec(grid);
-        assert_eq!(d.rows, 0);
-        assert_eq!(d.cols, 0);
+        assert_eq!(d.row_count(), 0);
+        assert_eq!(d.col_count(), 0);
     }
 
     #[test]
     fn can_create_new_from_vector() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![CellState::Empty, CellState::Empty, CellState::Empty],
-            vec![CellState::Empty, CellState::Empty, CellState::Empty],
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' '], 
+            vec![' ', ' ', ' ']
         ];
         let d = Definition::from_vec(grid);
-        assert_eq!(d.rows, 2);
-        assert_eq!(d.cols, 3);
+        assert_eq!(d.row_count(), 2);
+        assert_eq!(d.col_count(), 3);
     }
 
     #[test]
@@ -98,14 +139,10 @@ mod tests {
         expected = "grid vector contains rows with different numbers of columns (expected 3 for all rows)"
     )]
     fn cannot_create_new_from_vector_with_diff_row_counts() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![CellState::Empty, CellState::Empty, CellState::Empty],
-            vec![
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-                CellState::Empty,
-            ],
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' '],
+            vec![' ', ' ', ' ', ' ']
         ];
         let _d = Definition::from_vec(grid);
     }
@@ -114,28 +151,26 @@ mod tests {
     fn can_serialize_empty_1() {
         let d = Definition::new(0, 0);
         let s = serde_json::to_string(&d).expect("Failed to serialize");
-        assert_eq!(s, "{\"rows\":0,\"cols\":0,\"grid\":[]}");
+        assert_eq!(s, "{\"grid\":[]}");
     }
 
     #[test]
     fn can_serialize_empty_2() {
-        let grid: Vec<Vec<CellState>> = vec![];
+        let grid: Vec<Vec<char>> = vec![];
         let d = Definition::from_vec(grid);
         let s = serde_json::to_string(&d).expect("Failed to serialize");
-        assert_eq!(s, "{\"rows\":0,\"cols\":0,\"grid\":[]}");
+        assert_eq!(s, "{\"grid\":[]}");
     }
 
     #[test]
     fn can_serialize_non_empty() {
-        let grid: Vec<Vec<CellState>> = vec![
-            vec![CellState::Empty, CellState::Empty, CellState::Empty],
-            vec![CellState::Empty, CellState::Empty, CellState::Empty],
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' '],
+            vec![' ', ' ', ' ']
         ];
         let d = Definition::from_vec(grid);
         let s = serde_json::to_string(&d).expect("Failed to serialize");
-        assert_eq!(
-            s,
-            "{\"rows\":2,\"cols\":3,\"grid\":[[\"Empty\",\"Empty\",\"Empty\"],[\"Empty\",\"Empty\",\"Empty\"]]}"
-        );
+        assert_eq!(s, "{\"grid\":[[\" \",\" \",\" \"],[\" \",\" \",\" \"]]}");
     }
 }
