@@ -135,6 +135,17 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "grid vector contains an invalid character 'X' at location [1, 2]")]
+    fn cannot_create_new_from_vector_with_invalid_char() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' '],
+            vec![' ', ' ', 'X']
+        ];
+        let _d = Definition::from_vec(grid);
+    }
+
+    #[test]
     #[should_panic(
         expected = "grid vector contains rows with different numbers of columns (expected 3 for all rows)"
     )]
