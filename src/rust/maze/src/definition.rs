@@ -4,31 +4,122 @@ use crate::CellState;
 use crate::Point;
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
+/// Represents a maze definition
 pub struct Definition {
+    /// 2-d grid (rows x columns) of characters describing the maze layout, where
+    /// - `'W'`:  Represents a wall.
+    /// - `' '`:  Represents an empty cell. 
     pub grid: Vec<Vec<char>>,
 }
 
 impl Definition {
     // Public interface functions
+
+    /// Creates a maze definition instance with the given number of rows x columns empty cells
+    /// # Arguments
+    /// * `rows` - Number of rows
+    /// * `cols` - Number of columns
+    /// 
+    /// # Returns
+    /// 
+    /// A new maze definition instance
+    /// 
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// let d = Definition::new(3, 4);
+    /// assert_eq!(d.row_count(), 3);
+    /// assert_eq!(d.col_count(), 4);
+    /// ```
     pub fn new(rows: usize, cols: usize) -> Self {
         Definition {
             grid: vec![vec![' '; cols]; rows],
         }
     }
 
+    /// Returns the number of rows associated with the definition instance
+    /// # Returns
+    /// 
+    /// Number of rows
+    /// 
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// let d = Definition::new(3, 4);
+    /// assert_eq!(d.row_count(), 3);
+    /// ``` 
     pub fn row_count(&self) -> usize {
         self.grid.len()
     }
 
+    /// Returns the number of columns associated with the definition instance
+    /// # Returns
+    /// 
+    /// Number of columns
+    /// 
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// let d = Definition::new(3, 4);
+    /// assert_eq!(d.col_count(), 4);
+    /// ```
     pub fn col_count(&self) -> usize {
         Self::first_row_col_count(&self.grid)
     }
 
+    /// Creates a new maze definition for the given vector of cell definition character rows, where:
+    /// - `'W'`:  Represents a wall.
+    /// - `' '`:  Represents an empty cell. 
+    /// 
+    /// # Arguments
+    /// 
+    /// A vector of row-column cell states
+    /// 
+    /// # Returns
+    /// 
+    /// A new definition instance
+    /// 
+    /// # Examples
+    /// 
+    /// Create a 2 row x 3 column definition with a wall in the last column
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec![' ', ' ', 'W'], 
+    ///    vec![' ', ' ', 'W']
+    /// ];
+    /// let d = Definition::from_vec(grid);
+    /// assert_eq!(d.row_count(), 2);
+    /// assert_eq!(d.col_count(), 3);
+    /// ``` 
     pub fn from_vec(grid: Vec<Vec<char>>) -> Self {
         Self::validate_grid(&grid);
 
         Definition { grid: grid }
     }
+
+    /// Converts the definition instance to a vector of row cell states
+    /// 
+    /// # Returns
+    /// 
+    /// A vector of row-column cell states
+    /// 
+    /// # Examples
+    /// 
+    /// Create a maze definition with 3 rows and 4 columns, convert it to a row-column state vector and then confirm that 
+    /// the number of rows in the state vector is the same as the number of rows in the definition (3).
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// let d = Definition::new(3, 4);
+    /// let state = d.to_state(); 
+    /// assert_eq!(state.len(), d.row_count());
+    /// assert_eq!(state.len(), 3);
+    /// ``` 
     pub fn to_state(&self) -> Vec<Vec<CellState>> {
         return self
             .grid
@@ -37,7 +128,7 @@ impl Definition {
                 inner_vec
                     .iter()
                     .map(|value| match value {
-                        'W' => CellState::Blocked,
+                        'W' => CellState::Wall,
                         ' ' => CellState::Empty,
                         _ => panic!("grid contains unsupported cell character: {}", value),
                     })
@@ -46,12 +137,41 @@ impl Definition {
             .collect();
     }
 
+    /// Checks that a point is valid for the definition instance
+    /// # Returns
+    /// Boolean
+    /// 
+    /// # Examples
+    /// 
+    /// Create a maze definition with 3 rows and 4 columns and confirm that [2,1] is valid, but that [3,1] is not
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// use maze::Point;
+    /// let d = Definition::new(3, 4);
+    /// assert_eq!(d.is_valid( &Point {row: 2, col: 1}), true);
+    /// assert_eq!(d.is_valid( &Point {row: 3, col: 1}), false);
+    /// ```
     pub fn is_valid(&self, pt: &Point) -> bool {
         if pt.row >= self.row_count() || pt.col >= self.col_count() {
             return false;
         }
         true
     }
+
+    /// Converts the definition instance to a vector of display characters
+    /// # Returns
+    /// Vector containing the rows of display characters
+    ///  
+    /// # Examples
+    /// 
+    /// Create a maze definition with 3 rows and 4 columns and print it
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// let d = Definition::new(3, 4);
+    /// println!("{:?}", d.display_grid());
+    /// ```
     pub fn display_grid(&self) -> Vec<Vec<char>> {
         return self
             .grid
@@ -60,7 +180,7 @@ impl Definition {
                 inner_vec
                     .iter()
                     .map(|value| match value {
-                        'B' => '\u{2588}',
+                        'W' => '\u{2588}',
                         ' ' => '\u{2591}',
                         _ => '-',
                     })

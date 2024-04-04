@@ -7,24 +7,155 @@ use crate::Point;
 use crate::Solver;
 
 #[allow(dead_code)]
+/// Represents a maze
 pub struct Maze {
+    /// Definition, containing the layout of the maze 
     pub definition: Definition,
 }
 
 impl Maze {
+    /// Creates a new maze instance with the given definition
+    /// # Arguments
+    /// * `grid` - Maze definition
+    /// 
+    /// # Returns
+    /// 
+    /// A new maze instance
+    /// 
+    /// # Examples
+    /// 
+    /// Create a 2 row x 3 column definition with a wall in the last column
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// use maze::Maze;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec![' ', ' ', 'W'], 
+    ///    vec![' ', ' ', 'W']
+    /// ];
+    /// let d = Definition::from_vec(grid);
+    /// let m = Maze::new(d);
+    /// assert_eq!(m.definition.row_count(), 2);
+    /// assert_eq!(m.definition.col_count(), 3);
     pub fn new(definition: Definition) -> Maze {
         Maze { definition }
     }
+    /// Creates a new maze definition for the given vector of cell definition character rows, where:
+    /// - `'W'`:  Represents a wall.
+    /// - `' '`:  Represents an empty cell.
+    ///  
+    /// # Arguments
+    /// 
+    /// A vector of row-column cell states
+    /// 
+    /// # Returns
+    /// 
+    /// A new maze instance
+    /// 
+    /// 
+    /// # Examples
+    /// 
+    /// Create a 2 row x 3 column definition with a wall in the last column
+    ///
+    /// ```
+    /// use maze::Maze;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec![' ', ' ', 'W'], 
+    ///    vec![' ', ' ', 'W']
+    /// ];
+    /// let m = Maze::from_vec(grid);
+    /// assert_eq!(m.definition.row_count(), 2);
+    /// assert_eq!(m.definition.col_count(), 3);
     pub fn from_vec(grid: Vec<Vec<char>>) -> Self {
         Maze {
             definition: Definition::from_vec(grid),
         }
     }
+    /// Attempts to solve the path between a start and end point within the maze instance
+    /// # Arguments
+    /// * `start` - Start point
+    /// * `end` - End point
+    /// 
+    /// # Returns
+    /// 
+    /// A `Result` containing either the solution if successful, or a `SolveError` if an error occurs 
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use maze::Maze;
+    /// use maze::Point;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec![' ', 'W', ' ', ' ', 'W'],
+    ///    vec![' ', 'W', ' ', 'W', ' '],
+    ///    vec![' ', ' ', ' ', 'W', ' '],
+    ///    vec!['W', ' ', 'W', ' ', ' '],
+    ///    vec![' ', ' ', ' ', 'W', ' '],
+    ///    vec!['W', 'W', ' ', ' ', ' '],
+    ///    vec!['W', 'W', ' ', 'W', ' '],
+    /// ];
+    /// let m = Maze::from_vec(grid);
+    /// let start = Point { row: 0, col: 0 };
+    /// let end = Point { row: 2, col: 4 };
+    /// let result = m.solve(start, end);
+    /// match result {
+    ///    Ok(solution) => {
+    ///       println!("Successfully solved maze, solution path => {}", solution.path); 
+    ///    }
+    ///    Err(error) => {
+    ///        panic!(
+    ///            "failed to solve maze => {}",
+    ///           error.message
+    ///        );
+    ///    }
+    /// }
+    /// ```
     pub fn solve(&self, start: Point, end: Point) -> Result<Solution, SolveError> {
         let s = Solver { maze: &self };
         s.solve(start, end)
     }
 
+    /// Print a maze instance with the given start point, end point and solution path
+    /// # Arguments
+    /// * `start` - Start point
+    /// * `end` - End point
+    /// * `path` - Solution path
+    /// 
+    /// # Returns
+    /// 
+    /// Nothing
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use maze::Maze;
+    /// use maze::Point;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec![' ', 'W', ' ', ' ', 'W'],
+    ///    vec![' ', 'W', ' ', 'W', ' '],
+    ///    vec![' ', ' ', ' ', 'W', ' '],
+    ///    vec!['W', ' ', 'W', ' ', ' '],
+    ///    vec![' ', ' ', ' ', 'W', ' '],
+    ///    vec!['W', 'W', ' ', ' ', ' '],
+    ///    vec!['W', 'W', ' ', 'W', ' '],
+    /// ];
+    /// let m = Maze::from_vec(grid);
+    /// let start = Point { row: 0, col: 0 };
+    /// let end = Point { row: 2, col: 4 };
+    /// let result = m.solve(start.clone(), end.clone());
+    /// match result {
+    ///    Ok(solution) => {
+    ///       println!("Successfully solved maze:");
+    ///       m.print(start, end, solution.path);
+    ///    }
+    ///    Err(error) => {
+    ///        panic!(
+    ///            "failed to solve maze => {}",
+    ///           error.message
+    ///        );
+    ///    }
+    /// }
+    /// ```
     pub fn print(&self, start: Point, end: Point, path: Path) {
         let mut base = self.definition.display_grid();
         let mut path_idx = 0;

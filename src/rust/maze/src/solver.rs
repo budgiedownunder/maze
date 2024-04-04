@@ -9,7 +9,9 @@ use crate::Point;
 use crate::Solution;
 
 #[derive(Debug)]
+/// Represents a solve error
 pub struct SolveError {
+    /// Error message
     pub message: String,
 }
 
@@ -30,7 +32,9 @@ impl std::fmt::Display for SolveError {
 impl Error for SolveError {}
 
 #[allow(dead_code)]
+/// Represents a maze solver
 pub struct Solver<'a> {
+    /// Maze reference
     pub maze: &'a Maze,
 }
 
@@ -168,6 +172,48 @@ impl Solver<'_> {
         Err(SolveError::new("no solution found"))
     }
 
+    /// Attempts to solves the path between a start and end point within the maze referenced by the solver instance
+    /// # Arguments
+    /// * `start` - Start point
+    /// * `end` - End point
+    /// 
+    /// # Returns
+    /// 
+    /// A `Result` containing either the solution if successful, or a `SolveError` if an error occurs 
+    /// 
+    /// # Examples
+    /// 
+    /// ```
+    /// use maze::Maze;
+    /// use maze::Point;
+    /// use maze::Solver;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec![' ', 'W', ' ', ' ', 'W'],
+    ///    vec![' ', 'W', ' ', 'W', ' '],
+    ///    vec![' ', ' ', ' ', 'W', ' '],
+    ///    vec!['W', ' ', 'W', ' ', ' '],
+    ///    vec![' ', ' ', ' ', 'W', ' '],
+    ///    vec!['W', 'W', ' ', ' ', ' '],
+    ///    vec!['W', 'W', ' ', 'W', ' '],
+    /// ];
+    /// let solver = Solver {
+    ///     maze: &Maze::from_vec(grid),
+    /// };
+    /// let start = Point { row: 0, col: 0 };
+    /// let end = Point { row: 2, col: 4 };
+    /// let result = solver.solve(start, end);
+    /// match result {
+    ///    Ok(solution) => {
+    ///       println!("Successfully solved maze, solution path => {}", solution.path); 
+    ///    }
+    ///    Err(error) => {
+    ///        panic!(
+    ///            "failed to solve maze => {}",
+    ///           error.message
+    ///        );
+    ///    }
+    /// }
+    /// ```
     pub fn solve(&self, start: Point, end: Point) -> Result<Solution, SolveError> {
         if !self.is_valid(&start) {
             return Err(SolveError::new(

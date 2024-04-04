@@ -2,8 +2,11 @@ use std::fmt;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
+/// Represents an offset between cell points within a maze instance
 pub struct Offset {
+    /// Row offset
     pub row: i32,
+    /// Column offset
     pub col: i32,
 }
 

@@ -19,3 +19,4 @@ pub use path::Path;
 pub use point::Point;
 pub use solution::Solution;
 pub use solver::Solver;
+pub use solver::SolveError;

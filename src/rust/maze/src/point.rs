@@ -3,9 +3,12 @@ use std::fmt;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// Represents a cell point location within a maze
 pub struct Point {
-    pub row: usize, // Zero-based index
-    pub col: usize, // Zero-based index
+    /// Row index (zero-based)
+    pub row: usize, 
+    /// Column index (zero-based)
+    pub col: usize,
 }
 
 impl fmt::Display for Point {
