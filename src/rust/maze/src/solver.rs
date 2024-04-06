@@ -9,7 +9,7 @@ use crate::Point;
 use crate::Solution;
 
 #[derive(Debug)]
-/// Represents a solve error
+/// Represents a maze solve error
 pub struct SolveError {
     /// Error message
     pub message: String,

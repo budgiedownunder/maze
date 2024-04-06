@@ -4,7 +4,7 @@ use crate::Point;
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq)]
-/// Represents a path composed of a sequence of points
+/// Represents a path composed of a sequence of maze points
 pub struct Path {
     /// Vector of successive points within the path 
     pub points: Vec<Point>,

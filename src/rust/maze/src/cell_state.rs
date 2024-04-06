@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-/// Represents the state of a maze cell
+/// Represents the state of a maze point cell
 /// # Variants
 /// - `Empty`: An empty cell that is not currently part of a solution path
 /// - `Wall`: A wall

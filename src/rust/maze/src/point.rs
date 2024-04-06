@@ -3,7 +3,7 @@ use std::fmt;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-/// Represents a cell point location within a maze
+/// Represents a point within a maze
 pub struct Point {
     /// Row index (zero-based)
     pub row: usize, 
