@@ -157,7 +157,7 @@ impl Maze {
     /// }
     /// ```
     pub fn print(&self, start: Point, end: Point, path: Path) {
-        let mut base = self.definition.display_grid();
+        let mut display_chars = self.definition.to_display_chars();
         let mut path_idx = 0;
 
         for pt in &path.points {
@@ -184,17 +184,17 @@ impl Maze {
                     }
                 }
 
-                base[pt.row][pt.col] = direction.unicode_char();
+                display_chars[pt.row][pt.col] = direction.unicode_char();
             }
             path_idx += 1;
         }
         if self.definition.is_valid(&start) {
-            base[start.row][start.col] = 'S';
+            display_chars[start.row][start.col] = 'S';
         }
         if self.definition.is_valid(&end) {
-            base[end.row][end.col] = 'F';
+            display_chars[end.row][end.col] = 'F';
         }
-        for row in base.iter() {
+        for row in display_chars.iter() {
             println!();
             for col in row {
                 print!("{}", col);

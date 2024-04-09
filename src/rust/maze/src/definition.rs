@@ -170,9 +170,9 @@ impl Definition {
     /// ```
     /// use maze::Definition;
     /// let d = Definition::new(3, 4);
-    /// println!("{:?}", d.display_grid());
+    /// println!("{:?}", d.to_display_chars());
     /// ```
-    pub fn display_grid(&self) -> Vec<Vec<char>> {
+    pub fn to_display_chars(&self) -> Vec<Vec<char>> {
         return self
             .grid
             .iter()
