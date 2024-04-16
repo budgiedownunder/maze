@@ -1,35 +1,12 @@
 use std::collections::VecDeque;
-use std::error::Error;
 
 use crate::CellState;
 use crate::Maze;
+use crate::MazeError;
 use crate::Offset;
 use crate::Path;
 use crate::Point;
 use crate::Solution;
-
-#[derive(Debug)]
-/// Represents a maze solve error
-pub struct SolveError {
-    /// Error message
-    pub message: String,
-}
-
-impl SolveError {
-    fn new(message: &str) -> Self {
-        SolveError {
-            message: message.to_string(),
-        }
-    }
-}
-
-impl std::fmt::Display for SolveError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl Error for SolveError {}
 
 #[allow(dead_code)]
 /// Represents a maze solver
@@ -43,12 +20,12 @@ impl Solver<'_> {
         self.maze.definition.is_valid(pt)
     }
 
-    fn calc_location(&self, pt: &Point, offset: &Offset) -> Result<Point, SolveError> {
+    fn calc_location(&self, pt: &Point, offset: &Offset) -> Result<Point, MazeError> {
         if offset.row < 0 && (offset.row.abs() as usize) > pt.row {
-            return Err(SolveError::new("location is out of bounds"));
+            return Err(MazeError::new("location is out of bounds"));
         }
         if offset.col < 0 && (offset.col.abs() as usize) > pt.col {
-            return Err(SolveError::new("location is out of bounds"));
+            return Err(MazeError::new("location is out of bounds"));
         }
         let pt_check = Point {
             row: if offset.row >= 0 {
@@ -64,7 +41,7 @@ impl Solver<'_> {
         };
 
         if !self.is_valid(&pt_check) {
-            return Err(SolveError::new("location is out of bounds"));
+            return Err(MazeError::new("location is out of bounds"));
         }
         Ok(pt_check)
     }
@@ -75,11 +52,11 @@ impl Solver<'_> {
         start: &Point,
         end: &Point,
         offsets: &[Offset],
-    ) -> Result<Solution, SolveError> {
+    ) -> Result<Solution, MazeError> {
         let mut points: Vec<Point> = vec![];
         match grid_state[end.row][end.col].step_value() {
             None => {
-                return Err(SolveError::new(
+                return Err(MazeError::new(
                     "solution path not found (end point not processed)",
                 ));
             }
@@ -116,7 +93,7 @@ impl Solver<'_> {
                         }
                     }
                     if !found_neighbour {
-                        return Err(SolveError::new(format!("solution path not found (no path sequence neighbour exists for point {})", step_pt).as_str()));
+                        return Err(MazeError::new(format!("solution path not found (no path sequence neighbour exists for point {})", step_pt).as_str()));
                     }
                 }
                 _ => (),
@@ -125,7 +102,7 @@ impl Solver<'_> {
     }
 
     // Assumes 'start' and 'end' are valid
-    fn solve_lee(&self, start: &Point, end: &Point) -> Result<Solution, SolveError> {
+    fn solve_lee(&self, start: &Point, end: &Point) -> Result<Solution, MazeError> {
         let mut q: VecDeque<Point> = VecDeque::new();
         let mut grid_state = self.maze.definition.to_state();
         let offsets = [
@@ -169,7 +146,7 @@ impl Solver<'_> {
             }
         }
 
-        Err(SolveError::new("no solution found"))
+        Err(MazeError::new("no solution found"))
     }
 
     /// Attempts to solves the path between a start and end point within the maze referenced by the solver instance
@@ -179,7 +156,7 @@ impl Solver<'_> {
     /// 
     /// # Returns
     /// 
-    /// A `Result` containing either the solution if successful, or a `SolveError` if an error occurs 
+    /// A `Result` containing either the solution if successful, or a `MazeError` if an error occurs 
     /// 
     /// # Examples
     /// 
@@ -214,14 +191,14 @@ impl Solver<'_> {
     ///    }
     /// }
     /// ```
-    pub fn solve(&self, start: Point, end: Point) -> Result<Solution, SolveError> {
+    pub fn solve(&self, start: Point, end: Point) -> Result<Solution, MazeError> {
         if !self.is_valid(&start) {
-            return Err(SolveError::new(
+            return Err(MazeError::new(
                 format!("start location {} is invalid", start).as_str(),
             ));
         }
         if !self.is_valid(&end) {
-            return Err(SolveError::new(
+            return Err(MazeError::new(
                 format!("end location {} is invalid", end,).as_str(),
             ));
         }

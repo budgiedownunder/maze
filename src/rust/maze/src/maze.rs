@@ -1,5 +1,5 @@
+use crate::MazeError;
 use crate::solution::Solution;
-use crate::solver::SolveError;
 use crate::Definition;
 use crate::Direction;
 use crate::Path;
@@ -78,7 +78,7 @@ impl Maze {
     /// 
     /// # Returns
     /// 
-    /// A `Result` containing either the solution if successful, or a `SolveError` if an error occurs 
+    /// A `Result` containing either the solution if successful, or a `MazeError` if an error occurs 
     /// 
     /// # Examples
     /// 
@@ -110,7 +110,7 @@ impl Maze {
     ///    }
     /// }
     /// ```
-    pub fn solve(&self, start: Point, end: Point) -> Result<Solution, SolveError> {
+    pub fn solve(&self, start: Point, end: Point) -> Result<Solution, MazeError> {
         let s = Solver { maze: &self };
         s.solve(start, end)
     }
