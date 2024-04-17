@@ -345,6 +345,55 @@ impl Definition {
         self.grid.splice(start_row..start_row, empty_rows);
     }
 
+    /// Modify the value of each cell in a given region of the definition instance
+    /// # Arguments
+    ///
+    /// * `from` - Starting point of cell region to modify
+    /// * `to` - Ending point of cell region to modify
+    /// * `value` - Value to set
+    ///
+    /// # Returns
+    /// Nothing
+    ///
+    /// # Examples
+    ///
+    /// Create a maze definition with 5 rows and 4 columns, then set the central region (1,1) to (3, 2) to be a wall and then print it
+    ///
+    ///
+    /// ```
+    /// use maze::CellState;
+    /// use maze::Definition;
+    /// use maze::Point;
+    /// let mut d = Definition::new(5, 4);
+    /// let from = Point { row: 1, col: 1, };
+    /// let to = Point { row: 3, col: 2, };
+    /// d.set_value( from, to, 'W');
+    /// println!("{:?}", d.to_display_chars());
+    /// ```
+    /// ```
+    pub fn set_value(&mut self, from: Point, to: Point, value: char) {
+        if !self.is_valid(&from) {
+            panic!("invalid 'from' point {}", from);
+        }
+        if !self.is_valid(&to) {
+            panic!("invalid 'to' point {}", to);
+        }
+        match value {
+            'W' | ' ' => {
+                let top_row = from.row.min(to.row);
+                let bottom_row = from.row.max(to.row);
+                let left_col = from.col.min(to.col);
+                let right_col = from.col.max(to.col);
+                for row_idx in top_row..(bottom_row + 1) {
+                    for col_idx in left_col..(right_col + 1) {
+                        self.grid[row_idx][col_idx] = value;
+                    }
+                }
+            }
+            _ => panic!("invalid 'value' ('{}')", value),
+        }
+    }
+
     // Private helper functions
 
     fn panic_if_empty(&self) {
@@ -687,6 +736,42 @@ mod tests {
         assert_empty_rows(&d, 2, 3);
     }
 
+    #[test]
+    fn can_set_value_valid_range() {
+        let mut d = Definition::new(5, 4);
+        let from = Point { row: 1, col: 1 };
+        let to = Point { row: 3, col: 2 };
+        d.set_value(from.clone(), to.clone(), 'W');
+        assert_cell_value(&d, from.clone(), to.clone(), 'W');
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid 'from' point [6, 1]")]
+    fn cannot_set_value_invalid_from() {
+        let mut d = Definition::new(5, 4);
+        let from = Point { row: 6, col: 1 };
+        let to = Point { row: 2, col: 2 };
+        d.set_value(from, to, 'W');
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid 'to' point [6, 2]")]
+    fn cannot_set_value_invalid_to() {
+        let mut d = Definition::new(5, 4);
+        let from = Point { row: 1, col: 1 };
+        let to = Point { row: 6, col: 2 };
+        d.set_value(from, to, 'W');
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid 'value' ('X')")]
+    fn cannot_set_value_invalid_value() {
+        let mut d = Definition::new(5, 4);
+        let from = Point { row: 1, col: 1 };
+        let to = Point { row: 3, col: 2 };
+        d.set_value(from, to, 'X');
+    }
+
     // Private test helper functions
     fn assert_empty_cols(d: &Definition, start_col: usize, end_col: usize) {
         let row_count = d.row_count();
@@ -702,6 +787,23 @@ mod tests {
         for row_idx in start_row..(end_row + 1) {
             for col_idx in 0..col_count {
                 assert_eq!(d.grid[row_idx][col_idx], ' ');
+            }
+        }
+    }
+
+    fn assert_cell_value(d: &Definition, from: Point, to: Point, expected: char) {
+        let top_row = from.row.min(to.row);
+        let bottom_row = from.row.max(to.row);
+        let left_col = from.col.min(to.col);
+        let right_col = from.col.max(to.col);
+        for row_idx in top_row..(bottom_row + 1) {
+            for col_idx in left_col..(right_col + 1) {
+                if d.grid[row_idx][col_idx] != expected {
+                    panic!(
+                        "grid contains unexpected value: '{}' - expected: '{}' (row: {}, col: {})",
+                        d.grid[row_idx][col_idx], expected, row_idx, col_idx
+                    );
+                }
             }
         }
     }
