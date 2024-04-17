@@ -34,7 +34,7 @@ impl Definition {
     /// ```
     pub fn new(row_count: usize, col_count: usize) -> Self {
         Definition {
-            grid: Self::create_empty_rows(row_count, col_count),
+            grid: Self::alloc_empty_rows(row_count, col_count),
         }
     }
 
@@ -341,7 +341,7 @@ impl Definition {
         if count == 0 {
             return;
         }
-        let empty_rows = Self::create_empty_rows(count, self.col_count());
+        let empty_rows = Self::alloc_empty_rows(count, self.col_count());
         self.grid.splice(start_row..start_row, empty_rows);
     }
 
@@ -426,7 +426,7 @@ impl Definition {
         }
     }
 
-    fn create_empty_rows(row_count: usize, col_count: usize) -> Vec<Vec<char>> {
+    fn alloc_empty_rows(row_count: usize, col_count: usize) -> Vec<Vec<char>> {
         vec![vec![' '; col_count]; row_count]
     }
 }
