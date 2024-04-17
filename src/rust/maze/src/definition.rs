@@ -234,7 +234,7 @@ impl Definition {
     pub fn delete_cols(&mut self, start_col: usize, count: usize) {
         self.panic_if_empty();
         if start_col >= self.col_count() {
-            panic!("invalid start_col index ({})", start_col);
+            panic!("invalid 'start_col' index ({})", start_col);
         }
         for row in &mut self.grid {
             row.drain(start_col..(start_col + count));
@@ -267,7 +267,7 @@ impl Definition {
     pub fn insert_cols(&mut self, start_col: usize, count: usize) {
         self.panic_if_empty();
         if start_col >= self.col_count() + 1 {
-            panic!("invalid start_col index ({})", start_col);
+            panic!("invalid 'start_col' index ({})", start_col);
         }
         for row in &mut self.grid {
             row.splice(start_col..start_col, vec![' '; count]);
@@ -303,7 +303,7 @@ impl Definition {
     pub fn delete_rows(&mut self, start_row: usize, count: usize) {
         self.panic_if_empty();
         if start_row >= self.row_count() {
-            panic!("invalid start_row index ({})", start_row);
+            panic!("invalid 'start_row' index ({})", start_row);
         }
         self.grid.drain(start_row..(start_row + count));
     }
@@ -336,7 +336,7 @@ impl Definition {
     /// ```
     pub fn insert_rows(&mut self, start_row: usize, count: usize) {
         if start_row >= self.row_count() + 1 {
-            panic!("invalid start_row index ({})", start_row);
+            panic!("invalid 'start_row' index ({})", start_row);
         }
         if count == 0 {
             return;
@@ -418,8 +418,8 @@ impl Definition {
             for (col_idx, &item) in row.iter().enumerate() {
                 if item != ' ' && item != 'W' {
                     panic!(
-                        "grid vector contains an invalid character '{}' at location [{}, {}]",
-                        item, row_idx, col_idx
+                        "grid vector contains an invalid character '{}' at location {}",
+                        item, Point{ row: row_idx, col: col_idx}
                     );
                 }
             }
@@ -564,7 +564,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "invalid start_col index (4)")]
+    #[should_panic(expected = "invalid 'start_col' index (4)")]
     fn cannot_delete_invalid_cols() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
@@ -609,7 +609,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "invalid start_col index (5)")]
+    #[should_panic(expected = "invalid 'start_col' index (5)")]
     fn cannot_insert_invalid_cols() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
@@ -669,7 +669,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "invalid start_row index (2)")]
+    #[should_panic(expected = "invalid 'start_row' index (2)")]
     fn cannot_delete_invalid_rows() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
@@ -706,7 +706,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "invalid start_row index (3)")]
+    #[should_panic(expected = "invalid 'start_row' index (3)")]
     fn cannot_insert_invalid_rows() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
