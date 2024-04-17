@@ -1,7 +1,7 @@
-use crate::MazeError;
 use crate::solution::Solution;
 use crate::Definition;
 use crate::Direction;
+use crate::MazeError;
 use crate::Path;
 use crate::Point;
 use crate::Solver;
@@ -9,7 +9,7 @@ use crate::Solver;
 #[allow(dead_code)]
 /// Represents a maze
 pub struct Maze {
-    /// Definition, containing the layout of the maze 
+    /// Definition, containing the layout of the maze
     pub definition: Definition,
 }
 
@@ -17,20 +17,20 @@ impl Maze {
     /// Creates a new maze instance with the given definition
     /// # Arguments
     /// * `grid` - Maze definition
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new maze instance
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// Create a 2 row x 3 column definition with a wall in the last column
     ///
     /// ```
     /// use maze::Definition;
     /// use maze::Maze;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', ' ', 'W'], 
+    ///    vec![' ', ' ', 'W'],
     ///    vec![' ', ' ', 'W']
     /// ];
     /// let d = Definition::from_vec(grid);
@@ -43,24 +43,24 @@ impl Maze {
     /// Creates a new maze definition for the given vector of cell definition character rows, where:
     /// - `'W'`:  Represents a wall.
     /// - `' '`:  Represents an empty cell.
-    ///  
+    ///
     /// # Arguments
-    /// 
-    /// A vector of row-column cell states
-    /// 
+    ///
+    /// `grid` - Vector of row-column cell states
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new maze instance
-    /// 
-    /// 
+    ///
+    ///
     /// # Examples
-    /// 
+    ///
     /// Create a 2 row x 3 column definition with a wall in the last column
     ///
     /// ```
     /// use maze::Maze;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', ' ', 'W'], 
+    ///    vec![' ', ' ', 'W'],
     ///    vec![' ', ' ', 'W']
     /// ];
     /// let m = Maze::from_vec(grid);
@@ -75,13 +75,13 @@ impl Maze {
     /// # Arguments
     /// * `start` - Start point
     /// * `end` - End point
-    /// 
+    ///
     /// # Returns
-    /// 
-    /// A `Result` containing either the solution if successful, or a `MazeError` if an error occurs 
-    /// 
+    ///
+    /// A `Result` containing either the solution if successful, or a `MazeError` if an error occurs
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use maze::Maze;
     /// use maze::Point;
@@ -100,7 +100,7 @@ impl Maze {
     /// let result = m.solve(start, end);
     /// match result {
     ///    Ok(solution) => {
-    ///       println!("Successfully solved maze, solution path => {}", solution.path); 
+    ///       println!("Successfully solved maze, solution path => {}", solution.path);
     ///    }
     ///    Err(error) => {
     ///        panic!(
@@ -120,13 +120,13 @@ impl Maze {
     /// * `start` - Start point
     /// * `end` - End point
     /// * `path` - Solution path
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// Nothing
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use maze::Maze;
     /// use maze::Point;
