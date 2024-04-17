@@ -34,7 +34,7 @@ impl Definition {
     /// ```
     pub fn new(row_count: usize, col_count: usize) -> Self {
         Definition {
-            grid: vec![vec![' '; col_count]; row_count],
+            grid: Self::create_empty_rows(row_count, col_count),
         }
     }
 
@@ -427,13 +427,7 @@ impl Definition {
     }
 
     fn create_empty_rows(row_count: usize, col_count: usize) -> Vec<Vec<char>> {
-        let mut empty_rows: Vec<Vec<char>> = Vec::with_capacity(row_count);
-        for _ in 0..row_count {
-            let row_cols: Vec<char> = (0..col_count).map(|_| ' ').collect();
-
-            empty_rows.push(row_cols);
-        }
-        empty_rows
+        vec![vec![' '; col_count]; row_count]
     }
 }
 
