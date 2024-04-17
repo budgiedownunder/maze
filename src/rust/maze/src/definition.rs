@@ -227,14 +227,17 @@ impl Definition {
     ///    vec![' ', ' ', ' ', 'W'],
     ///    vec![' ', ' ', ' ', 'W']
     /// ];
-    /// let d = Definition::from_vec(grid);
+    /// let mut d = Definition::from_vec(grid);
     /// d.delete_cols(1,2);
     /// println!("{:?}", d.to_display_chars());
     /// ```
-    pub fn delete_cols(&self, start_col: usize, count: usize) {
+    pub fn delete_cols(&mut self, start_col: usize, count: usize) {
         self.panic_if_empty();
         if start_col >= self.col_count() {
             panic!("invalid start_col index ({})", start_col);
+        }
+        for row in &mut self.grid {
+            row.drain(start_col..(start_col + count));
         }
     }
 
@@ -257,14 +260,17 @@ impl Definition {
     ///    vec![' ', ' ', ' ', 'W'],
     ///    vec![' ', ' ', ' ', 'W']
     /// ];
-    /// let d = Definition::from_vec(grid);
+    /// let mut d = Definition::from_vec(grid);
     /// d.insert_cols(0,2);
     /// println!("{:?}", d.to_display_chars());
     /// ```
-    pub fn insert_cols(&self, start_col: usize, count: usize) {
+    pub fn insert_cols(&mut self, start_col: usize, count: usize) {
         self.panic_if_empty();
         if start_col >= self.col_count() + 1 {
             panic!("invalid start_col index ({})", start_col);
+        }
+        for row in &mut self.grid {
+            row.splice(start_col..start_col, vec![' '; count]);
         }
     }
 
@@ -498,7 +504,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn cannot_delete_cols_if_empty() {
-        let d = Definition::new(0, 0);
+        let mut d = Definition::new(0, 0);
         d.delete_cols(0, 1);
     }
 
@@ -509,7 +515,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let d = Definition::from_vec(grid);
+        let mut d = Definition::from_vec(grid);
         d.delete_cols(1, 2);
         assert_eq!(d.col_count(), 2);
     }
@@ -522,27 +528,29 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let d = Definition::from_vec(grid);
+        let mut d = Definition::from_vec(grid);
         d.delete_cols(4, 2);
     }
 
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn cannot_insert_cols_if_empty() {
-        let d = Definition::new(0, 0);
+        let mut d = Definition::new(0, 0);
         d.insert_cols(0, 1);
+        assert_empty_cols(&d, 0, 1);
     }
 
     #[test]
     fn can_insert_valid_cols() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
-            vec![' ', ' ', ' ', 'W'],
-            vec![' ', ' ', ' ', 'W']
+            vec![' ', 'W', ' ', 'W'],
+            vec![' ', 'W', ' ', 'W']
         ];
-        let d = Definition::from_vec(grid);
+        let mut d = Definition::from_vec(grid);
         d.insert_cols(1, 2);
         assert_eq!(d.col_count(), 6);
+        assert_empty_cols(&d, 1, 2);
     }
 
     #[test]
@@ -552,7 +560,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let d = Definition::from_vec(grid);
+        let mut d = Definition::from_vec(grid);
         d.insert_cols(1, 0);
         assert_eq!(d.col_count(), 4);
     }
@@ -565,7 +573,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let d = Definition::from_vec(grid);
+        let mut d = Definition::from_vec(grid);
         d.insert_cols(5, 2);
     }
 
@@ -576,9 +584,10 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let d = Definition::from_vec(grid);
+        let mut d = Definition::from_vec(grid);
         d.insert_cols(4, 2);
         assert_eq!(d.col_count(), 6);
+        assert_empty_cols(&d, 4, 5);
     }
 
     #[test]
@@ -679,9 +688,17 @@ mod tests {
     }
 
     // Private test helper functions
+    fn assert_empty_cols(d: &Definition, start_col: usize, end_col: usize) {
+        let row_count = d.row_count();
+        for row_idx in 0..row_count {
+            for col_idx in start_col..(end_col + 1) {
+                assert_eq!(d.grid[row_idx][col_idx], ' ');
+            }
+        }
+    }
+
     fn assert_empty_rows(d: &Definition, start_row: usize, end_row: usize) {
         let col_count = d.col_count();
-
         for row_idx in start_row..(end_row + 1) {
             for col_idx in 0..col_count {
                 assert_eq!(d.grid[row_idx][col_idx], ' ');
