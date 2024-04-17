@@ -17,8 +17,8 @@ impl Definition {
 
     /// Creates a maze definition instance with the given number of rows x columns empty cells
     /// # Arguments
-    /// * `rows` - Number of rows
-    /// * `cols` - Number of columns
+    /// * `row_count` - Number of rows
+    /// * `col_count` - Number of columns
     ///
     /// # Returns
     ///
@@ -32,9 +32,9 @@ impl Definition {
     /// assert_eq!(d.row_count(), 3);
     /// assert_eq!(d.col_count(), 4);
     /// ```
-    pub fn new(rows: usize, cols: usize) -> Self {
+    pub fn new(row_count: usize, col_count: usize) -> Self {
         Definition {
-            grid: vec![vec![' '; cols]; rows],
+            grid: vec![vec![' '; col_count]; row_count],
         }
     }
 
