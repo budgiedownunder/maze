@@ -247,7 +247,7 @@ mod tests {
     fn can_serialize_empty() {
         let m = Maze::new(Definition::new(0, 0));
         let s = serde_json::to_string(&m).expect("Failed to serialize");
-        assert_eq!(s, "{\"definition\":{\"grid\":[]}}");
+        assert_eq!(s, r#"{"definition":{"grid":[]}}"#);
     }
     #[test]
     fn can_serialize_non_empty() {
@@ -258,7 +258,10 @@ mod tests {
         ];
         let m = Maze::new(Definition::from_vec(grid));
         let s = serde_json::to_string(&m).expect("Failed to serialize");
-        assert_eq!(s, "{\"definition\":{\"grid\":[[\" \",\"W\",\" \"],[\" \",\" \",\"W\"]]}}");
+        assert_eq!(
+            s,
+            r#"{"definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#
+        );
     }
 
     #[test]

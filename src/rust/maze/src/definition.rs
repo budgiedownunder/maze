@@ -1,15 +1,53 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::HashMap;
 
 use crate::CellState;
 use crate::Point;
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 /// Represents a maze definition
 pub struct Definition {
     /// 2-d grid (rows x columns) of characters describing the maze layout, where
     /// - `'W'`:  Represents a wall.
     /// - `' '`:  Represents an empty cell.
     pub grid: Vec<Vec<char>>,
+}
+
+impl<'de> Deserialize<'de> for Definition {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let map: HashMap<String, Vec<Vec<char>>> = Deserialize::deserialize(deserializer)?;
+
+        for key in map.keys() {
+            if key != "grid" {
+                return Err(serde::de::Error::unknown_field(key, &["grid"]));
+            }
+        }
+
+        let grid = match map.get("grid") {
+            Some(inner_vecs) => inner_vecs.clone(),
+            None => {
+                return Err(serde::de::Error::missing_field("grid"));
+            }
+        };
+
+        for row in &grid {
+            for ch in row {
+                if *ch != 'W' && *ch != ' ' {
+                    return Err(serde::de::Error::invalid_value(
+                        serde::de::Unexpected::Char(*ch),
+                        &"valid characters are 'W' or ' '",
+                    ));
+                }
+            }
+        }
+
+        Self::validate_grid(&grid);
+
+        Ok(Definition { grid })
+    }
 }
 
 impl Definition {
@@ -419,7 +457,11 @@ impl Definition {
                 if item != ' ' && item != 'W' {
                     panic!(
                         "grid vector contains an invalid character '{}' at location {}",
-                        item, Point{ row: row_idx, col: col_idx}
+                        item,
+                        Point {
+                            row: row_idx,
+                            col: col_idx
+                        }
                     );
                 }
             }
@@ -509,7 +551,7 @@ mod tests {
     fn can_serialize_empty_1() {
         let d = Definition::new(0, 0);
         let s = serde_json::to_string(&d).expect("Failed to serialize");
-        assert_eq!(s, "{\"grid\":[]}");
+        assert_eq!(s, r#"{"grid":[]}"#);
     }
 
     #[test]
@@ -517,7 +559,7 @@ mod tests {
         let grid: Vec<Vec<char>> = vec![];
         let d = Definition::from_vec(grid);
         let s = serde_json::to_string(&d).expect("Failed to serialize");
-        assert_eq!(s, "{\"grid\":[]}");
+        assert_eq!(s, r#"{"grid":[]}"#);
     }
 
     #[test]
@@ -529,7 +571,7 @@ mod tests {
         ];
         let d = Definition::from_vec(grid);
         let s = serde_json::to_string(&d).expect("Failed to serialize");
-        assert_eq!(s, "{\"grid\":[[\" \",\" \",\" \"],[\" \",\" \",\" \"]]}");
+        assert_eq!(s, r#"{"grid":[[" "," "," "],[" "," "," "]]}"#);
     }
 
     #[test]
@@ -541,7 +583,104 @@ mod tests {
         ];
         let d = Definition::from_vec(grid);
         let s = serde_json::to_string(&d).expect("Failed to serialize");
-        assert_eq!(s, "{\"grid\":[[\" \",\"W\",\" \"],[\" \",\" \",\"W\"]]}");
+        assert_eq!(s, r#"{"grid":[[" ","W"," "],[" "," ","W"]]}"#);
+    }
+
+    #[test]
+    fn can_deserialize_empty() {
+        let s = r#"{"grid":[]}"#;
+        let d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        assert_eq!(d.row_count(), 0);
+        assert_eq!(d.col_count(), 0);
+    }
+
+    #[test]
+    fn can_deserialize_non_empty() {
+        let s = r#"{"grid":[[" ","W"," "],[" "," ","W"]]}"#;
+        let d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        assert_eq!(d.row_count(), 2);
+        assert_eq!(d.col_count(), 3);
+        let grid: Vec<Vec<char>> = vec![vec![' ', 'W', ' '], vec![' ', ' ', 'W']];
+        assert_eq!(d.grid, grid);
+    }
+
+    #[test]
+    #[should_panic(expected = "EOF while parsing an object")]
+    fn cannot_deserialize_bad_json_format_incomplete_object() {
+        let s = "{";
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "expected value")]
+    fn cannot_deserialize_bad_json_format_no_open_object() {
+        let s = "}";
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "expected value")]
+    fn cannot_deserialize_bad_json_format_missing_field_value() {
+        let s = r#"{"grid":}"#;
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "EOF while parsing a string")]
+    fn cannot_deserialize_bad_json_format_field_name_not_closed() {
+        let s = r#"{"grid:}"#;
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "key must be a string")]
+    fn cannot_deserialize_bad_json_format_field_name_not_quoted() {
+        let s = "{grid:}";
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = r#"invalid type: string \"a\", expected a sequence"#)]
+    fn cannot_deserialize_json_with_non_vec_grid_value() {
+        let s = r#"{"grid":"a"}"#;
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "missing field `grid`")]
+    fn cannot_deserialize_json_missing_grid_field() {
+        let s = "{}";
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown field `grid2`")]
+    fn cannot_deserialize_json_with_invalid_field_name() {
+        let s = r#"{"grid2":[[" ","W"," "],[" "," ","W"]]}"#;
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "invalid value: character `X`, expected valid characters are 'W' or ' '"
+    )]
+    fn cannot_deserialize_bad_json_invalid_char_1() {
+        let s = r#"{"grid":[[" ","X"," "],[" "," ","W"]]}"#;
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = r#"invalid value: string \"XX\", expected a character"#)]
+    fn cannot_deserialize_bad_json_invalid_char_2() {
+        let s = r#"{"grid":[[" ","XX"," "],[" "," ","W"]]}"#;
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "grid vector contains rows with different numbers of columns (expected 3 for all rows)")]
+    fn cannot_deserialize_bad_json_with_different_col_counts() {
+        let s = r#"{"grid":[[" "," "," "],[" "," "]]}"#;
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
     }
 
     #[test]

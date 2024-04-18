@@ -72,7 +72,7 @@ impl Solver<'_> {
                         match self.calc_location(&step_pt, &offset) {
                             Ok(offset_pt) => {
                                 let offset_pt_step_value =
-                                grid_state[offset_pt.row][offset_pt.col].step_value();
+                                    grid_state[offset_pt.row][offset_pt.col].step_value();
                                 match offset_pt_step_value {
                                     Some(offset_pt_value) => {
                                         if step_pt == *start {
@@ -123,13 +123,18 @@ impl Solver<'_> {
                         Some(value) => {
                             for offset in offsets.iter() {
                                 match self.calc_location(&pt, &offset) {
-                                    Ok(offset_pt) => match grid_state[offset_pt.row][offset_pt.col] {
+                                    Ok(offset_pt) => match grid_state[offset_pt.row][offset_pt.col]
+                                    {
                                         CellState::Empty => {
                                             grid_state[offset_pt.row][offset_pt.col] =
                                                 CellState::SolutionStep { value: value + 1 };
                                             if offset_pt == *end {
-                                                return self
-                                                    .get_lee_solution(&grid_state, start, end, &offsets);
+                                                return self.get_lee_solution(
+                                                    &grid_state,
+                                                    start,
+                                                    end,
+                                                    &offsets,
+                                                );
                                             }
                                             q.push_back(offset_pt.clone());
                                         }
@@ -149,17 +154,17 @@ impl Solver<'_> {
         Err(MazeError::new("no solution found"))
     }
 
-    /// Attempts to solves the path between a start and end point within the maze referenced by the solver instance
+    /// Attempts to solve the path between a start and end point within the maze referenced by the solver instance
     /// # Arguments
     /// * `start` - Start point
     /// * `end` - End point
-    /// 
+    ///
     /// # Returns
-    /// 
-    /// A `Result` containing either the solution if successful, or a `MazeError` if an error occurs 
-    /// 
+    ///
+    /// A `Result` containing either the solution if successful, or a `MazeError` if an error occurs
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// use maze::Maze;
     /// use maze::Point;
@@ -181,7 +186,7 @@ impl Solver<'_> {
     /// let result = solver.solve(start, end);
     /// match result {
     ///    Ok(solution) => {
-    ///       println!("Successfully solved maze, solution path => {}", solution.path); 
+    ///       println!("Successfully solved maze, solution path => {}", solution.path);
     ///    }
     ///    Err(error) => {
     ///        panic!(

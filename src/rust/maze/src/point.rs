@@ -6,7 +6,7 @@ use std::fmt;
 /// Represents a point within a maze
 pub struct Point {
     /// Row index (zero-based)
-    pub row: usize, 
+    pub row: usize,
     /// Column index (zero-based)
     pub col: usize,
 }
@@ -32,6 +32,6 @@ mod tests {
     fn should_support_serialize() {
         let my_pt = Point { row: 1, col: 2 };
         let s = serde_json::to_string(&my_pt).expect("Failed to serialize");
-        assert_eq!(s, "{\"row\":1,\"col\":2}");
+        assert_eq!(s, r#"{"row":1,"col":2}"#);
     }
 }
