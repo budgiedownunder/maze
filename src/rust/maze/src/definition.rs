@@ -11,7 +11,7 @@ pub struct Definition {
     /// 2-d grid (rows x columns) of characters describing the maze layout, where
     /// - `'W'`:  Represents a wall.
     /// - `' '`:  Represents an empty cell.
-    pub grid: Vec<Vec<char>>,
+    grid: Vec<Vec<char>>,
 }
 
 impl<'de> Deserialize<'de> for Definition {
@@ -197,7 +197,10 @@ impl Definition {
                     .map(|value| match value {
                         'W' => CellState::Wall,
                         ' ' => CellState::Empty,
-                        _ => panic!("grid contains unsupported cell character: {}", value),
+                        _ => panic!(
+                            "internal error - grid contains unsupported cell character: {}",
+                            value
+                        ),
                     })
                     .collect::<Vec<CellState>>()
             })
