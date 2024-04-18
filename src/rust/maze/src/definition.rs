@@ -8,9 +8,9 @@ use crate::Point;
 #[derive(Serialize)]
 /// Represents a maze definition
 pub struct Definition {
-    /// 2-d grid (rows x columns) of characters describing the maze layout, where
-    /// - `'W'`:  Represents a wall.
-    /// - `' '`:  Represents an empty cell.
+    // 2-d grid (rows x columns) of characters describing the maze layout, where
+    // - `'W'`:  Represents a wall.
+    // - `' '`:  Represents an empty cell.
     grid: Vec<Vec<char>>,
 }
 
