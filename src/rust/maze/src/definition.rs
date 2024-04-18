@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, de, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
 use crate::CellState;
@@ -48,8 +48,8 @@ impl<'de> Deserialize<'de> for Definition {
         match Self::validate_grid(&grid) {
             Some(err) => {
                 return Err(de::Error::custom(format!("{}", err.message)));
-            },
-            None => {},
+            }
+            None => {}
         }
 
         Ok(Definition { grid })
@@ -60,6 +60,7 @@ impl Definition {
     // Public interface functions
 
     /// Creates a maze definition instance with the given number of rows x columns empty cells
+    ///
     /// # Arguments
     /// * `row_count` - Number of rows
     /// * `col_count` - Number of columns
@@ -83,6 +84,7 @@ impl Definition {
     }
 
     /// Returns the number of rows associated with the definition instance
+    ///
     /// # Returns
     ///
     /// Number of rows
@@ -99,6 +101,7 @@ impl Definition {
     }
 
     /// Returns the number of columns associated with the definition instance
+    ///
     /// # Returns
     ///
     /// Number of columns
@@ -114,6 +117,7 @@ impl Definition {
         Self::first_row_col_count(&self.grid)
     }
     /// Checks whether the definition instance is empty
+    ///
     /// # Returns
     ///
     /// Boolean
@@ -159,9 +163,9 @@ impl Definition {
         match Self::validate_grid(&grid) {
             Some(err) => {
                 panic!("{}", err.message);
-            },
-            _ => {},
-        }    
+            }
+            _ => {}
+        }
         Definition { grid: grid }
     }
 
@@ -201,11 +205,13 @@ impl Definition {
     }
 
     /// Checks that a point is valid for the definition instance
+    ///
     /// # Arguments
     ///
     /// * `pt` - Point to validate
     ///
     /// # Returns
+    ///
     /// Boolean
     ///
     /// # Examples
@@ -227,7 +233,9 @@ impl Definition {
     }
 
     /// Converts the definition instance to a vector of display characters
+    ///
     /// # Returns
+    ///
     /// Vector containing the rows of display characters
     ///
     /// # Examples
@@ -257,13 +265,17 @@ impl Definition {
     }
 
     /// Deletes one or more consecutive columns from the definition instance
+    ///
     /// # Arguments
     ///
     /// * `start_col` - Start column index (zero-based)
     /// * `count` - Number of columns to delete
     ///
     /// # Returns
-    /// Nothing
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the definition is empty
+    /// - If the target columns are out of range
     ///
     /// # Examples
     ///
@@ -276,28 +288,37 @@ impl Definition {
     ///    vec![' ', ' ', ' ', 'W']
     /// ];
     /// let mut d = Definition::from_vec(grid);
-    /// d.delete_cols(1,2);
+    /// d.delete_cols(1,2).expect("delete_cols() failed");
     /// println!("{:?}", d.to_display_chars());
     /// ```
-    pub fn delete_cols(&mut self, start_col: usize, count: usize) {
-        self.panic_if_empty();
+    pub fn delete_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
+        if self.row_count() == 0 {
+            return Err(MazeError::new(format!("definition is empty").as_str()));
+        }
         if start_col >= self.col_count() {
-            panic!("invalid 'start_col' index ({})", start_col);
+            return Err(MazeError::new(
+                format!("invalid 'start_col' index ({})", start_col).as_str(),
+            ));
         }
         for row in &mut self.grid {
             row.drain(start_col..(start_col + count));
         }
+        Ok(())
     }
 
     /// Inserts one or more empty columns into the definition instance
+    ///
     /// # Arguments
     ///
     /// * `start_col` - Start column index (zero-based)
     /// * `count` - Number of columns to insert
     ///
     /// # Returns
-    /// Nothing
     ///
+    /// This function will return an error in the following situations:
+    /// - If the definition is empty
+    /// - If the target columns are out of range
+    ///  
     /// # Examples
     ///
     /// Create a maze definition with 2 rows and 4 columns, with a wall at the end of each row, insert 2 columns at the start of each row and print the result
@@ -309,27 +330,36 @@ impl Definition {
     ///    vec![' ', ' ', ' ', 'W']
     /// ];
     /// let mut d = Definition::from_vec(grid);
-    /// d.insert_cols(0,2);
+    /// d.insert_cols(0,2).expect("insert_cols() failed");
     /// println!("{:?}", d.to_display_chars());
     /// ```
-    pub fn insert_cols(&mut self, start_col: usize, count: usize) {
-        self.panic_if_empty();
+    pub fn insert_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
+        if self.row_count() == 0 {
+            return Err(MazeError::new(format!("definition is empty").as_str()));
+        }
         if start_col >= self.col_count() + 1 {
-            panic!("invalid 'start_col' index ({})", start_col);
+            return Err(MazeError::new(
+                format!("invalid 'start_col' index ({})", start_col).as_str(),
+            ));
         }
         for row in &mut self.grid {
             row.splice(start_col..start_col, vec![' '; count]);
         }
+        Ok(())
     }
 
     /// Deletes one or more consecutive rows from the definition instance
+    ///
     /// # Arguments
     ///
     /// * `start_row` - Start row index (zero-based)
     /// * `count` - Number of rows to delete
     ///
     /// # Returns
-    /// Nothing
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the definition is empty
+    /// - If the target rows are out of range
     ///
     /// # Examples
     ///
@@ -348,22 +378,30 @@ impl Definition {
     /// d.delete_rows(1,2);
     /// println!("{:?}", d.to_display_chars());
     /// ```
-    pub fn delete_rows(&mut self, start_row: usize, count: usize) {
-        self.panic_if_empty();
+    pub fn delete_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
+        if self.row_count() == 0 {
+            return Err(MazeError::new(format!("definition is empty").as_str()));
+        }
         if start_row >= self.row_count() {
-            panic!("invalid 'start_row' index ({})", start_row);
+            return Err(MazeError::new(
+                format!("invalid 'start_row' index ({})", start_row).as_str(),
+            ));
         }
         self.grid.drain(start_row..(start_row + count));
+        Ok(())
     }
 
     /// Inserts one or more empty rows into the definition instance
+    ///
     /// # Arguments
     ///
     /// * `start_row` - Start row index (zero-based)
     /// * `count` - Number of rows to insert
     ///
     /// # Returns
-    /// Nothing
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the target rows are out of range
     ///
     /// # Examples
     ///
@@ -382,15 +420,17 @@ impl Definition {
     /// d.insert_rows(3,2);
     /// println!("{:?}", d.to_display_chars());
     /// ```
-    pub fn insert_rows(&mut self, start_row: usize, count: usize) {
+    pub fn insert_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
         if start_row >= self.row_count() + 1 {
-            panic!("invalid 'start_row' index ({})", start_row);
+            return Err(MazeError::new(
+                format!("invalid 'start_row' index ({})", start_row).as_str(),
+            ));
         }
-        if count == 0 {
-            return;
+        if count > 0 {
+            let empty_rows = Self::alloc_empty_rows(count, self.col_count());
+            self.grid.splice(start_row..start_row, empty_rows);
         }
-        let empty_rows = Self::alloc_empty_rows(count, self.col_count());
-        self.grid.splice(start_row..start_row, empty_rows);
+        Ok(())
     }
 
     /// Modify the value of each cell in a given region of the definition instance
@@ -443,12 +483,6 @@ impl Definition {
     }
 
     // Private helper functions
-
-    fn panic_if_empty(&self) {
-        if self.row_count() == 0 {
-            panic!("definition is empty");
-        }
-    }
 
     fn first_row_col_count(grid: &Vec<Vec<char>>) -> usize {
         grid.get(0).map_or(0, |inner_vec| inner_vec.len())
@@ -690,7 +724,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "grid vector contains rows with different numbers of columns (expected 3 for all rows)")]
+    #[should_panic(
+        expected = "grid vector contains rows with different numbers of columns (expected 3 for all rows)"
+    )]
     fn cannot_deserialize_bad_json_with_different_col_counts() {
         let s = r#"{"grid":[[" "," "," "],[" "," "]]}"#;
         let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
@@ -700,7 +736,7 @@ mod tests {
     #[should_panic(expected = "definition is empty")]
     fn cannot_delete_cols_if_empty() {
         let mut d = Definition::new(0, 0);
-        d.delete_cols(0, 1);
+        d.delete_cols(0, 1).expect("delete_cols() failed");
     }
 
     #[test]
@@ -711,7 +747,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.delete_cols(1, 2);
+        d.delete_cols(1, 2).expect("delete_cols() failed");
         assert_eq!(d.col_count(), 2);
     }
 
@@ -724,14 +760,14 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.delete_cols(4, 2);
+        d.delete_cols(4, 2).expect("delete_cols() failed");
     }
 
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn cannot_insert_cols_if_empty() {
         let mut d = Definition::new(0, 0);
-        d.insert_cols(0, 1);
+        d.insert_cols(0, 1).expect("insert_cols() failed");
         assert_empty_cols(&d, 0, 1);
     }
 
@@ -743,7 +779,7 @@ mod tests {
             vec![' ', 'W', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.insert_cols(1, 2);
+        d.insert_cols(1, 2).expect("insert_cols() failed");
         assert_eq!(d.col_count(), 6);
         assert_empty_cols(&d, 1, 2);
     }
@@ -756,7 +792,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.insert_cols(1, 0);
+        d.insert_cols(1, 0).expect("insert_cols() failed");
         assert_eq!(d.col_count(), 4);
     }
 
@@ -769,7 +805,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.insert_cols(5, 2);
+        d.insert_cols(5, 2).expect("insert_cols() failed");
     }
 
     #[test]
@@ -780,7 +816,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.insert_cols(4, 2);
+        d.insert_cols(4, 2).expect("insert_cols() failed");
         assert_eq!(d.col_count(), 6);
         assert_empty_cols(&d, 4, 5);
     }
@@ -789,7 +825,7 @@ mod tests {
     #[should_panic(expected = "definition is empty")]
     fn cannot_delete_rows_if_empty() {
         let mut d = Definition::new(0, 0);
-        d.delete_rows(0, 1);
+        d.delete_rows(0, 1).expect("delete_rows() failed");
     }
 
     #[test]
@@ -801,7 +837,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.delete_rows(0, 2);
+        d.delete_rows(0, 2).expect("delete_rows() failed");
         assert_eq!(d.row_count(), 1);
         assert_eq!(d.col_count(), 4);
     }
@@ -815,7 +851,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.delete_rows(0, 3);
+        d.delete_rows(0, 3).expect("delete_rows() failed");
         assert_eq!(d.row_count(), 0);
         assert_eq!(d.col_count(), 0);
     }
@@ -829,7 +865,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.delete_rows(2, 1);
+        d.delete_rows(2, 1).expect("delete_rows() failed");
     }
 
     #[test]
@@ -840,7 +876,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.insert_rows(1, 3);
+        d.insert_rows(1, 3).expect("insert_rows() failed");
         assert_eq!(d.row_count(), 5);
         assert_empty_rows(&d, 1, 3);
     }
@@ -853,7 +889,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.insert_rows(1, 0);
+        d.insert_rows(1, 0).expect("insert_rows() failed");
         assert_eq!(d.row_count(), 2);
     }
 
@@ -866,7 +902,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.insert_rows(3, 2);
+        d.insert_rows(3, 2).expect("insert_rows() failed");
     }
 
     #[test]
@@ -877,7 +913,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let mut d = Definition::from_vec(grid);
-        d.insert_rows(2, 2);
+        d.insert_rows(2, 2).expect("insert_rows() failed");
         assert_eq!(d.row_count(), 4);
         assert_empty_rows(&d, 2, 3);
     }
