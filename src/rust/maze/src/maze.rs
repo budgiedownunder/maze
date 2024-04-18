@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::solution::Solution;
 use crate::Definition;
 use crate::Direction;
@@ -7,6 +9,8 @@ use crate::Point;
 use crate::Solver;
 
 #[allow(dead_code)]
+#[derive(Serialize, Deserialize)]
+
 /// Represents a maze
 pub struct Maze {
     /// Definition, containing the layout of the maze
@@ -237,6 +241,24 @@ mod tests {
         let m = Maze::new(Definition::new(2, 3));
         assert_eq!(m.definition.row_count(), 2);
         assert_eq!(m.definition.col_count(), 3);
+    }
+
+    #[test]
+    fn can_serialize_empty() {
+        let m = Maze::new(Definition::new(0, 0));
+        let s = serde_json::to_string(&m).expect("Failed to serialize");
+        assert_eq!(s, "{\"definition\":{\"grid\":[]}}");
+    }
+    #[test]
+    fn can_serialize_non_empty() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', 'W', ' '],
+            vec![' ', ' ', 'W']
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let s = serde_json::to_string(&m).expect("Failed to serialize");
+        assert_eq!(s, "{\"definition\":{\"grid\":[[\" \",\"W\",\" \"],[\" \",\" \",\"W\"]]}}");
     }
 
     #[test]
