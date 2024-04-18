@@ -375,7 +375,7 @@ impl Definition {
     ///    vec![' ', 'W', ' ', 'W']
     /// ];
     /// let mut d = Definition::from_vec(grid);
-    /// d.delete_rows(1,2);
+    /// d.delete_rows(1,2).expect("delete_rows() failed");
     /// println!("{:?}", d.to_display_chars());
     /// ```
     pub fn delete_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
@@ -417,7 +417,7 @@ impl Definition {
     ///    vec![' ', 'W', ' ', 'W']
     /// ];
     /// let mut d = Definition::from_vec(grid);
-    /// d.insert_rows(3,2);
+    /// d.insert_rows(3,2).expect("insert_rows() failed");
     /// println!("{:?}", d.to_display_chars());
     /// ```
     pub fn insert_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
@@ -438,10 +438,13 @@ impl Definition {
     ///
     /// * `from` - Starting point of cell region to modify
     /// * `to` - Ending point of cell region to modify
-    /// * `value` - Value to set
+    /// * `value` - Value to set. Must be either `'W'` (wall) or `' '` (empty).
     ///
     /// # Returns
-    /// Nothing
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the target points are out of range
+    /// - if the character value is invalid
     ///
     /// # Examples
     ///
@@ -455,16 +458,20 @@ impl Definition {
     /// let mut d = Definition::new(5, 4);
     /// let from = Point { row: 1, col: 1, };
     /// let to = Point { row: 3, col: 2, };
-    /// d.set_value( from, to, 'W');
+    /// d.set_value( from, to, 'W').expect("set_value() failed");
     /// println!("{:?}", d.to_display_chars());
     /// ```
     /// ```
-    pub fn set_value(&mut self, from: Point, to: Point, value: char) {
+    pub fn set_value(&mut self, from: Point, to: Point, value: char) -> Result<(), MazeError> {
         if !self.is_valid(&from) {
-            panic!("invalid 'from' point {}", from);
+            return Err(MazeError::new(
+                format!("invalid 'from' point {}", from).as_str(),
+            ));
         }
         if !self.is_valid(&to) {
-            panic!("invalid 'to' point {}", to);
+            return Err(MazeError::new(
+                format!("invalid 'to' point {}", to).as_str(),
+            ));
         }
         match value {
             'W' | ' ' => {
@@ -478,8 +485,13 @@ impl Definition {
                     }
                 }
             }
-            _ => panic!("invalid 'value' ('{}')", value),
+            _ => {
+                return Err(MazeError::new(
+                    format!("invalid 'value' ('{}')", value).as_str(),
+                ))
+            }
         }
+        Ok(())
     }
 
     // Private helper functions
@@ -923,7 +935,8 @@ mod tests {
         let mut d = Definition::new(5, 4);
         let from = Point { row: 1, col: 1 };
         let to = Point { row: 3, col: 2 };
-        d.set_value(from.clone(), to.clone(), 'W');
+        d.set_value(from.clone(), to.clone(), 'W')
+            .expect("set_value() failed");
         assert_cell_value(&d, from.clone(), to.clone(), 'W');
     }
 
@@ -933,7 +946,7 @@ mod tests {
         let mut d = Definition::new(5, 4);
         let from = Point { row: 6, col: 1 };
         let to = Point { row: 2, col: 2 };
-        d.set_value(from, to, 'W');
+        d.set_value(from, to, 'W').expect("set_value() failed");
     }
 
     #[test]
@@ -942,7 +955,7 @@ mod tests {
         let mut d = Definition::new(5, 4);
         let from = Point { row: 1, col: 1 };
         let to = Point { row: 6, col: 2 };
-        d.set_value(from, to, 'W');
+        d.set_value(from, to, 'W').expect("set_value() failed");
     }
 
     #[test]
@@ -951,7 +964,7 @@ mod tests {
         let mut d = Definition::new(5, 4);
         let from = Point { row: 1, col: 1 };
         let to = Point { row: 3, col: 2 };
-        d.set_value(from, to, 'X');
+        d.set_value(from, to, 'X').expect("set_value() failed");
     }
 
     // Private test helper functions
