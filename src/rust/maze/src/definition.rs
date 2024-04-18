@@ -1,7 +1,8 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, de, Serialize};
 use std::collections::HashMap;
 
 use crate::CellState;
+use crate::MazeError;
 use crate::Point;
 #[allow(dead_code)]
 #[derive(Serialize)]
@@ -44,7 +45,12 @@ impl<'de> Deserialize<'de> for Definition {
             }
         }
 
-        Self::validate_grid(&grid);
+        match Self::validate_grid(&grid) {
+            Some(err) => {
+                return Err(de::Error::custom(format!("{}", err.message)));
+            },
+            None => {},
+        }
 
         Ok(Definition { grid })
     }
@@ -150,8 +156,12 @@ impl Definition {
     /// assert_eq!(d.col_count(), 3);
     /// ```
     pub fn from_vec(grid: Vec<Vec<char>>) -> Self {
-        Self::validate_grid(&grid);
-
+        match Self::validate_grid(&grid) {
+            Some(err) => {
+                panic!("{}", err.message);
+            },
+            _ => {},
+        }    
         Definition { grid: grid }
     }
 
@@ -444,18 +454,19 @@ impl Definition {
         grid.get(0).map_or(0, |inner_vec| inner_vec.len())
     }
 
-    fn validate_grid(grid: &Vec<Vec<char>>) {
+    fn validate_grid(grid: &Vec<Vec<char>>) -> Option<MazeError> {
         let first_row_col_count = Self::first_row_col_count(&grid);
         let same_col_counts = grid
             .iter()
             .all(|inner_vec| inner_vec.len() == first_row_col_count);
         if !same_col_counts {
-            panic!("grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_col_count);
+            let msg = format!("grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_col_count).clone();
+            return Some(MazeError::new(&msg));
         }
         for (row_idx, row) in grid.iter().enumerate() {
             for (col_idx, &item) in row.iter().enumerate() {
                 if item != ' ' && item != 'W' {
-                    panic!(
+                    let msg = format!(
                         "grid vector contains an invalid character '{}' at location {}",
                         item,
                         Point {
@@ -463,9 +474,11 @@ impl Definition {
                             col: col_idx
                         }
                     );
+                    return Some(MazeError::new(&msg));
                 }
             }
         }
+        None
     }
 
     fn alloc_empty_rows(row_count: usize, col_count: usize) -> Vec<Vec<char>> {
