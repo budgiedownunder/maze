@@ -47,7 +47,7 @@ impl<'de> Deserialize<'de> for Definition {
 
         match Self::validate_grid(&grid) {
             Some(err) => {
-                return Err(de::Error::custom(format!("{}", err.message)));
+                return Err(de::Error::custom(format!("{}", err.to_string())));
             }
             None => {}
         }
@@ -162,7 +162,7 @@ impl Definition {
     pub fn from_vec(grid: Vec<Vec<char>>) -> Self {
         match Self::validate_grid(&grid) {
             Some(err) => {
-                panic!("{}", err.message);
+                panic!("{}", err.to_string());
             }
             _ => {}
         }
@@ -296,12 +296,13 @@ impl Definition {
     /// ```
     pub fn delete_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
         if self.row_count() == 0 {
-            return Err(MazeError::new(format!("definition is empty").as_str()));
+            return Err(MazeError::new(format!("definition is empty")));
         }
         if start_col >= self.col_count() {
-            return Err(MazeError::new(
-                format!("invalid 'start_col' index ({})", start_col).as_str(),
-            ));
+            return Err(MazeError::new(format!(
+                "invalid 'start_col' index ({})",
+                start_col
+            )));
         }
         for row in &mut self.grid {
             row.drain(start_col..(start_col + count));
@@ -338,12 +339,13 @@ impl Definition {
     /// ```
     pub fn insert_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
         if self.row_count() == 0 {
-            return Err(MazeError::new(format!("definition is empty").as_str()));
+            return Err(MazeError::new(format!("definition is empty")));
         }
         if start_col >= self.col_count() + 1 {
-            return Err(MazeError::new(
-                format!("invalid 'start_col' index ({})", start_col).as_str(),
-            ));
+            return Err(MazeError::new(format!(
+                "invalid 'start_col' index ({})",
+                start_col
+            )));
         }
         for row in &mut self.grid {
             row.splice(start_col..start_col, vec![' '; count]);
@@ -383,12 +385,13 @@ impl Definition {
     /// ```
     pub fn delete_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
         if self.row_count() == 0 {
-            return Err(MazeError::new(format!("definition is empty").as_str()));
+            return Err(MazeError::new(format!("definition is empty")));
         }
         if start_row >= self.row_count() {
-            return Err(MazeError::new(
-                format!("invalid 'start_row' index ({})", start_row).as_str(),
-            ));
+            return Err(MazeError::new(format!(
+                "invalid 'start_row' index ({})",
+                start_row
+            )));
         }
         self.grid.drain(start_row..(start_row + count));
         Ok(())
@@ -425,9 +428,10 @@ impl Definition {
     /// ```
     pub fn insert_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
         if start_row >= self.row_count() + 1 {
-            return Err(MazeError::new(
-                format!("invalid 'start_row' index ({})", start_row).as_str(),
-            ));
+            return Err(MazeError::new(format!(
+                "invalid 'start_row' index ({})",
+                start_row
+            )));
         }
         if count > 0 {
             let empty_rows = Self::alloc_empty_rows(count, self.col_count());
@@ -466,14 +470,10 @@ impl Definition {
     /// ```
     pub fn set_value(&mut self, from: Point, to: Point, value: char) -> Result<(), MazeError> {
         if !self.is_valid(&from) {
-            return Err(MazeError::new(
-                format!("invalid 'from' point {}", from).as_str(),
-            ));
+            return Err(MazeError::new(format!("invalid 'from' point {}", from)));
         }
         if !self.is_valid(&to) {
-            return Err(MazeError::new(
-                format!("invalid 'to' point {}", to).as_str(),
-            ));
+            return Err(MazeError::new(format!("invalid 'to' point {}", to)));
         }
         match value {
             'W' | ' ' => {
@@ -487,11 +487,7 @@ impl Definition {
                     }
                 }
             }
-            _ => {
-                return Err(MazeError::new(
-                    format!("invalid 'value' ('{}')", value).as_str(),
-                ))
-            }
+            _ => return Err(MazeError::new(format!("invalid 'value' ('{}')", value))),
         }
         Ok(())
     }
@@ -509,7 +505,7 @@ impl Definition {
             .all(|inner_vec| inner_vec.len() == first_row_col_count);
         if !same_col_counts {
             let msg = format!("grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_col_count).clone();
-            return Some(MazeError::new(&msg));
+            return Some(MazeError::new(msg));
         }
         for (row_idx, row) in grid.iter().enumerate() {
             for (col_idx, &item) in row.iter().enumerate() {
@@ -522,7 +518,7 @@ impl Definition {
                             col: col_idx
                         }
                     );
-                    return Some(MazeError::new(&msg));
+                    return Some(MazeError::new(msg));
                 }
             }
         }

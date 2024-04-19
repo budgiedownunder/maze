@@ -24,6 +24,7 @@ pub struct Maze {
 impl Maze {
     /// Creates a new maze instance with the given definition
     /// # Arguments
+    ///
     /// * `grid` - Maze definition
     ///
     /// # Returns
@@ -105,12 +106,12 @@ impl Maze {
     /// let path = "./my_maze.json";
     /// match m.save_to_file(path, true) {
     ///     Ok(_) => println!("Successfully saved to file: {}", path),
-    ///     Err(err) => println!("Failed to save to file: {}", err)
+    ///     Err(error) => println!("Failed to save to file: {}", error)
     /// }
     pub fn save_to_file(&self, path: &str, overwrite: bool) -> Result<(), MazeError> {
         if !overwrite {
             if let Ok(_metadata) = fs::metadata(path) {
-                return Err(MazeError::new("file path already exists"));
+                return Err(MazeError::new("file path already exists".to_string()));
             }
         }
         let s = serde_json::to_string(&self)?;
@@ -145,14 +146,14 @@ impl Maze {
     /// let path = "./my_maze.json";
     /// match m1.save_to_file(path, true) {
     ///     Ok(_) => println!("Successfully saved to file: {}", path),
-    ///     Err(err) => println!("Failed to save to file: {}", err)
+    ///     Err(error) => println!("Failed to save to file: {}", error)
     /// }
     /// let mut m2 = Maze::new(Definition::new(0, 0));
     /// match m2.load_from_file(path) {
     ///     Ok(_) => {
     ///         println!("Successfully loaded from file: {}", path);
     ///     }
-    ///     Err(err) => println!("Failed to load from file: {} - {}", path, err)
+    ///     Err(error) => println!("Failed to load from file: {} - {}", path, error)
     /// }
     pub fn load_from_file(&mut self, path: &str) -> Result<(), MazeError> {
         let mut file = File::open(path)?;
@@ -195,7 +196,7 @@ impl Maze {
     ///    Err(error) => {
     ///        panic!(
     ///            "failed to solve maze => {}",
-    ///           error.message
+    ///           error
     ///        );
     ///    }
     /// }
@@ -241,7 +242,7 @@ impl Maze {
     ///    Err(error) => {
     ///        panic!(
     ///            "failed to solve maze => {}",
-    ///           error.message
+    ///           error
     ///        );
     ///    }
     /// }
@@ -427,7 +428,7 @@ mod tests {
         let path = "./maze_1.json";
         match m.save_to_file(path, true) {
             Ok(_) => println!("Successfully saved to file: {}", path),
-            Err(err) => panic!("Failed to save to file: {}", err),
+            Err(error) => panic!("Failed to save to file: {}", error),
         }
         std::fs::remove_file(path).expect("Failed to delete file");
     }
@@ -439,13 +440,7 @@ mod tests {
         let path = "";
         match m.save_to_file(path, true) {
             Ok(_) => panic!("Successfully saved to file: {} but did not expect to", path),
-            Err(err) => {
-                assert_error_starts_with_either(
-                    &err.message,
-                    "The system cannot find the path specified",
-                    "No such file or directory",
-                );
-            }
+            Err(error) => assert_io_err_not_found(error),
         }
     }
 
@@ -465,9 +460,9 @@ mod tests {
                     path
                 );
             }
-            Err(err) => {
+            Err(error) => {
                 std::fs::remove_file(path).expect("Failed to delete file");
-                panic!("{}", err);
+                panic!("{}", error);
             }
         }
     }
@@ -483,9 +478,9 @@ mod tests {
             Ok(_) => {
                 std::fs::remove_file(path).expect("Failed to delete file");
             }
-            Err(err) => {
+            Err(error) => {
                 std::fs::remove_file(path).expect("Failed to delete file");
-                panic!("{}", err);
+                panic!("{}", error);
             }
         }
     }
@@ -497,7 +492,7 @@ mod tests {
         let path = "./maze_4.json";
         match m1.save_to_file(path, true) {
             Ok(_) => {}
-            Err(err) => panic!("Failed to save to file: {}", err),
+            Err(error) => panic!("Failed to save to file: {}", error),
         }
         let mut m2 = Maze::new(Definition::new(0, 0));
         match m2.load_from_file(path) {
@@ -505,7 +500,7 @@ mod tests {
                 assert_eq!(m2.definition.row_count(), m1.definition.row_count());
                 assert_eq!(m2.definition.col_count(), m1.definition.col_count());
             }
-            Err(err) => panic!("Failed to load from: {} - {}", path, err),
+            Err(error) => panic!("Failed to load from: {} - {}", path, error),
         }
         std::fs::remove_file(path).expect("Failed to delete file");
     }
@@ -516,13 +511,7 @@ mod tests {
         let mut m = Maze::new(Definition::new(0, 0));
         match m.load_from_file(path) {
             Ok(_) => panic!("File should not exist"),
-            Err(err) => {
-                assert_error_starts_with_either(
-                    &err.message,
-                    "The system cannot find the file specified",
-                    "No such file or directory",
-                );
-            }
+            Err(error) => assert_io_err_not_found(error),
         }
     }
 
@@ -533,12 +522,11 @@ mod tests {
         let end = Point { row: 0, col: 2 };
         let result = m.solve(start.clone(), end);
         match result {
-            Ok(_) => {
-                panic!("expected solve() to return Err, but it returned Ok");
-            }
-            Err(e) => {
-                assert_eq!(e.message, format!("start location {} is invalid", start));
-            }
+            Ok(_) => panic_unexpected_solve_success(),
+            Err(error) => assert_error_msg_eq(
+                error,
+                format!("start location {} is invalid", start).as_str(),
+            ),
         }
     }
 
@@ -549,11 +537,9 @@ mod tests {
         let end = Point { row: 0, col: 3 };
         let result = m.solve(start, end.clone());
         match result {
-            Ok(_) => {
-                panic!("expected solve() to return Err, but it returned Ok");
-            }
-            Err(e) => {
-                assert_eq!(e.message, format!("end location {} is invalid", end));
+            Ok(_) => panic_unexpected_solve_success(),
+            Err(error) => {
+                assert_error_msg_eq(error, format!("end location {} is invalid", end).as_str())
             }
         }
     }
@@ -572,15 +558,7 @@ mod tests {
                 assert_eq!(s.path.points.len(), 1);
                 assert_eq!(s.path, expected_solution_path);
             }
-            Err(error) => {
-                panic!(
-                    "{}",
-                    format!(
-                        "expected solve() to succeed, but it returned the error: {}",
-                        error
-                    )
-                );
-            }
+            Err(error) => panic_unexpected_solve_error(error),
         }
     }
 
@@ -603,15 +581,7 @@ mod tests {
                 assert_eq!(s.path.points.len(), 4);
                 assert_eq!(s.path, expected_solution_path);
             }
-            Err(error) => {
-                panic!(
-                    "{}",
-                    format!(
-                        "expected solve() to succeed, but it returned the error: {}",
-                        error
-                    )
-                );
-            }
+            Err(error) => panic_unexpected_solve_error(error),
         }
     }
 
@@ -635,15 +605,7 @@ mod tests {
                 assert_eq!(s.path.points.len(), 5);
                 assert_eq!(s.path, expected_solution_path);
             }
-            Err(error) => {
-                panic!(
-                    "{}",
-                    format!(
-                        "expected solve() to succeed, but it returned the error: {}",
-                        error
-                    )
-                );
-            }
+            Err(error) => panic_unexpected_solve_error(error),
         }
     }
 
@@ -665,15 +627,7 @@ mod tests {
                 assert_eq!(s.path.points.len(), 3);
                 assert_eq!(s.path, expected_solution_path);
             }
-            Err(error) => {
-                panic!(
-                    "{}",
-                    format!(
-                        "expected solve() to succeed, but it returned the error: {}",
-                        error
-                    )
-                );
-            }
+            Err(error) => panic_unexpected_solve_error(error),
         }
     }
 
@@ -690,11 +644,9 @@ mod tests {
         let end = Point { row: 0, col: 2 };
         let result = m.solve(start, end);
         match result {
-            Ok(_) => {
-                panic!("expected solve() to return Err, but it returned Ok");
-            }
+            Ok(_) => panic_unexpected_solve_success(),
             Err(error) => {
-                assert_eq!(error.message, "no solution found");
+                assert_error_msg_eq(error, "no solution found");
             }
         }
     }
@@ -737,12 +689,7 @@ mod tests {
                 assert_eq!(s.path.points.len(), 13);
                 assert_eq!(s.path, expected_solution_path);
             }
-            Err(error) => {
-                panic!(
-                    "expected solve() to succeed but it returned the error {}",
-                    error.message
-                );
-            }
+            Err(error) => panic_unexpected_solve_error(error),
         }
     }
 
@@ -791,12 +738,7 @@ mod tests {
                 assert_eq!(s.path.points.len(), 20);
                 assert_eq!(s.path, expected_solution_path);
             }
-            Err(error) => {
-                panic!(
-                    "expected solve() to succeed but it returned the error {}",
-                    error.message
-                );
-            }
+            Err(error) => panic_unexpected_solve_error(error),
         }
     }
 
@@ -834,23 +776,33 @@ mod tests {
                 assert_eq!(s.path.points.len(), 9);
                 assert_eq!(s.path, expected_solution_path);
             }
-            Err(error) => {
-                panic!(
-                    "expected solve() to succeed but it returned the error {}",
-                    error.message
-                );
-            }
+            Err(error) => panic_unexpected_solve_error(error),
         }
     }
 
     // Helper functions
-    fn assert_error_starts_with_either(error_msg: &str, prefix1: &str, prefix2: &str) {
-        assert!(
-            error_msg.starts_with(prefix1) || error_msg.starts_with(prefix2),
-            "Error does not start with either '{}' or '{}': '{}'",
-            prefix1,
-            prefix2,
-            error_msg
+    fn panic_unexpected_solve_success() {
+        panic!("expected solve() to return Err, but it returned Ok");
+    }
+
+    fn panic_unexpected_solve_error(error: MazeError) {
+        panic!(
+            "expected solve() to succeed but it returned the error {}",
+            error
         );
+    }
+
+    fn assert_io_err_not_found(error: MazeError) {
+        match error {
+            MazeError::Io(io_error) => match io_error.kind() {
+                std::io::ErrorKind::NotFound => {}
+                _ => panic!("io::ErrorKind::NotFound error expected (got: {})", io_error),
+            },
+            _ => panic!("io::ErrorKind::NotFound error expected (got: {})", error),
+        }
+    }
+
+    fn assert_error_msg_eq(err: MazeError, msg: &str) {
+        assert_eq!(format!("{}", err), msg);
     }
 }

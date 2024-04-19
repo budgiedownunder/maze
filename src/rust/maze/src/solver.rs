@@ -22,10 +22,10 @@ impl Solver<'_> {
 
     fn calc_location(&self, pt: &Point, offset: &Offset) -> Result<Point, MazeError> {
         if offset.row < 0 && (offset.row.abs() as usize) > pt.row {
-            return Err(MazeError::new("location is out of bounds"));
+            return Err(MazeError::new("location is out of bounds".to_string()));
         }
         if offset.col < 0 && (offset.col.abs() as usize) > pt.col {
-            return Err(MazeError::new("location is out of bounds"));
+            return Err(MazeError::new("location is out of bounds".to_string()));
         }
         let pt_check = Point {
             row: if offset.row >= 0 {
@@ -41,7 +41,7 @@ impl Solver<'_> {
         };
 
         if !self.is_valid(&pt_check) {
-            return Err(MazeError::new("location is out of bounds"));
+            return Err(MazeError::new("location is out of bounds".to_string()));
         }
         Ok(pt_check)
     }
@@ -57,7 +57,7 @@ impl Solver<'_> {
         match grid_state[end.row][end.col].step_value() {
             None => {
                 return Err(MazeError::new(
-                    "solution path not found (end point not processed)",
+                    "solution path not found (end point not processed)".to_string(),
                 ));
             }
             _ => {}
@@ -93,7 +93,7 @@ impl Solver<'_> {
                         }
                     }
                     if !found_neighbour {
-                        return Err(MazeError::new(format!("solution path not found (no path sequence neighbour exists for point {})", step_pt).as_str()));
+                        return Err(MazeError::new(format!("solution path not found (no path sequence neighbour exists for point {})", step_pt)));
                     }
                 }
                 _ => (),
@@ -151,7 +151,7 @@ impl Solver<'_> {
             }
         }
 
-        Err(MazeError::new("no solution found"))
+        Err(MazeError::new("no solution found".to_string()))
     }
 
     /// Attempts to solve the path between a start and end point within the maze referenced by the solver instance
@@ -191,21 +191,20 @@ impl Solver<'_> {
     ///    Err(error) => {
     ///        panic!(
     ///            "failed to solve maze => {}",
-    ///           error.message
+    ///           error
     ///        );
     ///    }
     /// }
     /// ```
     pub fn solve(&self, start: Point, end: Point) -> Result<Solution, MazeError> {
         if !self.is_valid(&start) {
-            return Err(MazeError::new(
-                format!("start location {} is invalid", start).as_str(),
-            ));
+            return Err(MazeError::new(format!(
+                "start location {} is invalid",
+                start
+            )));
         }
         if !self.is_valid(&end) {
-            return Err(MazeError::new(
-                format!("end location {} is invalid", end,).as_str(),
-            ));
+            return Err(MazeError::new(format!("end location {} is invalid", end)));
         }
         if start == end {
             let points = vec![start.clone()];

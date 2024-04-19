@@ -2,35 +2,36 @@ use std::error::Error;
 use std::io;
 
 #[derive(Debug)]
-/// Represents a maze error
-pub struct MazeError {
-    /// Error message
-    pub message: String,
+/// Represents an error
+pub enum MazeError {
+    Maze(String),
+    Io(std::io::Error),
 }
 
 impl MazeError {
-    pub fn new(message: &str) -> Self {
-        MazeError {
-            message: message.to_string(),
-        }
+    pub fn new(message: String) -> Self {
+        MazeError::Maze(message)
     }
 }
 
 impl From<serde_json::Error> for MazeError {
     fn from(error: serde_json::Error) -> Self {
-        MazeError::new(error.to_string().as_str())
+        MazeError::new(error.to_string())
     }
 }
 
 impl From<io::Error> for MazeError {
     fn from(error: io::Error) -> Self {
-        MazeError::new(error.to_string().as_str())
+        MazeError::Io(error)
     }
 }
 
 impl std::fmt::Display for MazeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
+        match *self {
+            MazeError::Maze(ref message) => write!(f, "{}", message),
+            MazeError::Io(ref error) => write!(f, "{}", error),
+        }
     }
 }
 
@@ -42,8 +43,8 @@ mod tests {
 
     #[test]
     fn can_create_new_maze_error() {
-        let msg = "This is a maze error";
-        let e = MazeError::new(msg);
-        assert_eq!(e.message, msg);
+        let msg = "This is a custom maze error";
+        let err = MazeError::new(msg.to_string());
+        assert_eq!(format!("{}", err), msg);
     }
 }
