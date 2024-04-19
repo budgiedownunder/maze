@@ -440,11 +440,10 @@ mod tests {
         match m.save_to_file(path, true) {
             Ok(_) => panic!("Successfully saved to file: {} but did not expect to", path),
             Err(err) => {
-                assert!(
-                    err.message
-                        .starts_with("The system cannot find the path specified"),
-                    "error returned does not start with expected path not found text: `{}` was returned",
-                    err.message
+                assert_error_starts_with_either(
+                    &err.message,
+                    "The system cannot find the path specified",
+                    "No such file or directory",
                 );
             }
         }
@@ -518,11 +517,10 @@ mod tests {
         match m.load_from_file(path) {
             Ok(_) => panic!("File should not exist"),
             Err(err) => {
-                assert!(
-                    err.message
-                        .starts_with("The system cannot find the file specified"),
-                    "error returned does not start with expected file not found text: `{}` was returned",
-                    err.message
+                assert_error_starts_with_either(
+                    &err.message,
+                    "The system cannot find the file specified",
+                    "No such file or directory",
                 );
             }
         }
@@ -843,5 +841,16 @@ mod tests {
                 );
             }
         }
+    }
+
+    // Helper functions
+    fn assert_error_starts_with_either(error_msg: &str, prefix1: &str, prefix2: &str) {
+        assert!(
+            error_msg.starts_with(prefix1) || error_msg.starts_with(prefix2),
+            "Error does not start with either '{}' or '{}': '{}'",
+            prefix1,
+            prefix2,
+            error_msg
+        );
     }
 }
