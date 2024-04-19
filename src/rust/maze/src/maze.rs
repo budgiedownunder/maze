@@ -1,4 +1,8 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::fs::File;
+use std::io::Read;
+use std::io::Write;
 
 use crate::solution::Solution;
 use crate::Definition;
@@ -50,7 +54,7 @@ impl Maze {
     ///
     /// # Arguments
     ///
-    /// `grid` - Vector of row-column cell states
+    /// * `grid` - Vector of row-column cell states
     ///
     /// # Returns
     ///
@@ -74,6 +78,88 @@ impl Maze {
         Maze {
             definition: Definition::from_vec(grid),
         }
+    }
+    /// Saves a maze definition to a file (as JSON), optionally overwriting any existing file
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - file path
+    /// * `overwrite` - flag indicating whether to overwrite any existing file
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error if the fiel cannotbe
+    ///
+    /// # Examples
+    ///
+    /// Create a 2 row x 3 column definition with a wall in the last column and then save it to the local file `my_file.json`, overwriting
+    /// any existing file
+    ///
+    /// ```
+    /// use maze::Maze;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec![' ', ' ', 'W'],
+    ///    vec![' ', ' ', 'W']
+    /// ];
+    /// let m = Maze::from_vec(grid);
+    /// let path = "./my_maze.json";
+    /// match m.save_to_file(path, true) {
+    ///     Ok(_) => println!("Successfully saved to file: {}", path),
+    ///     Err(err) => println!("Failed to save to file: {}", err)
+    /// }
+    pub fn save_to_file(&self, path: &str, overwrite: bool) -> Result<(), MazeError> {
+        if !overwrite {
+            if let Ok(_metadata) = fs::metadata(path) {
+                return Err(MazeError::new("file path already exists"));
+            }
+        }
+        let s = serde_json::to_string(&self)?;
+        let mut file = File::create(path)?;
+        file.write_all(s.as_bytes())?;
+        Ok(())
+    }
+    /// Loads a maze definition from a file
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - file path
+    ///
+    /// # Returns
+    ///
+    /// A new maze instance
+    ///
+    ///
+    /// # Examples
+    ///
+    /// Create a 2 row x 3 column definition with a wall in the last column and then save it to the local file `my_file.json`, overwriting
+    /// any existing file. Then attempt to reload that file into a second maze definition.
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// use maze::Maze;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec![' ', ' ', 'W'],
+    ///    vec![' ', ' ', 'W']
+    /// ];
+    /// let m1 = Maze::from_vec(grid);
+    /// let path = "./my_maze.json";
+    /// match m1.save_to_file(path, true) {
+    ///     Ok(_) => println!("Successfully saved to file: {}", path),
+    ///     Err(err) => println!("Failed to save to file: {}", err)
+    /// }
+    /// let mut m2 = Maze::new(Definition::new(0, 0));
+    /// match m2.load_from_file(path) {
+    ///     Ok(_) => {
+    ///         println!("Successfully loaded from file: {}", path);
+    ///     }
+    ///     Err(err) => println!("Failed to load from file: {} - {}", path, err)
+    /// }
+    pub fn load_from_file(&mut self, path: &str) -> Result<(), MazeError> {
+        let mut file = File::open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        *self = serde_json::from_str(&contents).expect("Failed to deserialize file content");
+        Ok(())
     }
     /// Attempts to solve the path between a start and end point within the maze instance
     /// # Arguments
@@ -249,6 +335,7 @@ mod tests {
         let s = serde_json::to_string(&m).expect("Failed to serialize");
         assert_eq!(s, r#"{"definition":{"grid":[]}}"#);
     }
+
     #[test]
     fn can_serialize_non_empty() {
         #[rustfmt::skip]
@@ -262,6 +349,14 @@ mod tests {
             s,
             r#"{"definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#
         );
+    }
+
+    #[test]
+    fn can_deserialize_empty() {
+        let s = r#"{"definition":{"grid":[]}}"#;
+        let m: Maze = serde_json::from_str(&s).expect("Failed to deserialize");
+        assert_eq!(m.definition.row_count(), 0);
+        assert_eq!(m.definition.col_count(), 0);
     }
 
     #[test]
@@ -323,6 +418,114 @@ mod tests {
             ],
         };
         m.print(start, end, path);
+    }
+
+    #[test]
+    fn can_save_to_valid_file_path() {
+        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', 'W'], vec![' ', ' ', 'W']];
+        let m = Maze::from_vec(grid);
+        let path = "./maze_1.json";
+        match m.save_to_file(path, true) {
+            Ok(_) => println!("Successfully saved to file: {}", path),
+            Err(err) => panic!("Failed to save to file: {}", err),
+        }
+        std::fs::remove_file(path).expect("Failed to delete file");
+    }
+
+    #[test]
+    fn cannot_save_to_invalid_file_path() {
+        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', 'W'], vec![' ', ' ', 'W']];
+        let m = Maze::from_vec(grid);
+        let path = "";
+        match m.save_to_file(path, true) {
+            Ok(_) => panic!("Successfully saved to file: {} but did not expect to", path),
+            Err(err) => {
+                assert!(
+                    err.message
+                        .starts_with("The system cannot find the path specified"),
+                    "error returned does not start with expected path not found text: `{}` was returned",
+                    err.message
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "file path already exists")]
+    fn cannot_save_to_existing_file_path_if_overwrite_disabled() {
+        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', 'W'], vec![' ', ' ', 'W']];
+        let m = Maze::from_vec(grid);
+        let path = "./maze_2.json";
+        let mut _file = File::create(path).expect("Failed to create file");
+
+        match m.save_to_file(path, false) {
+            Ok(_) => {
+                std::fs::remove_file(path).expect("Failed to delete file");
+                panic!(
+                    "Successfully saved to existing file: {} despite overwrite being false",
+                    path
+                );
+            }
+            Err(err) => {
+                std::fs::remove_file(path).expect("Failed to delete file");
+                panic!("{}", err);
+            }
+        }
+    }
+
+    #[test]
+    fn can_save_to_existing_file_path_if_overwrite_enabled() {
+        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', 'W'], vec![' ', ' ', 'W']];
+        let m = Maze::from_vec(grid);
+        let path = "./maze_3.json";
+        let mut _file = File::create(path).expect("Failed to create file");
+
+        match m.save_to_file(path, true) {
+            Ok(_) => {
+                std::fs::remove_file(path).expect("Failed to delete file");
+            }
+            Err(err) => {
+                std::fs::remove_file(path).expect("Failed to delete file");
+                panic!("{}", err);
+            }
+        }
+    }
+
+    #[test]
+    fn can_load_from_valid_file_path() {
+        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', 'W'], vec![' ', ' ', 'W']];
+        let m1 = Maze::from_vec(grid);
+        let path = "./maze_4.json";
+        match m1.save_to_file(path, true) {
+            Ok(_) => {}
+            Err(err) => panic!("Failed to save to file: {}", err),
+        }
+        let mut m2 = Maze::new(Definition::new(0, 0));
+        match m2.load_from_file(path) {
+            Ok(_) => {
+                assert_eq!(m2.definition.row_count(), m1.definition.row_count());
+                assert_eq!(m2.definition.col_count(), m1.definition.col_count());
+            }
+            Err(err) => panic!("Failed to load from: {} - {}", path, err),
+        }
+        std::fs::remove_file(path).expect("Failed to delete file");
+    }
+
+    #[test]
+    fn cannot_load_from_invalid_file_path() {
+        let path = "./maze_does_not_exist.json";
+        let mut m = Maze::new(Definition::new(0, 0));
+        match m.load_from_file(path) {
+            Ok(_) => panic!("File should not exist"),
+            Err(err) => {
+                assert!(
+                    err.message
+                        .starts_with("The system cannot find the file specified"),
+                    "error returned does not start with expected file not found text: `{}` was returned",
+                    err.message
+                );
+            }
+        }
     }
 
     #[test]

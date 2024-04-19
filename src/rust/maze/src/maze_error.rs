@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::io;
 
 #[derive(Debug)]
 /// Represents a maze error
@@ -12,6 +13,18 @@ impl MazeError {
         MazeError {
             message: message.to_string(),
         }
+    }
+}
+
+impl From<serde_json::Error> for MazeError {
+    fn from(error: serde_json::Error) -> Self {
+        MazeError::new(error.to_string().as_str())
+    }
+}
+
+impl From<io::Error> for MazeError {
+    fn from(error: io::Error) -> Self {
+        MazeError::new(error.to_string().as_str())
     }
 }
 

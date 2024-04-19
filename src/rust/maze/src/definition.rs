@@ -219,7 +219,7 @@ impl Definition {
     ///
     /// # Examples
     ///
-    /// Create a maze definition with 3 rows and 4 columns and confirm that [2,1] is valid, but that [3,1] is not
+    /// Create a maze definition with 3 rows and 4 columns and confirm that `[2,1]` is valid, but that `[3,1]` is not
     ///
     /// ```
     /// use maze::Definition;
@@ -463,7 +463,6 @@ impl Definition {
     /// let to = Point { row: 3, col: 2, };
     /// d.set_value( from, to, 'W').expect("set_value() failed");
     /// println!("{:?}", d.to_display_chars());
-    /// ```
     /// ```
     pub fn set_value(&mut self, from: Point, to: Point, value: char) -> Result<(), MazeError> {
         if !self.is_valid(&from) {
