@@ -159,8 +159,13 @@ impl Maze {
         let mut file = File::open(path)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
-        *self = serde_json::from_str(&contents).expect("Failed to deserialize file content");
-        Ok(())
+        match serde_json::from_str(&contents) {
+            Ok(result) => {
+                *self = result;
+                Ok(())
+            }
+            Err(err) => Err(MazeError::from(err)),
+        }
     }
     /// Attempts to solve the path between a start and end point within the maze instance
     /// # Arguments
@@ -430,7 +435,7 @@ mod tests {
             Ok(_) => println!("Successfully saved to file: {}", path),
             Err(error) => panic!("Failed to save to file: {}", error),
         }
-        std::fs::remove_file(path).expect("Failed to delete file");
+        delete_test_file(path);
     }
 
     #[test]
@@ -454,14 +459,14 @@ mod tests {
 
         match m.save_to_file(path, false) {
             Ok(_) => {
-                std::fs::remove_file(path).expect("Failed to delete file");
+                std::fs::remove_file(path).expect("Failed to delete test file");
                 panic!(
                     "Successfully saved to existing file: {} despite overwrite being false",
                     path
                 );
             }
             Err(error) => {
-                std::fs::remove_file(path).expect("Failed to delete file");
+                std::fs::remove_file(path).expect("Failed to delete test file");
                 panic!("{}", error);
             }
         }
@@ -476,10 +481,10 @@ mod tests {
 
         match m.save_to_file(path, true) {
             Ok(_) => {
-                std::fs::remove_file(path).expect("Failed to delete file");
+                std::fs::remove_file(path).expect("Failed to delete test file");
             }
             Err(error) => {
-                std::fs::remove_file(path).expect("Failed to delete file");
+                std::fs::remove_file(path).expect("Failed to delete test file");
                 panic!("{}", error);
             }
         }
@@ -502,7 +507,7 @@ mod tests {
             }
             Err(error) => panic!("Failed to load from: {} - {}", path, error),
         }
-        std::fs::remove_file(path).expect("Failed to delete file");
+        std::fs::remove_file(path).expect("Failed to delete test file");
     }
 
     #[test]
@@ -513,6 +518,87 @@ mod tests {
             Ok(_) => panic!("File should not exist"),
             Err(error) => assert_io_err_not_found(error),
         }
+    }
+
+    #[test]
+    fn cannot_load_file_with_invalid_content_eof() {
+        run_load_file_test_with_invalid_content(
+            "./maze_file_with_invalid_content_eof.json",
+            "{",
+            ExpectedSerdeErrorKind::UnexpectedEof,
+        );
+    }
+
+    #[test]
+    fn cannot_load_file_with_invalid_content_syntax_1() {
+        run_load_file_test_with_invalid_content(
+            "./maze_file_with_invalid_content_syntax_1.json",
+            "{x",
+            ExpectedSerdeErrorKind::Syntax,
+        );
+    }
+
+    #[test]
+    fn cannot_load_file_with_invalid_content_syntax_2() {
+        run_load_file_test_with_invalid_content(
+            "./maze_file_with_invalid_content_syntax_2.json",
+            r#"{"x"}"#,
+            ExpectedSerdeErrorKind::Syntax,
+        );
+    }
+
+    #[test]
+    fn cannot_load_file_with_invalid_content_syntax_3() {
+        run_load_file_test_with_invalid_content(
+            "./maze_file_with_invalid_content_syntax_3.json",
+            r#"{"x":}"#,
+            ExpectedSerdeErrorKind::Syntax,
+        );
+    }
+
+    #[test]
+    fn cannot_load_file_with_invalid_content_syntax_4() {
+        run_load_file_test_with_invalid_content(
+            "./maze_file_with_invalid_content_syntax_4.json",
+            "}",
+            ExpectedSerdeErrorKind::Syntax,
+        );
+    }
+
+    #[test]
+    fn cannot_load_file_with_invalid_content_syntax_5() {
+        run_load_file_test_with_invalid_content(
+            "./maze_file_with_invalid_content_syntax_5.json",
+            "{{}",
+            ExpectedSerdeErrorKind::Syntax,
+        );
+    }
+
+    #[test]
+    fn cannot_load_file_with_invalid_content_data_1() {
+        run_load_file_test_with_invalid_content(
+            "./maze_file_with_invalid_content_data_1.json",
+            r#"{"definition1":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#,
+            ExpectedSerdeErrorKind::Data,
+        );
+    }
+
+    #[test]
+    fn cannot_load_file_with_invalid_content_data_2() {
+        run_load_file_test_with_invalid_content(
+            "./maze_file_with_invalid_content_data_2.json",
+            r#"{"definition":{"grid2":[[" ","W"," "],[" "," ","W"]]}}"#,
+            ExpectedSerdeErrorKind::Data,
+        );
+    }
+
+    #[test]
+    fn cannot_load_file_with_invalid_content_data_3() {
+        run_load_file_test_with_invalid_content(
+            "./maze_file_with_invalid_content_data_3.json",
+            r#"{"definition":{"grid":"invalid data"}}"#,
+            ExpectedSerdeErrorKind::Data,
+        );
     }
 
     #[test]
@@ -780,7 +866,62 @@ mod tests {
         }
     }
 
-    // Helper functions
+    // Helper functions and definitions
+    fn delete_test_file(path: &str) {
+        std::fs::remove_file(path).expect(format!("Failed to delete test file: {}", path).as_str());
+    }
+
+    enum ExpectedSerdeErrorKind {
+        Data,
+        Syntax,
+        UnexpectedEof,
+    }
+
+    fn run_load_file_test_with_invalid_content(
+        file_path: &str,
+        content: &str,
+        expected_error_kind: ExpectedSerdeErrorKind,
+    ) {
+        let mut file = File::create(file_path).expect("Failed to create test file");
+        match file.write_all(content.as_bytes()) {
+            Ok(_) => {
+                let mut m = Maze::new(Definition::new(0, 0));
+                match m.load_from_file(file_path) {
+                    Ok(_) => {
+                        delete_test_file(file_path);
+                        panic!("Unexpectedly loaded file despite having invalid content");
+                    }
+                    Err(error) => {
+                        delete_test_file(file_path);
+                        match error {
+                            MazeError::SerdeJson(ref serdejson_error) => {
+                                match expected_error_kind {
+                                    ExpectedSerdeErrorKind::Data => {
+                                        if !serdejson_error.is_data() {
+                                            panic!("Serde data error expected (got SerdeJson error: {})", serdejson_error);
+                                        }
+                                    }
+                                    ExpectedSerdeErrorKind::Syntax => {
+                                        if !serdejson_error.is_syntax() {
+                                            panic!("Serde syntax error expected (got SerdeJson error: {})", serdejson_error);
+                                        }
+                                    }
+                                    ExpectedSerdeErrorKind::UnexpectedEof => {
+                                        if !serdejson_error.is_eof() {
+                                            panic!("Serde unexpected EOF error expected (got SerdeJson error: {})", serdejson_error);
+                                        }
+                                    }
+                                }
+                            }
+                            _ => panic!("Unxpected error encountered (got error: {})", error),
+                        }
+                    }
+                }
+            }
+            Err(error) => panic!("Failed to create invalid maze file: {}", error),
+        }
+    }
+
     fn panic_unexpected_solve_success() {
         panic!("expected solve() to return Err, but it returned Ok");
     }

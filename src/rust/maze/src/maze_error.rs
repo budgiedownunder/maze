@@ -6,6 +6,7 @@ use std::io;
 pub enum MazeError {
     Maze(String),
     Io(std::io::Error),
+    SerdeJson(serde_json::Error),
 }
 
 impl MazeError {
@@ -16,7 +17,7 @@ impl MazeError {
 
 impl From<serde_json::Error> for MazeError {
     fn from(error: serde_json::Error) -> Self {
-        MazeError::new(error.to_string())
+        MazeError::SerdeJson(error)
     }
 }
 
@@ -31,6 +32,7 @@ impl std::fmt::Display for MazeError {
         match *self {
             MazeError::Maze(ref message) => write!(f, "{}", message),
             MazeError::Io(ref error) => write!(f, "{}", error),
+            MazeError::SerdeJson(ref error) => write!(f, "{}", error),
         }
     }
 }
