@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
-use std::io::Read;
+use std::io::BufReader;
 use std::io::Write;
 
 use crate::solution::Solution;
@@ -156,10 +156,9 @@ impl Maze {
     ///     Err(error) => println!("Failed to load from file: {} - {}", path, error)
     /// }
     pub fn load_from_file(&mut self, path: &str) -> Result<(), MazeError> {
-        let mut file = File::open(path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        match serde_json::from_str(&contents) {
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        match serde_json::from_reader(reader) {
             Ok(result) => {
                 *self = result;
                 Ok(())
