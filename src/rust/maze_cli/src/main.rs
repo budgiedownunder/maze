@@ -17,3 +17,12 @@ fn main() {
     print_welcome_banner();
     let _m = Maze::new(Definition::new(0, 0));
 }
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn dummy_test() {
+        assert_eq!(1, 1);
+    }
+}    
