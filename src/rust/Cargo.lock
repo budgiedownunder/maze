@@ -17,6 +17,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "maze_cli"
+version = "0.1.0"
+dependencies = [
+ "maze",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
