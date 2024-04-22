@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::fs::File;
-use std::io::BufReader;
-use std::io::Write;
+use std::fs::{self, File};
+use std::io::{BufReader, Write};
 
 use crate::solution::Solution;
 use crate::Definition;

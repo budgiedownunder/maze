@@ -1,5 +1,4 @@
-use std::error::Error;
-use std::io;
+use std::{error::Error, io};
 
 #[derive(Debug)]
 /// Represents an error
