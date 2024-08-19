@@ -1,6 +1,3 @@
 @startuml maze_project
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
-
-Person(user, "User X")
-
+class Example
 @enduml
