@@ -27,9 +27,9 @@ jobs:
 
     - name: Download C4-PlantUML files
       run: |
-        curl -O https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4.puml
-        curl -O https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
-        curl -O https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+        curl -o diagrams/C4.puml https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4.puml
+        curl -o diagrams/C4_Container.puml https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+        curl -o diagrams/C4_Context.puml https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
 
     - name: Show .puml files
       run: cat diagrams/maze.puml
