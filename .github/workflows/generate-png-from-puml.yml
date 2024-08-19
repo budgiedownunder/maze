@@ -13,29 +13,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'adopt'
-          java-version: '11'
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Install PlantUML
-        run: sudo apt-get install plantuml
+    - name: Set up Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'adopt'
+        java-version: '11'
 
-      - name: Generate PNGs
-        run: |
-          for f in $(find . -name '*.puml'); do
-            plantuml -tpng "$f"
-          done
+    - name: Install PlantUML
+      run: sudo apt-get install -y plantuml
 
-      - name: Commit PNG files
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git add .
-          git commit -m "Generate PNG files from PlantUML"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Download C4-PlantUML
+      run: |
+        curl -O https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+    - name: Generate PNGs
+      run: |
+        for f in $(find . -name '*.puml'); do
+          plantuml -tpng "$f"
+        done
+
+    - name: Commit PNG files
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
+        git add .
+        git commit -m "Generate PNG files from PlantUML"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
