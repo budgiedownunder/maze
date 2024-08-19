@@ -1,0 +1,41 @@
+name: Generate PNG from PlantUML
+
+on:
+  push:
+    paths:
+      - '**/*.puml'
+  pull_request:
+    paths:
+      - '**/*.puml'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: '11'
+
+      - name: Install PlantUML
+        run: sudo apt-get install plantuml
+
+      - name: Generate PNGs
+        run: |
+          for f in $(find . -name '*.puml'); do
+            plantuml -tpng "$f"
+          done
+
+      - name: Commit PNG files
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add .
+          git commit -m "Generate PNG files from PlantUML"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
