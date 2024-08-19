@@ -1,5 +1,5 @@
 @startuml maze_project
-!include C4_Container.puml
+!include includes/C4_Container.puml
 
 Person(personAlias, "Label", "Optional Description")
 Container(containerAlias, "Label", "Technology", "Optional Description")
