@@ -1,3 +1,5 @@
 @startuml
-Bob->Alice_XXXX
+!include includes/C4_Container.puml
+Person(personAlias, "Label", "Optional Description")
+Container(containerAlias, "Label", "Technology", "Optional Description")
 @enduml
