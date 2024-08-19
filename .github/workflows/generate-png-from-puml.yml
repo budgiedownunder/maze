@@ -8,7 +8,10 @@ on:
     paths:
       - '**/*.puml'
 
-jobs:
+permissions:
+  contents: write
+
+  jobs:
   generate:
     runs-on: ubuntu-latest
 
