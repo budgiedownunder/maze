@@ -38,6 +38,12 @@ jobs:
     - name: Show .puml C4 include file
       run: cat diagrams/includes/C4.puml
 
+    - name: Show .puml C4 Container include file
+      run: cat diagrams/includes/C4_Container.puml
+
+    - name: Show .puml C4 Context include file
+      run: cat diagrams/includes/C4_Context.puml
+
     - name: Show .puml files
       run: cat diagrams/maze.puml
 
