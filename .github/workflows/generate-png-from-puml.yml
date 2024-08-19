@@ -25,9 +25,14 @@ jobs:
     - name: Install PlantUML
       run: sudo apt-get install -y plantuml
 
-    - name: Download C4-PlantUML
+    - name: Download C4-PlantUML files
       run: |
+        curl -O https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4.puml
+        curl -O https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
         curl -O https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+    - name: Show .puml files
+      run: cat diagrams/maze.puml
 
     - name: Generate PNGs
       run: |
