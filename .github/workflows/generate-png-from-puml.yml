@@ -40,7 +40,8 @@ jobs:
 
     - name: Generate PNGs
       run: |
-        for f in $(find . -name '*.puml' - not -path './disgrams/C4_*.puml'); do
+        for f in $(find . -name '*.puml' - not -path './diagrams/includes/C4_*.puml'); do
+          echo "Processing $f"
           plantuml -tpng "$f"
         done
 
