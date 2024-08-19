@@ -11,7 +11,7 @@ on:
 permissions:
   contents: write
 
-  jobs:
+jobs:
   generate:
     runs-on: ubuntu-latest
 

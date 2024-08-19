@@ -1,3 +1,3 @@
 @startuml maze_project
-Bob->Alice2
+Bob->Alice3
 @enduml
