@@ -51,7 +51,7 @@ jobs:
       run: |
         for f in $(find . -name '*.puml' -not -path './diagrams/includes/*' -not -path './diagrams/includes'); do
           echo "Processing $f"
-          plantuml -DRELATIVE_INCLUDE=true -tpng "$f"
+          plantuml -verbose -DRELATIVE_INCLUDE=true -tpng "$f"
         done
 
     - name: Commit PNG files
