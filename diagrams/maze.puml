@@ -1,9 +1,3 @@
 @startuml maze_project
-!include includes/C4_Container.puml
-
-Person(personAlias, "Label", "Optional Description")
-Container(containerAlias, "Label", "Technology", "Optional Description")
-System(systemAlias, "Label", "Optional Description")
-
-Rel(personAlias, containerAlias, "Label", "Optional Technology Test zz")
+Bob->Alice
 @enduml
