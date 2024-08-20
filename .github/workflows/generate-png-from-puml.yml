@@ -25,9 +25,6 @@ jobs:
         sudo apt-get install -y default-jdk graphviz
         sudo curl -L https://github.com/plantuml/plantuml/releases/download/v1.2024.6/plantuml.jar -o /usr/local/bin/plantuml.jar
 
-    - name: Show .puml files
-      run: cat diagrams/maze.puml
-
     - name: Generate PNGs
       run: |
         java -jar /usr/local/bin/plantuml.jar -version
