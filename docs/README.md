@@ -21,6 +21,8 @@ Here is a brief overview of the project structure:
 - **`src/`**: Contains the source code.
 - **`docs/`**: Contains documentation files, including this README and diagrams.
   - **`diagrams/`**: Contains architectural diagrams and other visual representations.
+- **`research/`**: Contains research notes
+- **`.github/`**: Contains GitHub assets (e.g. workflows)
   
 ## Diagrams
 
