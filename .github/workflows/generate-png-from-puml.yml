@@ -26,7 +26,9 @@ jobs:
         java-version: '11'
 
     - name: Install PlantUML
-      run: sudo apt-get install -y plantuml
+      run: |
+        sudo apt-get install -y default-jdk graphviz
+        sudo apt-get install -y plantuml
 
     - name: Download C4-PlantUML files
       run: |
