@@ -31,9 +31,9 @@ jobs:
           java -jar /usr/local/bin/plantuml.jar "$@"
         }      
         plantuml -version
-        for f in $(find . -name '*.puml' -not -path './diagrams/includes/*' -not -path './diagrams/includes'); do
+        for f in $(find ./diagrams -maxdepth 1 -name '*.puml'); do
           echo "Processing $f"
-          java -jar /usr/local/bin/plantuml.jar -tpng "$f"
+          plantuml -tpng "$f"
         done
 
     - name: Commit PNG files
