@@ -27,8 +27,9 @@ jobs:
 
     - name: Generate PNGs
       run: |
-        # java -jar /usr/local/bin/plantuml.jar -version
-        alias plantuml='java -jar /usr/local/bin/plantuml.jar'
+        plantuml() {
+          java -jar /usr/local/bin/plantuml.jar "$@"
+        }      
         plantuml -version
         for f in $(find . -name '*.puml' -not -path './diagrams/includes/*' -not -path './diagrams/includes'); do
           echo "Processing $f"
