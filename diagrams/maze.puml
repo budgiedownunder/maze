@@ -2,7 +2,6 @@
 
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
-
-Person(personAlias, "Label", "Optional Description x")
-Container(containerAlias, "Label", "Technology", "Optional Description yy")
+Person(personAlias, "Label", "Optional Description 3")
+Container(containerAlias, "Label", "Technology", "Optional Description 3")
 @enduml

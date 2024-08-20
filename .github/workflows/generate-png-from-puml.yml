@@ -23,23 +23,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y default-jdk graphviz
-        sudo curl -L https://github.com/plantuml/plantuml/releases/latest/download/plantuml.jar -o /usr/local/bin/plantuml.jar
-
-    - name: Download C4-PlantUML files
-      run: |
-        mkdir -p diagrams/includes
-        curl -o diagrams/includes/C4.puml https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4.puml
-        curl -o diagrams/includes/C4_Container.puml https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
-        curl -o diagrams/includes/C4_Context.puml https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
-
-    - name: Show .puml C4 include file
-      run: cat diagrams/includes/C4.puml
-
-    - name: Show .puml C4 Container include file
-      run: cat diagrams/includes/C4_Container.puml
-
-    - name: Show .puml C4 Context include file
-      run: cat diagrams/includes/C4_Container.puml
+        sudo curl -L https://github.com/plantuml/plantuml/releases/download/v1.2024.6/plantuml.jar -o /usr/local/bin/plantuml.jar
 
     - name: Show .puml files
       run: cat diagrams/maze.puml
