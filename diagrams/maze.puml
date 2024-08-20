@@ -1,6 +1,8 @@
 @startuml
 
-!include includes/test.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
 
+Person(personAlias, "Label", "Optional Description x")
+Container(containerAlias, "Label", "Technology", "Optional Description yy")
 @enduml
