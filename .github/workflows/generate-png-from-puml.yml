@@ -46,11 +46,10 @@ jobs:
 
     - name: Generate PNGs
       run: |
-        alias plantuml='java -jar /usr/local/bin/plantuml.jar'
-        plantuml -version
+        java -jar /usr/local/bin/plantuml.jar -version
         for f in $(find . -name '*.puml' -not -path './diagrams/includes/*' -not -path './diagrams/includes'); do
           echo "Processing $f"
-          plantuml -tpng "$f"
+          java -jar /usr/local/bin/plantuml.jar -tpng "$f"
         done
 
     - name: Commit PNG files
