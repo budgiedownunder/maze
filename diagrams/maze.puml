@@ -1,5 +1,3 @@
 @startuml
-!include includes/rubbish.puml
-Person(personAlias, "Label", "Optional Description x")
-Container(containerAlias, "Label", "Technology", "Optional Description yy")
+!include includes/test.puml
 @enduml
