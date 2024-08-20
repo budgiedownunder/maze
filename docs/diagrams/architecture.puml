@@ -7,7 +7,7 @@ title Architecture Diagram for Maze Project
 Person(user, "User", "A user of the system")
 System_Boundary(c1, "Maze Project") {
     Container(cli_app, "Maze CLI", "Rust", "Command-line application ")
-    Container(maze_library, "Maze", "Rust", "Provides maze definition and solution calculation functionality")
+    Container(maze_library, "Maze Library", "Rust", "Provides maze definition and solution calculation functionality")
 }
 
 Rel(user, cli_app, "Uses")
