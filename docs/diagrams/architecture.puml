@@ -2,7 +2,7 @@
 
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
-title Architecture  diagram for Maze Project
+title Architecture Diagram for Maze Project
 
 Person(user, "User", "A user of the system")
 System_Boundary(c1, "Maze Project") {
