@@ -1,9 +1,6 @@
 @startuml
 
-!include includes/C4_Container.puml
+!include includes/test.puml
 
 
-
-Person(personAlias, "Label", "Optional Description x")
-Container(containerAlias, "Label", "Technology", "Optional Description yy")
 @enduml
