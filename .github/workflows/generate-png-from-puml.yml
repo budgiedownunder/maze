@@ -19,19 +19,11 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'adopt'
-        java-version: '11'
-
-    - name: Install PlantUML
+    - name: Install Java and PlantUML
       run: |
+        sudo apt-get update
         sudo apt-get install -y default-jdk graphviz
-        sudo apt-get install -y plantuml
-
-    - name: Check PlantUML version
-      run: plantuml -version
+        curl -L https://github.com/plantuml/plantuml/releases/download/v1.2023.3/plantuml.1.2023.3.jar -o /usr/local/bin/plantuml.jar
 
     - name: Download C4-PlantUML files
       run: |
@@ -47,16 +39,18 @@ jobs:
       run: cat diagrams/includes/C4_Container.puml
 
     - name: Show .puml C4 Context include file
-      run: cat diagrams/includes/C4_Context.puml
+      run: cat diagrams/includes/C4_Container.puml
 
     - name: Show .puml files
       run: cat diagrams/maze.puml
 
     - name: Generate PNGs
       run: |
+        alias plantuml='java -jar /usr/local/bin/plantuml.jar'
+        plantuml -version
         for f in $(find . -name '*.puml' -not -path './diagrams/includes/*' -not -path './diagrams/includes'); do
           echo "Processing $f"
-          plantuml -verbose -DRELATIVE_INCLUDE=true -tpng "$f"
+          plantuml -tpng "$f"
         done
 
     - name: Commit PNG files
