@@ -30,6 +30,9 @@ jobs:
         sudo apt-get install -y default-jdk graphviz
         sudo apt-get install -y plantuml
 
+    - name: Check PlantUML version
+      run: plantuml -version
+
     - name: Download C4-PlantUML files
       run: |
         mkdir -p diagrams/includes
