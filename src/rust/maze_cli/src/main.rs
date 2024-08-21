@@ -1,31 +1,29 @@
-use crossterm::event::{poll, read, Event, KeyCode, KeyEvent/* , KeyEventKind*/};
+use crossterm::event::{poll, read, Event, KeyCode, KeyEvent};
 use std::io::{self};
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 use maze::Definition;
 use maze::Maze;
 
-trait InputSource {
-    fn getch(&mut self) -> io::Result<char>;
-} 
-
-// Implementation for reading from crossterm
-struct Crossterm;
-impl InputSource for Crossterm {
-    fn getch(&mut self) -> io::Result<char> {
-        loop {
-            if poll(Duration::from_secs(0))? {
-                if let Event::Key(KeyEvent { code, modifiers, kind, .. }) = read()? {
-                    if modifiers.is_empty() && kind == crossterm::event::KeyEventKind::Press {
-                        if let KeyCode::Char(ch) = code {
-                            return Ok(ch);
-                        }
-                    }    
-                } 
+fn getch() -> io::Result<Option<char>> {
+    loop {
+        if poll(Duration::from_secs(0))? {
+            if let Event::Key(KeyEvent {
+                code,
+                modifiers,
+                kind,
+                ..
+            }) = read()?
+            {
+                if modifiers.is_empty() && kind == crossterm::event::KeyEventKind::Press {
+                    if let KeyCode::Char(ch) = code {
+                        return Ok(Some(ch));
+                    }
+                }
             }
-            thread::sleep(Duration::from_millis(10));                
         }
+        thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -68,22 +66,23 @@ fn print_menu() {
     print_lines(menu_lines());
 }
 
-fn process_keys<T: InputSource>(input: &mut T) {
+fn process_keys() {
     let mut _m: Maze = Maze::new(Definition::new(0, 0));
     loop {
-        match input.getch() {
-            Ok(ch) => {
-                match ch.to_ascii_uppercase() {
-                    'Q' => {
-                        println!("Exiting...");
-                        break;
-                    }
-                    'P' => {
-                        println!("Would print");
-                    }
-                    _ => println!("Unknown option selected: {}", ch)
-                } 
-            }
+        match getch() {
+            Ok(Some(ch)) => match ch.to_ascii_uppercase() {
+                'Q' => {
+                    println!("Exiting...");
+                    break;
+                }
+                'P' => {
+                    println!("Would print");
+                }
+                _ => println!("Unknown option selected: {}", ch),
+            },
+            Ok(None) => {
+                thread::sleep(Duration::from_millis(10));                
+            },
             Err(err) => {
                 eprintln!("Error reading input: {}", err)
             }
@@ -94,7 +93,7 @@ fn process_keys<T: InputSource>(input: &mut T) {
 fn run() {
     print_welcome_banner();
     print_menu();
-    process_keys(&mut Crossterm {});
+    process_keys();
 }
 
 fn main() {
@@ -106,18 +105,16 @@ fn main() {
 mod tests {
     use super::*;
     use std::io::Write;
-    use assert_cmd::Command;
 
     #[test]
     fn should_be_able_quit_on_start() {
-        let output = Command::cargo_bin(app_name()).unwrap().output().unwrap();
+       /* let output = Command::cargo_bin(app_name()).unwrap().output().unwrap();
         let mut expected_lines = welcome_banner_lines();
         expected_lines.extend(menu_lines());
 
         let std_output = String::from_utf8_lossy(&output.stdout);
         assert_lines_eq(std_output.lines().collect(), expected_lines);
-
-        //feed_character('Q');
+        */
     }
 
     // Helper functions
@@ -139,4 +136,5 @@ mod tests {
         Ok(())
     }
 }
+
 */
