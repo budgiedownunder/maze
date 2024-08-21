@@ -82,7 +82,7 @@ fn process_keys() {
             },
             Ok(None) => {
                 thread::sleep(Duration::from_millis(10));
-            },
+            }
             Err(err) => {
                 eprintln!("Error reading input: {}", err)
             }
@@ -104,12 +104,12 @@ fn main() {
 mod tests {
     // use super::*;
     use env_logger::Env;
-   // use expectrl::{spawn, Eof, Regex, Session};
+    use expectrl::{spawn, Eof, Regex /*, Session */};
     use log::LevelFilter;
-    //use std::str;
+    use std::str;
     use std::sync::Once;
-    //use std::time::Duration;
-    //use strip_ansi_escapes::strip;
+    use std::time::Duration;
+    use strip_ansi_escapes::strip;
 
     static INIT: Once = Once::new();
 
@@ -132,31 +132,31 @@ mod tests {
         // Initialize the logger for debugging
         init_logging();
 
-        /*/      // Spawn the CLI application
-                println!("Spawning CLI...");
-                let mut p = spawn("cargo run --quiet").expect("Failed to spawn process");
-                println!("Spawning complete.");
+        // Spawn the CLI application
+        println!("Spawning CLI...");
+        let mut p = spawn("cargo run --quiet").expect("Failed to spawn process");
+        println!("Spawning complete.");
 
-                // Set a timeout for expect calls
-                p.set_expect_timeout(Some(Duration::from_secs(5)));
+        // Set a timeout for expect calls
+        p.set_expect_timeout(Some(Duration::from_secs(5)));
 
-                // Capture and print any initial output
-                let output = p.expect(Regex(".+"))?;
-                // Convert the output to a readable string
-                println!("Captured Output ==> {:?}", output);
-                let stripped_output = strip(output.before()).unwrap();
-                if let Ok(output_str) = str::from_utf8(&stripped_output) {
-                    println!("Captured Output: {}", output_str);
-                } else {
-                    println!("Captured Output contains invalid UTF-8");
-                }
+        // Capture and print any initial output
+        let output = p.expect(Regex(".+"))?;
+        // Convert the output to a readable string
+        println!("Captured Output ==> {:?}", output);
+        let stripped_output = strip(output.before()).unwrap();
+        if let Ok(output_str) = str::from_utf8(&stripped_output) {
+            println!("Captured Output: {}", output_str);
+        } else {
+            println!("Captured Output contains invalid UTF-8");
+        }
 
-                // Send 'Q' key press without newline
-                p.send("Q")?;
+        // Send 'Q' key press without newline
+        p.send("Q")?;
 
-                // Ensure the process exits
-                p.expect(Eof)?;
-        */
+        // Ensure the process exits
+        p.expect(Eof)?;
+
         Ok(())
     }
 
