@@ -1,54 +1,15 @@
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent};
-use std::io::{self};
+use std::io::{self /*, stdout, Stdout*/};
 use std::thread;
 use std::time::Duration;
 
 use maze::Definition;
 use maze::Maze;
 
-fn getch() -> io::Result<Option<char>> {
-    loop {
-        if poll(Duration::from_secs(0))? {
-            if let Event::Key(KeyEvent {
-                code,
-                modifiers,
-                kind,
-                ..
-            }) = read()?
-            {
-                if modifiers.is_empty() && kind == crossterm::event::KeyEventKind::Press {
-                    if let KeyCode::Char(ch) = code {
-                        return Ok(Some(ch));
-                    }
-                }
-            }
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-}
-
-fn str_lines(s: &'static str) -> Vec<&'static str> {
-    s.lines().map(|line| line.trim_start()).collect()
-}
-
-fn print_lines(lines: Vec<&'static str>) {
-    for line in lines {
-        println!("{}", line);
-    }
-}
-
 static WELCOME_BANNER: &'static str = r#"******************************
        * Welcome to the Maze CLI !! *
        ******************************
     "#;
-
-fn welcome_banner_lines() -> Vec<&'static str> {
-    str_lines(WELCOME_BANNER)
-}
-
-fn print_welcome_banner() {
-    print_lines(welcome_banner_lines());
-}
 
 static MENU: &'static str = r#"******************************
         Select action:
@@ -58,110 +19,164 @@ static MENU: &'static str = r#"******************************
         ******************************
         "#;
 
-fn menu_lines() -> Vec<&'static str> {
-    str_lines(MENU)
-}
+trait App {
+    fn read_key(&mut self) -> Result<Option<char>, io::Error>;
+    fn write_line(&mut self, line: &str) -> Result<(), io::Error>;
 
-fn print_menu() {
-    print_lines(menu_lines());
-}
+    fn write_lines(&mut self, lines: Vec<&'static str>) -> Result<(), io::Error> {
+        for line in lines {
+            self.write_line(line)?;
+        }
+        Ok(())
+    }
 
-fn process_keys() {
-    let mut _m: Maze = Maze::new(Definition::new(0, 0));
-    loop {
-        match getch() {
-            Ok(Some(ch)) => match ch.to_ascii_uppercase() {
-                'Q' => {
-                    println!("Exiting...");
-                    break;
-                }
-                'P' => {
-                    println!("Would print");
-                }
-                _ => println!("Unknown option selected: {}", ch),
-            },
-            Ok(None) => {
-                thread::sleep(Duration::from_millis(10));
-            }
-            Err(err) => {
-                eprintln!("Error reading input: {}", err)
+    fn str_lines(&mut self, s: &'static str) -> Vec<&'static str> {
+        s.lines().map(|line| line.trim_start()).collect()
+    }
+
+    fn welcome_banner_lines(&mut self) -> Vec<&'static str> {
+        self.str_lines(WELCOME_BANNER)
+    }
+
+    fn write_welcome_banner(&mut self) -> Result<(), io::Error> {
+        let lines = self.welcome_banner_lines();
+        self.write_lines(lines)
+    }
+
+    fn menu_lines(&mut self) -> Vec<&'static str> {
+        self.str_lines(MENU)
+    }
+
+    fn write_menu(&mut self) -> Result<(), io::Error> {
+        let lines = self.menu_lines();
+        self.write_lines(lines)?;
+        Ok(())
+    }
+
+    fn process_keys(&mut self) -> Result<(), io::Error> {
+        let mut _m: Maze = Maze::new(Definition::new(0, 0));
+        loop {
+            match self.read_key()? {
+                Some(ch) => match ch.to_ascii_uppercase() {
+                    'Q' => {
+                        self.write_line("Exiting...")?;
+                        return Ok(())
+                    }
+                    'P' => {
+                        self.write_line("Would print")?;
+                    }
+                    _ => self.write_line(format!("Unknown option selected: {}", ch).as_str())?,
+                },
+                None => {
+                    thread::sleep(Duration::from_millis(10));
+                },
             }
         }
     }
+
+    fn run(&mut self) -> Result<(), io::Error> {
+        self.write_welcome_banner()?;
+        self.write_menu()?;
+        self.process_keys()?;
+        Ok(())
+    }
 }
 
-fn run() {
-    print_welcome_banner();
-    print_menu();
-    process_keys();
+struct ConsoleApp {}
+
+impl ConsoleApp {}
+
+impl App for ConsoleApp {
+    fn read_key(&mut self) -> Result<Option<char>, io::Error> {
+        loop {
+            if poll(Duration::from_secs(0))? {
+                if let Event::Key(KeyEvent {
+                    code,
+                    modifiers,
+                    kind,
+                    ..
+                }) = read()?
+                {
+                    if modifiers.is_empty() && kind == crossterm::event::KeyEventKind::Press {
+                        if let KeyCode::Char(ch) = code {
+                            return Ok(Some(ch));
+                        }
+                    }
+                }
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn write_line(&mut self, line: &str) -> Result<(), io::Error> {
+        println!("{}", line);
+        Ok(())
+    }
 }
 
-fn main() {
-    run();
+// Helper functions
+//fn app_name() -> &'static str {
+//  env!("CARGO_PKG_NAME")
+//}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut app = ConsoleApp {};
+    app.run()?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
-    use env_logger::Env;
-    use expectrl::{spawn, Eof, Regex /*, Session */};
-    use log::LevelFilter;
-    use std::str;
-    use std::sync::Once;
-    use std::time::Duration;
-    use strip_ansi_escapes::strip;
+    use crate::App;
+    use std::io::{self};
+    use std::collections::VecDeque;
 
-    static INIT: Once = Once::new();
-
-    fn init_logging() {
-        INIT.call_once(|| {
-            // Set up logging level from environment or fallback to debug
-            env_logger::Builder::from_env(Env::default().default_filter_or("debug"))
-                .filter_level(LevelFilter::Debug)
-                .init();
-            log::debug!("Debug logging is now enabled.");
-        });
+    struct MockApp {
+        input_keys: VecDeque<char>,
+        output: Vec<String>,
     }
 
-    #[test]
-    fn test_logging_output() {
-        init_logging();
-    }
-    #[test]
-    fn should_be_able_quit_on_start() -> Result<(), expectrl::Error> {
-        // Initialize the logger for debugging
-        init_logging();
-
-        // Spawn the CLI application
-        println!("Spawning CLI...");
-        let mut p = spawn("cargo run --quiet").expect("Failed to spawn process");
-        println!("Spawning complete.");
-
-        // Set a timeout for expect calls
-        p.set_expect_timeout(Some(Duration::from_secs(5)));
-
-        // Capture and print any initial output
-        let output = p.expect(Regex(".+"))?;
-        // Convert the output to a readable string
-        println!("Captured Output ==> {:?}", output);
-        let stripped_output = strip(output.before()).unwrap();
-        if let Ok(output_str) = str::from_utf8(&stripped_output) {
-            println!("Captured Output: {}", output_str);
-        } else {
-            println!("Captured Output contains invalid UTF-8");
+    impl MockApp {
+        fn new() -> MockApp {
+            MockApp {
+                input_keys: VecDeque::new(),
+                output: Vec::new(),
+            }
         }
 
-        // Send 'Q' key press without newline
-        p.send("Q")?;
+        fn add_input_key(&mut self, key: char) {
+            self.input_keys.push_back(key);
+        }
 
-        // Ensure the process exits
-        p.expect(Eof)?;
-
-        Ok(())
+        fn print_output(&self) {
+            for line in &self.output {
+                println!("{}", line);
+            }
+        }
     }
 
-    // Helper functions
-    //fn app_name() -> &'static str {
-    //    env!("CARGO_PKG_NAME")
-    //}
+    impl App for MockApp {
+        fn read_key(&mut self) -> Result<Option<char>, io::Error> {
+            match self.input_keys.pop_front() {
+                Some(ch) => Ok(Some(ch)),
+                None => {
+                    self.write_line("No key presses found in input_keys buffer")?;
+                    Err(io::Error::new(io::ErrorKind::Other, "No key presses found in input_keys buffer"))
+                },    
+            }
+        }
+        fn write_line(&mut self, line: &str) -> Result<(), io::Error> {
+            self.output.push(line.to_string());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn should_be_able_quit_on_start() -> Result<(), io::Error> {
+        let mut mock_app = MockApp::new();
+        mock_app.add_input_key('Q');
+        mock_app.run()?;
+        mock_app.print_output();
+        Ok(())
+    }
 }

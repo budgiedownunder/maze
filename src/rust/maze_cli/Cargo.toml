@@ -10,7 +10,3 @@ maze = { path = "../maze" }
 crossterm = "*"
 
 [dev-dependencies]
-expectrl = "0.5"
-log = "0.4"  
-env_logger = "0.10"
-strip-ansi-escapes = "0.1"
