@@ -172,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn should_be_able_quit_on_start() -> Result<(), io::Error> {
+    fn should_be_able_to_quit_on_start() -> Result<(), io::Error> {
         let mut mock_app = MockApp::new();
         mock_app.add_input_key('Q');
         mock_app.run()?;
