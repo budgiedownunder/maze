@@ -126,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[cfg(test)]
-mod tests {
+mod maze_cli_tests {
     use crate::App;
     use std::io::{self};
     use std::collections::VecDeque;
