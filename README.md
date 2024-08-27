@@ -9,7 +9,7 @@
 - [Acknowledgements](#acknowledgements)
 
 ## Introduction
-A set of tools and libraries for managing and solving mazes. 
+This is an experimental project that I have used for experimenting with various languages and technologies. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios. 
 
 ## Getting Started
 
