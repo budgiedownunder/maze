@@ -48,7 +48,7 @@ impl Solver<'_> {
 
     fn get_lee_solution(
         &self,
-        grid_state: &Vec<Vec<CellState>>,
+        grid_state: &[Vec<CellState>],
         start: &Point,
         end: &Point,
         offsets: &[Offset],
@@ -69,7 +69,7 @@ impl Solver<'_> {
                 CellState::SolutionStep { value } => {
                     let mut found_neighbour = false;
                     for offset in offsets.iter() {
-                        match self.calc_location(&step_pt, &offset) {
+                        match self.calc_location(&step_pt, offset) {
                             Ok(offset_pt) => {
                                 let offset_pt_step_value =
                                     grid_state[offset_pt.row][offset_pt.col].step_value();
@@ -114,7 +114,7 @@ impl Solver<'_> {
 
         q.push_back(start.clone());
         grid_state[start.row][start.col] = CellState::SolutionStep { value: 0 };
-        while q.len() > 0 {
+        while !q.is_empty() {
             let opt_pt = q.pop_front();
             match opt_pt {
                 Some(pt) => {
@@ -122,7 +122,7 @@ impl Solver<'_> {
                     match pt_step_value {
                         Some(value) => {
                             for offset in offsets.iter() {
-                                match self.calc_location(&pt, &offset) {
+                                match self.calc_location(&pt, offset) {
                                     Ok(offset_pt) => match grid_state[offset_pt.row][offset_pt.col]
                                     {
                                         CellState::Empty => {

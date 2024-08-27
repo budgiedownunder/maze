@@ -204,7 +204,7 @@ impl Maze {
     /// }
     /// ```
     pub fn solve(&self, start: Point, end: Point) -> Result<Solution, MazeError> {
-        let s = Solver { maze: &self };
+        let s = Solver { maze: self };
         s.solve(start, end)
     }
 
@@ -251,9 +251,7 @@ impl Maze {
     /// ```
     pub fn print(&self, start: Point, end: Point, path: Path) {
         let mut display_chars = self.definition.to_display_chars();
-        let mut path_idx = 0;
-
-        for pt in &path.points {
+        for (path_idx, pt) in path.points.iter().enumerate() {
             if self.definition.is_valid(pt) && *pt != start && *pt != end {
                 let mut direction = Direction::None;
                 if (path_idx + 1) < path.points.len() {
@@ -279,7 +277,6 @@ impl Maze {
 
                 display_chars[pt.row][pt.col] = direction.unicode_char();
             }
-            path_idx += 1;
         }
         if self.definition.is_valid(&start) {
             display_chars[start.row][start.col] = 'S';
