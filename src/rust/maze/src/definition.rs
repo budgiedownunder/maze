@@ -45,11 +45,8 @@ impl<'de> Deserialize<'de> for Definition {
             }
         }
 
-        match Self::validate_grid(&grid) {
-            Some(err) => {
-                return Err(de::Error::custom(format!("{}", err.to_string())));
-            }
-            None => {}
+        if let Some(err) = Self::validate_grid(&grid) {
+            return Err(de::Error::custom(err.to_string()));
         }
 
         Ok(Definition { grid })
@@ -160,13 +157,10 @@ impl Definition {
     /// assert_eq!(d.col_count(), 3);
     /// ```
     pub fn from_vec(grid: Vec<Vec<char>>) -> Self {
-        match Self::validate_grid(&grid) {
-            Some(err) => {
-                panic!("{}", err.to_string());
-            }
-            _ => {}
+        if let Some(err) = Self::validate_grid(&grid) {
+            panic!("{}", err.to_string());
         }
-        Definition { grid: grid }
+        Definition { grid }
     }
 
     /// Converts the definition instance to a vector of row cell states
@@ -296,7 +290,7 @@ impl Definition {
     /// ```
     pub fn delete_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
         if self.row_count() == 0 {
-            return Err(MazeError::new(format!("definition is empty")));
+            return Err(MazeError::new("definition is empty".to_string()));
         }
         if start_col >= self.col_count() {
             return Err(MazeError::new(format!(
@@ -339,9 +333,9 @@ impl Definition {
     /// ```
     pub fn insert_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
         if self.row_count() == 0 {
-            return Err(MazeError::new(format!("definition is empty")));
+            return Err(MazeError::new("definition is empty".to_string()));
         }
-        if start_col >= self.col_count() + 1 {
+        if start_col > self.col_count() {
             return Err(MazeError::new(format!(
                 "invalid 'start_col' index ({})",
                 start_col
@@ -385,7 +379,7 @@ impl Definition {
     /// ```
     pub fn delete_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
         if self.row_count() == 0 {
-            return Err(MazeError::new(format!("definition is empty")));
+            return Err(MazeError::new("definition is empty".to_string()));
         }
         if start_row >= self.row_count() {
             return Err(MazeError::new(format!(
@@ -427,7 +421,7 @@ impl Definition {
     /// println!("{:?}", d.to_display_chars());
     /// ```
     pub fn insert_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
-        if start_row >= self.row_count() + 1 {
+        if start_row > self.row_count() {
             return Err(MazeError::new(format!(
                 "invalid 'start_row' index ({})",
                 start_row
@@ -495,7 +489,7 @@ impl Definition {
     // Private helper functions
 
     fn first_row_col_count(grid: &Vec<Vec<char>>) -> usize {
-        grid.get(0).map_or(0, |inner_vec| inner_vec.len())
+        grid.first().map_or(0, |inner_vec| inner_vec.len())
     }
 
     fn validate_grid(grid: &Vec<Vec<char>>) -> Option<MazeError> {

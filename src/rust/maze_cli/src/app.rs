@@ -4,15 +4,16 @@ use std::io::{self};
 use std::thread;
 use std::time::Duration;
 
-static WELCOME_BANNER: &'static str = r#"******************************
+static WELCOME_BANNER: &str = r#"******************************
        * Welcome to the Maze CLI !! *
        ******************************
     "#;
 
-static MENU: &'static str = r#"******************************
+static MENU: &str = r#"******************************
         Select action:
 
         E -> Enter text
+        R -> Reset
         Q -> Quit
         ******************************
         "#;
@@ -52,11 +53,56 @@ pub trait App {
         Ok(())
     }
 
-    fn process_keys(&mut self) -> Result<(), io::Error> {
-        let mut _m: Maze = Maze::new(Definition::new(0, 0));
+    fn press_any_key(&mut self) -> Result<(), io::Error> {
+        self.write_line("[** Press any key **]")?;
+        self.read_key()?;
+        Ok(())
+    }
+
+    fn choose_yes_no(&mut self, message: &str) -> Result<bool, io::Error> {
+        self.write_line(format!("{} (Y/N)?", message).as_str())?;
         loop {
             match self.read_key()? {
                 Some(ch) => match ch.to_ascii_uppercase() {
+                    'Y' => {
+                        return Ok(true);
+                    }
+                    'N' => {
+                        return Ok(false);
+                    }
+                    _ => {
+                        self.write_line(format!("Invalid response: '{}'", ch).as_str())?;
+                    }
+                },
+                None => {
+                    self.write_line("No action taken")?;
+                }
+            }
+        }
+    }
+
+    fn handle_reset(&mut self, _maze: &mut Maze) -> Result<(), io::Error> {
+        match self.choose_yes_no("Reset maze")? {
+            true => {
+                self.write_line("YES selected")?;
+            }
+            false => {
+                self.write_line("NO selected")?;
+            }
+        }
+        self.press_any_key()?;
+        Ok(())
+    }
+
+    fn process_keys(&mut self) -> Result<(), io::Error> {
+        let mut maze: Maze = Maze::new(Definition::new(0, 0));
+        loop {
+            match self.read_key()? {
+                Some(ch) => match ch.to_ascii_uppercase() {
+                    'R' => {
+                        self.handle_reset(&mut maze)?;
+                        self.write_menu()?;
+                    }
                     'Q' => {
                         self.write_line("Exiting...")?;
                         return Ok(());
