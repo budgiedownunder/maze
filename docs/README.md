@@ -28,7 +28,8 @@ Here is a brief overview of the project structure:
 
 The `docs/diagrams/` directory contains visual representations of the system architecture, workflows, and other important components. These diagrams are intended to provide a clear understanding of how different parts of the system interact.
 
-- [Architecture Diagram](diagrams/architecture.png)
+
+![Diagram](diagrams/architecture.png)
 
 For more detailed explanations, see the [Architecture Documentation](diagrams/README.md).
 
