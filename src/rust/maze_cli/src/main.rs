@@ -150,9 +150,19 @@ mod maze_cli_tests {
     use std::collections::VecDeque;
     use std::io::{self};
 
+    struct MockInputKey {
+        key: char,
+        reset_output: bool,
+    }
+
+    struct MockInputLine {
+        text: String,
+        reset_output: bool,
+    }
+
     struct MockApp {
-        input_keys: VecDeque<char>,
-        input_lines: VecDeque<String>,
+        input_keys: VecDeque<MockInputKey>,
+        input_lines: VecDeque<MockInputLine>,
         output: Vec<String>,
     }
 
@@ -165,12 +175,40 @@ mod maze_cli_tests {
             }
         }
 
-        fn add_input_key(&mut self, key: char) {
-            self.input_keys.push_back(key);
+        fn add_input_key(&mut self, key: char, reset_output: bool) {
+            self.input_keys.push_back(MockInputKey {
+                key: key,
+                reset_output: reset_output,
+            });
         }
 
-        fn add_input_line(&mut self, line: &str) {
-            self.input_lines.push_back(line.to_string());
+        fn add_input_line(&mut self, text: &str, reset_output: bool) {
+            self.input_lines.push_back(MockInputLine {
+                text: text.to_string(),
+                reset_output: reset_output,
+            });
+        }
+
+        fn io_error(message: String) -> io::Error {
+            io::Error::new(io::ErrorKind::Other, message)
+        }
+
+        fn verify_output(&self, expected: &[&str]) -> Result<(), io::Error> {
+            if expected.len() != self.output.len() {
+                return Err(Self::io_error(
+                    format!("The output and expected lines differ in length. Expected has length {}, while output has length {}.",
+                    expected.len(),
+                    self.output.len() )                    
+                ));
+            }
+            for i in 0..expected.len() {
+                if expected[i] != self.output[i] {
+                    return Err(Self::io_error(
+                        format!("Difference found in output at index {}: expected[{}] = '{}', output[{}] = '{}'", i, i, expected[i], i, self.output[i])
+                    ));
+                }
+            }
+            Ok(())
         }
 
         fn print_output(&self) {
@@ -183,24 +221,25 @@ mod maze_cli_tests {
     impl App for MockApp {
         fn read_key(&mut self) -> Result<Option<char>, io::Error> {
             match self.input_keys.pop_front() {
-                Some(ch) => Ok(Some(ch)),
-                None => {
-                    self.write_line("No key presses found in input_keys buffer")?;
-                    Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "No key presses found in input_keys buffer",
-                    ))
+                Some(input_key) => {
+                    if input_key.reset_output {
+                        self.output.clear();
+                    }
+                    Ok(Some(input_key.key))
                 }
+                None => return Err(Self::io_error("No key presses found in input_keys buffer".to_string())),
             }
         }
 
         fn read_line(&mut self) -> Result<Option<String>, io::Error> {
             match self.input_lines.pop_front() {
-                Some(line) => Ok(Some(line)),
-                None => Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "No lines found in input_lines buffer",
-                )),
+                Some(input_line) => {
+                    if input_line.reset_output {
+                        self.output.clear();
+                    }
+                    Ok(Some(input_line.text))
+                }
+                None => return Err(Self::io_error("No lines found in input_lines buffer".to_string())),
             }
         }
 
@@ -213,20 +252,24 @@ mod maze_cli_tests {
     #[test]
     fn should_be_able_to_quit_on_start() -> Result<(), io::Error> {
         let mut mock_app = MockApp::new();
-        mock_app.add_input_key('Q');
+        let expected_output = ["Exiting..."];
+        mock_app.add_input_key('Q', true);
         mock_app.run()?;
         mock_app.print_output();
+        mock_app.verify_output(&expected_output)?;
         Ok(())
     }
 
     #[test]
     fn should_be_able_to_enter_text_and_then_quit() -> Result<(), io::Error> {
         let mut mock_app = MockApp::new();
-        mock_app.add_input_key('E');
-        mock_app.add_input_line("Some test text");
-        mock_app.add_input_key('Q');
+        let expected_output = ["Enter some text: ", "You entered: Some test text", "Exiting..."];
+        mock_app.add_input_key('E', true);
+        mock_app.add_input_line("Some test text", false);
+        mock_app.add_input_key('Q', false);
         mock_app.run()?;
         mock_app.print_output();
+        mock_app.verify_output(&expected_output)?;
         Ok(())
     }
 }
