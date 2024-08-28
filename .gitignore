@@ -1,0 +1,2 @@
+# Ignore the rust/target folder
+src/rust/target
