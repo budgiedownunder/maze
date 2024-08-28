@@ -488,12 +488,12 @@ impl Definition {
 
     // Private helper functions
 
-    fn first_row_col_count(grid: &Vec<Vec<char>>) -> usize {
+    fn first_row_col_count(grid: &[Vec<char>]) -> usize {
         grid.first().map_or(0, |inner_vec| inner_vec.len())
     }
 
-    fn validate_grid(grid: &Vec<Vec<char>>) -> Option<MazeError> {
-        let first_row_col_count = Self::first_row_col_count(&grid);
+    fn validate_grid(grid: &[Vec<char>]) -> Option<MazeError> {
+        let first_row_col_count = Self::first_row_col_count(grid);
         let same_col_counts = grid
             .iter()
             .all(|inner_vec| inner_vec.len() == first_row_col_count);

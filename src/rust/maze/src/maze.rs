@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::fs::{self, File};
 use std::io::{BufReader, Write};
 
@@ -257,20 +258,16 @@ impl Maze {
                 if (path_idx + 1) < path.points.len() {
                     let next_pt = &path.points[path_idx + 1];
                     if next_pt.row == pt.row {
-                        direction = if pt.col < next_pt.col {
-                            Direction::Right
-                        } else if pt.col > next_pt.col {
-                            Direction::Left
-                        } else {
-                            Direction::None
+                        direction = match pt.col.cmp(&next_pt.col) {
+                            Ordering::Less => Direction::Right,
+                            Ordering::Greater => Direction::Left,
+                            Ordering::Equal => Direction::None,
                         };
                     } else if next_pt.col == pt.col {
-                        direction = if pt.row < next_pt.row {
-                            Direction::Down
-                        } else if pt.row > next_pt.row {
-                            Direction::Up
-                        } else {
-                            Direction::None
+                        direction = match pt.row.cmp(&next_pt.row) {
+                            Ordering::Less => Direction::Down,
+                            Ordering::Greater => Direction::Up,
+                            Ordering::Equal => Direction::None,
                         };
                     }
                 }

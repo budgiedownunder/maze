@@ -20,24 +20,35 @@ impl Solver<'_> {
         self.maze.definition.is_valid(pt)
     }
 
+    #[allow(clippy::cast_abs_to_unsigned)]
+    fn unsigned_abs_i32(value: i32) -> usize {
+        value.abs() as usize
+    }
+
     fn calc_location(&self, pt: &Point, offset: &Offset) -> Result<Point, MazeError> {
-        if offset.row < 0 && (offset.row.abs() as usize) > pt.row {
+        if offset.row < 0 && Self::unsigned_abs_i32(offset.row) > pt.row {
             return Err(MazeError::new("location is out of bounds".to_string()));
         }
-        if offset.col < 0 && (offset.col.abs() as usize) > pt.col {
+        if offset.col < 0 && Self::unsigned_abs_i32(offset.col) > pt.col {
             return Err(MazeError::new("location is out of bounds".to_string()));
         }
-        let pt_check = Point {
-            row: if offset.row >= 0 {
-                pt.row + offset.row as usize
-            } else {
-                pt.row - (-offset.row) as usize
-            },
-            col: if offset.col >= 0 {
-                pt.col + offset.col as usize
-            } else {
-                pt.col - (-offset.col) as usize
-            },
+        let pt_check = {
+            // Supress clippy's comparison_chain lint as "if chain"s are ok and
+            // calc_location() is performance-critical during solve
+            // (see: https://github.com/rust-lang/rust-clippy/issues/5354)
+            #[allow(clippy::comparison_chain)]
+            Point {
+                row: if offset.row >= 0 {
+                    pt.row + offset.row as usize
+                } else {
+                    pt.row - (-offset.row) as usize
+                },
+                col: if offset.col >= 0 {
+                    pt.col + offset.col as usize
+                } else {
+                    pt.col - (-offset.col) as usize
+                },
+            }
         };
 
         if !self.is_valid(&pt_check) {
@@ -54,49 +65,40 @@ impl Solver<'_> {
         offsets: &[Offset],
     ) -> Result<Solution, MazeError> {
         let mut points: Vec<Point> = vec![];
-        match grid_state[end.row][end.col].step_value() {
-            None => {
-                return Err(MazeError::new(
-                    "solution path not found (end point not processed)".to_string(),
-                ));
-            }
-            _ => {}
+        if grid_state[end.row][end.col].step_value().is_none() {
+            return Err(MazeError::new(
+                "solution path not found (end point not processed)".to_string(),
+            ));
         }
         let mut step_pt: Point = end.clone();
         points.push(end.clone());
         loop {
-            match grid_state[step_pt.row][step_pt.col] {
-                CellState::SolutionStep { value } => {
-                    let mut found_neighbour = false;
-                    for offset in offsets.iter() {
-                        match self.calc_location(&step_pt, offset) {
-                            Ok(offset_pt) => {
-                                let offset_pt_step_value =
-                                    grid_state[offset_pt.row][offset_pt.col].step_value();
-                                match offset_pt_step_value {
-                                    Some(offset_pt_value) => {
-                                        if step_pt == *start {
-                                            points.reverse();
-                                            return Ok(Solution::new(Path::new(points)));
-                                        }
-                                        if offset_pt_value == value - 1 {
-                                            step_pt = offset_pt;
-                                            points.push(step_pt.clone());
-                                            found_neighbour = true;
-                                            break;
-                                        }
-                                    }
-                                    _ => (),
-                                }
+            if let CellState::SolutionStep { value } = grid_state[step_pt.row][step_pt.col] {
+                let mut found_neighbour = false;
+                for offset in offsets.iter() {
+                    if let Ok(offset_pt) = self.calc_location(&step_pt, offset) {
+                        let offset_pt_step_value =
+                            grid_state[offset_pt.row][offset_pt.col].step_value();
+                        if let Some(offset_pt_value) = offset_pt_step_value {
+                            if step_pt == *start {
+                                points.reverse();
+                                return Ok(Solution::new(Path::new(points)));
                             }
-                            Err(_) => {} // Skip
+                            if offset_pt_value == value - 1 {
+                                step_pt = offset_pt;
+                                points.push(step_pt.clone());
+                                found_neighbour = true;
+                                break;
+                            }
                         }
                     }
-                    if !found_neighbour {
-                        return Err(MazeError::new(format!("solution path not found (no path sequence neighbour exists for point {})", step_pt)));
-                    }
                 }
-                _ => (),
+                if !found_neighbour {
+                    return Err(MazeError::new(format!(
+                        "solution path not found (no path sequence neighbour exists for point {})",
+                        step_pt
+                    )));
+                }
             }
         }
     }
@@ -115,39 +117,26 @@ impl Solver<'_> {
         q.push_back(start.clone());
         grid_state[start.row][start.col] = CellState::SolutionStep { value: 0 };
         while !q.is_empty() {
-            let opt_pt = q.pop_front();
-            match opt_pt {
-                Some(pt) => {
-                    let pt_step_value = grid_state[pt.row][pt.col].step_value();
-                    match pt_step_value {
-                        Some(value) => {
-                            for offset in offsets.iter() {
-                                match self.calc_location(&pt, offset) {
-                                    Ok(offset_pt) => match grid_state[offset_pt.row][offset_pt.col]
-                                    {
-                                        CellState::Empty => {
-                                            grid_state[offset_pt.row][offset_pt.col] =
-                                                CellState::SolutionStep { value: value + 1 };
-                                            if offset_pt == *end {
-                                                return self.get_lee_solution(
-                                                    &grid_state,
-                                                    start,
-                                                    end,
-                                                    &offsets,
-                                                );
-                                            }
-                                            q.push_back(offset_pt.clone());
-                                        }
-                                        _ => (),
-                                    },
-                                    Err(_) => {} // Skip
+            if let Some(pt) = q.pop_front() {
+                if let Some(value) = grid_state[pt.row][pt.col].step_value() {
+                    for offset in offsets.iter() {
+                        if let Ok(offset_pt) = self.calc_location(&pt, offset) {
+                            if grid_state[offset_pt.row][offset_pt.col] == CellState::Empty {
+                                grid_state[offset_pt.row][offset_pt.col] =
+                                    CellState::SolutionStep { value: value + 1 };
+                                if offset_pt == *end {
+                                    return self.get_lee_solution(
+                                        &grid_state,
+                                        start,
+                                        end,
+                                        &offsets,
+                                    );
                                 }
+                                q.push_back(offset_pt.clone());
                             }
                         }
-                        None => (),
                     }
                 }
-                None => {}
             }
         }
 
