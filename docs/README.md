@@ -1,6 +1,6 @@
 # Documentation Overview
 
-Welcome to the documentation section of this project. This directory contains all the relevant documentation, diagrams, and other resources to help you understand and contribute to the project.
+Welcome to the documentation section of this project. This directory contains all the relevant documentation, diagrams, and other resources to help you understand the project.
 
 ## Table of Contents
 
@@ -12,7 +12,7 @@ Welcome to the documentation section of this project. This directory contains al
 
 ## Introduction
 
-This project is an experimental project for managing and solving mazes. The documentation here will help you get started with setup, understand the architecture, and contribute to the project effectively.
+This project is an experimental project for managing and solving mazes. The documentation here will help you get started with setup and understand the architecture.
 
 ## Project Structure
 

@@ -45,6 +45,7 @@ cargo doc --open
 ```
 
 ## Contributing
+At this stage, this project is not accepting contributions.
 
 ## License
 
