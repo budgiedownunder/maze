@@ -9,7 +9,7 @@
 - [Acknowledgements](#acknowledgements)
 
 ## Introduction
-This is an experimental project that has been created for experimenting with various programming languages and technologies. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios. 
+This is an experimental project that has been created for exploring various programming languages and technologies. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios. 
 
 ## Getting Started
 
