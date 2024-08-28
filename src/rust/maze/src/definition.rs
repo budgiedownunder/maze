@@ -130,6 +130,31 @@ impl Definition {
         self.row_count() == 0
     }
 
+    /// Verifies whether the definition instance is empty, returning an error if it is
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error if the definition is empty
+    ///  
+    /// # Examples
+    ///
+    /// Create an empty maze definition and then verify it
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// let d = Definition::new(0, 0);
+    /// match d.verify_not_empty() {
+    ///     Err(e) => println!("Verification failed: {}", e.to_string()),
+    ///     Ok(()) => println!("Definition is not empty"),
+    /// }
+    /// ```
+    pub fn verify_not_empty(&self) -> Result<(), MazeError> {
+        if self.is_empty() {
+            return Err(MazeError::new("definition is empty".to_string()));
+        }
+        Ok(())
+    }
+
     /// Creates a new maze definition for the given vector of cell definition character rows, where:
     /// - `'W'`:  Represents a wall.
     /// - `' '`:  Represents an empty cell.
@@ -289,9 +314,7 @@ impl Definition {
     /// println!("{:?}", d.to_display_chars());
     /// ```
     pub fn delete_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
-        if self.row_count() == 0 {
-            return Err(MazeError::new("definition is empty".to_string()));
-        }
+        self.verify_not_empty()?;
         if start_col >= self.col_count() {
             return Err(MazeError::new(format!(
                 "invalid 'start_col' index ({})",
@@ -332,9 +355,7 @@ impl Definition {
     /// println!("{:?}", d.to_display_chars());
     /// ```
     pub fn insert_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
-        if self.row_count() == 0 {
-            return Err(MazeError::new("definition is empty".to_string()));
-        }
+        self.verify_not_empty()?;
         if start_col > self.col_count() {
             return Err(MazeError::new(format!(
                 "invalid 'start_col' index ({})",
@@ -378,9 +399,7 @@ impl Definition {
     /// println!("{:?}", d.to_display_chars());
     /// ```
     pub fn delete_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
-        if self.row_count() == 0 {
-            return Err(MazeError::new("definition is empty".to_string()));
-        }
+        self.verify_not_empty()?;
         if start_row >= self.row_count() {
             return Err(MazeError::new(format!(
                 "invalid 'start_row' index ({})",
@@ -596,6 +615,24 @@ mod tests {
     fn can_confirm_not_empty() {
         let d = Definition::new(1, 1);
         assert_eq!(d.is_empty(), false);
+    }
+
+    #[test]
+    #[should_panic(expected = "definition is empty")]
+    fn confirm_verify_not_empty_detects_empty() {
+        let d = Definition::new(0, 0);
+        if let Err(e) = d.verify_not_empty() {
+            panic!("{}", e.to_string());
+        }
+        panic!("verify_not_empty() did not return an error");
+    }
+
+    #[test]
+    fn confirm_verify_not_empty_ignores_non_empty() {
+        let d = Definition::new(1, 1);
+        if let Err(e) = d.verify_not_empty() {
+            panic!("{}", e.to_string());
+        }
     }
 
     #[test]
