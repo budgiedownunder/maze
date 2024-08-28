@@ -1,3 +1,5 @@
+use maze::Definition;
+use maze::Maze;
 use maze_cli::app::App;
 
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent};
@@ -5,11 +7,23 @@ use std::io::{self};
 use std::thread;
 use std::time::Duration;
 
-pub struct ConsoleApp {}
+pub struct ConsoleApp {
+    current_maze: Maze,
+}
 
-impl ConsoleApp {}
+impl ConsoleApp {
+    pub fn new() -> ConsoleApp {
+        ConsoleApp {
+            current_maze: Maze::new(Definition::new(0, 0)),
+        }
+    }
+}
 
 impl App for ConsoleApp {
+    fn get_current_maze(&mut self) -> &mut Maze {
+        &mut self.current_maze
+    }
+
     fn read_key(&mut self) -> Result<Option<char>, io::Error> {
         loop {
             if poll(Duration::from_secs(0))? {

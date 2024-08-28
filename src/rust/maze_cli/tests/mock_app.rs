@@ -1,6 +1,10 @@
+extern crate maze;
 extern crate maze_cli;
 
 use maze_cli::app::App;
+use maze::Maze;
+use maze::Definition;
+
 use std::collections::VecDeque;
 use std::io::{self};
 
@@ -18,6 +22,7 @@ pub struct MockApp {
     input_keys: VecDeque<MockInputKey>,
     input_lines: VecDeque<MockInputLine>,
     output: Vec<String>,
+    current_maze: Maze
 }
 
 impl MockApp {
@@ -26,6 +31,7 @@ impl MockApp {
             input_keys: VecDeque::new(),
             input_lines: VecDeque::new(),
             output: Vec::new(),
+            current_maze: Maze::new(Definition::new(0, 0)),
         }
     }
 
@@ -73,6 +79,10 @@ impl MockApp {
 }
 
 impl App for MockApp {
+    fn get_current_maze(&mut self) -> &mut Maze {
+        &mut self.current_maze
+    }
+
     fn read_key(&mut self) -> Result<Option<char>, io::Error> {
         match self.input_keys.pop_front() {
             Some(input_key) => {

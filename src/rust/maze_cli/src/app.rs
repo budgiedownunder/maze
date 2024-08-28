@@ -1,4 +1,3 @@
-use maze::Definition;
 use maze::Maze;
 use std::io::{self};
 use std::thread;
@@ -19,6 +18,7 @@ static MENU: &str = r#"******************************
         "#;
 
 pub trait App {
+    fn get_current_maze(&mut self) -> &mut Maze;
     fn read_key(&mut self) -> Result<Option<char>, io::Error>;
     fn read_line(&mut self) -> Result<Option<String>, io::Error>;
     fn write_line(&mut self, line: &str) -> Result<(), io::Error>;
@@ -81,26 +81,22 @@ pub trait App {
         }
     }
 
-    fn handle_reset(&mut self, _maze: &mut Maze) -> Result<(), io::Error> {
-        match self.choose_yes_no("Reset maze")? {
-            true => {
-                self.write_line("YES selected")?;
-            }
-            false => {
-                self.write_line("NO selected")?;
-            }
+    fn handle_reset(&mut self) -> Result<(), io::Error> {
+        let choice = self.choose_yes_no("Reset maze")?;
+        if choice {
+            let _maze = self.get_current_maze();
+            self.write_line("Would reset maze")?;
         }
         self.press_any_key()?;
         Ok(())
     }
 
     fn process_keys(&mut self) -> Result<(), io::Error> {
-        let mut maze: Maze = Maze::new(Definition::new(0, 0));
         loop {
             match self.read_key()? {
                 Some(ch) => match ch.to_ascii_uppercase() {
                     'R' => {
-                        self.handle_reset(&mut maze)?;
+                        self.handle_reset()?;
                         self.write_menu()?;
                     }
                     'Q' => {

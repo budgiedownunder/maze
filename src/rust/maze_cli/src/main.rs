@@ -8,7 +8,7 @@ use maze_cli::app::App;
 //}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut app = ConsoleApp {};
+    let mut app = ConsoleApp::new();
     app.run()?;
     Ok(())
 }
