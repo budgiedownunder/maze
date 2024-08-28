@@ -68,6 +68,7 @@ impl Definition {
     ///
     /// # Examples
     ///
+    /// Create a definition with 3 rows and 4 columns and then verify its dimensions
     /// ```
     /// use maze::Definition;
     /// let d = Definition::new(3, 4);
@@ -79,7 +80,27 @@ impl Definition {
             grid: Self::alloc_empty_rows(row_count, col_count),
         }
     }
-
+    /// Resets a maze definition instance to empty
+    ///
+    /// # Returns
+    ///
+    /// The maze definition instance
+    ///
+    /// # Examples
+    ///
+    /// Create a definition with 3 rows and 4 columns, verify its dimensions, reset it and
+    /// then confirm it is empty
+    /// ```
+    /// use maze::Definition;
+    /// let mut d = Definition::new(3, 4);
+    /// assert_eq!(d.row_count(), 3);
+    /// assert_eq!(d.col_count(), 4);
+    /// assert_eq!(d.reset().is_empty(), true);
+    /// ```
+    pub fn reset(&mut self) -> &mut Self {
+        self.grid = vec![];
+        self
+    }
     /// Returns the number of rows associated with the definition instance
     ///
     /// # Returns
@@ -96,7 +117,6 @@ impl Definition {
     pub fn row_count(&self) -> usize {
         self.grid.len()
     }
-
     /// Returns the number of columns associated with the definition instance
     ///
     /// # Returns
@@ -129,7 +149,6 @@ impl Definition {
     pub fn is_empty(&self) -> bool {
         self.row_count() == 0
     }
-
     /// Verifies whether the definition instance is empty, returning an error if it is
     ///
     /// # Returns
@@ -154,7 +173,6 @@ impl Definition {
         }
         Ok(())
     }
-
     /// Creates a new maze definition for the given vector of cell definition character rows, where:
     /// - `'W'`:  Represents a wall.
     /// - `' '`:  Represents an empty cell.
@@ -187,7 +205,6 @@ impl Definition {
         }
         Definition { grid }
     }
-
     /// Converts the definition instance to a vector of row cell states
     ///
     /// # Returns
@@ -225,7 +242,6 @@ impl Definition {
             })
             .collect();
     }
-
     /// Checks that a point is valid for the definition instance
     ///
     /// # Arguments
@@ -253,7 +269,6 @@ impl Definition {
         }
         true
     }
-
     /// Converts the definition instance to a vector of display characters
     ///
     /// # Returns
@@ -285,7 +300,6 @@ impl Definition {
             })
             .collect();
     }
-
     /// Deletes one or more consecutive columns from the definition instance
     ///
     /// # Arguments
@@ -326,7 +340,6 @@ impl Definition {
         }
         Ok(())
     }
-
     /// Inserts one or more empty columns into the definition instance
     ///
     /// # Arguments
@@ -367,7 +380,6 @@ impl Definition {
         }
         Ok(())
     }
-
     /// Deletes one or more consecutive rows from the definition instance
     ///
     /// # Arguments
@@ -409,7 +421,6 @@ impl Definition {
         self.grid.drain(start_row..(start_row + count));
         Ok(())
     }
-
     /// Inserts one or more empty rows into the definition instance
     ///
     /// # Arguments
@@ -452,7 +463,6 @@ impl Definition {
         }
         Ok(())
     }
-
     /// Modify the value of each cell in a given region of the definition instance
     /// # Arguments
     ///
@@ -559,6 +569,15 @@ mod tests {
         let d = Definition::new(2, 3);
         assert_eq!(d.row_count(), 2);
         assert_eq!(d.col_count(), 3);
+    }
+
+    #[test]
+    fn can_reset_to_empty() {
+        let mut d = Definition::new(2, 3);
+        assert_eq!(d.row_count(), 2);
+        assert_eq!(d.col_count(), 3);
+        assert_eq!(d.is_empty(), false);
+        assert_eq!(d.reset().is_empty(), true)
     }
 
     #[test]

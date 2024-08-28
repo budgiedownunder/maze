@@ -48,6 +48,31 @@ impl Maze {
     pub fn new(definition: Definition) -> Maze {
         Maze { definition }
     }
+    /// Resets a maze definition instance to empty
+    ///
+    /// # Returns
+    ///
+    /// The maze definition instance
+    ///
+    /// # Examples
+    /// Create a definition with 2 rows and 3 columns, verify its dimensions, reset it and
+    /// then confirm it is empty
+    /// ```
+    /// use maze::Maze;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec![' ', ' ', 'W'],
+    ///    vec![' ', ' ', 'W']
+    /// ];
+    /// let mut m = Maze::from_vec(grid);
+    /// assert_eq!(m.definition.row_count(), 2);
+    /// assert_eq!(m.definition.col_count(), 3);
+    /// m.reset();
+    /// assert_eq!(m.definition.is_empty(), true);
+    /// ```
+    pub fn reset(&mut self) -> &mut Self {
+        self.definition.reset();
+        self
+    }
     /// Creates a new maze definition for the given vector of cell definition character rows, where:
     /// - `'W'`:  Represents a wall.
     /// - `' '`:  Represents an empty cell.
@@ -88,7 +113,7 @@ impl Maze {
     ///
     /// # Returns
     ///
-    /// This function will return an error if the fiel cannotbe
+    /// This function will return an error if the definition cannot be saved
     ///
     /// # Examples
     ///
@@ -127,7 +152,6 @@ impl Maze {
     /// # Returns
     ///
     /// A new maze instance
-    ///
     ///
     /// # Examples
     ///
@@ -208,7 +232,6 @@ impl Maze {
         let s = Solver { maze: self };
         s.solve(start, end)
     }
-
     /// Print a maze instance with the given start point, end point and solution path
     /// # Arguments
     /// * `start` - Start point
@@ -324,6 +347,15 @@ mod tests {
         let m = Maze::new(Definition::new(2, 3));
         assert_eq!(m.definition.row_count(), 2);
         assert_eq!(m.definition.col_count(), 3);
+    }
+
+    #[test]
+    fn can_reset_to_empty() {
+        let mut m = Maze::new(Definition::new(2, 3));
+        assert_eq!(m.definition.row_count(), 2);
+        assert_eq!(m.definition.col_count(), 3);
+        assert_eq!(m.definition.is_empty(), false);
+        assert_eq!(m.reset().definition.is_empty(), true)
     }
 
     #[test]

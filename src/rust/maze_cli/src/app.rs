@@ -12,7 +12,7 @@ static MENU: &str = r#"******************************
         Select action:
 
         E -> Enter text
-        R -> Reset
+        R -> Reset to empty
         Q -> Quit
         ******************************
         "#;
@@ -30,26 +30,24 @@ pub trait App {
         Ok(())
     }
 
-    fn str_lines(&mut self, s: &'static str) -> Vec<&'static str> {
+    fn str_lines(s: &'static str) -> Vec<&'static str> {
         s.lines().map(|line| line.trim_start()).collect()
     }
 
-    fn welcome_banner_lines(&mut self) -> Vec<&'static str> {
-        self.str_lines(WELCOME_BANNER)
+    fn get_welcome_banner_lines() -> Vec<&'static str> {
+        Self::str_lines(WELCOME_BANNER)
     }
 
     fn write_welcome_banner(&mut self) -> Result<(), io::Error> {
-        let lines = self.welcome_banner_lines();
-        self.write_lines(lines)
+        self.write_lines(Self::get_welcome_banner_lines())
     }
 
-    fn menu_lines(&mut self) -> Vec<&'static str> {
-        self.str_lines(MENU)
+    fn get_menu_lines() -> Vec<&'static str> {
+        Self::str_lines(MENU)
     }
 
     fn write_menu(&mut self) -> Result<(), io::Error> {
-        let lines = self.menu_lines();
-        self.write_lines(lines)?;
+        self.write_lines(Self::get_menu_lines())?;
         Ok(())
     }
 
@@ -60,7 +58,7 @@ pub trait App {
     }
 
     fn choose_yes_no(&mut self, message: &str) -> Result<bool, io::Error> {
-        self.write_line(format!("{} (Y/N)?", message).as_str())?;
+        self.write_line(format!("{} (Y/N)", message).as_str())?;
         loop {
             match self.read_key()? {
                 Some(ch) => match ch.to_ascii_uppercase() {
@@ -82,10 +80,20 @@ pub trait App {
     }
 
     fn handle_reset(&mut self) -> Result<(), io::Error> {
-        let choice = self.choose_yes_no("Reset maze")?;
+        let (rows, cols) = {
+            let maze = self.get_current_maze();
+            (maze.definition.row_count(), maze.definition.col_count())
+        };
+        let message = format!(
+            "Reset maze to empty? [current dimensions: {} rows, {} columns]",
+            rows, cols
+        );
+        let choice = self.choose_yes_no(message.as_str())?;
         if choice {
-            let _maze = self.get_current_maze();
-            self.write_line("Would reset maze")?;
+            self.get_current_maze().reset();
+            self.write_line("Maze reset to empty")?;
+        } else {
+            self.write_line("Maze was not changed")?;
         }
         self.press_any_key()?;
         Ok(())

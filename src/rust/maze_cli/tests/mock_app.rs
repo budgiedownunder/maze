@@ -22,7 +22,7 @@ pub struct MockApp {
     input_keys: VecDeque<MockInputKey>,
     input_lines: VecDeque<MockInputLine>,
     output: Vec<String>,
-    current_maze: Maze
+    pub current_maze: Maze,
 }
 
 impl MockApp {
@@ -53,7 +53,7 @@ impl MockApp {
         io::Error::new(io::ErrorKind::Other, message)
     }
 
-    pub fn verify_output(&self, expected: &[&str]) -> Result<(), io::Error> {
+    pub fn verify_output(&self, expected: Vec<&str>) -> Result<(), io::Error> {
         if expected.len() != self.output.len() {
             return Err(Self::io_error(
                 format!("The output and expected lines differ in length. Expected has length {}, while output has length {}.",
