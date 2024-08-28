@@ -13,6 +13,37 @@ This is an experimental project that has been created for experimenting with var
 
 ## Getting Started
 
+### Build
+To build all (currently `Rust`) project components:
+```
+cd src/rust
+cargo build
+```
+### Run
+To run the `maze_cli` application:
+```
+cd src/rust/maze_cli
+cargo run
+```
+
+### Testing
+To test all (currently `Rust`) components:
+```
+cd src/rust
+cargo test
+```
+or, if you also wish to capture and display any `stdout` output:
+```
+cd src/rust
+cargo test -- --nocapture
+```
+### Generating Documentation
+To generate and view Rust (crate) documentation in your default browser:
+```
+cd src/rust
+cargo doc --open
+```
+
 ## Contributing
 
 ## License
