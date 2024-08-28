@@ -71,8 +71,9 @@ impl MockApp {
         Ok(())
     }
 
+    #[cfg(feature = "print_output")]
     pub fn print_output(&self) {
-        for line in &self.output {
+       for line in &self.output {
             println!("{}", line);
         }
     }

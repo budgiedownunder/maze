@@ -10,3 +10,6 @@ maze = { path = "../maze" }
 crossterm = "*"
 
 [dev-dependencies]
+
+[features]
+print_output = [] 
