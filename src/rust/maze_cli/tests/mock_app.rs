@@ -80,7 +80,7 @@ impl MockApp {
 }
 
 impl App for MockApp {
-    fn get_current_maze(&mut self) -> &mut Maze {
+    fn get_maze(&mut self) -> &mut Maze {
         &mut self.current_maze
     }
 
@@ -108,7 +108,7 @@ impl App for MockApp {
         }
     }
 
-    fn write_line(&mut self, line: &str) -> Result<(), io::Error> {
+    fn print_line(&mut self, line: &str) -> Result<(), io::Error> {
         self.output.push(line.to_string());
         Ok(())
     }
