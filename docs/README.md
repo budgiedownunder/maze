@@ -39,5 +39,5 @@ To get started with this project, follow the instructions in the [main README](.
 
 ## Usage Guide
 
-For a detailed guide on how to use this project, please refer to the [Usage Guide](usage.md) where you’ll find step-by-step instructions, examples, and common use cases.
+For a detailed guide on how to use this project, please refer to the [Usage Guide](usage-guide.md) where you’ll find step-by-step instructions, examples, and common use cases.
 
