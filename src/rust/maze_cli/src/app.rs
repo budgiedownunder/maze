@@ -18,7 +18,7 @@ static MENU: &str = r#"*********************************************
         
         I -> Insert rows    | D -> Delete rows
         N -> Insert columns | L -> Delete columns
-        T -> Set walls      | C -> Clear walls
+        W -> Set walls      | C -> Clear walls
         R -> Resize         | E -> Empty
         -------------------------------------------
         S -> Solve          | P -> Print
@@ -133,6 +133,36 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
+    fn do_insert_rows(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("Insert rows")?;
+        Ok(())
+    }
+
+    fn do_delete_rows(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("Delete rows")?;
+        Ok(())
+    }
+
+    fn do_insert_cols(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("Insert columns")?;
+        Ok(())
+    }
+
+    fn do_delete_cols(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("Delete columns")?;
+        Ok(())
+    }
+
+    fn do_set_walls(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("Set walls")?;
+        Ok(())
+    }
+
+    fn do_clear_walls(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("Clear walls")?;
+        Ok(())
+    }
+
     fn do_resize(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_maze_dimensions("Current")?;
         let new_row_count = self.prompt_number("Enter new row count: ")?;
@@ -141,7 +171,6 @@ pub trait App: LinePrinter {
             .definition
             .resize(new_row_count, new_col_count);
         self.print_maze_dimensions("New")?;
-        self.press_any_key()?;
         Ok(())
     }
 
@@ -161,7 +190,6 @@ pub trait App: LinePrinter {
         } else {
             self.print_line("Maze was not changed")?;
         }
-        self.press_any_key()?;
         Ok(())
     }
 
@@ -185,32 +213,42 @@ pub trait App: LinePrinter {
 
     fn do_print(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_maze()?;
-        self.press_any_key()?;
+        Ok(())
+    }
+
+    fn do_solve(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("Do solve")?;
         Ok(())
     }
 
     fn process_keys(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
             match self.read_key()? {
-                Some(ch) => match ch.to_ascii_uppercase() {
-                    'R' => {
-                        self.do_resize()?;
-                        self.print_menu()?;
-                    }
-                    'E' => {
-                        self.do_empty()?;
-                        self.print_menu()?;
-                    }
-                    'P' => {
-                        self.do_print()?;
-                        self.print_menu()?;
-                    }
-                    'Q' => {
-                        self.print_line("Exiting...")?;
-                        return Ok(());
-                    }
-                    _ => self.print_line(format!("Unknown option selected: {}", ch).as_str())?,
-                },
+                Some(ch) => {
+                    let result = match ch.to_ascii_uppercase() {
+                        'I' => self.do_insert_rows(),
+                        'D' => self.do_delete_rows(),
+                        'N' => self.do_insert_cols(),
+                        'L' => self.do_delete_cols(),
+                        'W' => self.do_set_walls(),
+                        'C' => self.do_clear_walls(),
+                        'R' => self.do_resize(),
+                        'E' => self.do_empty(),
+                        'S' => self.do_solve(),
+                        'P' => self.do_print(),
+                        'Q' => {
+                            self.print_line("Exiting...")?;
+                            return Ok(());
+                        }
+                        _ => {
+                            self.print_line(format!("Unknown option selected: {}", ch).as_str())?;
+                            continue;
+                        }
+                    };
+                    result?;
+                    self.press_any_key()?;
+                    self.print_menu()?;
+                }
                 None => {
                     thread::sleep(Duration::from_millis(10));
                 }
