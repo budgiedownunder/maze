@@ -8,19 +8,23 @@ use std::io::{self};
 use std::thread;
 use std::time::Duration;
 
-static WELCOME_BANNER: &str = r#"******************************
-       * Welcome to the Maze CLI !! *
-       ******************************
+static WELCOME_BANNER: &str = r#"*********************************************
+       *           Welcome to the Maze CLI !!      *
+       *********************************************
     "#;
 
-static MENU: &str = r#"******************************
+static MENU: &str = r#"*********************************************
         Select action:
-
-        R -> Resize
-        E -> Empty
-        P -> Print
+        
+        I -> Insert rows    | D -> Delete rows
+        N -> Insert columns | L -> Delete columns
+        T -> Set walls      | C -> Clear walls
+        R -> Resize         | E -> Empty
+        -------------------------------------------
+        S -> Solve          | P -> Print
+        -------------------------------------------
         Q -> Quit
-        ******************************
+        *********************************************
         "#;
 
 static PRESS_ANY_KEY_TEXT: &str = "\n[** Press any key **]\n";
