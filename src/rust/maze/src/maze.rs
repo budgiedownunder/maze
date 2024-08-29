@@ -1,18 +1,19 @@
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fs::{self, File};
-use std::io::{BufReader, Write};
+use std::io::{self, BufReader, Write};
 
 use crate::solution::Solution;
 use crate::Definition;
 use crate::Direction;
+use crate::LinePrinter;
 use crate::MazeError;
 use crate::Path;
 use crate::Point;
 use crate::Solver;
 
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 
 /// Represents a maze
 pub struct Maze {
@@ -232,8 +233,9 @@ impl Maze {
         let s = Solver { maze: self };
         s.solve(start, end)
     }
-    /// Print a maze instance with the given start point, end point and solution path
+    /// Print a maze instance to the given print target with the given start point, end point and solution path
     /// # Arguments
+    /// * `print_target` - Print target
     /// * `start` - Start point
     /// * `end` - End point
     /// * `path` - Solution path
@@ -245,8 +247,10 @@ impl Maze {
     /// # Examples
     ///
     /// ```
+    /// use maze::StdoutLinePrinter;
     /// use maze::Maze;
     /// use maze::Point;
+    ///
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec![' ', 'W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W', ' '],
@@ -263,7 +267,8 @@ impl Maze {
     /// match result {
     ///    Ok(solution) => {
     ///       println!("Successfully solved maze:");
-    ///       m.print(start, end, solution.path);
+    ///       let mut print_target = StdoutLinePrinter::new();
+    ///       m.print(&mut print_target, start, end, solution.path);
     ///    }
     ///    Err(error) => {
     ///        panic!(
@@ -273,7 +278,13 @@ impl Maze {
     ///    }
     /// }
     /// ```
-    pub fn print(&self, start: Point, end: Point, path: Path) {
+    pub fn print(
+        &self,
+        print_target: &mut dyn LinePrinter,
+        start: Point,
+        end: Point,
+        path: Path,
+    ) -> Result<(), io::Error> {
         let mut display_chars = self.definition.to_display_chars();
         for (path_idx, pt) in path.points.iter().enumerate() {
             if self.definition.is_valid(pt) && *pt != start && *pt != end {
@@ -305,17 +316,17 @@ impl Maze {
             display_chars[end.row][end.col] = 'F';
         }
         for row in display_chars.iter() {
-            println!();
-            for col in row {
-                print!("{}", col);
-            }
+            let row_chars: String = row.iter().collect();
+            print_target.print_line(row_chars.as_str())?;
         }
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::StdoutLinePrinter;
 
     #[test]
     fn can_create_new_maze_from_vector() {
@@ -404,7 +415,10 @@ mod tests {
         let start = Point { row: 0, col: 1 };
         let end = Point { row: 2, col: 4 };
         let path = Path { points: vec![] };
-        m.print(start, end, path);
+        let mut print_target = StdoutLinePrinter::new();
+        if let Err(error) = m.print(&mut print_target, start, end, path) {
+            panic!("Unexpected print() error: {}", error);
+        }
     }
 
     #[test]
@@ -446,7 +460,11 @@ mod tests {
                 Point { row: 2, col: 4 },
             ],
         };
-        m.print(start, end, path);
+        let mut print_target = StdoutLinePrinter::new();
+
+        if let Err(error) = m.print(&mut print_target, start, end, path) {
+            panic!("Unexpected print() error: {}", error);
+        }
     }
 
     #[test]

@@ -5,7 +5,7 @@ use crate::CellState;
 use crate::MazeError;
 use crate::Point;
 #[allow(dead_code)]
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 /// Represents a maze definition
 pub struct Definition {
     // 2-d grid (rows x columns) of characters describing the maze layout, where
