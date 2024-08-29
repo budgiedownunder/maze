@@ -1,4 +1,8 @@
+use maze::LinePrinter;
 use maze::Maze;
+use maze::Path;
+use maze::Point;
+
 use std::io::{self};
 use std::thread;
 use std::time::Duration;
@@ -13,15 +17,16 @@ static MENU: &str = r#"******************************
 
         E -> Enter text
         R -> Reset to empty
+        P -> Print
         Q -> Quit
         ******************************
         "#;
 
-pub trait App {
-    fn get_maze(&mut self) -> &mut Maze;
+pub trait App: LinePrinter {
+    fn get_maze(&self) -> &Maze;
+    fn get_maze_mut(&mut self) -> &mut Maze;
     fn read_key(&mut self) -> Result<Option<char>, io::Error>;
     fn read_line(&mut self) -> Result<Option<String>, io::Error>;
-    fn print_line(&mut self, line: &str) -> Result<(), io::Error>;
 
     fn print_lines(&mut self, lines: Vec<&'static str>) -> Result<(), io::Error> {
         for line in lines {
@@ -52,7 +57,7 @@ pub trait App {
     }
 
     fn press_any_key(&mut self) -> Result<(), io::Error> {
-        self.print_line("[** Press any key **]")?;
+        self.print_line("\n[** Press any key **]\n")?;
         self.read_key()?;
         Ok(())
     }
@@ -90,11 +95,33 @@ pub trait App {
         );
         let choice = self.choose_yes_no(message.as_str())?;
         if choice {
-            self.get_maze().reset();
+            self.get_maze_mut().reset();
             self.print_line("Maze reset to empty")?;
         } else {
             self.print_line("Maze was not changed")?;
         }
+        self.press_any_key()?;
+        Ok(())
+    }
+
+    fn get_line_printer(&mut self) -> &mut dyn LinePrinter;
+
+    fn print_maze(&mut self) -> Result<(), io::Error> {
+        let maze = self.get_maze().clone();
+        let start = Point { row: 0, col: 0 };
+        let end = Point { row: 0, col: 0 };
+        let path = Path { points: vec![] };
+        let print_target = self.get_line_printer();
+        if maze.definition.is_empty() {
+            print_target.print_line("Maze is empty")?;
+        } else if let Err(error) = maze.print(print_target, start, end, path) {
+            print_target.print_line(format!("Failed to print matrix: {}", error).as_str())?;
+        }
+        Ok(())
+    }
+
+    fn handle_print(&mut self) -> Result<(), io::Error> {
+        self.print_maze()?;
         self.press_any_key()?;
         Ok(())
     }
@@ -105,6 +132,10 @@ pub trait App {
                 Some(ch) => match ch.to_ascii_uppercase() {
                     'R' => {
                         self.handle_reset()?;
+                        self.print_menu()?;
+                    }
+                    'P' => {
+                        self.handle_print()?;
                         self.print_menu()?;
                     }
                     'Q' => {

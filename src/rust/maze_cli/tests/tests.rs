@@ -1,8 +1,8 @@
 mod mock_app;
 use crate::mock_app::MockApp;
-use maze_cli::app::App;
-use maze::Maze;
 use maze::Definition;
+use maze::Maze;
+use maze_cli::app::App;
 use std::io::{self};
 
 #[test]
@@ -38,13 +38,45 @@ fn should_be_able_to_reset_maze_and_quit() -> Result<(), io::Error> {
     let mut expected_output = vec![
         "Reset maze to empty? [current dimensions: 10 rows, 5 columns] (Y/N)",
         "Maze reset to empty",
-        "[** Press any key **]",
+        "\n[** Press any key **]\n",
     ];
     expected_output.extend(MockApp::get_menu_lines());
     expected_output.push("Exiting...");
 
     mock_app.add_input_key('R', true);
     mock_app.add_input_key('Y', false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_print_empty_maze_and_quit() -> Result<(), io::Error> {
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    let mut expected_output = vec!["Maze is empty", "\n[** Press any key **]\n"];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('P', true);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_print_maze_with_content_and_quit() -> Result<(), io::Error> {
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(2, 3));
+    let mut expected_output = vec!["F░░", "░░░", "\n[** Press any key **]\n"];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('P', true);
     mock_app.add_input_key(' ', false);
     mock_app.add_input_key('Q', false);
     mock_app.run()?;

@@ -1,4 +1,5 @@
 use maze::Definition;
+use maze::LinePrinter;
 use maze::Maze;
 use maze_cli::app::App;
 
@@ -20,7 +21,11 @@ impl ConsoleApp {
 }
 
 impl App for ConsoleApp {
-    fn get_maze(&mut self) -> &mut Maze {
+    fn get_maze(&self) -> &Maze {
+        &self.current_maze
+    }
+
+    fn get_maze_mut(&mut self) -> &mut Maze {
         &mut self.current_maze
     }
 
@@ -55,6 +60,12 @@ impl App for ConsoleApp {
         }
     }
 
+    fn get_line_printer(&mut self) -> &mut dyn LinePrinter {
+        self
+    }
+}
+
+impl LinePrinter for ConsoleApp {
     fn print_line(&mut self, line: &str) -> Result<(), io::Error> {
         println!("{}", line);
         Ok(())
