@@ -72,7 +72,7 @@ pub trait App: LinePrinter {
     }
 
     fn prompt_yes_no(&mut self, message: &str) -> Result<bool, Box<dyn Error>> {
-        self.print_line(format!("{} (Y/N)", message).as_str())?;
+        self.print_line(&format!("{} (Y/N)", message))?;
         loop {
             match self.read_key()? {
                 Some(ch) => match ch.to_ascii_uppercase() {
@@ -83,7 +83,7 @@ pub trait App: LinePrinter {
                         return Ok(false);
                     }
                     _ => {
-                        self.print_line(format!("Invalid response: '{}'", ch).as_str())?;
+                        self.print_line(&format!("Invalid response: '{}'", ch))?;
                     }
                 },
                 None => {
@@ -183,7 +183,7 @@ pub trait App: LinePrinter {
             "Set maze to empty? [current dimensions: {} row(s), {} column(s)]",
             rows, cols
         );
-        let choice = self.prompt_yes_no(message.as_str())?;
+        let choice = self.prompt_yes_no(&message)?;
         if choice {
             self.get_maze_mut().reset();
             self.print_line("Maze set to empty")?;
@@ -206,7 +206,7 @@ pub trait App: LinePrinter {
         if maze.definition.is_empty() {
             print_target.print_line("Maze is empty")?;
         } else if let Err(error) = maze.print(print_target, start, end, path) {
-            print_target.print_line(format!("Failed to print matrix: {}", error).as_str())?;
+            print_target.print_line(&format!("Failed to print matrix: {}", error))?;
         }
         Ok(())
     }
@@ -223,35 +223,31 @@ pub trait App: LinePrinter {
 
     fn process_keys(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
-            match self.read_key()? {
-                Some(ch) => {
-                    let result = match ch.to_ascii_uppercase() {
-                        'I' => self.do_insert_rows(),
-                        'D' => self.do_delete_rows(),
-                        'N' => self.do_insert_cols(),
-                        'L' => self.do_delete_cols(),
-                        'W' => self.do_set_walls(),
-                        'C' => self.do_clear_walls(),
-                        'R' => self.do_resize(),
-                        'E' => self.do_empty(),
-                        'S' => self.do_solve(),
-                        'P' => self.do_print(),
-                        'Q' => {
-                            self.print_line("Exiting...")?;
-                            return Ok(());
-                        }
-                        _ => {
-                            self.print_line(format!("Unknown option selected: {}", ch).as_str())?;
-                            continue;
-                        }
-                    };
-                    result?;
-                    self.press_any_key()?;
-                    self.print_menu()?;
+            if let Some(ch) = self.read_key()? {
+                match ch.to_ascii_uppercase() {
+                    'I' => self.do_insert_rows()?,
+                    'D' => self.do_delete_rows()?,
+                    'N' => self.do_insert_cols()?,
+                    'L' => self.do_delete_cols()?,
+                    'W' => self.do_set_walls()?,
+                    'C' => self.do_clear_walls()?,
+                    'R' => self.do_resize()?,
+                    'E' => self.do_empty()?,
+                    'S' => self.do_solve()?,
+                    'P' => self.do_print()?,
+                    'Q' => {
+                        self.print_line("Exiting...")?;
+                        return Ok(());
+                    }
+                    _ => {
+                        self.print_line(&format!("Unknown option selected: {}", ch))?;
+                        continue;
+                    }
                 }
-                None => {
-                    thread::sleep(Duration::from_millis(10));
-                }
+                self.press_any_key()?;
+                self.print_menu()?;
+            } else {
+                thread::sleep(Duration::from_millis(10));
             }
         }
     }

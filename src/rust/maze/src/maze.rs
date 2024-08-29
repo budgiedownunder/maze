@@ -317,7 +317,7 @@ impl Maze {
         }
         for row in display_chars.iter() {
             let row_chars: String = row.iter().collect();
-            print_target.print_line(row_chars.as_str())?;
+            print_target.print_line(&row_chars)?;
         }
         Ok(())
     }
@@ -652,7 +652,7 @@ mod tests {
             Ok(_) => panic_unexpected_solve_success(),
             Err(error) => assert_error_msg_eq(
                 error,
-                format!("start location {} is invalid", start).as_str(),
+                &format!("start location {} is invalid", start),
             ),
         }
     }
@@ -666,7 +666,7 @@ mod tests {
         match result {
             Ok(_) => panic_unexpected_solve_success(),
             Err(error) => {
-                assert_error_msg_eq(error, format!("end location {} is invalid", end).as_str())
+                assert_error_msg_eq(error, &format!("end location {} is invalid", end))
             }
         }
     }
@@ -909,7 +909,7 @@ mod tests {
 
     // Helper functions and definitions
     fn delete_test_file(path: &str) {
-        std::fs::remove_file(path).expect(format!("Failed to delete test file: {}", path).as_str());
+        std::fs::remove_file(path).expect(&format!("Failed to delete test file: {}", path));
     }
 
     enum ExpectedSerdeErrorKind {
