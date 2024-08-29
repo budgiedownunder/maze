@@ -101,6 +101,33 @@ impl Definition {
         self.grid = vec![];
         self
     }
+    /// Resizes a maze definition instance
+    ///
+    /// # Returns
+    ///
+    /// The maze definition instance
+    ///
+    /// # Examples
+    ///
+    /// Create an empty maze definition, resize it to 3 rows and 4 columns and then verify its dimensions
+    /// ```
+    /// use maze::Definition;
+    /// let mut d = Definition::new(0, 0);
+    /// assert_eq!(d.row_count(), 0);
+    /// assert_eq!(d.col_count(), 0);
+    /// d.resize(3, 4);
+    /// println!("Resize successful");
+    /// assert_eq!(d.row_count(), 3);
+    /// assert_eq!(d.col_count(), 4);
+    ///
+    /// ```
+    pub fn resize(&mut self, new_row_count: usize, new_col_count: usize) -> &mut Self {
+        for row in self.grid.iter_mut() {
+            row.resize(new_col_count, ' ');
+        }
+        self.grid.resize(new_row_count, vec![' '; new_col_count]);
+        self
+    }
     /// Returns the number of rows associated with the definition instance
     ///
     /// # Returns
@@ -652,6 +679,85 @@ mod tests {
         if let Err(e) = d.verify_not_empty() {
             panic!("{}", e.to_string());
         }
+    }
+
+    #[test]
+    fn can_resize_empty_to_empty() {
+        let mut d = Definition::new(0, 0);
+        d.resize(0, 0);
+        assert_eq!(d.row_count(), 0);
+        assert_eq!(d.col_count(), 0);
+    }
+
+    #[test]
+    fn can_resize_to_empty() {
+        let mut d = Definition::new(10, 5);
+        d.resize(0, 0);
+        assert_eq!(d.row_count(), 0);
+        assert_eq!(d.col_count(), 0);
+    }
+
+    #[test]
+    fn can_expand_with_resize() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['W', ' ', ' '],
+            vec![' ', ' ', 'W']
+        ];
+        let mut d = Definition::from_vec(grid);
+        assert_eq!(d.row_count(), 2);
+        assert_eq!(d.col_count(), 3);
+        d.resize(3, 5);
+        assert_eq!(d.row_count(), 3);
+        assert_eq!(d.col_count(), 5);
+        #[rustfmt::skip]
+        let grid_check: Vec<Vec<char>> = vec![
+            vec!['W', ' ', ' ', ' ', ' '],
+            vec![' ', ' ', 'W', ' ', ' '],
+            vec![' ', ' ', ' ', ' ', ' ']
+        ];
+        assert_eq!(d.grid, grid_check);
+    }
+
+    #[test]
+    fn can_shrink_with_resize_1() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['W', ' ', ' '],
+            vec![' ', ' ', 'W']
+        ];
+        let mut d = Definition::from_vec(grid);
+        assert_eq!(d.row_count(), 2);
+        assert_eq!(d.col_count(), 3);
+        d.resize(2, 1);
+        assert_eq!(d.row_count(), 2);
+        assert_eq!(d.col_count(), 1);
+        #[rustfmt::skip]
+        let grid_check: Vec<Vec<char>> = vec![
+            vec!['W'],
+            vec![' ']
+        ];
+        assert_eq!(d.grid, grid_check);
+    }
+
+    #[test]
+    fn can_shrink_with_resize_2() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['W', ' ', ' '],
+            vec![' ', ' ', 'W']
+        ];
+        let mut d = Definition::from_vec(grid);
+        assert_eq!(d.row_count(), 2);
+        assert_eq!(d.col_count(), 3);
+        d.resize(1, 2);
+        assert_eq!(d.row_count(), 1);
+        assert_eq!(d.col_count(), 2);
+        #[rustfmt::skip]
+        let grid_check: Vec<Vec<char>> = vec![
+            vec!['W', ' ']
+        ];
+        assert_eq!(d.grid, grid_check);
     }
 
     #[test]

@@ -3,6 +3,7 @@ use maze::Maze;
 use maze::Path;
 use maze::Point;
 
+use std::error::Error;
 use std::io::{self};
 use std::thread;
 use std::time::Duration;
@@ -15,20 +16,21 @@ static WELCOME_BANNER: &str = r#"******************************
 static MENU: &str = r#"******************************
         Select action:
 
-        E -> Enter text
-        R -> Reset to empty
+        R -> Resize
+        E -> Empty
         P -> Print
         Q -> Quit
         ******************************
         "#;
 
+static PRESS_ANY_KEY_TEXT: &str = "\n[** Press any key **]\n";
 pub trait App: LinePrinter {
     fn get_maze(&self) -> &Maze;
     fn get_maze_mut(&mut self) -> &mut Maze;
     fn read_key(&mut self) -> Result<Option<char>, io::Error>;
     fn read_line(&mut self) -> Result<Option<String>, io::Error>;
 
-    fn print_lines(&mut self, lines: Vec<&'static str>) -> Result<(), io::Error> {
+    fn print_lines(&mut self, lines: Vec<&'static str>) -> Result<(), Box<dyn Error>> {
         for line in lines {
             self.print_line(line)?;
         }
@@ -43,7 +45,7 @@ pub trait App: LinePrinter {
         Self::str_to_lines(WELCOME_BANNER)
     }
 
-    fn print_welcome_banner(&mut self) -> Result<(), io::Error> {
+    fn print_welcome_banner(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_lines(Self::get_welcome_banner_lines())
     }
 
@@ -51,18 +53,21 @@ pub trait App: LinePrinter {
         Self::str_to_lines(MENU)
     }
 
-    fn print_menu(&mut self) -> Result<(), io::Error> {
+    fn print_menu(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_lines(Self::get_menu_lines())?;
         Ok(())
     }
 
-    fn press_any_key(&mut self) -> Result<(), io::Error> {
-        self.print_line("\n[** Press any key **]\n")?;
+    fn get_press_any_key_text() -> &'static str {
+        PRESS_ANY_KEY_TEXT
+    }
+    fn press_any_key(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line(Self::get_press_any_key_text())?;
         self.read_key()?;
         Ok(())
     }
 
-    fn choose_yes_no(&mut self, message: &str) -> Result<bool, io::Error> {
+    fn prompt_yes_no(&mut self, message: &str) -> Result<bool, Box<dyn Error>> {
         self.print_line(format!("{} (Y/N)", message).as_str())?;
         loop {
             match self.read_key()? {
@@ -84,19 +89,71 @@ pub trait App: LinePrinter {
         }
     }
 
-    fn handle_reset(&mut self) -> Result<(), io::Error> {
+    fn prompt_text(&mut self, message: &str) -> Result<String, Box<dyn Error>> {
+        self.print_line(message)?;
+        loop {
+            match self.read_line()? {
+                Some(line) => {
+                    return Ok(line);
+                }
+                None => {
+                    self.print_line("Please enter a value")?;
+                }
+            }
+        }
+    }
+
+    fn prompt_number(&mut self, message: &str) -> Result<usize, Box<dyn Error>> {
+        loop {
+            let text = self.prompt_text(message)?;
+            match text.trim().parse::<usize>() {
+                Ok(num) => {
+                    return Ok(num);
+                }
+                Err(_) => {
+                    self.print_line(
+                        "Invalid number, please enter an integer value greater or equal to zero",
+                    )?;
+                }
+            }
+        }
+    }
+
+    fn print_maze_dimensions(&mut self, prefix: &str) -> Result<(), Box<dyn Error>> {
+        let (rows, cols) = {
+            let maze = self.get_maze();
+            (maze.definition.row_count(), maze.definition.col_count())
+        };
+        let message = format!("{} dimensions: {} row(s), {} column(s)", prefix, rows, cols);
+        self.print_line(&message)?;
+        Ok(())
+    }
+
+    fn do_resize(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_maze_dimensions("Current")?;
+        let new_row_count = self.prompt_number("Enter new row count: ")?;
+        let new_col_count = self.prompt_number("Enter new column count: ")?;
+        self.get_maze_mut()
+            .definition
+            .resize(new_row_count, new_col_count);
+        self.print_maze_dimensions("New")?;
+        self.press_any_key()?;
+        Ok(())
+    }
+
+    fn do_empty(&mut self) -> Result<(), Box<dyn Error>> {
         let (rows, cols) = {
             let maze = self.get_maze();
             (maze.definition.row_count(), maze.definition.col_count())
         };
         let message = format!(
-            "Reset maze to empty? [current dimensions: {} rows, {} columns]",
+            "Set maze to empty? [current dimensions: {} row(s), {} column(s)]",
             rows, cols
         );
-        let choice = self.choose_yes_no(message.as_str())?;
+        let choice = self.prompt_yes_no(message.as_str())?;
         if choice {
             self.get_maze_mut().reset();
-            self.print_line("Maze reset to empty")?;
+            self.print_line("Maze set to empty")?;
         } else {
             self.print_line("Maze was not changed")?;
         }
@@ -106,7 +163,9 @@ pub trait App: LinePrinter {
 
     fn get_line_printer(&mut self) -> &mut dyn LinePrinter;
 
-    fn print_maze(&mut self) -> Result<(), io::Error> {
+    fn print_maze(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_maze_dimensions("Current")?;
+        self.print_line("\nDefinition:\n")?;
         let maze = self.get_maze().clone();
         let start = Point { row: 0, col: 0 };
         let end = Point { row: 0, col: 0 };
@@ -120,38 +179,31 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
-    fn handle_print(&mut self) -> Result<(), io::Error> {
+    fn do_print(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_maze()?;
         self.press_any_key()?;
         Ok(())
     }
 
-    fn process_keys(&mut self) -> Result<(), io::Error> {
+    fn process_keys(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
             match self.read_key()? {
                 Some(ch) => match ch.to_ascii_uppercase() {
                     'R' => {
-                        self.handle_reset()?;
+                        self.do_resize()?;
+                        self.print_menu()?;
+                    }
+                    'E' => {
+                        self.do_empty()?;
                         self.print_menu()?;
                     }
                     'P' => {
-                        self.handle_print()?;
+                        self.do_print()?;
                         self.print_menu()?;
                     }
                     'Q' => {
                         self.print_line("Exiting...")?;
                         return Ok(());
-                    }
-                    'E' => {
-                        self.print_line("Enter some text: ")?;
-                        match self.read_line()? {
-                            Some(line) => {
-                                self.print_line(format!("You entered: {}", line).as_str())?;
-                            }
-                            None => {
-                                self.print_line("No text entered")?;
-                            }
-                        }
                     }
                     _ => self.print_line(format!("Unknown option selected: {}", ch).as_str())?,
                 },
@@ -162,7 +214,7 @@ pub trait App: LinePrinter {
         }
     }
 
-    fn run(&mut self) -> Result<(), io::Error> {
+    fn run(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_welcome_banner()?;
         self.print_menu()?;
         self.process_keys()?;
