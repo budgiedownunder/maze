@@ -197,17 +197,35 @@ pub trait App: LinePrinter {
     fn do_insert_rows(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_maze_dimensions("Current")?;
         let current_rows = self.get_maze().definition.row_count();
-        let start_row = self.prompt_number("Insert at row: ", Some(1), Some(1 + current_rows))?;
+        let mut start_row = 1;
+        if current_rows > 1 {
+            start_row = self.prompt_number("Insert at row: ", Some(1), Some(1 + current_rows))?;
+        }
         let num_rows = self.prompt_number("Number rows to insert: ", None, None)?;
         self.get_maze_mut()
             .definition
             .insert_rows(start_row - 1, num_rows)?;
-        self.print_maze_dimensions("New")?;
+        self.print_maze_dimensions("Success - new")?;
         Ok(())
     }
 
     fn do_delete_rows(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("Delete rows")?;
+        let current_rows = self.get_maze().definition.row_count();
+        if current_rows == 0 {
+            self.print_line("Definition is empty - no rows to delete")?;
+            return Ok(());
+        }
+        self.print_maze_dimensions("Current")?;
+        let start_row = self.prompt_number("Delete rows from: ", Some(1), Some(current_rows))?;
+        let num_rows = self.prompt_number(
+            "Number rows to delete: ",
+            Some(1),
+            Some(current_rows - start_row + 1),
+        )?;
+        self.get_maze_mut()
+            .definition
+            .delete_rows(start_row - 1, num_rows)?;
+        self.print_maze_dimensions("Success - new")?;
         Ok(())
     }
 
@@ -238,7 +256,7 @@ pub trait App: LinePrinter {
         self.get_maze_mut()
             .definition
             .resize(new_row_count, new_col_count);
-        self.print_maze_dimensions("New")?;
+        self.print_maze_dimensions("Success - new")?;
         Ok(())
     }
 
