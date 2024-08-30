@@ -185,11 +185,14 @@ pub trait App: LinePrinter {
     }
 
     fn print_maze_dimensions(&mut self, prefix: &str) -> Result<(), Box<dyn Error>> {
-        let (rows, cols) = {
+        let (num_rows, num_cols) = {
             let maze = self.get_maze();
             (maze.definition.row_count(), maze.definition.col_count())
         };
-        let message = format!("{} dimensions: {} row(s), {} column(s)", prefix, rows, cols);
+        let message = format!(
+            "{} dimensions: {} row(s), {} column(s)",
+            prefix, num_rows, num_cols
+        );
         self.print_line(&message)?;
         Ok(())
     }
@@ -269,13 +272,54 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
+    fn get_maze_dims(&self) -> (usize, usize) {
+        let (num_rows, num_cols) = {
+            let maze = self.get_maze();
+            (maze.definition.row_count(), maze.definition.col_count())
+        };
+        (num_rows, num_cols)
+    }
+
+    fn maze_has_cells(&mut self) -> bool {
+        let (num_rows, num_cols) = self.get_maze_dims();
+        num_rows > 0 && num_cols > 0
+    }
+
+    fn process_walls(&mut self, title: &str, modify_char: char) -> Result<(), Box<dyn Error>> {
+        self.print_line(title)?;
+        self.print_maze_dimensions("Current")?;
+        if !self.maze_has_cells() {
+            self.print_line(
+                "Maze has no cells - add some rows and columns first before modifying walls",
+            )?;
+            return Ok(());
+        }
+        let (num_rows, num_cols) = self.get_maze_dims();
+        let start_row = self.prompt_number("Start row:", Some(1), Some(num_rows))?;
+        let start_col = self.prompt_number("Start column:", Some(1), Some(num_cols))?;
+        let end_row = self.prompt_number("End row:", Some(1), Some(num_rows))?;
+        let end_col = self.prompt_number("End column:", Some(1), Some(num_cols))?;
+        self.get_maze_mut().definition.set_value(
+            Point {
+                row: start_row - 1,
+                col: start_col - 1,
+            },
+            Point {
+                row: end_row - 1,
+                col: end_col - 1,
+            },
+            modify_char,
+        )?;
+        Ok(())
+    }
+
     fn do_set_walls(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("Set walls")?;
+        self.process_walls("Set walls", 'W')?;
         Ok(())
     }
 
     fn do_clear_walls(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("Clear walls")?;
+        self.process_walls("Clear walls", ' ')?;
         Ok(())
     }
 
