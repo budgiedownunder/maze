@@ -106,6 +106,7 @@ fn should_prevent_insert_invalid_rows_into_non_empty_maze() -> Result<(), Box<dy
 fn should_not_be_able_to_delete_rows_from_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
     let mut expected_output = vec![
+        "Current dimensions: 0 row(s), 0 column(s)",
         "Definition is empty - no rows to delete",
         MockApp::get_press_any_key_text(),
     ];
@@ -155,6 +156,125 @@ fn should_not_be_able_to_delete_invalid_rows_from_non_empty_maze() -> Result<(),
     mock_app.add_input_line("-1", false);
     mock_app.add_input_line("11", false);
     mock_app.add_input_line("4", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_not_be_able_to_insert_cols_into_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    let mut expected_output = vec![
+        "Current dimensions: 0 row(s), 0 column(s)",
+        "Definition is empty - insert some rows before adding columns",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('N', true);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_prevent_insert_invalid_cols_into_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(10, 5));
+    let mut expected_output = vec![
+        "Current dimensions: 10 row(s), 5 column(s)",
+        "Insert at column: ",
+        "Invalid value 'A' (out of bounds), please enter an integer value between 1 and 6 (inclusive)",
+        "Insert at column: ",
+        "Invalid value '-1' (out of bounds), please enter an integer value between 1 and 6 (inclusive)",
+        "Insert at column: ",
+        "Invalid value '12' (out of bounds), please enter an integer value between 1 and 6 (inclusive)",
+        "Insert at column: ",
+        "Number columns to insert: ",
+        "Invalid value 'B' (out of bounds), please enter an integer value greater or equal to 0",
+        "Number columns to insert: ",
+        "Invalid value '-2' (out of bounds), please enter an integer value greater or equal to 0",
+        "Number columns to insert: ",
+        "Success - new dimensions: 10 row(s), 12 column(s)",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('N', true);
+    mock_app.add_input_line("A", false);
+    mock_app.add_input_line("-1", false);
+    mock_app.add_input_line("12", false);
+    mock_app.add_input_line("5", false);
+    mock_app.add_input_line("B", false);
+    mock_app.add_input_line("-2", false);
+    mock_app.add_input_line("7", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_not_be_able_to_delete_cols_from_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    let mut expected_output = vec![
+        "Current dimensions: 0 row(s), 0 column(s)",
+        "Definition has no columns to delete",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('L', true);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_not_be_able_to_delete_invalid_cols_from_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(10, 5));
+    let mut expected_output = vec![
+        "Current dimensions: 10 row(s), 5 column(s)",
+        "Delete columns from: ",
+        "Invalid value 'A' (out of bounds), please enter an integer value between 1 and 5 (inclusive)",
+        "Delete columns from: ",
+        "Invalid value '-1' (out of bounds), please enter an integer value between 1 and 5 (inclusive)",
+        "Delete columns from: ",
+        "Invalid value '6' (out of bounds), please enter an integer value between 1 and 5 (inclusive)",
+        "Delete columns from: ",
+        "Number columns to delete: ",
+        "Invalid value 'A' (out of bounds), please enter an integer value between 1 and 2 (inclusive)",
+        "Number columns to delete: ",
+        "Invalid value '-1' (out of bounds), please enter an integer value between 1 and 2 (inclusive)",
+        "Number columns to delete: ",
+        "Invalid value '4' (out of bounds), please enter an integer value between 1 and 2 (inclusive)",
+        "Number columns to delete: ",
+        "Success - new dimensions: 10 row(s), 3 column(s)",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('L', true);
+    mock_app.add_input_line("A", false);
+    mock_app.add_input_line("-1", false);
+    mock_app.add_input_line("6", false);
+    mock_app.add_input_line("4", false);
+    mock_app.add_input_line("A", false);
+    mock_app.add_input_line("-1", false);
+    mock_app.add_input_line("4", false);
+    mock_app.add_input_line("2", false);
     mock_app.add_input_key(' ', false);
     mock_app.add_input_key('Q', false);
     mock_app.run()?;

@@ -210,12 +210,12 @@ pub trait App: LinePrinter {
     }
 
     fn do_delete_rows(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_maze_dimensions("Current")?;
         let current_rows = self.get_maze().definition.row_count();
         if current_rows == 0 {
             self.print_line("Definition is empty - no rows to delete")?;
             return Ok(());
         }
-        self.print_maze_dimensions("Current")?;
         let start_row = self.prompt_number("Delete rows from: ", Some(1), Some(current_rows))?;
         let num_rows = self.prompt_number(
             "Number rows to delete: ",
@@ -230,12 +230,42 @@ pub trait App: LinePrinter {
     }
 
     fn do_insert_cols(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("Insert columns")?;
+        self.print_maze_dimensions("Current")?;
+        if self.get_maze().definition.row_count() == 0 {
+            self.print_line("Definition is empty - insert some rows before adding columns")?;
+            return Ok(());
+        }
+        let current_cols = self.get_maze().definition.col_count();
+        let mut start_col = 1;
+        if current_cols > 1 {
+            start_col =
+                self.prompt_number("Insert at column: ", Some(1), Some(1 + current_cols))?;
+        }
+        let num_cols = self.prompt_number("Number columns to insert: ", None, None)?;
+        self.get_maze_mut()
+            .definition
+            .insert_cols(start_col - 1, num_cols)?;
+        self.print_maze_dimensions("Success - new")?;
         Ok(())
     }
 
     fn do_delete_cols(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("Delete columns")?;
+        self.print_maze_dimensions("Current")?;
+        let current_cols = self.get_maze().definition.col_count();
+        if current_cols == 0 {
+            self.print_line("Definition has no columns to delete")?;
+            return Ok(());
+        }
+        let start_col = self.prompt_number("Delete columns from: ", Some(1), Some(current_cols))?;
+        let num_cols = self.prompt_number(
+            "Number columns to delete: ",
+            Some(1),
+            Some(current_cols - start_col + 1),
+        )?;
+        self.get_maze_mut()
+            .definition
+            .delete_cols(start_col - 1, num_cols)?;
+        self.print_maze_dimensions("Success - new")?;
         Ok(())
     }
 
