@@ -107,18 +107,79 @@ pub trait App: LinePrinter {
         }
     }
 
-    fn prompt_number(&mut self, message: &str) -> Result<usize, Box<dyn Error>> {
+    fn prompt_number(
+        &mut self,
+        message: &str,
+        min_limit: Option<usize>,
+        max_limit: Option<usize>,
+    ) -> Result<usize, Box<dyn Error>> {
+        fn range_summary(min_limit: Option<usize>, max_limit: Option<usize>) -> String {
+            let (have_min, have_max) = (min_limit.is_some(), max_limit.is_some());
+            if have_min && have_max {
+                if min_limit.unwrap() != max_limit.unwrap() {
+                    format!(
+                        "between {} and {} (inclusive)",
+                        min_limit.unwrap(),
+                        max_limit.unwrap()
+                    )
+                } else {
+                    format!("equal to {}", min_limit.unwrap())
+                }
+            } else if have_min {
+                format!("greater or equal to {}", min_limit.unwrap())
+            } else if have_max {
+                format!("between zero and {} (inclusive)", max_limit.unwrap())
+            } else {
+                "greater or equal to 0".to_string()
+            }
+        }
+
+        fn error_message<T: std::fmt::Display>(
+            value: T,
+            min_limit: Option<usize>,
+            max_limit: Option<usize>,
+        ) -> String {
+            format!(
+                "Invalid value '{}' (out of bounds), please enter an integer value {}",
+                value,
+                range_summary(min_limit, max_limit)
+            )
+        }
+
+        fn value_error<T: std::fmt::Display>(
+            value: T,
+            min_limit: Option<usize>,
+            max_limit: Option<usize>,
+        ) -> Result<(), String> {
+            Err(error_message(value, min_limit, max_limit))
+        }
+
+        fn validate_number(
+            num: usize,
+            min_limit: Option<usize>,
+            max_limit: Option<usize>,
+        ) -> Result<(), String> {
+            if let Some(min_allowed) = min_limit {
+                if num < min_allowed {
+                    return value_error(num, min_limit, max_limit);
+                }
+            }
+            if let Some(max_allowed) = max_limit {
+                if num > max_allowed {
+                    return value_error(num, min_limit, max_limit);
+                }
+            }
+            Ok(())
+        }
+
         loop {
             let text = self.prompt_text(message)?;
             match text.trim().parse::<usize>() {
-                Ok(num) => {
-                    return Ok(num);
-                }
-                Err(_) => {
-                    self.print_line(
-                        "Invalid number, please enter an integer value greater or equal to zero",
-                    )?;
-                }
+                Ok(num) => match validate_number(num, min_limit, max_limit) {
+                    Ok(_) => return Ok(num),
+                    Err(err_msg) => self.print_line(&err_msg)?,
+                },
+                Err(_) => self.print_line(&error_message(text.trim(), min_limit, max_limit))?,
             }
         }
     }
@@ -134,7 +195,14 @@ pub trait App: LinePrinter {
     }
 
     fn do_insert_rows(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("Insert rows")?;
+        self.print_maze_dimensions("Current")?;
+        let current_rows = self.get_maze().definition.row_count();
+        let start_row = self.prompt_number("Insert at row: ", Some(1), Some(1 + current_rows))?;
+        let num_rows = self.prompt_number("Number rows to insert: ", None, None)?;
+        self.get_maze_mut()
+            .definition
+            .insert_rows(start_row - 1, num_rows)?;
+        self.print_maze_dimensions("New")?;
         Ok(())
     }
 
@@ -165,8 +233,8 @@ pub trait App: LinePrinter {
 
     fn do_resize(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_maze_dimensions("Current")?;
-        let new_row_count = self.prompt_number("Enter new row count: ")?;
-        let new_col_count = self.prompt_number("Enter new column count: ")?;
+        let new_row_count = self.prompt_number("Enter new row count: ", None, None)?;
+        let new_col_count = self.prompt_number("Enter new column count: ", None, None)?;
         self.get_maze_mut()
             .definition
             .resize(new_row_count, new_col_count);
@@ -224,17 +292,17 @@ pub trait App: LinePrinter {
     fn process_keys(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
             if let Some(ch) = self.read_key()? {
-                match ch.to_ascii_uppercase() {
-                    'I' => self.do_insert_rows()?,
-                    'D' => self.do_delete_rows()?,
-                    'N' => self.do_insert_cols()?,
-                    'L' => self.do_delete_cols()?,
-                    'W' => self.do_set_walls()?,
-                    'C' => self.do_clear_walls()?,
-                    'R' => self.do_resize()?,
-                    'E' => self.do_empty()?,
-                    'S' => self.do_solve()?,
-                    'P' => self.do_print()?,
+                let result = match ch.to_ascii_uppercase() {
+                    'I' => self.do_insert_rows(),
+                    'D' => self.do_delete_rows(),
+                    'N' => self.do_insert_cols(),
+                    'L' => self.do_delete_cols(),
+                    'W' => self.do_set_walls(),
+                    'C' => self.do_clear_walls(),
+                    'R' => self.do_resize(),
+                    'E' => self.do_empty(),
+                    'S' => self.do_solve(),
+                    'P' => self.do_print(),
                     'Q' => {
                         self.print_line("Exiting...")?;
                         return Ok(());
@@ -243,6 +311,9 @@ pub trait App: LinePrinter {
                         self.print_line(&format!("Unknown option selected: {}", ch))?;
                         continue;
                     }
+                };
+                if let Err(error) = result {
+                    self.print_line(&format!("Failed: {}", error))?;
                 }
                 self.press_any_key()?;
                 self.print_menu()?;

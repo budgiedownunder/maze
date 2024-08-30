@@ -285,6 +285,9 @@ impl Maze {
         end: Point,
         path: Path,
     ) -> Result<(), io::Error> {
+        if self.definition.row_count() == 0 || self.definition.col_count() == 0 {
+            return Ok(());
+        }
         let mut display_chars = self.definition.to_display_chars();
         for (path_idx, pt) in path.points.iter().enumerate() {
             if self.definition.is_valid(pt) && *pt != start && *pt != end {
@@ -650,10 +653,9 @@ mod tests {
         let result = m.solve(start.clone(), end);
         match result {
             Ok(_) => panic_unexpected_solve_success(),
-            Err(error) => assert_error_msg_eq(
-                error,
-                &format!("start location {} is invalid", start),
-            ),
+            Err(error) => {
+                assert_error_msg_eq(error, &format!("start location {} is invalid", start))
+            }
         }
     }
 
@@ -665,9 +667,7 @@ mod tests {
         let result = m.solve(start, end.clone());
         match result {
             Ok(_) => panic_unexpected_solve_success(),
-            Err(error) => {
-                assert_error_msg_eq(error, &format!("end location {} is invalid", end))
-            }
+            Err(error) => assert_error_msg_eq(error, &format!("end location {} is invalid", end)),
         }
     }
 

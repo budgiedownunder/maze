@@ -16,6 +16,106 @@ fn should_be_able_to_quit_on_start() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+fn should_be_able_to_insert_rows_into_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    let mut expected_output = vec![
+        "Current dimensions: 0 row(s), 0 column(s)",
+        "Insert at row: ",
+        "Number rows to insert: ",
+        "New dimensions: 5 row(s), 0 column(s)",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('I', true);
+    mock_app.add_input_line("1", false);
+    mock_app.add_input_line("5", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_prevent_insert_invalid_rows_into_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    let mut expected_output = vec![
+        "Current dimensions: 0 row(s), 0 column(s)",
+        "Insert at row: ",
+        "Invalid value 'A' (out of bounds), please enter an integer value equal to 1",
+        "Insert at row: ",
+        "Invalid value '-1' (out of bounds), please enter an integer value equal to 1",
+        "Insert at row: ",
+        "Invalid value '2' (out of bounds), please enter an integer value equal to 1",
+        "Insert at row: ",
+        "Number rows to insert: ",
+        "Invalid value 'B' (out of bounds), please enter an integer value greater or equal to 0",
+        "Number rows to insert: ",
+        "Invalid value '-2' (out of bounds), please enter an integer value greater or equal to 0",
+        "Number rows to insert: ",
+        "New dimensions: 5 row(s), 0 column(s)",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('I', true);
+    mock_app.add_input_line("A", false);
+    mock_app.add_input_line("-1", false);
+    mock_app.add_input_line("2", false);
+    mock_app.add_input_line("1", false);
+    mock_app.add_input_line("B", false);
+    mock_app.add_input_line("-2", false);
+    mock_app.add_input_line("5", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_prevent_insert_invalid_rows_into_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(10, 5));
+    let mut expected_output = vec![
+        "Current dimensions: 10 row(s), 5 column(s)",
+        "Insert at row: ",
+        "Invalid value 'A' (out of bounds), please enter an integer value between 1 and 11 (inclusive)",
+        "Insert at row: ",
+        "Invalid value '-1' (out of bounds), please enter an integer value between 1 and 11 (inclusive)",
+        "Insert at row: ",
+        "Invalid value '12' (out of bounds), please enter an integer value between 1 and 11 (inclusive)",
+        "Insert at row: ",
+        "Number rows to insert: ",
+        "Invalid value 'B' (out of bounds), please enter an integer value greater or equal to 0",
+        "Number rows to insert: ",
+        "Invalid value '-2' (out of bounds), please enter an integer value greater or equal to 0",
+        "Number rows to insert: ",
+        "New dimensions: 15 row(s), 5 column(s)",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('I', true);
+    mock_app.add_input_line("A", false);
+    mock_app.add_input_line("-1", false);
+    mock_app.add_input_line("12", false);
+    mock_app.add_input_line("1", false);
+    mock_app.add_input_line("B", false);
+    mock_app.add_input_line("-2", false);
+    mock_app.add_input_line("5", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
 fn should_be_able_to_resize_maze_and_then_quit() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
     let mut expected_output = vec![
