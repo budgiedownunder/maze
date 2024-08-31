@@ -9,6 +9,8 @@ use crate::Point;
 /// Represents a maze definition
 pub struct Definition {
     // 2-d grid (rows x columns) of characters describing the maze layout, where
+    // - `'S'`:  Represents the starting cell (limited to one).
+    // - `'F'`:  Represents the finishing cell (limited to one).
     // - `'W'`:  Represents a wall.
     // - `' '`:  Represents an empty cell.
     grid: Vec<Vec<char>>,
@@ -36,10 +38,10 @@ impl<'de> Deserialize<'de> for Definition {
 
         for row in &grid {
             for ch in row {
-                if *ch != 'W' && *ch != ' ' {
+                if !Self::is_valid_char(*ch) {
                     return Err(serde::de::Error::invalid_value(
                         serde::de::Unexpected::Char(*ch),
-                        &"valid characters are 'W' or ' '",
+                        &"valid characters are 'S', 'F', 'W' or ' '",
                     ));
                 }
             }
@@ -176,6 +178,25 @@ impl Definition {
     pub fn is_empty(&self) -> bool {
         self.row_count() == 0
     }
+    /// Checks whether the given character is valid for use within the definition
+    ///
+    /// # Returns
+    ///
+    /// Boolean
+    ///
+    /// # Examples
+    ///
+    /// Print whether 'X' (`false`) and 'S' (`true`) are valid characters
+    /// ```
+    /// use maze::Definition;
+    /// let x_is_valid = Definition::is_valid_char('X');
+    /// println!("Character 'X' is valid => {}", x_is_valid);
+    /// let s_is_valid = Definition::is_valid_char('S');
+    /// println!("Character 'S' is valid => {}", s_is_valid);
+    /// ```
+    pub fn is_valid_char(ch: char) -> bool {
+        matches!(ch, 'S' | 'F' | 'W' | ' ')
+    }
     /// Verifies whether the definition instance is empty, returning an error if it is
     ///
     /// # Returns
@@ -201,6 +222,8 @@ impl Definition {
         Ok(())
     }
     /// Creates a new maze definition for the given vector of cell definition character rows, where:
+    /// - `'S'`:  Represents the starting cell (limited to one).
+    /// - `'F'`:  Represents the finishing cell (limited to one).
     /// - `'W'`:  Represents a wall.
     /// - `' '`:  Represents an empty cell.
     ///
@@ -259,7 +282,7 @@ impl Definition {
                     .iter()
                     .map(|value| match value {
                         'W' => CellState::Wall,
-                        ' ' => CellState::Empty,
+                        'S' | 'F' | ' ' => CellState::Empty,
                         _ => panic!(
                             "internal error - grid contains unsupported cell character: {}",
                             value
@@ -319,6 +342,8 @@ impl Definition {
                 inner_vec
                     .iter()
                     .map(|value| match value {
+                        'S' => 'S',
+                        'F' => 'F',
                         'W' => '\u{2588}',
                         ' ' => '\u{2591}',
                         _ => '-',
@@ -490,6 +515,114 @@ impl Definition {
         }
         Ok(())
     }
+    /// Locates the starting position within the maze definition (if any)
+    ///
+    /// # Returns
+    ///
+    /// The starting position, else none
+    ///
+    /// # Examples
+    ///
+    /// Locate the starting position in a 2 row x 3 column definition
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let d = Definition::from_vec(grid);
+    /// match d.get_start() {
+    ///     Some(start) => {
+    ///         println!("Start found at point {}", start);
+    ///     },
+    ///     None => {
+    ///         println!("Start not found");
+    ///     }
+    /// };
+    /// ```
+    pub fn get_start(&self) -> Option<Point> {
+        self.find_first_char('S')
+    }
+    /// Sets the starting position within the maze definition (if any)
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the new starting position is out of range
+    ///
+    /// # Examples
+    ///
+    /// Reset the starting position in a 2 row x 3 column definition
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// use maze::Point;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let mut d = Definition::from_vec(grid);
+    /// let new_start = Point {row: 1, col: 2};
+    /// d.set_start(Some(new_start)).expect("set_start() failed");
+    /// ```
+    pub fn set_start(&mut self, new_start: Option<Point>) -> Result<(), MazeError> {
+        self.reset_point("start", self.get_start(), new_start, 'S')
+    }
+    /// Locates the finishing position within the maze definition (if any)
+    ///
+    /// # Returns
+    ///
+    /// The finishing position, else none
+    ///
+    /// # Examples
+    ///
+    /// Locate the finishing position in a 2 row x 3 column definition
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let d = Definition::from_vec(grid);
+    /// match d.get_finish() {
+    ///     Some(finish) => {
+    ///         println!("Finish found at point {}", finish);
+    ///     },
+    ///     None => {
+    ///         println!("Finish not found");
+    ///     }
+    /// };
+    /// ```
+    pub fn get_finish(&self) -> Option<Point> {
+        self.find_first_char('F')
+    }
+    /// Sets the finishing position within the maze definition (if any)
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the new finishing position is out of range
+    ///
+    /// # Examples
+    ///
+    /// Reset the finishing position in a 2 row x 3 column definition
+    ///
+    /// ```
+    /// use maze::Definition;
+    /// use maze::Point;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let mut d = Definition::from_vec(grid);
+    /// let new_finish = Point {row: 0, col: 2};
+    /// d.set_start(Some(new_finish)).expect("new_finish() failed");
+    /// ```
+    pub fn set_finish(&mut self, new_finish: Option<Point>) -> Result<(), MazeError> {
+        self.reset_point("finish", self.get_finish(), new_finish, 'F')
+    }
     /// Modify the value of each cell in a given region of the definition instance
     /// # Arguments
     ///
@@ -557,9 +690,11 @@ impl Definition {
             let msg = format!("grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_col_count).clone();
             return Some(MazeError::new(msg));
         }
+        let mut num_starts = 0;
+        let mut num_finishes = 0;
         for (row_idx, row) in grid.iter().enumerate() {
             for (col_idx, &item) in row.iter().enumerate() {
-                if item != ' ' && item != 'W' {
+                if !Self::is_valid_char(item) {
                     let msg = format!(
                         "grid vector contains an invalid character '{}' at location {}",
                         item,
@@ -569,6 +704,16 @@ impl Definition {
                         }
                     );
                     return Some(MazeError::new(msg));
+                } else if item == 'S' {
+                    num_starts += 1;
+                    if num_starts > 1 {
+                        return Some(MazeError::new("too many start characters `S`".to_string()));
+                    }
+                } else if item == 'F' {
+                    num_finishes += 1;
+                    if num_finishes > 1 {
+                        return Some(MazeError::new("too many finish characters `F`".to_string()));
+                    }
                 }
             }
         }
@@ -577,6 +722,41 @@ impl Definition {
 
     fn alloc_empty_rows(row_count: usize, col_count: usize) -> Vec<Vec<char>> {
         vec![vec![' '; col_count]; row_count]
+    }
+
+    fn find_first_char(&self, target: char) -> Option<Point> {
+        for (i, row) in self.grid.iter().enumerate() {
+            for (j, &ch) in row.iter().enumerate() {
+                if ch == target {
+                    return Some(Point { row: i, col: j });
+                }
+            }
+        }
+        None
+    }
+
+    fn reset_point(
+        &mut self,
+        name: &str,
+        current: Option<Point>,
+        new: Option<Point>,
+        ch: char,
+    ) -> Result<(), MazeError> {
+        if let Some(new_pt) = new {
+            if !self.is_valid(&new_pt) {
+                return Err(MazeError::new(format!(
+                    "invalid '{}' point {}",
+                    name, new_pt
+                )));
+            }
+            if let Some(current_pt) = current {
+                self.grid[current_pt.row][current_pt.col] = ' ';
+            }
+            self.grid[new_pt.row][new_pt.col] = ch;
+        } else if let Some(current_pt) = self.get_start() {
+            self.grid[current_pt.row][current_pt.col] = ' ';
+        }
+        Ok(())
     }
 }
 
@@ -634,6 +814,28 @@ mod tests {
         let grid: Vec<Vec<char>> = vec![
             vec![' ', ' ', ' '],
             vec![' ', ' ', 'X']
+        ];
+        let _d = Definition::from_vec(grid);
+    }
+
+    #[test]
+    #[should_panic(expected = "too many start characters `S`")]
+    fn cannot_create_new_from_vector_with_too_many_start_chars() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', ' ', ' '],
+            vec!['S', ' ', ' ']
+        ];
+        let _d = Definition::from_vec(grid);
+    }
+
+    #[test]
+    #[should_panic(expected = "too many finish characters `F`")]
+    fn cannot_create_new_from_vector_with_too_many_finish_chars() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', ' ', 'F'],
+            vec!['F', ' ', ' ']
         ];
         let _d = Definition::from_vec(grid);
     }
@@ -800,6 +1002,18 @@ mod tests {
     }
 
     #[test]
+    fn can_serialize_non_empty_3() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', 'W', ' '],
+            vec![' ', 'F', 'W']
+        ];
+        let d = Definition::from_vec(grid);
+        let s = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(s, r#"{"grid":[["S","W"," "],[" ","F","W"]]}"#);
+    }
+
+    #[test]
     fn can_deserialize_empty() {
         let s = r#"{"grid":[]}"#;
         let d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
@@ -809,11 +1023,11 @@ mod tests {
 
     #[test]
     fn can_deserialize_non_empty() {
-        let s = r#"{"grid":[[" ","W"," "],[" "," ","W"]]}"#;
+        let s = r#"{"grid":[["S","W"," "],["F"," ","W"]]}"#;
         let d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
         assert_eq!(d.row_count(), 2);
         assert_eq!(d.col_count(), 3);
-        let grid: Vec<Vec<char>> = vec![vec![' ', 'W', ' '], vec![' ', ' ', 'W']];
+        let grid: Vec<Vec<char>> = vec![vec!['S', 'W', ' '], vec!['F', ' ', 'W']];
         assert_eq!(d.grid, grid);
     }
 
@@ -875,17 +1089,31 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "invalid value: character `X`, expected valid characters are 'W' or ' '"
+        expected = "invalid value: character `X`, expected valid characters are 'S', 'F', 'W' or ' '"
     )]
     fn cannot_deserialize_bad_json_invalid_char_1() {
-        let s = r#"{"grid":[[" ","X"," "],[" "," ","W"]]}"#;
+        let s = r#"{"grid":[["S","X"," "],["F"," ","W"]]}"#;
         let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = r#"invalid value: string \"XX\", expected a character"#)]
     fn cannot_deserialize_bad_json_invalid_char_2() {
-        let s = r#"{"grid":[[" ","XX"," "],[" "," ","W"]]}"#;
+        let s = r#"{"grid":[["S","XX"," "],["F"," ","W"]]}"#;
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "too many start characters `S`")]
+    fn cannot_deserialize_bad_json_more_than_one_start_char() {
+        let s = r#"{"grid":[["S"," "," "],["F","S","W"]]}"#;
+        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(expected = "too many finish characters `F`")]
+    fn cannot_deserialize_bad_json_more_than_one_finish_char() {
+        let s = r#"{"grid":[["S"," "," "],["F","F","W"]]}"#;
         let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
     }
 
@@ -1082,6 +1310,138 @@ mod tests {
         d.insert_rows(2, 2).expect("insert_rows() failed");
         assert_eq!(d.row_count(), 4);
         assert_empty_rows(&d, 2, 3);
+    }
+
+    #[test]
+    fn should_find_start() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', 'W'],
+            vec![' ', ' ', 'S', 'W']
+        ];
+        let d = Definition::from_vec(grid);
+        match d.get_start() {
+            Some(start) => {
+                assert_eq!(start, Point { row: 1, col: 2 });
+            }
+            None => {
+                panic!("Failed to find start")
+            }
+        };
+    }
+
+    #[test]
+    fn should_not_find_start() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', 'W'],
+            vec![' ', ' ', ' ', 'W']
+        ];
+        let d = Definition::from_vec(grid);
+        match d.get_start() {
+            Some(start) => {
+                panic!("Unexpectedly found start at {}", start);
+            }
+            None => {}
+        };
+    }
+
+    #[test]
+    fn should_reset_start() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', 'W'],
+            vec![' ', ' ', 'S', 'W']
+        ];
+        let mut d = Definition::from_vec(grid);
+        match d.set_start(Some(Point { row: 1, col: 0 })) {
+            Err(e) => {
+                panic!("Failed to reset start: {}", e);
+            }
+            _ => {
+                let new_start = d.get_start().unwrap();
+                assert_eq!(new_start, Point { row: 1, col: 0 });
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid 'start' point [1, 8]")]
+    fn should_not_reset_start() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', 'W'],
+            vec![' ', ' ', 'S', 'W']
+        ];
+        let mut d = Definition::from_vec(grid);
+        d.set_start(Some(Point { row: 1, col: 8 }))
+            .expect("set_start() failed");
+    }
+
+    #[test]
+    fn should_find_finish() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', 'F', 'W'],
+            vec![' ', ' ', ' ', 'W']
+        ];
+        let d = Definition::from_vec(grid);
+        match d.get_finish() {
+            Some(finish) => {
+                assert_eq!(finish, Point { row: 0, col: 2 });
+            }
+            None => {
+                panic!("Failed to find finish")
+            }
+        };
+    }
+
+    #[test]
+    fn should_not_find_finish() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', 'W'],
+            vec![' ', ' ', ' ', 'W']
+        ];
+        let d = Definition::from_vec(grid);
+        match d.get_finish() {
+            Some(finish) => {
+                panic!("Unexpectedly found finish at {}", finish);
+            }
+            None => {}
+        };
+    }
+
+    #[test]
+    fn should_reset_finish() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', 'W'],
+            vec![' ', ' ', 'F', 'W']
+        ];
+        let mut d = Definition::from_vec(grid);
+        match d.set_finish(Some(Point { row: 0, col: 1 })) {
+            Err(e) => {
+                panic!("Failed to reset finish: {}", e);
+            }
+            _ => {
+                let new_finish = d.get_finish().unwrap();
+                assert_eq!(new_finish, Point { row: 0, col: 1 });
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid 'finish' point [1, 8]")]
+    fn should_not_reset_finish() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', 'W'],
+            vec![' ', ' ', 'F', 'W']
+        ];
+        let mut d = Definition::from_vec(grid);
+        d.set_finish(Some(Point { row: 1, col: 8 }))
+            .expect("set_finish() failed");
     }
 
     #[test]

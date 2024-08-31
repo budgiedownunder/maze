@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn can_save_to_valid_file_path() {
-        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', 'W'], vec![' ', ' ', 'W']];
+        let grid: Vec<Vec<char>> = vec![vec!['S', ' ', 'W'], vec!['F', ' ', 'W']];
         let m = Maze::from_vec(grid);
         let path = "./maze_1.json";
         match m.save_to_file(path, true) {
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn cannot_save_to_invalid_file_path() {
-        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', 'W'], vec![' ', ' ', 'W']];
+        let grid: Vec<Vec<char>> = vec![vec!['S', ' ', 'W'], vec!['F', ' ', 'W']];
         let m = Maze::from_vec(grid);
         let path = "";
         match m.save_to_file(path, true) {
@@ -496,7 +496,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "file path already exists")]
     fn cannot_save_to_existing_file_path_if_overwrite_disabled() {
-        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', 'W'], vec![' ', ' ', 'W']];
+        let grid: Vec<Vec<char>> = vec![vec!['S', ' ', 'W'], vec!['F', ' ', 'W']];
         let m = Maze::from_vec(grid);
         let path = "./maze_2.json";
         let mut _file = File::create(path).expect("Failed to create file");
@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn can_save_to_existing_file_path_if_overwrite_enabled() {
-        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', 'W'], vec![' ', ' ', 'W']];
+        let grid: Vec<Vec<char>> = vec![vec!['S', ' ', 'W'], vec!['F', ' ', 'W']];
         let m = Maze::from_vec(grid);
         let path = "./maze_3.json";
         let mut _file = File::create(path).expect("Failed to create file");
@@ -536,7 +536,7 @@ mod tests {
 
     #[test]
     fn can_load_from_valid_file_path() {
-        let grid: Vec<Vec<char>> = vec![vec![' ', ' ', 'W'], vec![' ', ' ', 'W']];
+        let grid: Vec<Vec<char>> = vec![vec!['S', ' ', 'W'], vec!['F', ' ', 'W']];
         let m1 = Maze::from_vec(grid);
         let path = "./maze_4.json";
         match m1.save_to_file(path, true) {
