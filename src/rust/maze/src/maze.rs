@@ -75,6 +75,8 @@ impl Maze {
         self
     }
     /// Creates a new maze definition for the given vector of cell definition character rows, where:
+    /// - `'S'`:  Represents the starting cell (limited to one).
+    /// - `'F'`:  Represents the finishing cell (limited to one).
     /// - `'W'`:  Represents a wall.
     /// - `' '`:  Represents an empty cell.
     ///
@@ -89,13 +91,13 @@ impl Maze {
     ///
     /// # Examples
     ///
-    /// Create a 2 row x 3 column definition with a wall in the last column
+    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column
     ///
     /// ```
     /// use maze::Maze;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', ' ', 'W'],
-    ///    vec![' ', ' ', 'W']
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
     /// ];
     /// let m = Maze::from_vec(grid);
     /// assert_eq!(m.definition.row_count(), 2);
