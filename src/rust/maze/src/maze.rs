@@ -33,7 +33,7 @@ impl Maze {
     ///
     /// # Examples
     ///
-    /// Create a 2 row x 3 column definition with a start, fnish and a wall in the last column
+    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column
     ///
     /// ```
     /// use maze::Definition;
@@ -56,6 +56,7 @@ impl Maze {
     /// The maze definition instance
     ///
     /// # Examples
+    /// 
     /// Create a definition with 2 rows and 3 columns, verify its dimensions, reset it and
     /// then confirm it is empty
     /// ```
@@ -120,8 +121,8 @@ impl Maze {
     ///
     /// # Examples
     ///
-    /// Create a 2 row x 3 column definition with a wall in the last column and then save it to the local file `my_file.json`, overwriting
-    /// any existing file
+    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column and 
+    /// then save it to the local file `my_file.json`, overwriting any existing file
     ///
     /// ```
     /// use maze::Maze;
@@ -158,8 +159,9 @@ impl Maze {
     ///
     /// # Examples
     ///
-    /// Create a 2 row x 3 column definition with a wall in the last column and then save it to the local file `my_file.json`, overwriting
-    /// any existing file. Then attempt to reload that file into a second maze definition.
+    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column and then
+    /// save it to the local file `my_file.json`, overwriting any existing file. Then attempt to reload
+    /// that file into a second maze definition.
     ///
     /// ```
     /// use maze::Definition;

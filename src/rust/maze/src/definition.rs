@@ -237,13 +237,13 @@ impl Definition {
     ///
     /// # Examples
     ///
-    /// Create a 2 row x 3 column definition with a wall in the last column
+    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column
     ///
     /// ```
     /// use maze::Definition;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', ' ', 'W'],
-    ///    vec![' ', ' ', 'W']
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
     /// ];
     /// let d = Definition::from_vec(grid);
     /// assert_eq!(d.row_count(), 2);
@@ -367,13 +367,14 @@ impl Definition {
     ///
     /// # Examples
     ///
-    /// Create a maze definition with 2 rows and 4 columns, with a wall at the end of each row, delete the second and third columns and print the result
+    /// Create a maze definition with 2 rows and 4 columns with a start, finish and a wall at the end of each row,
+    /// delete the second and third columns and print the result
     ///
     /// ```
     /// use maze::Definition;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', ' ', ' ', 'W'],
-    ///    vec![' ', ' ', ' ', 'W']
+    ///    vec!['S', ' ', ' ', 'W'],
+    ///    vec![' ', 'F', ' ', 'W']
     /// ];
     /// let mut d = Definition::from_vec(grid);
     /// d.delete_cols(1,2).expect("delete_cols() failed");
@@ -407,13 +408,14 @@ impl Definition {
     ///  
     /// # Examples
     ///
-    /// Create a maze definition with 2 rows and 4 columns, with a wall at the end of each row, insert 2 columns at the start of each row and print the result
+    /// Create a maze definition with 2 rows and 4 columns, with a start, finish and a wall at
+    /// the end of each row, insert 2 columns at the start of each row and print the result
     ///
     /// ```
     /// use maze::Definition;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', ' ', ' ', 'W'],
-    ///    vec![' ', ' ', ' ', 'W']
+    ///    vec!['S', ' ', ' ', 'W'],
+    ///    vec![' ', 'F', ' ', 'W']
     /// ];
     /// let mut d = Definition::from_vec(grid);
     /// d.insert_cols(0,2).expect("insert_cols() failed");
