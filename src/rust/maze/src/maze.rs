@@ -33,14 +33,14 @@ impl Maze {
     ///
     /// # Examples
     ///
-    /// Create a 2 row x 3 column definition with a wall in the last column
+    /// Create a 2 row x 3 column definition with a start, fnish and a wall in the last column
     ///
     /// ```
     /// use maze::Definition;
     /// use maze::Maze;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', ' ', 'W'],
-    ///    vec![' ', ' ', 'W']
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
     /// ];
     /// let d = Definition::from_vec(grid);
     /// let m = Maze::new(d);
@@ -61,8 +61,8 @@ impl Maze {
     /// ```
     /// use maze::Maze;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', ' ', 'W'],
-    ///    vec![' ', ' ', 'W']
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
     /// ];
     /// let mut m = Maze::from_vec(grid);
     /// assert_eq!(m.definition.row_count(), 2);
@@ -126,8 +126,8 @@ impl Maze {
     /// ```
     /// use maze::Maze;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', ' ', 'W'],
-    ///    vec![' ', ' ', 'W']
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
     /// ];
     /// let m = Maze::from_vec(grid);
     /// let path = "./my_maze.json";
@@ -165,8 +165,8 @@ impl Maze {
     /// use maze::Definition;
     /// use maze::Maze;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', ' ', 'W'],
-    ///    vec![' ', ' ', 'W']
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
     /// ];
     /// let m1 = Maze::from_vec(grid);
     /// let path = "./my_maze.json";
