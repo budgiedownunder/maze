@@ -403,7 +403,7 @@ pub trait App: LinePrinter {
         if maze.definition.is_empty() {
             print_target.print_line("Maze is empty")?;
         } else if let Err(error) = maze.print(print_target, path) {
-            print_target.print_line(&format!("Failed to print matrix: {}", error))?;
+            print_target.print_line(&format!("Failed to print maze: {}", error))?;
         }
         Ok(())
     }
@@ -414,7 +414,19 @@ pub trait App: LinePrinter {
     }
 
     fn do_solve(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("Do solve")?;
+        match self.get_maze_mut().solve() {
+            Ok(solution) => {
+                self.print_line("\nSuccessfully solved maze:\n")?;
+                let maze = self.get_maze().clone();
+                let print_target = self.get_line_printer();
+                if let Err(error) = maze.print(print_target, solution.path) {
+                    print_target.print_line(&format!("Failed to print solved maze: {}", error))?;
+                }
+            }
+            Err(error) => {
+                self.print_line(&format!("Failed to solve maze: {}", error))?;
+            }
+        }
         Ok(())
     }
 

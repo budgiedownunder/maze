@@ -9,7 +9,6 @@ use crate::Direction;
 use crate::LinePrinter;
 use crate::MazeError;
 use crate::Path;
-use crate::Point;
 use crate::Solver;
 
 #[allow(dead_code)]
@@ -194,10 +193,7 @@ impl Maze {
             Err(err) => Err(MazeError::from(err)),
         }
     }
-    /// Attempts to solve the path between a start and end point within the maze instance
-    /// # Arguments
-    /// * `start` - Start point
-    /// * `end` - End point
+    /// Attempts to solve the path between the start and end points defined within the maze instance
     ///
     /// # Returns
     ///
@@ -209,18 +205,16 @@ impl Maze {
     /// use maze::Maze;
     /// use maze::Point;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', 'W', ' ', ' ', 'W'],
+    ///    vec!['S', 'W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W', ' '],
-    ///    vec![' ', ' ', ' ', 'W', ' '],
+    ///    vec![' ', ' ', ' ', 'W', 'F'],
     ///    vec!['W', ' ', 'W', ' ', ' '],
     ///    vec![' ', ' ', ' ', 'W', ' '],
     ///    vec!['W', 'W', ' ', ' ', ' '],
     ///    vec!['W', 'W', ' ', 'W', ' '],
     /// ];
     /// let m = Maze::from_vec(grid);
-    /// let start = Point { row: 0, col: 0 };
-    /// let end = Point { row: 2, col: 4 };
-    /// let result = m.solve(start, end);
+    /// let result = m.solve();
     /// match result {
     ///    Ok(solution) => {
     ///       println!("Successfully solved maze, solution path => {}", solution.path);
@@ -233,9 +227,9 @@ impl Maze {
     ///    }
     /// }
     /// ```
-    pub fn solve(&self, start: Point, end: Point) -> Result<Solution, MazeError> {
+    pub fn solve(&self) -> Result<Solution, MazeError> {
         let s = Solver { maze: self };
-        s.solve(start, end)
+        s.solve()
     }
     /// Print a maze instance to the given print target with the given start point, end point and solution path
     /// # Arguments
@@ -253,21 +247,18 @@ impl Maze {
     /// ```
     /// use maze::StdoutLinePrinter;
     /// use maze::Maze;
-    /// use maze::Point;
     ///
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', 'W', ' ', ' ', 'W'],
+    ///    vec!['S', 'W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W', ' '],
-    ///    vec![' ', ' ', ' ', 'W', ' '],
+    ///    vec![' ', ' ', ' ', 'W', 'F'],
     ///    vec!['W', ' ', 'W', ' ', ' '],
     ///    vec![' ', ' ', ' ', 'W', ' '],
     ///    vec!['W', 'W', ' ', ' ', ' '],
     ///    vec!['W', 'W', ' ', 'W', ' '],
     /// ];
     /// let m = Maze::from_vec(grid);
-    /// let start = Point { row: 0, col: 0 };
-    /// let end = Point { row: 2, col: 4 };
-    /// let result = m.solve(start.clone(), end.clone());
+    /// let result = m.solve();
     /// match result {
     ///    Ok(solution) => {
     ///       println!("Successfully solved maze:");
@@ -327,6 +318,7 @@ impl Maze {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Point;
     use crate::StdoutLinePrinter;
 
     #[test]
@@ -466,7 +458,11 @@ mod tests {
 
     #[test]
     fn can_save_to_valid_file_path() {
-        let grid: Vec<Vec<char>> = vec![vec!['S', ' ', 'W'], vec!['F', ' ', 'W']];
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', ' ', 'W'], 
+            vec!['F', ' ', 'W']
+        ];
         let m = Maze::from_vec(grid);
         let path = "./maze_1.json";
         match m.save_to_file(path, true) {
@@ -478,7 +474,11 @@ mod tests {
 
     #[test]
     fn cannot_save_to_invalid_file_path() {
-        let grid: Vec<Vec<char>> = vec![vec!['S', ' ', 'W'], vec!['F', ' ', 'W']];
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', ' ', 'W'], 
+            vec!['F', ' ', 'W']
+        ];
         let m = Maze::from_vec(grid);
         let path = "";
         match m.save_to_file(path, true) {
@@ -490,7 +490,11 @@ mod tests {
     #[test]
     #[should_panic(expected = "file path already exists")]
     fn cannot_save_to_existing_file_path_if_overwrite_disabled() {
-        let grid: Vec<Vec<char>> = vec![vec!['S', ' ', 'W'], vec!['F', ' ', 'W']];
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', ' ', 'W'], 
+            vec!['F', ' ', 'W']
+        ];
         let m = Maze::from_vec(grid);
         let path = "./maze_2.json";
         let mut _file = File::create(path).expect("Failed to create file");
@@ -512,7 +516,11 @@ mod tests {
 
     #[test]
     fn can_save_to_existing_file_path_if_overwrite_enabled() {
-        let grid: Vec<Vec<char>> = vec![vec!['S', ' ', 'W'], vec!['F', ' ', 'W']];
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', ' ', 'W'],
+            vec!['F', ' ', 'W']
+        ];
         let m = Maze::from_vec(grid);
         let path = "./maze_3.json";
         let mut _file = File::create(path).expect("Failed to create file");
@@ -530,7 +538,11 @@ mod tests {
 
     #[test]
     fn can_load_from_valid_file_path() {
-        let grid: Vec<Vec<char>> = vec![vec!['S', ' ', 'W'], vec!['F', ' ', 'W']];
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', ' ', 'W'], 
+            vec!['F', ' ', 'W']
+        ];
         let m1 = Maze::from_vec(grid);
         let path = "./maze_4.json";
         match m1.save_to_file(path, true) {
@@ -640,55 +652,46 @@ mod tests {
     }
 
     #[test]
-    fn solve_should_fail_with_invalid_start_location() {
-        let m = Maze::new(Definition::new(2, 3));
-        let start = Point { row: 2, col: 0 };
-        let end = Point { row: 0, col: 2 };
-        let result = m.solve(start.clone(), end);
+    fn solve_should_fail_with_missing_start_cell() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', 'W', ' '],
+            vec![' ', ' ', 'W', ' '],
+            vec![' ', 'F', 'W', ' '],
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let result = m.solve();
         match result {
             Ok(_) => panic_unexpected_solve_success(),
-            Err(error) => {
-                assert_error_msg_eq(error, &format!("start location {} is invalid", start))
-            }
+            Err(error) => assert_error_msg_eq(error, "no start cell found within maze"),
         }
     }
 
     #[test]
-    fn solve_should_fail_with_invalid_end_location() {
-        let m = Maze::new(Definition::new(2, 3));
-        let start = Point { row: 1, col: 0 };
-        let end = Point { row: 0, col: 3 };
-        let result = m.solve(start, end.clone());
+    fn solve_should_fail_with_missing_finish_cell() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', ' ', 'W', ' '],
+            vec![' ', ' ', 'W', ' '],
+            vec![' ', ' ', 'W', ' '],
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let result = m.solve();
         match result {
             Ok(_) => panic_unexpected_solve_success(),
-            Err(error) => assert_error_msg_eq(error, &format!("end location {} is invalid", end)),
-        }
-    }
-
-    #[test]
-    fn solve_should_succeed_for_same_start_end() {
-        let m = Maze::new(Definition::new(2, 3));
-        let start = Point { row: 1, col: 2 };
-        let end = Point { row: 1, col: 2 };
-        let result = m.solve(start, end);
-        match result {
-            Ok(s) => {
-                let expected_solution_path = Path {
-                    points: vec![Point { row: 1, col: 2 }],
-                };
-                assert_eq!(s.path.points.len(), 1);
-                assert_eq!(s.path, expected_solution_path);
-            }
-            Err(error) => panic_unexpected_solve_error(error),
+            Err(error) => assert_error_msg_eq(error, "no finish cell found within maze"),
         }
     }
 
     #[test]
     fn solve_should_succeed_for_maze_with_no_walls_1() {
-        let m = Maze::new(Definition::new(2, 3));
-        let start = Point { row: 1, col: 0 };
-        let end = Point { row: 0, col: 2 };
-        let result = m.solve(start, end);
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', 'F'],
+            vec!['S', ' ', ' ']
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let result = m.solve();
         match result {
             Ok(s) => {
                 let expected_solution_path = Path {
@@ -708,10 +711,13 @@ mod tests {
 
     #[test]
     fn solve_should_succeed_for_maze_with_no_walls_2() {
-        let m = Maze::new(Definition::new(2, 4));
-        let start = Point { row: 1, col: 0 };
-        let end = Point { row: 0, col: 3 };
-        let result = m.solve(start, end);
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', 'F'],
+            vec!['S', ' ', ' ', ' ']
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let result = m.solve();
         match result {
             Ok(s) => {
                 let expected_solution_path = Path {
@@ -732,10 +738,14 @@ mod tests {
 
     #[test]
     fn solve_should_succeed_for_maze_with_no_walls_3() {
-        let m = Maze::new(Definition::new(3, 4));
-        let start = Point { row: 1, col: 1 };
-        let end = Point { row: 2, col: 2 };
-        let result = m.solve(start, end);
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', ' '],
+            vec![' ', 'S', ' ', ' '],
+            vec![' ', ' ', 'F', ' '],
+        ];
+        let m = Maze::new(Definition::from_vec(grid));
+        let result = m.solve();
         match result {
             Ok(s) => {
                 let expected_solution_path = Path {
@@ -756,14 +766,12 @@ mod tests {
     fn solve_should_fail_as_no_solution_due_to_blocking_wall() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
-            vec![' ', ' ', 'W', ' '],
-            vec![' ', ' ', 'W', ' '],
+            vec![' ', ' ', 'W', 'F'],
+            vec!['S', ' ', 'W', ' '],
             vec![' ', ' ', 'W', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
-        let start = Point { row: 1, col: 0 };
-        let end = Point { row: 0, col: 2 };
-        let result = m.solve(start, end);
+        let result = m.solve();
         match result {
             Ok(_) => panic_unexpected_solve_success(),
             Err(error) => {
@@ -776,18 +784,16 @@ mod tests {
     fn solve_should_succeed_with_walls_1() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
-            vec![' ', 'W', ' ', ' ', 'W'],
+            vec!['S', 'W', ' ', ' ', 'W'],
             vec![' ', 'W', ' ', 'W', ' '],
-            vec![' ', ' ', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', 'W', 'F'],
             vec!['W', ' ', 'W', ' ', ' '],
             vec![' ', ' ', ' ', 'W', ' '],
             vec!['W', 'W', ' ', ' ', ' '],
             vec!['W', 'W', ' ', 'W', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
-        let start = Point { row: 0, col: 0 };
-        let end = Point { row: 2, col: 4 };
-        let result = m.solve(start, end);
+        let result = m.solve();
         match result {
             Ok(s) => {
                 let expected_solution_path = Path {
@@ -818,18 +824,16 @@ mod tests {
     fn solve_should_succeed_with_walls_2() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
-            vec![' ', ' ', 'W', ' ', 'W'],
+            vec![' ', 'S', 'W', ' ', 'W'],
             vec![' ', 'W', ' ', 'W', ' '],
-            vec![' ', ' ', ' ', 'W', ' '],
+            vec![' ', ' ', ' ', 'W', 'F'],
             vec!['W', 'W', ' ', 'W', ' '],
             vec![' ', ' ', ' ', 'W', ' '],
             vec![' ', 'W', 'W', 'W', ' '],
             vec![' ', ' ', ' ', ' ', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
-        let start = Point { row: 0, col: 1 };
-        let end = Point { row: 2, col: 4 };
-        let result = m.solve(start, end);
+        let result = m.solve();
         match result {
             Ok(s) => {
                 let expected_solution_path = Path {
@@ -867,8 +871,8 @@ mod tests {
     fn solve_should_succeed_with_walls_3() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
-            vec![' ', ' ', 'W', ' ', 'W'],
-            vec![' ', 'W', ' ', 'W', ' '],
+            vec![' ', 'S', 'W', ' ', 'W'],
+            vec![' ', 'W', ' ', 'W', 'F'],
             vec![' ', ' ', ' ', ' ', ' '],
             vec!['W', 'W', ' ', 'W', ' '],
             vec![' ', ' ', ' ', 'W', ' '],
@@ -876,9 +880,7 @@ mod tests {
             vec![' ', ' ', ' ', ' ', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
-        let start = Point { row: 0, col: 1 };
-        let end = Point { row: 1, col: 4 };
-        let result = m.solve(start, end);
+        let result = m.solve();
         match result {
             Ok(s) => {
                 let expected_solution_path = Path {

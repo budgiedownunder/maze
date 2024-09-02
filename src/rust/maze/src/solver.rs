@@ -143,10 +143,7 @@ impl Solver<'_> {
         Err(MazeError::new("no solution found".to_string()))
     }
 
-    /// Attempts to solve the path between a start and end point within the maze referenced by the solver instance
-    /// # Arguments
-    /// * `start` - Start point
-    /// * `end` - End point
+    /// Attempts to solve the path between the start and end point defined within the maze referenced by the solver instance
     ///
     /// # Returns
     ///
@@ -159,9 +156,9 @@ impl Solver<'_> {
     /// use maze::Point;
     /// use maze::Solver;
     /// let grid: Vec<Vec<char>> = vec![
-    ///    vec![' ', 'W', ' ', ' ', 'W'],
+    ///    vec!['S', 'W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W', ' '],
-    ///    vec![' ', ' ', ' ', 'W', ' '],
+    ///    vec![' ', ' ', ' ', 'W', 'F'],
     ///    vec!['W', ' ', 'W', ' ', ' '],
     ///    vec![' ', ' ', ' ', 'W', ' '],
     ///    vec!['W', 'W', ' ', ' ', ' '],
@@ -170,9 +167,7 @@ impl Solver<'_> {
     /// let solver = Solver {
     ///     maze: &Maze::from_vec(grid),
     /// };
-    /// let start = Point { row: 0, col: 0 };
-    /// let end = Point { row: 2, col: 4 };
-    /// let result = solver.solve(start, end);
+    /// let result = solver.solve();
     /// match result {
     ///    Ok(solution) => {
     ///       println!("Successfully solved maze, solution path => {}", solution.path);
@@ -185,21 +180,25 @@ impl Solver<'_> {
     ///    }
     /// }
     /// ```
-    pub fn solve(&self, start: Point, end: Point) -> Result<Solution, MazeError> {
-        if !self.is_valid(&start) {
-            return Err(MazeError::new(format!(
-                "start location {} is invalid",
-                start
-            )));
+    pub fn solve(&self) -> Result<Solution, MazeError> {
+        let start = self.maze.definition.get_start();
+        let finish = self.maze.definition.get_finish();
+        if start.is_none() {
+            return Err(MazeError::new(
+                "no start cell found within maze".to_string(),
+            ));
         }
-        if !self.is_valid(&end) {
-            return Err(MazeError::new(format!("end location {} is invalid", end)));
+        if finish.is_none() {
+            return Err(MazeError::new(
+                "no finish cell found within maze".to_string(),
+            ));
         }
-        if start == end {
-            let points = vec![start.clone()];
-
+        let start_pt: Point = start.unwrap();
+        let finish_pt: Point = finish.unwrap();
+        if start_pt == finish_pt {
+            let points = vec![start_pt];
             return Ok(Solution::new(Path::new(points)));
         }
-        self.solve_lee(&start, &end)
+        self.solve_lee(&start_pt, &finish_pt)
     }
 }

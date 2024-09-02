@@ -563,6 +563,127 @@ fn should_be_able_to_empty_maze_and_then_quit() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+fn should_not_be_able_to_solve_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    let mut expected_output = vec![
+        "Failed to solve maze: no start cell found within maze",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('S', true);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_not_be_able_to_solve_maze_with_no_start_cell() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    #[rustfmt::skip]
+    let grid: Vec<Vec<char>> = vec![
+        vec![' ', 'F'],
+    ];
+    mock_app.current_maze = Maze::from_vec(grid);
+
+    let mut expected_output = vec![
+        "Failed to solve maze: no start cell found within maze",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('S', true);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_not_be_able_to_solve_maze_with_no_finish_cell() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    #[rustfmt::skip]
+    let grid: Vec<Vec<char>> = vec![
+        vec!['S', ' '],
+     ];
+    mock_app.current_maze = Maze::from_vec(grid);
+
+    let mut expected_output = vec![
+        "Failed to solve maze: no finish cell found within maze",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('S', true);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    #[rustfmt::skip]
+    let grid: Vec<Vec<char>> = vec![
+        vec!['S', 'W', ' ', 'F', 'W'],
+        vec![' ', 'W', ' ', 'W', ' '],
+        vec![' ', ' ', ' ', 'W', ' '],
+     ];
+    mock_app.current_maze = Maze::from_vec(grid);
+
+    let mut expected_output = vec![
+        "\nSuccessfully solved maze:\n",
+        "S█→F█",
+        "↓█↑█░",
+        "→→↑█░",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('S', true);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_not_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    #[rustfmt::skip]
+    let grid: Vec<Vec<char>> = vec![
+        vec!['S', 'W', 'W', 'F', 'W'],
+        vec![' ', 'W', ' ', 'W', ' '],
+        vec![' ', ' ', ' ', 'W', ' '],
+     ];
+    mock_app.current_maze = Maze::from_vec(grid);
+
+    let mut expected_output = vec![
+        "Failed to solve maze: no solution found",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('S', true);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
 fn should_be_able_to_print_empty_maze_and_then_quit() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
