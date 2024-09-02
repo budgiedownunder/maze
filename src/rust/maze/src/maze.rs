@@ -56,7 +56,7 @@ impl Maze {
     /// The maze definition instance
     ///
     /// # Examples
-    /// 
+    ///
     /// Create a definition with 2 rows and 3 columns, verify its dimensions, reset it and
     /// then confirm it is empty
     /// ```
@@ -121,7 +121,7 @@ impl Maze {
     ///
     /// # Examples
     ///
-    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column and 
+    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column and
     /// then save it to the local file `my_file.json`, overwriting any existing file
     ///
     /// ```
@@ -272,7 +272,7 @@ impl Maze {
     ///    Ok(solution) => {
     ///       println!("Successfully solved maze:");
     ///       let mut print_target = StdoutLinePrinter::new();
-    ///       m.print(&mut print_target, start, end, solution.path);
+    ///       m.print(&mut print_target, solution.path);
     ///    }
     ///    Err(error) => {
     ///        panic!(
@@ -282,19 +282,19 @@ impl Maze {
     ///    }
     /// }
     /// ```
-    pub fn print(
-        &self,
-        print_target: &mut dyn LinePrinter,
-        start: Point,
-        end: Point,
-        path: Path,
-    ) -> Result<(), io::Error> {
+    pub fn print(&self, print_target: &mut dyn LinePrinter, path: Path) -> Result<(), io::Error> {
         if self.definition.row_count() == 0 || self.definition.col_count() == 0 {
             return Ok(());
         }
         let mut display_chars = self.definition.to_display_chars();
+        let start = self.definition.get_start();
+        let finish = self.definition.get_finish();
+
         for (path_idx, pt) in path.points.iter().enumerate() {
-            if self.definition.is_valid(pt) && *pt != start && *pt != end {
+            if self.definition.is_valid(pt)
+                && (start.is_none() || *pt != *(start.as_ref().unwrap()))
+                && (finish.is_none() || *pt != *(finish.as_ref().unwrap()))
+            {
                 let mut direction = Direction::None;
                 if (path_idx + 1) < path.points.len() {
                     let next_pt = &path.points[path_idx + 1];
@@ -315,12 +315,6 @@ impl Maze {
 
                 display_chars[pt.row][pt.col] = direction.unicode_char();
             }
-        }
-        if self.definition.is_valid(&start) {
-            display_chars[start.row][start.col] = 'S';
-        }
-        if self.definition.is_valid(&end) {
-            display_chars[end.row][end.col] = 'F';
         }
         for row in display_chars.iter() {
             let row_chars: String = row.iter().collect();
@@ -419,11 +413,9 @@ mod tests {
             vec![' ', ' ', ' ', ' ', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
-        let start = Point { row: 0, col: 1 };
-        let end = Point { row: 2, col: 4 };
         let path = Path { points: vec![] };
         let mut print_target = StdoutLinePrinter::new();
-        if let Err(error) = m.print(&mut print_target, start, end, path) {
+        if let Err(error) = m.print(&mut print_target, path) {
             panic!("Unexpected print() error: {}", error);
         }
     }
@@ -441,8 +433,6 @@ mod tests {
             vec![' ', ' ', ' ', ' ', ' '],
         ];
         let m = Maze::new(Definition::from_vec(grid));
-        let start = Point { row: 0, col: 1 };
-        let end = Point { row: 2, col: 4 };
         let path = Path {
             points: vec![
                 Point { row: 0, col: 1 },
@@ -469,7 +459,7 @@ mod tests {
         };
         let mut print_target = StdoutLinePrinter::new();
 
-        if let Err(error) = m.print(&mut print_target, start, end, path) {
+        if let Err(error) = m.print(&mut print_target, path) {
             panic!("Unexpected print() error: {}", error);
         }
     }

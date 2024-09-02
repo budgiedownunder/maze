@@ -282,6 +282,106 @@ fn should_not_be_able_to_delete_invalid_cols_from_non_empty_maze() -> Result<(),
     Ok(())
 }
 
+fn run_set_endpoint_test_in_empty_maze(
+    operation_key: char,
+    name: &str,
+) -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    let operation_message = format!("Set {}", name);
+    let expected_error_message = &format!(
+        "Maze has no cells - add some rows and columns first before setting the {} cell",
+        name
+    );
+    let mut expected_output = vec![
+        operation_message.as_str(),
+        "Current dimensions: 0 row(s), 0 column(s)",
+        expected_error_message,
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key(operation_key, true);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_not_be_able_to_set_start_in_empty_maze() -> Result<(), Box<dyn Error>> {
+    run_set_endpoint_test_in_empty_maze('A', "start")?;
+    Ok(())
+}
+
+#[test]
+fn should_not_be_able_to_set_finish_in_empty_maze() -> Result<(), Box<dyn Error>> {
+    run_set_endpoint_test_in_empty_maze('F', "finish")?;
+    Ok(())
+}
+
+fn run_modify_endpoint_test(
+    operation_key: char,
+    operation: &str,
+    endpoint_char: char,
+) -> Result<(), Box<dyn Error>> {
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(3, 5));
+    let modified_row = format!("░░{}░░", endpoint_char);
+    let mut expected_output:Vec<&str> = vec![
+        operation,
+        "Current dimensions: 3 row(s), 5 column(s)",
+        "Row:",
+        "Invalid value 'A' (out of bounds), please enter an integer value between 1 and 3 (inclusive)",
+        "Row:",
+        "Invalid value '-1' (out of bounds), please enter an integer value between 1 and 3 (inclusive)",
+        "Row:",
+        "Invalid value '11' (out of bounds), please enter an integer value between 1 and 3 (inclusive)",
+        "Row:",
+        "Column:",
+        "Invalid value 'B' (out of bounds), please enter an integer value between 1 and 5 (inclusive)",
+        "Column:",
+        "Invalid value '-1' (out of bounds), please enter an integer value between 1 and 5 (inclusive)",
+        "Column:",
+        "Invalid value '6' (out of bounds), please enter an integer value between 1 and 5 (inclusive)",
+        "Column:",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Current dimensions: 3 row(s), 5 column(s)");
+    expected_output.push("\nDefinition:\n");
+    expected_output.push("░░░░░");
+    expected_output.push(&modified_row);
+    expected_output.push("░░░░░");
+    expected_output.push(MockApp::get_press_any_key_text());
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key(operation_key, true);
+    mock_app.add_input_line("A", false);
+    mock_app.add_input_line("-1", false);
+    mock_app.add_input_line("11", false);
+    mock_app.add_input_line("2", false);
+    mock_app.add_input_line("B", false);
+    mock_app.add_input_line("-1", false);
+    mock_app.add_input_line("6", false);
+    mock_app.add_input_line("3", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('P', false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_set_start_in_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    run_modify_endpoint_test('A', "Set start", 'S')?;
+    Ok(())
+}
+
 #[test]
 fn should_not_be_able_to_set_walls_in_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
@@ -346,7 +446,7 @@ fn run_modify_walls_test(
     expected_output.extend(MockApp::get_menu_lines());
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)");
     expected_output.push("\nDefinition:\n");
-    expected_output.push("F░░░░");
+    expected_output.push("░░░░░");
     expected_output.push("░░░░░");
     expected_output.push(&modified_row);
     expected_output.push(&modified_row);
@@ -383,7 +483,6 @@ fn run_modify_walls_test(
     mock_app.add_input_key('Q', false);
     mock_app.run()?;
     mock_app.verify_output(expected_output)?;
-    //mock_app.print_output();
     Ok(())
 }
 
@@ -491,7 +590,7 @@ fn should_be_able_to_print_maze_with_content_and_then_quit() -> Result<(), Box<d
     let mut expected_output = vec![
         "Current dimensions: 2 row(s), 3 column(s)",
         "\nDefinition:\n",
-        "F░░",
+        "░░░",
         "░░░",
         MockApp::get_press_any_key_text(),
     ];

@@ -18,7 +18,10 @@ static MENU: &str = r#"*********************************************
         
         I -> Insert rows    | D -> Delete rows
         N -> Insert columns | L -> Delete columns
+        -------------------------------------------
+        A -> Set start      | F -> Set finish
         W -> Set walls      | C -> Clear walls
+        -------------------------------------------
         R -> Resize         | E -> Empty
         -------------------------------------------
         S -> Solve          | P -> Print
@@ -285,6 +288,42 @@ pub trait App: LinePrinter {
         num_rows > 0 && num_cols > 0
     }
 
+    fn process_set_endpoint(&mut self, start: bool) -> Result<(), Box<dyn Error>> {
+        let name = if start { "start" } else { "finish" };
+        self.print_line(&format!("Set {}", name))?;
+        self.print_maze_dimensions("Current")?;
+        if !self.maze_has_cells() {
+            self.print_line(&format!(
+                "Maze has no cells - add some rows and columns first before setting the {} cell",
+                name
+            ))?;
+            return Ok(());
+        }
+        let (num_rows, num_cols) = self.get_maze_dims();
+        let row = self.prompt_number("Row:", Some(1), Some(num_rows))? - 1;
+        let col = self.prompt_number("Column:", Some(1), Some(num_cols))? - 1;
+        if start {
+            self.get_maze_mut()
+                .definition
+                .set_start(Some(Point { row, col }))?;
+        } else {
+            self.get_maze_mut()
+                .definition
+                .set_finish(Some(Point { row, col }))?;
+        }
+        Ok(())
+    }
+
+    fn do_set_start(&mut self) -> Result<(), Box<dyn Error>> {
+        self.process_set_endpoint(true)?;
+        Ok(())
+    }
+
+    fn do_set_finish(&mut self) -> Result<(), Box<dyn Error>> {
+        self.process_set_endpoint(false)?;
+        Ok(())
+    }
+
     fn process_walls(&mut self, title: &str, modify_char: char) -> Result<(), Box<dyn Error>> {
         self.print_line(title)?;
         self.print_maze_dimensions("Current")?;
@@ -359,13 +398,11 @@ pub trait App: LinePrinter {
         self.print_maze_dimensions("Current")?;
         self.print_line("\nDefinition:\n")?;
         let maze = self.get_maze().clone();
-        let start = Point { row: 0, col: 0 };
-        let end = Point { row: 0, col: 0 };
         let path = Path { points: vec![] };
         let print_target = self.get_line_printer();
         if maze.definition.is_empty() {
             print_target.print_line("Maze is empty")?;
-        } else if let Err(error) = maze.print(print_target, start, end, path) {
+        } else if let Err(error) = maze.print(print_target, path) {
             print_target.print_line(&format!("Failed to print matrix: {}", error))?;
         }
         Ok(())
@@ -389,6 +426,8 @@ pub trait App: LinePrinter {
                     'D' => self.do_delete_rows(),
                     'N' => self.do_insert_cols(),
                     'L' => self.do_delete_cols(),
+                    'A' => self.do_set_start(),
+                    'F' => self.do_set_finish(),
                     'W' => self.do_set_walls(),
                     'C' => self.do_clear_walls(),
                     'R' => self.do_resize(),
