@@ -15,7 +15,7 @@ static WELCOME_BANNER: &str = r#"*********************************************
 
 static MENU: &str = r#"*********************************************
         Select action:
-        
+
         I -> Insert rows    | D -> Delete rows
         N -> Insert columns | L -> Delete columns
         -------------------------------------------
@@ -25,6 +25,9 @@ static MENU: &str = r#"*********************************************
         R -> Resize         | E -> Empty
         -------------------------------------------
         S -> Solve          | P -> Print
+        -------------------------------------------
+        O -> Open
+        V -> Save           | Z -> Save As
         -------------------------------------------
         Q -> Quit
         *********************************************
@@ -408,11 +411,6 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
-    fn do_print(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_maze()?;
-        Ok(())
-    }
-
     fn do_solve(&mut self) -> Result<(), Box<dyn Error>> {
         match self.get_maze_mut().solve() {
             Ok(solution) => {
@@ -427,6 +425,26 @@ pub trait App: LinePrinter {
                 self.print_line(&format!("Failed to solve maze: {}", error))?;
             }
         }
+        Ok(())
+    }
+
+    fn do_print(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_maze()?;
+        Ok(())
+    }
+
+    fn do_open(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("Open")?;
+        Ok(())
+    }
+
+    fn do_save(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("Save")?;
+        Ok(())
+    }
+
+    fn do_save_as(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("Save As")?;
         Ok(())
     }
 
@@ -446,6 +464,9 @@ pub trait App: LinePrinter {
                     'E' => self.do_empty(),
                     'S' => self.do_solve(),
                     'P' => self.do_print(),
+                    'O' => self.do_open(),
+                    'V' => self.do_save(),
+                    'Z' => self.do_save_as(),
                     'Q' => {
                         self.print_line("Exiting...")?;
                         return Ok(());
