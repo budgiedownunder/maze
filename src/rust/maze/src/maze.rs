@@ -107,6 +107,75 @@ impl Maze {
             definition: Definition::from_vec(grid),
         }
     }
+    /// Generates the JSON string representation for the maze
+    ///
+    /// # Returns
+    ///
+    /// JSON string representing the maze definition
+    ///
+    ///
+    /// # Examples
+    ///
+    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column
+    /// and then convert it to JSON and print it
+    /// ```
+    /// use maze::Maze;
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let m = Maze::from_vec(grid);
+    /// assert_eq!(m.definition.row_count(), 2);
+    /// assert_eq!(m.definition.col_count(), 3);
+    /// match m.to_json() {
+    ///     Ok(json) => {
+    ///         println!("JSON: {}", json);
+    ///     }
+    ///     Err(error) => {
+    ///        panic!(
+    ///            "failed to convert maze to JSON => {}",
+    ///           error
+    ///        );
+    ///     }
+    /// }
+    pub fn to_json(&self) -> Result<String, MazeError> {
+        Ok(serde_json::to_string(&self)?)
+    }
+    /// Initializes a maze instance by reading the JSON string content provided
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error if the JSON could not be read
+    ///
+    /// # Examples
+    ///
+    /// Create an empty maze and then reinitialize it from a JSON string definition
+    /// containing 2 rows and 3 columns  
+    /// ```
+    /// use maze::Definition;
+    /// use maze::Maze;
+    /// let mut m = Maze::new(Definition::new(0, 0));
+    /// let json = r#"{"definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#;
+    /// match m.from_json(json) {
+    ///     Ok(()) => {
+    ///         println!(
+    ///             "JSON successfully read into Maze => new rows = {}, new columns = {}",
+    ///             m.definition.row_count(),
+    ///             m.definition.col_count()
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///        panic!(
+    ///            "failed to read JSON into maze => {}",
+    ///           error
+    ///        );
+    ///     }
+    /// }
+    pub fn from_json(&mut self, json: &str) -> Result<(), MazeError> {
+        let temp: Maze = serde_json::from_str(json)?;
+        *self = temp;
+        Ok(())
+    }
     /// Saves a maze definition to a file (as JSON), optionally overwriting any existing file
     ///
     /// # Arguments
@@ -141,7 +210,7 @@ impl Maze {
                 return Err(MazeError::new("file path already exists".to_string()));
             }
         }
-        let s = serde_json::to_string(&self)?;
+        let s = self.to_json()?;
         let mut file = File::create(path)?;
         file.write_all(s.as_bytes())?;
         Ok(())
@@ -365,7 +434,7 @@ mod tests {
     #[test]
     fn can_serialize_empty() {
         let m = Maze::new(Definition::new(0, 0));
-        let s = serde_json::to_string(&m).expect("Failed to serialize");
+        let s = m.to_json().expect("Failed to serialize");
         assert_eq!(s, r#"{"definition":{"grid":[]}}"#);
     }
 
@@ -377,7 +446,7 @@ mod tests {
             vec![' ', ' ', 'W']
         ];
         let m = Maze::new(Definition::from_vec(grid));
-        let s = serde_json::to_string(&m).expect("Failed to serialize");
+        let s = m.to_json().expect("Failed to serialize");
         assert_eq!(
             s,
             r#"{"definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#
@@ -386,10 +455,19 @@ mod tests {
 
     #[test]
     fn can_deserialize_empty() {
+        let mut m = Maze::new(Definition::new(10, 10));
         let s = r#"{"definition":{"grid":[]}}"#;
-        let m: Maze = serde_json::from_str(s).expect("Failed to deserialize");
-        assert_eq!(m.definition.row_count(), 0);
-        assert_eq!(m.definition.col_count(), 0);
+        m.from_json(s).expect("Failed to deserialize");
+        assert!(m.definition.is_empty());
+    }
+
+    #[test]
+    fn can_deserialize_non_empty() {
+        let mut m = Maze::new(Definition::new(10, 10));
+        let s = r#"{"definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#;
+        m.from_json(s).expect("Failed to deserialize");
+        assert_eq!(m.definition.row_count(), 2);
+        assert_eq!(m.definition.col_count(), 3);
     }
 
     #[test]
