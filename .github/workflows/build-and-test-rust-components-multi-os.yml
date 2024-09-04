@@ -42,5 +42,4 @@ jobs:
 
     - name: Benchmark
       run: |
-        cd src/rust
         cargo bench -p maze
