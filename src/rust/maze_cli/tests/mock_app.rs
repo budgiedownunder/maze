@@ -7,6 +7,7 @@ use maze::Maze;
 use maze::Definition;
 
 use std::collections::VecDeque;
+use std::error::Error;
 use std::io::{self};
 
 struct MockInputKey {
@@ -24,6 +25,7 @@ pub struct MockApp {
     input_lines: VecDeque<MockInputLine>,
     output: Vec<String>,
     pub current_maze: Maze,
+    current_maze_name: String,
 }
 
 impl MockApp {
@@ -33,6 +35,7 @@ impl MockApp {
             input_lines: VecDeque::new(),
             output: Vec::new(),
             current_maze: Maze::new(Definition::new(0, 0)),
+            current_maze_name: "".to_string(),
         }
     }
 
@@ -94,6 +97,15 @@ impl App for MockApp {
 
     fn get_maze_mut(&mut self) -> &mut Maze {
         &mut self.current_maze
+    }
+
+    fn get_maze_name(&self) -> String { 
+        self.current_maze_name.clone()
+    }
+
+    fn set_maze_name(&mut self, name: &str) -> Result<(), Box<dyn Error>> {
+        self.current_maze_name = name.to_string();
+        Ok(())
     }
 
     fn read_key(&mut self) -> Result<Option<char>, io::Error> {

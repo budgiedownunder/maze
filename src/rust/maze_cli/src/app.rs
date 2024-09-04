@@ -5,6 +5,7 @@ use maze::Point;
 
 use std::error::Error;
 use std::io::{self};
+use std::path::{Path as stdPath, PathBuf};
 use std::thread;
 use std::time::Duration;
 
@@ -39,6 +40,17 @@ pub trait App: LinePrinter {
     fn get_maze_mut(&mut self) -> &mut Maze;
     fn read_key(&mut self) -> Result<Option<char>, io::Error>;
     fn read_line(&mut self) -> Result<Option<String>, io::Error>;
+    fn get_maze_name(&self) -> String;
+    fn set_maze_name(&mut self, name: &str) -> Result<(), Box<dyn Error>>;
+
+    fn get_maze_storage_id(name: &str) -> String {
+        format!("{}.json", name.trim())
+    }
+
+    fn maze_name_exists(name: &str) -> bool {
+        let path = PathBuf::from(Self::get_maze_storage_id(name));
+        !name.is_empty() && stdPath::new(&path).exists()
+    }
 
     fn print_lines(&mut self, lines: Vec<&'static str>) -> Result<(), Box<dyn Error>> {
         for line in lines {
@@ -102,13 +114,12 @@ pub trait App: LinePrinter {
     fn prompt_text(&mut self, message: &str) -> Result<String, Box<dyn Error>> {
         self.print_line(message)?;
         loop {
-            match self.read_line()? {
-                Some(line) => {
-                    return Ok(line);
+            if let Some(line) = self.read_line()? {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    return Ok(trimmed.to_string());
                 }
-                None => {
-                    self.print_line("Please enter a value")?;
-                }
+                self.print_line("Please enter a value")?;
             }
         }
     }
@@ -434,17 +445,50 @@ pub trait App: LinePrinter {
     }
 
     fn do_open(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("Open")?;
+        let name = self.prompt_text("Enter name of maze to open: ")?;
+        let file_name = &Self::get_maze_storage_id(&name);
+        self.print_line(&format!("Loading from: {}", file_name))?;
+        self.get_maze_mut().load_from_file(file_name)?;
+        self.set_maze_name(&name)?;
+        self.print_line(&format!(
+            "Maze '{}' successfully loaded from file '{}'",
+            name, file_name
+        ))?;
+        Ok(())
+    }
+
+    fn save_maze(&mut self, name: &str, prompt_overwrite: bool) -> Result<(), Box<dyn Error>> {
+        if prompt_overwrite && Self::maze_name_exists(name) {
+            let yes = self.prompt_yes_no(&format!(
+                "A maze with the name '{}' already exists. Overwrite it?",
+                name
+            ))?;
+            if !yes {
+                self.print_line("Maze not saved")?;
+                return Ok(());
+            }
+        }
+        self.set_maze_name(name)?;
+        let file_name = &Self::get_maze_storage_id(name);
+        self.get_maze().save_to_file(file_name, true)?;
+        self.print_line(&format!("Saved '{}' to file: '{}'", name, file_name))?;
         Ok(())
     }
 
     fn do_save(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("Save")?;
+        let name = self.get_maze_name();
+        if name.is_empty() {
+            self.do_save_as()?
+        } else {
+            self.save_maze(&name, false)?
+        }
         Ok(())
     }
 
     fn do_save_as(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("Save As")?;
+        self.print_line(&format!("Current name is '{}'", self.get_maze_name()))?;
+        let name = self.prompt_text("Enter name of maze to save as: ")?;
+        self.save_maze(name.trim(), true)?;
         Ok(())
     }
 
