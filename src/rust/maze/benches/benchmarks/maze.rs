@@ -32,7 +32,7 @@ fn solve() -> Result<Solution, MazeError> {
 
 fn maze(c: &mut Criterion) {
     let mut group = c.benchmark_group("maze_group");
-    group.sample_size(200);
+    group.sample_size(100);
     group.bench_function("maze.solve()", |b| {
         b.iter(|| {
             if let Err(e) = solve() {
