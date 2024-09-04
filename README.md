@@ -37,6 +37,13 @@ or, if you also wish to capture and display any `stdout` output:
 cd src/rust
 cargo test -- --nocapture
 ```
+### Benchmarking
+To run benchmark tests (which are currently only configured for the `maze` crate):
+```
+cd src/rust
+cargo bench -p maze
+```
+
 ### Generating Documentation
 To generate and view Rust (crate) documentation in your default browser:
 ```
