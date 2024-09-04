@@ -358,8 +358,8 @@ mod tests {
         let mut m = Maze::new(Definition::new(2, 3));
         assert_eq!(m.definition.row_count(), 2);
         assert_eq!(m.definition.col_count(), 3);
-        assert_eq!(m.definition.is_empty(), false);
-        assert_eq!(m.reset().definition.is_empty(), true)
+        assert!(!m.definition.is_empty());
+        assert!(m.reset().definition.is_empty())
     }
 
     #[test]
@@ -387,7 +387,7 @@ mod tests {
     #[test]
     fn can_deserialize_empty() {
         let s = r#"{"definition":{"grid":[]}}"#;
-        let m: Maze = serde_json::from_str(&s).expect("Failed to deserialize");
+        let m: Maze = serde_json::from_str(s).expect("Failed to deserialize");
         assert_eq!(m.definition.row_count(), 0);
         assert_eq!(m.definition.col_count(), 0);
     }
@@ -905,7 +905,8 @@ mod tests {
 
     // Helper functions and definitions
     fn delete_test_file(path: &str) {
-        std::fs::remove_file(path).expect(&format!("Failed to delete test file: {}", path));
+        std::fs::remove_file(path)
+            .unwrap_or_else(|_| panic!("Failed to delete test file: {}", path));
     }
 
     enum ExpectedSerdeErrorKind {

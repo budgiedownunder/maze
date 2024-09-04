@@ -785,8 +785,8 @@ mod tests {
         let mut d = Definition::new(2, 3);
         assert_eq!(d.row_count(), 2);
         assert_eq!(d.col_count(), 3);
-        assert_eq!(d.is_empty(), false);
-        assert_eq!(d.reset().is_empty(), true)
+        assert!(!d.is_empty());
+        assert!(d.reset().is_empty())
     }
 
     #[test]
@@ -858,13 +858,13 @@ mod tests {
     #[test]
     fn can_confirm_empty() {
         let d = Definition::new(0, 0);
-        assert_eq!(d.is_empty(), true);
+        assert!(d.is_empty());
     }
 
     #[test]
     fn can_confirm_not_empty() {
         let d = Definition::new(1, 1);
-        assert_eq!(d.is_empty(), false);
+        assert!(!d.is_empty());
     }
 
     #[test]
@@ -1018,7 +1018,7 @@ mod tests {
     #[test]
     fn can_deserialize_empty() {
         let s = r#"{"grid":[]}"#;
-        let d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
         assert_eq!(d.row_count(), 0);
         assert_eq!(d.col_count(), 0);
     }
@@ -1026,7 +1026,7 @@ mod tests {
     #[test]
     fn can_deserialize_non_empty() {
         let s = r#"{"grid":[["S","W"," "],["F"," ","W"]]}"#;
-        let d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
         assert_eq!(d.row_count(), 2);
         assert_eq!(d.col_count(), 3);
         let grid: Vec<Vec<char>> = vec![vec!['S', 'W', ' '], vec!['F', ' ', 'W']];
@@ -1037,56 +1037,56 @@ mod tests {
     #[should_panic(expected = "EOF while parsing an object")]
     fn cannot_deserialize_bad_json_format_incomplete_object() {
         let s = "{";
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "expected value")]
     fn cannot_deserialize_bad_json_format_no_open_object() {
         let s = "}";
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "expected value")]
     fn cannot_deserialize_bad_json_format_missing_field_value() {
         let s = r#"{"grid":}"#;
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "EOF while parsing a string")]
     fn cannot_deserialize_bad_json_format_field_name_not_closed() {
         let s = r#"{"grid:}"#;
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "key must be a string")]
     fn cannot_deserialize_bad_json_format_field_name_not_quoted() {
         let s = "{grid:}";
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = r#"invalid type: string \"a\", expected a sequence"#)]
     fn cannot_deserialize_json_with_non_vec_grid_value() {
         let s = r#"{"grid":"a"}"#;
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "missing field `grid`")]
     fn cannot_deserialize_json_missing_grid_field() {
         let s = "{}";
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "unknown field `grid2`")]
     fn cannot_deserialize_json_with_invalid_field_name() {
         let s = r#"{"grid2":[[" ","W"," "],[" "," ","W"]]}"#;
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
@@ -1095,28 +1095,28 @@ mod tests {
     )]
     fn cannot_deserialize_bad_json_invalid_char_1() {
         let s = r#"{"grid":[["S","X"," "],["F"," ","W"]]}"#;
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = r#"invalid value: string \"XX\", expected a character"#)]
     fn cannot_deserialize_bad_json_invalid_char_2() {
         let s = r#"{"grid":[["S","XX"," "],["F"," ","W"]]}"#;
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "too many start characters `S`")]
     fn cannot_deserialize_bad_json_more_than_one_start_char() {
         let s = r#"{"grid":[["S"," "," "],["F","S","W"]]}"#;
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "too many finish characters `F`")]
     fn cannot_deserialize_bad_json_more_than_one_finish_char() {
         let s = r#"{"grid":[["S"," "," "],["F","F","W"]]}"#;
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
@@ -1125,7 +1125,7 @@ mod tests {
     )]
     fn cannot_deserialize_bad_json_with_different_col_counts() {
         let s = r#"{"grid":[[" "," "," "],[" "," "]]}"#;
-        let _d: Definition = serde_json::from_str(&s).expect("Failed to deserialize");
+        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
@@ -1340,11 +1340,8 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let d = Definition::from_vec(grid);
-        match d.get_start() {
-            Some(start) => {
-                panic!("Unexpectedly found start at {}", start);
-            }
-            None => {}
+        if let Some(start) = d.get_start() {
+            panic!("Unexpectedly found start at {}", start);
         };
     }
 
@@ -1406,11 +1403,8 @@ mod tests {
             vec![' ', ' ', ' ', 'W']
         ];
         let d = Definition::from_vec(grid);
-        match d.get_finish() {
-            Some(finish) => {
-                panic!("Unexpectedly found finish at {}", finish);
-            }
-            None => {}
+        if let Some(finish) = d.get_finish() {
+            panic!("Unexpectedly found finish at {}", finish);
         };
     }
 

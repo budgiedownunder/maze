@@ -38,15 +38,15 @@ impl MockApp {
 
     pub fn add_input_key(&mut self, key: char, reset_output: bool) {
         self.input_keys.push_back(MockInputKey {
-            key: key,
-            reset_output: reset_output,
+            key,
+            reset_output,
         });
     }
 
     pub fn add_input_line(&mut self, text: &str, reset_output: bool) {
         self.input_lines.push_back(MockInputLine {
             text: text.to_string(),
-            reset_output: reset_output,
+            reset_output,
         });
     }
 
@@ -62,10 +62,10 @@ impl MockApp {
                 self.output.len() )                    
             ));
         }
-        for i in 0..expected.len() {
-            if expected[i] != self.output[i] {
+        for (i, expected_line) in expected.iter().enumerate() {
+            if *expected_line != self.output[i] {
                 return Err(Self::io_error(
-                    format!("Difference found in output at index {}: expected[{}] = '{}', output[{}] = '{}'", i, i, expected[i], i, self.output[i])
+                    format!("Difference found in output at index {}: expected[{}] = '{}', output[{}] = '{}'", i, i, expected_line, i, self.output[i])
                 ));
             }
         }
@@ -80,6 +80,12 @@ impl MockApp {
         }
     }
 }
+
+impl Default for MockApp {
+    fn default() -> Self {
+             Self::new()
+         }
+     }
 
 impl App for MockApp {
     fn get_maze(&self) -> &Maze {
@@ -98,7 +104,7 @@ impl App for MockApp {
                 }
                 Ok(Some(input_key.key))
             }
-            None => return Err(Self::io_error("No key presses found in input_keys buffer".to_string())),
+            None => Err(Self::io_error("No key presses found in input_keys buffer".to_string())),
         }
     }
 
@@ -110,7 +116,7 @@ impl App for MockApp {
                 }
                 Ok(Some(input_line.text))
             }
-            None => return Err(Self::io_error("No lines found in input_lines buffer".to_string())),
+            None => Err(Self::io_error("No lines found in input_lines buffer".to_string())),
         }
     }
     
