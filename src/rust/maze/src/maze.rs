@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{self, BufReader, Write};
+use std::path::{Path as StdPath, PathBuf};
 
 use crate::solution::Solution;
 use crate::Definition;
@@ -206,7 +207,8 @@ impl Maze {
     /// }
     pub fn save_to_file(&self, path: &str, overwrite: bool) -> Result<(), MazeError> {
         if !overwrite {
-            if let Ok(_metadata) = fs::metadata(path) {
+            let os_path = PathBuf::from(path);
+            if StdPath::new(&os_path).exists() {
                 return Err(MazeError::new("file path already exists".to_string()));
             }
         }
