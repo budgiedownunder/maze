@@ -1,9 +1,11 @@
 use maze::LinePrinter;
 use maze::Maze;
+use maze::MazeError;
 use maze::Path;
 use maze::Point;
 
 use std::error::Error;
+use std::fs;
 use std::io::{self};
 use std::path::{Path as stdPath, PathBuf};
 use std::thread::sleep;
@@ -27,9 +29,9 @@ static MENU: &str = r#"*********************************************
         -------------------------------------------
         S -> Solve          | P -> Print
         -------------------------------------------
-        O -> Open           | U -> List 
-        V -> Save           | Z -> Save As
-        X -> Delete
+        O -> Open maze      | U -> List mazes
+        V -> Save maze      | Z -> Save maze as
+        X -> Delete maze
         -------------------------------------------
         Q -> Quit
         *********************************************
@@ -84,6 +86,7 @@ pub trait App: LinePrinter {
     fn get_press_any_key_text() -> &'static str {
         PRESS_ANY_KEY_TEXT
     }
+
     fn press_any_key(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_line(Self::get_press_any_key_text())?;
         self.read_key()?;
@@ -457,8 +460,37 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
+    fn get_maze_names(&self) -> Result<Vec<String>, Box<dyn Error>> {
+        let mut names: Vec<String> = Vec::new();
+        let current_dir = std::env::current_dir()?;
+
+        for entry in fs::read_dir(current_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if let Some(extension) = path.extension() {
+                if extension == "json" {
+                    if let Some(name) = path.file_stem() {
+                        if let Some(name_str) = name.to_str() {
+                            names.push(name_str.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        Ok(names)
+    }
+
+    fn print_maze_names(&mut self) -> Result<usize, Box<dyn Error>> {
+        let names = self.get_maze_names()?;
+        self.print_line(&format!("Available mazes = {}\n", names.len()))?;
+        for (i, name) in names.iter().enumerate() {
+            self.print_line(&format!("{} - {}", i + 1, name))?;
+        }
+        Ok(names.len())
+    }
+
     fn do_list(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("List")?;
+        let _ = self.print_maze_names()?;
         Ok(())
     }
 
@@ -497,8 +529,28 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
+    fn delete_maze(&mut self, name: &str) -> Result<(), Box<dyn Error>> {
+        if let Err(error) = fs::remove_file(format!("{}.json", name)) {
+            return Err(Box::new(MazeError::from(error)));
+        }
+        Ok(())
+    }
+
     fn do_delete(&mut self) -> Result<(), Box<dyn Error>> {
-        self.print_line("List")?;
+        let num = self.print_maze_names()?;
+        if num == 0 {
+            self.print_line("There are no mazes available to delete")?;
+            return Ok(());
+        }
+        let name = self.prompt_text("Enter name of maze to delete: ")?;
+        let yes = self.prompt_yes_no(&format!(
+            "Are you sure you want to delete the maze '{}'?",
+            name
+        ))?;
+        if yes {
+            self.delete_maze(name.trim())?;
+            self.print_line("Maze deleted")?;
+        }
         Ok(())
     }
 
