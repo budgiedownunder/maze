@@ -27,8 +27,9 @@ static MENU: &str = r#"*********************************************
         -------------------------------------------
         S -> Solve          | P -> Print
         -------------------------------------------
-        O -> Open
+        O -> Open           | U -> List 
         V -> Save           | Z -> Save As
+        X -> Delete
         -------------------------------------------
         Q -> Quit
         *********************************************
@@ -456,6 +457,11 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
+    fn do_list(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("List")?;
+        Ok(())
+    }
+
     fn save_maze(&mut self, name: &str, prompt_overwrite: bool) -> Result<(), Box<dyn Error>> {
         if prompt_overwrite && Self::maze_name_exists(name) {
             let yes = self.prompt_yes_no(&format!(
@@ -491,6 +497,11 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
+    fn do_delete(&mut self) -> Result<(), Box<dyn Error>> {
+        self.print_line("List")?;
+        Ok(())
+    }
+
     fn process_keys(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
             if let Some(ch) = self.read_key()? {
@@ -508,8 +519,10 @@ pub trait App: LinePrinter {
                     'S' => self.do_solve(),
                     'P' => self.do_print(),
                     'O' => self.do_open(),
+                    'U' => self.do_list(),
                     'V' => self.do_save(),
                     'Z' => self.do_save_as(),
+                    'X' => self.do_delete(),
                     'Q' => {
                         self.print_line("Exiting...")?;
                         return Ok(());
