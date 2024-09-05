@@ -10,6 +10,7 @@ maze = { path = "../maze" }
 crossterm = "*"
 
 [dev-dependencies]
+lazy_static = "1.4"
 
 [features]
 print_output = [] 

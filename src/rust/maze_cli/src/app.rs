@@ -6,7 +6,7 @@ use maze::Point;
 use std::error::Error;
 use std::io::{self};
 use std::path::{Path as stdPath, PathBuf};
-use std::thread;
+use std::thread::sleep;
 use std::time::Duration;
 
 static WELCOME_BANNER: &str = r#"*********************************************
@@ -447,11 +447,10 @@ pub trait App: LinePrinter {
     fn do_open(&mut self) -> Result<(), Box<dyn Error>> {
         let name = self.prompt_text("Enter name of maze to open: ")?;
         let file_name = &Self::get_maze_storage_id(&name);
-        self.print_line(&format!("Loading from: {}", file_name))?;
         self.get_maze_mut().load_from_file(file_name)?;
         self.set_maze_name(&name)?;
         self.print_line(&format!(
-            "Maze '{}' successfully loaded from file '{}'",
+            "Maze '{}' successfully loaded from '{}'",
             name, file_name
         ))?;
         Ok(())
@@ -471,7 +470,7 @@ pub trait App: LinePrinter {
         self.set_maze_name(name)?;
         let file_name = &Self::get_maze_storage_id(name);
         self.get_maze().save_to_file(file_name, true)?;
-        self.print_line(&format!("Saved '{}' to file: '{}'", name, file_name))?;
+        self.print_line(&format!("Saved '{}' to '{}'", name, file_name))?;
         Ok(())
     }
 
@@ -526,7 +525,7 @@ pub trait App: LinePrinter {
                 self.press_any_key()?;
                 self.print_menu()?;
             } else {
-                thread::sleep(Duration::from_millis(10));
+                sleep(Duration::from_millis(10));
             }
         }
     }

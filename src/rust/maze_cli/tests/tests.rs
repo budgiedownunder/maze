@@ -4,6 +4,37 @@ use maze::Definition;
 use maze::Maze;
 use maze_cli::app::App;
 use std::error::Error;
+use std::fs;
+use std::path::Path;
+use std::sync::Mutex;
+use std::thread::sleep;
+use std::time::Duration;
+
+lazy_static::lazy_static! {
+    static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
+}
+
+fn delete_file(file: &str) {
+    let _ = fs::remove_file(file);
+    let mut count = 0;
+    loop {
+        // Secondary check, in case there is lag in the operating system
+        if !Path::new(file).exists() {
+            break;
+        }
+        count += 1;
+        if count == 10 {
+            break;
+        }
+        sleep(Duration::from_millis(10));
+    }
+}
+
+fn delete_files(files: Vec<&str>) {
+    for file in files {
+        delete_file(file);
+    }
+}
 
 #[test]
 fn should_be_able_to_quit_on_start() -> Result<(), Box<dyn Error>> {
@@ -519,7 +550,7 @@ fn should_clear_walls_in_non_empty_maze() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-fn should_be_able_to_resize_maze_and_then_quit() -> Result<(), Box<dyn Error>> {
+fn should_be_able_to_resize_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
     let mut expected_output = vec![
         "Current dimensions: 0 row(s), 0 column(s)",
@@ -542,7 +573,7 @@ fn should_be_able_to_resize_maze_and_then_quit() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-fn should_be_able_to_empty_maze_and_then_quit() -> Result<(), Box<dyn Error>> {
+fn should_be_able_to_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(10, 5));
     let mut expected_output = vec![
@@ -684,7 +715,7 @@ fn should_not_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-fn should_be_able_to_print_empty_maze_and_then_quit() -> Result<(), Box<dyn Error>> {
+fn should_be_able_to_print_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output = vec![
@@ -705,7 +736,7 @@ fn should_be_able_to_print_empty_maze_and_then_quit() -> Result<(), Box<dyn Erro
 }
 
 #[test]
-fn should_be_able_to_print_maze_with_content_and_then_quit() -> Result<(), Box<dyn Error>> {
+fn should_be_able_to_print_maze_with_content() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(2, 3));
     let mut expected_output = vec![
@@ -722,6 +753,166 @@ fn should_be_able_to_print_maze_with_content_and_then_quit() -> Result<(), Box<d
     mock_app.add_input_key(' ', false);
     mock_app.add_input_key('Q', false);
     mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_not_be_able_to_open_non_existant_maze() -> Result<(), Box<dyn Error>> {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    delete_file("does_not_exist.json");
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    let mut expected_output = vec![
+        "Enter name of maze to open: ",
+        "Failed: File or directory not found",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('O', true);
+    mock_app.add_input_line("does_not_exist", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    delete_file("saved_maze.json");
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    let mut expected_output = vec![
+        "Current name is ''",
+        "Enter name of maze to save as: ",
+        "Saved 'saved_maze' to 'saved_maze.json'",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Enter name of maze to open: ");
+    expected_output.push("Maze 'saved_maze' successfully loaded from 'saved_maze.json'");
+    expected_output.push(MockApp::get_press_any_key_text());
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('V', true);
+    mock_app.add_input_line("saved_maze", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('O', false);
+    mock_app.add_input_line("saved_maze", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    delete_file("saved_maze_1.json");
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_save_maze() -> Result<(), Box<dyn Error>> {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    delete_file("saved_maze.json");
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    let mut expected_output = vec![
+        "Current name is ''",
+        "Enter name of maze to save as: ",
+        "Saved 'saved_maze' to 'saved_maze.json'",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('V', true);
+    mock_app.add_input_line("saved_maze", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    delete_file("saved_maze.json");
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Error>> {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    let test_files = ["first_name.json", "second_name.json"];
+    delete_files(test_files.to_vec());
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    let mut expected_output = vec![
+        "Current name is ''",
+        "Enter name of maze to save as: ",
+        "Saved 'first_name' to 'first_name.json'",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Current name is 'first_name'");
+    expected_output.push("Enter name of maze to save as: ");
+    expected_output.push("Saved 'second_name' to 'second_name.json'");
+    expected_output.push(MockApp::get_press_any_key_text());
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Current name is 'second_name'");
+    expected_output.push("Enter name of maze to save as: ");
+    expected_output.push("A maze with the name 'first_name' already exists. Overwrite it? (Y/N)");
+    expected_output.push("Saved 'first_name' to 'first_name.json'");
+    expected_output.push(MockApp::get_press_any_key_text());
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('Z', true);
+    mock_app.add_input_line("first_name", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Z', false);
+    mock_app.add_input_line("second_name", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Z', false);
+    mock_app.add_input_line("first_name", false);
+    mock_app.add_input_key('Y', false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    delete_files(test_files.to_vec());
+    mock_app.verify_output(expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<dyn Error>> {
+    let _guard = TEST_MUTEX.lock().unwrap();
+    let test_files = ["first_name.json"];
+    delete_files(test_files.to_vec());
+    let mut mock_app = MockApp::new();
+    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    let mut expected_output = vec![
+        "Current name is ''",
+        "Enter name of maze to save as: ",
+        "Saved 'first_name' to 'first_name.json'",
+        MockApp::get_press_any_key_text(),
+    ];
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Current name is 'first_name'");
+    expected_output.push("Enter name of maze to save as: ");
+    expected_output.push("A maze with the name 'first_name' already exists. Overwrite it? (Y/N)");
+    expected_output.push("Maze not saved");
+    expected_output.push(MockApp::get_press_any_key_text());
+    expected_output.extend(MockApp::get_menu_lines());
+    expected_output.push("Exiting...");
+
+    mock_app.add_input_key('Z', true);
+    mock_app.add_input_line("first_name", false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Z', false);
+    mock_app.add_input_line("first_name", false);
+    mock_app.add_input_key('N', false);
+    mock_app.add_input_key(' ', false);
+    mock_app.add_input_key('Q', false);
+    mock_app.run()?;
+    delete_files(test_files.to_vec());
     mock_app.verify_output(expected_output)?;
     Ok(())
 }
