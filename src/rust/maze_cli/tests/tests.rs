@@ -208,13 +208,13 @@ fn should_not_be_able_to_delete_invalid_rows_from_non_empty_maze() -> Result<(),
     add_enter_number_steps(
         &mut mock_app, &mut expected_output,
         "Delete rows from: ",
-        true, "1", "10", &["A", "-1", "11"], "3",
+        true, "1", "10", &["A", "-1", "11"], "3"
     );
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
         "Number rows to delete: ",
-        true, "1", "8", &["A", "-1", "9"], "4",
+        true, "1", "8", &["A", "-1", "9"], "4"
     );
     expected_output.push("Success - new dimensions: 6 row(s), 5 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
@@ -244,13 +244,13 @@ fn should_prevent_insert_invalid_cols_into_non_empty_maze() -> Result<(), Box<dy
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
         "Insert at column: ",
-        true, "1", "6", &["B", "-1", "12"], "5",
+        true, "1", "6", &["B", "-1", "12"], "5"
     );
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
         "Number columns to insert: ",
-        false, "0", "", &["B", "-2"], "7",
+        false, "0", "", &["B", "-2"], "7"
     );
     expected_output.push("Success - new dimensions: 10 row(s), 12 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
@@ -275,28 +275,18 @@ fn should_not_be_able_to_delete_invalid_cols_from_non_empty_maze() -> Result<(),
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('L', true);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
-    expected_output.push("Delete columns from: ".to_string());
-    mock_app.add_input_line("A", false);
-    expected_output.push("Invalid value 'A' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("Delete columns from: ".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("Delete columns from: ".to_string());
-    mock_app.add_input_line("6", false);
-    expected_output.push("Invalid value '6' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("Delete columns from: ".to_string());
-    mock_app.add_input_line("4", false);
-    expected_output.push("Number columns to delete: ".to_string());
-    mock_app.add_input_line("A", false);
-    expected_output.push("Invalid value 'A' (out of bounds), please enter an integer value between 1 and 2 (inclusive)".to_string());
-    expected_output.push("Number columns to delete: ".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 2 (inclusive)".to_string());
-    expected_output.push("Number columns to delete: ".to_string());
-    mock_app.add_input_line("4", false);
-    expected_output.push("Invalid value '4' (out of bounds), please enter an integer value between 1 and 2 (inclusive)".to_string());
-    expected_output.push("Number columns to delete: ".to_string());
-    mock_app.add_input_line("2", false);
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app,&mut expected_output,
+        "Delete columns from: ",
+        true, "1", "5", &["A", "-1", "6"], "4"
+    );
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app,&mut expected_output,
+        "Number columns to delete: ",
+        true, "1", "2", &["A", "-1", "4"], "2"
+    );
     expected_output.push("Success - new dimensions: 10 row(s), 3 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
@@ -345,28 +335,18 @@ fn run_modify_endpoint_test(
     mock_app.add_input_key(operation_key, true);
     expected_output.push(operation.to_string());
     expected_output.push("Current dimensions: 3 row(s), 5 column(s)".to_string());
-    expected_output.push("Row:".to_string());
-    mock_app.add_input_line("A", false);
-    expected_output.push("Invalid value 'A' (out of bounds), please enter an integer value between 1 and 3 (inclusive)".to_string());
-    expected_output.push("Row:".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 3 (inclusive)".to_string());
-    expected_output.push("Row:".to_string());
-    mock_app.add_input_line("11", false);
-    expected_output.push("Invalid value '11' (out of bounds), please enter an integer value between 1 and 3 (inclusive)".to_string());
-    expected_output.push("Row:".to_string());
-    mock_app.add_input_line("2", false);
-    expected_output.push("Column:".to_string());
-    mock_app.add_input_line("B", false);
-    expected_output.push("Invalid value 'B' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("Column:".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("Column:".to_string());
-    mock_app.add_input_line("6", false);
-    expected_output.push("Invalid value '6' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("Column:".to_string());
-    mock_app.add_input_line("3", false);
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app,&mut expected_output,
+        "Row:",
+        true, "1", "3", &["A", "-1", "11"], "2"
+    );
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app,&mut expected_output,
+        "Column:",
+        true, "1", "5", &["B", "-1", "6"], "3"
+    );
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('P', false);
@@ -411,50 +391,30 @@ fn run_modify_walls_test(
     mock_app.add_input_key(operation_key, true);
     expected_output.push(operation.to_string());
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
-    expected_output.push("Start row:".to_string());
-    mock_app.add_input_line("A", false);
-    expected_output.push("Invalid value 'A' (out of bounds), please enter an integer value between 1 and 10 (inclusive)".to_string());
-    expected_output.push("Start row:".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 10 (inclusive)".to_string());
-    expected_output.push("Start row:".to_string());
-    mock_app.add_input_line("11", false);
-    expected_output.push("Invalid value '11' (out of bounds), please enter an integer value between 1 and 10 (inclusive)".to_string());
-    expected_output.push("Start row:".to_string());
-    mock_app.add_input_line("3", false);
-    expected_output.push("Start column:".to_string());
-    mock_app.add_input_line("B", false);
-    expected_output.push("Invalid value 'B' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("Start column:".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("Start column:".to_string());
-    mock_app.add_input_line("6", false);
-    expected_output.push("Invalid value '6' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("Start column:".to_string());
-    mock_app.add_input_line("2", false);
-    expected_output.push("End row:".to_string());
-    mock_app.add_input_line("C", false);
-    expected_output.push("Invalid value 'C' (out of bounds), please enter an integer value between 1 and 10 (inclusive)".to_string());
-    expected_output.push("End row:".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 10 (inclusive)".to_string());
-    expected_output.push("End row:".to_string());
-    mock_app.add_input_line("11", false);
-    expected_output.push("Invalid value '11' (out of bounds), please enter an integer value between 1 and 10 (inclusive)".to_string());
-    expected_output.push("End row:".to_string());
-    mock_app.add_input_line("5", false);
-    expected_output.push("End column:".to_string());
-    mock_app.add_input_line("D", false);
-    expected_output.push("Invalid value 'D' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("End column:".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("End column:".to_string());
-    mock_app.add_input_line("6", false);
-    expected_output.push("Invalid value '6' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
-    expected_output.push("End column:".to_string());
-    mock_app.add_input_line("4", false);
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app,&mut expected_output,
+        "Start row:",
+        true, "1", "10", &["A", "-1", "11"], "3"
+    );
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app, &mut expected_output,
+        "Start column:",
+        true, "1", "5", &["B", "-1", "6"], "2"
+    );
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app, &mut expected_output,
+        "End row:",
+        true, "1", "10", &["C", "-1", "11"], "5"
+    );
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app, &mut expected_output,
+        "End column:",
+        true, "1", "5", &["D", "-1", "6"], "4"
+    );
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('P', false);
