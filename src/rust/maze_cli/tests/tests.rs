@@ -116,6 +116,66 @@ fn add_enter_number_steps(
     app.add_input_line(good_value, false);
 }
 
+fn add_save_maze_as_steps(
+    app: &mut MockApp,
+    expected_output: &mut Vec<String>,
+    operation_key: char,
+    reset_output: bool,
+    current_name: &str,
+    new_name: &str,
+    expect_prompt_overwrite: bool,
+    abandon_overwrite: bool,
+) {
+    app.add_input_key(operation_key, reset_output);
+    expected_output.push(format!("Current name is '{}'", current_name));
+    expected_output.push("Enter name of maze to save as: ".to_string());
+    app.add_input_line(new_name, false);
+    if expect_prompt_overwrite {
+        expected_output.push(format!(
+            "A maze with the name '{}' already exists. Overwrite it? (Y/N)",
+            new_name
+        ));
+        if abandon_overwrite {
+            app.add_input_key('N', false);
+            expected_output.push("Maze not saved".to_string());
+            return;
+        }
+        app.add_input_key('Y', false);
+    }
+    expected_output.push(format!("Saved '{}' to '{}.json'", new_name, new_name));
+}
+
+fn add_delete_maze_steps(
+    app: &mut MockApp,
+    expected_output: &mut Vec<String>,
+    reset_output: bool,
+    name: &str,
+    names_expected: Vec<&str>,
+    expect_exists: bool,
+) {
+    app.add_input_key('X', reset_output);
+    expected_output.push(format!("Available mazes = {}\n", names_expected.len()));
+    for (i, name) in names_expected.iter().enumerate() {
+        expected_output.push(format!("{} - {}", i + 1, name));
+    }
+    if names_expected.len() > 0 {
+        expected_output.push("Enter name of maze to delete: ".to_string());
+        app.add_input_line(name, false);
+        expected_output.push(format!(
+            "Are you sure you want to delete the maze '{}'? (Y/N)",
+            name
+        ));
+        app.add_input_key('Y', false);
+        if expect_exists {
+            expected_output.push("Maze deleted".to_string());
+        } else {
+            expected_output.push("Failed: File or directory not found".to_string());
+        }
+    } else {
+        expected_output.push("There are no mazes available to delete".to_string());
+    }
+}
+
 #[test]
 fn should_be_able_to_quit_on_start() -> Result<(), Box<dyn Error>> {
     let mut expected_output = vec![];
@@ -616,11 +676,8 @@ fn should_be_mazes_listed_after_save() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
-    mock_app.add_input_key('V', true);
-    expected_output.push("Current name is ''".to_string());
-    expected_output.push("Enter name of maze to save as: ".to_string());
-    mock_app.add_input_line("saved_maze", false);
-    expected_output.push("Saved 'saved_maze' to 'saved_maze.json'".to_string());
+    #[rustfmt::skip]
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'V', true, "", "saved_maze", false, false);
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('U', false);
@@ -633,16 +690,12 @@ fn should_be_mazes_listed_after_save() -> Result<(), Box<dyn Error>> {
 #[test]
 fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
-    println!("should_be_able_to_open_a_saved_maze - started");
     delete_files_with_ext(".", "json")?;
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
-    mock_app.add_input_key('V', true);
-    expected_output.push("Current name is ''".to_string());
-    expected_output.push("Enter name of maze to save as: ".to_string());
-    mock_app.add_input_line("saved_maze", false);
-    expected_output.push("Saved 'saved_maze' to 'saved_maze.json'".to_string());
+    #[rustfmt::skip]
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'V', true, "", "saved_maze", false, false);
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('O', false);
@@ -651,7 +704,6 @@ fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
     expected_output
         .push("Maze 'saved_maze' successfully loaded from 'saved_maze.json'".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
-    println!("should_be_able_to_open_a_saved_maze - finished");
     Ok(())
 }
 
@@ -662,11 +714,8 @@ fn should_be_able_to_save_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
-    mock_app.add_input_key('V', true);
-    expected_output.push("Current name is ''".to_string());
-    expected_output.push("Enter name of maze to save as: ".to_string());
-    mock_app.add_input_line("saved_maze", false);
-    expected_output.push("Saved 'saved_maze' to 'saved_maze.json'".to_string());
+    #[rustfmt::skip]
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'V', true, "", "saved_maze", false, false);
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
@@ -674,35 +723,21 @@ fn should_be_able_to_save_maze() -> Result<(), Box<dyn Error>> {
 #[test]
 fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
-    println!("should_be_able_to_save_new_maze_as_and_overwrite - started");
     delete_files_with_ext(".", "json")?;
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
-    mock_app.add_input_key('Z', true);
-    expected_output.push("Current name is ''".to_string());
-    expected_output.push("Enter name of maze to save as: ".to_string());
-    mock_app.add_input_line("first_name", false);
-    expected_output.push("Saved 'first_name' to 'first_name.json'".to_string());
+    #[rustfmt::skip]
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'Z', true, "", "first_name", false, false);
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
-    mock_app.add_input_key('Z', false);
-    expected_output.push("Current name is 'first_name'".to_string());
-    expected_output.push("Enter name of maze to save as: ".to_string());
-    mock_app.add_input_line("second_name", false);
-    expected_output.push("Saved 'second_name' to 'second_name.json'".to_string());
+    #[rustfmt::skip]
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'Z', false, "first_name", "second_name", false, false);
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
-    mock_app.add_input_key('Z', false);
-    expected_output.push("Current name is 'second_name'".to_string());
-    expected_output.push("Enter name of maze to save as: ".to_string());
-    mock_app.add_input_line("first_name", false);
-    expected_output
-        .push("A maze with the name 'first_name' already exists. Overwrite it? (Y/N)".to_string());
-    mock_app.add_input_key('Y', false);
-    expected_output.push("Saved 'first_name' to 'first_name.json'".to_string());
+    #[rustfmt::skip]
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'Z', false, "second_name", "first_name", true, false);
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
-    println!("should_be_able_to_save_new_maze_as_and_overwrite - finished");
     Ok(())
 }
 
@@ -710,29 +745,25 @@ fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Erro
 fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<dyn Error>> {
     // /*
     let _guard = TEST_MUTEX.lock().unwrap();
-    println!("should_be_able_to_save_new_maze_as_and_abandon_overwrite - started");
     delete_files_with_ext(".", "json")?;
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
-    mock_app.add_input_key('Z', true);
-    expected_output.push("Current name is ''".to_string());
-    expected_output.push("Enter name of maze to save as: ".to_string());
-    mock_app.add_input_line("first_name", false);
-    expected_output.push("Saved 'first_name' to 'first_name.json'".to_string());
+    #[rustfmt::skip]
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'Z', true, "", "first_name", false, false);
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
-    mock_app.add_input_key('Z', false);
-    expected_output.push("Current name is 'first_name'".to_string());
-    expected_output.push("Enter name of maze to save as: ".to_string());
-    mock_app.add_input_line("first_name", false);
-    expected_output
-        .push("A maze with the name 'first_name' already exists. Overwrite it? (Y/N)".to_string());
-    mock_app.add_input_key('N', false);
-    expected_output.push("Maze not saved".to_string());
+    add_save_maze_as_steps(
+        &mut mock_app,
+        &mut expected_output,
+        'Z',
+        false,
+        "first_name",
+        "first_name",
+        true,
+        true,
+    );
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
-    println!("should_be_able_to_save_new_maze_as_and_abandon_overwrite - finished");
-    //  */
     Ok(())
 }
 
@@ -743,9 +774,8 @@ fn should_be_unable_delete_when_no_mazes() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
-    mock_app.add_input_key('X', true);
-    expected_output.push("Available mazes = 0\n".to_string());
-    expected_output.push("There are no mazes available to delete".to_string());
+    #[rustfmt::skip]
+    add_delete_maze_steps(&mut mock_app, &mut expected_output, true, "", [].to_vec(), false);
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
@@ -757,22 +787,21 @@ fn should_be_only_able_to_delete_maze_after_save() -> Result<(), Box<dyn Error>>
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
-    mock_app.add_input_key('V', true);
-    expected_output.push("Current name is ''".to_string());
-    expected_output.push("Enter name of maze to save as: ".to_string());
-    mock_app.add_input_line("saved_maze", false);
-    expected_output.push("Saved 'saved_maze' to 'saved_maze.json'".to_string());
+    add_save_maze_as_steps(
+        &mut mock_app,
+        &mut expected_output,
+        'V',
+        true,
+        "",
+        "saved_maze",
+        false,
+        false,
+    );
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
-    mock_app.add_input_key('X', false);
-    expected_output.push("Available mazes = 1\n".to_string());
-    expected_output.push("1 - saved_maze".to_string());
-    expected_output.push("Enter name of maze to delete: ".to_string());
-    mock_app.add_input_line("saved_maze", false);
-    expected_output
-        .push("Are you sure you want to delete the maze 'saved_maze'? (Y/N)".to_string());
-    mock_app.add_input_key('Y', false);
-    expected_output.push("Maze deleted".to_string());
+    #[rustfmt::skip]
+    add_delete_maze_steps(&mut mock_app, &mut expected_output,
+        false, "saved_maze", ["saved_maze"].to_vec(), true);
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
@@ -784,22 +813,13 @@ fn should_not_be_able_to_delete_invalid_maze_after_save() -> Result<(), Box<dyn 
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
-    mock_app.add_input_key('V', true);
-    expected_output.push("Current name is ''".to_string());
-    expected_output.push("Enter name of maze to save as: ".to_string());
-    mock_app.add_input_line("saved_maze", false);
-    expected_output.push("Saved 'saved_maze' to 'saved_maze.json'".to_string());
+    #[rustfmt::skip]
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'V', true, "", "saved_maze", false, false);
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
-    mock_app.add_input_key('X', false);
-    expected_output.push("Available mazes = 1\n".to_string());
-    expected_output.push("1 - saved_maze".to_string());
-    expected_output.push("Enter name of maze to delete: ".to_string());
-    mock_app.add_input_line("does_not_exist", false);
-    expected_output
-        .push("Are you sure you want to delete the maze 'does_not_exist'? (Y/N)".to_string());
-    mock_app.add_input_key('Y', false);
-    expected_output.push("Failed: File or directory not found".to_string());
+    #[rustfmt::skip]
+    add_delete_maze_steps(&mut mock_app, &mut expected_output,
+        false, "does_not_exist", ["saved_maze"].to_vec(), false);
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
