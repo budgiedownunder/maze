@@ -55,8 +55,8 @@ fn delete_files_with_ext(dir: &str, extension: &str) -> std::io::Result<()> {
 }
 
 fn do_quit_and_verify(
-    mut app: MockApp,
-    mut expected_output: Vec<String>,
+    app: &mut MockApp,
+    expected_output: &mut Vec<String>,
     reset_input: bool,
 ) -> Result<(), Box<dyn Error>> {
     app.add_input_key('Q', reset_input);
@@ -68,33 +68,32 @@ fn do_quit_and_verify(
 }
 
 fn do_quit_run_and_verify(
-    app: MockApp,
-    mut expected_output: Vec<String>,
+    app: &mut MockApp,
+    expected_output: &mut Vec<String>,
 ) -> Result<(), Box<dyn Error>> {
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     do_quit_and_verify(app, expected_output, false)?;
     Ok(())
 }
 
-//fn add_press_any_key_steps(mut app: MockApp, mut expected_output: Vec<String>) {
-//    expected_output.push(MockApp::get_press_any_key_text().to_string());
-//    app.add_input_key(' ', false);
-//}
-
-fn do_press_any_key_quit_run_and_verify(
-    mut app: MockApp,
-    mut expected_output: Vec<String>,
-) -> Result<(), Box<dyn Error>> {
+fn add_press_any_key_steps(app: &mut MockApp, expected_output: &mut Vec<String>) {
     expected_output.push(MockApp::get_press_any_key_text().to_string());
     app.add_input_key(' ', false);
+}
+
+fn do_press_any_key_quit_run_and_verify(
+    app: &mut MockApp,
+    expected_output: &mut Vec<String>,
+) -> Result<(), Box<dyn Error>> {
+    add_press_any_key_steps(app, expected_output);
     do_quit_run_and_verify(app, expected_output)?;
     Ok(())
 }
 
 #[test]
 fn should_be_able_to_quit_on_start() -> Result<(), Box<dyn Error>> {
-    let expected_output = vec![];
-    do_quit_and_verify(MockApp::new(), expected_output, true)?;
+    let mut expected_output = vec![];
+    do_quit_and_verify(&mut MockApp::new(), &mut expected_output, true)?;
     Ok(())
 }
 
@@ -107,7 +106,7 @@ fn should_be_able_to_insert_rows_into_empty_maze() -> Result<(), Box<dyn Error>>
     expected_output.push("Number rows to insert: ".to_string());
     mock_app.add_input_line("5", false);
     expected_output.push("Success - new dimensions: 5 row(s), 0 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -132,8 +131,31 @@ fn should_prevent_insert_invalid_rows_into_empty_maze() -> Result<(), Box<dyn Er
     expected_output.push("Number rows to insert: ".to_string());
     mock_app.add_input_line("5", false);
     expected_output.push("Success - new dimensions: 5 row(s), 0 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
+}
+
+fn add_enter_number_steps(
+    app: &mut MockApp,
+    expected_output: &mut Vec<String>,
+    prompt: &str,
+    has_range: bool,
+    lower: &str,
+    upper: &str,
+    bad_values: &[&str],
+    good_value: &str,
+) {
+    for bad_value in bad_values.iter() {
+        expected_output.push(prompt.to_string());
+        app.add_input_line(bad_value, false);
+        if has_range {
+            expected_output.push(format!("Invalid value '{}' (out of bounds), please enter an integer value between {} and {} (inclusive)", bad_value, lower, upper));
+        } else {
+            expected_output.push(format!("Invalid value '{}' (out of bounds), please enter an integer value greater or equal to {}", bad_value, lower));
+        }
+    }
+    expected_output.push(prompt.to_string());
+    app.add_input_line(good_value, false);
 }
 
 #[test]
@@ -143,34 +165,28 @@ fn should_prevent_insert_invalid_rows_into_non_empty_maze() -> Result<(), Box<dy
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('I', true);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
-    //add_enter_number_steps(mock_app, expected_output, "Insert at row: ", "1", "11", ["A", "-1", "12"], "1");
-    expected_output.push("Insert at row: ".to_string());
-    mock_app.add_input_line("A", false);
-    expected_output.push("Invalid value 'A' (out of bounds), please enter an integer value between 1 and 11 (inclusive)".to_string());
-    expected_output.push("Insert at row: ".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 11 (inclusive)".to_string());
-    expected_output.push("Insert at row: ".to_string());
-    mock_app.add_input_line("12", false);
-    expected_output.push("Invalid value '12' (out of bounds), please enter an integer value between 1 and 11 (inclusive)".to_string());
-    expected_output.push("Insert at row: ".to_string());
-    mock_app.add_input_line("1", false);
-    expected_output.push("Number rows to insert: ".to_string());
-    mock_app.add_input_line("B", false);
-    expected_output.push(
-        "Invalid value 'B' (out of bounds), please enter an integer value greater or equal to 0"
-            .to_string(),
+    add_enter_number_steps(
+        &mut mock_app,
+        &mut expected_output,
+        "Insert at row: ",
+        true,
+        "1",
+        "11",
+        &["A", "-1", "12"],
+        "1",
     );
-    expected_output.push("Number rows to insert: ".to_string());
-    mock_app.add_input_line("-2", false);
-    expected_output.push(
-        "Invalid value '-2' (out of bounds), please enter an integer value greater or equal to 0"
-            .to_string(),
+    add_enter_number_steps(
+        &mut mock_app,
+        &mut expected_output,
+        "Number rows to insert: ",
+        false,
+        "0",
+        "",
+        &["B", "-2"],
+        "5",
     );
-    expected_output.push("Number rows to insert: ".to_string());
-    mock_app.add_input_line("5", false);
     expected_output.push("Success - new dimensions: 15 row(s), 5 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -181,7 +197,7 @@ fn should_not_be_able_to_delete_rows_from_empty_maze() -> Result<(), Box<dyn Err
     mock_app.add_input_key('D', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
     expected_output.push("Definition is empty - no rows to delete".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -192,30 +208,28 @@ fn should_not_be_able_to_delete_invalid_rows_from_non_empty_maze() -> Result<(),
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('D', true);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
-    expected_output.push("Delete rows from: ".to_string());
-    mock_app.add_input_line("A", false);
-    expected_output.push("Invalid value 'A' (out of bounds), please enter an integer value between 1 and 10 (inclusive)".to_string());
-    expected_output.push("Delete rows from: ".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 10 (inclusive)".to_string());
-    expected_output.push("Delete rows from: ".to_string());
-    mock_app.add_input_line("11", false);
-    expected_output.push("Invalid value '11' (out of bounds), please enter an integer value between 1 and 10 (inclusive)".to_string());
-    expected_output.push("Delete rows from: ".to_string());
-    mock_app.add_input_line("3", false);
-    expected_output.push("Number rows to delete: ".to_string());
-    mock_app.add_input_line("A", false);
-    expected_output.push("Invalid value 'A' (out of bounds), please enter an integer value between 1 and 8 (inclusive)".to_string());
-    expected_output.push("Number rows to delete: ".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 8 (inclusive)".to_string());
-    expected_output.push("Number rows to delete: ".to_string());
-    mock_app.add_input_line("11", false);
-    expected_output.push("Invalid value '11' (out of bounds), please enter an integer value between 1 and 8 (inclusive)".to_string());
-    expected_output.push("Number rows to delete: ".to_string());
-    mock_app.add_input_line("4", false);
+    add_enter_number_steps(
+        &mut mock_app,
+        &mut expected_output,
+        "Delete rows from: ",
+        true,
+        "1",
+        "10",
+        &["A", "-1", "11"],
+        "3",
+    );
+    add_enter_number_steps(
+        &mut mock_app,
+        &mut expected_output,
+        "Number rows to delete: ",
+        true,
+        "1",
+        "8",
+        &["A", "-1", "9"],
+        "4",
+    );
     expected_output.push("Success - new dimensions: 6 row(s), 5 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -227,7 +241,7 @@ fn should_not_be_able_to_insert_cols_into_empty_maze() -> Result<(), Box<dyn Err
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
     expected_output
         .push("Definition is empty - insert some rows before adding columns".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -264,7 +278,7 @@ fn should_prevent_insert_invalid_cols_into_non_empty_maze() -> Result<(), Box<dy
     expected_output.push("Number columns to insert: ".to_string());
     mock_app.add_input_line("7", false);
     expected_output.push("Success - new dimensions: 10 row(s), 12 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -275,7 +289,7 @@ fn should_not_be_able_to_delete_cols_from_empty_maze() -> Result<(), Box<dyn Err
     mock_app.add_input_key('L', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
     expected_output.push("Definition has no columns to delete".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -309,7 +323,7 @@ fn should_not_be_able_to_delete_invalid_cols_from_non_empty_maze() -> Result<(),
     expected_output.push("Number columns to delete: ".to_string());
     mock_app.add_input_line("2", false);
     expected_output.push("Success - new dimensions: 10 row(s), 3 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -328,7 +342,7 @@ fn run_set_endpoint_test_in_empty_maze(
     expected_output.push(operation_message);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
     expected_output.push(expected_error_message);
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -378,8 +392,7 @@ fn run_modify_endpoint_test(
     expected_output.push("Invalid value '6' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
     expected_output.push("Column:".to_string());
     mock_app.add_input_line("3", false);
-    expected_output.push(MockApp::get_press_any_key_text().to_string());
-    mock_app.add_input_key(' ', false);
+    add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('P', false);
     expected_output.push("Current dimensions: 3 row(s), 5 column(s)".to_string());
@@ -387,7 +400,7 @@ fn run_modify_endpoint_test(
     expected_output.push("░░░░░".to_string());
     expected_output.push(modified_row);
     expected_output.push("░░░░░".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -407,7 +420,7 @@ fn should_not_be_able_to_set_walls_in_empty_maze() -> Result<(), Box<dyn Error>>
     expected_output.push(
         "Maze has no cells - add some rows and columns first before modifying walls".to_string(),
     );
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -467,8 +480,7 @@ fn run_modify_walls_test(
     expected_output.push("Invalid value '6' (out of bounds), please enter an integer value between 1 and 5 (inclusive)".to_string());
     expected_output.push("End column:".to_string());
     mock_app.add_input_line("4", false);
-    expected_output.push(MockApp::get_press_any_key_text().to_string());
-    mock_app.add_input_key(' ', false);
+    add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('P', false);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
@@ -483,7 +495,7 @@ fn run_modify_walls_test(
     expected_output.push("░░░░░".to_string());
     expected_output.push("░░░░░".to_string());
     expected_output.push("░░░░░".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -503,7 +515,7 @@ fn should_not_be_able_to_clear_walls_in_empty_maze() -> Result<(), Box<dyn Error
     expected_output.push(
         "Maze has no cells - add some rows and columns first before modifying walls".to_string(),
     );
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -524,7 +536,7 @@ fn should_be_able_to_resize_maze() -> Result<(), Box<dyn Error>> {
     expected_output.push("Enter new column count: ".to_string());
     mock_app.add_input_line("10", false);
     expected_output.push("Success - new dimensions: 5 row(s), 10 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -538,7 +550,7 @@ fn should_be_able_to_empty_maze() -> Result<(), Box<dyn Error>> {
         .push("Set maze to empty? [current dimensions: 10 row(s), 5 column(s)] (Y/N)".to_string());
     mock_app.add_input_key('Y', false);
     expected_output.push("Maze set to empty".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -548,7 +560,7 @@ fn should_not_be_able_to_solve_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('S', true);
     expected_output.push("Failed to solve maze: no start cell found within maze".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -563,7 +575,7 @@ fn should_not_be_able_to_solve_maze_with_no_start_cell() -> Result<(), Box<dyn E
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('S', true);
     expected_output.push("Failed to solve maze: no start cell found within maze".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -578,7 +590,7 @@ fn should_not_be_able_to_solve_maze_with_no_finish_cell() -> Result<(), Box<dyn 
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('S', true);
     expected_output.push("Failed to solve maze: no finish cell found within maze".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -598,7 +610,7 @@ fn should_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
     expected_output.push("S█→F█".to_string());
     expected_output.push("↓█↑█░".to_string());
     expected_output.push("→→↑█░".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -615,7 +627,7 @@ fn should_not_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('S', true);
     expected_output.push("Failed to solve maze: no solution found".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -628,7 +640,7 @@ fn should_be_able_to_print_empty_maze() -> Result<(), Box<dyn Error>> {
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
     expected_output.push("\nDefinition:\n".to_string());
     expected_output.push("Maze is empty".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -642,7 +654,7 @@ fn should_be_able_to_print_maze_with_content() -> Result<(), Box<dyn Error>> {
     expected_output.push("\nDefinition:\n".to_string());
     expected_output.push("░░░".to_string());
     expected_output.push("░░░".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -657,7 +669,7 @@ fn should_not_be_able_to_open_non_existant_maze() -> Result<(), Box<dyn Error>> 
     expected_output.push("Enter name of maze to open: ".to_string());
     mock_app.add_input_line("does_not_exist", false);
     expected_output.push("Failed: File or directory not found".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -670,7 +682,7 @@ fn should_be_no_mazes_listed() -> Result<(), Box<dyn Error>> {
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('U', true);
     expected_output.push("Available mazes = 0\n".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -686,13 +698,12 @@ fn should_be_mazes_listed_after_save() -> Result<(), Box<dyn Error>> {
     expected_output.push("Enter name of maze to save as: ".to_string());
     mock_app.add_input_line("saved_maze", false);
     expected_output.push("Saved 'saved_maze' to 'saved_maze.json'".to_string());
-    expected_output.push(MockApp::get_press_any_key_text().to_string());
-    mock_app.add_input_key(' ', false);
+    add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('U', false);
     expected_output.push("Available mazes = 1\n".to_string());
     expected_output.push("1 - saved_maze".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -708,15 +719,14 @@ fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
     expected_output.push("Enter name of maze to save as: ".to_string());
     mock_app.add_input_line("saved_maze", false);
     expected_output.push("Saved 'saved_maze' to 'saved_maze.json'".to_string());
-    expected_output.push(MockApp::get_press_any_key_text().to_string());
-    mock_app.add_input_key(' ', false);
+    add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('O', false);
     expected_output.push("Enter name of maze to open: ".to_string());
     mock_app.add_input_line("saved_maze", false);
     expected_output
         .push("Maze 'saved_maze' successfully loaded from 'saved_maze.json'".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -732,7 +742,7 @@ fn should_be_able_to_save_maze() -> Result<(), Box<dyn Error>> {
     expected_output.push("Enter name of maze to save as: ".to_string());
     mock_app.add_input_line("saved_maze", false);
     expected_output.push("Saved 'saved_maze' to 'saved_maze.json'".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -748,16 +758,14 @@ fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Erro
     expected_output.push("Enter name of maze to save as: ".to_string());
     mock_app.add_input_line("first_name", false);
     expected_output.push("Saved 'first_name' to 'first_name.json'".to_string());
-    expected_output.push(MockApp::get_press_any_key_text().to_string());
-    mock_app.add_input_key(' ', false);
+    add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('Z', false);
     expected_output.push("Current name is 'first_name'".to_string());
     expected_output.push("Enter name of maze to save as: ".to_string());
     mock_app.add_input_line("second_name", false);
     expected_output.push("Saved 'second_name' to 'second_name.json'".to_string());
-    expected_output.push(MockApp::get_press_any_key_text().to_string());
-    mock_app.add_input_key(' ', false);
+    add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('Z', false);
     expected_output.push("Current name is 'second_name'".to_string());
@@ -767,7 +775,7 @@ fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Erro
         .push("A maze with the name 'first_name' already exists. Overwrite it? (Y/N)".to_string());
     mock_app.add_input_key('Y', false);
     expected_output.push("Saved 'first_name' to 'first_name.json'".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -783,8 +791,7 @@ fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<
     expected_output.push("Enter name of maze to save as: ".to_string());
     mock_app.add_input_line("first_name", false);
     expected_output.push("Saved 'first_name' to 'first_name.json'".to_string());
-    expected_output.push(MockApp::get_press_any_key_text().to_string());
-    mock_app.add_input_key(' ', false);
+    add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('Z', false);
     expected_output.push("Current name is 'first_name'".to_string());
@@ -794,7 +801,7 @@ fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<
         .push("A maze with the name 'first_name' already exists. Overwrite it? (Y/N)".to_string());
     mock_app.add_input_key('N', false);
     expected_output.push("Maze not saved".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -808,7 +815,7 @@ fn should_be_unable_delete_when_no_mazes() -> Result<(), Box<dyn Error>> {
     mock_app.add_input_key('X', true);
     expected_output.push("Available mazes = 0\n".to_string());
     expected_output.push("There are no mazes available to delete".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -824,8 +831,7 @@ fn should_be_only_able_to_delete_maze_after_save() -> Result<(), Box<dyn Error>>
     expected_output.push("Enter name of maze to save as: ".to_string());
     mock_app.add_input_line("saved_maze", false);
     expected_output.push("Saved 'saved_maze' to 'saved_maze.json'".to_string());
-    expected_output.push(MockApp::get_press_any_key_text().to_string());
-    mock_app.add_input_key(' ', false);
+    add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('X', false);
     expected_output.push("Available mazes = 1\n".to_string());
@@ -836,7 +842,7 @@ fn should_be_only_able_to_delete_maze_after_save() -> Result<(), Box<dyn Error>>
         .push("Are you sure you want to delete the maze 'saved_maze'? (Y/N)".to_string());
     mock_app.add_input_key('Y', false);
     expected_output.push("Maze deleted".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
 
@@ -852,8 +858,7 @@ fn should_not_be_able_to_delete_invalid_maze_after_save() -> Result<(), Box<dyn 
     expected_output.push("Enter name of maze to save as: ".to_string());
     mock_app.add_input_line("saved_maze", false);
     expected_output.push("Saved 'saved_maze' to 'saved_maze.json'".to_string());
-    expected_output.push(MockApp::get_press_any_key_text().to_string());
-    mock_app.add_input_key(' ', false);
+    add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('X', false);
     expected_output.push("Available mazes = 1\n".to_string());
@@ -864,6 +869,6 @@ fn should_not_be_able_to_delete_invalid_maze_after_save() -> Result<(), Box<dyn 
         .push("Are you sure you want to delete the maze 'does_not_exist'? (Y/N)".to_string());
     mock_app.add_input_key('Y', false);
     expected_output.push("Failed: File or directory not found".to_string());
-    do_press_any_key_quit_run_and_verify(mock_app, expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
