@@ -18,6 +18,10 @@ fn to_vec_strings(vec_of_str: Vec<&str>) -> Vec<String> {
     vec_of_str.iter().map(|&s| s.to_string()).collect()
 }
 
+fn vec_append_string_copies(v: &mut Vec<String>, s: &str, n: usize) {
+    v.resize(v.len() + n, s.to_string());
+}
+
 fn delete_file(file: &str) {
     let _ = fs::remove_file(file);
     let mut count = 0;
@@ -50,7 +54,6 @@ fn delete_files_with_ext(dir: &str, extension: &str) -> std::io::Result<()> {
             }
         }
     }
-    sleep(Duration::from_millis(10));
     Ok(())
 }
 
@@ -143,20 +146,12 @@ fn should_prevent_insert_invalid_rows_into_empty_maze() -> Result<(), Box<dyn Er
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('I', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
-    expected_output.push("Number rows to insert: ".to_string());
-    mock_app.add_input_line("B", false);
-    expected_output.push(
-        "Invalid value 'B' (out of bounds), please enter an integer value greater or equal to 0"
-            .to_string(),
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app, &mut expected_output,
+        "Number rows to insert: ",
+        false, "0", "", &["B", "-2"],"5",
     );
-    expected_output.push("Number rows to insert: ".to_string());
-    mock_app.add_input_line("-2", false);
-    expected_output.push(
-        "Invalid value '-2' (out of bounds), please enter an integer value greater or equal to 0"
-            .to_string(),
-    );
-    expected_output.push("Number rows to insert: ".to_string());
-    mock_app.add_input_line("5", false);
     expected_output.push("Success - new dimensions: 5 row(s), 0 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
@@ -420,16 +415,10 @@ fn run_modify_walls_test(
     mock_app.add_input_key('P', false);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
     expected_output.push("\nDefinition:\n".to_string());
-    expected_output.push("░░░░░".to_string());
-    expected_output.push("░░░░░".to_string());
-    expected_output.push(modified_row.clone());
-    expected_output.push(modified_row.clone());
-    expected_output.push(modified_row.clone());
-    expected_output.push("░░░░░".to_string());
-    expected_output.push("░░░░░".to_string());
-    expected_output.push("░░░░░".to_string());
-    expected_output.push("░░░░░".to_string());
-    expected_output.push("░░░░░".to_string());
+    let blank_row = "░░░░░".to_string();
+    vec_append_string_copies(&mut expected_output, &blank_row, 2);
+    vec_append_string_copies(&mut expected_output, &modified_row, 3);
+    vec_append_string_copies(&mut expected_output, &blank_row, 5);
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
@@ -587,8 +576,7 @@ fn should_be_able_to_print_maze_with_content() -> Result<(), Box<dyn Error>> {
     mock_app.add_input_key('P', true);
     expected_output.push("Current dimensions: 2 row(s), 3 column(s)".to_string());
     expected_output.push("\nDefinition:\n".to_string());
-    expected_output.push("░░░".to_string());
-    expected_output.push("░░░".to_string());
+    vec_append_string_copies(&mut expected_output, "░░░", 2);
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
@@ -645,6 +633,7 @@ fn should_be_mazes_listed_after_save() -> Result<(), Box<dyn Error>> {
 #[test]
 fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
+    println!("should_be_able_to_open_a_saved_maze - started");
     delete_files_with_ext(".", "json")?;
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
@@ -662,6 +651,7 @@ fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
     expected_output
         .push("Maze 'saved_maze' successfully loaded from 'saved_maze.json'".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    println!("should_be_able_to_open_a_saved_maze - finished");
     Ok(())
 }
 
@@ -684,6 +674,7 @@ fn should_be_able_to_save_maze() -> Result<(), Box<dyn Error>> {
 #[test]
 fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
+    println!("should_be_able_to_save_new_maze_as_and_overwrite - started");
     delete_files_with_ext(".", "json")?;
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
@@ -711,12 +702,15 @@ fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Erro
     mock_app.add_input_key('Y', false);
     expected_output.push("Saved 'first_name' to 'first_name.json'".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    println!("should_be_able_to_save_new_maze_as_and_overwrite - finished");
     Ok(())
 }
 
 #[test]
 fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<dyn Error>> {
+    // /*
     let _guard = TEST_MUTEX.lock().unwrap();
+    println!("should_be_able_to_save_new_maze_as_and_abandon_overwrite - started");
     delete_files_with_ext(".", "json")?;
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
@@ -737,6 +731,8 @@ fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<
     mock_app.add_input_key('N', false);
     expected_output.push("Maze not saved".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    println!("should_be_able_to_save_new_maze_as_and_abandon_overwrite - finished");
+    //  */
     Ok(())
 }
 
