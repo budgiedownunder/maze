@@ -38,7 +38,9 @@ jobs:
       run: cargo build --verbose
       
     - name: Test
-      run: cargo test
+      run: |
+        cargo test -p maze
+        cargo test -p maze_cli -- --test-threads=1 
 
     - name: Benchmark
       run: |
