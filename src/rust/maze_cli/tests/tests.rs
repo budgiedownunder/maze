@@ -90,6 +90,29 @@ fn do_press_any_key_quit_run_and_verify(
     Ok(())
 }
 
+fn add_enter_number_steps(
+    app: &mut MockApp,
+    expected_output: &mut Vec<String>,
+    prompt: &str,
+    has_range: bool,
+    lower: &str,
+    upper: &str,
+    bad_values: &[&str],
+    good_value: &str,
+) {
+    for bad_value in bad_values.iter() {
+        expected_output.push(prompt.to_string());
+        app.add_input_line(bad_value, false);
+        if has_range {
+            expected_output.push(format!("Invalid value '{}' (out of bounds), please enter an integer value between {} and {} (inclusive)", bad_value, lower, upper));
+        } else {
+            expected_output.push(format!("Invalid value '{}' (out of bounds), please enter an integer value greater or equal to {}", bad_value, lower));
+        }
+    }
+    expected_output.push(prompt.to_string());
+    app.add_input_line(good_value, false);
+}
+
 #[test]
 fn should_be_able_to_quit_on_start() -> Result<(), Box<dyn Error>> {
     let mut expected_output = vec![];
@@ -103,8 +126,12 @@ fn should_be_able_to_insert_rows_into_empty_maze() -> Result<(), Box<dyn Error>>
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('I', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
-    expected_output.push("Number rows to insert: ".to_string());
-    mock_app.add_input_line("5", false);
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app, &mut expected_output,
+        "Number rows to insert: ",
+        false, "0", "", &[],"5",
+    );
     expected_output.push("Success - new dimensions: 5 row(s), 0 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
@@ -135,29 +162,6 @@ fn should_prevent_insert_invalid_rows_into_empty_maze() -> Result<(), Box<dyn Er
     Ok(())
 }
 
-fn add_enter_number_steps(
-    app: &mut MockApp,
-    expected_output: &mut Vec<String>,
-    prompt: &str,
-    has_range: bool,
-    lower: &str,
-    upper: &str,
-    bad_values: &[&str],
-    good_value: &str,
-) {
-    for bad_value in bad_values.iter() {
-        expected_output.push(prompt.to_string());
-        app.add_input_line(bad_value, false);
-        if has_range {
-            expected_output.push(format!("Invalid value '{}' (out of bounds), please enter an integer value between {} and {} (inclusive)", bad_value, lower, upper));
-        } else {
-            expected_output.push(format!("Invalid value '{}' (out of bounds), please enter an integer value greater or equal to {}", bad_value, lower));
-        }
-    }
-    expected_output.push(prompt.to_string());
-    app.add_input_line(good_value, false);
-}
-
 #[test]
 fn should_prevent_insert_invalid_rows_into_non_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = MockApp::new();
@@ -165,25 +169,17 @@ fn should_prevent_insert_invalid_rows_into_non_empty_maze() -> Result<(), Box<dy
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('I', true);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
+    #[rustfmt::skip]
     add_enter_number_steps(
-        &mut mock_app,
-        &mut expected_output,
+        &mut mock_app,&mut expected_output,
         "Insert at row: ",
-        true,
-        "1",
-        "11",
-        &["A", "-1", "12"],
-        "1",
+        true, "1", "11", &["A", "-1", "12"], "1"
     );
+    #[rustfmt::skip]
     add_enter_number_steps(
-        &mut mock_app,
-        &mut expected_output,
+        &mut mock_app,&mut expected_output,
         "Number rows to insert: ",
-        false,
-        "0",
-        "",
-        &["B", "-2"],
-        "5",
+        false, "0", "", &["B", "-2"],"5"
     );
     expected_output.push("Success - new dimensions: 15 row(s), 5 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
@@ -208,25 +204,17 @@ fn should_not_be_able_to_delete_invalid_rows_from_non_empty_maze() -> Result<(),
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('D', true);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
+    #[rustfmt::skip]
     add_enter_number_steps(
-        &mut mock_app,
-        &mut expected_output,
+        &mut mock_app, &mut expected_output,
         "Delete rows from: ",
-        true,
-        "1",
-        "10",
-        &["A", "-1", "11"],
-        "3",
+        true, "1", "10", &["A", "-1", "11"], "3",
     );
+    #[rustfmt::skip]
     add_enter_number_steps(
-        &mut mock_app,
-        &mut expected_output,
+        &mut mock_app,&mut expected_output,
         "Number rows to delete: ",
-        true,
-        "1",
-        "8",
-        &["A", "-1", "9"],
-        "4",
+        true, "1", "8", &["A", "-1", "9"], "4",
     );
     expected_output.push("Success - new dimensions: 6 row(s), 5 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
@@ -252,31 +240,18 @@ fn should_prevent_insert_invalid_cols_into_non_empty_maze() -> Result<(), Box<dy
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('N', true);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
-    expected_output.push("Insert at column: ".to_string());
-    mock_app.add_input_line("A", false);
-    expected_output.push("Invalid value 'A' (out of bounds), please enter an integer value between 1 and 6 (inclusive)".to_string());
-    expected_output.push("Insert at column: ".to_string());
-    mock_app.add_input_line("-1", false);
-    expected_output.push("Invalid value '-1' (out of bounds), please enter an integer value between 1 and 6 (inclusive)".to_string());
-    expected_output.push("Insert at column: ".to_string());
-    mock_app.add_input_line("12", false);
-    expected_output.push("Invalid value '12' (out of bounds), please enter an integer value between 1 and 6 (inclusive)".to_string());
-    expected_output.push("Insert at column: ".to_string());
-    mock_app.add_input_line("5", false);
-    expected_output.push("Number columns to insert: ".to_string());
-    mock_app.add_input_line("B", false);
-    expected_output.push(
-        "Invalid value 'B' (out of bounds), please enter an integer value greater or equal to 0"
-            .to_string(),
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app,&mut expected_output,
+        "Insert at column: ",
+        true, "1", "6", &["B", "-1", "12"], "5",
     );
-    expected_output.push("Number columns to insert: ".to_string());
-    mock_app.add_input_line("-2", false);
-    expected_output.push(
-        "Invalid value '-2' (out of bounds), please enter an integer value greater or equal to 0"
-            .to_string(),
+    #[rustfmt::skip]
+    add_enter_number_steps(
+        &mut mock_app,&mut expected_output,
+        "Number columns to insert: ",
+        false, "0", "", &["B", "-2"], "7",
     );
-    expected_output.push("Number columns to insert: ".to_string());
-    mock_app.add_input_line("7", false);
     expected_output.push("Success - new dimensions: 10 row(s), 12 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
