@@ -1,6 +1,6 @@
 mod console_app;
 use crate::console_app::ConsoleApp;
-use maze_cli::app::App;
+use console::app::App;
 
 // Helper functions
 //fn app_name() -> &'static str {
