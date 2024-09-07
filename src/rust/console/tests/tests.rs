@@ -2,7 +2,7 @@ mod mock_app;
 use crate::mock_app::MockApp;
 use maze::Definition;
 use maze::Maze;
-use maze_cli::app::App;
+use console::app::App;
 use std::error::Error;
 use std::fs;
 use std::path::Path;

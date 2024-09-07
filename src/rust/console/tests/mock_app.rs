@@ -1,7 +1,7 @@
 extern crate maze;
-extern crate maze_cli;
+extern crate console;
 
-use maze_cli::app::App;
+use console::app::App;
 use maze::LinePrinter;
 use maze::Maze;
 use maze::Definition;
