@@ -20,9 +20,9 @@ cd src/rust
 cargo build
 ```
 ### Run
-To run the `maze_cli` application:
+To run the `console` application:
 ```
-cd src/rust/maze_cli
+cd src/rust/console
 cargo run
 ```
 
