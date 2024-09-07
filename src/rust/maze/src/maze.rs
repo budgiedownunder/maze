@@ -17,6 +17,9 @@ use crate::Solver;
 
 /// Represents a maze
 pub struct Maze {
+    #[serde(skip_serializing, default)]
+    pub id: String,
+    pub name: String,
     /// Definition, containing the layout of the maze
     pub definition: Definition,
 }
@@ -43,11 +46,15 @@ impl Maze {
     ///    vec![' ', 'F', 'W']
     /// ];
     /// let d = Definition::from_vec(grid);
-    /// let m = Maze::new(d);
+    /// let m = Maze::new( d);
     /// assert_eq!(m.definition.row_count(), 2);
     /// assert_eq!(m.definition.col_count(), 3);
     pub fn new(definition: Definition) -> Maze {
-        Maze { definition }
+        Maze {
+            id: "".to_string(),
+            name: "".to_string(),
+            definition,
+        }
     }
     /// Resets a maze definition instance to empty
     ///
@@ -105,6 +112,8 @@ impl Maze {
     /// assert_eq!(m.definition.col_count(), 3);
     pub fn from_vec(grid: Vec<Vec<char>>) -> Self {
         Maze {
+            id: "".to_string(),
+            name: "".to_string(),
             definition: Definition::from_vec(grid),
         }
     }
@@ -156,7 +165,7 @@ impl Maze {
     /// use maze::Definition;
     /// use maze::Maze;
     /// let mut m = Maze::new(Definition::new(0, 0));
-    /// let json = r#"{"definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#;
+    /// let json = r#"{"name":"my_maze", "definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#;
     /// match m.from_json(json) {
     ///     Ok(()) => {
     ///         println!(
@@ -437,7 +446,7 @@ mod tests {
     fn can_serialize_empty() {
         let m = Maze::new(Definition::new(0, 0));
         let s = m.to_json().expect("Failed to serialize");
-        assert_eq!(s, r#"{"definition":{"grid":[]}}"#);
+        assert_eq!(s, r#"{"name":"","definition":{"grid":[]}}"#);
     }
 
     #[test]
@@ -451,14 +460,14 @@ mod tests {
         let s = m.to_json().expect("Failed to serialize");
         assert_eq!(
             s,
-            r#"{"definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#
+            r#"{"name":"","definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#
         );
     }
 
     #[test]
     fn can_deserialize_empty() {
         let mut m = Maze::new(Definition::new(10, 10));
-        let s = r#"{"definition":{"grid":[]}}"#;
+        let s = r#"{"name":"my_maze","definition":{"grid":[]}}"#;
         m.from_json(s).expect("Failed to deserialize");
         assert!(m.definition.is_empty());
     }
@@ -466,7 +475,7 @@ mod tests {
     #[test]
     fn can_deserialize_non_empty() {
         let mut m = Maze::new(Definition::new(10, 10));
-        let s = r#"{"definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#;
+        let s = r#"{"name":"my_maze","definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#;
         m.from_json(s).expect("Failed to deserialize");
         assert_eq!(m.definition.row_count(), 2);
         assert_eq!(m.definition.col_count(), 3);
