@@ -40,7 +40,7 @@ jobs:
     - name: Test
       run: |
         cargo test -p maze
-        cargo test -p maze_cli -- --test-threads=1 
+        cargo test -p console -- --test-threads=1 
 
     - name: Benchmark
       run: |
