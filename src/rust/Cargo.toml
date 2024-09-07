@@ -1,4 +1,4 @@
 [workspace]
 
-members = [ "maze", "console"]
+members = [ "maze", "maze_console"]
 resolver = "2"

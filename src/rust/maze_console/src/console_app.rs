@@ -1,7 +1,7 @@
 use maze::Definition;
 use maze::LinePrinter;
 use maze::Maze;
-use console::app::App;
+use maze_console::app::App;
 
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent};
 use std::error::Error;
