@@ -57,7 +57,7 @@ impl MockApp {
         io::Error::new(io::ErrorKind::Other, message)
     }
 
-    pub fn verify_output(&self, expected: &Vec<String>) -> Result<(), io::Error> {
+    pub fn verify_output(&self, expected: &[String]) -> Result<(), io::Error> {
         if expected.len() != self.output.len() {
             return Err(Self::io_error(
                 format!("The output and expected lines differ in length. Expected has length {}, while output has length {}.",

@@ -66,7 +66,7 @@ fn do_quit_and_verify(
     expected_output.push("Exiting...".to_string());
     app.run()?;
     delete_files_with_ext(".", "json")?;
-    app.verify_output(&expected_output)?;
+    app.verify_output(expected_output)?;
     Ok(())
 }
 
@@ -101,7 +101,7 @@ fn add_enter_number_steps(
     lower: &str,
     upper: &str,
     bad_values: &[&str],
-    good_value: &str,
+    good_value: &str
 ) {
     for bad_value in bad_values.iter() {
         expected_output.push(prompt.to_string());
@@ -124,7 +124,7 @@ fn add_save_maze_as_steps(
     current_name: &str,
     new_name: &str,
     expect_prompt_overwrite: bool,
-    abandon_overwrite: bool,
+    abandon_overwrite: bool
 ) {
     app.add_input_key(operation_key, reset_output);
     expected_output.push(format!("Current name is '{}'", current_name));
@@ -151,14 +151,14 @@ fn add_delete_maze_steps(
     reset_output: bool,
     name: &str,
     names_expected: Vec<&str>,
-    expect_exists: bool,
+    expect_exists: bool
 ) {
     app.add_input_key('X', reset_output);
     expected_output.push(format!("Available mazes = {}\n", names_expected.len()));
     for (i, name) in names_expected.iter().enumerate() {
         expected_output.push(format!("{} - {}", i + 1, name));
     }
-    if names_expected.len() > 0 {
+    if !names_expected.is_empty() {
         expected_output.push("Enter name of maze to delete: ".to_string());
         app.add_input_line(name, false);
         expected_output.push(format!(
