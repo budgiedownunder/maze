@@ -93,56 +93,108 @@ fn do_press_any_key_quit_run_and_verify(
     Ok(())
 }
 
+struct EnterNumberConfig {
+    prompt: String,
+    has_range: bool,
+    lower: String,
+    upper: String,
+    bad_values: Vec<String>,
+    good_value: String,
+}
+
+impl EnterNumberConfig {
+    pub fn new(
+        prompt: &str,
+        has_range: bool,
+        lower: &str,
+        upper: &str,
+        bad_values: &[&str],
+        good_value: &str,
+    ) -> EnterNumberConfig {
+        EnterNumberConfig {
+            prompt: prompt.to_string(),
+            has_range,
+            lower: lower.to_string(),
+            upper: upper.to_string(),
+            bad_values: to_vec_strings(bad_values.to_vec()),
+            good_value: good_value.to_string(),
+        }
+    }
+}
+
 fn add_enter_number_steps(
     app: &mut MockApp,
     expected_output: &mut Vec<String>,
-    prompt: &str,
-    has_range: bool,
-    lower: &str,
-    upper: &str,
-    bad_values: &[&str],
-    good_value: &str
+    config: &EnterNumberConfig,
 ) {
-    for bad_value in bad_values.iter() {
-        expected_output.push(prompt.to_string());
+    for bad_value in config.bad_values.iter() {
+        expected_output.push(config.prompt.to_string());
         app.add_input_line(bad_value, false);
-        if has_range {
-            expected_output.push(format!("Invalid value '{}' (out of bounds), please enter an integer value between {} and {} (inclusive)", bad_value, lower, upper));
+        if config.has_range {
+            expected_output.push(format!("Invalid value '{}' (out of bounds), please enter an integer value between {} and {} (inclusive)", 
+                bad_value, config.lower, config.upper));
         } else {
-            expected_output.push(format!("Invalid value '{}' (out of bounds), please enter an integer value greater or equal to {}", bad_value, lower));
+            expected_output.push(format!("Invalid value '{}' (out of bounds), please enter an integer value greater or equal to {}",
+                bad_value, config.lower));
         }
     }
-    expected_output.push(prompt.to_string());
-    app.add_input_line(good_value, false);
+    expected_output.push(config.prompt.to_string());
+    app.add_input_line(&config.good_value, false);
+}
+struct MazeSaveAsConfig {
+    operation_key: char,
+    reset_output: bool,
+    current_name: String,
+    new_name: String,
+    expect_prompt_overwrite: bool,
+    abandon_overwrite: bool,
+}
+
+impl MazeSaveAsConfig {
+    pub fn new(
+        operation_key: char,
+        reset_output: bool,
+        current_name: &str,
+        new_name: &str,
+        expect_prompt_overwrite: bool,
+        abandon_overwrite: bool,
+    ) -> MazeSaveAsConfig {
+        MazeSaveAsConfig {
+            operation_key,
+            reset_output,
+            current_name: current_name.to_string(),
+            new_name: new_name.to_string(),
+            expect_prompt_overwrite,
+            abandon_overwrite,
+        }
+    }
 }
 
 fn add_save_maze_as_steps(
     app: &mut MockApp,
     expected_output: &mut Vec<String>,
-    operation_key: char,
-    reset_output: bool,
-    current_name: &str,
-    new_name: &str,
-    expect_prompt_overwrite: bool,
-    abandon_overwrite: bool
+    config: &MazeSaveAsConfig,
 ) {
-    app.add_input_key(operation_key, reset_output);
-    expected_output.push(format!("Current name is '{}'", current_name));
+    app.add_input_key(config.operation_key, config.reset_output);
+    expected_output.push(format!("Current name is '{}'", config.current_name));
     expected_output.push("Enter name of maze to save as: ".to_string());
-    app.add_input_line(new_name, false);
-    if expect_prompt_overwrite {
+    app.add_input_line(&config.new_name, false);
+    if config.expect_prompt_overwrite {
         expected_output.push(format!(
             "A maze with the name '{}' already exists. Overwrite it? (Y/N)",
-            new_name
+            config.new_name
         ));
-        if abandon_overwrite {
+        if config.abandon_overwrite {
             app.add_input_key('N', false);
             expected_output.push("Maze not saved".to_string());
             return;
         }
         app.add_input_key('Y', false);
     }
-    expected_output.push(format!("Saved '{}' to '{}.json'", new_name, new_name));
+    expected_output.push(format!(
+        "Saved '{}' to '{}.json'",
+        config.new_name, config.new_name
+    ));
 }
 
 fn add_delete_maze_steps(
@@ -151,7 +203,7 @@ fn add_delete_maze_steps(
     reset_output: bool,
     name: &str,
     names_expected: Vec<&str>,
-    expect_exists: bool
+    expect_exists: bool,
 ) {
     app.add_input_key('X', reset_output);
     expected_output.push(format!("Available mazes = {}\n", names_expected.len()));
@@ -192,8 +244,8 @@ fn should_be_able_to_insert_rows_into_empty_maze() -> Result<(), Box<dyn Error>>
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app, &mut expected_output,
-        "Number rows to insert: ",
-        false, "0", "", &[],"5",
+        &EnterNumberConfig::new("Number rows to insert: ",
+            false, "0", "", &[],"5")
     );
     expected_output.push("Success - new dimensions: 5 row(s), 0 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
@@ -209,8 +261,8 @@ fn should_prevent_insert_invalid_rows_into_empty_maze() -> Result<(), Box<dyn Er
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app, &mut expected_output,
-        "Number rows to insert: ",
-        false, "0", "", &["B", "-2"],"5",
+        &EnterNumberConfig::new("Number rows to insert: ",
+            false, "0", "", &["B", "-2"],"5")
     );
     expected_output.push("Success - new dimensions: 5 row(s), 0 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
@@ -227,14 +279,14 @@ fn should_prevent_insert_invalid_rows_into_non_empty_maze() -> Result<(), Box<dy
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
-        "Insert at row: ",
-        true, "1", "11", &["A", "-1", "12"], "1"
+        &EnterNumberConfig::new("Insert at row: ",
+            true, "1", "11", &["A", "-1", "12"], "1")
     );
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
-        "Number rows to insert: ",
-        false, "0", "", &["B", "-2"],"5"
+        &EnterNumberConfig::new("Number rows to insert: ",
+            false, "0", "", &["B", "-2"],"5")
     );
     expected_output.push("Success - new dimensions: 15 row(s), 5 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
@@ -262,14 +314,14 @@ fn should_not_be_able_to_delete_invalid_rows_from_non_empty_maze() -> Result<(),
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app, &mut expected_output,
-        "Delete rows from: ",
-        true, "1", "10", &["A", "-1", "11"], "3"
+        &EnterNumberConfig::new("Delete rows from: ",
+            true, "1", "10", &["A", "-1", "11"], "3")
     );
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
-        "Number rows to delete: ",
-        true, "1", "8", &["A", "-1", "9"], "4"
+        &EnterNumberConfig::new("Number rows to delete: ",
+            true, "1", "8", &["A", "-1", "9"], "4")
     );
     expected_output.push("Success - new dimensions: 6 row(s), 5 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
@@ -298,14 +350,14 @@ fn should_prevent_insert_invalid_cols_into_non_empty_maze() -> Result<(), Box<dy
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
-        "Insert at column: ",
-        true, "1", "6", &["B", "-1", "12"], "5"
+        &EnterNumberConfig::new("Insert at column: ",
+            true, "1", "6", &["B", "-1", "12"], "5")
     );
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
-        "Number columns to insert: ",
-        false, "0", "", &["B", "-2"], "7"
+        &EnterNumberConfig::new("Number columns to insert: ",
+            false, "0", "", &["B", "-2"], "7")
     );
     expected_output.push("Success - new dimensions: 10 row(s), 12 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
@@ -333,14 +385,14 @@ fn should_not_be_able_to_delete_invalid_cols_from_non_empty_maze() -> Result<(),
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
-        "Delete columns from: ",
-        true, "1", "5", &["A", "-1", "6"], "4"
+        &EnterNumberConfig::new("Delete columns from: ",
+            true, "1", "5", &["A", "-1", "6"], "4")
     );
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
-        "Number columns to delete: ",
-        true, "1", "2", &["A", "-1", "4"], "2"
+        &EnterNumberConfig::new("Number columns to delete: ",
+            true, "1", "2", &["A", "-1", "4"], "2")
     );
     expected_output.push("Success - new dimensions: 10 row(s), 3 column(s)".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
@@ -393,14 +445,14 @@ fn run_modify_endpoint_test(
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
-        "Row:",
-        true, "1", "3", &["A", "-1", "11"], "2"
+        &EnterNumberConfig::new("Row:",
+            true, "1", "3", &["A", "-1", "11"], "2")
     );
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
-        "Column:",
-        true, "1", "5", &["B", "-1", "6"], "3"
+        &EnterNumberConfig::new("Column:",
+            true, "1", "5", &["B", "-1", "6"], "3")
     );
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
@@ -449,26 +501,26 @@ fn run_modify_walls_test(
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app,&mut expected_output,
-        "Start row:",
-        true, "1", "10", &["A", "-1", "11"], "3"
+        &EnterNumberConfig::new("Start row:",
+            true, "1", "10", &["A", "-1", "11"], "3")
     );
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app, &mut expected_output,
-        "Start column:",
-        true, "1", "5", &["B", "-1", "6"], "2"
+        &EnterNumberConfig::new("Start column:",
+            true, "1", "5", &["B", "-1", "6"], "2")
     );
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app, &mut expected_output,
-        "End row:",
-        true, "1", "10", &["C", "-1", "11"], "5"
+        &EnterNumberConfig::new("End row:",
+            true, "1", "10", &["C", "-1", "11"], "5")
     );
     #[rustfmt::skip]
     add_enter_number_steps(
         &mut mock_app, &mut expected_output,
-        "End column:",
-        true, "1", "5", &["D", "-1", "6"], "4"
+        &EnterNumberConfig::new("End column:",
+            true, "1", "5", &["D", "-1", "6"], "4")
     );
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
@@ -677,7 +729,8 @@ fn should_be_mazes_listed_after_save() -> Result<(), Box<dyn Error>> {
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
-    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'V', true, "", "saved_maze", false, false);
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 
+        &MazeSaveAsConfig::new('V', true, "", "saved_maze", false, false));
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('U', false);
@@ -695,7 +748,8 @@ fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
-    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'V', true, "", "saved_maze", false, false);
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 
+        &MazeSaveAsConfig::new('V', true, "", "saved_maze", false, false));
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('O', false);
@@ -715,7 +769,8 @@ fn should_be_able_to_save_maze() -> Result<(), Box<dyn Error>> {
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
-    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'V', true, "", "saved_maze", false, false);
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 
+        &MazeSaveAsConfig::new('V', true, "", "saved_maze", false, false));
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
@@ -728,15 +783,18 @@ fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Erro
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
-    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'Z', true, "", "first_name", false, false);
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 
+        &MazeSaveAsConfig::new('Z', true, "", "first_name", false, false));
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     #[rustfmt::skip]
-    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'Z', false, "first_name", "second_name", false, false);
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 
+        &MazeSaveAsConfig::new('Z', false, "first_name", "second_name", false, false));
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     #[rustfmt::skip]
-    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'Z', false, "second_name", "first_name", true, false);
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 
+        &MazeSaveAsConfig::new('Z', false, "second_name", "first_name", true, false));
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
@@ -750,19 +808,13 @@ fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
-    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'Z', true, "", "first_name", false, false);
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 
+        &MazeSaveAsConfig::new('Z', true, "", "first_name", false, false));
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
-    add_save_maze_as_steps(
-        &mut mock_app,
-        &mut expected_output,
-        'Z',
-        false,
-        "first_name",
-        "first_name",
-        true,
-        true,
-    );
+    #[rustfmt::skip]
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output,
+        &MazeSaveAsConfig::new('Z', false, "first_name", "first_name", true, true));
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
@@ -787,16 +839,9 @@ fn should_be_only_able_to_delete_maze_after_save() -> Result<(), Box<dyn Error>>
     let mut mock_app = MockApp::new();
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
-    add_save_maze_as_steps(
-        &mut mock_app,
-        &mut expected_output,
-        'V',
-        true,
-        "",
-        "saved_maze",
-        false,
-        false,
-    );
+    #[rustfmt::skip]
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output,
+        &MazeSaveAsConfig::new('V', true, "", "saved_maze", false, false));
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     #[rustfmt::skip]
@@ -814,7 +859,8 @@ fn should_not_be_able_to_delete_invalid_maze_after_save() -> Result<(), Box<dyn 
     mock_app.current_maze = Maze::new(Definition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
-    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 'V', true, "", "saved_maze", false, false);
+    add_save_maze_as_steps(&mut mock_app, &mut expected_output, 
+        &MazeSaveAsConfig::new('V', true, "", "saved_maze", false, false));
     add_press_any_key_steps(&mut mock_app, &mut expected_output);
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     #[rustfmt::skip]
