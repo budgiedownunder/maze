@@ -268,6 +268,7 @@ impl Maze {
         match serde_json::from_reader(reader) {
             Ok(result) => {
                 *self = result;
+                self.id = path.to_string();
                 Ok(())
             }
             Err(err) => Err(MazeError::from(err)),

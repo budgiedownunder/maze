@@ -43,11 +43,18 @@ pub trait App: LinePrinter {
     fn get_maze_mut(&mut self) -> &mut Maze;
     fn read_key(&mut self) -> Result<Option<char>, io::Error>;
     fn read_line(&mut self) -> Result<Option<String>, io::Error>;
-    fn get_maze_name(&self) -> String;
-    fn set_maze_name(&mut self, name: &str) -> Result<(), Box<dyn Error>>;
 
     fn get_maze_storage_id(name: &str) -> String {
         format!("{}.json", name.trim())
+    }
+
+    fn get_maze_name(&self) -> String {
+        self.get_maze().name.clone()
+    }
+
+    fn set_maze_name(&mut self, name: &str) -> Result<(), Box<dyn Error>> {
+        self.get_maze_mut().name = name.to_string();
+        Ok(())
     }
 
     fn maze_name_exists(name: &str) -> bool {
