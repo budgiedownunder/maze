@@ -52,11 +52,6 @@ pub trait App: LinePrinter {
         self.get_maze().name.clone()
     }
 
-    fn set_maze_name(&mut self, name: &str) -> Result<(), Box<dyn Error>> {
-        self.get_maze_mut().name = name.to_string();
-        Ok(())
-    }
-
     fn maze_name_exists(name: &str) -> bool {
         let path = PathBuf::from(Self::get_maze_storage_id(name));
         !name.is_empty() && stdPath::new(&path).exists()
@@ -457,12 +452,11 @@ pub trait App: LinePrinter {
 
     fn do_open(&mut self) -> Result<(), Box<dyn Error>> {
         let name = self.prompt_text("Enter name of maze to open: ")?;
-        let file_name = &Self::get_maze_storage_id(&name);
-        self.get_maze_mut().load_from_file(file_name)?;
-        self.set_maze_name(&name)?;
+        let file_id = &Self::get_maze_storage_id(&name);
+        self.get_maze_mut().load_from_file(file_id)?;
         self.print_line(&format!(
             "Maze '{}' successfully loaded from '{}'",
-            name, file_name
+            name, file_id
         ))?;
         Ok(())
     }
@@ -512,10 +506,11 @@ pub trait App: LinePrinter {
                 return Ok(());
             }
         }
-        self.set_maze_name(name)?;
-        let file_name = &Self::get_maze_storage_id(name);
-        self.get_maze().save_to_file(file_name, true)?;
-        self.print_line(&format!("Saved '{}' to '{}'", name, file_name))?;
+        let maze = self.get_maze_mut();
+        maze.name = name.to_string();
+        let file_id = &Self::get_maze_storage_id(name);
+        maze.save_to_file(file_id, true)?;
+        self.print_line(&format!("Saved '{}' to '{}'", name, file_id))?;
         Ok(())
     }
 

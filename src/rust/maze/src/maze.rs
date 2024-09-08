@@ -214,7 +214,7 @@ impl Maze {
     ///     Ok(_) => println!("Successfully saved to file: {}", path),
     ///     Err(error) => println!("Failed to save to file: {}", error)
     /// }
-    pub fn save_to_file(&self, path: &str, overwrite: bool) -> Result<(), MazeError> {
+    pub fn save_to_file(&mut self, path: &str, overwrite: bool) -> Result<(), MazeError> {
         if !overwrite {
             let os_path = PathBuf::from(path);
             if StdPath::new(&os_path).exists() {
@@ -224,6 +224,7 @@ impl Maze {
         let s = self.to_json()?;
         let mut file = File::create(path)?;
         file.write_all(s.as_bytes())?;
+        self.id = path.to_string();
         Ok(())
     }
     /// Loads a maze definition from a file
@@ -553,7 +554,7 @@ mod tests {
             vec!['S', ' ', 'W'], 
             vec!['F', ' ', 'W']
         ];
-        let m = Maze::from_vec(grid);
+        let mut m = Maze::from_vec(grid);
         let path = "./maze_1.json";
         match m.save_to_file(path, true) {
             Ok(_) => println!("Successfully saved to file: {}", path),
@@ -569,7 +570,7 @@ mod tests {
             vec!['S', ' ', 'W'], 
             vec!['F', ' ', 'W']
         ];
-        let m = Maze::from_vec(grid);
+        let mut m = Maze::from_vec(grid);
         let path = "";
         match m.save_to_file(path, true) {
             Ok(_) => panic!("Successfully saved to file: {} but did not expect to", path),
@@ -585,7 +586,7 @@ mod tests {
             vec!['S', ' ', 'W'], 
             vec!['F', ' ', 'W']
         ];
-        let m = Maze::from_vec(grid);
+        let mut m = Maze::from_vec(grid);
         let path = "./maze_2.json";
         let mut _file = File::create(path).expect("Failed to create file");
 
@@ -611,7 +612,7 @@ mod tests {
             vec!['S', ' ', 'W'],
             vec!['F', ' ', 'W']
         ];
-        let m = Maze::from_vec(grid);
+        let mut m = Maze::from_vec(grid);
         let path = "./maze_3.json";
         let mut _file = File::create(path).expect("Failed to create file");
 
@@ -633,7 +634,7 @@ mod tests {
             vec!['S', ' ', 'W'], 
             vec!['F', ' ', 'W']
         ];
-        let m1 = Maze::from_vec(grid);
+        let mut m1 = Maze::from_vec(grid);
         let path = "./maze_4.json";
         match m1.save_to_file(path, true) {
             Ok(_) => {}
