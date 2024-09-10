@@ -1,5 +1,7 @@
 use std::fs;
-use std::path::{Path as stdPath, PathBuf};
+use std::fs::File;
+use std::path::{Path as StdPath, PathBuf};
+use std::io::{/*self, BufReader,*/ Write};
 
 use maze::Maze;
 
@@ -13,6 +15,20 @@ impl FileStore {
     pub fn new() -> Self {
         FileStore {}
     }
+
+    fn save_maze_to_file(&self, maze: &mut Maze, path: &str, overwrite: bool) -> Result<(), StoreError> {
+        if !overwrite {
+            let os_path = PathBuf::from(path);
+            if StdPath::new(&os_path).exists() {
+                return Err(StoreError::AlreadyExists(path.to_string()));
+            }
+        }
+        let s = maze.to_json()?;
+        let mut file = File::create(path)?;
+        file.write_all(s.as_bytes())?;
+        maze.id = path.to_string();
+        Ok(())
+    }
 }
 
 impl Store for FileStore {
@@ -20,10 +36,12 @@ impl Store for FileStore {
         format!("{}.json", name)
     }
 
-    fn create_maze(&self, _maze: &mut Maze) -> Result<(), StoreError> {
-        Err(StoreError::Other(
-            "create_maze() not implemented for FileStore".to_string(),
-        ))
+    fn create_maze(&self, maze: &mut Maze) -> Result<(), StoreError> {
+        let file_id = self.generate_maze_id(&maze.name);
+        if let Err(err) = self.save_maze_to_file(maze, &file_id, false) {
+            return Err(StoreError::from(err));
+        }
+        Ok(())
     }
 
     fn delete_maze(&self, id: &str) -> Result<(), StoreError> {
@@ -31,7 +49,11 @@ impl Store for FileStore {
     }
 
     fn update_maze(&self, maze: &mut Maze) -> Result<(), StoreError> {
-        Err(StoreError::NotFound(maze.id.clone()))
+        let file_id = self.generate_maze_id(&maze.name);
+        if let Err(err) = self.save_maze_to_file(maze, &file_id, true) {
+            return Err(StoreError::from(err));
+        }
+        Ok(())
     }
 
     fn get_maze(&self, id: &str) -> Result<Maze, StoreError> {
@@ -42,7 +64,7 @@ impl Store for FileStore {
         let file_id = self.generate_maze_id(name);
         let path = PathBuf::from(file_id.clone());
 
-        if !name.is_empty() && stdPath::new(&path).exists() {
+        if !name.is_empty() && StdPath::new(&path).exists() {
             return Ok(MazeItem {
                 id: file_id,
                 name: name.to_string(),

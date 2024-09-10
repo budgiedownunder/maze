@@ -501,14 +501,18 @@ pub trait App: LinePrinter {
                 return Ok(());
             }
         }
-        let file_id = {
+        {
             let maze = self.get_maze_mut();
             maze.name = name.to_string();
-            self.get_maze_storage_id(name)
-        };
-        let maze = self.get_maze_mut();
-        maze.save_to_file(&file_id, true)?;
-        self.print_line(&format!("Saved '{}' to '{}'", name, file_id))?;
+        }
+        let mut maze = self.get_maze().clone();
+        if !name_exists {
+            self.get_store().create_maze(&mut maze)?;
+        } else {
+            self.get_store().update_maze(&mut maze)?;
+        }
+        *self.get_maze_mut() = maze.clone();
+        self.print_line(&format!("Saved '{}' to '{}'", name, maze.id))?;
         Ok(())
     }
 
