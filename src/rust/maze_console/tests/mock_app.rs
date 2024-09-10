@@ -1,3 +1,6 @@
+use std::collections::VecDeque;
+use std::io::{self};
+
 extern crate maze;
 extern crate maze_console;
 
@@ -6,8 +9,7 @@ use maze::LinePrinter;
 use maze::Maze;
 use maze::Definition;
 
-use std::collections::VecDeque;
-use std::io::{self};
+use storage::{Store, get_store};
 
 struct MockInputKey {
     key: char,
@@ -20,6 +22,7 @@ struct MockInputLine {
 }
 
 pub struct MockApp {
+    store: Box<dyn Store>,
     input_keys: VecDeque<MockInputKey>,
     input_lines: VecDeque<MockInputLine>,
     output: Vec<String>,
@@ -27,8 +30,9 @@ pub struct MockApp {
 }
 
 impl MockApp {
-    pub fn new() -> MockApp {
+    pub fn new(store: Box<dyn Store>) -> MockApp {
         MockApp {
+            store,
             input_keys: VecDeque::new(),
             input_lines: VecDeque::new(),
             output: Vec::new(),
@@ -83,11 +87,22 @@ impl MockApp {
 
 impl Default for MockApp {
     fn default() -> Self {
-             Self::new()
-         }
-     }
+        match get_store(storage::StoreType::File) {
+            Ok(store) => {
+                Self::new(store)
+            }
+            Err(error) => {
+                panic!("{}", format!("Failed to initialise default mock app status: {}", error));
+            }
+        }
+    }
+}
 
 impl App for MockApp {
+    fn get_store(&mut self) -> &mut Box<dyn Store> {
+        &mut self.store
+    }
+
     fn get_maze(&self) -> &Maze {
         &self.current_maze
     }

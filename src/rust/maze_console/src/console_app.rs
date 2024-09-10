@@ -1,26 +1,35 @@
-use maze::Definition;
-use maze::LinePrinter;
-use maze::Maze;
-use maze_console::app::App;
-
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent};
 use std::io::{self};
 use std::thread;
 use std::time::Duration;
 
+use maze::Definition;
+use maze::LinePrinter;
+use maze::Maze;
+use maze_console::app::App;
+
+use storage::Store;
+
 pub struct ConsoleApp {
+    store: Box<dyn Store>,
     current_maze: Maze,
 }
 
 impl ConsoleApp {
-    pub fn new() -> ConsoleApp {
+    pub fn new(store: Box<dyn Store>) -> ConsoleApp {
         ConsoleApp {
+            store,
             current_maze: Maze::new(Definition::new(0, 0)),
         }
     }
 }
 
 impl App for ConsoleApp {
+
+    fn get_store(&mut self) -> &mut Box<dyn Store> {
+        &mut self.store
+    }
+
     fn get_maze(&self) -> &Maze {
         &self.current_maze
     }

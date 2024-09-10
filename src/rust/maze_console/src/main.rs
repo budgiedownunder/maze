@@ -1,6 +1,7 @@
 mod console_app;
 use crate::console_app::ConsoleApp;
 use maze_console::app::App;
+use storage::get_store;
 
 // Helper functions
 //fn app_name() -> &'static str {
@@ -8,7 +9,8 @@ use maze_console::app::App;
 //}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut app = ConsoleApp::new();
+    let store = get_store(storage::StoreType::File)?;
+    let mut app = ConsoleApp::new(store);
     app.run()?;
     Ok(())
 }
