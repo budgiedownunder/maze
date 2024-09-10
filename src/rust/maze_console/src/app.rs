@@ -48,7 +48,7 @@ pub trait App: LinePrinter {
 
     fn get_maze_storage_id(&mut self, name: &str) -> String {
         let store = self.get_store();
-        store.generate_maze_id(name)       
+        store.generate_maze_id(name)
     }
 
     fn get_maze_name(&self) -> String {
@@ -466,22 +466,11 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
-    fn get_maze_names(&self) -> Result<Vec<String>, Box<dyn Error>> {
+    fn get_maze_names(&mut self) -> Result<Vec<String>, Box<dyn Error>> {
+        let items = self.get_store().get_maze_items()?;
         let mut names: Vec<String> = Vec::new();
-        let current_dir = std::env::current_dir()?;
-
-        for entry in fs::read_dir(current_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if let Some(extension) = path.extension() {
-                if extension == "json" {
-                    if let Some(name) = path.file_stem() {
-                        if let Some(name_str) = name.to_str() {
-                            names.push(name_str.to_string());
-                        }
-                    }
-                }
-            }
+        for item in items {
+            names.push(item.name);
         }
         Ok(names)
     }
@@ -502,7 +491,7 @@ pub trait App: LinePrinter {
 
     fn save_maze(&mut self, name: &str, prompt_overwrite: bool) -> Result<(), Box<dyn Error>> {
         let name_exists = self.maze_name_exists(name);
-        if prompt_overwrite && name_exists  {
+        if prompt_overwrite && name_exists {
             let yes = self.prompt_yes_no(&format!(
                 "A maze with the name '{}' already exists. Overwrite it?",
                 name
@@ -517,7 +506,7 @@ pub trait App: LinePrinter {
             maze.name = name.to_string();
             self.get_maze_storage_id(name)
         };
-        let maze = self.get_maze_mut();    
+        let maze = self.get_maze_mut();
         maze.save_to_file(&file_id, true)?;
         self.print_line(&format!("Saved '{}' to '{}'", name, file_id))?;
         Ok(())

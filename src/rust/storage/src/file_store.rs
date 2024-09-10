@@ -1,8 +1,9 @@
+use std::fs;
 use std::path::{Path as stdPath, PathBuf};
 
 use maze::Maze;
 
-use crate::MazeDetails;
+use crate::MazeItem;
 use crate::Store;
 use crate::StoreError;
 
@@ -37,12 +38,12 @@ impl Store for FileStore {
         Err(StoreError::NotFound(id.to_string()))
     }
 
-    fn find_maze_by_name(&mut self, name: &str) -> Result<MazeDetails, StoreError> {
+    fn find_maze_by_name(&mut self, name: &str) -> Result<MazeItem, StoreError> {
         let file_id = self.generate_maze_id(name);
         let path = PathBuf::from(file_id.clone());
 
         if !name.is_empty() && stdPath::new(&path).exists() {
-            return Ok(MazeDetails {
+            return Ok(MazeItem {
                 id: file_id,
                 name: name.to_string(),
             });
@@ -50,7 +51,28 @@ impl Store for FileStore {
         Err(StoreError::NotFound(name.to_string()))
     }
 
-    fn get_maze_items(&self) -> Result<Vec<MazeDetails>, StoreError> {
-        Ok(vec![])
+    fn get_maze_items(&self) -> Result<Vec<MazeItem>, StoreError> {
+        let mut items: Vec<MazeItem> = Vec::new();
+        let current_dir = std::env::current_dir()?;
+
+        for entry in fs::read_dir(current_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if let Some(path_str) = path.to_str() {
+                if let Some(extension) = path.extension() {
+                    if extension == "json" {
+                        if let Some(name) = path.file_stem() {
+                            if let Some(name_str) = name.to_str() {
+                                items.push(MazeItem {
+                                    id: path_str.to_string(),
+                                    name: name_str.to_string(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(items)
     }
 }
