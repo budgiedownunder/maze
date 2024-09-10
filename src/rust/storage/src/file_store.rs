@@ -1,7 +1,7 @@
 use std::fs;
 use std::fs::File;
-use std::path::{Path as StdPath, PathBuf};
 use std::io::{/*self, BufReader,*/ Write};
+use std::path::{Path as StdPath, PathBuf};
 
 use maze::Maze;
 
@@ -16,7 +16,12 @@ impl FileStore {
         FileStore {}
     }
 
-    fn save_maze_to_file(&self, maze: &mut Maze, path: &str, overwrite: bool) -> Result<(), StoreError> {
+    fn save_maze_to_file(
+        &self,
+        maze: &mut Maze,
+        path: &str,
+        overwrite: bool,
+    ) -> Result<(), StoreError> {
         if !overwrite {
             let os_path = PathBuf::from(path);
             if StdPath::new(&os_path).exists() {
@@ -38,9 +43,7 @@ impl Store for FileStore {
 
     fn create_maze(&self, maze: &mut Maze) -> Result<(), StoreError> {
         let file_id = self.generate_maze_id(&maze.name);
-        if let Err(err) = self.save_maze_to_file(maze, &file_id, false) {
-            return Err(StoreError::from(err));
-        }
+        self.save_maze_to_file(maze, &file_id, false)?;
         Ok(())
     }
 
@@ -50,9 +53,7 @@ impl Store for FileStore {
 
     fn update_maze(&self, maze: &mut Maze) -> Result<(), StoreError> {
         let file_id = self.generate_maze_id(&maze.name);
-        if let Err(err) = self.save_maze_to_file(maze, &file_id, true) {
-            return Err(StoreError::from(err));
-        }
+        self.save_maze_to_file(maze, &file_id, true)?;
         Ok(())
     }
 
