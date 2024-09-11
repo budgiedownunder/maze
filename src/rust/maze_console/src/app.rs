@@ -46,11 +46,6 @@ pub trait App: LinePrinter {
     fn read_key(&mut self) -> Result<Option<char>, io::Error>;
     fn read_line(&mut self) -> Result<Option<String>, io::Error>;
 
-    fn get_maze_storage_id(&mut self, name: &str) -> String {
-        let store = self.get_store();
-        store.generate_maze_id(name)
-    }
-
     fn get_maze_name(&self) -> String {
         self.get_maze().name.clone()
     }
@@ -457,11 +452,13 @@ pub trait App: LinePrinter {
 
     fn do_open(&mut self) -> Result<(), Box<dyn Error>> {
         let name = self.prompt_text("Enter name of maze to open: ")?;
-        let file_id = self.get_maze_storage_id(&name);
-        self.get_maze_mut().load_from_file(&file_id)?;
+        let item = self.get_store().find_maze_by_name(&name)?;
+        let maze = self.get_store().get_maze(&item.id)?;
+        let id = maze.id.clone();
+        *self.get_maze_mut() = maze;
         self.print_line(&format!(
             "Maze '{}' successfully loaded from '{}'",
-            name, file_id
+            name, id
         ))?;
         Ok(())
     }

@@ -48,10 +48,6 @@ impl FileStore {
 }
 
 impl Store for FileStore {
-    fn generate_maze_id(&self, name: &str) -> String {
-        // TO DO - REMOVE
-        self.make_maze_id(name)
-    }
 
     fn create_maze(&self, maze: &mut Maze) -> Result<(), StoreError> {
         if maze.name.is_empty() {

@@ -7,7 +7,6 @@ pub struct MazeItem {
 }
 
 pub trait Store {
-    fn generate_maze_id(&self, name: &str) -> String; // TO DO - REMOVE
     fn create_maze(&self, maze: &mut Maze) -> Result<(), StoreError>;
     fn delete_maze(&self, id: &str) -> Result<(), StoreError>;
     fn update_maze(&self, maze: &mut Maze) -> Result<(), StoreError>;
