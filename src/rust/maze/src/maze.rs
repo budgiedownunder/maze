@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::fs::File;
-use std::io::{self, BufReader, Write};
-use std::path::{Path as StdPath, PathBuf};
+use std::io::{self};
 
 use crate::solution::Solution;
 use crate::Definition;
@@ -37,7 +35,6 @@ impl PartialEq for Maze {
         false
     }
 }
-
 
 impl Maze {
     /// Creates a new maze instance with the given definition
@@ -200,95 +197,6 @@ impl Maze {
         let temp: Maze = serde_json::from_str(json)?;
         *self = temp;
         Ok(())
-    }
-    /// Saves a maze definition to a file (as JSON), optionally overwriting any existing file
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - file path
-    /// * `overwrite` - flag indicating whether to overwrite any existing file
-    ///
-    /// # Returns
-    ///
-    /// This function will return an error if the definition cannot be saved
-    ///
-    /// # Examples
-    ///
-    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column and
-    /// then save it to the local file `my_file.json`, overwriting any existing file
-    ///
-    /// ```
-    /// use maze::Maze;
-    /// let grid: Vec<Vec<char>> = vec![
-    ///    vec!['S', ' ', 'W'],
-    ///    vec![' ', 'F', 'W']
-    /// ];
-    /// let mut m = Maze::from_vec(grid);
-    /// let path = "./my_maze.json";
-    /// match m.save_to_file(path, true) {
-    ///     Ok(_) => println!("Successfully saved to file: {}", path),
-    ///     Err(error) => println!("Failed to save to file: {}", error)
-    /// }
-    pub fn save_to_file(&mut self, path: &str, overwrite: bool) -> Result<(), MazeError> {
-        if !overwrite {
-            let os_path = PathBuf::from(path);
-            if StdPath::new(&os_path).exists() {
-                return Err(MazeError::new("file path already exists".to_string()));
-            }
-        }
-        let s = self.to_json()?;
-        let mut file = File::create(path)?;
-        file.write_all(s.as_bytes())?;
-        self.id = path.to_string();
-        Ok(())
-    }
-    /// Loads a maze definition from a file
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - file path
-    ///
-    /// # Returns
-    ///
-    /// A new maze instance
-    ///
-    /// # Examples
-    ///
-    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column and then
-    /// save it to the local file `my_file.json`, overwriting any existing file. Then attempt to reload
-    /// that file into a second maze definition.
-    ///
-    /// ```
-    /// use maze::Definition;
-    /// use maze::Maze;
-    /// let grid: Vec<Vec<char>> = vec![
-    ///    vec!['S', ' ', 'W'],
-    ///    vec![' ', 'F', 'W']
-    /// ];
-    /// let mut m1 = Maze::from_vec(grid);
-    /// let path = "./my_maze.json";
-    /// match m1.save_to_file(path, true) {
-    ///     Ok(_) => println!("Successfully saved to file: {}", path),
-    ///     Err(error) => println!("Failed to save to file: {}", error)
-    /// }
-    /// let mut m2 = Maze::new(Definition::new(0, 0));
-    /// match m2.load_from_file(path) {
-    ///     Ok(_) => {
-    ///         println!("Successfully loaded from file: {}", path);
-    ///     }
-    ///     Err(error) => println!("Failed to load from file: {} - {}", path, error)
-    /// }
-    pub fn load_from_file(&mut self, path: &str) -> Result<(), MazeError> {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
-        match serde_json::from_reader(reader) {
-            Ok(result) => {
-                *self = result;
-                self.id = path.to_string();
-                Ok(())
-            }
-            Err(err) => Err(MazeError::from(err)),
-        }
     }
     /// Attempts to solve the path between the start and end points defined within the maze instance
     ///
@@ -563,195 +471,54 @@ mod tests {
     }
 
     #[test]
-    fn can_save_to_valid_file_path() {
-        #[rustfmt::skip]
-        let grid: Vec<Vec<char>> = vec![
-            vec!['S', ' ', 'W'], 
-            vec!['F', ' ', 'W']
-        ];
-        let mut m = Maze::from_vec(grid);
-        let path = "./maze_1.json";
-        match m.save_to_file(path, true) {
-            Ok(_) => println!("Successfully saved to file: {}", path),
-            Err(error) => panic!("Failed to save to file: {}", error),
-        }
-        delete_test_file(path);
+    fn cannot_load_json_with_invalid_content_eof() {
+        run_from_json_test_with_invalid_content("{", ExpectedSerdeErrorKind::UnexpectedEof);
     }
 
     #[test]
-    fn cannot_save_to_invalid_file_path() {
-        #[rustfmt::skip]
-        let grid: Vec<Vec<char>> = vec![
-            vec!['S', ' ', 'W'], 
-            vec!['F', ' ', 'W']
-        ];
-        let mut m = Maze::from_vec(grid);
-        let path = "";
-        match m.save_to_file(path, true) {
-            Ok(_) => panic!("Successfully saved to file: {} but did not expect to", path),
-            Err(error) => assert_io_err_not_found(error),
-        }
+    fn cannot_load_json_with_invalid_content_syntax_1() {
+        run_from_json_test_with_invalid_content("{x", ExpectedSerdeErrorKind::Syntax);
     }
 
     #[test]
-    #[should_panic(expected = "file path already exists")]
-    fn cannot_save_to_existing_file_path_if_overwrite_disabled() {
-        #[rustfmt::skip]
-        let grid: Vec<Vec<char>> = vec![
-            vec!['S', ' ', 'W'], 
-            vec!['F', ' ', 'W']
-        ];
-        let mut m = Maze::from_vec(grid);
-        let path = "./maze_2.json";
-        let mut _file = File::create(path).expect("Failed to create file");
-
-        match m.save_to_file(path, false) {
-            Ok(_) => {
-                std::fs::remove_file(path).expect("Failed to delete test file");
-                panic!(
-                    "Successfully saved to existing file: {} despite overwrite being false",
-                    path
-                );
-            }
-            Err(error) => {
-                std::fs::remove_file(path).expect("Failed to delete test file");
-                panic!("{}", error);
-            }
-        }
+    fn cannot_load_json_with_invalid_content_syntax_2() {
+        run_from_json_test_with_invalid_content(r#"{"x"}"#, ExpectedSerdeErrorKind::Syntax);
     }
 
     #[test]
-    fn can_save_to_existing_file_path_if_overwrite_enabled() {
-        #[rustfmt::skip]
-        let grid: Vec<Vec<char>> = vec![
-            vec!['S', ' ', 'W'],
-            vec!['F', ' ', 'W']
-        ];
-        let mut m = Maze::from_vec(grid);
-        let path = "./maze_3.json";
-        let mut _file = File::create(path).expect("Failed to create file");
-
-        match m.save_to_file(path, true) {
-            Ok(_) => {
-                std::fs::remove_file(path).expect("Failed to delete test file");
-            }
-            Err(error) => {
-                std::fs::remove_file(path).expect("Failed to delete test file");
-                panic!("{}", error);
-            }
-        }
+    fn cannot_load_json_with_invalid_content_syntax_3() {
+        run_from_json_test_with_invalid_content(r#"{"x":}"#, ExpectedSerdeErrorKind::Syntax);
     }
 
     #[test]
-    fn can_load_from_valid_file_path() {
-        #[rustfmt::skip]
-        let grid: Vec<Vec<char>> = vec![
-            vec!['S', ' ', 'W'], 
-            vec!['F', ' ', 'W']
-        ];
-        let mut m1 = Maze::from_vec(grid);
-        let path = "./maze_4.json";
-        match m1.save_to_file(path, true) {
-            Ok(_) => {}
-            Err(error) => panic!("Failed to save to file: {}", error),
-        }
-        let mut m2 = Maze::new(Definition::new(0, 0));
-        match m2.load_from_file(path) {
-            Ok(_) => {
-                assert_eq!(m2.definition.row_count(), m1.definition.row_count());
-                assert_eq!(m2.definition.col_count(), m1.definition.col_count());
-            }
-            Err(error) => panic!("Failed to load from: {} - {}", path, error),
-        }
-        std::fs::remove_file(path).expect("Failed to delete test file");
+    fn cannot_load_json_with_invalid_content_syntax_4() {
+        run_from_json_test_with_invalid_content("}", ExpectedSerdeErrorKind::Syntax);
     }
 
     #[test]
-    fn cannot_load_from_invalid_file_path() {
-        let path = "./maze_does_not_exist.json";
-        let mut m = Maze::new(Definition::new(0, 0));
-        match m.load_from_file(path) {
-            Ok(_) => panic!("File should not exist"),
-            Err(error) => assert_io_err_not_found(error),
-        }
+    fn cannot_load_json_with_invalid_content_syntax_5() {
+        run_from_json_test_with_invalid_content("{{}", ExpectedSerdeErrorKind::Syntax);
     }
 
     #[test]
-    fn cannot_load_file_with_invalid_content_eof() {
-        run_load_file_test_with_invalid_content(
-            "./maze_file_with_invalid_content_eof.json",
-            "{",
-            ExpectedSerdeErrorKind::UnexpectedEof,
-        );
-    }
-
-    #[test]
-    fn cannot_load_file_with_invalid_content_syntax_1() {
-        run_load_file_test_with_invalid_content(
-            "./maze_file_with_invalid_content_syntax_1.json",
-            "{x",
-            ExpectedSerdeErrorKind::Syntax,
-        );
-    }
-
-    #[test]
-    fn cannot_load_file_with_invalid_content_syntax_2() {
-        run_load_file_test_with_invalid_content(
-            "./maze_file_with_invalid_content_syntax_2.json",
-            r#"{"x"}"#,
-            ExpectedSerdeErrorKind::Syntax,
-        );
-    }
-
-    #[test]
-    fn cannot_load_file_with_invalid_content_syntax_3() {
-        run_load_file_test_with_invalid_content(
-            "./maze_file_with_invalid_content_syntax_3.json",
-            r#"{"x":}"#,
-            ExpectedSerdeErrorKind::Syntax,
-        );
-    }
-
-    #[test]
-    fn cannot_load_file_with_invalid_content_syntax_4() {
-        run_load_file_test_with_invalid_content(
-            "./maze_file_with_invalid_content_syntax_4.json",
-            "}",
-            ExpectedSerdeErrorKind::Syntax,
-        );
-    }
-
-    #[test]
-    fn cannot_load_file_with_invalid_content_syntax_5() {
-        run_load_file_test_with_invalid_content(
-            "./maze_file_with_invalid_content_syntax_5.json",
-            "{{}",
-            ExpectedSerdeErrorKind::Syntax,
-        );
-    }
-
-    #[test]
-    fn cannot_load_file_with_invalid_content_data_1() {
-        run_load_file_test_with_invalid_content(
-            "./maze_file_with_invalid_content_data_1.json",
+    fn cannot_load_json_with_invalid_content_data_1() {
+        run_from_json_test_with_invalid_content(
             r#"{"definition1":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#,
             ExpectedSerdeErrorKind::Data,
         );
     }
 
     #[test]
-    fn cannot_load_file_with_invalid_content_data_2() {
-        run_load_file_test_with_invalid_content(
-            "./maze_file_with_invalid_content_data_2.json",
+    fn cannot_load_json_with_invalid_content_data_2() {
+        run_from_json_test_with_invalid_content(
             r#"{"definition":{"grid2":[[" ","W"," "],[" "," ","W"]]}}"#,
             ExpectedSerdeErrorKind::Data,
         );
     }
 
     #[test]
-    fn cannot_load_file_with_invalid_content_data_3() {
-        run_load_file_test_with_invalid_content(
-            "./maze_file_with_invalid_content_data_3.json",
+    fn cannot_load_json_with_invalid_content_data_3() {
+        run_from_json_test_with_invalid_content(
             r#"{"definition":{"grid":"invalid data"}}"#,
             ExpectedSerdeErrorKind::Data,
         );
@@ -1010,59 +777,50 @@ mod tests {
     }
 
     // Helper functions and definitions
-    fn delete_test_file(path: &str) {
-        std::fs::remove_file(path)
-            .unwrap_or_else(|_| panic!("Failed to delete test file: {}", path));
-    }
-
     enum ExpectedSerdeErrorKind {
         Data,
         Syntax,
         UnexpectedEof,
     }
 
-    fn run_load_file_test_with_invalid_content(
-        file_path: &str,
+    fn run_from_json_test_with_invalid_content(
         content: &str,
         expected_error_kind: ExpectedSerdeErrorKind,
     ) {
-        let mut file = File::create(file_path).expect("Failed to create test file");
-        match file.write_all(content.as_bytes()) {
+        let mut m = Maze::new(Definition::new(0, 0));
+        match m.from_json(content) {
             Ok(_) => {
-                let mut m = Maze::new(Definition::new(0, 0));
-                match m.load_from_file(file_path) {
-                    Ok(_) => {
-                        delete_test_file(file_path);
-                        panic!("Unexpectedly loaded file despite having invalid content");
-                    }
-                    Err(error) => {
-                        delete_test_file(file_path);
-                        match error {
-                            MazeError::SerdeJson(ref serdejson_error) => {
-                                match expected_error_kind {
-                                    ExpectedSerdeErrorKind::Data => {
-                                        if !serdejson_error.is_data() {
-                                            panic!("Serde data error expected (got SerdeJson error: {})", serdejson_error);
-                                        }
-                                    }
-                                    ExpectedSerdeErrorKind::Syntax => {
-                                        if !serdejson_error.is_syntax() {
-                                            panic!("Serde syntax error expected (got SerdeJson error: {})", serdejson_error);
-                                        }
-                                    }
-                                    ExpectedSerdeErrorKind::UnexpectedEof => {
-                                        if !serdejson_error.is_eof() {
-                                            panic!("Serde unexpected EOF error expected (got SerdeJson error: {})", serdejson_error);
-                                        }
-                                    }
-                                }
-                            }
-                            _ => panic!("Unxpected error encountered (got error: {})", error),
+                panic!("Unexpectedly loaded json despite having invalid content");
+            }
+            Err(error) => match error {
+                MazeError::SerdeJson(ref serdejson_error) => match expected_error_kind {
+                    ExpectedSerdeErrorKind::Data => {
+                        if !serdejson_error.is_data() {
+                            panic!(
+                                "Serde data error expected (got SerdeJson error: {})",
+                                serdejson_error
+                            );
                         }
                     }
-                }
-            }
-            Err(error) => panic!("Failed to create invalid maze file: {}", error),
+                    ExpectedSerdeErrorKind::Syntax => {
+                        if !serdejson_error.is_syntax() {
+                            panic!(
+                                "Serde syntax error expected (got SerdeJson error: {})",
+                                serdejson_error
+                            );
+                        }
+                    }
+                    ExpectedSerdeErrorKind::UnexpectedEof => {
+                        if !serdejson_error.is_eof() {
+                            panic!(
+                                "Serde unexpected EOF error expected (got SerdeJson error: {})",
+                                serdejson_error
+                            );
+                        }
+                    }
+                },
+                _ => panic!("Unxpected error encountered (got error: {})", error),
+            },
         }
     }
 
@@ -1075,16 +833,6 @@ mod tests {
             "expected solve() to succeed but it returned the error {}",
             error
         );
-    }
-
-    fn assert_io_err_not_found(error: MazeError) {
-        match error {
-            MazeError::Io(io_error) => match io_error.kind() {
-                std::io::ErrorKind::NotFound => {}
-                _ => panic!("io::ErrorKind::NotFound error expected (got: {})", io_error),
-            },
-            _ => panic!("io::ErrorKind::NotFound error expected (got: {})", error),
-        }
     }
 
     fn assert_error_msg_eq(err: MazeError, msg: &str) {

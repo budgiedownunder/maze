@@ -233,7 +233,7 @@ fn add_delete_maze_steps(
         if expect_exists {
             expected_output.push("Maze deleted".to_string());
         } else {
-            expected_output.push("Failed: File or directory not found".to_string());
+            expected_output.push(format!("Failed: Item with name '{}' not found", name));
         }
     } else {
         expected_output.push("There are no mazes available to delete".to_string());

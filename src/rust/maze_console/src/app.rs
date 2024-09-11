@@ -1,12 +1,10 @@
 use std::error::Error;
-use std::fs;
 use std::io::{self};
 use std::thread::sleep;
 use std::time::Duration;
 
 use maze::LinePrinter;
 use maze::Maze;
-use maze::MazeError;
 use maze::Path;
 use maze::Point;
 
@@ -531,9 +529,8 @@ pub trait App: LinePrinter {
     }
 
     fn delete_maze(&mut self, name: &str) -> Result<(), Box<dyn Error>> {
-        if let Err(error) = fs::remove_file(format!("{}.json", name)) {
-            return Err(Box::new(MazeError::from(error)));
-        }
+        let item = self.get_store().find_maze_by_name(name)?;
+        self.get_store().delete_maze(&item.id)?;
         Ok(())
     }
 
