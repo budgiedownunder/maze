@@ -26,8 +26,8 @@ fn solve() -> Result<Solution, MazeError> {
         vec!['W', 'W', ' ', 'W', ' ', 'W', 'W'],
         vec![' ', ' ', ' ', ' ', ' ', ' ', 'W'],
     ];
-    let m = Maze::new(Definition::from_vec(grid));
-    m.solve()
+    let maze = Maze::new(Definition::from_vec(grid));
+    maze.solve()
 }
 
 fn maze(c: &mut Criterion) {
@@ -35,8 +35,8 @@ fn maze(c: &mut Criterion) {
     group.sample_size(100);
     group.bench_function("maze.solve()", |b| {
         b.iter(|| {
-            if let Err(e) = solve() {
-                panic!("{}", e);
+            if let Err(error) = solve() {
+                panic!("{}", error);
             }
         })
     });

@@ -47,8 +47,8 @@ impl<'de> Deserialize<'de> for Definition {
             }
         }
 
-        if let Some(err) = Self::validate_grid(&grid) {
-            return Err(de::Error::custom(err.to_string()));
+        if let Some(error) = Self::validate_grid(&grid) {
+            return Err(de::Error::custom(error.to_string()));
         }
 
         Ok(Definition { grid })
@@ -73,9 +73,9 @@ impl Definition {
     /// Create a definition with 3 rows and 4 columns and then verify its dimensions
     /// ```
     /// use maze::Definition;
-    /// let d = Definition::new(3, 4);
-    /// assert_eq!(d.row_count(), 3);
-    /// assert_eq!(d.col_count(), 4);
+    /// let definition = Definition::new(3, 4);
+    /// assert_eq!(definition.row_count(), 3);
+    /// assert_eq!(definition.col_count(), 4);
     /// ```
     pub fn new(row_count: usize, col_count: usize) -> Self {
         Definition {
@@ -94,10 +94,10 @@ impl Definition {
     /// then confirm it is empty
     /// ```
     /// use maze::Definition;
-    /// let mut d = Definition::new(3, 4);
-    /// assert_eq!(d.row_count(), 3);
-    /// assert_eq!(d.col_count(), 4);
-    /// assert_eq!(d.reset().is_empty(), true);
+    /// let mut definition = Definition::new(3, 4);
+    /// assert_eq!(definition.row_count(), 3);
+    /// assert_eq!(definition.col_count(), 4);
+    /// assert_eq!(definition.reset().is_empty(), true);
     /// ```
     pub fn reset(&mut self) -> &mut Self {
         self.grid = vec![];
@@ -114,13 +114,13 @@ impl Definition {
     /// Create an empty maze definition, resize it to 3 rows and 4 columns and then verify its dimensions
     /// ```
     /// use maze::Definition;
-    /// let mut d = Definition::new(0, 0);
-    /// assert_eq!(d.row_count(), 0);
-    /// assert_eq!(d.col_count(), 0);
-    /// d.resize(3, 4);
+    /// let mut definition = Definition::new(0, 0);
+    /// assert_eq!(definition.row_count(), 0);
+    /// assert_eq!(definition.col_count(), 0);
+    /// definition.resize(3, 4);
     /// println!("Resize successful");
-    /// assert_eq!(d.row_count(), 3);
-    /// assert_eq!(d.col_count(), 4);
+    /// assert_eq!(definition.row_count(), 3);
+    /// assert_eq!(definition.col_count(), 4);
     ///
     /// ```
     pub fn resize(&mut self, new_row_count: usize, new_col_count: usize) -> &mut Self {
@@ -140,8 +140,8 @@ impl Definition {
     ///
     /// ```
     /// use maze::Definition;
-    /// let d = Definition::new(3, 4);
-    /// assert_eq!(d.row_count(), 3);
+    /// let definition = Definition::new(3, 4);
+    /// assert_eq!(definition.row_count(), 3);
     /// ```
     pub fn row_count(&self) -> usize {
         self.grid.len()
@@ -156,8 +156,8 @@ impl Definition {
     ///
     /// ```
     /// use maze::Definition;
-    /// let d = Definition::new(3, 4);
-    /// assert_eq!(d.col_count(), 4);
+    /// let definition = Definition::new(3, 4);
+    /// assert_eq!(definition.col_count(), 4);
     /// ```
     pub fn col_count(&self) -> usize {
         Self::first_row_col_count(&self.grid)
@@ -172,8 +172,8 @@ impl Definition {
     ///
     /// ```
     /// use maze::Definition;
-    /// let d = Definition::new(3, 4);
-    /// assert_eq!(d.is_empty(), false);
+    /// let definition = Definition::new(3, 4);
+    /// assert_eq!(definition.is_empty(), false);
     /// ```
     pub fn is_empty(&self) -> bool {
         self.row_count() == 0
@@ -209,8 +209,8 @@ impl Definition {
     ///
     /// ```
     /// use maze::Definition;
-    /// let d = Definition::new(0, 0);
-    /// match d.verify_not_empty() {
+    /// let definition = Definition::new(0, 0);
+    /// match definition.verify_not_empty() {
     ///     Err(e) => println!("Verification failed: {}", e.to_string()),
     ///     Ok(()) => println!("Definition is not empty"),
     /// }
@@ -245,13 +245,13 @@ impl Definition {
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let d = Definition::from_vec(grid);
-    /// assert_eq!(d.row_count(), 2);
-    /// assert_eq!(d.col_count(), 3);
+    /// let definition = Definition::from_vec(grid);
+    /// assert_eq!(definition.row_count(), 2);
+    /// assert_eq!(definition.col_count(), 3);
     /// ```
     pub fn from_vec(grid: Vec<Vec<char>>) -> Self {
-        if let Some(err) = Self::validate_grid(&grid) {
-            panic!("{}", err.to_string());
+        if let Some(error) = Self::validate_grid(&grid) {
+            panic!("{}", error.to_string());
         }
         Definition { grid }
     }
@@ -268,9 +268,9 @@ impl Definition {
     ///
     /// ```
     /// use maze::Definition;
-    /// let d = Definition::new(3, 4);
-    /// let state = d.to_state();
-    /// assert_eq!(state.len(), d.row_count());
+    /// let definition = Definition::new(3, 4);
+    /// let state = definition.to_state();
+    /// assert_eq!(state.len(), definition.row_count());
     /// assert_eq!(state.len(), 3);
     /// ```
     pub fn to_state(&self) -> Vec<Vec<CellState>> {
@@ -309,9 +309,9 @@ impl Definition {
     /// ```
     /// use maze::Definition;
     /// use maze::Point;
-    /// let d = Definition::new(3, 4);
-    /// assert_eq!(d.is_valid( &Point {row: 2, col: 1}), true);
-    /// assert_eq!(d.is_valid( &Point {row: 3, col: 1}), false);
+    /// let definition = Definition::new(3, 4);
+    /// assert_eq!(definition.is_valid( &Point {row: 2, col: 1}), true);
+    /// assert_eq!(definition.is_valid( &Point {row: 3, col: 1}), false);
     /// ```
     pub fn is_valid(&self, pt: &Point) -> bool {
         if pt.row >= self.row_count() || pt.col >= self.col_count() {
@@ -331,8 +331,8 @@ impl Definition {
     ///
     /// ```
     /// use maze::Definition;
-    /// let d = Definition::new(3, 4);
-    /// println!("{:?}", d.to_display_chars());
+    /// let definition = Definition::new(3, 4);
+    /// println!("{:?}", definition.to_display_chars());
     /// ```
     pub fn to_display_chars(&self) -> Vec<Vec<char>> {
         return self
@@ -376,9 +376,9 @@ impl Definition {
     ///    vec!['S', ' ', ' ', 'W'],
     ///    vec![' ', 'F', ' ', 'W']
     /// ];
-    /// let mut d = Definition::from_vec(grid);
-    /// d.delete_cols(1,2).expect("delete_cols() failed");
-    /// println!("{:?}", d.to_display_chars());
+    /// let mut definition = Definition::from_vec(grid);
+    /// definition.delete_cols(1,2).expect("delete_cols() failed");
+    /// println!("{:?}", definition.to_display_chars());
     /// ```
     pub fn delete_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
         self.verify_not_empty()?;
@@ -417,9 +417,9 @@ impl Definition {
     ///    vec!['S', ' ', ' ', 'W'],
     ///    vec![' ', 'F', ' ', 'W']
     /// ];
-    /// let mut d = Definition::from_vec(grid);
-    /// d.insert_cols(0,2).expect("insert_cols() failed");
-    /// println!("{:?}", d.to_display_chars());
+    /// let mut definition = Definition::from_vec(grid);
+    /// definition.insert_cols(0,2).expect("insert_cols() failed");
+    /// println!("{:?}", definition.to_display_chars());
     /// ```
     pub fn insert_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
         self.verify_not_empty()?;
@@ -460,9 +460,9 @@ impl Definition {
     ///    vec!['W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W']
     /// ];
-    /// let mut d = Definition::from_vec(grid);
-    /// d.delete_rows(1,2).expect("delete_rows() failed");
-    /// println!("{:?}", d.to_display_chars());
+    /// let mut definition = Definition::from_vec(grid);
+    /// definition.delete_rows(1,2).expect("delete_rows() failed");
+    /// println!("{:?}", definition.to_display_chars());
     /// ```
     pub fn delete_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
         self.verify_not_empty()?;
@@ -500,9 +500,9 @@ impl Definition {
     ///    vec!['W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W']
     /// ];
-    /// let mut d = Definition::from_vec(grid);
-    /// d.insert_rows(3,2).expect("insert_rows() failed");
-    /// println!("{:?}", d.to_display_chars());
+    /// let mut definition = Definition::from_vec(grid);
+    /// definition.insert_rows(3,2).expect("insert_rows() failed");
+    /// println!("{:?}", definition.to_display_chars());
     /// ```
     pub fn insert_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
         if start_row > self.row_count() {
@@ -533,8 +533,8 @@ impl Definition {
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let d = Definition::from_vec(grid);
-    /// match d.get_start() {
+    /// let definition = Definition::from_vec(grid);
+    /// match definition.get_start() {
     ///     Some(start) => {
     ///         println!("Start found at point {}", start);
     ///     },
@@ -564,9 +564,9 @@ impl Definition {
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let mut d = Definition::from_vec(grid);
+    /// let mut definition = Definition::from_vec(grid);
     /// let new_start = Point {row: 1, col: 2};
-    /// d.set_start(Some(new_start)).expect("set_start() failed");
+    /// definition.set_start(Some(new_start)).expect("set_start() failed");
     /// ```
     pub fn set_start(&mut self, new_start: Option<Point>) -> Result<(), MazeError> {
         self.reset_point("start", self.get_start(), new_start, 'S')
@@ -587,8 +587,8 @@ impl Definition {
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let d = Definition::from_vec(grid);
-    /// match d.get_finish() {
+    /// let definition = Definition::from_vec(grid);
+    /// match definition.get_finish() {
     ///     Some(finish) => {
     ///         println!("Finish found at point {}", finish);
     ///     },
@@ -618,9 +618,9 @@ impl Definition {
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let mut d = Definition::from_vec(grid);
+    /// let mut definition = Definition::from_vec(grid);
     /// let new_finish = Point {row: 0, col: 2};
-    /// d.set_start(Some(new_finish)).expect("new_finish() failed");
+    /// definition.set_start(Some(new_finish)).expect("new_finish() failed");
     /// ```
     pub fn set_finish(&mut self, new_finish: Option<Point>) -> Result<(), MazeError> {
         self.reset_point("finish", self.get_finish(), new_finish, 'F')
@@ -647,11 +647,11 @@ impl Definition {
     /// use maze::CellState;
     /// use maze::Definition;
     /// use maze::Point;
-    /// let mut d = Definition::new(5, 4);
+    /// let mut definition = Definition::new(5, 4);
     /// let from = Point { row: 1, col: 1, };
     /// let to = Point { row: 3, col: 2, };
-    /// d.set_value( from, to, 'W').expect("set_value() failed");
-    /// println!("{:?}", d.to_display_chars());
+    /// definition.set_value( from, to, 'W').expect("set_value() failed");
+    /// println!("{:?}", definition.to_display_chars());
     /// ```
     pub fn set_value(&mut self, from: Point, to: Point, value: char) -> Result<(), MazeError> {
         if !self.is_valid(&from) {
@@ -768,33 +768,33 @@ mod tests {
 
     #[test]
     fn can_create_empty_from_dimensions() {
-        let d = Definition::new(0, 0);
-        assert_eq!(d.row_count(), 0);
-        assert_eq!(d.col_count(), 0);
+        let definition = Definition::new(0, 0);
+        assert_eq!(definition.row_count(), 0);
+        assert_eq!(definition.col_count(), 0);
     }
 
     #[test]
     fn can_create_new_from_dimensions() {
-        let d = Definition::new(2, 3);
-        assert_eq!(d.row_count(), 2);
-        assert_eq!(d.col_count(), 3);
+        let definition = Definition::new(2, 3);
+        assert_eq!(definition.row_count(), 2);
+        assert_eq!(definition.col_count(), 3);
     }
 
     #[test]
     fn can_reset_to_empty() {
-        let mut d = Definition::new(2, 3);
-        assert_eq!(d.row_count(), 2);
-        assert_eq!(d.col_count(), 3);
-        assert!(!d.is_empty());
-        assert!(d.reset().is_empty())
+        let mut definition = Definition::new(2, 3);
+        assert_eq!(definition.row_count(), 2);
+        assert_eq!(definition.col_count(), 3);
+        assert!(!definition.is_empty());
+        assert!(definition.reset().is_empty())
     }
 
     #[test]
     fn can_create_empty_from_vector() {
         let grid: Vec<Vec<char>> = vec![];
-        let d = Definition::from_vec(grid);
-        assert_eq!(d.row_count(), 0);
-        assert_eq!(d.col_count(), 0);
+        let definition = Definition::from_vec(grid);
+        assert_eq!(definition.row_count(), 0);
+        assert_eq!(definition.col_count(), 0);
     }
 
     #[test]
@@ -804,9 +804,9 @@ mod tests {
             vec![' ', ' ', ' '],
             vec![' ', ' ', ' ']
         ];
-        let d = Definition::from_vec(grid);
-        assert_eq!(d.row_count(), 2);
-        assert_eq!(d.col_count(), 3);
+        let definition = Definition::from_vec(grid);
+        assert_eq!(definition.row_count(), 2);
+        assert_eq!(definition.col_count(), 3);
     }
 
     #[test]
@@ -817,7 +817,7 @@ mod tests {
             vec![' ', ' ', ' '],
             vec![' ', ' ', 'X']
         ];
-        let _d = Definition::from_vec(grid);
+        let _definition = Definition::from_vec(grid);
     }
 
     #[test]
@@ -828,7 +828,7 @@ mod tests {
             vec!['S', ' ', ' '],
             vec!['S', ' ', ' ']
         ];
-        let _d = Definition::from_vec(grid);
+        let _definition = Definition::from_vec(grid);
     }
 
     #[test]
@@ -839,7 +839,7 @@ mod tests {
             vec!['S', ' ', 'F'],
             vec!['F', ' ', ' ']
         ];
-        let _d = Definition::from_vec(grid);
+        let _definition = Definition::from_vec(grid);
     }
 
     #[test]
@@ -852,53 +852,53 @@ mod tests {
             vec![' ', ' ', ' '],
             vec![' ', ' ', ' ', ' ']
         ];
-        let _d = Definition::from_vec(grid);
+        let _definition = Definition::from_vec(grid);
     }
 
     #[test]
     fn can_confirm_empty() {
-        let d = Definition::new(0, 0);
-        assert!(d.is_empty());
+        let definition = Definition::new(0, 0);
+        assert!(definition.is_empty());
     }
 
     #[test]
     fn can_confirm_not_empty() {
-        let d = Definition::new(1, 1);
-        assert!(!d.is_empty());
+        let definition = Definition::new(1, 1);
+        assert!(!definition.is_empty());
     }
 
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn confirm_verify_not_empty_detects_empty() {
-        let d = Definition::new(0, 0);
-        if let Err(e) = d.verify_not_empty() {
-            panic!("{}", e.to_string());
+        let definition = Definition::new(0, 0);
+        if let Err(error) = definition.verify_not_empty() {
+            panic!("{}", error.to_string());
         }
         panic!("verify_not_empty() did not return an error");
     }
 
     #[test]
     fn confirm_verify_not_empty_ignores_non_empty() {
-        let d = Definition::new(1, 1);
-        if let Err(e) = d.verify_not_empty() {
-            panic!("{}", e.to_string());
+        let definition = Definition::new(1, 1);
+        if let Err(error) = definition.verify_not_empty() {
+            panic!("{}", error.to_string());
         }
     }
 
     #[test]
     fn can_resize_empty_to_empty() {
-        let mut d = Definition::new(0, 0);
-        d.resize(0, 0);
-        assert_eq!(d.row_count(), 0);
-        assert_eq!(d.col_count(), 0);
+        let mut definition = Definition::new(0, 0);
+        definition.resize(0, 0);
+        assert_eq!(definition.row_count(), 0);
+        assert_eq!(definition.col_count(), 0);
     }
 
     #[test]
     fn can_resize_to_empty() {
-        let mut d = Definition::new(10, 5);
-        d.resize(0, 0);
-        assert_eq!(d.row_count(), 0);
-        assert_eq!(d.col_count(), 0);
+        let mut definition = Definition::new(10, 5);
+        definition.resize(0, 0);
+        assert_eq!(definition.row_count(), 0);
+        assert_eq!(definition.col_count(), 0);
     }
 
     #[test]
@@ -908,19 +908,19 @@ mod tests {
             vec!['W', ' ', ' '],
             vec![' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        assert_eq!(d.row_count(), 2);
-        assert_eq!(d.col_count(), 3);
-        d.resize(3, 5);
-        assert_eq!(d.row_count(), 3);
-        assert_eq!(d.col_count(), 5);
+        let mut definition = Definition::from_vec(grid);
+        assert_eq!(definition.row_count(), 2);
+        assert_eq!(definition.col_count(), 3);
+        definition.resize(3, 5);
+        assert_eq!(definition.row_count(), 3);
+        assert_eq!(definition.col_count(), 5);
         #[rustfmt::skip]
         let grid_check: Vec<Vec<char>> = vec![
             vec!['W', ' ', ' ', ' ', ' '],
             vec![' ', ' ', 'W', ' ', ' '],
             vec![' ', ' ', ' ', ' ', ' ']
         ];
-        assert_eq!(d.grid, grid_check);
+        assert_eq!(definition.grid, grid_check);
     }
 
     #[test]
@@ -930,18 +930,18 @@ mod tests {
             vec!['W', ' ', ' '],
             vec![' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        assert_eq!(d.row_count(), 2);
-        assert_eq!(d.col_count(), 3);
-        d.resize(2, 1);
-        assert_eq!(d.row_count(), 2);
-        assert_eq!(d.col_count(), 1);
+        let mut definition = Definition::from_vec(grid);
+        assert_eq!(definition.row_count(), 2);
+        assert_eq!(definition.col_count(), 3);
+        definition.resize(2, 1);
+        assert_eq!(definition.row_count(), 2);
+        assert_eq!(definition.col_count(), 1);
         #[rustfmt::skip]
         let grid_check: Vec<Vec<char>> = vec![
             vec!['W'],
             vec![' ']
         ];
-        assert_eq!(d.grid, grid_check);
+        assert_eq!(definition.grid, grid_check);
     }
 
     #[test]
@@ -951,31 +951,31 @@ mod tests {
             vec!['W', ' ', ' '],
             vec![' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        assert_eq!(d.row_count(), 2);
-        assert_eq!(d.col_count(), 3);
-        d.resize(1, 2);
-        assert_eq!(d.row_count(), 1);
-        assert_eq!(d.col_count(), 2);
+        let mut definition = Definition::from_vec(grid);
+        assert_eq!(definition.row_count(), 2);
+        assert_eq!(definition.col_count(), 3);
+        definition.resize(1, 2);
+        assert_eq!(definition.row_count(), 1);
+        assert_eq!(definition.col_count(), 2);
         #[rustfmt::skip]
         let grid_check: Vec<Vec<char>> = vec![
             vec!['W', ' ']
         ];
-        assert_eq!(d.grid, grid_check);
+        assert_eq!(definition.grid, grid_check);
     }
 
     #[test]
     fn can_serialize_empty_1() {
-        let d = Definition::new(0, 0);
-        let s = serde_json::to_string(&d).expect("Failed to serialize");
+        let definition = Definition::new(0, 0);
+        let s = serde_json::to_string(&definition).expect("Failed to serialize");
         assert_eq!(s, r#"{"grid":[]}"#);
     }
 
     #[test]
     fn can_serialize_empty_2() {
         let grid: Vec<Vec<char>> = vec![];
-        let d = Definition::from_vec(grid);
-        let s = serde_json::to_string(&d).expect("Failed to serialize");
+        let definition = Definition::from_vec(grid);
+        let s = serde_json::to_string(&definition).expect("Failed to serialize");
         assert_eq!(s, r#"{"grid":[]}"#);
     }
 
@@ -986,8 +986,8 @@ mod tests {
             vec![' ', ' ', ' '],
             vec![' ', ' ', ' ']
         ];
-        let d = Definition::from_vec(grid);
-        let s = serde_json::to_string(&d).expect("Failed to serialize");
+        let definition = Definition::from_vec(grid);
+        let s = serde_json::to_string(&definition).expect("Failed to serialize");
         assert_eq!(s, r#"{"grid":[[" "," "," "],[" "," "," "]]}"#);
     }
 
@@ -998,8 +998,8 @@ mod tests {
             vec![' ', 'W', ' '],
             vec![' ', ' ', 'W']
         ];
-        let d = Definition::from_vec(grid);
-        let s = serde_json::to_string(&d).expect("Failed to serialize");
+        let definition = Definition::from_vec(grid);
+        let s = serde_json::to_string(&definition).expect("Failed to serialize");
         assert_eq!(s, r#"{"grid":[[" ","W"," "],[" "," ","W"]]}"#);
     }
 
@@ -1010,8 +1010,8 @@ mod tests {
             vec!['S', 'W', ' '],
             vec![' ', 'F', 'W']
         ];
-        let d = Definition::from_vec(grid);
-        let s = serde_json::to_string(&d).expect("Failed to serialize");
+        let definition = Definition::from_vec(grid);
+        let s = serde_json::to_string(&definition).expect("Failed to serialize");
         assert_eq!(s, r#"{"grid":[["S","W"," "],[" ","F","W"]]}"#);
     }
 
@@ -1131,8 +1131,8 @@ mod tests {
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn cannot_delete_cols_if_empty() {
-        let mut d = Definition::new(0, 0);
-        d.delete_cols(0, 1).expect("delete_cols() failed");
+        let mut definition = Definition::new(0, 0);
+        definition.delete_cols(0, 1).expect("delete_cols() failed");
     }
 
     #[test]
@@ -1142,9 +1142,9 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.delete_cols(1, 2).expect("delete_cols() failed");
-        assert_eq!(d.col_count(), 2);
+        let mut definition = Definition::from_vec(grid);
+        definition.delete_cols(1, 2).expect("delete_cols() failed");
+        assert_eq!(definition.col_count(), 2);
     }
 
     #[test]
@@ -1155,16 +1155,16 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.delete_cols(4, 2).expect("delete_cols() failed");
+        let mut definition = Definition::from_vec(grid);
+        definition.delete_cols(4, 2).expect("delete_cols() failed");
     }
 
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn cannot_insert_cols_if_empty() {
-        let mut d = Definition::new(0, 0);
-        d.insert_cols(0, 1).expect("insert_cols() failed");
-        assert_empty_cols(&d, 0, 1);
+        let mut definition = Definition::new(0, 0);
+        definition.insert_cols(0, 1).expect("insert_cols() failed");
+        assert_empty_cols(&definition, 0, 1);
     }
 
     #[test]
@@ -1174,10 +1174,10 @@ mod tests {
             vec![' ', 'W', ' ', 'W'],
             vec![' ', 'W', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.insert_cols(1, 2).expect("insert_cols() failed");
-        assert_eq!(d.col_count(), 6);
-        assert_empty_cols(&d, 1, 2);
+        let mut definition = Definition::from_vec(grid);
+        definition.insert_cols(1, 2).expect("insert_cols() failed");
+        assert_eq!(definition.col_count(), 6);
+        assert_empty_cols(&definition, 1, 2);
     }
 
     #[test]
@@ -1187,9 +1187,9 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.insert_cols(1, 0).expect("insert_cols() failed");
-        assert_eq!(d.col_count(), 4);
+        let mut definition = Definition::from_vec(grid);
+        definition.insert_cols(1, 0).expect("insert_cols() failed");
+        assert_eq!(definition.col_count(), 4);
     }
 
     #[test]
@@ -1200,8 +1200,8 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.insert_cols(5, 2).expect("insert_cols() failed");
+        let mut definition = Definition::from_vec(grid);
+        definition.insert_cols(5, 2).expect("insert_cols() failed");
     }
 
     #[test]
@@ -1211,17 +1211,17 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.insert_cols(4, 2).expect("insert_cols() failed");
-        assert_eq!(d.col_count(), 6);
-        assert_empty_cols(&d, 4, 5);
+        let mut definition = Definition::from_vec(grid);
+        definition.insert_cols(4, 2).expect("insert_cols() failed");
+        assert_eq!(definition.col_count(), 6);
+        assert_empty_cols(&definition, 4, 5);
     }
 
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn cannot_delete_rows_if_empty() {
-        let mut d = Definition::new(0, 0);
-        d.delete_rows(0, 1).expect("delete_rows() failed");
+        let mut definition = Definition::new(0, 0);
+        definition.delete_rows(0, 1).expect("delete_rows() failed");
     }
 
     #[test]
@@ -1232,10 +1232,10 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.delete_rows(0, 2).expect("delete_rows() failed");
-        assert_eq!(d.row_count(), 1);
-        assert_eq!(d.col_count(), 4);
+        let mut definition = Definition::from_vec(grid);
+        definition.delete_rows(0, 2).expect("delete_rows() failed");
+        assert_eq!(definition.row_count(), 1);
+        assert_eq!(definition.col_count(), 4);
     }
 
     #[test]
@@ -1246,10 +1246,10 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.delete_rows(0, 3).expect("delete_rows() failed");
-        assert_eq!(d.row_count(), 0);
-        assert_eq!(d.col_count(), 0);
+        let mut definition = Definition::from_vec(grid);
+        definition.delete_rows(0, 3).expect("delete_rows() failed");
+        assert_eq!(definition.row_count(), 0);
+        assert_eq!(definition.col_count(), 0);
     }
 
     #[test]
@@ -1260,8 +1260,8 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.delete_rows(2, 1).expect("delete_rows() failed");
+        let mut definition = Definition::from_vec(grid);
+        definition.delete_rows(2, 1).expect("delete_rows() failed");
     }
 
     #[test]
@@ -1271,10 +1271,10 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.insert_rows(1, 3).expect("insert_rows() failed");
-        assert_eq!(d.row_count(), 5);
-        assert_empty_rows(&d, 1, 3);
+        let mut definition = Definition::from_vec(grid);
+        definition.insert_rows(1, 3).expect("insert_rows() failed");
+        assert_eq!(definition.row_count(), 5);
+        assert_empty_rows(&definition, 1, 3);
     }
 
     #[test]
@@ -1284,9 +1284,9 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.insert_rows(1, 0).expect("insert_rows() failed");
-        assert_eq!(d.row_count(), 2);
+        let mut definition = Definition::from_vec(grid);
+        definition.insert_rows(1, 0).expect("insert_rows() failed");
+        assert_eq!(definition.row_count(), 2);
     }
 
     #[test]
@@ -1297,8 +1297,8 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.insert_rows(3, 2).expect("insert_rows() failed");
+        let mut definition = Definition::from_vec(grid);
+        definition.insert_rows(3, 2).expect("insert_rows() failed");
     }
 
     #[test]
@@ -1308,10 +1308,10 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.insert_rows(2, 2).expect("insert_rows() failed");
-        assert_eq!(d.row_count(), 4);
-        assert_empty_rows(&d, 2, 3);
+        let mut definition = Definition::from_vec(grid);
+        definition.insert_rows(2, 2).expect("insert_rows() failed");
+        assert_eq!(definition.row_count(), 4);
+        assert_empty_rows(&definition, 2, 3);
     }
 
     #[test]
@@ -1321,8 +1321,8 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', 'S', 'W']
         ];
-        let d = Definition::from_vec(grid);
-        match d.get_start() {
+        let definition = Definition::from_vec(grid);
+        match definition.get_start() {
             Some(start) => {
                 assert_eq!(start, Point { row: 1, col: 2 });
             }
@@ -1339,8 +1339,8 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let d = Definition::from_vec(grid);
-        if let Some(start) = d.get_start() {
+        let definition = Definition::from_vec(grid);
+        if let Some(start) = definition.get_start() {
             panic!("Unexpectedly found start at {}", start);
         };
     }
@@ -1352,13 +1352,13 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', 'S', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        match d.set_start(Some(Point { row: 1, col: 0 })) {
-            Err(e) => {
-                panic!("Failed to reset start: {}", e);
+        let mut definition = Definition::from_vec(grid);
+        match definition.set_start(Some(Point { row: 1, col: 0 })) {
+            Err(error) => {
+                panic!("Failed to reset start: {}", error);
             }
             _ => {
-                let new_start = d.get_start().unwrap();
+                let new_start = definition.get_start().unwrap();
                 assert_eq!(new_start, Point { row: 1, col: 0 });
             }
         }
@@ -1372,8 +1372,9 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', 'S', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.set_start(Some(Point { row: 1, col: 8 }))
+        let mut definition = Definition::from_vec(grid);
+        definition
+            .set_start(Some(Point { row: 1, col: 8 }))
             .expect("set_start() failed");
     }
 
@@ -1384,8 +1385,8 @@ mod tests {
             vec![' ', ' ', 'F', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let d = Definition::from_vec(grid);
-        match d.get_finish() {
+        let definition = Definition::from_vec(grid);
+        match definition.get_finish() {
             Some(finish) => {
                 assert_eq!(finish, Point { row: 0, col: 2 });
             }
@@ -1402,8 +1403,8 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let d = Definition::from_vec(grid);
-        if let Some(finish) = d.get_finish() {
+        let definition = Definition::from_vec(grid);
+        if let Some(finish) = definition.get_finish() {
             panic!("Unexpectedly found finish at {}", finish);
         };
     }
@@ -1415,13 +1416,13 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', 'F', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        match d.set_finish(Some(Point { row: 0, col: 1 })) {
-            Err(e) => {
-                panic!("Failed to reset finish: {}", e);
+        let mut definition = Definition::from_vec(grid);
+        match definition.set_finish(Some(Point { row: 0, col: 1 })) {
+            Err(error) => {
+                panic!("Failed to reset finish: {}", error);
             }
             _ => {
-                let new_finish = d.get_finish().unwrap();
+                let new_finish = definition.get_finish().unwrap();
                 assert_eq!(new_finish, Point { row: 0, col: 1 });
             }
         }
@@ -1435,46 +1436,54 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', 'F', 'W']
         ];
-        let mut d = Definition::from_vec(grid);
-        d.set_finish(Some(Point { row: 1, col: 8 }))
+        let mut definition = Definition::from_vec(grid);
+        definition
+            .set_finish(Some(Point { row: 1, col: 8 }))
             .expect("set_finish() failed");
     }
 
     #[test]
     fn can_set_value_valid_range() {
-        let mut d = Definition::new(5, 4);
+        let mut definition = Definition::new(5, 4);
         let from = Point { row: 1, col: 1 };
         let to = Point { row: 3, col: 2 };
-        d.set_value(from.clone(), to.clone(), 'W')
+        definition
+            .set_value(from.clone(), to.clone(), 'W')
             .expect("set_value() failed");
-        assert_cell_value(&d, from.clone(), to.clone(), 'W');
+        assert_cell_value(&definition, from.clone(), to.clone(), 'W');
     }
 
     #[test]
     #[should_panic(expected = "invalid 'from' point [6, 1]")]
     fn cannot_set_value_invalid_from() {
-        let mut d = Definition::new(5, 4);
+        let mut definition = Definition::new(5, 4);
         let from = Point { row: 6, col: 1 };
         let to = Point { row: 2, col: 2 };
-        d.set_value(from, to, 'W').expect("set_value() failed");
+        definition
+            .set_value(from, to, 'W')
+            .expect("set_value() failed");
     }
 
     #[test]
     #[should_panic(expected = "invalid 'to' point [6, 2]")]
     fn cannot_set_value_invalid_to() {
-        let mut d = Definition::new(5, 4);
+        let mut definition = Definition::new(5, 4);
         let from = Point { row: 1, col: 1 };
         let to = Point { row: 6, col: 2 };
-        d.set_value(from, to, 'W').expect("set_value() failed");
+        definition
+            .set_value(from, to, 'W')
+            .expect("set_value() failed");
     }
 
     #[test]
     #[should_panic(expected = "invalid 'value' ('X')")]
     fn cannot_set_value_invalid_value() {
-        let mut d = Definition::new(5, 4);
+        let mut definition = Definition::new(5, 4);
         let from = Point { row: 1, col: 1 };
         let to = Point { row: 3, col: 2 };
-        d.set_value(from, to, 'X').expect("set_value() failed");
+        definition
+            .set_value(from, to, 'X')
+            .expect("set_value() failed");
     }
 
     // Private test helper functions

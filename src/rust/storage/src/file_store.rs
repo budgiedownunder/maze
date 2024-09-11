@@ -89,7 +89,7 @@ impl Store for FileStore {
                 maze.id = id.to_string();
                 Ok(maze)
             }
-            Err(err) => Err(StoreError::from(err)),
+            Err(error) => Err(StoreError::from(error)),
         }
     }
 
