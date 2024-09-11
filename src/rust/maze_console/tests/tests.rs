@@ -1,9 +1,5 @@
 use std::error::Error;
-use std::fs;
-use std::path::Path;
 use std::sync::Mutex;
-use std::thread::sleep;
-use std::time::Duration;
 
 mod mock_app;
 use crate::mock_app::MockApp;
@@ -11,6 +7,8 @@ use maze::Definition;
 use maze::Maze;
 use maze_console::app::App;
 use storage::get_store;
+
+use utils::file::{delete_file, delete_files_with_ext};
 
 lazy_static::lazy_static! {
     static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
@@ -36,41 +34,6 @@ fn vec_append_string_copies(v: &mut Vec<String>, s: &str, n: usize) {
     v.resize(v.len() + n, s.to_string());
 }
 
-fn delete_file(file: &str) {
-    let _ = fs::remove_file(file);
-    let mut count = 0;
-    loop {
-        // Secondary check, in case there is lag in the operating system
-        if !Path::new(file).exists() {
-            break;
-        }
-        count += 1;
-        if count == 10 {
-            break;
-        }
-        sleep(Duration::from_millis(10));
-    }
-}
-
-fn delete_files_with_ext(dir: &str, extension: &str) -> std::io::Result<()> {
-    let files = fs::read_dir(dir)?;
-    for file in files {
-        let file = file?;
-        let path = file.path();
-        if path.is_file() {
-            if let Some(ext) = path.extension() {
-                if ext == extension {
-                    if let Some(file_name) = path.file_name() {
-                        let file_name_str = file_name.to_string_lossy();
-                        delete_file(&file_name_str);
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 fn do_quit_and_verify(
     app: &mut MockApp,
     expected_output: &mut Vec<String>,
@@ -81,7 +44,6 @@ fn do_quit_and_verify(
     app.run()?;
     delete_files_with_ext(".", "json")?;
     app.verify_output(expected_output)?;
-    //    app.print_output();
     Ok(())
 }
 
