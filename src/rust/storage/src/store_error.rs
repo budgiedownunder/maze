@@ -1,5 +1,6 @@
 use maze::MazeError;
 
+/// Represents a store error
 #[derive(Debug)]
 pub enum StoreError {
     IdMissing(),
@@ -22,7 +23,9 @@ impl std::fmt::Display for StoreError {
             StoreError::IdAlreadyExists(id) => write!(f, "Item with id '{}' already exists", id),
             StoreError::NameMissing() => write!(f, "No name provided"),
             StoreError::NameNotFound(name) => write!(f, "Item with name '{}' not found", name),
-            StoreError::NameAlreadyExists(name) => write!(f, "An item with name '{}' already exists", name),
+            StoreError::NameAlreadyExists(name) => {
+                write!(f, "An item with name '{}' already exists", name)
+            }
             StoreError::Io(e) => write!(f, "I/O error: {}", e),
             StoreError::MazeError(e) => write!(f, "Maze error: {}", e),
             StoreError::SerdeJson(ref error) => write!(f, "{}", error),

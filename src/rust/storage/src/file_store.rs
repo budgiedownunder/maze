@@ -4,15 +4,65 @@ use std::io::{BufReader, Write};
 use std::path::{Path as StdPath, PathBuf};
 
 use maze::Maze;
-use utils::file::{delete_file};
+use utils::file::delete_file;
 
 use crate::MazeItem;
 use crate::Store;
 use crate::StoreError;
 
+/// A file store that implements the [`Store`] trait
+///
+/// Maze objects are stored on disk as files named `<name>.json` (in the working directory), with the `id`
+/// of the object assumed to be the file name
 pub struct FileStore {}
 
 impl FileStore {
+    /// Creates a new file store instance
+    ///
+    /// # Returns
+    ///
+    /// A new file store instance if successful
+    ///
+    /// # Examples
+    ///
+    /// Try to create a new maze within a file store
+    ///
+    /// ```
+    /// use crate::storage::Store;
+    /// use storage::FileStore;
+    /// use maze::Maze;
+    ///
+
+    /// # // Ensure the maze file does not exist, prior to running the doc test   
+    /// # use utils::file::delete_file;
+    /// # delete_file("./maze_1.json");
+
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let mut maze_to_create = Maze::from_vec(grid);
+    /// maze_to_create.name = "maze_1".to_string();
+    ///
+    /// // Create the file store
+    /// let store = FileStore::new();
+    ///
+    /// // Create a maze within the file store
+    /// match store.create_maze(&mut maze_to_create) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created maze in the file store with id = {}",
+    ///             maze_to_create.id
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create maze => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
     pub fn new() -> Self {
         FileStore {}
     }
@@ -46,7 +96,55 @@ impl FileStore {
     }
 }
 
+impl Default for FileStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Store for FileStore {
+    /// Creates a new maze within the file store instance
+    ///
+    /// # Examples
+    ///
+    /// Try to create a new maze within a file store
+    ///
+    /// ```
+    /// use crate::storage::Store;
+    /// use storage::FileStore;
+    /// use maze::Maze;
+    ///
+
+    /// # // Ensure the maze file does not exist, prior to running the doc test   
+    /// # use utils::file::delete_file;
+    /// # delete_file("./maze_1.json");
+
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let mut maze_to_create = Maze::from_vec(grid);
+    /// maze_to_create.name = "maze_1".to_string();
+    ///
+    /// // Create the file store
+    /// let store = FileStore::new();
+    ///
+    /// // Create maze within the file store
+    /// match store.create_maze(&mut maze_to_create) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created maze in the file store with id = {}",
+    ///             maze_to_create.id
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create maze => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
     fn create_maze(&self, maze: &mut Maze) -> Result<(), StoreError> {
         if maze.name.is_empty() {
             return Err(StoreError::NameMissing());
@@ -58,7 +156,43 @@ impl Store for FileStore {
         self.save_maze_to_file(maze, &file_id, false)?;
         Ok(())
     }
+    /// Deletes an existing maze from within the file store instance
+    ///
+    /// # Examples
+    ///
+    /// Try to delete an existing maze from within a file store
+    ///
+    /// ```
+    /// use crate::storage::Store;
+    /// use storage::FileStore;
+    /// use maze::Maze;
+    ///
 
+    /// # // Ensure the maze file exists, prior to running the doc test
+    /// # use std::fs::File;   
+    /// # if let Ok(_) = File::create("maze_1.json") {}
+
+    /// // Create the file store
+    /// let store = FileStore::new();
+    ///
+    /// // Delete maze from within the file store
+    /// let id = "maze_1.json".to_string();
+    ///
+    /// match store.delete_maze(&id) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully delete maze from the file store",
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to delete maze with id {} => {}",
+    ///             id,
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
     fn delete_maze(&self, id: &str) -> Result<(), StoreError> {
         if id.is_empty() {
             return Err(StoreError::IdMissing());
@@ -66,7 +200,49 @@ impl Store for FileStore {
         delete_file(id);
         Ok(())
     }
+    /// Updates an existing maze within the file store instance
+    ///
+    /// # Examples
+    ///
+    /// Try to update an existing maze within a file store with new content
+    ///
+    /// ```
+    /// use crate::storage::Store;
+    /// use storage::FileStore;
+    /// use maze::Maze;
+    ///
 
+    /// # // Ensure the maze file exists, prior to running the doc test
+    /// # use std::fs::File;   
+    /// # if let Ok(_) = File::create("maze_1.json") {}
+
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let mut maze_to_update = Maze::from_vec(grid);
+    /// maze_to_update.name = "maze_1".to_string();
+    /// maze_to_update.id = "maze_1".to_string();
+    ///
+    /// // Create the file store
+    /// let store = FileStore::new();
+    ///
+    /// // Update maze within the file store
+    /// match store.update_maze(&mut maze_to_update) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully updated maze in the file store with id = {}",
+    ///             maze_to_update.id
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to update maze => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
     fn update_maze(&self, maze: &mut Maze) -> Result<(), StoreError> {
         if maze.id.is_empty() {
             return Err(StoreError::IdMissing());
@@ -77,7 +253,63 @@ impl Store for FileStore {
         self.save_maze_to_file(maze, &maze.id.clone(), true)?;
         Ok(())
     }
+    /// Loads a maze from within the file store instance
+    ///
+    /// # Returns
+    ///
+    /// The maze instance if successful
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then reload a maze from within a file store and, if successful, print it
+    ///
+    /// ```
+    /// use crate::storage::Store;
+    /// use storage::FileStore;
+    /// use maze::StdoutLinePrinter;
+    /// use maze::Maze;
+    /// use maze::Path;
+    ///
 
+    /// # // Ensure the maze file does not exist, prior to running the doc test   
+    /// # use utils::file::delete_file;
+    /// # delete_file("./maze_1.json");
+
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let mut maze_to_create = Maze::from_vec(grid);
+    /// maze_to_create.name = "maze_1".to_string();
+    ///
+    /// // Create the file store
+    /// let store = FileStore::new();
+    ///
+    /// // Create the maze within the store
+    /// if let Err(error) = store.create_maze(&mut maze_to_create) {
+    ///     println!(
+    ///         "Failed to create maze => {}",
+    ///         error
+    ///     );
+    ///     return;
+    /// }
+    /// // Now reload the maze from the store
+    /// match store.get_maze(&maze_to_create.id) {
+    ///     Ok(loaded_maze) => {
+    ///         println!("Successfully loaded maze:");
+    ///         let mut print_target = StdoutLinePrinter::new();
+    ///         let empty_path = Path { points: vec![] };
+    ///         loaded_maze.print(&mut print_target, empty_path);
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to load maze with id '{}' => {}",
+    ///             maze_to_create.id,
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
     fn get_maze(&self, id: &str) -> Result<Maze, StoreError> {
         if !self.maze_exists(id) {
             return Err(StoreError::IdNotFound(id.to_string()));
@@ -92,8 +324,44 @@ impl Store for FileStore {
             Err(error) => Err(StoreError::from(error)),
         }
     }
-
-    fn find_maze_by_name(&mut self, name: &str) -> Result<MazeItem, StoreError> {
+    /// Locates a maze item by name from within the file store instance
+    ///
+    /// # Returns
+    ///
+    /// The maze item if successful
+    ///
+    /// # Examples
+    ///
+    /// Try to find the maze item with name `my_maze` from within a file store and, if successful,
+    /// print its details
+    ///
+    /// ```
+    /// use crate::storage::Store;
+    /// use storage::FileStore;
+    ///
+    /// // Create the file store
+    /// let store = FileStore::new();
+    ///
+    /// let id = "my_maze".to_string();
+    ///
+    /// // Attempt to find the maze item
+    /// match store.find_maze_by_name(&id) {
+    ///     Ok(maze_item) => {
+    ///         println!("Successfully found maze item => id = {}, name = {}",
+    ///             maze_item.id,
+    ///             maze_item.name
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to find maze item with id '{}' => {}",
+    ///             id,
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn find_maze_by_name(&self, name: &str) -> Result<MazeItem, StoreError> {
         let file_id = self.make_maze_id(name);
         let path = PathBuf::from(file_id.clone());
 
@@ -105,7 +373,39 @@ impl Store for FileStore {
         }
         Err(StoreError::NameNotFound(name.to_string()))
     }
-
+    /// Returns the list of maze items within the file store instance
+    ///
+    /// # Returns
+    ///
+    /// The maze items if successful
+    ///
+    /// # Examples
+    ///
+    /// Try to load the maze items within a file store and, if successful,
+    /// print the number of items found
+    ///
+    /// ```
+    /// use crate::storage::Store;
+    /// use storage::FileStore;
+    ///
+    /// // Create the file store
+    /// let store = FileStore::new();
+    ///
+    /// // Attempt to load the maze items
+    /// match store.get_maze_items() {
+    ///     Ok(maze_items) => {
+    ///         println!("Successfully loaded {} maze items",
+    ///             maze_items.len()
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to load maze items=> {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
     fn get_maze_items(&self) -> Result<Vec<MazeItem>, StoreError> {
         let mut items: Vec<MazeItem> = Vec::new();
         let current_dir = std::env::current_dir()?;
@@ -136,7 +436,7 @@ impl Store for FileStore {
 mod tests {
     //use crate::file_store::FileStore;
     use super::*;
-    use utils::file::{delete_files_with_ext};
+    use utils::file::delete_files_with_ext;
 
     #[test]
     fn can_save_maze_to_valid_file_path() {

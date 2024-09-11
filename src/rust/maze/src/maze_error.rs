@@ -2,7 +2,7 @@ use std::io::ErrorKind;
 use std::{error::Error, io};
 
 #[derive(Debug)]
-/// Represents an error
+/// Represents a maze error
 pub enum MazeError {
     Maze(String),
     Io(std::io::Error),
