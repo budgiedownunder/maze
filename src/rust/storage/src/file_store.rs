@@ -14,7 +14,6 @@ use crate::StoreError;
 pub struct FileStore {}
 
 impl FileStore {
-   
     pub fn new() -> Self {
         FileStore {}
     }
@@ -22,7 +21,7 @@ impl FileStore {
     fn make_maze_id(&self, name: &str) -> String {
         format!("{}.json", name)
     }
-    
+
     fn maze_exists(&self, path: &str) -> bool {
         let path = PathBuf::from(path);
         StdPath::new(&path).exists()
@@ -49,8 +48,8 @@ impl FileStore {
 }
 
 impl Store for FileStore {
-
-    fn generate_maze_id(&self, name: &str) -> String { // TO DO - REMOVE
+    fn generate_maze_id(&self, name: &str) -> String {
+        // TO DO - REMOVE
         self.make_maze_id(name)
     }
 
@@ -171,7 +170,7 @@ mod tests {
         match store.save_maze_to_file(&mut maze, &path, true) {
             Ok(_) => {
                 delete_file(&path);
-            },    
+            }
             Err(error) => panic!("Failed to save to file: {}", error),
         }
     }
@@ -230,9 +229,9 @@ mod tests {
     fn can_create_maze_that_does_not_exist() {
         let store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", false, true);
-        
+
         delete_file(&path);
-        
+
         match store.create_maze(&mut maze) {
             Ok(_) => delete_file(&path),
             Err(error) => panic!("Failed to create maze: {}", error),
@@ -294,7 +293,7 @@ mod tests {
     fn cannot_update_non_existant_maze() {
         let store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", true, true);
-        
+
         delete_file(&path);
 
         match store.update_maze(&mut maze) {
@@ -331,7 +330,7 @@ mod tests {
     fn can_delete_maze() {
         let store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", true, true);
-        
+
         delete_file(&path);
 
         match store.save_maze_to_file(&mut maze, &path, true) {
@@ -372,7 +371,7 @@ mod tests {
     fn can_get_maze_that_exists() {
         let store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", true, true);
-        
+
         delete_file(&path);
 
         match store.create_maze(&mut maze) {
@@ -412,7 +411,71 @@ mod tests {
         }
     }
 
-    fn init_test_maze(store: &FileStore, name: &str, set_id: bool, set_name: bool) -> (String, Maze) {
+    #[test]
+    fn maze_item_list_should_be_empty() {
+        let store = FileStore::new();
+
+        let _ = delete_files_with_ext(".", "json");
+
+        match store.get_maze_items() {
+            Ok(items) => {
+                if items.len() != 0 {
+                    panic!("Maze item list is not empty ({} items found)", items.len());
+                }
+            }
+            Err(error) => {
+                panic!("{}", error);
+            }
+        }
+    }
+
+    #[test]
+    fn maze_item_list_should_not_be_empty() {
+        let store = FileStore::new();
+
+        let _ = delete_files_with_ext(".", "json");
+
+        let (_, mut maze_1) = init_test_maze(&store, "maze_1", false, true);
+        match store.create_maze(&mut maze_1) {
+            Ok(_) => {}
+            Err(error) => panic!("Failed to create maze {}: {}", maze_1.name, error),
+        }
+
+        let (_, mut maze_2) = init_test_maze(&store, "maze_2", false, true);
+        match store.create_maze(&mut maze_2) {
+            Ok(_) => {}
+            Err(error) => panic!("Failed to create maze {}: {}", maze_2.name, error),
+        }
+
+        match store.get_maze_items() {
+            Ok(items) => {
+                if items.len() != 2 {
+                    panic!("Maze item list does not contain the expected number of items (2 expected, {} found)", items.len());
+                }
+                check_maze_item(&items, 0, "maze_1");
+                check_maze_item(&items, 1, "maze_2");
+            }
+            Err(error) => {
+                panic!("{}", error);
+            }
+        }
+
+        fn check_maze_item(items: &Vec<MazeItem>, idx: usize, expected: &str) {
+            if items[idx].name != expected {
+                panic!(
+                    "Item at index {} contains unexpected value (expected = {}, found: {})",
+                    idx, expected, items[idx].name
+                );
+            }
+        }
+    }
+
+    fn init_test_maze(
+        store: &FileStore,
+        name: &str,
+        set_id: bool,
+        set_name: bool,
+    ) -> (String, Maze) {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
             vec!['S', ' ', 'W'], 
@@ -427,6 +490,25 @@ mod tests {
         }
         let path = format!("./{}.json", name);
         (path, maze)
+    }
+
+    fn delete_files_with_ext(dir: &str, extension: &str) -> std::io::Result<()> {
+        let files = fs::read_dir(dir)?;
+        for file in files {
+            let file = file?;
+            let path = file.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension() {
+                    if ext == extension {
+                        if let Some(file_name) = path.file_name() {
+                            let file_name_str = file_name.to_string_lossy();
+                            delete_file(&file_name_str);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn assert_io_err_not_found(error: StoreError) {
