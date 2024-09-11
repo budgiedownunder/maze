@@ -509,7 +509,7 @@ pub trait App: LinePrinter {
             self.get_store().update_maze(&mut maze)?;
         }
         *self.get_maze_mut() = maze.clone();
-        self.print_line(&format!("Saved '{}' to '{}'", name, maze.id))?;
+        self.print_line(&format!("Saved as '{}'", name))?;
         Ok(())
     }
 

@@ -18,9 +18,7 @@ lazy_static::lazy_static! {
 
 fn new_mock_app() -> MockApp {
     match get_store(storage::StoreType::File) {
-        Ok(store) => {
-            MockApp::new(store)
-        }
+        Ok(store) => MockApp::new(store),
         Err(error) => {
             panic!(
                 "{}",
@@ -83,6 +81,7 @@ fn do_quit_and_verify(
     app.run()?;
     delete_files_with_ext(".", "json")?;
     app.verify_output(expected_output)?;
+    //    app.print_output();
     Ok(())
 }
 
@@ -207,10 +206,7 @@ fn add_save_maze_as_steps(
         }
         app.add_input_key('Y', false);
     }
-    expected_output.push(format!(
-        "Saved '{}' to '{}.json'",
-        config.new_name, config.new_name
-    ));
+    expected_output.push(format!("Saved as '{}'", config.new_name));
 }
 
 fn add_delete_maze_steps(
