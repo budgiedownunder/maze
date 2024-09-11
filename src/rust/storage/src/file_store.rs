@@ -48,7 +48,6 @@ impl FileStore {
 }
 
 impl Store for FileStore {
-
     fn create_maze(&self, maze: &mut Maze) -> Result<(), StoreError> {
         if maze.name.is_empty() {
             return Err(StoreError::NameMissing());
@@ -415,7 +414,7 @@ mod tests {
 
         match store.get_maze_items() {
             Ok(items) => {
-                if items.len() != 0 {
+                if !items.is_empty() {
                     panic!("Maze item list is not empty ({} items found)", items.len());
                 }
             }
@@ -456,7 +455,7 @@ mod tests {
             }
         }
 
-        fn check_maze_item(items: &Vec<MazeItem>, idx: usize, expected: &str) {
+        fn check_maze_item(items: &[MazeItem], idx: usize, expected: &str) {
             if items[idx].name != expected {
                 panic!(
                     "Item at index {} contains unexpected value (expected = {}, found: {})",
