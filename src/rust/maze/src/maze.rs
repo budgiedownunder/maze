@@ -24,6 +24,21 @@ pub struct Maze {
     pub definition: Definition,
 }
 
+impl PartialEq for Maze {
+    fn eq(&self, other: &Self) -> bool {
+        if self.id != other.id {
+            return false;
+        }
+
+        if let (Ok(self_json), Ok(other_json)) = (self.to_json(), other.to_json()) {
+            return self_json == other_json;
+        }
+
+        false
+    }
+}
+
+
 impl Maze {
     /// Creates a new maze instance with the given definition
     /// # Arguments
@@ -208,7 +223,7 @@ impl Maze {
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let m = Maze::from_vec(grid);
+    /// let mut m = Maze::from_vec(grid);
     /// let path = "./my_maze.json";
     /// match m.save_to_file(path, true) {
     ///     Ok(_) => println!("Successfully saved to file: {}", path),
@@ -250,7 +265,7 @@ impl Maze {
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let m1 = Maze::from_vec(grid);
+    /// let mut m1 = Maze::from_vec(grid);
     /// let path = "./my_maze.json";
     /// match m1.save_to_file(path, true) {
     ///     Ok(_) => println!("Successfully saved to file: {}", path),
