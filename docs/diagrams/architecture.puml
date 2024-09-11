@@ -6,10 +6,15 @@ title Architecture Diagram for Maze Project
 
 Person(user, "User", "A user of the system")
 System_Boundary(c1, "Maze Project") {
-    Container(cli_app, "Maze Console", "Rust", "Console application")
-    Container(maze_library, "Maze Library", "Rust", "Provides maze definition and solution calculation functionality")
+    Container(console_app, "Maze Console", "Rust", "Console application")
+    Container(storage_library, "Storage Library", "Rust", "Maze storage")
+    Container(maze_library, "Maze Library", "Rust", "Maze definition and solution calculation")
+    Container(utils_library, "Utility Library", "Rust", "Shared utility functions")
 }
 
-Rel(user, cli_app, "Uses")
-Rel(cli_app, maze_library, "Uses")
+Rel(user, console_app, "Uses")
+Rel(console_app, maze_library, "Uses")
+Rel(console_app, storage_library, "Uses")
+Rel(console_app, utils_library, "Uses")
+Rel(storage_library, utils_library, "Uses")
 @enduml
