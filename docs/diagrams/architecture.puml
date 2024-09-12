@@ -16,5 +16,6 @@ Rel(user, maze_console, "Uses")
 Rel(maze_console, maze, "Uses")
 Rel(maze_console, storage, "Uses")
 Rel(maze_console, utils, "Uses")
+Rel(storage, maze, "Uses")
 Rel(storage, utils, "Uses")
 @enduml
