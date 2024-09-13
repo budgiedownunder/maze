@@ -13,7 +13,7 @@ pub struct Definition {
     // - `'F'`:  Represents the finishing cell (limited to one).
     // - `'W'`:  Represents a wall.
     // - `' '`:  Represents an empty cell.
-    grid: Vec<Vec<char>>,
+    pub grid: Vec<Vec<char>>,
 }
 
 impl<'de> Deserialize<'de> for Definition {

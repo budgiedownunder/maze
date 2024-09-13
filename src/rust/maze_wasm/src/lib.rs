@@ -31,6 +31,34 @@ fn to_js_point_obj(point: &Point) -> Object {
 }
 
 #[wasm_bindgen]
+pub enum MazeCellType {
+    Empty,
+    Start,
+    Finish,
+    Wall,
+}
+
+fn to_cell_type_enum(cell_type: char) -> MazeCellType {
+    match cell_type {
+        'S' => MazeCellType::Start,
+        'F' => MazeCellType::Finish,
+        'W' => MazeCellType::Wall,
+        _ => MazeCellType::Empty,
+    }
+}
+
+fn to_js_cell_info_obj(cell_type: char) -> Object {
+    let obj = Object::new();
+    Reflect::set(
+        &obj,
+        &JsValue::from_str("cell_type"),
+        &JsValue::from(to_cell_type_enum(cell_type) as u32),
+    )
+    .unwrap();
+    obj
+}
+
+#[wasm_bindgen]
 impl SolutionWasm {
     pub fn get_path_points(&self) -> Array {
         let path_points = Array::new();
@@ -92,12 +120,18 @@ impl MazeWasm {
         self.maze.definition.col_count()
     }
 
-    /*
     #[wasm_bindgen]
     pub fn get_cell(&self, row: JsValue, col: JsValue) -> Result<Object, JsValue> {
-        Ok()
+        let row = Self::arg_to_usize("row", row)?;
+        if row >= self.maze.definition.row_count() {
+            return Err(JsValue::from_str("Row out of bounds"));
+        }
+        let col = Self::arg_to_usize("col", col)?;
+        if col >= self.maze.definition.col_count() {
+            return Err(JsValue::from_str("Column out of bounds"));
+        }
+        Ok(to_js_cell_info_obj(self.maze.definition.grid[row][col]))
     }
-    */
 
     #[wasm_bindgen]
     pub fn set_start(&mut self, start_row: JsValue, start_col: JsValue) -> Result<(), JsValue> {
