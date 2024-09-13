@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maze WebAssembly</title>
+</head>
+
+<body>
+    <h1>Maze Row Count Example</h1>
+    <script type="module">
+        import init, { MazeWasm } from '../pkg/maze_wasm.js';
+
+        async function run() {
+            // Initialize the Wasm module
+            await init();
+
+            // Create a new MazeWasm instance
+            let maze = new MazeWasm();
+
+            // Get and display the row count
+            console.log("Is Empty = ", maze.is_empty(), ", Row Count:", maze.get_row_count(), ", Col Count: ", maze.get_col_count());
+
+            let json = maze.to_json();
+            console.log("JSON:", json);
+
+            try {
+                console.log("Calling from_json() #1...");
+                maze.from_json(1);
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #2...");
+                maze.from_json({});
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #3...");
+                maze.from_json(true);
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #4...");
+                maze.from_json(null);
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #5...");
+                maze.from_json(undefined);
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #6...");
+                maze.from_json("");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #7...");
+                maze.from_json("{}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #8...");
+                maze.from_json("{\"name\":}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #9...");
+                maze.from_json("{\"name\":\"test\",}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #10...");
+                maze.from_json("{\"name\":\"test\"}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #11...");
+                maze.from_json("{\"name\":\"test\", \"definition\"}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #12...");
+                maze.from_json("{\"name\":\"test\", \"definition\":}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #13...");
+                maze.from_json("{\"name\":\"test\", \"definition\":[]}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #14...");
+                maze.from_json("{\"name\":\"test\", \"definition\":{}}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #15...");
+                maze.from_json("{\"name\":\"test\", \"definition\":{\"grid\"}}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #16...");
+                maze.from_json("{\"name\":\"test\", \"definition\":{\"grid\":}}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #17...");
+                maze.from_json("{\"name\":\"test\", \"definition\":{\"grid\":[}}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+            try {
+                console.log("Calling from_json() #18...");
+                maze.from_json("{\"name\":\"test\", \"definition\":{\"grid\":[]}}");
+                console.log("from_json() succeded");
+            }
+            catch(e) {
+                console.error("from_json() failed: ", e);
+            }
+
+            console.log("Calling reset() #19...");
+            maze.reset();
+            console.log("After reset() => Is Empty = ", maze.is_empty(), ", Row Count:", maze.get_row_count(), ", Col Count: ", maze.get_col_count());
+
+            try {
+                console.log("Calling resize() #20...");
+                maze.resize(10, 12);
+                console.log("resize() succeeded");
+                console.log("After resize() => Is Empty = ", maze.is_empty(), ", Row Count:", maze.get_row_count(), ", Col Count: ", maze.get_col_count());
+            }
+            catch(e) {
+                console.error("resize() failed: ", e);
+            }
+
+            try {
+                console.log("Calling get_start() #21...");
+                let start = maze.get_start();
+                console.log("get_start() succeeded => ", start);
+            }
+            catch(e) {
+                console.error("get_start() failed: ", e);
+            }
+
+            try {
+                console.log("Calling set_start() #22...");
+                maze.set_start(1, 1);
+                console.log("set_start() succeeded");
+            }
+            catch(e) {
+                console.error("set_start() failed: ", e);
+            }
+
+            try {
+                console.log("Calling get_start() #23...");
+                let start = maze.get_start();
+                console.log("get_start() succeeded => ", start);
+            }
+            catch(e) {
+                console.error("get_start() failed: ", e);
+            }
+
+            try {
+                console.log("Calling get_finish() #24...");
+                let finish = maze.get_finish();
+                console.log("get_finish() succeeded => ", finish);
+            }
+            catch(e) {
+                console.error("get_start() failed: ", e);
+            }
+        
+            try {
+                console.log("Calling set_finish() #25...");
+                maze.set_finish(9, 9);
+                console.log("set_finish() succeeded");
+            }
+            catch(e) {
+                console.error("set_finish() failed: ", e);
+            }
+
+            try {
+                console.log("Calling get_finish() #26...");
+                let finish = maze.get_finish();
+                console.log("get_finish() succeeded => ", finish);
+            }
+            catch(e) {
+                console.error("get_start() failed: ", e);
+            }
+
+            try {
+                console.log("Calling solve() #27...");
+                let solution = maze.solve();
+                console.log("solve() succeded");
+                let points = solution.get_path_points();
+                console.log("solve() points = ", points);
+
+            }
+            catch(e) {
+                console.error("solve() failed: ", e);
+            }
+        }
+
+        run();
+    </script>
+</body>
+
+</html>
