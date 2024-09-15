@@ -98,11 +98,55 @@ impl MazeWasm {
         &mut self,
         new_row_count: JsValue,
         new_col_count: JsValue,
-    ) -> Result<MazeWasm, JsValue> {
+    ) -> Result<(), JsValue> {
         let new_row_count = Self::arg_to_usize("new_row_count", new_row_count)?;
         let new_col_count = Self::arg_to_usize("new_col_count", new_col_count)?;
         self.maze.definition.resize(new_row_count, new_col_count);
-        Ok(self.clone())
+        Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn insert_rows(&mut self, start_row: JsValue, count: JsValue) -> Result<(), JsValue> {
+        let start_row = Self::arg_to_usize("start_row", start_row)?;
+        let count = Self::arg_to_usize("count", count)?;
+        self.maze
+            .definition
+            .insert_rows(start_row, count)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn delete_rows(&mut self, start_row: JsValue, count: JsValue) -> Result<(), JsValue> {
+        let start_row = Self::arg_to_usize("start_row", start_row)?;
+        let count = Self::arg_to_usize("count", count)?;
+        self.maze
+            .definition
+            .delete_rows(start_row, count)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn insert_cols(&mut self, start_col: JsValue, count: JsValue) -> Result<(), JsValue> {
+        let start_col = Self::arg_to_usize("start_col", start_col)?;
+        let count = Self::arg_to_usize("count", count)?;
+        self.maze
+            .definition
+            .insert_cols(start_col, count)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn delete_cols(&mut self, start_col: JsValue, count: JsValue) -> Result<(), JsValue> {
+        let start_col = Self::arg_to_usize("start_col", start_col)?;
+        let count = Self::arg_to_usize("count", count)?;
+        self.maze
+            .definition
+            .delete_cols(start_col, count)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
     }
 
     #[wasm_bindgen]
@@ -240,12 +284,12 @@ impl MazeWasm {
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
-    pub fn from_json(&mut self, json_string: JsValue) -> Result<MazeWasm, JsValue> {
+    pub fn from_json(&mut self, json_string: JsValue) -> Result<(), JsValue> {
         let json_str = Self::arg_to_string("json_string", json_string)?;
         self.maze
             .from_json(&json_str)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        Ok(self.clone())
+        Ok(())
     }
 
     pub fn solve(&self) -> Result<SolutionWasm, JsValue> {
