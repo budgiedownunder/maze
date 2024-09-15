@@ -4,13 +4,33 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 
 #[wasm_bindgen]
+/// Web assembly representation of a maze
 pub struct MazeWasm {
     maze: Maze,
 }
 
 #[wasm_bindgen]
-pub struct SolutionWasm {
+/// Web assembly representation of a maze solution
+pub struct MazeSolutionWasm {
     solution: Solution,
+}
+
+#[wasm_bindgen]
+/// Web assembly representation of a maze cell type
+pub enum MazeCellTypeWasm {
+    Empty,
+    Start,
+    Finish,
+    Wall,
+}
+
+fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
+    match cell_type {
+        'S' => MazeCellTypeWasm::Start,
+        'F' => MazeCellTypeWasm::Finish,
+        'W' => MazeCellTypeWasm::Wall,
+        _ => MazeCellTypeWasm::Empty,
+    }
 }
 
 fn to_js_point_obj(point: &Point) -> Object {
@@ -30,23 +50,6 @@ fn to_js_point_obj(point: &Point) -> Object {
     obj
 }
 
-#[wasm_bindgen]
-pub enum MazeCellType {
-    Empty,
-    Start,
-    Finish,
-    Wall,
-}
-
-fn to_cell_type_enum(cell_type: char) -> MazeCellType {
-    match cell_type {
-        'S' => MazeCellType::Start,
-        'F' => MazeCellType::Finish,
-        'W' => MazeCellType::Wall,
-        _ => MazeCellType::Empty,
-    }
-}
-
 fn to_js_cell_info_obj(cell_type: char) -> Object {
     let obj = Object::new();
     Reflect::set(
@@ -59,7 +62,49 @@ fn to_js_cell_info_obj(cell_type: char) -> Object {
 }
 
 #[wasm_bindgen]
-impl SolutionWasm {
+impl MazeSolutionWasm {
+    /// Returns the array of points (if any) associated with the maze solution
+    ///
+    /// # Returns
+    ///
+    /// This function will return an array of Javascript objects defining each point in
+    /// the solution. Each solution point object has the folllowing properties:
+    /// ```javascript
+    /// {
+    ///     row : <row index>,    // zero-based row index for the solution point
+    ///     col : <column index>  // zero-based column index for the solution point
+    /// }
+    /// ```
+    /// # Examples
+    ///
+    /// Initialize a maze from a JSON string, then attempt to solve it and, if successful,
+    /// print the maze solution path's points
+    ///
+    /// ```javascript
+    /// import init, { MazeWasm } from 'maze_wasm.js';
+    ///
+    /// let maze = new MazeWasm();
+    /// try {
+    ///     maze.from_json(`{
+    ///         \"name\":\"test\",
+    ///         \"definition\": {
+    ///             \"grid\":[
+    ///                 [\"S\", \"W\", \" \", \" \", \"W\"],
+    ///                 [\" \", \"W\", \" \", \"W\", \" \"],
+    ///                 [\" \", \" \", \" \", \"W\", \"F\"],
+    ///                 [\"W\", \" \", \"W\", \" \", \" \"],
+    ///                 [\" \", \" \", \" \", \"W\", \" \"],
+    ///                 [\"W\", \"W\", \" \", \" \", \" \"],
+    ///                 [\"W\", \"W\", \" \", \"W\", \" \"]
+    ///             ]
+    ///     }}`);
+    ///     let solution = maze.solve();
+    ///     let solution_points = solution.get_path_points();
+    ///     console.log("Successfully solved maze. Solution points are: ", solution_points);
+    /// } catch (e) {
+    ///     console.error("Operation failed: ", e);
+    /// }
+    /// ```
     pub fn get_path_points(&self) -> Array {
         let path_points = Array::new();
         for point in &self.solution.path.points {
@@ -292,12 +337,12 @@ impl MazeWasm {
         Ok(())
     }
 
-    pub fn solve(&self) -> Result<SolutionWasm, JsValue> {
+    pub fn solve(&self) -> Result<MazeSolutionWasm, JsValue> {
         let solution = self
             .maze
             .solve()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        Ok(SolutionWasm { solution })
+        Ok(MazeSolutionWasm { solution })
     }
 
     // Private helper functions and methods
