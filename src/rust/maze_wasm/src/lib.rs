@@ -134,7 +134,11 @@ impl MazeWasm {
     }
 
     #[wasm_bindgen]
-    pub fn set_start(&mut self, start_row: JsValue, start_col: JsValue) -> Result<(), JsValue> {
+    pub fn set_start_cell(
+        &mut self,
+        start_row: JsValue,
+        start_col: JsValue,
+    ) -> Result<(), JsValue> {
         let row = Self::arg_to_usize("start_row", start_row)?;
         let col = Self::arg_to_usize("start_col", start_col)?;
         self.maze
@@ -145,7 +149,7 @@ impl MazeWasm {
     }
 
     #[wasm_bindgen]
-    pub fn get_start(&mut self) -> Result<Object, JsValue> {
+    pub fn get_start_cell(&mut self) -> Result<Object, JsValue> {
         if let Some(start) = self.maze.definition.get_start() {
             return Ok(to_js_point_obj(&start));
         }
@@ -153,7 +157,11 @@ impl MazeWasm {
     }
 
     #[wasm_bindgen]
-    pub fn set_finish(&mut self, finish_row: JsValue, finish_col: JsValue) -> Result<(), JsValue> {
+    pub fn set_finish_cell(
+        &mut self,
+        finish_row: JsValue,
+        finish_col: JsValue,
+    ) -> Result<(), JsValue> {
         let row = Self::arg_to_usize("finish_row", finish_row)?;
         let col = Self::arg_to_usize("finish_col", finish_col)?;
         self.maze
@@ -164,11 +172,65 @@ impl MazeWasm {
     }
 
     #[wasm_bindgen]
-    pub fn get_finish(&mut self) -> Result<Object, JsValue> {
+    pub fn get_finish_cell(&mut self) -> Result<Object, JsValue> {
         if let Some(finish) = self.maze.definition.get_finish() {
             return Ok(to_js_point_obj(&finish));
         }
         Err(JsValue::from_str("No finish cell defined"))
+    }
+
+    fn set_cell_values(
+        &mut self,
+        start_row: JsValue,
+        start_col: JsValue,
+        end_row: JsValue,
+        end_col: JsValue,
+        modify_char: char,
+    ) -> Result<(), JsValue> {
+        let start_row = Self::arg_to_usize("start_row", start_row)?;
+        let start_col = Self::arg_to_usize("start_col", start_col)?;
+        let end_row = Self::arg_to_usize("end_row", end_row)?;
+        let end_col = Self::arg_to_usize("end_col", end_col)?;
+
+        self.maze
+            .definition
+            .set_value(
+                Point {
+                    row: start_row - 1,
+                    col: start_col - 1,
+                },
+                Point {
+                    row: end_row - 1,
+                    col: end_col - 1,
+                },
+                modify_char,
+            )
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn set_wall_cells(
+        &mut self,
+        start_row: JsValue,
+        start_col: JsValue,
+        end_row: JsValue,
+        end_col: JsValue,
+    ) -> Result<(), JsValue> {
+        self.set_cell_values(start_row, start_col, end_row, end_col, 'W')?;
+        Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn clear_cells(
+        &mut self,
+        start_row: JsValue,
+        start_col: JsValue,
+        end_row: JsValue,
+        end_col: JsValue,
+    ) -> Result<(), JsValue> {
+        self.set_cell_values(start_row, start_col, end_row, end_col, ' ')?;
+        Ok(())
     }
 
     #[wasm_bindgen]

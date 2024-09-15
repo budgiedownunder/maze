@@ -26,6 +26,26 @@
             return "Uknown cell type";
         }
 
+        function print_maze(maze) {
+            try {
+                console.log("Maze Cells:");
+                let row_count = maze.get_row_count();
+                let col_count = maze.get_col_count();
+
+                for (let row = 0; row < row_count; row++) {
+                    for (let col = 0; col < col_count; col++) {
+                        let cell = maze.get_cell(row, col);
+                        let cell_type_str = get_cell_type_str(cell.cell_type);
+                        console.log(`[${row}, ${col}] - ${cell_type_str}`);
+                    }
+                }
+            }
+            catch (e) {
+                console.error("get_cell() failed: ", e);
+            }
+        }
+
+
 
         async function run() {
             // Initialize the Wasm module
@@ -200,57 +220,57 @@
             }
 
             try {
-                console.log("Calling get_start() #21...");
-                let start = maze.get_start();
-                console.log("get_start() succeeded => ", start);
+                console.log("Calling get_start_cell() #21...");
+                let start = maze.get_start_cell();
+                console.log("get_start_cell() succeeded => ", start);
             }
             catch (e) {
-                console.error("get_start() failed: ", e);
+                console.error("get_start_cell() failed: ", e);
             }
 
             try {
-                console.log("Calling set_start() #22...");
-                maze.set_start(1, 1);
+                console.log("Calling set_start_cell() #22...");
+                maze.set_start_cell(1, 1);
                 console.log("set_start() succeeded");
             }
             catch (e) {
-                console.error("set_start() failed: ", e);
+                console.error("set_start_cell() failed: ", e);
             }
 
             try {
-                console.log("Calling get_start() #23...");
-                let start = maze.get_start();
-                console.log("get_start() succeeded => ", start);
+                console.log("Calling get_start_cell() #23...");
+                let start = maze.get_start_cell();
+                console.log("get_start_cell() succeeded => ", start);
             }
             catch (e) {
-                console.error("get_start() failed: ", e);
+                console.error("get_start_cell() failed: ", e);
             }
 
             try {
-                console.log("Calling get_finish() #24...");
-                let finish = maze.get_finish();
-                console.log("get_finish() succeeded => ", finish);
+                console.log("Calling get_finish_cell() #24...");
+                let finish = maze.get_finish_cell();
+                console.log("get_finish_cell() succeeded => ", finish);
             }
             catch (e) {
-                console.error("get_start() failed: ", e);
+                console.error("get_finish_cell() failed: ", e);
             }
 
             try {
-                console.log("Calling set_finish() #25...");
-                maze.set_finish(9, 9);
-                console.log("set_finish() succeeded");
+                console.log("Calling set_finish_cell() #25...");
+                maze.set_finish_cell(9, 9);
+                console.log("set_finish_cell() succeeded");
             }
             catch (e) {
-                console.error("set_finish() failed: ", e);
+                console.error("set_finish_cell() failed: ", e);
             }
 
             try {
-                console.log("Calling get_finish() #26...");
-                let finish = maze.get_finish();
-                console.log("get_finish() succeeded => ", finish);
+                console.log("Calling get_finish_cell() #26...");
+                let finish = maze.get_finish_cell();
+                console.log("get_finish_cell() succeeded => ", finish);
             }
             catch (e) {
-                console.error("get_start() failed: ", e);
+                console.error("get_finish_cell() failed: ", e);
             }
 
             try {
@@ -266,23 +286,90 @@
             }
 
             try {
-                console.log("Calling get_cell fore whole maze #28..");
-                let row_count = maze.get_row_count();
-                let col_count = maze.get_col_count();
-
-                for (let row = 0; row < row_count; row++) {
-                    for (let col = 0; col < col_count; col++) {
-                        let cell = maze.get_cell(row, col);
-                        let cell_type_str = get_cell_type_str(cell.cell_type);
-                        console.log(`[${row}, ${col}] - ${cell_type_str}`);
-                    }
-                }
+                console.log("Calling get_cell() #28...");
+                let cell = maze.get_cell(-1);
+                console.log("get_cell() succeeded: ", cell);
             }
             catch (e) {
                 console.error("get_cell() failed: ", e);
             }
 
+            try {
+                console.log("Calling get_cell() #29...");
+                let cell = maze.get_cell(1);
+                console.log("get_cell() succeeded: ", cell);
+            }
+            catch (e) {
+                console.error("get_cell() failed: ", e);
+            }
 
+            try {
+                console.log("Calling get_cell() #30...");
+                let cell = maze.get_cell(1, 2);
+                console.log("get_cell() succeeded: ", cell);
+            }
+            catch (e) {
+                console.error("get_cell() failed: ", e);
+            }
+
+            console.log("print_maze() #31...");
+            print_maze(maze);
+
+            try {
+                console.log("Calling set_wall_cells() #31...");
+                maze.set_wall_cells(-1, -1);
+                console.log("set_wall_cells() succeeded");
+            }
+            catch (e) {
+                console.error("set_wall_cells() failed: ", e);
+            }
+
+            try {
+                console.log("Calling set_wall_cells() #32...");
+                maze.set_wall_cells(1, -1);
+                console.log("set_wall_cells() succeeded");
+            }
+            catch (e) {
+                console.error("set_wall_cells() failed: ", e);
+            }
+
+            try {
+                console.log("Calling set_wall_cells() #33...");
+                maze.set_wall_cells(1, 2);
+                console.log("set_wall_cells() succeeded");
+            }
+            catch (e) {
+                console.error("set_wall_cells() failed: ", e);
+            }
+
+            try {
+                console.log("Calling set_wall_cells() #34...");
+                maze.set_wall_cells(1, 2, 3);
+                console.log("set_wall_cells() succeeded");
+            }
+            catch (e) {
+                console.error("set_wall_cells() failed: ", e);
+            }
+
+            try {
+                console.log("Calling set_wall_cells() #35...");
+                maze.set_wall_cells(1, 2, 3, 4);
+                console.log("set_wall_cells() succeeded");
+                print_maze(maze);
+            }
+            catch (e) {
+                console.error("set_wall_cells() failed: ", e);
+            }
+
+            try {
+                console.log("Calling clear_cells() #36...");
+                maze.clear_cells(1, 2, 1, 4);
+                console.log("clear_cells() succeeded");
+                print_maze(maze);
+            }
+            catch (e) {
+                console.error("clear_cells() failed: ", e);
+            }
         }
 
         run();
