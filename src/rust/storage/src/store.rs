@@ -19,6 +19,7 @@ pub trait Store {
     fn get_maze(&self, id: &str) -> Result<Maze, StoreError>;
     /// Locates a maze item by its name within the store
     fn find_maze_by_name(&self, name: &str) -> Result<MazeItem, StoreError>;
-    /// Returns the list of maze items within the store
+    /// Returns the list of maze items within the store, sorted
+    /// alphabetically in ascending order
     fn get_maze_items(&self) -> Result<Vec<MazeItem>, StoreError>;
 }
