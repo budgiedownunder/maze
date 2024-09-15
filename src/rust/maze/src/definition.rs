@@ -388,6 +388,12 @@ impl Definition {
                 start_col
             )));
         }
+        if start_col + count > self.col_count() {
+            return Err(MazeError::new(format!(
+                "invalid 'count' ({}) - too large",
+                count
+            )));
+        }
         for row in &mut self.grid {
             row.drain(start_col..(start_col + count));
         }
@@ -470,6 +476,12 @@ impl Definition {
             return Err(MazeError::new(format!(
                 "invalid 'start_row' index ({})",
                 start_row
+            )));
+        }
+        if start_row + count > self.row_count() {
+            return Err(MazeError::new(format!(
+                "invalid 'count' ({}) - too large",
+                count
             )));
         }
         self.grid.drain(start_row..(start_row + count));
