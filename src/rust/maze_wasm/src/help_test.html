@@ -17,8 +17,9 @@
             // Initialize the Wasm module
             await init();
 
-            let maze = new MazeWasm();
+            // MazeSolutionWasm::get_path_points()
             try {
+                let maze = new MazeWasm();
                 maze.from_json(`{
                     \"name\":\"test\", 
                     \"definition\": {
@@ -34,12 +35,19 @@
                 }}`);
                 let solution = maze.solve();
                 let solution_points = solution.get_path_points();
-                console.log("Successfully solved maze. Solution points are: ", solution_points);            
+                console.log("Successfully solved maze. Solution points are: ", solution_points);
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+
+            // MazeWasm::new()
+            try {
+                let maze = new MazeWasm();
+                console.log("Successfully created maze. Dimensions: ", maze.get_row_count(), "rows x ", maze.get_col_count(), " columns");
             } catch (e) {
                 console.error("Operation failed: ", e);
             }
         }
-
         run();
     </script>
 </body>

@@ -16,7 +16,7 @@ pub struct MazeSolutionWasm {
 }
 
 #[wasm_bindgen]
-/// Web assembly representation of a maze cell type
+/// Web assembly enum for a maze cell type
 pub enum MazeCellTypeWasm {
     Empty,
     Start,
@@ -83,8 +83,8 @@ impl MazeSolutionWasm {
     /// ```javascript
     /// import init, { MazeWasm } from 'maze_wasm.js';
     ///
-    /// let maze = new MazeWasm();
     /// try {
+    ///     let maze = new MazeWasm();
     ///     maze.from_json(`{
     ///         \"name\":\"test\",
     ///         \"definition\": {
@@ -125,6 +125,32 @@ impl Clone for MazeWasm {
 #[wasm_bindgen]
 impl MazeWasm {
     #[wasm_bindgen(constructor)]
+    /// Returns the array of points (if any) associated with the maze solution
+    ///
+    /// # Returns
+    ///
+    /// This function will return an array of Javascript objects defining each point in
+    /// the solution. Each solution point object has the folllowing properties:
+    /// ```javascript
+    /// {
+    ///     row : <row index>,    // zero-based row index for the solution point
+    ///     col : <column index>  // zero-based column index for the solution point
+    /// }
+    /// ```
+    /// # Examples
+    ///
+    /// Create a new maze and print its dimensions (which will be 0 rows x 0 columns)
+    ///
+    /// ```javascript
+    /// import init, { MazeWasm } from 'maze_wasm.js';
+    ///
+    /// try {
+    ///     let maze = new MazeWasm();
+    ///     console.log("Successfully created maze. Dimensions: ", maze.get_row_count(), "rows x ", maze.get_col_count(), " columns");
+    /// } catch (e) {
+    ///     console.error("Operation failed: ", e);
+    /// }
+    /// ```
     pub fn new() -> Result<MazeWasm, JsValue> {
         let def = Definition::new(0, 0);
         Ok(MazeWasm {
