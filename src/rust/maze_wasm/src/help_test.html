@@ -10,8 +10,7 @@
 <body>
     <h1>Maze Row Count Example</h1>
     <script type="module">
-        import init, { MazeWasm, MazeCellType } from '../pkg/maze_wasm.js';
-
+        import init, { MazeWasm, MazeCellTypeWasm } from '../pkg/maze_wasm.js';
 
         async function run() {
             // Initialize the Wasm module
@@ -21,7 +20,7 @@
             try {
                 let maze = new MazeWasm();
                 maze.from_json(`{
-                    \"name\":\"test\", 
+                    \"name\":\"test\",
                     \"definition\": {
                         \"grid\":[
                             [\"S\", \"W\", \" \", \" \", \"W\"],
@@ -39,11 +38,225 @@
             } catch (e) {
                 console.error("Operation failed: ", e);
             }
-
             // MazeWasm::new()
             try {
                 let maze = new MazeWasm();
-                console.log("Successfully created maze. Dimensions: ", maze.get_row_count(), "rows x ", maze.get_col_count(), " columns");
+                console.log("Successfully created maze. Dimensions: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::reset()
+            try {
+                let maze = new MazeWasm();
+                maze.resize(10, 5);
+                console.log("After resize(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+                maze.reset();
+                console.log("After reset(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::resize()
+            try {
+                let maze = new MazeWasm();
+                console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+                maze.resize(10, 5);
+                console.log("After resize(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::insert_rows()
+            try {
+                let maze = new MazeWasm();
+                console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+                maze.insert_rows(0, 5);
+                console.log("After insert_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::delete_rows()
+            try {
+                let maze = new MazeWasm();
+                console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+                maze.insert_rows(0, 5);
+                console.log("After insert_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+                maze.delete_rows(2, 3);
+                console.log("After delete_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::insert_cols()
+            try {
+                let maze = new MazeWasm();
+                console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+                maze.insert_rows(0, 1);
+                console.log("After insert_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+                maze.insert_cols(0, 10);
+                console.log("After insert_cols(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::delete_cols()
+            try {
+                let maze = new MazeWasm();
+                maze.resize(10, 5);
+                console.log("After resize(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+                maze.delete_cols(1, 3);
+                console.log("After delete_cols(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::is_empty()
+            try {
+                let maze = new MazeWasm();
+                console.log("Ater creation, is_empty() = ", maze.is_empty());
+                maze.resize(1,2);
+                console.log("Ater resize(), is_empty() = ", maze.is_empty());
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::get_row_count()
+            try {
+                let maze = new MazeWasm();
+                console.log("After creation, get_row_count() = ", maze.get_row_count());
+                maze.resize(10, 5);
+                console.log("After resize(), get_row_count() = ", maze.get_row_count());
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::get_col_count()
+            try {
+                let maze = new MazeWasm();
+                console.log("After creation, get_col_count() = ", maze.get_col_count());
+                maze.resize(10, 5);
+                console.log("After resize(), get_col_count() = ", maze.get_col_count());
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::get_cell()
+            try {
+                let maze = new MazeWasm();
+                maze.resize(10, 5);
+                console.log("get_cell(1, 2) = ", maze.get_cell(1, 2));
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::set_start_cell()
+            try {
+                let maze = new MazeWasm();
+                maze.resize(10, 5);
+                console.log("Before set_start_cell(), get_cell(1, 2) = ", maze.get_cell(1, 2));
+                maze.set_start_cell(1, 2);
+                console.log("After set_start_cell(), get_cell(1, 2) = ", maze.get_cell(1, 2));
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::get_start_cell()
+            try {
+                let maze = new MazeWasm();
+                maze.resize(10, 5);
+                maze.set_start_cell(1, 2);
+                console.log("get_start_cell() = ", maze.get_start_cell());
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::set_finish_cell()
+            try {
+                let maze = new MazeWasm();
+                maze.resize(10, 5);
+                console.log("Before set_finish_cell(), get_cell(3, 4) = ", maze.get_cell(3, 4));
+                maze.set_finish_cell(3, 4);
+                console.log("After set_finish_cell(), get_cell(3, 4) = ", maze.get_cell(3, 4));
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::get_finish_cell()
+            try {
+                let maze = new MazeWasm();
+                maze.resize(10, 5);
+                maze.set_finish_cell(9, 4);
+                console.log("get_finish_cell() = ", maze.get_finish_cell());
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::set_wall_cells()
+            try {
+                let maze = new MazeWasm();
+                maze.resize(10, 5);
+                maze.set_wall_cells(0, 1, 0, 3);
+                for( let col  = 0; col < 5; col ++) {
+                    console.log(`After set_walls_cell(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+                }
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::clear_cells()
+            try {
+                let maze = new MazeWasm();
+                maze.resize(10, 5);
+                maze.set_wall_cells(0, 1, 0, 3);
+                for( let col  = 0; col < 5; col ++) {
+                    console.log(`After set_walls_cell(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+                }
+                maze.clear_cells(0, 2, 3, 4);
+                for( let col  = 0; col < 5; col ++) {
+                    console.log(`After clear_walls(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+                }
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeWasm::to_json()
+            try {
+                let maze = new MazeWasm();
+                maze.resize(6, 5);
+                maze.set_wall_cells(0, 1, 2, 4);
+                let json = maze.to_json();
+                console.log("to_json() returned: ", json);
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeSolutionWasm::from_json()
+            try {
+                let maze = new MazeWasm();
+                maze.from_json(`{
+                    \"name\":\"test\",
+                    \"definition\": {
+                        \"grid\":[
+                            [\"S\", \"W\", \" \", \" \", \"W\"],
+                            [\" \", \"W\", \" \", \"W\", \" \"],
+                            [\" \", \" \", \" \", \"W\", \"F\"],
+                            [\"W\", \" \", \"W\", \" \", \" \"],
+                            [\" \", \" \", \" \", \"W\", \" \"],
+                            [\"W\", \"W\", \" \", \" \", \" \"],
+                            [\"W\", \"W\", \" \", \"W\", \" \"]
+                        ]
+                }}`);
+                for( let row  = 0; row < maze.get_row_count(); row ++) {
+                    for( let col  = 0; col < maze.get_col_count(); col ++) {
+                        console.log(`After from_json(), cell_type at (${row}, ${col}) = `, maze.get_cell(row, col).cell_type);
+                    }
+                }
+            } catch (e) {
+                console.error("Operation failed: ", e);
+            }
+            // MazeSolutionWasm::solve()
+            try {
+                let maze = new MazeWasm();
+                maze.from_json(`{
+                    \"name\":\"test\",
+                    \"definition\": {
+                        \"grid\":[
+                            [\"S\", \"W\", \" \", \" \", \"W\"],
+                            [\" \", \"W\", \" \", \"W\", \" \"],
+                            [\" \", \" \", \" \", \"W\", \"F\"],
+                            [\"W\", \" \", \"W\", \" \", \" \"],
+                            [\" \", \" \", \" \", \"W\", \" \"],
+                            [\"W\", \"W\", \" \", \" \", \" \"],
+                            [\"W\", \"W\", \" \", \"W\", \" \"]
+                        ]
+                }}`);
+                let solution = maze.solve();
+                let solution_points = solution.get_path_points();
+                console.log("Maze solve() succeeded. Solution points are: ", solution_points);
             } catch (e) {
                 console.error("Operation failed: ", e);
             }

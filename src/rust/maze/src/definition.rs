@@ -105,6 +105,10 @@ impl Definition {
     }
     /// Resizes a maze definition instance
     ///
+    /// # Arguments
+    /// * `new_row_count` - New number of rows
+    /// * `new_col_count` - New number of columns
+    ///
     /// # Returns
     ///
     /// The maze definition instance

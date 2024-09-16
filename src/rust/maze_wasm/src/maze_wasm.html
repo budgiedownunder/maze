@@ -10,17 +10,17 @@
 <body>
     <h1>Maze Row Count Example</h1>
     <script type="module">
-        import init, { MazeWasm, MazeCellType } from '../pkg/maze_wasm.js';
+        import init, { MazeWasm, MazeCellTypeWasm } from '../pkg/maze_wasm.js';
 
 
         function get_cell_type_str(cell_type) {
-            if (cell_type === MazeCellType.Empty) {
+            if (cell_type === MazeCellTypeWasm.Empty) {
                 return "Empty";
-            } else if (cell_type === MazeCellType.Start) {
+            } else if (cell_type === MazeCellTypeWasm.Start) {
                 return "Start";
-            } else if (cell_type === MazeCellType.Finish) {
+            } else if (cell_type === MazeCellTypeWasm.Finish) {
                 return "Finish";
-            } else if (cell_type === MazeCellType.Wall) {
+            } else if (cell_type === MazeCellTypeWasm.Wall) {
                 return "Wall";
             }
             return "Uknown cell type";
@@ -44,8 +44,6 @@
                 console.error("get_cell() failed: ", e);
             }
         }
-
-
 
         async function run() {
             // Initialize the Wasm module
@@ -442,12 +440,7 @@
             catch (e) {
                 console.error("insert_cols() failed: ", e);
             }
-
-            console.log("print_maze() #45...");
-            print_maze(maze);
-
         }
-
         run();
     </script>
 </body>
