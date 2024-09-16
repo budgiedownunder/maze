@@ -33,7 +33,7 @@ impl FileStore {
     /// use maze::Maze;
     ///
 
-    /// # // Ensure the maze file does not exist, prior to running the doc test   
+    /// # // Ensure the maze file does not exist, prior to running the doc test
     /// # use utils::file::delete_file;
     /// # delete_file("./maze_1.json");
 
@@ -115,7 +115,7 @@ impl Store for FileStore {
     /// use maze::Maze;
     ///
 
-    /// # // Ensure the maze file does not exist, prior to running the doc test   
+    /// # // Ensure the maze file does not exist, prior to running the doc test
     /// # use utils::file::delete_file;
     /// # delete_file("./maze_1.json");
 
@@ -169,7 +169,7 @@ impl Store for FileStore {
     ///
 
     /// # // Ensure the maze file exists, prior to running the doc test
-    /// # use std::fs::File;   
+    /// # use std::fs::File;
     /// # if let Ok(_) = File::create("maze_1.json") {}
 
     /// // Create the file store
@@ -213,7 +213,7 @@ impl Store for FileStore {
     ///
 
     /// # // Ensure the maze file exists, prior to running the doc test
-    /// # use std::fs::File;   
+    /// # use std::fs::File;
     /// # if let Ok(_) = File::create("maze_1.json") {}
 
     /// let grid: Vec<Vec<char>> = vec![
@@ -271,7 +271,7 @@ impl Store for FileStore {
     /// use maze::Path;
     ///
 
-    /// # // Ensure the maze file does not exist, prior to running the doc test   
+    /// # // Ensure the maze file does not exist, prior to running the doc test
     /// # use utils::file::delete_file;
     /// # delete_file("./maze_1.json");
 
@@ -373,7 +373,8 @@ impl Store for FileStore {
         }
         Err(StoreError::NameNotFound(name.to_string()))
     }
-    /// Returns the list of maze items within the file store instance
+    /// Returns the list of maze items within the file store instance, sorted
+    /// alphabetically in ascending order
     ///
     /// # Returns
     ///
@@ -410,9 +411,13 @@ impl Store for FileStore {
         let mut items: Vec<MazeItem> = Vec::new();
         let current_dir = std::env::current_dir()?;
 
-        for entry in fs::read_dir(current_dir)? {
-            let entry = entry?;
-            let path = entry.path();
+        let mut paths: Vec<_> = fs::read_dir(current_dir)?
+            .map(|res| res.map(|e| e.path()))
+            .collect::<Result<_, std::io::Error>>()?;
+
+        paths.sort();
+
+        for path in paths {
             if let Some(path_str) = path.to_str() {
                 if let Some(extension) = path.extension() {
                     if extension == "json" {
@@ -756,7 +761,7 @@ mod tests {
     ) -> (String, Maze) {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
-            vec!['S', ' ', 'W'], 
+            vec!['S', ' ', 'W'],
             vec!['F', ' ', 'W']
         ];
         let mut maze = Maze::from_vec(grid);

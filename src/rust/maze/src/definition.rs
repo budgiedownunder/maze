@@ -13,7 +13,7 @@ pub struct Definition {
     // - `'F'`:  Represents the finishing cell (limited to one).
     // - `'W'`:  Represents a wall.
     // - `' '`:  Represents an empty cell.
-    grid: Vec<Vec<char>>,
+    pub grid: Vec<Vec<char>>,
 }
 
 impl<'de> Deserialize<'de> for Definition {
@@ -104,6 +104,10 @@ impl Definition {
         self
     }
     /// Resizes a maze definition instance
+    ///
+    /// # Arguments
+    /// * `new_row_count` - New number of rows
+    /// * `new_col_count` - New number of columns
     ///
     /// # Returns
     ///
@@ -202,7 +206,7 @@ impl Definition {
     /// # Returns
     ///
     /// This function will return an error if the definition is empty
-    ///  
+    ///
     /// # Examples
     ///
     /// Create an empty maze definition and then verify it
@@ -388,6 +392,12 @@ impl Definition {
                 start_col
             )));
         }
+        if start_col + count > self.col_count() {
+            return Err(MazeError::new(format!(
+                "invalid 'count' ({}) - too large",
+                count
+            )));
+        }
         for row in &mut self.grid {
             row.drain(start_col..(start_col + count));
         }
@@ -405,7 +415,7 @@ impl Definition {
     /// This function will return an error in the following situations:
     /// - If the definition is empty
     /// - If the target columns are out of range
-    ///  
+    ///
     /// # Examples
     ///
     /// Create a maze definition with 2 rows and 4 columns, with a start, finish and a wall at
@@ -470,6 +480,12 @@ impl Definition {
             return Err(MazeError::new(format!(
                 "invalid 'start_row' index ({})",
                 start_row
+            )));
+        }
+        if start_row + count > self.row_count() {
+            return Err(MazeError::new(format!(
+                "invalid 'count' ({}) - too large",
+                count
             )));
         }
         self.grid.drain(start_row..(start_row + count));
@@ -1160,6 +1176,18 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "invalid 'count' (3) - too large")]
+    fn cannot_delete_too_many_cols() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', 'W'],
+            vec![' ', ' ', ' ', 'W']
+        ];
+        let mut definition = Definition::from_vec(grid);
+        definition.delete_cols(2, 3).expect("delete_cols() failed");
+    }
+
+    #[test]
     #[should_panic(expected = "definition is empty")]
     fn cannot_insert_cols_if_empty() {
         let mut definition = Definition::new(0, 0);
@@ -1262,6 +1290,18 @@ mod tests {
         ];
         let mut definition = Definition::from_vec(grid);
         definition.delete_rows(2, 1).expect("delete_rows() failed");
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid 'count' (2) - too large")]
+    fn cannot_delete_too_many_rows() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![' ', ' ', ' ', 'W'],
+            vec![' ', ' ', ' ', 'W']
+        ];
+        let mut definition = Definition::from_vec(grid);
+        definition.delete_rows(1, 2).expect("delete_rows() failed");
     }
 
     #[test]
