@@ -34,7 +34,7 @@ jobs:
     - name: Handle Windows OS-specifics
       if: matrix.os == 'windows-latest'
       run: echo "Running on Windows OS"
-      
+
     - name: Install wasm-pack
       uses: jetli/wasm-pack-action@v0.4.0
       with:
@@ -45,8 +45,7 @@ jobs:
       run: |
         cargo build --verbose
         cd maze_wasm
-        wasm-pack build --target bundler
-#        wasm-pack build --target web
+        wasm-pack build --target web
       
     - name: Test
       run: |
