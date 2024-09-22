@@ -35,8 +35,14 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: echo "Running on Windows OS"
       
+    - name: Install wasm-pack
+      uses: wasm-tool/setup-wasm-pack@v1
+
     - name: Build
-      run: cargo build --verbose
+      run: |
+        cargo build --verbose
+        cd maze_wasm
+        wasm-pack build --target web
       
     - name: Test
       run: |
