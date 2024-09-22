@@ -19,7 +19,7 @@ async function loadWasm() {
         console.log("Number rows = ", maze.get_row_count());
         console.log("Number cols = ", maze.get_col_count());
 
-        process.exit(1); // Fail for now
+        process.exit(0); // Success
     } catch (error) {
         console.error('Error initializing the WASM module:', error);
         process.exit(1);
