@@ -45,7 +45,8 @@ jobs:
       run: |
         cargo build --verbose
         cd maze_wasm
-        wasm-pack build --target web
+        wasm-pack build --target bundler
+#        wasm-pack build --target web
       
     - name: Test
       run: |
