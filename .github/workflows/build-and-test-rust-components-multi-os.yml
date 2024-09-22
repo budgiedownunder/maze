@@ -6,6 +6,7 @@ on:
     branches:
       
     paths:
+      - '**.mjs'
       - '**.rs'
       - '**.toml'
 
@@ -43,6 +44,9 @@ jobs:
         cargo test -p maze_console -- --test-threads=1 
         cargo test -p storage -- --test-threads=1
         cargo test -p maze_wasm
+        node --version
+        cd maze_wasm/tests
+        node run_test.mjs 
 
     - name: Benchmark
       run: |
