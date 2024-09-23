@@ -13,7 +13,7 @@ async function run_tests() {
         console.log('WASM module initialized successfully!');
 
         const maze = new MazeWasm();
-        maze.resize(10, 4);
+        maze.resize(10, 3);
         console.log("Number rows = ", maze.get_row_count());
         console.log("Number cols = ", maze.get_col_count());
 
