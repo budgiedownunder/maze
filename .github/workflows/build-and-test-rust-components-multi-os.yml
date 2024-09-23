@@ -58,7 +58,7 @@ jobs:
 
     - name: Run API Tests
       run: |
-        cd maze_wasm/tests
+        cd maze_wasm/tests/js
         npm run test_help_examples
 
     - name: Run Benchmark Tests
