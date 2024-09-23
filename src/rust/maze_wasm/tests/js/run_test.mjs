@@ -14,8 +14,7 @@ if (!testFileName) {
 async function run() {
     try {
         const module = await import(testFileName);
-
-        const success = await module.run_tests();
+        const success = await module.run_tests(false);
         if (success) {
             console.log("All javascript tests ran successfully");
         } else {
