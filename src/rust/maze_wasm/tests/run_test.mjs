@@ -1,27 +1,33 @@
-import { readFile } from 'fs/promises';
-import init, {MazeWasm, MazeCellTypeWasm} from '../pkg/maze_wasm.js'; // Default import of the WebAssembly module
+// JavaScript test runner - executes an async function run_tests() defined in the target JavaScript test file
+// 
+// This is required to be run from node as follows:
 
-// Custom function to handle loading WASM in Node.js
-async function loadWasm() {
-    // Read the .wasm file manually
-    const wasmBuffer = await readFile('../pkg/maze_wasm_bg.wasm');
-    // Initialize the WASM module using the buffer
-    await init({ module_or_path: wasmBuffer });
+// node <this_file> <target_file_containing_run_tests>
+
+const testFileName = process.argv[2];
+
+if (!testFileName) {
+    console.error('Please provide the name of the javscript file to test.');
+    process.exit(1);
 }
 
-(async () => {
+async function run() {
     try {
-        await loadWasm();
-        console.log('WASM module initialized successfully!');
+        const module = await import(testFileName);
 
-        const maze = new MazeWasm();
-        maze.resize( 10, 4);
-        console.log("Number rows = ", maze.get_row_count());
-        console.log("Number cols = ", maze.get_col_count());
-
-        process.exit(0); // Success
+        const success = await module.run_tests();
+        if (success) {
+            console.log("All javascript tests ran successfully");
+        } else {
+            console.error("One or more of the javascript tests failed - check output logs for details");
+        }
+        return success;
     } catch (error) {
-        console.error('Error initializing the WASM module:', error);
-        process.exit(1);
+        console.error('Error running the javascript tests:', error);
+        return false;
     }
-})();
+}
+
+
+let success = await run();
+process.exit(success ? 0 : 1);
