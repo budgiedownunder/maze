@@ -1,4 +1,4 @@
-// JavaScript test runner - executes an async function run_tests() defined in the target JavaScript test file
+// JavaScript test runner - executes an async function run_tests(hide_results) defined in the target JavaScript test file
 // 
 // This is required to be run from node as follows:
 
@@ -14,7 +14,7 @@ if (!testFileName) {
 async function run() {
     try {
         const module = await import(testFileName);
-        const success = await module.run_tests(false);
+        const success = await module.run_tests(true);
         if (success) {
             console.log("All javascript tests ran successfully");
         } else {
