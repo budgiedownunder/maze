@@ -35,10 +35,10 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: echo "Running on Windows OS"
 
-    - name: Install wasm-pack
+    # Use wasm-pack-action in preference to "cargo install wasm-pack" as ~ 4 minutes faster      
+    - name: Install wasm-pack 
       uses: jetli/wasm-pack-action@v0.4.0
       with:
-        # Optional version of wasm-pack to install(eg. 'v0.9.1', 'latest')
         version: 'latest'
 
     - name: Build
