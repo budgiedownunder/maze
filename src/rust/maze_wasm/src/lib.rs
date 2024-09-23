@@ -458,9 +458,9 @@ impl MazeWasm {
     ///
     ///     try {
     ///         let maze = new MazeWasm();
-    ///         console.log("Ater creation, is_empty() = ", maze.is_empty());
+    ///         console.log("After creation, is_empty() = ", maze.is_empty());
     ///         maze.resize(1,2);
-    ///         console.log("Ater resize(), is_empty() = ", maze.is_empty());
+    ///         console.log("After resize(), is_empty() = ", maze.is_empty());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
     ///     }
