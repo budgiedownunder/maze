@@ -1,11 +1,9 @@
 import { readFile } from 'fs/promises';
-import init, { MazeWasm, MazeCellTypeWasm } from '../../pkg/maze_wasm.js'; // Default import of the WebAssembly module
+import init, { MazeWasm, MazeCellTypeWasm } from '../../pkg/maze_wasm.js';
 
 // Custom function to handle loading WASM in Node.js
 async function loadWasm() {
-    // Read the .wasm file manually
     const wasmBuffer = await readFile('../../pkg/maze_wasm_bg.wasm');
-    // Initialize the WASM module using the buffer
     await init({ module_or_path: wasmBuffer });
 }
 
