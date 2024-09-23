@@ -55,7 +55,7 @@ jobs:
         cargo test -p maze_wasm
         node --version
         cd maze_wasm/tests
-        node run_test.mjs 
+        npm test
 
     - name: Benchmark
       run: |
