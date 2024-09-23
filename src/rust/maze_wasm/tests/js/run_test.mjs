@@ -2,7 +2,7 @@
 // 
 // This is required to be run from node as follows:
 
-// node <this_file> <target_file_containing_run_tests>
+// node <path_to_this_file> <path_to_target_file_containing_run_tests>
 
 const testFileName = process.argv[2];
 
@@ -27,7 +27,6 @@ async function run() {
         return false;
     }
 }
-
 
 let success = await run();
 process.exit(success ? 0 : 1);
