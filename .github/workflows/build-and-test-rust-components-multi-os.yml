@@ -4,7 +4,7 @@ run-name: ${{ github.actor }} is running the build and test workflow for Rust co
 on:
   push:
     branches:
-      
+
     paths:
       - '**.mjs'
       - '**.rs'
@@ -20,11 +20,11 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-     
+
     - name: Handle Ubuntu-specifics
       if: matrix.os == 'ubuntu-latest'
       run: echo "Running on Ubuntu"
@@ -35,8 +35,8 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: echo "Running on Windows OS"
 
-    # Use wasm-pack-action in preference to "cargo install wasm-pack" as ~ 4 minutes faster      
-    - name: Install wasm-pack 
+    # Use wasm-pack-action in preference to "cargo install wasm-pack" as ~ 4 minutes faster
+    - name: Install wasm-pack
       uses: jetli/wasm-pack-action@v0.4.0
       with:
         version: 'latest'
@@ -46,16 +46,21 @@ jobs:
         cargo build --verbose
         cd maze_wasm
         wasm-pack build --target web
-      
-    - name: Test
+
+    - name: Run Rust Tests
       run: |
         cargo test -p maze
-        cargo test -p maze_console -- --test-threads=1 
+        cargo test -p maze_console -- --test-threads=1
         cargo test -p storage -- --test-threads=1
         cargo test -p maze_wasm
         node --version
         cd maze_wasm/tests
-        npm test
+        npm run test_help_examples
+
+    - name: Run API Tests
+      run: |
+        cd maze_wasm/tests
+        npm run test_help_examples
 
     - name: Benchmark
       run: |
