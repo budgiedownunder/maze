@@ -35,12 +35,16 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: echo "Running on Windows OS"
 
-    # Use wasm-pack-action in preference to "cargo install wasm-pack" as ~ 4 minutes faster
-    - name: Install wasm-pack
-      uses: jetli/wasm-pack-action@v0.4.0
-      with:
-        version: 'latest'
+    - name: Install wasm-pack on Linux/macOS
+      if: runner.os != 'Windows'
+      run: |
+        curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
+    - name: Install wasm-pack on Windows
+      if: runner.os == 'Windows'
+      run: |
+        cargo install wasm-pack
+    
     - name: Build
       run: |
         cargo build --verbose
