@@ -1,0 +1,12 @@
+{
+    "name": "maze_wasm-javascript-tests",
+    "version": "1.0.0",
+    "description": "Node testing environment for maze_wasm project's javascript files (require ES modules)",
+    "type": "module", 
+    "scripts": {
+      "test": "node --experimental-wasm-modules run_test.mjs"
+    },
+    "devDependencies": {
+    }
+  }
+  
