@@ -1,3 +1,5 @@
+// This file exports a single function run_tests() which runs the tests for each
+// JavaScript example confirming that they work
 import { readFile } from 'fs/promises';
 import init, { MazeWasm, MazeCellTypeWasm } from '../../pkg/maze_wasm.js';
 

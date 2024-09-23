@@ -7,7 +7,7 @@
 const testFileName = process.argv[2];
 
 if (!testFileName) {
-    console.error('Please provide the name of the javscript file to test.');
+    console.error('Please provide the name of the JavaScript file to test.');
     process.exit(1);
 }
 
@@ -16,13 +16,13 @@ async function run() {
         const module = await import(testFileName);
         const success = await module.run_tests(true);
         if (success) {
-            console.log("All javascript tests ran successfully");
+            console.log("All JavaScript tests ran successfully");
         } else {
-            console.error("One or more of the javascript tests failed - check output logs for details");
+            console.error("One or more of the JavaScript tests failed - check output logs for details");
         }
         return success;
     } catch (error) {
-        console.error('Error running the javascript tests:', error);
+        console.error('Error running the JavaScript tests:', error);
         return false;
     }
 }
