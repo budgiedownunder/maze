@@ -53,7 +53,6 @@ jobs:
         cargo test -p maze_console -- --test-threads=1
         cargo test -p storage -- --test-threads=1
         cargo test -p maze_wasm
-        node --version
         cd maze_wasm/tests
         npm run test_help_examples
 
@@ -62,6 +61,6 @@ jobs:
         cd maze_wasm/tests
         npm run test_help_examples
 
-    - name: Benchmark
+    - name: Run Benchmark Tests
       run: |
         cargo bench -p maze
