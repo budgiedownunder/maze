@@ -1,5 +1,6 @@
 // This file exports a single function run_tests() which runs the tests for
-// the maze_wasm JavaScript API
+// the maze_wasm JavaScript API, using 'mocha' and 'chai'.
+// 
 import { readFile } from 'fs/promises';
 import init, { MazeWasm, MazeCellTypeWasm } from '../../pkg/maze_wasm.js';
 import Mocha from 'mocha';
