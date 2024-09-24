@@ -581,11 +581,11 @@ impl MazeWasm {
     pub fn get_cell(&self, row: JsValue, col: JsValue) -> Result<Object, JsValue> {
         let row = Self::arg_to_usize("row", row)?;
         if row >= self.maze.definition.row_count() {
-            return Err(JsValue::from_str("Row out of bounds"));
+            return Err(JsValue::from_str("row out of bounds"));
         }
         let col = Self::arg_to_usize("col", col)?;
         if col >= self.maze.definition.col_count() {
-            return Err(JsValue::from_str("Column out of bounds"));
+            return Err(JsValue::from_str("column out of bounds"));
         }
         Ok(to_js_cell_info_obj(self.maze.definition.grid[row][col]))
     }
@@ -685,7 +685,7 @@ impl MazeWasm {
         if let Some(start) = self.maze.definition.get_start() {
             return Ok(to_js_point_obj(&start));
         }
-        Err(JsValue::from_str("No start cell defined"))
+        Err(JsValue::from_str("no start cell defined"))
     }
     #[wasm_bindgen]
     /// Sets the finish cell location within the maze instance
@@ -783,7 +783,7 @@ impl MazeWasm {
         if let Some(finish) = self.maze.definition.get_finish() {
             return Ok(to_js_point_obj(&finish));
         }
-        Err(JsValue::from_str("No finish cell defined"))
+        Err(JsValue::from_str("no finish cell defined"))
     }
     #[wasm_bindgen]
     /// Sets a range of cells within the maze instance to be walls (`cell_type` = [`MazeCellTypeWasm::Wall`])
@@ -1074,7 +1074,7 @@ impl MazeWasm {
         value_type_prefix: &str,
     ) -> JsValue {
         JsValue::from_str(&format!(
-            "Invalid '{}' argument provided - expected '{}' but '{}{}' provided",
+            "invalid '{}' argument provided - expected '{}' but '{}{}' provided",
             name,
             expected_type,
             value_type_prefix,
