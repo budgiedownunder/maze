@@ -53,8 +53,8 @@ cargo test -p maze_wasm
 
 ```
 
-#### 2. JavaScript API (`maze_wasm.js`)
-To test the JavaScript API `maze_wasm.js`, you must have `node` installed and then:
+#### 2. JavaScript APIs
+To test the `maze_wasm.js` JavaScript API:
 ```
 cd src/rust/maze_wasm/tests/js
 npm run test_api
@@ -69,7 +69,7 @@ cargo bench -p maze
 ```
 
 ### Generating Documentation
-To generate and view Rust (crate) documentation in your default browser:
+To generate and view `Rust` (crate) documentation in your default browser:
 ```
 cd src/rust
 cargo doc --open
