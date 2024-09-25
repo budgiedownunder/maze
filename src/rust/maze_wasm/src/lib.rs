@@ -102,8 +102,8 @@ impl MazeSolutionWasm {
     ///                 ]
     ///         }}`);
     ///         let solution = maze.solve();
-    ///         let solution_points = solution.get_path_points();
-    ///         console.log("Successfully solved maze. Solution points are: ", solution_points);
+    ///         let solutionPoints = solution.get_path_points();
+    ///         console.log("Successfully solved maze. Solution points are: ", solutionPoints);
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
     ///     }
@@ -820,7 +820,7 @@ impl MazeWasm {
     ///         let maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         maze.set_wall_cells(0, 1, 0, 3);
-    ///         for( let col  = 0; col < 5; col ++) {
+    ///         for (let col  = 0; col < 5; col ++) {
     ///             console.log(`After set_walls_cell(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
     ///         }
     ///     } catch (e) {
@@ -876,11 +876,11 @@ impl MazeWasm {
     ///         let maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         maze.set_wall_cells(0, 1, 0, 3);
-    ///         for( let col  = 0; col < 5; col ++) {
+    ///         for (let col  = 0; col < 5; col ++) {
     ///             console.log(`After set_walls_cell(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
     ///         }
     ///         maze.clear_cells(0, 2, 3, 4);
-    ///         for( let col  = 0; col < 5; col ++) {
+    ///         for (let col  = 0; col < 5; col ++) {
     ///             console.log(`After clear_walls(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
     ///         }
     ///     } catch (e) {
@@ -973,8 +973,8 @@ impl MazeWasm {
     ///                     [\"W\", \"W\", \" \", \"W\", \" \"]
     ///                 ]
     ///         }}`);
-    ///         for( let row  = 0; row < maze.get_row_count(); row ++) {
-    ///             for( let col  = 0; col < maze.get_col_count(); col ++) {
+    ///         for (let row  = 0; row < maze.get_row_count(); row ++) {
+    ///             for (let col  = 0; col < maze.get_col_count(); col ++) {
     ///                 console.log(`After from_json(), cell_type at (${row}, ${col}) = `, maze.get_cell(row, col).cell_type);
     ///             }
     ///         }
@@ -1028,8 +1028,8 @@ impl MazeWasm {
     ///                 ]
     ///         }}`);
     ///         let solution = maze.solve();
-    ///         let solution_points = solution.get_path_points();
-    ///         console.log("Maze solve() succeeded. Solution points are: ", solution_points);
+    ///         let solutionPoints = solution.get_path_points();
+    ///         console.log("Maze solve() succeeded. Solution points are: ", solutionPoints);
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
     ///     }

@@ -497,8 +497,8 @@ function testMazeSolve() {
                         ]
                 }}`);
         let solution = maze.solve();
-        let solution_points = solution.get_path_points();
-        console.log("Maze solve() succeeded. Solution points are: ", solution_points);
+        let solutionPoints = solution.get_path_points();
+        console.log("Maze solve() succeeded. Solution points are: ", solutionPoints);
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
@@ -544,8 +544,8 @@ function testMazeSolutionGetPathPoints() {
                 ]
         }}`);
         let solution = maze.solve();
-        let solution_points = solution.get_path_points();
-        console.log("Successfully solved maze. Solution points are: ", solution_points);
+        let solutionPoints = solution.get_path_points();
+        console.log("Successfully solved maze. Solution points are: ", solutionPoints);
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
@@ -606,7 +606,7 @@ const errorTemplate = (test, i, expected, logRows) =>
   Generated Content:  "${logRows[i]}"`;
 
 // Function to run all tests
-function runTests(hide_results) {
+function runTests(hideResults) {
     const originalConsoleLog = console.log;
     let logRows = [];
 
@@ -614,7 +614,7 @@ function runTests(hide_results) {
         console.log = function (...args) {
             const message = util.format(...args);
             logRows.push(message);
-            if (!hide_results)
+            if (!hideResults)
                 originalConsoleLog(message);
         };
     };

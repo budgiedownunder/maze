@@ -63,8 +63,8 @@ function invalidPointError(name, row, column) {
     return `invalid '${name}' point [${row}, ${column}]`;
 }
 
-function run_bad_arg_tests(callback) {
-    let arg_tests = [
+function runBadArgTests(callback) {
+    let argTests = [
         { value: undefined, desc: "undefined" },
         { value: null, desc: "unknown" },
         { value: -1, desc: "negative number" },
@@ -73,16 +73,16 @@ function run_bad_arg_tests(callback) {
         { value: {}, desc: "object" }
     ];
 
-    for (let i = 0; i < arg_tests.length; i++) {
-        callback(arg_tests[i]);
+    for (let i = 0; i < argTests.length; i++) {
+        callback(argTests[i]);
     }
 }
 
-function verifyCellType(maze, start_row, start_col, end_row, end_col, cellType) {
-    for (let row = start_row; row <= end_row; row++) {
-        for (let col = start_col; col <= end_col; col++) {
-            let cell_info = maze.get_cell(row, col);
-            expect(cell_info.cell_type).to.equal(cellType);
+function verifyCellType(maze, startRow, startCol, endRow, endCol, cellType) {
+    for (let row = startRow; row <= endRow; row++) {
+        for (let col = startCol; col <= endCol; col++) {
+            let cellInfo = maze.get_cell(row, col);
+            expect(cellInfo.cell_type).to.equal(cellType);
         }
     }
 }
@@ -181,32 +181,32 @@ function registerMazeTests() {
         // MazeWasm::resize()
         it('should expect resize() to modify number of rows and columns in a maze', function () {
             let maze = new MazeWasm();
-            let old_is_empty = maze.is_empty();
-            let old_row_count = maze.get_row_count();
-            let old_col_count = maze.get_col_count();
+            let oldIsEmpty = maze.is_empty();
+            let oldRowCount = maze.get_row_count();
+            let oldColCount = maze.get_col_count();
             maze.resize(10, 5);
-            let new_is_empty = maze.is_empty();
-            let new_row_count = maze.get_row_count();
-            let new_col_count = maze.get_col_count();
+            let newIsEmpty = maze.is_empty();
+            let newRowCount = maze.get_row_count();
+            let newColCount = maze.get_col_count();
 
-            expect((old_is_empty == true) && (old_row_count == 0) && (old_col_count == 0) && (new_is_empty == false) &&
-                (new_row_count == 10) && (new_col_count == 5)).to.equal(true);
+            expect((oldIsEmpty == true) && (oldRowCount == 0) && (oldColCount == 0) && (newIsEmpty == false) &&
+                (newRowCount == 10) && (newColCount == 5)).to.equal(true);
         });
 
         // MazeWasm::reset()
         it('should expect reset() to clear all rows and columns in a maze', function () {
             let maze = new MazeWasm();
             maze.resize(10, 5);
-            let old_is_empty = maze.is_empty();
-            let old_row_count = maze.get_row_count();
-            let old_col_count = maze.get_col_count();
+            let oldIsEmpty = maze.is_empty();
+            let oldRowCount = maze.get_row_count();
+            let oldColCount = maze.get_col_count();
             maze.reset();
-            let new_is_empty = maze.is_empty();
-            let new_row_count = maze.get_row_count();
-            let new_col_count = maze.get_col_count();
+            let newIsEmpty = maze.is_empty();
+            let newRowCount = maze.get_row_count();
+            let newColCount = maze.get_col_count();
 
-            expect((old_is_empty == false) && (old_row_count == 10) && (old_col_count == 5) && (new_is_empty == true) &&
-                (new_row_count == 0) && (new_col_count == 0)).to.equal(true);
+            expect((oldIsEmpty == false) && (oldRowCount == 10) && (oldColCount == 5) && (newIsEmpty == true) &&
+                (newRowCount == 0) && (newColCount == 0)).to.equal(true);
         });
 
         // MazeWasm::get_start_cell()
@@ -215,11 +215,11 @@ function registerMazeTests() {
         });
 
         // MazeWasm::set_start_cell()
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect set_start_cell() to fail for a maze when passed an invalid 'start_row' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect set_start_cell() to fail for a maze when passed an invalid 'start_row' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.set_start_cell(arg_test.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", arg_test.desc));
+                expect(() => maze.set_start_cell(argTest.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", argTest.desc));
             });
         });
 
@@ -252,19 +252,19 @@ function registerMazeTests() {
         });
 
         // MazeWasm::get_cell()
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect get_cell() to fail for a maze when passed an invalid 'row' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect get_cell() to fail for a maze when passed an invalid 'row' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.get_cell(arg_test.value)).to.throw(invalidArgumentError("row", "unsigned integer", arg_test.desc));
+                expect(() => maze.get_cell(argTest.value)).to.throw(invalidArgumentError("row", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect get_cell() to fail for a maze when passed an invalid 'col' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect get_cell() to fail for a maze when passed an invalid 'col' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.get_cell(1, arg_test.value)).to.throw(invalidArgumentError("col", "unsigned integer", arg_test.desc));
+                expect(() => maze.get_cell(1, argTest.value)).to.throw(invalidArgumentError("col", "unsigned integer", argTest.desc));
             });
         });
 
@@ -276,35 +276,35 @@ function registerMazeTests() {
         });
 
         // MazeWasm::set_wall_cells()
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect set_wall_cells() to fail for a maze when passed passed invalid 'start_row' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect set_wall_cells() to fail for a maze when passed passed invalid 'start_row' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.set_wall_cells(arg_test.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", arg_test.desc));
+                expect(() => maze.set_wall_cells(argTest.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect set_wall_cells() to fail for a maze when passed invalid 'start_col' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect set_wall_cells() to fail for a maze when passed invalid 'start_col' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.set_wall_cells(0, arg_test.value)).to.throw(invalidArgumentError("start_col", "unsigned integer", arg_test.desc));
+                expect(() => maze.set_wall_cells(0, argTest.value)).to.throw(invalidArgumentError("start_col", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect set_wall_cells() to fail for a maze when passed invalid 'end_row' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect set_wall_cells() to fail for a maze when passed invalid 'end_row' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.set_wall_cells(0, 0, arg_test.value)).to.throw(invalidArgumentError("end_row", "unsigned integer", arg_test.desc));
+                expect(() => maze.set_wall_cells(0, 0, argTest.value)).to.throw(invalidArgumentError("end_row", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect set_wall_cells() to fail for a maze when passed invalid 'end_col' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect set_wall_cells() to fail for a maze when passed invalid 'end_col' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.set_wall_cells(0, 0, 0, arg_test.value)).to.throw(invalidArgumentError("end_col", "unsigned integer", arg_test.desc));
+                expect(() => maze.set_wall_cells(0, 0, 0, argTest.value)).to.throw(invalidArgumentError("end_col", "unsigned integer", argTest.desc));
             });
         });
 
@@ -335,70 +335,70 @@ function registerMazeTests() {
         it(`should expect set_wall_cells() to succeed for a maze when passed valid arguments and for get_cell() to return the correct cell_type before/after`, function () {
             let maze = new MazeWasm();
             maze.resize(3, 3);
-            let start_row = 1, start_col = 1, end_row = 2, end_col = 2;
-            verifyCellType(maze, start_row, start_col, end_row, end_col, MazeCellTypeWasm.Empty);
-            maze.set_wall_cells(start_row, start_col, end_row, end_col);
-            verifyCellType(maze, start_row, start_col, end_row, end_col, MazeCellTypeWasm.Wall);
+            let startRow = 1, startCol = 1, endRow = 2, endCol = 2;
+            verifyCellType(maze, startRow, startCol, endRow, endCol, MazeCellTypeWasm.Empty);
+            maze.set_wall_cells(startRow, startCol, endRow, endCol);
+            verifyCellType(maze, startRow, startCol, endRow, endCol, MazeCellTypeWasm.Wall);
         });
 
         // MazeWasm::clear_cells()
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect clear_cells() to fail for a maze when passed passed invalid 'start_row' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect clear_cells() to fail for a maze when passed passed invalid 'start_row' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.clear_cells(arg_test.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", arg_test.desc));
+                expect(() => maze.clear_cells(argTest.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect clear_cells() to fail for a maze when passed passed invalid 'start_col' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect clear_cells() to fail for a maze when passed passed invalid 'start_col' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.clear_cells(0, arg_test.value)).to.throw(invalidArgumentError("start_col", "unsigned integer", arg_test.desc));
+                expect(() => maze.clear_cells(0, argTest.value)).to.throw(invalidArgumentError("start_col", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect clear_cells() to fail for a maze when passed passed invalid 'end_row' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect clear_cells() to fail for a maze when passed passed invalid 'end_row' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.clear_cells(0, 0, arg_test.value)).to.throw(invalidArgumentError("end_row", "unsigned integer", arg_test.desc));
+                expect(() => maze.clear_cells(0, 0, argTest.value)).to.throw(invalidArgumentError("end_row", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect clear_cells() to fail for a maze when passed passed invalid 'end_col' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect clear_cells() to fail for a maze when passed passed invalid 'end_col' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.clear_cells(0, 0, 0, arg_test.value)).to.throw(invalidArgumentError("end_col", "unsigned integer", arg_test.desc));
+                expect(() => maze.clear_cells(0, 0, 0, argTest.value)).to.throw(invalidArgumentError("end_col", "unsigned integer", argTest.desc));
             });
         });
 
         it('should expect clear_cells() to succeed for a new maze', function () {
             let maze = new MazeWasm();
             maze.resize(2, 2);
-            let start_row = 0, start_col = 0, end_row = 1, end_col = 1;
-            verifyCellType(maze, start_row, start_col, end_row, end_col, MazeCellTypeWasm.Empty);
-            maze.set_wall_cells(start_row, start_col, end_row, end_col);
-            verifyCellType(maze, start_row, start_col, end_row, end_col, MazeCellTypeWasm.Wall);
-            maze.clear_cells(start_row, start_col, end_row, end_col);
-            verifyCellType(maze, start_row, start_col, end_row, end_col, MazeCellTypeWasm.Empty);
+            let startRow = 0, startCol = 0, endRow = 1, endCol = 1;
+            verifyCellType(maze, startRow, startCol, endRow, endCol, MazeCellTypeWasm.Empty);
+            maze.set_wall_cells(startRow, startCol, endRow, endCol);
+            verifyCellType(maze, startRow, startCol, endRow, endCol, MazeCellTypeWasm.Wall);
+            maze.clear_cells(startRow, startCol, endRow, endCol);
+            verifyCellType(maze, startRow, startCol, endRow, endCol, MazeCellTypeWasm.Empty);
         });
 
         // MazeWasm::delete_rows()
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect delete_rows() to fail for a maze when passed passed invalid 'start_row' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect delete_rows() to fail for a maze when passed passed invalid 'start_row' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.delete_rows(arg_test.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", arg_test.desc));
+                expect(() => maze.delete_rows(argTest.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect delete_rows() to fail for a maze when passed passed invalid 'count' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect delete_rows() to fail for a maze when passed passed invalid 'count' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.delete_rows(0, arg_test.value)).to.throw(invalidArgumentError("count", "unsigned integer", arg_test.desc));
+                expect(() => maze.delete_rows(0, argTest.value)).to.throw(invalidArgumentError("count", "unsigned integer", argTest.desc));
             });
         });
 
@@ -417,26 +417,26 @@ function registerMazeTests() {
         it('should expect delete_rows() to succeed for valid arguments and for get_row_count() to return the updated row count', function () {
             let maze = new MazeWasm();
             maze.resize(3, 3);
-            let old_count = maze.get_row_count();
+            let oldCount = maze.get_row_count();
             maze.delete_rows(1, 2);
-            let new_count = maze.get_row_count();
-            expect((old_count == 3) && (new_count == 1)).to.equal(true);
+            let newCount = maze.get_row_count();
+            expect((oldCount == 3) && (newCount == 1)).to.equal(true);
         });
 
         // MazeWasm::insert_rows()
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect insert_rows() to fail for a maze when passed passed invalid 'start_row' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect insert_rows() to fail for a maze when passed passed invalid 'start_row' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.insert_rows(arg_test.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", arg_test.desc));
+                expect(() => maze.insert_rows(argTest.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect insert_rows() to fail for a maze when passed passed invalid 'count' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect insert_rows() to fail for a maze when passed passed invalid 'count' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.insert_rows(0, arg_test.value)).to.throw(invalidArgumentError("count", "unsigned integer", arg_test.desc));
+                expect(() => maze.insert_rows(0, argTest.value)).to.throw(invalidArgumentError("count", "unsigned integer", argTest.desc));
             });
         });
 
@@ -449,35 +449,35 @@ function registerMazeTests() {
         it('should expect insert_rows() to succeed when inserting between existing rows and for get_row_count() to return the updated row count', function () {
             let maze = new MazeWasm();
             maze.resize(3, 3);
-            let old_count = maze.get_row_count();
+            let oldCount = maze.get_row_count();
             maze.insert_rows(1, 2);
-            let new_count = maze.get_row_count();
-            expect((old_count == 3) && (new_count == 5)).to.equal(true);
+            let newCount = maze.get_row_count();
+            expect((oldCount == 3) && (newCount == 5)).to.equal(true);
         });
 
         it('should expect insert_rows() to allow insertion after last row and for get_row_count() to return the updated row count', function () {
             let maze = new MazeWasm();
             maze.resize(3, 3);
-            let old_count = maze.get_row_count();
-            maze.insert_rows(old_count, 2);
-            let new_count = maze.get_row_count();
-            expect((old_count == 3) && (new_count == 5)).to.equal(true);
+            let oldCount = maze.get_row_count();
+            maze.insert_rows(oldCount, 2);
+            let newCount = maze.get_row_count();
+            expect((oldCount == 3) && (newCount == 5)).to.equal(true);
         });
 
         // MazeWasm::delete_cols()
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect delete_cols() to fail for a maze when passed passed invalid 'start_col' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect delete_cols() to fail for a maze when passed passed invalid 'start_col' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.delete_cols(arg_test.value)).to.throw(invalidArgumentError("start_col", "unsigned integer", arg_test.desc));
+                expect(() => maze.delete_cols(argTest.value)).to.throw(invalidArgumentError("start_col", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect delete_cols() to fail for a maze when passed passed invalid 'count' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect delete_cols() to fail for a maze when passed passed invalid 'count' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.delete_cols(0, arg_test.value)).to.throw(invalidArgumentError("count", "unsigned integer", arg_test.desc));
+                expect(() => maze.delete_cols(0, argTest.value)).to.throw(invalidArgumentError("count", "unsigned integer", argTest.desc));
             });
         });
 
@@ -496,26 +496,26 @@ function registerMazeTests() {
         it('should expect delete_cols() to succeed for valid arguments and for get_col_count() to return the updated column count', function () {
             let maze = new MazeWasm();
             maze.resize(3, 2);
-            let old_count = maze.get_col_count();
+            let oldCount = maze.get_col_count();
             maze.delete_cols(1, 1);
-            let new_count = maze.get_col_count();
-            expect((old_count == 2) && (new_count == 1)).to.equal(true);
+            let newCount = maze.get_col_count();
+            expect((oldCount == 2) && (newCount == 1)).to.equal(true);
         });
 
         // MazeWasm::insert_cols()
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect insert_cols() to fail for a maze when passed passed invalid 'start_col' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect insert_cols() to fail for a maze when passed passed invalid 'start_col' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.insert_cols(arg_test.value)).to.throw(invalidArgumentError("start_col", "unsigned integer", arg_test.desc));
+                expect(() => maze.insert_cols(argTest.value)).to.throw(invalidArgumentError("start_col", "unsigned integer", argTest.desc));
             });
         });
 
-        run_bad_arg_tests(function (arg_test) {
-            it(`should expect insert_cols() to fail for a maze when passed passed invalid 'count' argument (${arg_test.desc})`, function () {
+        runBadArgTests(function (argTest) {
+            it(`should expect insert_cols() to fail for a maze when passed passed invalid 'count' argument (${argTest.desc})`, function () {
                 let maze = new MazeWasm();
                 maze.resize(2, 2);
-                expect(() => maze.insert_cols(0, arg_test.value)).to.throw(invalidArgumentError("count", "unsigned integer", arg_test.desc));
+                expect(() => maze.insert_cols(0, argTest.value)).to.throw(invalidArgumentError("count", "unsigned integer", argTest.desc));
             });
         });
 
@@ -528,19 +528,19 @@ function registerMazeTests() {
         it('should expect insert_cols() to succeed when inserting between existing columns and for get_col_count() to return the updated column count', function () {
             let maze = new MazeWasm();
             maze.resize(3, 3);
-            let old_count = maze.get_col_count();
+            let oldCount = maze.get_col_count();
             maze.insert_cols(1, 2);
-            let new_count = maze.get_col_count();
-            expect((old_count == 3) && (new_count == 5)).to.equal(true);
+            let newCount = maze.get_col_count();
+            expect((oldCount == 3) && (newCount == 5)).to.equal(true);
         });
 
         it('should expect insert_cols() to allow insertion after last column and for get_col_count() to return the updated row count', function () {
             let maze = new MazeWasm();
             maze.resize(3, 3);
-            let old_count = maze.get_col_count();
-            maze.insert_cols(old_count, 2);
-            let new_count = maze.get_col_count();
-            expect((old_count == 3) && (new_count == 5)).to.equal(true);
+            let oldCount = maze.get_col_count();
+            maze.insert_cols(oldCount, 2);
+            let newCount = maze.get_col_count();
+            expect((oldCount == 3) && (newCount == 5)).to.equal(true);
         });
 
         // MazeWasm::solve()
@@ -628,7 +628,7 @@ async function run_tests() {
     // Initialize tests
     const mocha = new Mocha();
     mocha.suite.emit('pre-require', global, 'solution', mocha);
-    registerTests(mocha);
+    registerTests();
     // Run tests
     return new Promise((resolve) => {
         mocha.run(failures => {
