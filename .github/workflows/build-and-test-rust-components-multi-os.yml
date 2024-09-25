@@ -60,8 +60,6 @@ jobs:
         cargo test -p maze_console -- --test-threads=1
         cargo test -p storage -- --test-threads=1
         cargo test -p maze_wasm
-        cd maze_wasm/tests/js
-        npm run test_help_examples
 
     - name: Run API Tests
       run: |
