@@ -18,7 +18,7 @@ The following components are present:
 |            | [`maze_console`](./src/rust/maze_console/README.md) | maze console application |
 |            | [`maze_wasm`](./src/rust/maze_wasm/README.md) | maze web assembly library |
 |            | [`storage`](./src/rust/storage/README.md) | maze storage library |
-|            | [`utils`](./src/rust/utils/README.md) | utilties library |
+|            | [`utils`](./src/rust/utils/README.md) | utilities library |
 
 ## Getting Started
 

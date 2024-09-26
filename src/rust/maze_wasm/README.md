@@ -4,6 +4,8 @@
 
 The `maze_wasm` crate is written in `Rust` and defines the Web Assembly library for defining and solving mazes in consumer applications that support Web Assembly (WASM).
 
+The crate uses `wasm-pack` to generate a JavaScript API wrapper `maze_wasm.js` to the WASM.
+
 ## Getting Started
 
 ### Setup
@@ -22,7 +24,7 @@ wasm-pack build --target web
 ```
 
 ### Testing
-To test the `maze_wasm` crate, run the following from within the `maze_wasm` directory:
+To test the `maze_wasm` crate and the JavaScript API wrapper, run the following from within the `maze_wasm` directory:
 ```
 cargo test
 cd tests/js
