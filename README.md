@@ -14,10 +14,11 @@ The following components are present:
 
 | Folder | Component | Description |
 |--------|-----------|--------------- |
-| `src/rust` | [`maze`](src/rust/maze/README.md) | maze definition and calculation library|
-|            | [`maze_console`](src/rust/maze_console/README.md) | maze console application |
-|            | [`maze_wasm`](src/rust/maze_wasm/README.md) | maze web assembly library |
-|            | [`storage`](src/rust/storage/README.md) | maze storage library |
+| `src/rust` | [`maze`](./src/rust/maze/README.md) | maze definition and calculation library|
+|            | [`maze_console`](./src/rust/maze_console/README.md) | maze console application |
+|            | [`maze_wasm`](./src/rust/maze_wasm/README.md) | maze web assembly library |
+|            | [`storage`](./src/rust/storage/README.md) | maze storage library |
+|            | [`utils`](./src/rust/utils/README.md) | utilties library |
 
 ## Getting Started
 

@@ -3,6 +3,7 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
+/// Deletes a file and waits to ensure it is no longer visible in the operating system (in case there is any lag)
 pub fn delete_file(file: &str) {
     let _ = fs::remove_file(file);
     let mut count = 0;
@@ -19,6 +20,8 @@ pub fn delete_file(file: &str) {
     }
 }
 
+/// Deletes all files in a given directory with a given extension, waiting to ensure 
+/// they are no longer visible in the operating system (in case there is any lag)
 pub fn delete_files_with_ext(dir: &str, extension: &str) -> std::io::Result<()> {
     let files = fs::read_dir(dir)?;
     for file in files {
