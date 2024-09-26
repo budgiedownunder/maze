@@ -10,6 +10,15 @@
 ## Introduction
 This is an experimental project that has been created for exploring various programming languages, technologies and language-to-language integration. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios.
 
+The following components are present:
+
+| Folder | Component | Description |
+|--------|-----------|--------------- |
+| `src/rust` | [`maze`](src/rust/maze/README.md) | maze definition and calculation library|
+|            | [`maze_console`](src/rust/maze_console/README.md) | maze console application |
+|            | [`maze_wasm`](src/rust/maze_wasm/README.md) | maze web assembly library |
+|            | [`storage`](src/rust/storage/README.md) | maze storage library |
+
 ## Getting Started
 
 ### Setup
@@ -50,7 +59,6 @@ cargo test -p maze
 cargo test -p maze_console -- --test-threads=1
 cargo test -p storage -- --test-threads=1
 cargo test -p maze_wasm
-
 ```
 
 #### 2. JavaScript APIs
