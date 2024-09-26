@@ -7,7 +7,7 @@ pub struct MazeItem {
     pub name: String,
 }
 
-/// Represents a store for holding maze and related objects
+/// Represents a store for holding mazes and related objects
 pub trait Store {
     /// Adds a new maze to the store and sets the allocated `id` within the maze object
     fn create_maze(&self, maze: &mut Maze) -> Result<(), StoreError>;

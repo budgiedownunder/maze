@@ -40,7 +40,7 @@ impl Maze {
     /// Creates a new maze instance with the given definition
     /// # Arguments
     ///
-    /// * `grid` - Maze definition
+    /// * `definition` - Maze definition
     ///
     /// # Returns
     ///
