@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34607.119
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Wasm.Interop", ".\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj", "{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Maze.Wasm.Interop.Tests", ".\Maze.Wasm.Interop.Tests\Maze.Wasm.Interop.Tests.csproj", "{57DE5792-1129-459C-BBDF-BB2728312D03}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57DE5792-1129-459C-BBDF-BB2728312D03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57DE5792-1129-459C-BBDF-BB2728312D03}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57DE5792-1129-459C-BBDF-BB2728312D03}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57DE5792-1129-459C-BBDF-BB2728312D03}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3B490C62-9290-4ED4-B945-0B11887F8950}
+	EndGlobalSection
+EndGlobal
