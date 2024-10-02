@@ -199,7 +199,7 @@
         public UInt32 NewMazeWasm()
         {
             UInt32 mazeWasmPtr = (UInt32)(Int32)(newMazeWasm?.Invoke() ?? 0);
-            if (mazeWasmPtr == null) {
+            if (mazeWasmPtr == 0) {
                 throw new Exception("newMazeWasm() failed (returned zero), possibly due to low memory");
             } 
             return mazeWasmPtr;
