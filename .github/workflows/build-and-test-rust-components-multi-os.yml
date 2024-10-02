@@ -52,7 +52,8 @@ jobs:
       run: |
         cargo build --verbose
         cd maze_wasm
-        wasm-pack build --target web
+        wasm-pack build --target web --features "wasm-bindgen"
+        cargo build --target wasm32-unknown-unknown --release
 
     - name: Run Rust Tests
       run: |
