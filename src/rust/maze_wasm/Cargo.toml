@@ -2,13 +2,20 @@
 name = "maze_wasm"
 version = "0.1.0"
 edition = "2021"
+description = "maze_wasm web assembly package"
+repository = "https://github.com/budgiedownunder/maze-project"
+license = "MIT" 
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-wasm-bindgen = { version = "0.2", features = ["serde"] }
+wasm-bindgen = { version = "0.2", optional = true, features = ["serde"] }
 js-sys = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 maze = { path = "../maze" } 
+
+[features]
+default = []
+wasm-bindgen = ["dep:wasm-bindgen"]
