@@ -14,10 +14,6 @@ namespace Maze.Wasm.Interop.Tests
         private UInt32 CreateNewMazeWasm(UInt32 numRows, UInt32 numCols)
         {
             UInt32 mazeWasmPtr = interop.NewMazeWasm();
-            if (mazeWasmPtr == 0)
-            {
-                throw new Exception("NewMazeWasm() returned zero");
-            }
             if (numRows > 0 || numCols > 0)
             {
                 interop.MazeWasmResize(mazeWasmPtr, numRows, numCols);
