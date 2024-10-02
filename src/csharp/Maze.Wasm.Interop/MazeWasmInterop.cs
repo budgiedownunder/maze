@@ -193,12 +193,16 @@
             return instance;
         }
         /// <summary>
-        /// Creates a new, empty `MazeWasm`
+        /// Creates a new, empty `MazeWasm`, or will throw an exception if the operation fails
         /// </summary>
         /// <returns>Pointer to the `MazeWasm`, which should later be freed by calling <see cref="FreeMazeWasm(UInt32)">FreeMazeWasm()</see></returns>
         public UInt32 NewMazeWasm()
         {
-            return (UInt32)(Int32)(newMazeWasm?.Invoke() ?? 0);
+            UInt32 mazeWasmPtr = (UInt32)(Int32)(newMazeWasm?.Invoke() ?? 0);
+            if (mazeWasmPtr == null) {
+                throw new Exception("newMazeWasm() failed (returned zero), possibly due to low memory");
+            } 
+            return mazeWasmPtr;
         }
         /// <summary>
         /// Frees a `MazeWasm` pointer
