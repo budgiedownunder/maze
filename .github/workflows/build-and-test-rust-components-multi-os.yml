@@ -62,7 +62,7 @@ jobs:
           brew install mono
           wget https://github.com/dotnet/docfx/releases/download/v2.58.9/docfx.zip -O docfx.zip
           unzip docfx.zip -d docfx
-          chmod +x docfx/docfx
+          chmod +x docfx/docfx.exe
         elif [[ "${{ runner.os }}" == "Windows" ]]; then
           curl -L https://github.com/dotnet/docfx/releases/download/v2.58.9/docfx.zip -o docfx.zip
           Expand-Archive -Path docfx.zip -DestinationPath docfx
