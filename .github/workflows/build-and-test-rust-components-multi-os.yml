@@ -12,7 +12,7 @@ on:
 
 defaults:
   run:
-    working-directory: ./src/rust
+    working-directory: ./src
 
 jobs:
   build-and-test:
@@ -47,6 +47,7 @@ jobs:
         version: 'latest'
     
     - name: Build Rust Components
+      working-directory: rust 
       run: |
         cargo build --verbose
         cd maze_wasm
@@ -54,6 +55,7 @@ jobs:
         cargo build --target wasm32-unknown-unknown --release
 
     - name: Run Rust Component Tests
+      working-directory: rust 
       run: |
         cargo test -p maze
         cargo test -p maze_console -- --test-threads=1
@@ -61,6 +63,7 @@ jobs:
         cargo test -p maze_wasm
 
     - name: Run JavaScript API Tests
+      working-directory: rust 
       run: |
         cd maze_wasm/tests/js
         npm install
@@ -68,5 +71,6 @@ jobs:
         npm run test_help_examples
 
     - name: Run Benchmark Tests
+      working-directory: rust 
       run: |
         cargo bench -p maze
