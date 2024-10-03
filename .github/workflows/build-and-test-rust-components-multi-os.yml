@@ -1,5 +1,5 @@
 name: build-and-test-rust-components-multi-os
-run-name: ${{ github.actor }} is running the build and test workflow for Rust components within the branch ${{  github.ref }} on mutliple operating systems
+run-name: ${{ github.actor }} is running the build and test workflow for all components within the branch ${{  github.ref }} on multiple operating systems
 
 on:
   push:
@@ -62,7 +62,7 @@ jobs:
         cargo test -p storage -- --test-threads=1
         cargo test -p maze_wasm
 
-    - name: Run API Tests
+    - name: Run JavaScript API Tests
       run: |
         cd maze_wasm/tests/js
         npm install
