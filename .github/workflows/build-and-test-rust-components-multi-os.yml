@@ -120,19 +120,12 @@ jobs:
 #      shell: bash
 #      run: ls
 #
-    - name: List content of bin directory
-      working-directory: ./src/csharp/Maze.Wasm.Interop/bin
-      shell: bash
-      run: | 
-        ls
-        cat Maze.Wasm.Interop.xml
-
     - name: Build .NET Maze.Wasm.Interop documentation
       working-directory: ./src/csharp/Maze.Wasm.Interop
       shell: bash
       run: |
         pwd
-        docfx build
+        docfx docfx.json
 #        if [[ "${{ runner.os }}" == "Linux" ]]; then
 #          ../../../docfx/docfx.exe build
 #        elif [[ "${{ runner.os }}" == "macOS" ]]; then
@@ -140,3 +133,10 @@ jobs:
 #        elif [[ "${{ runner.os }}" == "Windows" ]]; then
 #          ..\..\..\docfx\docfx.exe build
 #        fi
+
+    - name: List content of bin directory
+      working-directory: ./src/csharp/Maze.Wasm.Interop/bin
+      shell: bash
+      run: | 
+        ls
+        cat Maze.Wasm.Interop.xml
