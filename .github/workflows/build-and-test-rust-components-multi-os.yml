@@ -12,8 +12,6 @@ on:
       - '**.rs'
       - '**.toml'
       - '**.sln'
-  # Allow manual trigger of the workflow via the GitHub Actions UI
-  workflow_dispatch:
 
 defaults:
   run:
