@@ -3,9 +3,9 @@ use maze::{Maze, Definition};
 use wasm_bindgen::prelude::*;
 
 //************************************************************************************************************
-// Currently, we have duplicated definitions of MazeWasm and MazeSolutionWasm for wasm-bindgen and wasm32 
-// builds, due to the fact that we cannot conditionally mark the maze field with #[wasm_bindgen(skip)] 
-// - see https://github.com/anza-xyz/agave/pull/1658
+// Currently, we have to have duplicated definitions of MazeWasm for wasm-bindgen and wasm32 builds, due to 
+// the fact that we cannot conditionally mark the maze field with #[wasm_bindgen(skip)] 
+//- see https://github.com/anza-xyz/agave/pull/1658 for details on this issue
 //************************************************************************************************************/
 
 #[cfg(feature = "wasm-bindgen")]
