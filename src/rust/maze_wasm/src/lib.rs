@@ -1,3 +1,4 @@
+// Export modules that are not tied to any specific build mode
 pub mod wasm_common;
 
 // Export 'wasm' module if not in wasm-bindgen mode
