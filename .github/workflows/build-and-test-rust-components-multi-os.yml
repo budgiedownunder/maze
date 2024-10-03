@@ -121,3 +121,4 @@ jobs:
           ../../../docfx/docfx build
         elif [[ "${{ runner.os }}" == "Windows" ]]; then
           ..\..\..\docfx\docfx.exe build
+        fi
