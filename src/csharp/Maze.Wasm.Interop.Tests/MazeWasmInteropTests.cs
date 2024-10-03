@@ -9,7 +9,7 @@ namespace Maze.Wasm.Interop.Tests
 
     public class MazeWasmInteropTests
     {
-        MazeWasmInterop interop = MazeWasmInterop.GetInstance("C:\\projects\\repos\\maze-project\\src\\rust\\target\\wasm32-unknown-unknown\\release\\maze_wasm.wasm");
+        MazeWasmInterop interop = MazeWasmInterop.GetInstance("..\\..\\..\\..\\..\\rust\\target\\wasm32-unknown-unknown\\release\\maze_wasm.wasm");
 
         private UInt32 CreateNewMazeWasm(UInt32 numRows, UInt32 numCols)
         {
