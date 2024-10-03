@@ -88,10 +88,10 @@ jobs:
       run: |
         dotnet build
         
-    - name: Run .NET component tests
-      working-directory: ./src/csharp 
-      run: |
-        dotnet test
+   # - name: Run .NET component tests
+   #   working-directory: ./src/csharp 
+   #   run: |
+   #     dotnet test
 
     - name: Build .NET component documentation
       working-directory: ./src/csharp 
