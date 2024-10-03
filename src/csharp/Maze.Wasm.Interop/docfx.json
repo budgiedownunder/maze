@@ -4,7 +4,7 @@
       "src": [
         {
           "files": [ "Maze.Wasm.Interop.csproj" ],
-          "exclude": [ "bin/**/*", "obj/**/*, docx/**/*" ]
+          "exclude": [ "bin/**/*", "obj/**/*" ]
         }
       ],
       "dest": "api",
@@ -16,39 +16,36 @@
     "content": [
       {
         "files": [
-          "api/**.yml",
-          "api/index.md"
+          "docfx/api/**.yml",
+          "docfx/api/index.md"
         ]
       },
       {
         "files": [
-          "docx/articles/**.md",
-          "docx/articles/**/toc.yml",
-          "toc.yml",
-          "docx/*.md"
+          "docfx/articles/**.md",
+          "docfx/articles/**/toc.yml",
+          "docfx/toc.yml",
+          "docfx/*.md"
         ]
       }
     ],
     "resource": [
       {
         "files": [
-          "docx/images/**"
+          "docfx/images/**"
         ]
       }
     ],
     "overwrite": [
       {
         "files": [
-          "docx/apidoc/**.md"
+          "docfx/apidoc/**.md"
         ],
         "exclude": [
-          "docx/obj/**",
-          "docx/_site/**"
+          "docfx/obj/**",
+          "docfx/_site/**"
         ]
       }
-    ],
-    "xref": [
-      "no"
     ],
     "dest": "_site",
     "globalMetadataFiles": [],
