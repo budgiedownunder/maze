@@ -57,7 +57,7 @@ jobs:
           sudo apt-get install -y libunwind8 libicu70 || true
           wget https://github.com/dotnet/docfx/releases/download/v2.58.9/docfx.zip -O docfx.zip
           unzip docfx.zip -d docfx
-          chmod +x docfx/docfx
+          chmod +x docfx/docfx.exe
         elif [[ "${{ runner.os }}" == "macOS" ]]; then
           brew install mono
           wget https://github.com/dotnet/docfx/releases/download/v2.58.9/docfx.zip -O docfx.zip
@@ -115,8 +115,9 @@ jobs:
     - name: Build .NET Maze.Wasm.Interop documentation
       working-directory: ./src/csharp/Maze.Wasm.Interop
       run: |
-        if [[ "${{ runner.os }}" == "Linux" || "${{ runner.os }}" == "macOS" ]]; then
-        ../../../docfx/docfx build
+        if [[ "${{ runner.os }}" == "Linux" ]]; then
+          ../../../docfx/docfx.exe build
+        elif [[ "${{ runner.os }}" == "macOS" ]]; then
+          ../../../docfx/docfx build
         elif [[ "${{ runner.os }}" == "Windows" ]]; then
           ..\..\..\docfx\docfx.exe build
-        fi        
