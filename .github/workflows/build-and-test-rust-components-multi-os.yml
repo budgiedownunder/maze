@@ -12,7 +12,6 @@ on:
       - '**.rs'
       - '**.toml'
       - '**.sln'
-      - '**.yml'
 
 defaults:
   run:
@@ -95,7 +94,7 @@ jobs:
         dotnet test
 
     - name: Build .NET component documentation
-      working-directory: ./src/scharp 
+      working-directory: ./src/csharp 
       run: |
         cd Maze.Wasm.Interop
         docfx docfx.json
