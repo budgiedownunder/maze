@@ -6,9 +6,13 @@ on:
     branches:
 
     paths:
+      - '**.cs'
+      - '**.csproj'
       - '**.mjs'
       - '**.rs'
       - '**.toml'
+      - '**.sln'
+      - '**.yml'
 
 defaults:
   run:
@@ -62,7 +66,7 @@ jobs:
         cargo test -p storage -- --test-threads=1
         cargo test -p maze_wasm
 
-    - name: Run JavaScript API Tests
+    - name: Run Rust JavaScript API Tests
       working-directory: ./src/rust 
       run: |
         cd maze_wasm/tests/js
@@ -70,7 +74,29 @@ jobs:
         npm run test_api
         npm run test_help_examples
 
-    - name: Run Benchmark Tests
+    - name: Run Rust Benchmark Tests
       working-directory: ./src/rust 
       run: |
         cargo bench -p maze
+
+    - name: Setup .NET build environment
+      working-directory: ./src/csharp 
+      run: |
+        dotnet restore
+  
+    - name: Build .NET components
+      working-directory: ./src/csharp 
+      run: |
+        dotnet build
+        
+    - name: Run .NET component tests
+      working-directory: ./src/csharp 
+      run: |
+        dotnet test
+
+    - name: Build .NET component documentation
+      working-directory: ./src/scharp 
+      run: |
+        cd Maze.Wasm.Interop
+        docfx docfx.json
+  
