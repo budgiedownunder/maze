@@ -123,7 +123,9 @@ jobs:
     - name: List content of bin directory
       working-directory: ./src/csharp/Maze.Wasm.Interop/bin
       shell: bash
-      run: ls
+      run: | 
+        ls
+        cat bin/Maze.Wasm.Interop.xml
 
     - name: Build .NET Maze.Wasm.Interop documentation
       working-directory: ./src/csharp/Maze.Wasm.Interop
