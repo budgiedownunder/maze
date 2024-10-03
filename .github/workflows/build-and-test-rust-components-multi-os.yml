@@ -115,15 +115,15 @@ jobs:
    #   run: |
    #     dotnet test
 
-    - name: List content of root directory
-      working-directory: ./
-      shell: bash
-      run: ls
-
-    - name: List content of docfx directory
-      working-directory: ./docfx
-      shell: bash
-      run: ls
+#    - name: List content of root directory
+#      working-directory: ./
+#      shell: bash
+#      run: ls
+#
+#    - name: List content of docfx directory
+#      working-directory: ./docfx
+#      shell: bash
+#      run: ls
 
     - name: Build .NET Maze.Wasm.Interop documentation
       working-directory: ./src/csharp/Maze.Wasm.Interop
