@@ -66,7 +66,7 @@ jobs:
           chmod +x docfx/docfx.exe
         elif [[ "${{ runner.os }}" == "Windows" ]]; then
           curl -L https://github.com/dotnet/docfx/releases/download/v2.58.9/docfx.zip -o docfx.zip
-          Expand-Archive -Path docfx.zip -DestinationPath docfx
+          unzip docfx.zip -d docfx
         fi
 
     - name: Build Rust Components
