@@ -119,9 +119,9 @@ jobs:
       run: |
         pwd
         if [[ "${{ runner.os }}" == "Linux" ]]; then
-          ../../../docfx/docfx.exe build
+          ../../docfx/docfx.exe build
         elif [[ "${{ runner.os }}" == "macOS" ]]; then
-          ../../../docfx/docfx build
+          ../../docfx/docfx build
         elif [[ "${{ runner.os }}" == "Windows" ]]; then
-          ..\..\..\docfx\docfx.exe build
+          ..\..\docfx\docfx.exe build
         fi
