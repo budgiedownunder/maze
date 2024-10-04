@@ -93,7 +93,7 @@ jobs:
         dotnet build
         
     - name: Build .NET documentation
-      working-directory: ./src/csharp/Maze.Wasm.Interop/docfx
+      working-directory: ./src/csharp/docfx
       shell: bash
       run: |
         pwd
