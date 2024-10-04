@@ -49,27 +49,9 @@ jobs:
       with:
         version: 'latest'
     
-    # Install DocFX in root of the repository
     - name: Install DocFX
       working-directory: ./
       run: dotnet tool install -g docfx
-      
-##      shell: bash
-#      run: |
-#        if [[ "${{ runner.os }}" == "Linux" ]]; then
-#          sudo apt-get install -y libunwind8 libicu70 || true
-#          wget https://github.com/dotnet/docfx/releases/download/v2.58.9/docfx.zip -O docfx.zip
-#          unzip docfx.zip -d docfx
-#          chmod +x docfx/docfx.exe
-#        elif [[ "${{ runner.os }}" == "macOS" ]]; then
-#          brew install mono
-#          wget https://github.com/dotnet/docfx/releases/download/v2.58.9/docfx.zip -O docfx.zip
-#          unzip docfx.zip -d docfx
-#          chmod +x docfx/docfx.exe
-#        elif [[ "${{ runner.os }}" == "Windows" ]]; then
-#          curl -L https://github.com/dotnet/docfx/releases/download/v2.58.9/docfx.zip -o docfx.zip
-#          unzip docfx.zip -d docfx
-#        fi
 
     - name: Build Rust Components
       working-directory: ./src/rust 
@@ -110,8 +92,8 @@ jobs:
       run: |
         dotnet build
         
-    - name: Build .NET Maze.Wasm.Interop documentation
-      working-directory: ./src/csharp/Maze.Wasm.Interop
+    - name: Build .NET documentation
+      working-directory: ./src/csharp/Maze.Wasm.Interop/docfx
       shell: bash
       run: |
         pwd
