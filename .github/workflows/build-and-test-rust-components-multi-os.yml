@@ -78,8 +78,8 @@ jobs:
       if: runner.os == 'Windows'
       shell: powershell
       run: |
-        $pwd = Get-Location
-        echo "MAZE_WASM_PATH=$pwd\../target/wasm32-unknown-unknown\release\maze_wasm.wasm" >> $GITHUB_ENV
+        $fullPath = "$($pwd.Path)/../target/wasm32-unknown-unknown/release/maze_wasm.wasm"
+        echo "MAZE_WASM_PATH=$fullPath" >> $GITHUB_ENV
 
      # Read (Windows)
     - name: Print the MAZE_WASM_PATH environment variable (Windows)
