@@ -8,7 +8,7 @@
 - [License](#license)
 
 ## Introduction
-This is an experimental project that has been created for exploring various programming languages, technologies and language-to-language integration. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios.
+This is an experimental project that I have created for exploring various programming languages, technologies and language-to-language integration. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios.
 
 The following components are present:
 
