@@ -12,7 +12,7 @@ Welcome to the documentation section of this project. This directory contains al
 
 ## Introduction
 
-This project is an experimental project for managing and solving mazes. The documentation here will help you get started with setup and understand the architecture.
+This is an experimental project that has been created for exploring various programming languages, technologies and language-to-language integration. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios.
 
 ## Project Structure
 
