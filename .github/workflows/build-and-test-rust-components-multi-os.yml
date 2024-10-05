@@ -64,16 +64,31 @@ jobs:
         wasm-pack build --target web --features "wasm-bindgen"
         cargo build --target wasm32-unknown-unknown --release
         pwd
-        echo "MAZE_WASM_PATH=$(pwd)/../target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
 
-      # Use a conditional step for Windows (PowerShell)
+     # Set (non-Windows)
+     - name: Set the MAZE_WASM_PATH environment variable (non-Windows)
+      if: runner.os != 'Windows'
+      working-directory: ./src/rust/maze_wasm
+      run: |
+        echo "MAZE_WASM_PATH=$(pwd)/../target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
+  
+     # Set (Windows)
+     - name: Set the MAZE_WASM_PATH environment variable (Windows)
+      working-directory: ./src/rust/maze_wasm
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        $pwd = Get-Location
+        echo "MAZE_WASM_PATH=$pwd\../target/wasm32-unknown-unknown\release\maze_wasm.wasm" >> $GITHUB_ENV
+
+     # Read (Windows)
     - name: Print the MAZE_WASM_PATH environment variable (Windows)
       if: runner.os == 'Windows'
       shell: powershell
       run: |
         Write-Host "MAZE_WASM_PATH is set to: $env:MAZE_WASM_PATH"
 
-    # Use a conditional step for macOS/Ubuntu (bash)
+    # Read (non-Windows)
     - name: Print the MAZE_WASM_PATH environment variable (Linux/macOS)
       if: runner.os != 'Windows'
       shell: bash
