@@ -66,14 +66,14 @@ jobs:
         pwd
 
      # Set (non-Windows)
-     - name: Set the MAZE_WASM_PATH environment variable (non-Windows)
+    - name: Set the MAZE_WASM_PATH environment variable (non-Windows)
       if: runner.os != 'Windows'
       working-directory: ./src/rust/maze_wasm
       run: |
         echo "MAZE_WASM_PATH=$(pwd)/../target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
   
      # Set (Windows)
-     - name: Set the MAZE_WASM_PATH environment variable (Windows)
+    - name: Set the MAZE_WASM_PATH environment variable (Windows)
       working-directory: ./src/rust/maze_wasm
       if: runner.os == 'Windows'
       shell: powershell
