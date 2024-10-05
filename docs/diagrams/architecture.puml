@@ -12,6 +12,7 @@ System_Boundary(c1, "Browser") {
 }
 
 System_Boundary(c2, "Maze Project") {
+    Container(docfx, "docfx", "", "DocFX-generated HTML help")
     Container(maze_wasm_interop_net_tests, "Maze.Wasm.Interop.Tests", "C#", "Maze.Wasm.Interop Tests")
     Container(maze_wasm_interop_net, "Maze.Wasm.Interop", "C#", "maze_wasm interop .NET assembly")
     Container(maze_wasm_js, "maze_wasm.js", "Javascipt", "javascript API library")
@@ -22,12 +23,13 @@ System_Boundary(c2, "Maze Project") {
     Container(utils, "utils", "Rust", "utility functions")
 }
 
+Rel(user, browser, "Uses")
+Rel(browser, docfx, "Uses")
+Rel(browser, maze_wasm_js, "Uses")
 Rel(user, maze_console, "Uses")
 Rel(maze_console, maze, "Uses")
 Rel(maze_console, storage, "Uses")
 Rel(maze_console, utils, "Uses")
-Rel(user, browser, "Uses")
-Rel(browser, maze_wasm_js, "Uses")
 Rel(maze_wasm_interop_net_tests, maze_wasm_interop_net, "Uses")
 Rel(maze_wasm_interop_net, maze_wasm, "Uses")
 Rel(maze_wasm_js, maze_wasm, "Uses")
