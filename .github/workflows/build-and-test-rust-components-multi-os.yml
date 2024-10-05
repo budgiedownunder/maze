@@ -22,10 +22,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: 
+        os: [ubuntu-latest, macos-latest, windows-latest]
           # - ubuntu-latest
           # - macos-latest
-          - windows-latest
+          #- windows-latest
 
     steps:
     - name: Checkout repository
@@ -58,15 +58,25 @@ jobs:
 
     - name: Build Rust Components
       working-directory: ./src/rust
-      shell: bash
       run: |
         cargo build --verbose
         cd maze_wasm
         wasm-pack build --target web --features "wasm-bindgen"
         cargo build --target wasm32-unknown-unknown --release
+        pwd
         echo "MAZE_WASM_PATH=$(pwd)/../target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
 
-    - name: Print the MAZE_WASM_PATH environment variable
+      # Use a conditional step for Windows (PowerShell)
+    - name: Print the MAZE_WASM_PATH environment variable (Windows)
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        Write-Host "MAZE_WASM_PATH is set to: $env:MAZE_WASM_PATH"
+
+    # Use a conditional step for macOS/Ubuntu (bash)
+    - name: Print the MAZE_WASM_PATH environment variable (Linux/macOS)
+      if: runner.os != 'Windows'
+      shell: bash
       run: |
         echo "MAZE_WASM_PATH is set to: $(printenv MAZE_WASM_PATH)"
 
@@ -97,7 +107,7 @@ jobs:
         dotnet restore
   
     - name: Build .NET components
-      shell: bash  
+      shell:  
       working-directory: ./src/csharp 
       run: |
         dotnet build
