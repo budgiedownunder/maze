@@ -14,6 +14,7 @@ The following components are present:
 
 | Folder | Component | Description |
 |--------|-----------|--------------- |
+| `src/csharp` | [docfx](./src/csharp/docfx/README.md) | .NET API help generation|
 | `src/csharp` | [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) | .NET interop to `maze_wasm` web assembly|
 |            | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md) | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) |
 | `src/rust` | [`maze`](./src/rust/maze/README.md) | maze definition and calculation library|
