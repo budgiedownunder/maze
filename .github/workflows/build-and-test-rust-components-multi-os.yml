@@ -79,7 +79,7 @@ jobs:
       shell: powershell
       run: |
         $fullPath = "$($pwd.Path)/../target/wasm32-unknown-unknown/release/maze_wasm.wasm"
-        echo "MAZE_WASM_PATH=$fullPath" >> $GITHUB_ENV
+        "$envVar = MAZE_WASM_PATH=$fullPath" | Out-File -FilePath $GITHUB_ENV -Encoding utf8 -Append
 
      # Read (Windows)
     - name: Print the MAZE_WASM_PATH environment variable (Windows)
