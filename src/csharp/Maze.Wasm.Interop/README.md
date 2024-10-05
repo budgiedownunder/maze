@@ -45,11 +45,3 @@ dotnet build
 
 ### Testing
 Testing can be performed via the [`Maze.Wasm.Interop.Tests`](../Maze.Wasm.Interop.Tests/README.md) project.
-
-### Generating Documentation
-To generate and view `HTML` documentation for the assembly, run the following from the `Maze.Wasm.Interop` directory:
-```
-docfx docfx.json --serve
-```
-
-This will generate the help which can then be accessed in a browser at http://localhost:8000
