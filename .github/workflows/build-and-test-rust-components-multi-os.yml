@@ -60,11 +60,11 @@ jobs:
         cd maze_wasm
         wasm-pack build --target web --features "wasm-bindgen"
         cargo build --target wasm32-unknown-unknown --release
-        echo "::set-output name=MAZE_WASM_PATH::$(pwd)/../target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
+        echo "MAZE_WASM_PATH::$(pwd)/../target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
 
     - name: Print the MAZE_WASM_PATH environment variable
       run: |
-        echo "WASM_PATH is set to: $MAZE_WASM_PATH"
+        echo "MAZE_WASM_PATH is set to: $MAZE_WASM_PATH"
 
     - name: Run Rust Component Tests
       working-directory: ./src/rust 
