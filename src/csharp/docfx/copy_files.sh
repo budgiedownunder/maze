@@ -1,0 +1,1 @@
+install -D ../../../docs/diagrams/architecture.png ./images/architecture.png

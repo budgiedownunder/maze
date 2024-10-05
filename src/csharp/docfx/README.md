@@ -14,7 +14,15 @@ dotnet tool install -g docfx
 ## Build
 To generate the documentation, run the following from the `docfx` directory:
 
+Windows:
 ```
+copy_files.bat
+docfx docfx.json
+```
+
+Linux/macOS:
+```
+sh copy_files.sh
 docfx docfx.json
 ```
 
@@ -22,7 +30,15 @@ This will generate the documentation under the `_site` sub-directory.
 
 ## Viewing
 To generate and view `HTML` documentation, run the following from the `docfx` directory:
+Windows:
 ```
+copy_files.bat
+docfx docfx.json --serve
+```
+
+Linux/macOS:
+```
+sh copy_files.sh
 docfx docfx.json --serve
 ```
 
