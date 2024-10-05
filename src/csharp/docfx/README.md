@@ -30,6 +30,7 @@ This will generate the documentation under the `_site` sub-directory.
 
 ## Viewing
 To generate and view `HTML` documentation, run the following from the `docfx` directory:
+
 Windows:
 ```
 copy_files.bat
