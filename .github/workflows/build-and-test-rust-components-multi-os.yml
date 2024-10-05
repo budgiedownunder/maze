@@ -96,5 +96,5 @@ jobs:
       working-directory: ./src/csharp/docfx
       shell: bash
       run: |
-        pwd
+        bash copy_files.sh
         docfx docfx.json
