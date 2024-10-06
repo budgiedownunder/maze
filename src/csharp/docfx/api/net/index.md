@@ -4,6 +4,6 @@ This section contains the auto-generated .NET API reference documentation for `m
 
 ## Key Components
 
-- [Maze.Wasm.Interop](/api/Maze.Wasm.Interop.html) - web assembly interop functionality
-- [Maze.Wasm.Interop.Tests](/api/Maze.Wasm.Interop.Tests.html) - unit tests for [Maze.Wasm.Interop](/api/Maze.Wasm.Interop.html)
+- [Maze.Wasm.Interop](/api/net/Maze.Wasm.Interop.html) - web assembly interop functionality
+- [Maze.Wasm.Interop.Tests](/api/net/Maze.Wasm.Interop.Tests.html) - unit tests for [Maze.Wasm.Interop](/api/net/Maze.Wasm.Interop.html)
 
