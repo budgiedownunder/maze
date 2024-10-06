@@ -1,1 +1,0 @@
-xcopy ..\..\..\docs\diagrams\architecture.png .\images\ /i

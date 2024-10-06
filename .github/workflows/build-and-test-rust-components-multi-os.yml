@@ -116,7 +116,7 @@ jobs:
         dotnet test
           
     - name: Build .NET documentation
-      working-directory: ./src/csharp/docfx
+      working-directory: ./src/docfx
       shell: bash
       run: |
         bash copy_files.sh
