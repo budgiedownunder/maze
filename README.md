@@ -42,8 +42,10 @@ npm install
 cd ../csharp
 dotnet restore
 ```
+
 ### Build
 To build all project components:
+
 ```
 cd src/rust
 cargo build
@@ -53,8 +55,11 @@ cargo build --target wasm32-unknown-unknown --release
 cd ../../csharp
 dotnet build
 ```
+
 ### Run
+
 To run the `maze_console` application:
+
 ```
 cd src/rust/maze_console
 cargo run
@@ -63,6 +68,7 @@ cargo run
 ### Testing
 #### 1. Rust Components
 To test all `Rust` components:
+
 ```
 cd src/rust
 cargo test -p maze
@@ -70,8 +76,10 @@ cargo test -p maze_console -- --test-threads=1
 cargo test -p storage -- --test-threads=1
 cargo test -p maze_wasm
 ```
+
 #### 2. JavaScript APIs
 To test the `maze_wasm.js` JavaScript API:
+
 ```
 cd src/rust/maze_wasm/tests/js
 npm run test_api
@@ -80,25 +88,39 @@ npm run test_help_examples
 
 #### 3. .NET Components
 To test all .NET components:
+
 ```
-cd src/charp
+cd src/csharp
 dotnet test
 ```
 
 ### Benchmarking
 To run benchmark tests (which are currently only configured for the `maze` crate):
+
 ```
 cd src/rust
 cargo bench -p maze
 ```
 
 ### Generating Documentation
-To generate and view `Rust` (crate) documentation in your default browser:
+
+### .NET (C#)
+To generate and view documentation for the project's `.NET` (`C#`) assemblies, refer to the [README](./src/docfx/README.md) for the `docfx` project.
+
+#### Rust
+To generate and view documentation for the project's `Rust` crates in your default browser (with all external dependency crates), run:
+
 ```
 cd src/rust
 cargo doc --open
 ```
-To generate and view documentation for individual `.NET` assemblies, refer to the `README.md` file for each assembly.
+
+To generate and view documentation for the project's `Rust` crates in your default browser (without any external dependency crates), run:
+
+```
+cd src/rust
+cargo doc --no-deps --open
+```
 
 ## Contributing
 At this stage, this project is not accepting contributions.
