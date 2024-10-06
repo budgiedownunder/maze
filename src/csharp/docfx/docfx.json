@@ -33,7 +33,8 @@
     "resource": [
       {
         "files": [
-          "images/**"
+          "images/**",
+          "styles/main.css"
         ]
       }
     ],
@@ -56,10 +57,14 @@
       "default"
     ],
     "globalMetaData": {
+      "_appLogoPath": "images/logo.png",
       "_appTitle": "Maze Project Documentation",
       "_enableSearch": false,
       "_disableContribution": true
     },
+    "styles": [
+      "styles/main.css"
+    ],
     "postProcessors": [],
     "markdownEngineName": "markdig",
     "noLangKeyword": false,
