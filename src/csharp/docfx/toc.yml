@@ -1,5 +1,4 @@
 - name: Articles
   href: articles/
 - name: .NET API Documentation
-  href: api/net
-  homepage: api/net/index.md
+  href: api/net/

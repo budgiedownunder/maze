@@ -1,4 +1,4 @@
 - name: Introduction
-  href: /index.html
+  href: index.md
 - name: Architecture
   href: architecture.md
