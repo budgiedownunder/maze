@@ -6,8 +6,8 @@ The following components are present:
 
 | Language | Folder | Component | Description |
 |----------|--------|-----------|--------------- |
-| C#       | `src/csharp` | [`Maze.Wasm.Interop`](/api/Maze.Wasm.Interop.html) | .NET interop to `maze_wasm` web assembly |
-|          |            | [`Maze.Wasm.Interop.Tests`](/api/Maze.Wasm.Interop.Tests.html) | .NET test library for [`Maze.Wasm.Interop`](/api/Maze.Wasm.Interop.html) |
+| C#       | `src/csharp` | [`Maze.Wasm.Interop`](/api/net/Maze.Wasm.Interop.html) | .NET interop to `maze_wasm` web assembly |
+|          |            | [`Maze.Wasm.Interop.Tests`](/api/net/Maze.Wasm.Interop.Tests.html) | .NET test library for [`Maze.Wasm.Interop`](/api/net/Maze.Wasm.Interop.html) |
 | Rust     | `src/rust` | `maze` | maze definition and calculation library |
 |          |            | `maze_console` | maze console application |
 |          |            | `maze_wasm` | maze web assembly library |
