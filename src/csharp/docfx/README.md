@@ -1,11 +1,9 @@
 # `docfx` Project
 
 ## Introduction
-
 The `docfx` project defines and manages the online documentation for the `.NET` components.
+
 ## Setup
-
-
 The project uses [`DocFX`](https://dotnet.github.io/docfx/) to generate the help content. This can be installed by running the following command:
 ```
 dotnet tool install -g docfx
