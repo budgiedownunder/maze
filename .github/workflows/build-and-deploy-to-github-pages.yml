@@ -15,8 +15,9 @@ on:
       - '**.sln'
 
 permissions:
-  pages: write
-  contents: write
+  pages: write      # Allow writing to GitHub Pages
+  contents: write   # Allow modifying repository contents
+  id-token: write   # Allow requesting an ID token (needed for deploy-pages action)
 
 defaults:
   run:
