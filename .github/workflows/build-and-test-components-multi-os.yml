@@ -24,8 +24,8 @@ jobs:
       matrix:
         os: 
           - ubuntu-latest
-          - macos-latest
-          - windows-latest
+  #        - macos-latest
+  #        - windows-latest
 
     steps:
     - name: Checkout repository
@@ -55,6 +55,30 @@ jobs:
     - name: Install DocFX
       working-directory: ./
       run: dotnet tool install -g docfx
+
+    - name: Build HTML documentation (Windows)
+      if: runner.os == 'Windows'
+      working-directory: ./src/docfx
+      shell: cmd
+      run: |
+        build_all.bat
+
+    - name: Build HTML documentation (non-Windows)
+      if: runner.os != 'Windows'
+      working-directory: ./src/docfx
+      run: |
+        sh build_all.sh
+
+    - name: Setup GitHUb Pages
+      if: startsWith(runner.os, 'Linux') && github.ref == 'refs/heads/main'
+      id: pages
+      uses: actions/configure-pages@v3
+
+    - name: Upload GitHub Pages artifact
+      if: startsWith(runner.os, 'Linux') && github.ref == 'refs/heads/main'
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: ./src/docfx/_site
   
     - name: Build Rust Components
       working-directory: ./src/rust
@@ -115,36 +139,12 @@ jobs:
       run: |
         dotnet test
 
-    - name: Build HTML documentation (Windows)
-      if: runner.os == 'Windows'
-      working-directory: ./src/docfx
-      shell: cmd
-      run: |
-        build_all.bat
-
-    - name: Build HTML documentation (non-Windows)
-      if: runner.os != 'Windows'
-      working-directory: ./src/docfx
-      run: |
-        sh build_all.sh
-
-    - name: Setup Pages
-      if: runner.os == 'ubuntu-latest'
-      id: pages
-      uses: actions/configure-pages@v3
-
-    - name: Upload artifact
-      if: runner.os == 'ubuntu-latest'
-      uses: actions/upload-pages-artifact@v2
-      with:
-        path: ./src/docfx/_site
-
-  deploy:
+  deploy-to-github-pages:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    if: github.ref == 'refs/heads/main'
+    if: startsWith(runner.os, 'Linux') && github.ref == 'refs/heads/main'
     needs: build-and-test
     steps:
       - name: Deploy to GitHub Pages
