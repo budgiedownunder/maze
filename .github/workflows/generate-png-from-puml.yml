@@ -1,6 +1,7 @@
-name: Generate PNG from PlantUML
+name: Generate diagram PNG files from PlantUML
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - '**/*.puml'
