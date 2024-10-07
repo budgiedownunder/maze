@@ -18,13 +18,15 @@
       {
         "files": [
           "api/net/**.yml",
-          "api/net/index.md"
+          "api/net/index.md",
+          "api/rust/**.md"
         ]
       },
       {
         "files": [
           "articles/**.md",
           "articles/**/toc.yml",
+          "api/**/toc.yml",
           "toc.yml",
           "*.md" 
         ]

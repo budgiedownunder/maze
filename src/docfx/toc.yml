@@ -1,4 +1,6 @@
 - name: Articles
   href: articles/
-- name: .NET API Documentation
+- name: .NET APIs
   href: api/net/
+- name: Rust APIs
+  href: api/rust/index.md
