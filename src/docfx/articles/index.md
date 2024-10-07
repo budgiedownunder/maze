@@ -6,11 +6,11 @@ The following components are present:
 
 | Language | Folder | Component | Description |
 |----------|--------|-----------|--------------- |
-| C#       | `src/csharp` | [`Maze.Wasm.Interop`](/api/net/Maze.Wasm.Interop.html) | .NET interop to `maze_wasm` web assembly |
-|          |            | [`Maze.Wasm.Interop.Tests`](/api/net/Maze.Wasm.Interop.Tests.html) | .NET test library for [`Maze.Wasm.Interop`](/api/net/Maze.Wasm.Interop.html) |
-| Rust     | `src/rust` | `maze` | maze definition and calculation library |
-|          |            | `maze_console` | maze console application |
-|          |            | `maze_wasm` | maze web assembly library |
-|          |            | `storage` | maze storage library |
-|          |            | `utils` | utilities library |
+| C#       | `src/csharp` | [`Maze.Wasm.Interop`](../api/net/Maze.Wasm.Interop.html) | .NET interop to `maze_wasm` web assembly |
+|          |            | [`Maze.Wasm.Interop.Tests`](../api/net/Maze.Wasm.Interop.Tests.html) | .NET test library for [`Maze.Wasm.Interop`](../api/net/Maze.Wasm.Interop.html) |
+| Rust     | `src/rust` | [`maze`](../api/rust/maze/view_content.md) | maze definition and calculation library |
+|          |            | [`maze_console`](../api/rust/maze_console/view_content.md) | maze console application |
+|          |            | [`maze_wasm`](../api/rust/maze_wasm/view_content.md) | maze web assembly library |
+|          |            | [`storage`](../api/rust/storage/view_content.md) | maze storage library |
+|          |            | [`utils`](../api/rust/utils/view_content.md) | utilities library |
 
