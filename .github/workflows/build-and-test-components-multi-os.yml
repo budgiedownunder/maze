@@ -127,3 +127,26 @@ jobs:
       working-directory: ./src/docfx
       run: |
         sh build_all.sh
+
+    - name: Setup Pages
+      if: runner.os == 'ubuntu-latest'
+      id: pages
+      uses: actions/configure-pages@v3
+
+    - name: Upload artifact
+      if: runner.os == 'ubuntu-latest'
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: ./src/docfx/_site
+
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    if: github.ref == 'refs/heads/main'
+    needs: build-and-test
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
