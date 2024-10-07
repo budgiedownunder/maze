@@ -119,4 +119,4 @@ jobs:
       if: runner.os == 'Windows'
       working-directory: ./src/docfx
       run: |
-        build_all.bat
+        cmd.exe /c build_all.bat
