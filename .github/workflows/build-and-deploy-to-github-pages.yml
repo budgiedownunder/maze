@@ -14,6 +14,10 @@ on:
       - '**.toml'
       - '**.sln'
 
+permissions:
+  pages: write
+  contents: write
+
 defaults:
   run:
     working-directory: ./
@@ -47,7 +51,7 @@ jobs:
       uses: actions/upload-pages-artifact@v2
       with:
         path: ./src/docfx/_site
-  
+
   deploy:
     runs-on: ubuntu-latest
     environment:
