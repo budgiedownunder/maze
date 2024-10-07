@@ -1,0 +1,1 @@
+Placeholder page for `maze_console` crate documentation

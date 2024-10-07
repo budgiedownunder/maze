@@ -1,0 +1,12 @@
+- name: All crates
+  href: index.md
+- name: maze
+  href: maze/view_content.md
+- name: maze_console
+  href: maze_console/view_content.md
+- name: maze_wasm
+  href: maze_wasm/view_content.md
+- name: storage
+  href: storage/view_content.md
+- name: utils
+  href: utils/view_content.md

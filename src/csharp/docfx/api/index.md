@@ -1,9 +1,0 @@
-# Welcome to the .NET API Documentation
-
-This section contains the auto-generated .NET API reference documentation for `maze-project`.
-
-## Key Components
-
-- [Maze.Wasm.Interop](/api/Maze.Wasm.Interop.html) - web assembly interop functionality
-- [Maze.Wasm.Interop.Tests](/api/Maze.Wasm.Interop.Tests.html) - unit tests for [Maze.Wasm.Interop](/api/Maze.Wasm.Interop.html)
-

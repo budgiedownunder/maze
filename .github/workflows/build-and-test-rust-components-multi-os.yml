@@ -55,7 +55,7 @@ jobs:
     - name: Install DocFX
       working-directory: ./
       run: dotnet tool install -g docfx
-
+  
     - name: Build Rust Components
       working-directory: ./src/rust
       run: |
@@ -114,10 +114,16 @@ jobs:
       working-directory: ./src/csharp 
       run: |
         dotnet test
-          
-    - name: Build .NET documentation
-      working-directory: ./src/csharp/docfx
-      shell: bash
+
+    - name: Build HTML documentation (Windows)
+      if: runner.os == 'Windows'
+      working-directory: ./src/docfx
+      shell: cmd
       run: |
-        bash copy_files.sh
-        docfx docfx.json
+        build_all.bat
+
+    - name: Build HTML documentation (non-Windows)
+      if: runner.os != 'Windows'
+      working-directory: ./src/docfx
+      run: |
+        sh build_all.sh
