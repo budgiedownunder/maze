@@ -25,7 +25,7 @@ At this stage, the following areas are covered:
 - Combining `C#` and `Rust` documentation into a single HTML help system with use of `iFrame` containers
 - Architecture diagramming using `PlantUML` ([`architecture.puml`](./docs/diagrams/architecture.puml))
 - Automating image generation workflows using GitHub Actions ([`generate-png-from-puml.yml`](./.github/workflows/generate-png-from-puml.yml))
-- Automating build and testing workflows using GitHub Actions ([`build-and-test-rust-components-multi-os.yml`](./.github/workflows/build-and-test-rust-components-multi-os.yml))
+- Automating build and testing workflows using GitHub Actions ([`build-and-test-components-multi-os.yml`](./.github/workflows/build-and-test-components-multi-os.yml))
 
 The following components are present:
 
