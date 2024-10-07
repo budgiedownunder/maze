@@ -56,6 +56,19 @@ jobs:
       working-directory: ./
       run: dotnet tool install -g docfx
 
+    - name: Build HTML documentation (Windows)
+      if: runner.os == 'Windows'
+      working-directory: ./src/docfx
+      shell: cmd
+      run: |
+        build_all.bat
+
+    - name: Build HTML documentation (non-Windows)
+      if: runner.os != 'Windows'
+      working-directory: ./src/docfx
+      run: |
+        sh build_all.sh
+  
     - name: Build Rust Components
       working-directory: ./src/rust
       run: |
@@ -114,9 +127,3 @@ jobs:
       working-directory: ./src/csharp 
       run: |
         dotnet test
-          
-    - name: Build HTML documentation (Windows)
-      if: runner.os == 'Windows'
-      working-directory: ./src/docfx
-      run: |
-        cmd.exe /c build_all.bat
