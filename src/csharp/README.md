@@ -5,8 +5,8 @@ The following `C#` (`.NET`) components are present:
 
 | Folder | Component | Description |
 |--------|-----------|--------------- |
-| `src/csharp`| [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) | .NET interop to `maze_wasm` web assembly|
-|            | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md) | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) |
+| `src/csharp`| [`Maze.Wasm.Interop`](./Maze.Wasm.Interop/README.md) | .NET interop to `maze_wasm` web assembly|
+|            | [`Maze.Wasm.Interop.Tests`](./Maze.Wasm.Interop/README.md) | .NET test library for [`Maze.Wasm.Interop`](./Maze.Wasm.Interop/README.md) |
 
 ## Getting Started
 
@@ -41,7 +41,7 @@ There are no benchmarking tests currently configured for these components.
 ### Generating Documentation
 
 #### `.NET`-only 
-To generate and view documentation for the project's `.NET` (`C#`) assemblies, with placeholder pages for where the `Rust` documentation would be, run the following from the `.src/docfx` directory:
+To generate and view documentation for the project's `.NET` (`C#`) assemblies, with placeholder pages for where the `Rust` documentation would be, run the following from the `./src/docfx` directory:
 
 Windows:
 

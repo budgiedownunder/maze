@@ -1,16 +1,16 @@
-# Rust Components
+# Rust Crates
 
 
 ## Introduction
-The following `Rust` components are present:
+The following `Rust` crates are present:
 
-| Folder | Component | Description |
+| Folder | Crate | Description |
 |--------|-----------|--------------- |
-| `src/rust` | [`maze`](./src/rust/maze/README.md) | maze definition and calculation library|
-|            | [`maze_console`](./src/rust/maze_console/README.md) | maze console application |
-|            | [`maze_wasm`](./src/rust/maze_wasm/README.md) | maze web assembly library |
-|            | [`storage`](./src/rust/storage/README.md) | maze storage library |
-|            | [`utils`](./src/rust/utils/README.md) | utilities library |
+| `src/rust` | [`maze`](./maze/README.md) | maze definition and calculation library|
+|            | [`maze_console`](./maze_console/README.md) | maze console application |
+|            | [`maze_wasm`](./maze_wasm/README.md) | maze web assembly library |
+|            | [`storage`](./storage/README.md) | maze storage library |
+|            | [`utils`](./utils/README.md) | utilities library |
 
 ## Getting Started
 
@@ -30,7 +30,7 @@ npm install
 ```
 
 ### Build
-To build all project components:
+To build all project crates and JavaScript APIs:
 
 ```
 cd src/rust
@@ -50,8 +50,8 @@ cargo run
 ```
 
 ### Testing
-#### 1. Rust Components
-To test all `Rust` components:
+#### 1. Rust Crates
+To test all `Rust` crates:
 
 ```
 cd src/rust
