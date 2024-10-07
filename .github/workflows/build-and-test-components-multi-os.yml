@@ -69,7 +69,7 @@ jobs:
       run: |
         sh build_all.sh
 
-    - name: Setup GitHUb Pages
+    - name: Setup GitHub Pages
       if: startsWith(runner.os, 'Linux') && github.ref == 'refs/heads/main'
       id: pages
       uses: actions/configure-pages@v3
