@@ -8,13 +8,30 @@
 - [License](#license)
 
 ## Introduction
-This is an experimental project that I have created for exploring various programming languages, technologies and language-to-language integration. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios.
+This is an experimental project that has been created for exploring various programming languages, technologies and language-to-language integration. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios.
+
+At this stage, the following areas are covered:
+
+- Creating library crates in `Rust`
+- Creating a `Rust` console application (`maze_console`) that leverages `Rust` library crates for calculation (`maze`) and storage (`storage`)
+- Implementing automated unit and mock testing (dependency injection) in `Rust` 
+- Automating `Rust` documentation-generation with `cargo doc`
+- Web Assembly implementation and generation (`wasm32` and `wasm-bindgen`) in `Rust` (`maze_wasm`)
+- Generating JavaScript APIs from `Rust` crates (`wasm-pack`)
+- Automating JavaScript API testing in `node.js` (`chai`, `mocha`)
+- Implementing a `.NET` to Web Assembly (`maze_wasm`) interop library (`Maze.Wasm.Interop`) in `C#`
+- Implementing automated `.NET` API testing with `xUnit` (`Maze.Wasm.Interop.Tests`)
+- Automating `C#` API documentation generation with `DocFX`
+- Combining `C#` and `Rust` documentation into a single HTML help system with use of `iFrame` containers
+- Architecture diagramming using `PlantUML` (`generate-png-from-puml.yml`)
+- Automating image generation workflows using GitHub Actions (`generate-png-from-puml.yml`)
+- Automating build and testing workflows using GitHub Actions (`build-and-test-rust-components-multi-os.yml`)
 
 The following components are present:
 
 | Folder | Component | Description |
 |--------|-----------|--------------- |
-| `src` | [`docfx`](./src/docfx/README.md) | .NET API help generation|
+| `src` | [`docfx`](./src/docfx/README.md) | HTML help generation|
 | `src/csharp`| [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) | .NET interop to `maze_wasm` web assembly|
 |            | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md) | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) |
 | `src/rust` | [`maze`](./src/rust/maze/README.md) | maze definition and calculation library|
@@ -32,95 +49,22 @@ To setup the build and test environment, you first need to install:
 - [`Rust`](https://www.rust-lang.org/tools/install)
 - [`Node.js`](https://nodejs.org/en/learn/getting-started/how-to-install-nodejs) 
 
-and then:
+To setup the `C#` build environment, refer to the [README](src/csharp/README.md) in the `csharp` directory.
 
-```
-cd src/rust
-cargo install wasm-pack
-cd maze_wasm/tests/js
-npm install
-cd ../csharp
-dotnet restore
-```
+To setup the `Rust` build environment, refer to the [README](src/rust/README.md) in the `rust` directory.
 
 ### Build
-To build all project components:
 
-```
-cd src/rust
-cargo build
-cd maze_wasm
-wasm-pack build --target web --features "wasm-bindgen"
-cargo build --target wasm32-unknown-unknown --release
-cd ../../csharp
-dotnet build
-```
+- To build the `C#` (`.NET`) APIs, refer to the [README](src/csharp/README.md) in the `csharp` directory.
 
-### Run
-
-To run the `maze_console` application:
-
-```
-cd src/rust/maze_console
-cargo run
-```
-
-### Testing
-#### 1. Rust Components
-To test all `Rust` components:
-
-```
-cd src/rust
-cargo test -p maze
-cargo test -p maze_console -- --test-threads=1
-cargo test -p storage -- --test-threads=1
-cargo test -p maze_wasm
-```
-
-#### 2. JavaScript APIs
-To test the `maze_wasm.js` JavaScript API:
-
-```
-cd src/rust/maze_wasm/tests/js
-npm run test_api
-npm run test_help_examples
-```
-
-#### 3. .NET Components
-To test all .NET components:
-
-```
-cd src/csharp
-dotnet test
-```
-
-### Benchmarking
-To run benchmark tests (which are currently only configured for the `maze` crate):
-
-```
-cd src/rust
-cargo bench -p maze
-```
+- To build the `Rust` creates, refer to the [README](src/rust/README.md) in the `rust` directory.
 
 ### Generating Documentation
+- To generate combined documentation for the `.NET` APIs and `Rust` crates, refer to the [README](src/docfx/README.md) in the `docfx` project.
 
-### .NET (C#)
-To generate and view documentation for the project's `.NET` (`C#`) assemblies, refer to the [README](./src/docfx/README.md) for the `docfx` project.
+- To generate documentation just for the `.NET` APIs, refer to the [README](src/csharp/README.md) in the `csharp` directory.
 
-#### Rust
-To generate and view documentation for the project's `Rust` crates in your default browser (with all external dependency crates), run:
-
-```
-cd src/rust
-cargo doc --open
-```
-
-To generate and view documentation for the project's `Rust` crates in your default browser (without any external dependency crates), run:
-
-```
-cd src/rust
-cargo doc --no-deps --open
-```
+- To generate documentation just for the `Rust` creates, refer to the [README](src/rust/README.md) in the `rust` directory.
 
 ## Contributing
 At this stage, this project is not accepting contributions.
