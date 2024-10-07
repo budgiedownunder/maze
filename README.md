@@ -13,7 +13,7 @@ This is an experimental project that has been created for exploring various prog
 At this stage, the following areas are covered:
 
 - Creating library crates in `Rust`
-- Creating a `Rust` console application ([`maze_console`](./src/rust/maze_console/README.md)) that leverages `Rust` library crates for calculation ([`maze`](./src/rust/maze/README.md)) and storage (`storage`)
+- Creating a `Rust` console application ([`maze_console`](./src/rust/maze_console/README.md)) that leverages `Rust` library crates for calculation ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md))
 - Implementing automated unit and mock testing (dependency injection) in `Rust` 
 - Automating `Rust` documentation-generation with `cargo doc`
 - Web Assembly implementation and generation (`wasm32` and `wasm-bindgen`) in `Rust` ([`maze_wasm`](./src/rust/maze_wasm/README.md))
