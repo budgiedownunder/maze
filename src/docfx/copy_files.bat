@@ -1,1 +1,1 @@
-xcopy ..\..\docs\diagrams\architecture.png .\images\ /i
+xcopy ..\..\docs\diagrams\architecture.png .\images\ /i /y
