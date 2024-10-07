@@ -1,4 +1,5 @@
-name: Generate diagram PNG files from PlantUML
+name: generate-png-from-puml
+run-name: ${{ github.actor }} is running the generate diagram PNG files from PlantUML within the branch ${{  github.ref }}
 
 on:
   workflow_dispatch:
