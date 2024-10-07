@@ -1,6 +1,6 @@
 rmdir /s /q _site
 rmdir /s /q obj
-rmdir /s /q ./rust-doc-tmp
+rmdir /s /q rust-doc-tmp
 
 call copy_files.bat
 docfx docfx.json
