@@ -144,7 +144,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    if: startsWith(runner.os, 'Linux') && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     needs: build-and-test
     steps:
       - name: Deploy to GitHub Pages
