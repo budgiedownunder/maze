@@ -1,5 +1,5 @@
 name: build-and-deploy-to-github-pages
-run-name: ${{ github.actor }} is running the build and test workflow for all components within the branch ${{  github.ref }}
+run-name: ${{ github.actor }} is running the build and deploy to GitHub Pages workflow for the branch ${{  github.ref }}
 
 on:
   workflow_dispatch:
