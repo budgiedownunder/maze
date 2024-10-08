@@ -2,41 +2,15 @@ namespace Maze.Wasm.Interop.Tests
 {
     using Xunit;
     using Maze.Wasm.Interop;
-    using Microsoft.Extensions.Configuration;
-    using System;
     using static Maze.Wasm.Interop.MazeWasmInterop;
-    using System.Xml.Linq;
-    using Microsoft.VisualBasic;
-    using System.Reflection;
+    using System;
 
     /// <summary>
     ///  This class contains [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class
     /// </summary>
     public class MazeWasmInteropTest
     {
-        MazeWasmInterop interop = MazeWasmInterop.GetInstance(GetWasmPath());
-
-        static private string GetWasmPath()
-        {
-            var outputDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            if (string.IsNullOrEmpty(outputDirectory))
-            {
-                throw new InvalidOperationException("Could not determined output directory");
-            }
-
-            var configuration = new ConfigurationBuilder()
-                .SetBasePath(outputDirectory)
-                .AddJsonFile("appsettings.json")
-                .AddEnvironmentVariables()
-                .Build();
-
-            string? path = configuration["MAZE_WASM_PATH"]; 
-            if (string.IsNullOrEmpty(path))
-            {
-                throw new InvalidOperationException("MAZE_WASM_PATH environment variable is not set");
-            }
-            return path;
-        }
+        MazeWasmInterop interop = MazeWasmInterop.GetInstance();
 
         private UInt32 CreateNewMazeWasm(UInt32 numRows, UInt32 numCols)
         {
