@@ -26,11 +26,15 @@ At this stage, the following areas are covered:
 - Architecture diagramming using `PlantUML` ([`architecture.puml`](./docs/diagrams/architecture.puml))
 - Automating image generation workflows using GitHub Actions ([`generate-png-from-puml.yml`](./.github/workflows/generate-png-from-puml.yml))
 - Automating build and testing workflows using GitHub Actions ([`build-and-test-components-multi-os.yml`](./.github/workflows/build-and-test-components-multi-os.yml))
+- Automating GitHub Pages asset generation and deployment [`build-and-deploy-to-github-pages`](./.github/workflows/build-and-deploy-to-github-pages.yml)
 
 The following components are present:
 
 | Folder | Component | Description |
 |--------|-----------|--------------- |
+| `.github/workflows` | `*.yml` | GitHub Action workflow files
+| `docs` | [`README.md`](./docs/README.md) | Project overview documentation
+| `research/alorithms/excel` | `maze-algorithms.xls` | Excel workbook containing maze algorithms
 | `src` | [`docfx`](./src/docfx/README.md) | HTML help generation|
 | `src/csharp`| [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) | .NET interop to `maze_wasm` web assembly|
 |            | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md) | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) |
