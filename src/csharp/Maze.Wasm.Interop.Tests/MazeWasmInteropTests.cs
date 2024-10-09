@@ -7,9 +7,9 @@ namespace Maze.Wasm.Interop.Tests
 
     /// <summary>
     ///  This class contains [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class
-    /// </summary>
+    {    /// </summary>
     public class MazeWasmInteropTest
-    {
+
         MazeWasmInterop interop = MazeWasmInterop.GetInstance();
 
         private UInt32 CreateNewMazeWasm(UInt32 numRows, UInt32 numCols)

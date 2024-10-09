@@ -266,7 +266,7 @@
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <param name="newRowCount">New number of rows</param>
         /// <param name="newColCount">New number of columns</param>
-        /// <returns>Zero if successful, as a pointer to an error</returns>
+        /// <returns>Nothing</returns>
         public void MazeWasmResize(UInt32 mazeWasmPtr, UInt32 newRowCount, UInt32 newColCount)
         {
             mazeWasmResize?.Invoke(mazeWasmPtr, newRowCount, newColCount);
@@ -529,7 +529,7 @@
             return solutionPtr;
         }
         /// <summary>
-        /// Returns the list of points associated a solution's path, or will throw an exception if the operation fails
+        /// Returns the list of points associated with a solution's path, or will throw an exception if the operation fails
         /// </summary>
         /// <param name="solutionPtr">Pointer to solution</param>
         /// <returns>List of points</returns>
