@@ -105,7 +105,26 @@ jobs:
       working-directory: ./src/csharp 
       run: |
         dotnet restore
+
+    - name: Install .NET MAUI workload for Windows
+      if: runner.os == 'Windows'
+      working-directory: ./src/csharp 
+      run: |
+        dotnet workload install maui-windows
+
+    - name: Install .NET MAUI workload/Code for iOS/macOS
+      if: matrix.os == 'macos-latest'
+      working-directory: ./src/csharp 
+      run: |
+        dotnet workload install maui
+        sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
   
+    - name: Install .NET MAUI workload for Android
+      if: matrix.os == 'ubuntu-latest'
+      working-directory: ./src/csharp 
+      run: |
+        dotnet workload install maui-android
+
     - name: Build .NET components
       working-directory: ./src/csharp 
       run: |
