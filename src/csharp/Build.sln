@@ -9,9 +9,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Wasm.Interop.Tests", "
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MazeManagerMauiApp", "MazeManagerMauiApp\MazeManagerMauiApp.csproj", "{4A350BDF-623F-4C6F-9D0F-9DEDC8AD90D6}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Api", "Maze.API\Maze.Api.csproj", "{E53F98B1-D49A-4E9D-B271-BDF900B3C549}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Api", "Maze.Api\Maze.Api.csproj", "{E53F98B1-D49A-4E9D-B271-BDF900B3C549}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.ApI.Tests", "Maze.API.Tests\Maze.ApI.Tests.csproj", "{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Api.Tests", "Maze.Api.Tests\Maze.Api.Tests.csproj", "{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

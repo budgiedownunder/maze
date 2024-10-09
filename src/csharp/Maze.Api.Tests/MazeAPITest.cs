@@ -7,7 +7,7 @@
     /// <summary>
     ///  This class contains [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) .NET class library
     /// </summary>
-    public class MazeAPITest
+    public class MazeApiTest
     {
         private void AssertRowCount(UInt32 actual, UInt32 expected)
         {

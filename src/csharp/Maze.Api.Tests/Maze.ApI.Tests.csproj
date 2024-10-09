@@ -16,7 +16,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\Maze.API\Maze.Api.csproj" />
+		<ProjectReference Include="..\Maze.Api\Maze.Api.csproj" />
 		<ProjectReference Include="..\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj" />
 	</ItemGroup>
 

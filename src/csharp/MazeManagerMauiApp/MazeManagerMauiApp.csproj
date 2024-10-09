@@ -68,6 +68,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\Maze.API\Maze.Api.csproj" />
+	  <ProjectReference Include="..\Maze.Api\Maze.Api.csproj" />
 	</ItemGroup>	
 </Project>
