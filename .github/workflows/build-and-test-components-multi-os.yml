@@ -24,9 +24,9 @@ jobs:
     strategy:
       matrix:
         os: 
-   #       - ubuntu-latest
+          - ubuntu-latest
    #       - macos-latest
-          - windows-latest
+   #       - windows-latest
 
     steps:
     - name: Checkout repository
@@ -62,19 +62,6 @@ jobs:
       working-directory: ./src/csharp 
       run: |
         dotnet workload install maui-windows
-
-    - name: Install .NET MAUI workload/Code for iOS/macOS
-      if: matrix.os == 'macos-latest'
-      working-directory: ./src/csharp 
-      run: |
-        dotnet workload install maui
-        sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
-  
-    - name: Install .NET MAUI workload for Android
-      if: matrix.os == 'ubuntu-latest'
-      working-directory: ./src/csharp 
-      run: |
-        dotnet workload install maui-android
 
     - name: Build Rust Components
       working-directory: ./src/rust
