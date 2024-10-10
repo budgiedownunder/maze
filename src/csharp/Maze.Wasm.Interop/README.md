@@ -44,4 +44,4 @@ dotnet build
 ```
 
 ### Testing
-Testing can be performed via the [`Maze.Wasm.Interop.Tests`](../Maze.Wasm.Interop.Tests/README.md) project.
+Testing can be performed via the [`Maze.Wasm.Interop.Tests`](../Maze.Wasm.Interop.Tests/README.md) assembly.
