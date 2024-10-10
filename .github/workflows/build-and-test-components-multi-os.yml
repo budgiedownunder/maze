@@ -63,6 +63,16 @@ jobs:
       run: |
         dotnet workload install maui-windows
 
+    - name: Restore .NET dependencies
+      working-directory: ./src/csharp 
+      run: |
+        dotnet restore
+  
+    - name: Build .NET components
+      working-directory: ./src/csharp 
+      run: |
+        dotnet build
+  
     - name: Build Rust Components
       working-directory: ./src/rust
       run: |
@@ -107,15 +117,6 @@ jobs:
       run: |
         cargo bench -p maze
 
-    - name: Restore .NET dependencies
-      working-directory: ./src/csharp 
-      run: |
-        dotnet restore
-  
-    - name: Build .NET components
-      working-directory: ./src/csharp 
-      run: |
-        dotnet build
 
     - name: Test .NET components
       working-directory: ./src/csharp 
