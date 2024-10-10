@@ -24,9 +24,9 @@ jobs:
     strategy:
       matrix:
         os: 
-   #      - ubuntu-latest
+         - ubuntu-latest
          - macos-latest
-   #       - windows-latest
+         - windows-latest
 
     env:
       NET_BUILD_SOLUTION: ${{ matrix.os == 'windows-latest' && 'Build-Windows.sln' || 'Build-Non-Windows.sln' }}
@@ -66,6 +66,50 @@ jobs:
       run: |
         dotnet workload install maui-windows
 
+    - name: Build Rust Components
+      working-directory: ./src/rust
+      run: |
+        cargo build --verbose
+        cd maze_wasm
+        wasm-pack build --target web --features "wasm-bindgen"
+        cargo build --target wasm32-unknown-unknown --release
+        pwd
+
+    - name: Set environment variables (non-Windows)
+      if: runner.os != 'Windows'
+      working-directory: ./src/rust
+      run: |
+        echo "MAZE_WASM_PATH=$(pwd)/target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
+  
+    - name: Set environment variables (Windows)
+      working-directory: ./src/rust
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        $fullPath = "$($pwd.Path)/target/wasm32-unknown-unknown/release/maze_wasm.wasm"
+        "MAZE_WASM_PATH=$fullPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+    - name: Run Rust Component Tests
+      working-directory: ./src/rust 
+      run: |
+        cargo test -p maze
+        cargo test -p maze_console -- --test-threads=1
+        cargo test -p storage -- --test-threads=1
+        cargo test -p maze_wasm
+
+    - name: Run Rust JavaScript API Tests
+      working-directory: ./src/rust 
+      run: |
+        cd maze_wasm/tests/js
+        npm install
+        npm run test_api
+        npm run test_help_examples
+
+    - name: Run Rust Benchmark Tests
+      working-directory: ./src/rust 
+      run: |
+        cargo bench -p maze
+
     - name: Restore .NET dependencies
       working-directory: ./src/csharp 
       run: |
@@ -75,66 +119,21 @@ jobs:
       working-directory: ./src/csharp 
       run: |
         dotnet build ${{ env.NET_BUILD_SOLUTION }}
+
+    - name: Test .NET components
+      working-directory: ./src/csharp 
+      run: |
+        dotnet test ${{ env.NET_BUILD_SOLUTION }}
+
+    - name: Build HTML documentation (Windows)
+      if: runner.os == 'Windows'
+      working-directory: ./src/docfx
+      shell: cmd
+      run: |
+        build_all.bat
   
-    # - name: Build Rust Components
-    #   working-directory: ./src/rust
-    #   run: |
-    #     cargo build --verbose
-    #     cd maze_wasm
-    #     wasm-pack build --target web --features "wasm-bindgen"
-    #     cargo build --target wasm32-unknown-unknown --release
-    #     pwd
-
-    # - name: Set environment variables (non-Windows)
-    #   if: runner.os != 'Windows'
-    #   working-directory: ./src/rust
-    #   run: |
-    #     echo "MAZE_WASM_PATH=$(pwd)/target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
-  
-    # - name: Set environment variables (Windows)
-    #   working-directory: ./src/rust
-    #   if: runner.os == 'Windows'
-    #   shell: powershell
-    #   run: |
-    #     $fullPath = "$($pwd.Path)/target/wasm32-unknown-unknown/release/maze_wasm.wasm"
-    #     "MAZE_WASM_PATH=$fullPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-    # - name: Run Rust Component Tests
-    #   working-directory: ./src/rust 
-    #   run: |
-    #     cargo test -p maze
-    #     cargo test -p maze_console -- --test-threads=1
-    #     cargo test -p storage -- --test-threads=1
-    #     cargo test -p maze_wasm
-
-    # - name: Run Rust JavaScript API Tests
-    #   working-directory: ./src/rust 
-    #   run: |
-    #     cd maze_wasm/tests/js
-    #     npm install
-    #     npm run test_api
-    #     npm run test_help_examples
-
-    # - name: Run Rust Benchmark Tests
-    #   working-directory: ./src/rust 
-    #   run: |
-    #     cargo bench -p maze
-
-
-    # - name: Test .NET components
-    #   working-directory: ./src/csharp 
-    #   run: |
-    #     dotnet test
-
-    # - name: Build HTML documentation (Windows)
-    #   if: runner.os == 'Windows'
-    #   working-directory: ./src/docfx
-    #   shell: cmd
-    #   run: |
-    #     build_all.bat
-  
-    # - name: Build HTML documentation (non-Windows)
-    #   if: runner.os != 'Windows'
-    #   working-directory: ./src/docfx
-    #   run: |
-    #     sh build_all.sh
+    - name: Build HTML documentation (non-Windows)
+      if: runner.os != 'Windows'
+      working-directory: ./src/docfx
+      run: |
+        sh build_all.sh
