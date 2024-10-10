@@ -14,7 +14,7 @@ System_Boundary(c1, "Browser") {
 System_Boundary(c2, "Maze Project") {
     Container(html_help, "", "", "HTML help pages")
     Container(docfx, "docfx", "", "HTML help generation")
-    Container(maze_maui_app_net, "MazeManagerMauiApp", "C#", ".NET Maze Application (MAUI)")
+    Container(maze_maui_app_net, "MazeMauiApp", "C#", ".NET Maze Application (MAUI)")
     Container(maze_api_net_tests, "Maze.Api.Tests", "C#", "Maze.Api Tests")
     Container(maze_api_net, "Maze.Api", "C#", "Maze API .NET assembly")
     Container(maze_wasm_interop_net_tests, "Maze.Wasm.Interop.Tests", "C#", "Maze.Wasm.Interop Tests")
