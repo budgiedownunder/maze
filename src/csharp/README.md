@@ -27,15 +27,31 @@ dotnet restore
 ### Build
 To build all components, run the following from the `csharp` directory:
 
+Windows:
+
 ```
-dotnet build
+dotnet build Build-Windows.sln
+```
+
+Non-Windows:
+
+```
+dotnet build Build-Non-Windows.sln
 ```
 
 ### Testing
 To test all components, run the following from the `csharp` directory:
 
+Windows:
+
 ```
-dotnet test
+dotnet test Build-Windows.sln
+```
+
+Non-Windows:
+
+```
+dotnet test Build-Non-Windows.sln
 ```
 
 ### Benchmarking
@@ -49,15 +65,15 @@ To generate and view documentation for the project's `.NET` (`C#`) assemblies, w
 Windows:
 
 ```
-copy_files.bat
-docfx docfx.json --serve
+build_all.bat
+serve.bat
 ```
 
 Linux/macOS:
 
 ```
-sh copy_files.sh
-docfx docfx.json --serve
+sh build_all.sh
+sh serve.sh
 ```
 
 #### Combined (`.NET` and `Rust`)
