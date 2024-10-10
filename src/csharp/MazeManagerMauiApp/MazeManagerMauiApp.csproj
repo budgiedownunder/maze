@@ -38,6 +38,16 @@
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>
 	</PropertyGroup>
 
+	<!-- Condition to only build on Windows -->
+	<PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+		<IsExcludedFromBuild>true</IsExcludedFromBuild>
+	</PropertyGroup>
+
+	<Target Name="SkipBuildIfExcluded" BeforeTargets="Build" Condition="'$(IsExcludedFromBuild)' == 'true'">
+		<Message Text="Skipping build as the current OS is not Windows." Importance="high" />
+		<Error Text="Skipping project build as it is not supported on this operating system." />
+	</Target>
+	
 	<ItemGroup>
 		<!-- App Icon -->
 		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
