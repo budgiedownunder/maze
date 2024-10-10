@@ -31,24 +31,17 @@
     <TargetFrameworks>net8.0-windows10.0.19041.0;net8.0-android;net8.0-ios;net8.0-maccatalyst</TargetFrameworks>
   </PropertyGroup>
 
-	<!-- Ensure a valid TargetFramework for non-Windows OS to avoid empty TargetFramework -->
 	<PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
 		<TargetFramework>net8.0</TargetFramework>
-		<!-- Set a default valid TargetFramework for non-Windows -->
 		<IsExcludedFromBuild>true</IsExcludedFromBuild>
 	</PropertyGroup>
+
+	<!-- Skip restore and build on non-Windows platforms -->
+	<Target Name="SkipRestoreAndBuildIfExcluded" BeforeTargets="Restore;Build" Condition="'$(IsExcludedFromBuild)' == 'true'">
+		<Message Text="Skipping restore and build as this project is not supported on this OS." Importance="high" />
+		<Error Text="Skipping project restore and build as it is not supported on this operating system." />
+	</Target>
 	
-  <!-- Prevent restore and build on non-Windows platforms -->
-  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
-    <IsExcludedFromBuild>true</IsExcludedFromBuild>
-  </PropertyGroup>
-
-  <!-- Skip restore and build on non-Windows platforms -->
-  <Target Name="SkipRestoreAndBuildIfExcluded" BeforeTargets="Restore;Build" Condition="'$(IsExcludedFromBuild)' == 'true'">
-    <Message Text="Skipping restore and build as this project is not supported on this OS." Importance="high" />
-    <Error Text="Skipping project restore and build as it is not supported on this operating system." />
-  </Target>
-
 	<ItemGroup>
 		<!-- App Icon -->
 		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
