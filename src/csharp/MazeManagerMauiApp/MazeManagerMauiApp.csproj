@@ -39,11 +39,9 @@
 	</PropertyGroup>
 
 	<!-- Only exclude builds on non-Windows OS but allow restore -->
-	<PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+	<PropertyGroup Condition="'$(OS)' == 'Linux' Or '$(OS)' == 'OSX'">
+		<TargetFrameworks>net8.0</TargetFrameworks> <!-- Only restore for net8.0 -->
 		<IsExcludedFromBuild>true</IsExcludedFromBuild>
-		<!-- Ensure restore does not fail -->
-		<TargetFrameworks>net8.0</TargetFrameworks>
-		<!-- Only restore for net8.0 on non-Windows -->
 	</PropertyGroup>
 
 	<!-- Skip build if excluded -->
