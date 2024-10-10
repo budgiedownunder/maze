@@ -31,6 +31,13 @@
     <TargetFrameworks>net8.0-windows10.0.19041.0;net8.0-android;net8.0-ios;net8.0-maccatalyst</TargetFrameworks>
   </PropertyGroup>
 
+	<!-- Ensure a valid TargetFramework for non-Windows OS to avoid empty TargetFramework -->
+	<PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+		<TargetFramework>net8.0</TargetFramework>
+		<!-- Set a default valid TargetFramework for non-Windows -->
+		<IsExcludedFromBuild>true</IsExcludedFromBuild>
+	</PropertyGroup>
+	
   <!-- Prevent restore and build on non-Windows platforms -->
   <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
     <IsExcludedFromBuild>true</IsExcludedFromBuild>
