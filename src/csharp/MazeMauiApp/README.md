@@ -1,10 +1,10 @@
-# `MazeMauiApp` Assembly
+# `MazeMauiApp` Application
 
 ## Introduction
 
 The `MazeMauiApp` .NET application is a work-in-progress [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application. At the moment, 
-it simply connected to the [`Maze.Api`](../Maze.Api/README.md) .NET assembly to prove that the connectivity through to the underlying Web Assembly
-functions correctly.  
+it simply connects to the [`Maze.Api`](../Maze.Api/README.md) .NET assembly to prove that the connectivity through to the underlying Web Assembly
+function. The plan is to develop it into a fully fledged application for defining and solving mazes.  
 
 ## Getting Started
 
