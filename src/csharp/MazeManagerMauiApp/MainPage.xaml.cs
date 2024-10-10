@@ -1,4 +1,4 @@
-﻿namespace MazeManagerMauiApp
+﻿namespace MazeMauiApp
 {
     using System;
     using Maze.Api;

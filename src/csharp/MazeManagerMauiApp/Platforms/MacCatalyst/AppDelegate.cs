@@ -1,6 +1,6 @@
 ﻿using Foundation;
 
-namespace MazeManagerMauiApp
+namespace MazeMauiApp
 {
     [Register("AppDelegate")]
     public class AppDelegate : MauiUIApplicationDelegate

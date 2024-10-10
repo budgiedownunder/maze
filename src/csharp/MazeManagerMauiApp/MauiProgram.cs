@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 
-namespace MazeManagerMauiApp
+namespace MazeMauiApp
 {
     public static class MauiProgram
     {
