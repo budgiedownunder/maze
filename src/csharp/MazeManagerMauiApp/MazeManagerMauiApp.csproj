@@ -1,6 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
+		<TargetFrameworks>net8.0-android;net8.0-ios;net8.0-maccatalyst</TargetFrameworks>
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net8.0-windows10.0.19041.0</TargetFrameworks>
+		<!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
+		<!-- <TargetFrameworks>$(TargetFrameworks);net8.0-tizen</TargetFrameworks> -->
+
+		<!-- Note for MacCatalyst:
+		The default runtime is maccatalyst-x64, except in Release config, in which case the default is maccatalyst-x64;maccatalyst-arm64.
+		When specifying both architectures, use the plural <RuntimeIdentifiers> instead of the singular <RuntimeIdentifier>.
+		The Mac App Store will NOT accept apps with ONLY maccatalyst-arm64 indicated;
+		either BOTH runtimes must be indicated or ONLY macatalyst-x64. -->
+		<!-- For example: <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers> -->
+
 		<OutputType>Exe</OutputType>
 		<RootNamespace>MazeManagerMauiApp</RootNamespace>
 		<UseMaui>true</UseMaui>
@@ -26,22 +38,6 @@
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>
 	</PropertyGroup>
 
-	  <!-- Define TargetFrameworks only on Windows -->
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
-    <TargetFrameworks>net8.0-windows10.0.19041.0;net8.0-android;net8.0-ios;net8.0-maccatalyst</TargetFrameworks>
-  </PropertyGroup>
-
-	<PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
-		<TargetFramework>net8.0</TargetFramework>
-		<IsExcludedFromBuild>true</IsExcludedFromBuild>
-	</PropertyGroup>
-
-	<!-- Skip restore and build on non-Windows platforms -->
-	<Target Name="SkipRestoreAndBuildIfExcluded" BeforeTargets="Restore;Build" Condition="'$(IsExcludedFromBuild)' == 'true'">
-		<Message Text="Skipping restore and build as this project is not supported on this OS." Importance="high" />
-		<Error Text="Skipping project restore and build as it is not supported on this operating system." />
-	</Target>
-	
 	<ItemGroup>
 		<!-- App Icon -->
 		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
