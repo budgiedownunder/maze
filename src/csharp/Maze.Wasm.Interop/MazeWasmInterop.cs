@@ -189,33 +189,37 @@
         {
             const string WASM_FILE_NAME = "maze_wasm.wasm";
             const string APP_SETTINGS_FILE_NAME = "appsettings.json";
+
+            // Check app settings first (if they exist)
             var executionPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             if (string.IsNullOrEmpty(executionPath))
             {
                 throw new InvalidOperationException("Could not determine execution directory");
             }
-            string wasmExecutionFile = Path.Combine(executionPath, WASM_FILE_NAME);
-            if (File.Exists(wasmExecutionFile))
-            {
-                return wasmExecutionFile;
-            }
             string appsettingsFile = Path.Combine(executionPath, APP_SETTINGS_FILE_NAME);
-            if (!File.Exists(appsettingsFile))
+            if (File.Exists(appsettingsFile))
             {
-                throw new InvalidOperationException($"Web Assembly file path cannot be determined - no web assembly file found at execution path: '{wasmExecutionFile}' and no application settings file found at: {appsettingsFile}");
-            }
-            var configuration = new ConfigurationBuilder()
-            .SetBasePath(executionPath)
-            .AddJsonFile(APP_SETTINGS_FILE_NAME)
-            .AddEnvironmentVariables()
-            .Build();
+                var configuration = new ConfigurationBuilder()
+                .SetBasePath(executionPath)
+                .AddJsonFile(APP_SETTINGS_FILE_NAME)
+                .AddEnvironmentVariables()
+                .Build();
 
-            string? path = configuration["MAZE_WASM_PATH"];
-            if (string.IsNullOrEmpty(path))
-            {
-                throw new InvalidOperationException($"MAZE_WASM_PATH environment variable is not set in {APP_SETTINGS_FILE_NAME}");
+                string? path = configuration["MAZE_WASM_PATH"];
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    return path;
+                }
             }
-            return path;
+
+            // Default to execution path
+            string wasmExecutionFile = Path.Combine(executionPath, WASM_FILE_NAME);
+            if (!File.Exists(wasmExecutionFile))
+            {
+                throw new InvalidOperationException($"Web assembly file '{WASM_FILE_NAME}' not found at path ${wasmExecutionFile}");
+            }
+
+            return wasmExecutionFile;
         }
         /// <summary>
         /// Returns the instance for the interop (creating if needed)
