@@ -1,15 +1,20 @@
-﻿namespace MazeMauiApp
+﻿namespace MazeMauiApp.Views
 {
     using System;
     using Maze.Api;
-
+    using Microsoft.Maui.Controls;
+    
     public partial class MainPage : ContentPage
     {
+        const String APP_TITLE = "MAZE";
         int count = 0;
 
         public MainPage()
         {
             InitializeComponent();
+
+            // this.BindingContext = new MainPageViewModel();
+
         }
 
 
@@ -25,6 +30,11 @@
 
                 SemanticScreenReader.Announce(CounterBtn.Text);
             }
+        }
+
+        private void OnResetBtn_Clicked(object sender, EventArgs e)
+        {
+            DisplayAlert(APP_TITLE, "Reset", "OK");
         }
     }
 }

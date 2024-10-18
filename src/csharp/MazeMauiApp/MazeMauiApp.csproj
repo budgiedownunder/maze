@@ -83,6 +83,11 @@
 	  </None>
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="Models\" />
+	  <Folder Include="ViewModels\" />
+	</ItemGroup>
+
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
 		<Message Text="Started: Processing post-build events for framework: $(TargetFramework) (Windows)" Importance="high" />
 		<Exec Command="copy ..\..\rust\target\wasm32-unknown-unknown\release\maze_wasm.wasm $(OutDir)AppX" />
