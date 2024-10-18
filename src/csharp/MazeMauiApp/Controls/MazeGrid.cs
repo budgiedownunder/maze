@@ -111,13 +111,13 @@ namespace MazeMauiApp.Controls
 
                     // Add a TapGestureRecognizer to each cell
                     var tapGesture = new TapGestureRecognizer();
-                    int currentRow = row, currentCol = col;
+                    int currentRow = row + 1, currentCol = col +1;
                     tapGesture.Tapped += (s, e) => OnCellTapped(cellFrame, currentRow, currentCol);
                     cellFrame.GestureRecognizers.Add(tapGesture);
 
 
                     // Add the Frame to the grid at the specified row and column
-                    this.Add(cellFrame, col+1, row+1);
+                    this.Add(cellFrame, currentCol, currentRow);
 
                 }
             }
@@ -136,19 +136,20 @@ namespace MazeMauiApp.Controls
             Frame cellFrame = NewHeaderCell();
             var tapGesture = new TapGestureRecognizer();
             int currentCol = col;
-            tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(cellFrame, 0, currentCol);
+            tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(0, currentCol);
             cellFrame.GestureRecognizers.Add(tapGesture);
             this.Add(cellFrame, col + 1, 0);
         }
 
         private void AddRowHeader(int row)
         {
-            Frame cellFrame = NewHeaderCell();
+            //            Frame cellFrame = NewHeaderCell();
+            Button headerButton = NewHeaderButton();
             var tapGesture = new TapGestureRecognizer();
             int currentRow = row;
-            tapGesture.Tapped += (s, e) => OnRowHeaderTapped(cellFrame, currentRow, 0);
-            cellFrame.GestureRecognizers.Add(tapGesture);
-            this.Add(cellFrame, 0, row + 1);
+            tapGesture.Tapped += (s, e) => OnRowHeaderTapped(currentRow, 0);
+            headerButton.GestureRecognizers.Add(tapGesture);
+            this.Add(headerButton, 0, row + 1);
         }
 
         private Frame NewHeaderCell()
@@ -164,16 +165,35 @@ namespace MazeMauiApp.Controls
             };
         }
 
+        private Button NewHeaderButton()
+        {
+            return new Button
+            {
+                BorderColor = Colors.Black,
+                BorderWidth = 1,
+                BackgroundColor = Colors.LightGray,
+                Padding = 0,
+                Margin = 0,
+                CornerRadius = 0,
+                Shadow = new Shadow
+                {
+                    Brush = new SolidColorBrush(Colors.Black),
+                    Opacity = 0.5F,  
+                    Radius = 5,
+                },
+            };
+        }
+
         private void OnCellTapped(Frame cell, int row, int col)
         {
             UpdateSelection(cell, row, col, IsShiftKeyPressed());
         }
 
-        private void OnColumnHeaderTapped(Frame cell, int row, int col)
+        private void OnColumnHeaderTapped(int row, int col)
         {
         }
 
-        private void OnRowHeaderTapped(Frame cell, int row, int col)
+        private void OnRowHeaderTapped(int row, int col)
         {
         }
 
@@ -351,6 +371,7 @@ namespace MazeMauiApp.Controls
         }
         private Frame? GetCell(int row, int col)
         {
+            if (row == 0 || col == 0) return null;
             foreach (var child in this.Children)
             {
                 if (this.GetRow(child) == row && this.GetColumn(child) == col)

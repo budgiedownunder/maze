@@ -26,7 +26,7 @@
         </StackLayout>
 
         <ScrollView x:Name="MazeGridScrollView" Grid.Row ="1"  Orientation="Both" Padding="0" HorizontalScrollBarVisibility="Always" VerticalScrollBarVisibility="Always">
-            <controls:MazeGrid x:Name="MazeGrid" ContainerScrollView="{Binding Source={x:Reference MazeGridScrollView}}" RowSpacing="0" ColumnSpacing="0">
+            <controls:MazeGrid x:Name="MazeGrid" ContainerScrollView="{Binding Source={x:Reference MazeGridScrollView}}" RowSpacing="0" ColumnSpacing="0" Padding="10">
             </controls:MazeGrid>
         </ScrollView>
 
