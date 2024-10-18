@@ -143,13 +143,12 @@ namespace MazeMauiApp.Controls
 
         private void AddRowHeader(int row)
         {
-            //            Frame cellFrame = NewHeaderCell();
-            Button headerButton = NewHeaderButton();
+            Frame cellFrame = NewHeaderCell();
             var tapGesture = new TapGestureRecognizer();
             int currentRow = row;
             tapGesture.Tapped += (s, e) => OnRowHeaderTapped(currentRow, 0);
-            headerButton.GestureRecognizers.Add(tapGesture);
-            this.Add(headerButton, 0, row + 1);
+            cellFrame.GestureRecognizers.Add(tapGesture);
+            this.Add(cellFrame, 0, row + 1);
         }
 
         private Frame NewHeaderCell()
@@ -162,25 +161,6 @@ namespace MazeMauiApp.Controls
                 Margin = 0,
                 CornerRadius = 0,
                 HasShadow = false,
-            };
-        }
-
-        private Button NewHeaderButton()
-        {
-            return new Button
-            {
-                BorderColor = Colors.Black,
-                BorderWidth = 1,
-                BackgroundColor = Colors.LightGray,
-                Padding = 0,
-                Margin = 0,
-                CornerRadius = 0,
-                Shadow = new Shadow
-                {
-                    Brush = new SolidColorBrush(Colors.Black),
-                    Opacity = 0.5F,  
-                    Radius = 5,
-                },
             };
         }
 
