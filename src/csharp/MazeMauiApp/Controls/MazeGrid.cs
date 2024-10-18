@@ -133,22 +133,24 @@ namespace MazeMauiApp.Controls
 
         private void AddColumnHeader(int col)
         {
-            Frame cellFrame = NewHeaderCell();
+            //Frame cellFrame = NewHeaderCell();
+            Button button = NewHeaderButton(false);
             var tapGesture = new TapGestureRecognizer();
             int currentCol = col;
             tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(0, currentCol);
-            cellFrame.GestureRecognizers.Add(tapGesture);
-            this.Add(cellFrame, col + 1, 0);
+            button.GestureRecognizers.Add(tapGesture);
+            this.Add(button, col + 1, 0);
         }
 
         private void AddRowHeader(int row)
         {
-            Frame cellFrame = NewHeaderCell();
+            //Frame cellFrame = NewHeaderCell();
+            Button button = NewHeaderButton(true);
             var tapGesture = new TapGestureRecognizer();
             int currentRow = row;
             tapGesture.Tapped += (s, e) => OnRowHeaderTapped(currentRow, 0);
-            cellFrame.GestureRecognizers.Add(tapGesture);
-            this.Add(cellFrame, 0, row + 1);
+            button.GestureRecognizers.Add(tapGesture);
+            this.Add(button, 0, row + 1);
         }
 
         private Frame NewHeaderCell()
@@ -162,6 +164,24 @@ namespace MazeMauiApp.Controls
                 CornerRadius = 0,
                 HasShadow = false,
             };
+        }
+
+        private Button NewHeaderButton(bool rowHeader)
+        {
+            var button = new Button
+            {
+                WidthRequest = rowHeader ? ROW_HEADER_WIDTH : CELL_SIZE,
+                HeightRequest = rowHeader ? CELL_SIZE : COL_HEADER_HEIGHT,
+                CornerRadius = 5,
+                Padding = new Thickness(5),
+                BackgroundColor = Colors.LightGray,
+                BorderWidth = 2,
+                BorderColor = Colors.Gray,
+                HorizontalOptions = LayoutOptions.Center,
+                VerticalOptions = LayoutOptions.Center,
+                TextColor = Colors.Black
+            };
+            return button;
         }
 
         private void OnCellTapped(Frame cell, int row, int col)
