@@ -7,7 +7,7 @@ namespace MazeMauiApp.Controls
 {
     public partial class MazeGrid
     {
-        partial void initializePlatformSpecificCode()
+        partial void InitializePlatformSpecificCode()
         {
             // Get the native WinUI Window
             var windowObject = App.Current?.Windows[0].Handler?.PlatformView;
@@ -23,86 +23,85 @@ namespace MazeMauiApp.Controls
                 mauiWinWindow.Content.KeyDown += OnKeyDown;
             }
         }
-        
+
         private void OnKeyDown(object sender, KeyRoutedEventArgs e)
         {
-            var shiftPressed = isShiftKeyPressed();
-            var ctrlPressed = isCtrlKeyPressed();
-            var endPressed = isEndKeyPressed();
-            var homePressed = isHomeKeyPressed();
+            var shiftPressed = IsShiftKeyPressed();
+            var ctrlPressed = IsCtrlKeyPressed();
+            var endPressed = IsEndKeyPressed();
+            var homePressed = IsHomeKeyPressed();
 
             switch (e.Key)
             {
                 case VirtualKey.Left:
                     {
-                        int colOffset = ctrlPressed ? -activeCellCol : -1;
-                        moveActiveCell(shiftPressed, colOffset, 0);
+                        int colOffset = ctrlPressed ? -activeCellCol + 1 : -1;
+                        MoveActiveCell(shiftPressed, colOffset, 0);
                     }
                     break;
                 case VirtualKey.Right:
                     {
-                        int colOffset = ctrlPressed ? this.ColCount- activeCellCol - 1 : 1;
-                        moveActiveCell(shiftPressed, colOffset, 0);
+                        int colOffset = ctrlPressed ? this.ColCount - activeCellCol : 1;
+                        MoveActiveCell(shiftPressed, colOffset, 0);
                     }
                     break;
                 case VirtualKey.Up:
                     {
-                        int rowOffset = ctrlPressed ? -activeCellRow : -1;
-                        moveActiveCell(shiftPressed, 0, rowOffset); // Handle up arrow key
+                        int rowOffset = ctrlPressed ? -activeCellRow + 1 : -1;
+                        MoveActiveCell(shiftPressed, 0, rowOffset);
                     }
                     break;
                 case VirtualKey.Down:
                     {
-                        int rowOffset = ctrlPressed ? this.RowCount - activeCellRow - 1 : 1;
-                        moveActiveCell(shiftPressed, 0, rowOffset);
+                        int rowOffset = ctrlPressed ? this.RowCount - activeCellRow : 1;
+                        MoveActiveCell(shiftPressed, 0, rowOffset);
                     }
                     break;
                 case VirtualKey.Home:
                     {
-                        int rowOffset = ctrlPressed ? -activeCellRow : 0;
+                        int rowOffset = ctrlPressed ? -activeCellRow + 1 : 0;
                         int colOffset = -activeCellCol;
-                        moveActiveCell(shiftPressed, colOffset, rowOffset); 
+                        MoveActiveCell(shiftPressed, colOffset, rowOffset);
                     }
                     break;
                 case VirtualKey.End:
                     {
-                        int rowOffset = ctrlPressed ? this.RowCount - activeCellRow - 1 : 0;
-                        int colOffset = this.ColCount - activeCellCol - 1;
-                        moveActiveCell(shiftPressed, colOffset, rowOffset);
+                        int rowOffset = ctrlPressed ? this.RowCount - activeCellRow : 0;
+                        int colOffset = this.ColCount - activeCellCol;
+                        MoveActiveCell(shiftPressed, colOffset, rowOffset);
                     }
                     break;
             }
         }
-        
+
         [DllImport("user32.dll")]
         public static extern short GetAsyncKeyState(int vKey);
 
-        private const int VK_SHIFT = 0x10; 
+        private const int VK_SHIFT = 0x10;
         private const int VK_CTRL = 0x11;
         private const int VK_END = 0x23;
         private const int VK_HOME = 0x24;
 
-        private static bool isVirtualKeyPressed(int keyCode)
+        private static bool IsVirtualKeyPressed(int keyCode)
         {
             return (GetAsyncKeyState(keyCode) & 0x8000) != 0;
         }
-        private static bool isShiftKeyPressed()
+        private static bool IsShiftKeyPressed()
         {
-            return isVirtualKeyPressed(VK_SHIFT);
+            return IsVirtualKeyPressed(VK_SHIFT);
         }
 
-        private static bool isCtrlKeyPressed()
+        private static bool IsCtrlKeyPressed()
         {
-            return isVirtualKeyPressed(VK_CTRL);
+            return IsVirtualKeyPressed(VK_CTRL);
         }
-        private static bool isEndKeyPressed()
+        private static bool IsEndKeyPressed()
         {
-            return isVirtualKeyPressed(VK_END);
+            return IsVirtualKeyPressed(VK_END);
         }
-        private static bool isHomeKeyPressed()
+        private static bool IsHomeKeyPressed()
         {
-            return isVirtualKeyPressed(VK_HOME);
+            return IsVirtualKeyPressed(VK_HOME);
         }
-
     }
 }
