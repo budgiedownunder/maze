@@ -27,6 +27,13 @@ namespace MazeMauiApp.Controls
 
         private Maze.Api.Maze maze = new Maze.Api.Maze(3, 3);
 
+        private enum HeaderType
+        {
+            Corner = 0,
+            Row = 1,
+            Column = 2
+        }
+
         public MazeGrid()
         {
             InitializePlatformSpecificCode();
@@ -83,7 +90,7 @@ namespace MazeMauiApp.Controls
             // Populate the grid with Frames
             for (int row = 0; row < RowCount; row++)
             {
-                if(row == 0)
+                if (row == 0)
                 {
                     AddHeaderRow();
                 }
@@ -111,7 +118,7 @@ namespace MazeMauiApp.Controls
 
                     // Add a TapGestureRecognizer to each cell
                     var tapGesture = new TapGestureRecognizer();
-                    int currentRow = row + 1, currentCol = col +1;
+                    int currentRow = row + 1, currentCol = col + 1;
                     tapGesture.Tapped += (s, e) => OnCellTapped(cellFrame, currentRow, currentCol);
                     cellFrame.GestureRecognizers.Add(tapGesture);
 
@@ -125,30 +132,38 @@ namespace MazeMauiApp.Controls
         }
         private void AddHeaderRow()
         {
+            AddCornerHeader();
             for (int col = 0; col < ColCount; col++)
             {
                 AddColumnHeader(col);
             }
         }
 
+        private void AddCornerHeader()
+        {
+            Button button = NewHeaderButton(HeaderType.Corner);
+            var tapGesture = new TapGestureRecognizer();
+            tapGesture.Tapped += (s, e) => OnCornerHeaderTapped();
+            button.GestureRecognizers.Add(tapGesture);
+            this.Add(button, 0, 0);
+        }
+
         private void AddColumnHeader(int col)
         {
-            //Frame cellFrame = NewHeaderCell();
-            Button button = NewHeaderButton(false);
+            Button button = NewHeaderButton(HeaderType.Column);
             var tapGesture = new TapGestureRecognizer();
             int currentCol = col;
-            tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(0, currentCol);
+            tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(currentCol);
             button.GestureRecognizers.Add(tapGesture);
             this.Add(button, col + 1, 0);
         }
 
         private void AddRowHeader(int row)
         {
-            //Frame cellFrame = NewHeaderCell();
-            Button button = NewHeaderButton(true);
+            Button button = NewHeaderButton(HeaderType.Row);
             var tapGesture = new TapGestureRecognizer();
             int currentRow = row;
-            tapGesture.Tapped += (s, e) => OnRowHeaderTapped(currentRow, 0);
+            tapGesture.Tapped += (s, e) => OnRowHeaderTapped(currentRow);
             button.GestureRecognizers.Add(tapGesture);
             this.Add(button, 0, row + 1);
         }
@@ -166,12 +181,12 @@ namespace MazeMauiApp.Controls
             };
         }
 
-        private Button NewHeaderButton(bool rowHeader)
+        private Button NewHeaderButton(HeaderType type)
         {
             var button = new Button
             {
-                WidthRequest = rowHeader ? ROW_HEADER_WIDTH : CELL_SIZE,
-                HeightRequest = rowHeader ? CELL_SIZE : COL_HEADER_HEIGHT,
+                WidthRequest = GetHeaderWidth(type),
+                HeightRequest = GetHeaderHeight(type),
                 CornerRadius = 5,
                 Padding = new Thickness(5),
                 BackgroundColor = Colors.LightGray,
@@ -184,26 +199,89 @@ namespace MazeMauiApp.Controls
             return button;
         }
 
+        private double GetHeaderWidth(HeaderType type)
+        {
+            switch (type)
+            {
+                case HeaderType.Corner:
+                    return ROW_HEADER_WIDTH;
+                case HeaderType.Row:
+                    return ROW_HEADER_WIDTH;
+                case HeaderType.Column:
+                    return CELL_SIZE;
+            }
+            return 0;
+        }
+
+        private double GetHeaderHeight(HeaderType type)
+        {
+            switch (type)
+            {
+                case HeaderType.Corner:
+                    return COL_HEADER_HEIGHT;
+                case HeaderType.Row:
+                    return CELL_SIZE;
+                case HeaderType.Column:
+                    return COL_HEADER_HEIGHT;
+            }
+            return 0;
+        }
+
+        private void OnCornerHeaderTapped()
+        {
+            SelectCorner();
+        }
+
+
+        private void OnColumnHeaderTapped(int col)
+        {
+            SelectColumn(col);
+        }
+
+        private void OnRowHeaderTapped(int row)
+        {
+            SelectRow(row);
+        }
+
+
         private void OnCellTapped(Frame cell, int row, int col)
         {
             UpdateSelection(cell, row, col, IsShiftKeyPressed());
         }
 
-        private void OnColumnHeaderTapped(int row, int col)
+        private void SelectCorner()
         {
+            ClearSelectedCells();
+            SetAnchorCell(RowCount + 1, ColCount + 1);
+            MoveActiveCell(true, 1, 1);
         }
 
-        private void OnRowHeaderTapped(int row, int col)
+        private void SelectRow(int row)
         {
+            ClearSelectedCells();
+            SetAnchorCell(row + 1, ColCount + 1);
+            MoveActiveCell(true, row + 1, 1);
+        }
+
+        private void SelectColumn(int col)
+        {
+            ClearSelectedCells();
+            SetAnchorCell(RowCount + 1, col + 1);
+            MoveActiveCell(true, 1, col + 1);
         }
 
         // Move the active cell
-        private void MoveActiveCell(bool maintainSelection, int deltaX, int deltaY)
+        private void MoveActiveCellOffset(bool maintainSelection, int deltaX, int deltaY)
         {
             // Calculate the new position
             int newRow = Math.Clamp(activeCellRow + deltaY, 1, this.RowDefinitions.Count);
             int newCol = Math.Clamp(activeCellCol + deltaX, 1, this.ColumnDefinitions.Count);
 
+            MoveActiveCell(maintainSelection, newRow, newCol);
+        }
+
+        private void MoveActiveCell(bool maintainSelection, int newRow, int newCol)
+        {
             // If the position hasn't changed, return
             if (newRow == activeCellRow && newCol == activeCellCol) return;
 

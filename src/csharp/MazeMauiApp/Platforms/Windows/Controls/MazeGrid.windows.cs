@@ -36,39 +36,39 @@ namespace MazeMauiApp.Controls
                 case VirtualKey.Left:
                     {
                         int colOffset = ctrlPressed ? -activeCellCol + 1 : -1;
-                        MoveActiveCell(shiftPressed, colOffset, 0);
+                        MoveActiveCellOffset(shiftPressed, colOffset, 0);
                     }
                     break;
                 case VirtualKey.Right:
                     {
                         int colOffset = ctrlPressed ? this.ColCount - activeCellCol : 1;
-                        MoveActiveCell(shiftPressed, colOffset, 0);
+                        MoveActiveCellOffset(shiftPressed, colOffset, 0);
                     }
                     break;
                 case VirtualKey.Up:
                     {
                         int rowOffset = ctrlPressed ? -activeCellRow + 1 : -1;
-                        MoveActiveCell(shiftPressed, 0, rowOffset);
+                        MoveActiveCellOffset(shiftPressed, 0, rowOffset);
                     }
                     break;
                 case VirtualKey.Down:
                     {
                         int rowOffset = ctrlPressed ? this.RowCount - activeCellRow : 1;
-                        MoveActiveCell(shiftPressed, 0, rowOffset);
+                        MoveActiveCellOffset(shiftPressed, 0, rowOffset);
                     }
                     break;
                 case VirtualKey.Home:
                     {
                         int rowOffset = ctrlPressed ? -activeCellRow + 1 : 0;
                         int colOffset = -activeCellCol;
-                        MoveActiveCell(shiftPressed, colOffset, rowOffset);
+                        MoveActiveCellOffset(shiftPressed, colOffset, rowOffset);
                     }
                     break;
                 case VirtualKey.End:
                     {
                         int rowOffset = ctrlPressed ? this.RowCount - activeCellRow : 0;
                         int colOffset = this.ColCount - activeCellCol;
-                        MoveActiveCell(shiftPressed, colOffset, rowOffset);
+                        MoveActiveCellOffset(shiftPressed, colOffset, rowOffset);
                     }
                     break;
             }
