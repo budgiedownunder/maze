@@ -30,44 +30,45 @@ namespace MazeMauiApp.Controls
             var ctrlPressed = IsCtrlKeyPressed();
             var endPressed = IsEndKeyPressed();
             var homePressed = IsHomeKeyPressed();
+            bool useActiveCell = shiftPressed || (anchorCell == null);
 
             switch (e.Key)
             {
                 case VirtualKey.Left:
                     {
-                        int colOffset = ctrlPressed ? -activeCellCol + 1 : -1;
+                        int colOffset = ctrlPressed ? (useActiveCell ? -activeCellCol : -anchorCellCol) + 1 : -1;
                         MoveActiveCellOffset(shiftPressed, colOffset, 0);
                     }
                     break;
                 case VirtualKey.Right:
                     {
-                        int colOffset = ctrlPressed ? this.ColCount - activeCellCol : 1;
+                        int colOffset = ctrlPressed ? this.ColCount - (useActiveCell ? activeCellCol : anchorCellCol) : 1;
                         MoveActiveCellOffset(shiftPressed, colOffset, 0);
                     }
                     break;
                 case VirtualKey.Up:
                     {
-                        int rowOffset = ctrlPressed ? -activeCellRow + 1 : -1;
+                        int rowOffset = ctrlPressed ? (useActiveCell ? -activeCellRow : -anchorCellRow) + 1 : -1;
                         MoveActiveCellOffset(shiftPressed, 0, rowOffset);
                     }
                     break;
                 case VirtualKey.Down:
                     {
-                        int rowOffset = ctrlPressed ? this.RowCount - activeCellRow : 1;
+                        int rowOffset = ctrlPressed ? this.RowCount - (useActiveCell ? activeCellRow : anchorCellRow) : 1;
                         MoveActiveCellOffset(shiftPressed, 0, rowOffset);
                     }
                     break;
                 case VirtualKey.Home:
                     {
-                        int rowOffset = ctrlPressed ? -activeCellRow + 1 : 0;
-                        int colOffset = -activeCellCol;
+                        int rowOffset = ctrlPressed ? (useActiveCell ? -activeCellRow : -anchorCellRow) + 1 : 0;
+                        int colOffset = useActiveCell ? -activeCellCol : -anchorCellCol;
                         MoveActiveCellOffset(shiftPressed, colOffset, rowOffset);
                     }
                     break;
                 case VirtualKey.End:
                     {
-                        int rowOffset = ctrlPressed ? this.RowCount - activeCellRow : 0;
-                        int colOffset = this.ColCount - activeCellCol;
+                        int rowOffset = ctrlPressed ? this.RowCount - (useActiveCell ? activeCellRow : anchorCellRow) : 0;
+                        int colOffset = this.ColCount - (useActiveCell ? activeCellCol : anchorCellCol);
                         MoveActiveCellOffset(shiftPressed, colOffset, rowOffset);
                     }
                     break;
