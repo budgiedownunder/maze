@@ -25,7 +25,7 @@ namespace MazeMauiApp.Controls
         const double COL_HEADER_HEIGHT = 15.0;
         const double ROW_HEADER_WIDTH = 15.0;
 
-        private Maze.Api.Maze maze = new Maze.Api.Maze(3, 3);
+        private Maze.Api.Maze maze = new Maze.Api.Maze(5, 5);
 
         private enum HeaderType
         {
@@ -270,7 +270,50 @@ namespace MazeMauiApp.Controls
             MoveActiveCell(true, RowCount, col + 1);
         }
 
-        // Move the active cell
+        private void MoveActiveCellLeft(bool maintainSelection, bool moveToEnd)
+        {
+            bool useActiveCell = maintainSelection || (anchorCell == null);
+            int colOffset = moveToEnd ? (useActiveCell ? -activeCellCol : -anchorCellCol) + 1 : -1;
+            MoveActiveCellOffset(maintainSelection, colOffset, 0);
+        }
+
+        private void MoveActiveCellRight(bool maintainSelection, bool moveToEnd)
+        {
+            bool useActiveCell = maintainSelection || (anchorCell == null);
+            int colOffset = moveToEnd ? this.ColCount - (useActiveCell ? activeCellCol : anchorCellCol) : 1;
+            MoveActiveCellOffset(maintainSelection, colOffset, 0);
+        }
+
+        private void MoveActiveCellUp(bool maintainSelection, bool moveToEnd)
+        {
+            bool useActiveCell = maintainSelection || (anchorCell == null);
+            int rowOffset = moveToEnd ? (useActiveCell ? -activeCellRow : -anchorCellRow) + 1 : -1;
+            MoveActiveCellOffset(maintainSelection, 0, rowOffset);
+        }
+
+        private void MoveActiveCellDown(bool maintainSelection, bool moveToEnd)
+        {
+            bool useActiveCell = maintainSelection || (anchorCell == null);
+            int rowOffset = moveToEnd ? this.RowCount - (useActiveCell ? activeCellRow : anchorCellRow) : 1;
+            MoveActiveCellOffset(maintainSelection, 0, rowOffset);
+        }
+
+        private void MoveActiveCellToRowStart(bool maintainSelection, bool moveToTop)
+        {
+            bool useActiveCell = maintainSelection || (anchorCell == null);
+            int rowOffset = moveToTop ? (useActiveCell ? -activeCellRow : -anchorCellRow) + 1 : 0;
+            int colOffset = useActiveCell ? -activeCellCol : -anchorCellCol;
+            MoveActiveCellOffset(maintainSelection, colOffset, rowOffset);
+        }
+
+        private void MoveActiveCellToColumnEnd(bool maintainSelection, bool moveToTop)
+        {
+            bool useActiveCell = maintainSelection || (anchorCell == null);
+            int rowOffset = moveToTop ? this.RowCount - (useActiveCell ? activeCellRow : anchorCellRow) : 0;
+            int colOffset = this.ColCount - (useActiveCell ? activeCellCol : anchorCellCol);
+            MoveActiveCellOffset(maintainSelection, colOffset, rowOffset);
+        }
+
         private void MoveActiveCellOffset(bool maintainSelection, int deltaX, int deltaY)
         {
             int referenceRow = !maintainSelection && (anchorCell != null) ? anchorCellRow : activeCellRow;
@@ -289,11 +332,11 @@ namespace MazeMauiApp.Controls
             int newRow = anchorCellRow;
             if (newCol < selection.Left)
             {
-                newCol = (int)(selection.Right)-1;
+                newCol = (int)(selection.Right) - 1;
                 newRow--;
             }
             if (newRow < selection.Top)
-                newRow = (int)selection.Bottom-1;
+                newRow = (int)selection.Bottom - 1;
             MoveAnchorCell(newRow, newCol);
         }
 

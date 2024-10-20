@@ -28,65 +28,38 @@ namespace MazeMauiApp.Controls
         {
             var shiftPressed = IsShiftKeyPressed();
             var ctrlPressed = IsCtrlKeyPressed();
-            var endPressed = IsEndKeyPressed();
-            var homePressed = IsHomeKeyPressed();
-            bool useActiveCell = shiftPressed || (anchorCell == null);
 
             switch (e.Key)
             {
                 case VirtualKey.Left:
-                    {
-                        int colOffset = ctrlPressed ? (useActiveCell ? -activeCellCol : -anchorCellCol) + 1 : -1;
-                        MoveActiveCellOffset(shiftPressed, colOffset, 0);
-                    }
+                    MoveActiveCellLeft(shiftPressed, ctrlPressed);
                     break;
                 case VirtualKey.Right:
-                    {
-                        int colOffset = ctrlPressed ? this.ColCount - (useActiveCell ? activeCellCol : anchorCellCol) : 1;
-                        MoveActiveCellOffset(shiftPressed, colOffset, 0);
-                    }
+                    MoveActiveCellRight(shiftPressed, ctrlPressed);
                     break;
                 case VirtualKey.Up:
-                    {
-                        int rowOffset = ctrlPressed ? (useActiveCell ? -activeCellRow : -anchorCellRow) + 1 : -1;
-                        MoveActiveCellOffset(shiftPressed, 0, rowOffset);
-                    }
+                    MoveActiveCellUp(shiftPressed, ctrlPressed);
                     break;
                 case VirtualKey.Down:
-                    {
-                        int rowOffset = ctrlPressed ? this.RowCount - (useActiveCell ? activeCellRow : anchorCellRow) : 1;
-                        MoveActiveCellOffset(shiftPressed, 0, rowOffset);
-                    }
+                    MoveActiveCellDown(shiftPressed, ctrlPressed);
                     break;
                 case VirtualKey.Home:
-                    {
-                        int rowOffset = ctrlPressed ? (useActiveCell ? -activeCellRow : -anchorCellRow) + 1 : 0;
-                        int colOffset = useActiveCell ? -activeCellCol : -anchorCellCol;
-                        MoveActiveCellOffset(shiftPressed, colOffset, rowOffset);
-                    }
+                    MoveActiveCellToRowStart(shiftPressed, ctrlPressed);
                     break;
                 case VirtualKey.End:
-                    {   
-                        int rowOffset = ctrlPressed ? this.RowCount - (useActiveCell ? activeCellRow : anchorCellRow) : 0;
-                        int colOffset = this.ColCount - (useActiveCell ? activeCellCol : anchorCellCol);
-                        MoveActiveCellOffset(shiftPressed, colOffset, rowOffset);
-                    }
+                    MoveActiveCellToColumnEnd(shiftPressed, ctrlPressed);
                     break;
                 case VirtualKey.Tab:
+                    if (ctrlPressed) return;
+                    if (anchorCell == null)
                     {
-                        if (ctrlPressed) return;
-                        if(anchorCell != null)
-                        {
-                            // Have selection  - move left/right within selection
-                            if (shiftPressed)
-                                MoveAnchorCellToPrevWithinSelection();
-                            else
-                                MoveAnchorCellToNextWithinSelection();
-                            return;
-                        }
-                        // No selection - Shift => move left, else right
                         MoveActiveCellOffset(false, shiftPressed ? -1 : 1, 0);
+                        return;
                     }
+                    if (shiftPressed)
+                        MoveAnchorCellToPrevWithinSelection();
+                    else
+                        MoveAnchorCellToNextWithinSelection();
                     break;
             }
         }
@@ -96,8 +69,6 @@ namespace MazeMauiApp.Controls
 
         private const int VK_SHIFT = 0x10;
         private const int VK_CTRL = 0x11;
-        private const int VK_END = 0x23;
-        private const int VK_HOME = 0x24;
 
         private static bool IsVirtualKeyPressed(int keyCode)
         {
@@ -111,14 +82,6 @@ namespace MazeMauiApp.Controls
         private static bool IsCtrlKeyPressed()
         {
             return IsVirtualKeyPressed(VK_CTRL);
-        }
-        private static bool IsEndKeyPressed()
-        {
-            return IsVirtualKeyPressed(VK_END);
-        }
-        private static bool IsHomeKeyPressed()
-        {
-            return IsVirtualKeyPressed(VK_HOME);
         }
     }
 }
