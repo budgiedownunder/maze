@@ -66,10 +66,26 @@ namespace MazeMauiApp.Controls
                     }
                     break;
                 case VirtualKey.End:
-                    {
+                    {   
                         int rowOffset = ctrlPressed ? this.RowCount - (useActiveCell ? activeCellRow : anchorCellRow) : 0;
                         int colOffset = this.ColCount - (useActiveCell ? activeCellCol : anchorCellCol);
                         MoveActiveCellOffset(shiftPressed, colOffset, rowOffset);
+                    }
+                    break;
+                case VirtualKey.Tab:
+                    {
+                        if (ctrlPressed) return;
+                        if(anchorCell != null)
+                        {
+                            // Have selection  - move left/right within selection
+                            if (shiftPressed)
+                                MoveAnchorCellToPrevWithinSelection();
+                            else
+                                MoveAnchorCellToNextWithinSelection();
+                            return;
+                        }
+                        // No selection - Shift => move left, else right
+                        MoveActiveCellOffset(false, shiftPressed ? -1 : 1, 0);
                     }
                     break;
             }

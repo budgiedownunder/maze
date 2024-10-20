@@ -13,10 +13,10 @@ namespace MazeMauiApp.Controls
 {
     partial class MazeGrid : Grid
     {
-        private Frame? activeCell = null; 
+        private Frame? activeCell = null;
         private int activeCellRow = 0;
         private int activeCellCol = 0;
-        private Frame? anchorCell = null;  
+        private Frame? anchorCell = null;
         private int anchorCellRow = 0;
         private int anchorCellCol = 0;
         private Microsoft.Maui.Graphics.Rect? currentSelectedCells;
@@ -281,9 +281,52 @@ namespace MazeMauiApp.Controls
             MoveActiveCell(maintainSelection, newRow, newCol);
         }
 
+        private void MoveAnchorCellToPrevWithinSelection()
+        {
+            if (anchorCell == null || !currentSelectedCells.HasValue) return;
+            Rect selection = currentSelectedCells.Value;
+            int newCol = anchorCellCol - 1;
+            int newRow = anchorCellRow;
+            if (newCol < selection.Left)
+            {
+                newCol = (int)(selection.Right)-1;
+                newRow--;
+            }
+            if (newRow < selection.Top)
+                newRow = (int)selection.Bottom-1;
+            MoveAnchorCell(newRow, newCol);
+        }
+
+        private void MoveAnchorCellToNextWithinSelection()
+        {
+            if (anchorCell == null || !currentSelectedCells.HasValue) return;
+            Rect selection = currentSelectedCells.Value;
+            int newCol = anchorCellCol + 1;
+            int newRow = anchorCellRow;
+            if (newCol >= selection.Right)
+            {
+                newCol = (int)selection.Left;
+                newRow++;
+            }
+            if (newRow >= selection.Bottom)
+                newRow = (int)selection.Top;
+            MoveAnchorCell(newRow, newCol);
+        }
+
+        private void MoveAnchorCell(int newRow, int newCol)
+        {
+            if (anchorCell == null) return;
+            anchorCell.BackgroundColor = Colors.Yellow;
+            ClearAnchorCell();
+            SetAnchorCell(newRow, newCol);
+            if (anchorCell != null)
+                anchorCell.BackgroundColor = Colors.HotPink;
+
+        }
+
         private void MoveActiveCell(bool maintainSelection, int newRow, int newCol)
         {
-            if(!maintainSelection && anchorCell != null)
+            if (!maintainSelection && anchorCell != null)
             {
                 anchorCell.BackgroundColor = Colors.White;
                 activeCell = anchorCell;
@@ -414,8 +457,8 @@ namespace MazeMauiApp.Controls
         private void SetAnchorCell(int row, int col)
         {
             anchorCell = GetCell(row, col);
-            anchorCellRow = row;
-            anchorCellCol = col;
+            anchorCellRow = anchorCell != null ? row : -1;
+            anchorCellCol = anchorCell != null ? col : -1;
         }
 
         private void ClearAnchorCell()
