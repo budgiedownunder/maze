@@ -5,7 +5,7 @@ using Windows.System;
 
 namespace MazeMauiApp.Controls
 {
-    public partial class MazeGrid
+    public partial class InteractiveGrid
     {
         partial void InitializePlatformSpecificCode()
         {
