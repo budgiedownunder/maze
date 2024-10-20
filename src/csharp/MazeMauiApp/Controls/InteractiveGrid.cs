@@ -12,9 +12,10 @@ namespace MazeMauiApp.Controls
         private int anchorCellCol = 0;
         private Microsoft.Maui.Graphics.Rect? currentSelectedCells;
 
-        const double CELL_SIZE = 50.0;
-        const double COL_HEADER_HEIGHT = 15.0;
-        const double ROW_HEADER_WIDTH = 15.0;
+        const double DEFAULT_CELL_HEIGHT = 50.0;
+        const double DEFAULT_CELL_WIDTH = 50.0;
+        const double DEFAULT_COL_HEADER_HEIGHT = 15.0;
+        const double DEFAULT_ROW_HEADER_WIDTH = 15.0;
 
         private enum HeaderType
         {
@@ -23,24 +24,17 @@ namespace MazeMauiApp.Controls
             Column = 2
         }
 
-        public InteractiveGrid()
-        {
-            InitializePlatformSpecificCode();
-        }
-
-        public static readonly BindableProperty ContainerScrollViewProperty =
-            BindableProperty.Create(nameof(ContainerScrollView), typeof(ScrollView), typeof(InteractiveGrid));
-
-        public ScrollView ContainerScrollView
-        {
-            get => (ScrollView)GetValue(ContainerScrollViewProperty);
-            set => SetValue(ContainerScrollViewProperty, value);
-        }
-        partial void InitializePlatformSpecificCode();  // Platform-specific method stub
-
         public int RowCount { get; set; } = 0;
 
         public int ColCount { get; set; } = 0;
+
+        public double ColHeaderHeight { get; set; } = DEFAULT_COL_HEADER_HEIGHT;
+
+        public double RowHeaderWidth { get; set; } = DEFAULT_ROW_HEADER_WIDTH;
+
+        public double CellHeight { get; set; } = DEFAULT_CELL_HEIGHT;
+
+        public double CellWidth { get; set; } = DEFAULT_CELL_WIDTH;
 
         public Color HeaderBorderColor { get; set; } = Colors.Gray;
 
@@ -58,21 +52,35 @@ namespace MazeMauiApp.Controls
 
         public Color AnchorCellBackgroundColor { get; set; } = Colors.HotPink;
 
+        public InteractiveGrid()
+        {
+            InitializePlatformSpecificCode();
+        }
+
+        public static readonly BindableProperty ContainerScrollViewProperty =
+            BindableProperty.Create(nameof(ContainerScrollView), typeof(ScrollView), typeof(InteractiveGrid));
+
+        public ScrollView ContainerScrollView
+        {
+            get => (ScrollView)GetValue(ContainerScrollViewProperty);
+            set => SetValue(ContainerScrollViewProperty, value);
+        }
+        partial void InitializePlatformSpecificCode();  // Platform-specific method stub
+
         public void PopulateGrid()
         {
-
             this.IsVisible = false;
 
-            this.RowDefinitions.Add(new RowDefinition { Height = new GridLength(COL_HEADER_HEIGHT) });
+            this.RowDefinitions.Add(new RowDefinition { Height = new GridLength(this.ColHeaderHeight) });
 
             for (int row = 0; row < RowCount; row++)
-                this.RowDefinitions.Add(new RowDefinition { Height = new GridLength(CELL_SIZE) });
+                this.RowDefinitions.Add(new RowDefinition { Height = new GridLength(this.CellHeight) });
 
 
-            this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(COL_HEADER_HEIGHT) });
+            this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(this.ColHeaderHeight) });
 
             for (int col = 0; col < ColCount; col++)
-                this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(CELL_SIZE) });
+                this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(this.CellWidth) });
 
             for (int row = 0; row < RowCount; row++)
             {
@@ -173,11 +181,11 @@ namespace MazeMauiApp.Controls
             switch (type)
             {
                 case HeaderType.Corner:
-                    return ROW_HEADER_WIDTH;
+                    return this.RowHeaderWidth;
                 case HeaderType.Row:
-                    return ROW_HEADER_WIDTH;
+                    return this.RowHeaderWidth;
                 case HeaderType.Column:
-                    return CELL_SIZE;
+                    return this.CellWidth;
             }
             return 0;
         }
@@ -187,11 +195,11 @@ namespace MazeMauiApp.Controls
             switch (type)
             {
                 case HeaderType.Corner:
-                    return COL_HEADER_HEIGHT;
+                    return this.ColHeaderHeight;
                 case HeaderType.Row:
-                    return CELL_SIZE;
+                    return this.CellHeight;
                 case HeaderType.Column:
-                    return COL_HEADER_HEIGHT;
+                    return this.ColHeaderHeight;
             }
             return 0;
         }
@@ -366,11 +374,9 @@ namespace MazeMauiApp.Controls
 
         private async void UpdateSelection(Frame newActiveCell, int row, int col, bool maintainSelection)
         {
+            // Reset the previously active cell if needed
             if (activeCell != null)
-            {
-                // Reset the previously active cell
                 activeCell.BackgroundColor = this.CellBackgroundColor;
-            }
 
             if (maintainSelection)
             {
@@ -433,7 +439,6 @@ namespace MazeMauiApp.Controls
             else
                 targetX = currentScrollX;
 
-
             if (cellTopY < currentScrollY)
                 targetY = cellTopY;
             else if (cellBottomY > (currentScrollY + scrollViewHeight))
@@ -494,7 +499,7 @@ namespace MazeMauiApp.Controls
                         Frame? cell = GetCell(row, col);
                         if (cell != null)
                         {
-                            cell.BackgroundColor = clear ? this.CellBackgroundColor: this.HighlightedCellBackgroundColor;
+                            cell.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightedCellBackgroundColor;
                         }
                     }
                 }
