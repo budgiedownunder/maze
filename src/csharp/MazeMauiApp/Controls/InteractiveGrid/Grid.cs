@@ -5,11 +5,9 @@ namespace MazeMauiApp.Controls.InteractiveGrid
     public partial class Grid : Microsoft.Maui.Controls.Grid
     {
         private Frame? activeCell = null;
-        private int activeCellRow = 0;
-        private int activeCellCol = 0;
+        private CellPoint activeCellPoint = new CellPoint();
         private Frame? anchorCell = null;
-        private int anchorCellRow = 0;
-        private int anchorCellCol = 0;
+        private CellPoint anchorCellPoint = new CellPoint();
         private CellRange? selectedCells;
 
         const double DEFAULT_CELL_HEIGHT = 50.0;
@@ -243,14 +241,14 @@ namespace MazeMauiApp.Controls.InteractiveGrid
             {
                 int top = selectedCells.Top,
                     bottom = selectedCells.Bottom;
-                if (displayRow > anchorCellRow)
+                if (displayRow > anchorCellPoint.Row)
                 {
-                    top = anchorCellRow;
+                    top = anchorCellPoint.Row;
                     bottom = displayRow;
                 }
-                else if (displayRow <= anchorCellRow)
+                else if (displayRow <= anchorCellPoint.Row)
                 {
-                    bottom = anchorCellRow;
+                    bottom = anchorCellPoint.Row;
                     top = displayRow;
                 }
                 ClearSelectedCells();
@@ -271,14 +269,14 @@ namespace MazeMauiApp.Controls.InteractiveGrid
             {
                 int left = selectedCells.Left,
                     right = selectedCells.Right;
-                if (displayCol > anchorCellCol)
+                if (displayCol > anchorCellPoint.Col)
                 {
-                    left = anchorCellCol;
+                    left = anchorCellPoint.Col;
                     right = displayCol;
                 }
-                else if (displayCol <= anchorCellCol)
+                else if (displayCol <= anchorCellPoint.Col)
                 {
-                    right = anchorCellCol;
+                    right = anchorCellPoint.Col;
                     left = displayCol;
                 }
                 ClearSelectedCells();
@@ -295,51 +293,51 @@ namespace MazeMauiApp.Controls.InteractiveGrid
         private void MoveActiveCellLeft(bool maintainSelection, bool moveToEnd)
         {
             bool useActiveCell = maintainSelection || (anchorCell == null);
-            int colOffset = moveToEnd ? (useActiveCell ? -activeCellCol : -anchorCellCol) + 1 : -1;
+            int colOffset = moveToEnd ? (useActiveCell ? -activeCellPoint.Col : -anchorCellPoint.Col) + 1 : -1;
             MoveActiveCellOffset(maintainSelection, colOffset, 0);
         }
 
         private void MoveActiveCellRight(bool maintainSelection, bool moveToEnd)
         {
             bool useActiveCell = maintainSelection || (anchorCell == null);
-            int colOffset = moveToEnd ? this.ColCount - (useActiveCell ? activeCellCol : anchorCellCol) : 1;
+            int colOffset = moveToEnd ? this.ColCount - (useActiveCell ? activeCellPoint.Col : anchorCellPoint.Col) : 1;
             MoveActiveCellOffset(maintainSelection, colOffset, 0);
         }
 
         private void MoveActiveCellUp(bool maintainSelection, bool moveToEnd)
         {
             bool useActiveCell = maintainSelection || (anchorCell == null);
-            int rowOffset = moveToEnd ? (useActiveCell ? -activeCellRow : -anchorCellRow) + 1 : -1;
+            int rowOffset = moveToEnd ? (useActiveCell ? -activeCellPoint.Row : -anchorCellPoint.Row) + 1 : -1;
             MoveActiveCellOffset(maintainSelection, 0, rowOffset);
         }
 
         private void MoveActiveCellDown(bool maintainSelection, bool moveToEnd)
         {
             bool useActiveCell = maintainSelection || (anchorCell == null);
-            int rowOffset = moveToEnd ? this.RowCount - (useActiveCell ? activeCellRow : anchorCellRow) : 1;
+            int rowOffset = moveToEnd ? this.RowCount - (useActiveCell ? activeCellPoint.Row : anchorCellPoint.Row) : 1;
             MoveActiveCellOffset(maintainSelection, 0, rowOffset);
         }
 
         private void MoveActiveCellToRowStart(bool maintainSelection, bool moveToTop)
         {
             bool useActiveCell = maintainSelection || (anchorCell == null);
-            int rowOffset = moveToTop ? (useActiveCell ? -activeCellRow : -anchorCellRow) + 1 : 0;
-            int colOffset = useActiveCell ? -activeCellCol : -anchorCellCol;
+            int rowOffset = moveToTop ? (useActiveCell ? -activeCellPoint.Row : -anchorCellPoint.Row) + 1 : 0;
+            int colOffset = useActiveCell ? -activeCellPoint.Col : -anchorCellPoint.Col;
             MoveActiveCellOffset(maintainSelection, colOffset, rowOffset);
         }
 
         private void MoveActiveCellToColumnEnd(bool maintainSelection, bool moveToTop)
         {
             bool useActiveCell = maintainSelection || (anchorCell == null);
-            int rowOffset = moveToTop ? this.RowCount - (useActiveCell ? activeCellRow : anchorCellRow) : 0;
-            int colOffset = this.ColCount - (useActiveCell ? activeCellCol : anchorCellCol);
+            int rowOffset = moveToTop ? this.RowCount - (useActiveCell ? activeCellPoint.Row : anchorCellPoint.Row) : 0;
+            int colOffset = this.ColCount - (useActiveCell ? activeCellPoint.Col : anchorCellPoint.Col);
             MoveActiveCellOffset(maintainSelection, colOffset, rowOffset);
         }
 
         private void MoveActiveCellOffset(bool maintainSelection, int deltaX, int deltaY)
         {
-            int referenceRow = !maintainSelection && (anchorCell != null) ? anchorCellRow : activeCellRow;
-            int referenceCol = !maintainSelection && (anchorCell != null) ? anchorCellCol : activeCellCol;
+            int referenceRow = !maintainSelection && (anchorCell != null) ? anchorCellPoint.Row : activeCellPoint.Row;
+            int referenceCol = !maintainSelection && (anchorCell != null) ? anchorCellPoint.Col : activeCellPoint.Col;
             int newRow = Math.Clamp(referenceRow + deltaY, 1, this.RowDefinitions.Count);
             int newCol = Math.Clamp(referenceCol + deltaX, 1, this.ColumnDefinitions.Count);
 
@@ -349,8 +347,8 @@ namespace MazeMauiApp.Controls.InteractiveGrid
         private void MoveAnchorCellToPrevWithinSelection()
         {
             if (anchorCell == null || selectedCells == null) return;
-            int newCol = anchorCellCol - 1;
-            int newRow = anchorCellRow;
+            int newCol = anchorCellPoint.Col - 1;
+            int newRow = anchorCellPoint.Row;
             if (newCol < selectedCells.Left)
             {
                 newCol = selectedCells.Right;
@@ -364,8 +362,8 @@ namespace MazeMauiApp.Controls.InteractiveGrid
         private void MoveAnchorCellToNextWithinSelection()
         {
             if (anchorCell == null || selectedCells == null) return;
-            int newCol = anchorCellCol + 1;
-            int newRow = anchorCellRow;
+            int newCol = anchorCellPoint.Col + 1;
+            int newRow = anchorCellPoint.Row;
             if (newCol > selectedCells.Right)
             {
                 newCol = selectedCells.Left;
@@ -394,14 +392,14 @@ namespace MazeMauiApp.Controls.InteractiveGrid
                 // Clear anchor cell
                 anchorCell.BackgroundColor = this.CellBackgroundColor;
                 activeCell = anchorCell;
-                activeCellCol = anchorCellCol;
-                activeCellRow = anchorCellRow;
+                activeCellPoint.Col = anchorCellPoint.Col;
+                activeCellPoint.Row = anchorCellPoint.Row;
                 ClearAnchorCell();
                 ClearSelectedCells();
                 activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
             }
             // No change in position?
-            if (newRow == activeCellRow && newCol == activeCellCol) return;
+            if (newRow == activeCellPoint.Row && newCol == activeCellPoint.Col) return;
 
             // Find the new active cell
             var newActiveCell = this.Children
@@ -428,7 +426,7 @@ namespace MazeMauiApp.Controls.InteractiveGrid
                     if (activeCell == null)
                         SetAnchorCell(row, col);
                     else
-                        SetAnchorCell(activeCellRow, activeCellCol);
+                        SetAnchorCell(activeCellPoint.Row, activeCellPoint.Col);
                 }
             }
             else
@@ -444,8 +442,8 @@ namespace MazeMauiApp.Controls.InteractiveGrid
             else
                 activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
 
-            activeCellRow = row;
-            activeCellCol = col;
+            activeCellPoint.Row = row;
+            activeCellPoint.Col = col;
 
             if (anchorCell != null)
                 UpdateSelectedCells();
@@ -501,15 +499,15 @@ namespace MazeMauiApp.Controls.InteractiveGrid
         private void SetAnchorCell(int row, int col)
         {
             anchorCell = GetCell(row, col);
-            anchorCellRow = anchorCell != null ? row : -1;
-            anchorCellCol = anchorCell != null ? col : -1;
+            anchorCellPoint.Row = anchorCell != null ? row : -1;
+            anchorCellPoint.Col = anchorCell != null ? col : -1;
         }
 
         private void ClearAnchorCell()
         {
             anchorCell = null;
-            anchorCellRow = -1;
-            anchorCellCol = -1;
+            anchorCellPoint.Row = -1;
+            anchorCellPoint.Col = -1;
         }
 
         private void ClearSelectedCells()
@@ -524,10 +522,10 @@ namespace MazeMauiApp.Controls.InteractiveGrid
         private void UpdateSelectedCells()
         {
             ClearSelectedCells();
-            int startRow = Math.Min(anchorCellRow, activeCellRow);
-            int startCol = Math.Min(anchorCellCol, activeCellCol);
-            int width = Math.Abs(anchorCellCol - activeCellCol) + 1;
-            int height = Math.Abs(anchorCellRow - activeCellRow) + 1;
+            int startRow = Math.Min(anchorCellPoint.Row, activeCellPoint.Row);
+            int startCol = Math.Min(anchorCellPoint.Col, activeCellPoint.Col);
+            int width = Math.Abs(anchorCellPoint.Col - activeCellPoint.Col) + 1;
+            int height = Math.Abs(anchorCellPoint.Row - activeCellPoint.Row) + 1;
             selectedCells = new CellRange(startRow, startCol, startRow + height - 1, startCol + width - 1);
             HighlightCells(selectedCells, false);
         }
@@ -537,7 +535,7 @@ namespace MazeMauiApp.Controls.InteractiveGrid
             {
                 for (int col = range.Left; col <= range.Right; col++)
                 {
-                    if (row != anchorCellRow || col != anchorCellCol)
+                    if (row != anchorCellPoint.Row || col != anchorCellPoint.Col)
                     {
                         Frame? cellFrame = GetCell(row, col);
                         if (cellFrame != null)

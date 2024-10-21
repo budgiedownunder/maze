@@ -1,6 +1,6 @@
 ﻿namespace MazeMauiApp.Controls.InteractiveGrid
 {
-    public class CellRange
+    internal class CellRange
     {
         public int Left { get; set; } = 0;
         public int Right { get; set; } = 0;
