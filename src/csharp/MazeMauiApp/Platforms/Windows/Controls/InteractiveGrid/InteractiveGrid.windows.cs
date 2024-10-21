@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
-namespace MazeMauiApp.Controls
+namespace MazeMauiApp.Controls.InteractiveGrid
 {
-    public partial class InteractiveGrid
+    public partial class Grid
     {
         partial void InitializePlatformSpecificCode()
         {

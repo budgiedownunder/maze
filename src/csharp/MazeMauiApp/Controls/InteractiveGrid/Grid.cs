@@ -1,42 +1,8 @@
 ﻿using Microsoft.Maui.Controls;
 
-namespace MazeMauiApp.Controls
+namespace MazeMauiApp.Controls.InteractiveGrid
 {
-    public class CellRange
-    {
-        public int Left { get; set; } = 0;
-        public int Right { get; set; } = 0;
-
-        public int Top { get; set; } = 0;
-
-        public int Bottom { get; set; } = 0;
-
-        public int Width
-        {
-            get
-            {
-                return this.Right - this.Left + 1;
-            }
-        }
-
-        public int Height
-        {
-            get
-            {
-                return this.Bottom - this.Top + 1;
-            }
-        }
-
-        public CellRange(int top, int left, int bottom, int right)
-        {
-            Top = Math.Min(top, bottom);
-            Left = Math.Min(left, right);
-            Bottom = Math.Max(top, bottom);
-            Right = Math.Max(left, right);
-        }
-    }
-
-    public partial class InteractiveGrid : Grid
+    public partial class Grid : Microsoft.Maui.Controls.Grid
     {
         private Frame? activeCell = null;
         private int activeCellRow = 0;
@@ -86,13 +52,13 @@ namespace MazeMauiApp.Controls
 
         public Color AnchorCellBackgroundColor { get; set; } = Colors.HotPink;
 
-        public InteractiveGrid()
+        public Grid()
         {
             InitializePlatformSpecificCode();
         }
 
         public static readonly BindableProperty ContainerScrollViewProperty =
-            BindableProperty.Create(nameof(ContainerScrollView), typeof(ScrollView), typeof(InteractiveGrid));
+            BindableProperty.Create(nameof(ContainerScrollView), typeof(ScrollView), typeof(Grid));
 
         public ScrollView ContainerScrollView
         {
@@ -440,7 +406,7 @@ namespace MazeMauiApp.Controls
             // Find the new active cell
             var newActiveCell = this.Children
                 .OfType<Frame>()
-                .FirstOrDefault(cell => Grid.GetRow(cell) == newRow && Grid.GetColumn(cell) == newCol);
+                .FirstOrDefault(cell => Microsoft.Maui.Controls.Grid.GetRow(cell) == newRow && Microsoft.Maui.Controls.Grid.GetColumn(cell) == newCol);
 
             if (newActiveCell != null)
             {
