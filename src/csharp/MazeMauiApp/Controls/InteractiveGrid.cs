@@ -2,6 +2,40 @@
 
 namespace MazeMauiApp.Controls
 {
+    public class CellRange
+    {
+        public int Left { get; set; } = 0;
+        public int Right { get; set; } = 0;
+
+        public int Top { get; set; } = 0;
+
+        public int Bottom { get; set; } = 0;
+
+        public int Width
+        {
+            get
+            {
+                return this.Right - this.Left + 1;
+            }
+        }
+
+        public int Height
+        {
+            get
+            {
+                return this.Bottom - this.Top + 1;
+            }
+        }
+
+        public CellRange(int top, int left, int bottom, int right)
+        {
+            Top = Math.Min(top, bottom);
+            Left = Math.Min(left, right);
+            Bottom = Math.Max(top, bottom);
+            Right = Math.Max(left, right);
+        }
+    }
+
     public partial class InteractiveGrid : Grid
     {
         private Frame? activeCell = null;
@@ -10,7 +44,7 @@ namespace MazeMauiApp.Controls
         private Frame? anchorCell = null;
         private int anchorCellRow = 0;
         private int anchorCellCol = 0;
-        private Microsoft.Maui.Graphics.Rect? currentSelectedCells;
+        private CellRange? selectedCells;
 
         const double DEFAULT_CELL_HEIGHT = 50.0;
         const double DEFAULT_CELL_WIDTH = 50.0;
@@ -70,12 +104,10 @@ namespace MazeMauiApp.Controls
         public void PopulateGrid()
         {
             this.IsVisible = false;
-
             this.RowDefinitions.Add(new RowDefinition { Height = new GridLength(this.ColHeaderHeight) });
 
             for (int row = 0; row < RowCount; row++)
                 this.RowDefinitions.Add(new RowDefinition { Height = new GridLength(this.CellHeight) });
-
 
             this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(this.ColHeaderHeight) });
 
@@ -212,14 +244,13 @@ namespace MazeMauiApp.Controls
 
         private void OnColumnHeaderTapped(int col)
         {
-            SelectColumn(col);
+            SelectColumn(IsShiftKeyPressed(), col);
         }
 
         private void OnRowHeaderTapped(int row)
         {
-            SelectRow(row);
+            SelectRow(IsShiftKeyPressed(), row);
         }
-
 
         private void OnCellTapped(Frame cell, int row, int col)
         {
@@ -233,18 +264,66 @@ namespace MazeMauiApp.Controls
             MoveActiveCell(true, RowCount, ColCount);
         }
 
-        private void SelectRow(int row)
+        private void SelectRow(bool maintainSelection, int row)
         {
-            ClearSelectedCells();
-            MoveActiveCell(false, row + 1, 1);
-            MoveActiveCell(true, row + 1, ColCount);
+            int displayRow = row + 1;
+            if (!maintainSelection || anchorCell == null)
+            {
+                ClearSelectedCells();
+                MoveActiveCell(false, displayRow, 1);
+                MoveActiveCell(true, displayRow, ColCount);
+            }
+            else if (selectedCells != null)
+            {
+                int top = selectedCells.Top,
+                    bottom = selectedCells.Bottom;
+                if (displayRow > anchorCellRow)
+                {
+                    top = anchorCellRow;
+                    bottom = displayRow;
+                }
+                else if (displayRow <= anchorCellRow)
+                {
+                    bottom = anchorCellRow;
+                    top = displayRow;
+                }
+                ClearSelectedCells();
+                SelectCells(top, 1, bottom, ColCount, false);
+            }
         }
 
-        private void SelectColumn(int col)
+        private void SelectColumn(bool maintainSelection, int col)
         {
-            ClearSelectedCells();
-            MoveActiveCell(false, 1, col + 1);
-            MoveActiveCell(true, RowCount, col + 1);
+            int displayCol = col + 1;
+            if (!maintainSelection || anchorCell == null)
+            {
+                ClearSelectedCells();
+                MoveActiveCell(false, 1, displayCol);
+                MoveActiveCell(true, RowCount, displayCol);
+            }
+            else if (selectedCells != null)
+            {
+                int left = selectedCells.Left,
+                    right = selectedCells.Right;
+                if (displayCol > anchorCellCol)
+                {
+                    left = anchorCellCol;
+                    right = displayCol;
+                }
+                else if (displayCol <= anchorCellCol)
+                {
+                    right = anchorCellCol;
+                    left = displayCol;
+                }
+                ClearSelectedCells();
+                SelectCells(1, left, RowCount, right, false);
+            }
+        }
+
+        private void SelectCells(int top, int left, int bottom, int right, bool clear)
+        {
+            selectedCells = new CellRange(top, left, bottom, right);
+            HighlightCells(selectedCells, clear);
         }
 
         private void MoveActiveCellLeft(bool maintainSelection, bool moveToEnd)
@@ -303,33 +382,31 @@ namespace MazeMauiApp.Controls
 
         private void MoveAnchorCellToPrevWithinSelection()
         {
-            if (anchorCell == null || !currentSelectedCells.HasValue) return;
-            Rect selection = currentSelectedCells.Value;
+            if (anchorCell == null || selectedCells == null) return;
             int newCol = anchorCellCol - 1;
             int newRow = anchorCellRow;
-            if (newCol < selection.Left)
+            if (newCol < selectedCells.Left)
             {
-                newCol = (int)(selection.Right) - 1;
+                newCol = selectedCells.Right;
                 newRow--;
             }
-            if (newRow < selection.Top)
-                newRow = (int)selection.Bottom - 1;
+            if (newRow < selectedCells.Top)
+                newRow = selectedCells.Bottom;
             MoveAnchorCell(newRow, newCol);
         }
 
         private void MoveAnchorCellToNextWithinSelection()
         {
-            if (anchorCell == null || !currentSelectedCells.HasValue) return;
-            Rect selection = currentSelectedCells.Value;
+            if (anchorCell == null || selectedCells == null) return;
             int newCol = anchorCellCol + 1;
             int newRow = anchorCellRow;
-            if (newCol >= selection.Right)
+            if (newCol > selectedCells.Right)
             {
-                newCol = (int)selection.Left;
+                newCol = selectedCells.Left;
                 newRow++;
             }
-            if (newRow >= selection.Bottom)
-                newRow = (int)selection.Top;
+            if (newRow > selectedCells.Bottom)
+                newRow = selectedCells.Top;
             MoveAnchorCell(newRow, newCol);
         }
 
@@ -471,10 +548,10 @@ namespace MazeMauiApp.Controls
 
         private void ClearSelectedCells()
         {
-            if (currentSelectedCells != null)
+            if (selectedCells != null)
             {
-                HighlightCells(currentSelectedCells.Value, true);
-                currentSelectedCells = null;
+                HighlightCells(selectedCells, true);
+                selectedCells = null;
             }
 
         }
@@ -485,22 +562,20 @@ namespace MazeMauiApp.Controls
             int startCol = Math.Min(anchorCellCol, activeCellCol);
             int width = Math.Abs(anchorCellCol - activeCellCol) + 1;
             int height = Math.Abs(anchorCellRow - activeCellRow) + 1;
-            currentSelectedCells = new Rect(startCol, startRow, width, height);
-            HighlightCells(currentSelectedCells.Value, false);
+            selectedCells = new CellRange(startRow, startCol, startRow + height - 1, startCol + width - 1);
+            HighlightCells(selectedCells, false);
         }
-        private void HighlightCells(Microsoft.Maui.Graphics.Rect region, bool clear)
+        private void HighlightCells(CellRange range, bool clear)
         {
-            for (int row = (int)region.Top; row < (int)region.Bottom; row++)
+            for (int row = range.Top; row <= range.Bottom; row++)
             {
-                for (int col = (int)region.Left; col < (int)region.Right; col++)
+                for (int col = range.Left; col <= range.Right; col++)
                 {
                     if (row != anchorCellRow || col != anchorCellCol)
                     {
-                        Frame? cell = GetCell(row, col);
-                        if (cell != null)
-                        {
-                            cell.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightedCellBackgroundColor;
-                        }
+                        Frame? cellFrame = GetCell(row, col);
+                        if (cellFrame != null)
+                            cellFrame.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightedCellBackgroundColor;
                     }
                 }
             }
@@ -511,9 +586,7 @@ namespace MazeMauiApp.Controls
             foreach (var child in this.Children)
             {
                 if (this.GetRow(child) == row && this.GetColumn(child) == col)
-                {
                     return (Frame)child;
-                }
             }
             return null;
         }
