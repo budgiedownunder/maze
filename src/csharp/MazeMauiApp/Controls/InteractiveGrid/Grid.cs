@@ -1,4 +1,5 @@
 ﻿using Microsoft.Maui.Controls;
+using System;
 
 namespace MazeMauiApp.Controls.InteractiveGrid
 {
@@ -22,6 +23,8 @@ namespace MazeMauiApp.Controls.InteractiveGrid
             Column = 2
         }
 
+        static private Color GRID_LIGHT_GREEN = Color.FromRgb(211, 240, 224);
+
         public int RowCount { get; set; } = 0;
 
         public int ColCount { get; set; } = 0;
@@ -38,17 +41,19 @@ namespace MazeMauiApp.Controls.InteractiveGrid
 
         public Color HeaderBackgroundColor { get; set; } = Colors.LightGray;
 
+        public Color HighlightHeaderBackgroundColor { get; set; } = GRID_LIGHT_GREEN;
+
         public Color HeaderTextColor { get; set; } = Colors.Black;
 
         public Color CellBorderColor { get; set; } = Colors.Black;
 
         public Color CellBackgroundColor { get; set; } = Colors.White;
 
-        public Color HighlightedCellBackgroundColor { get; set; } = Colors.Yellow;
+        public Color HighlightCellBackgroundColor { get; set; } = GRID_LIGHT_GREEN;
 
-        public Color ActiveCellBackgroundColor { get; set; } = Colors.HotPink;
+        public Color ActiveCellBackgroundColor { get; set; } = Colors.Yellow;
 
-        public Color AnchorCellBackgroundColor { get; set; } = Colors.HotPink;
+        public Color AnchorCellBackgroundColor { get; set; } = Colors.Yellow;
 
         public Grid()
         {
@@ -377,7 +382,7 @@ namespace MazeMauiApp.Controls.InteractiveGrid
         private void MoveAnchorCell(int newRow, int newCol)
         {
             if (anchorCell == null) return;
-            anchorCell.BackgroundColor = this.HighlightedCellBackgroundColor;
+            anchorCell.BackgroundColor = this.HighlightCellBackgroundColor;
             ClearAnchorCell();
             SetAnchorCell(newRow, newCol);
             if (anchorCell != null)
@@ -531,6 +536,9 @@ namespace MazeMauiApp.Controls.InteractiveGrid
         }
         private void HighlightCells(CellRange range, bool clear)
         {
+            HighlightRowHeaders(range, clear);
+            HighlightColHeaders(range, clear);
+
             for (int row = range.Top; row <= range.Bottom; row++)
             {
                 for (int col = range.Left; col <= range.Right; col++)
@@ -539,11 +547,57 @@ namespace MazeMauiApp.Controls.InteractiveGrid
                     {
                         Frame? cellFrame = GetCell(row, col);
                         if (cellFrame != null)
-                            cellFrame.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightedCellBackgroundColor;
+                            cellFrame.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightCellBackgroundColor;
                     }
                 }
             }
         }
+        private void HighlightRowHeaders(CellRange range, bool clear)
+        {
+            if(range.Left == 1 && range.Right == ColCount)
+            {
+                for (int row = range.Top; row <= range.Bottom; row++)
+                {
+                    Button? headerButton = GetRowHeaderCell(row);
+                    if (headerButton != null)
+                        headerButton.BackgroundColor = clear ? this.HeaderBackgroundColor : this.HighlightHeaderBackgroundColor;
+                }
+            }
+        }
+
+        private void HighlightColHeaders(CellRange range, bool clear)
+        {
+            if (range.Top == 1 && range.Bottom == RowCount)
+            {
+                for (int col = range.Left; col <= range.Right; col++)
+                {
+                    Button? headerButton = GetColHeaderCell(col);
+                    if (headerButton != null)
+                        headerButton.BackgroundColor = clear ? this.HeaderBackgroundColor : this.HighlightHeaderBackgroundColor;
+                }
+            }
+        }
+
+        private Button? GetRowHeaderCell(int row)
+        {
+            foreach (var child in this.Children)
+            {
+                if (this.GetRow(child) == row && this.GetColumn(child) == 0)
+                    return (Button)child;
+            }
+            return null;
+        }
+
+        private Button? GetColHeaderCell(int col)
+        {
+            foreach (var child in this.Children)
+            {
+                if (this.GetRow(child) == 0 && this.GetColumn(child) == col)
+                    return (Button)child;
+            }
+            return null;
+        }
+
         private Frame? GetCell(int row, int col)
         {
             if (row == 0 || col == 0) return null;
