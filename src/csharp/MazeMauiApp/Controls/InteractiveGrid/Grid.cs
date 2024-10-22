@@ -1,7 +1,4 @@
-﻿using Microsoft.Maui.Controls;
-using System;
-
-namespace MazeMauiApp.Controls.InteractiveGrid
+﻿namespace MazeMauiApp.Controls.InteractiveGrid
 {
     public partial class Grid : Microsoft.Maui.Controls.Grid
     {
@@ -223,14 +220,14 @@ namespace MazeMauiApp.Controls.InteractiveGrid
 
         private void OnCellTapped(Frame cell, int row, int col)
         {
-            MoveActiveCell(IsShiftKeyPressed(), row, col);
+            MoveActiveCell(IsShiftKeyPressed(), row, col, true);
         }
 
         private void SelectCorner()
         {
             ClearSelectedCells();
-            MoveActiveCell(false, 1, 1);
-            MoveActiveCell(true, RowCount, ColCount);
+            MoveActiveCell(false, 1, 1, true);
+            MoveActiveCell(true, RowCount, ColCount, false);
         }
 
         private void SelectRow(bool maintainSelection, int row)
@@ -239,8 +236,8 @@ namespace MazeMauiApp.Controls.InteractiveGrid
             if (!maintainSelection || anchorCell == null)
             {
                 ClearSelectedCells();
-                MoveActiveCell(false, displayRow, 1);
-                MoveActiveCell(true, displayRow, ColCount);
+                MoveActiveCell(false, displayRow, 1, true);
+                MoveActiveCell(true, displayRow, ColCount, false);
             }
             else if (selectedCells != null)
             {
@@ -267,8 +264,8 @@ namespace MazeMauiApp.Controls.InteractiveGrid
             if (!maintainSelection || anchorCell == null)
             {
                 ClearSelectedCells();
-                MoveActiveCell(false, 1, displayCol);
-                MoveActiveCell(true, RowCount, displayCol);
+                MoveActiveCell(false, 1, displayCol, true);
+                MoveActiveCell(true, RowCount, displayCol, false);
             }
             else if (selectedCells != null)
             {
@@ -346,7 +343,7 @@ namespace MazeMauiApp.Controls.InteractiveGrid
             int newRow = Math.Clamp(referenceRow + deltaY, 1, this.RowDefinitions.Count);
             int newCol = Math.Clamp(referenceCol + deltaX, 1, this.ColumnDefinitions.Count);
 
-            MoveActiveCell(maintainSelection, newRow, newCol);
+            MoveActiveCell(maintainSelection, newRow, newCol, true);
         }
 
         private void MoveAnchorCellToPrevWithinSelection()
@@ -390,7 +387,7 @@ namespace MazeMauiApp.Controls.InteractiveGrid
 
         }
 
-        private void MoveActiveCell(bool maintainSelection, int newRow, int newCol)
+        private void MoveActiveCell(bool maintainSelection, int newRow, int newCol, bool scrollActiveCellIntoView)
         {
             if (!maintainSelection && anchorCell != null)
             {
@@ -413,12 +410,12 @@ namespace MazeMauiApp.Controls.InteractiveGrid
 
             if (newActiveCell != null)
             {
-                // Scroll the new active cell into view and update selection state as needed
-                UpdateSelection(newActiveCell, newRow, newCol, maintainSelection);
+                // Scroll the new active cell into view and/or update selection state as needed
+                UpdateSelection(newActiveCell, newRow, newCol, maintainSelection, scrollActiveCellIntoView);
             }
         }
 
-        private async void UpdateSelection(Frame newActiveCell, int row, int col, bool maintainSelection)
+        private async void UpdateSelection(Frame newActiveCell, int row, int col, bool maintainSelection, bool scrollActiveCellIntoView)
         {
             // Reset the previously active cell if needed
             if (activeCell != null)
@@ -453,46 +450,49 @@ namespace MazeMauiApp.Controls.InteractiveGrid
             if (anchorCell != null)
                 UpdateSelectedCells();
 
-            // Handle scroll
-            double cellWidth = newActiveCell.Bounds.Width;
-            double cellLeftX = newActiveCell.Bounds.X;
-            double cellRightX = cellLeftX + cellWidth - 1;
-            double cellHeight = newActiveCell.Bounds.Height;
-            double cellTopY = newActiveCell.Bounds.Y;
-            double cellBottomY = cellTopY + cellHeight - 1;
-            double currentScrollX = ContainerScrollView.ScrollX;
-            double scrollViewWidth = ContainerScrollView.Width;
-            double scrollMaxVisibleX = currentScrollX + scrollViewWidth;
-            double scrollViewHeight = ContainerScrollView.Height;
-            double currentScrollY = ContainerScrollView.ScrollY;
-            double scrolMaxlVisibleY = currentScrollY + scrollViewHeight;
-
-            // If the cell is already fully visible, there is no need to scroll
-            if (cellLeftX >= currentScrollX && cellRightX <= scrollMaxVisibleX &&
-                cellBottomY >= currentScrollY && cellBottomY <= scrolMaxlVisibleY)
+            if(scrollActiveCellIntoView)
             {
-                return;
+                // Handle scroll
+                double cellWidth = newActiveCell.Bounds.Width;
+                double cellLeftX = newActiveCell.Bounds.X;
+                double cellRightX = cellLeftX + cellWidth - 1;
+                double cellHeight = newActiveCell.Bounds.Height;
+                double cellTopY = newActiveCell.Bounds.Y;
+                double cellBottomY = cellTopY + cellHeight - 1;
+                double currentScrollX = ContainerScrollView.ScrollX;
+                double scrollViewWidth = ContainerScrollView.Width;
+                double scrollMaxVisibleX = currentScrollX + scrollViewWidth;
+                double scrollViewHeight = ContainerScrollView.Height;
+                double currentScrollY = ContainerScrollView.ScrollY;
+                double scrolMaxlVisibleY = currentScrollY + scrollViewHeight;
+
+                // If the cell is already fully visible, there is no need to scroll
+                if (cellLeftX >= currentScrollX && cellRightX <= scrollMaxVisibleX &&
+                    cellBottomY >= currentScrollY && cellBottomY <= scrolMaxlVisibleY)
+                {
+                    return;
+                }
+
+                // Calculate scroll adjustments (if any)
+                double targetX = currentScrollX;
+                double targetY = currentScrollY;
+
+                if (cellLeftX < currentScrollX)
+                    targetX = cellLeftX;
+                else if (cellRightX > scrollMaxVisibleX)
+                    targetX = cellRightX - scrollViewWidth;
+                else
+                    targetX = currentScrollX;
+
+                if (cellTopY < currentScrollY)
+                    targetY = cellTopY;
+                else if (cellBottomY > (currentScrollY + scrollViewHeight))
+                    targetY = cellBottomY - scrollViewHeight;
+                else
+                    targetY = currentScrollY;
+
+                await ContainerScrollView.ScrollToAsync(targetX, targetY, true);
             }
-
-            // Calculate scroll adjustments (if any)
-            double targetX = currentScrollX;
-            double targetY = currentScrollY;
-
-            if (cellLeftX < currentScrollX)
-                targetX = cellLeftX;
-            else if (cellRightX > scrollMaxVisibleX)
-                targetX = cellRightX - scrollViewWidth;
-            else
-                targetX = currentScrollX;
-
-            if (cellTopY < currentScrollY)
-                targetY = cellTopY;
-            else if (cellBottomY > (currentScrollY + scrollViewHeight))
-                targetY = cellBottomY - scrollViewHeight;
-            else
-                targetY = currentScrollY;
-
-            await ContainerScrollView.ScrollToAsync(targetX, targetY, true);
         }
 
 #if !WINDOWS
@@ -554,7 +554,7 @@ namespace MazeMauiApp.Controls.InteractiveGrid
         }
         private void HighlightRowHeaders(CellRange range, bool clear)
         {
-            if(range.Left == 1 && range.Right == ColCount)
+            if (range.Left == 1 && range.Right == ColCount)
             {
                 for (int row = range.Top; row <= range.Bottom; row++)
                 {
