@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Api", "Maze.Api\Maze.A
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Api.Tests", "Maze.Api.Tests\Maze.Api.Tests.csproj", "{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MazeMauiApp", "MazeMauiApp\MazeMauiApp.csproj", "{3621A3A1-C682-46D2-BFC9-DA64409CEDB9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Maui.App", "MazeMauiApp\Maze.Maui.App.csproj", "{3621A3A1-C682-46D2-BFC9-DA64409CEDB9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
