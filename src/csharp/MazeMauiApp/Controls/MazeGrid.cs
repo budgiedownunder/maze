@@ -3,12 +3,12 @@ namespace MazeMauiApp.Controls
 {
     public class MazeGrid : MazeMauiApp.Controls.InteractiveGrid.Grid
     {
-        private Maze.Api.Maze maze = new Maze.Api.Maze(5, 5);
+      //  private Maze.Api.Maze maze = new Maze.Api.Maze(5, 5);
 
         public MazeGrid()
         {
-            this.RowCount = (int)maze.RowCount;
-            this.ColCount = (int)maze.ColCount;
+            this.RowCount = 10; //(int)maze.RowCount;
+            this.ColCount = 10; //(int)maze.ColCount;
             PopulateGrid();
         }
 

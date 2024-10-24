@@ -1,4 +1,6 @@
-﻿namespace MazeMauiApp.Controls.InteractiveGrid
+﻿using MauiGestures;
+
+namespace MazeMauiApp.Controls.InteractiveGrid
 {
     public partial class Grid : Microsoft.Maui.Controls.Grid
     {
@@ -52,9 +54,13 @@
 
         public Color AnchorCellBackgroundColor { get; set; } = Colors.Yellow;
 
+        private bool inExtendedSelectionMode = false;
+        //private CommunityToolkit.Maui.Behaviors.TouchBehavior longPressBehaviour;
+
         public Grid()
         {
             InitializePlatformSpecificCode();
+            IntializeEventHandlers();
         }
 
         public static readonly BindableProperty ContainerScrollViewProperty =
@@ -65,8 +71,51 @@
             get => (ScrollView)GetValue(ContainerScrollViewProperty);
             set => SetValue(ContainerScrollViewProperty, value);
         }
+
         partial void InitializePlatformSpecificCode();  // Platform-specific method stub
 
+        private void IntializeEventHandlers()
+        {
+            //  longPressBehaviour = new CommunityToolkit.Maui.Behaviors.TouchBehavior()
+            //  {
+            //      LongPressDuration = 750,
+            //      ShouldMakeChildrenInputTransparent = false,
+            //      LongPressCommand = new Command(OnLongPress)
+            //  };
+            //  this.Behaviors.Add(longPressBehaviour);
+            // var tapGesture = new TapGestureRecognizer();
+            // tapGesture.Tapped += OnTapped;
+            //this.GestureRecognizers.Add(tapGesture);
+        }
+        private void OnLongPress()
+        {
+            //TouchInteractionStatus state = longPressBehaviour.CurrentInteractionStatus;
+            //          {
+            //                    if (selectedCells != null)
+            //                        ClearSelectedCells();
+
+            //                this.inExtendedSelectionMode = !this.inExtendedSelectionMode;
+
+            //int row = GetRowFromTouch
+            //MoveActiveCell(this.inExtendedSelectionMode, row, col, true);
+
+            //            })
+        }
+
+        /* private int GetRowFromTouch(double touchY)
+         {
+             double accumulatedHeight = 0;
+             for (int i = 0; i < this.RowDefinitions.Count; i++)
+             {
+                 double rowHeight = this.RowDefinitions[i].ActualHeight;
+                 if (touchY >= accumulatedHeight && touchY < accumulatedHeight + rowHeight)
+                 {
+                     return i;
+                 }
+                 accumulatedHeight += rowHeight;
+             }
+             return -1; // No row found
+         }*/
         public void PopulateGrid()
         {
             this.IsVisible = false;
@@ -104,6 +153,23 @@
                     tapGesture.Tapped += (s, e) => OnCellTapped(cellFrame, currentRow, currentCol);
                     cellFrame.GestureRecognizers.Add(tapGesture);
 
+                    Gesture.SetLongPressPointCommand(cellFrame, new Command<PointEventArgs>(args =>
+                     {
+                         OnCellLongPressed(cellFrame, currentRow, currentCol);
+                    }));
+
+                    /*var longPressBehaviour = new CommunityToolkit.Maui.Behaviors.TouchBehavior()
+                    {
+                        
+                        LongPressDuration = 750,
+                        ShouldMakeChildrenInputTransparent = true,
+                        LongPressCommand = new Command(() =>
+                        {
+                            OnCellLongPressed(cellFrame, currentRow, currentCol);
+                        })
+                    };
+                    cellFrame.Behaviors.Add(longPressBehaviour);
+                    */
                     this.Add(cellFrame, currentCol, currentRow);
                 }
             }
@@ -129,31 +195,63 @@
 
         private void AddCornerHeader()
         {
-            Button button = NewHeaderButton(HeaderType.Corner);
+            Frame frame = NewHeaderFrame(HeaderType.Corner);
             var tapGesture = new TapGestureRecognizer();
             tapGesture.Tapped += (s, e) => OnCornerHeaderTapped();
-            button.GestureRecognizers.Add(tapGesture);
-            this.Add(button, 0, 0);
+            frame.GestureRecognizers.Add(tapGesture);
+            Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
+            {
+                OnCornerHeaderLongPressed(frame);
+            }));
+            this.Add(frame, 0, 0);
         }
 
         private void AddColumnHeader(int col)
         {
-            Button button = NewHeaderButton(HeaderType.Column);
+            Frame frame = NewHeaderFrame(HeaderType.Column);
             var tapGesture = new TapGestureRecognizer();
             int currentCol = col;
             tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(currentCol);
-            button.GestureRecognizers.Add(tapGesture);
-            this.Add(button, col + 1, 0);
+            frame.GestureRecognizers.Add(tapGesture);
+            Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
+            {
+                OnColumnHeaderLongPressed(frame, currentCol);
+            }));
+
+            this.Add(frame, col + 1, 0);
         }
 
         private void AddRowHeader(int row)
         {
-            Button button = NewHeaderButton(HeaderType.Row);
+            // Button button = NewHeaderButton(HeaderType.Row);
+            Frame frame = NewHeaderFrame(HeaderType.Row);
             var tapGesture = new TapGestureRecognizer();
             int currentRow = row;
             tapGesture.Tapped += (s, e) => OnRowHeaderTapped(currentRow);
-            button.GestureRecognizers.Add(tapGesture);
-            this.Add(button, 0, row + 1);
+            frame.GestureRecognizers.Add(tapGesture);
+            Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
+            {
+                OnRowHeaderLongPressed(frame, currentRow);
+            }));
+
+            this.Add(frame, 0, row + 1);
+        }
+
+        private Frame NewHeaderFrame(HeaderType type)
+        {
+            var frame = new Frame
+            {
+                WidthRequest = GetHeaderWidth(type),
+                HeightRequest = GetHeaderHeight(type),
+                CornerRadius = 5,
+                Padding = new Thickness(5),
+                BackgroundColor = this.HeaderBackgroundColor,
+                //BorderWidth = 2,
+                BorderColor = this.HeaderBorderColor,
+                HorizontalOptions = LayoutOptions.Center,
+                VerticalOptions = LayoutOptions.Center,
+            };
+            return frame;
         }
 
         private Button NewHeaderButton(HeaderType type)
@@ -207,20 +305,43 @@
             SelectCorner();
         }
 
+        private void OnCornerHeaderLongPressed(Frame frame)
+        {
+            inExtendedSelectionMode = !inExtendedSelectionMode;
+            SelectCorner();
+        }
 
         private void OnColumnHeaderTapped(int col)
         {
-            SelectColumn(IsShiftKeyPressed(), col);
+            SelectColumn(inExtendedSelectionMode || IsShiftKeyPressed(), col);
+        }
+
+        private void OnColumnHeaderLongPressed(Frame frame, int col)
+        {
+            inExtendedSelectionMode = !inExtendedSelectionMode;
+            OnColumnHeaderTapped(col);
         }
 
         private void OnRowHeaderTapped(int row)
         {
-            SelectRow(IsShiftKeyPressed(), row);
+            SelectRow(inExtendedSelectionMode || IsShiftKeyPressed(), row);
+        }
+
+        private void OnRowHeaderLongPressed(Frame frame, int row)
+        {
+            inExtendedSelectionMode = !inExtendedSelectionMode;
+            OnRowHeaderTapped(row);
         }
 
         private void OnCellTapped(Frame cell, int row, int col)
         {
-            MoveActiveCell(IsShiftKeyPressed(), row, col, true);
+            MoveActiveCell(this.inExtendedSelectionMode || IsShiftKeyPressed(), row, col, true);
+        }
+
+        private void OnCellLongPressed(Frame cell, int row, int col)
+        {
+            this.inExtendedSelectionMode = !this.inExtendedSelectionMode;
+            OnCellTapped(cell, row, col);
         }
 
         private void SelectCorner()
@@ -415,7 +536,7 @@
             }
         }
 
-        private async void UpdateSelection(Frame newActiveCell, int row, int col, bool maintainSelection, bool scrollActiveCellIntoView)
+        private void UpdateSelection(Frame newActiveCell, int row, int col, bool maintainSelection, bool scrollActiveCellIntoView)
         {
             // Reset the previously active cell if needed
             if (activeCell != null)
@@ -450,49 +571,52 @@
             if (anchorCell != null)
                 UpdateSelectedCells();
 
-            if(scrollActiveCellIntoView)
+            if (scrollActiveCellIntoView)
+                ScrollCellIntoView(newActiveCell);
+        }
+
+        private async void ScrollCellIntoView(Frame cell)
+        {
+            // Handle scroll
+            double cellWidth = cell.Bounds.Width;
+            double cellLeftX = cell.Bounds.X;
+            double cellRightX = cellLeftX + cellWidth - 1;
+            double cellHeight = cell.Bounds.Height;
+            double cellTopY = cell.Bounds.Y;
+            double cellBottomY = cellTopY + cellHeight - 1;
+            double currentScrollX = ContainerScrollView.ScrollX;
+            double scrollViewWidth = ContainerScrollView.Width;
+            double scrollMaxVisibleX = currentScrollX + scrollViewWidth;
+            double scrollViewHeight = ContainerScrollView.Height;
+            double currentScrollY = ContainerScrollView.ScrollY;
+            double scrolMaxlVisibleY = currentScrollY + scrollViewHeight;
+
+            // If the cell is already fully visible, there is no need to scroll
+            if (cellLeftX >= currentScrollX && cellRightX <= scrollMaxVisibleX &&
+                cellBottomY >= currentScrollY && cellBottomY <= scrolMaxlVisibleY)
             {
-                // Handle scroll
-                double cellWidth = newActiveCell.Bounds.Width;
-                double cellLeftX = newActiveCell.Bounds.X;
-                double cellRightX = cellLeftX + cellWidth - 1;
-                double cellHeight = newActiveCell.Bounds.Height;
-                double cellTopY = newActiveCell.Bounds.Y;
-                double cellBottomY = cellTopY + cellHeight - 1;
-                double currentScrollX = ContainerScrollView.ScrollX;
-                double scrollViewWidth = ContainerScrollView.Width;
-                double scrollMaxVisibleX = currentScrollX + scrollViewWidth;
-                double scrollViewHeight = ContainerScrollView.Height;
-                double currentScrollY = ContainerScrollView.ScrollY;
-                double scrolMaxlVisibleY = currentScrollY + scrollViewHeight;
-
-                // If the cell is already fully visible, there is no need to scroll
-                if (cellLeftX >= currentScrollX && cellRightX <= scrollMaxVisibleX &&
-                    cellBottomY >= currentScrollY && cellBottomY <= scrolMaxlVisibleY)
-                {
-                    return;
-                }
-
-                // Calculate scroll adjustments (if any)
-                double targetX = currentScrollX;
-                double targetY = currentScrollY;
-
-                if (cellLeftX < currentScrollX)
-                    targetX = cellLeftX;
-                else if (cellRightX > scrollMaxVisibleX)
-                    targetX = cellRightX - scrollViewWidth;
-                else
-                    targetX = currentScrollX;
-
-                if (cellTopY < currentScrollY)
-                    targetY = cellTopY;
-                else if (cellBottomY > (currentScrollY + scrollViewHeight))
-                    targetY = cellBottomY - scrollViewHeight;
-                else
-                    targetY = currentScrollY;
-
-                await ContainerScrollView.ScrollToAsync(targetX, targetY, true);
+                return;
             }
+
+            // Calculate scroll adjustments (if any)
+            double targetX = currentScrollX;
+            double targetY = currentScrollY;
+
+            if (cellLeftX < currentScrollX)
+                targetX = cellLeftX;
+            else if (cellRightX > scrollMaxVisibleX)
+                targetX = cellRightX - scrollViewWidth;
+            else
+                targetX = currentScrollX;
+
+            if (cellTopY < currentScrollY)
+                targetY = cellTopY;
+            else if (cellBottomY > (currentScrollY + scrollViewHeight))
+                targetY = cellBottomY - scrollViewHeight;
+            else
+                targetY = currentScrollY;
+
+            await ContainerScrollView.ScrollToAsync(targetX, targetY, true);
         }
 
 #if !WINDOWS
@@ -558,9 +682,9 @@
             {
                 for (int row = range.Top; row <= range.Bottom; row++)
                 {
-                    Button? headerButton = GetRowHeaderCell(row);
-                    if (headerButton != null)
-                        headerButton.BackgroundColor = clear ? this.HeaderBackgroundColor : this.HighlightHeaderBackgroundColor;
+                    Frame? header = GetRowHeaderCell(row);
+                    if (header != null)
+                        header.BackgroundColor = clear ? this.HeaderBackgroundColor : this.HighlightHeaderBackgroundColor;
                 }
             }
         }
@@ -571,29 +695,29 @@
             {
                 for (int col = range.Left; col <= range.Right; col++)
                 {
-                    Button? headerButton = GetColHeaderCell(col);
-                    if (headerButton != null)
-                        headerButton.BackgroundColor = clear ? this.HeaderBackgroundColor : this.HighlightHeaderBackgroundColor;
+                    Frame? header = GetColHeaderCell(col);
+                    if (header != null)
+                        header.BackgroundColor = clear ? this.HeaderBackgroundColor : this.HighlightHeaderBackgroundColor;
                 }
             }
         }
 
-        private Button? GetRowHeaderCell(int row)
+        private Frame? GetRowHeaderCell(int row)
         {
             foreach (var child in this.Children)
             {
                 if (this.GetRow(child) == row && this.GetColumn(child) == 0)
-                    return (Button)child;
+                    return (Frame)child;
             }
             return null;
         }
 
-        private Button? GetColHeaderCell(int col)
+        private Frame? GetColHeaderCell(int col)
         {
             foreach (var child in this.Children)
             {
                 if (this.GetRow(child) == 0 && this.GetColumn(child) == col)
-                    return (Button)child;
+                    return (Frame)child;
             }
             return null;
         }
