@@ -1,7 +1,7 @@
 ﻿using Android.App;
 using Android.Runtime;
 
-namespace MazeMauiApp
+namespace Maze.Maui.App
 {
     [Application]
     public class MainApplication : MauiApplication

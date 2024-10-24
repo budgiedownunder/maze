@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MazeMauiApp.Controls.InteractiveGrid
+namespace Maze.Maui.App.Controls.InteractiveGrid
 {
     internal class CellPoint
     {

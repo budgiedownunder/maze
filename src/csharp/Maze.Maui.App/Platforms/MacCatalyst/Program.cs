@@ -1,7 +1,7 @@
 ﻿using ObjCRuntime;
 using UIKit;
 
-namespace MazeMauiApp
+namespace Maze.Maui.App
 {
     public class Program
     {

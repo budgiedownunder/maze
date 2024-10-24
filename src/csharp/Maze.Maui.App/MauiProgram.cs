@@ -2,7 +2,7 @@
 using MauiGestures;
 using Microsoft.Extensions.Logging;
 
-namespace MazeMauiApp
+namespace Maze.Maui.App
 {
     public static class MauiProgram
     {

@@ -1,7 +1,7 @@
 ﻿
-namespace MazeMauiApp.Controls
+namespace Maze.Maui.App.Controls
 {
-    public class MazeGrid : MazeMauiApp.Controls.InteractiveGrid.Grid
+    public class MazeGrid : Maze.Maui.App.Controls.InteractiveGrid.Grid
     {
       //  private Maze.Api.Maze maze = new Maze.Api.Maze(5, 5);
 

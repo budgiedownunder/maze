@@ -1,4 +1,4 @@
-﻿namespace MazeMauiApp
+﻿namespace Maze.Maui.App
 {
     public partial class App : Application
     {

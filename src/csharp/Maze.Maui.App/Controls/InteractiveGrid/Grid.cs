@@ -1,6 +1,6 @@
 ﻿using MauiGestures;
 
-namespace MazeMauiApp.Controls.InteractiveGrid
+namespace Maze.Maui.App.Controls.InteractiveGrid
 {
     public partial class Grid : Microsoft.Maui.Controls.Grid
     {

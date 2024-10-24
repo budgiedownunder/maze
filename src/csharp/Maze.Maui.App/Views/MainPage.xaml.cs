@@ -1,4 +1,4 @@
-﻿namespace MazeMauiApp.Views
+﻿namespace Maze.Maui.App.Views
 {
     using System;
     using Maze.Api;

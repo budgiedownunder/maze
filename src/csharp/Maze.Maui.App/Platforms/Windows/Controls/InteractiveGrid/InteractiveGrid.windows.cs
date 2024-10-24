@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
-namespace MazeMauiApp.Controls.InteractiveGrid
+namespace Maze.Maui.App.Controls.InteractiveGrid
 {
     public partial class Grid
     {
