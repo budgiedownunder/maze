@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Api", "Maze.Api\Maze.A
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Api.Tests", "Maze.Api.Tests\Maze.Api.Tests.csproj", "{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Maui.App", "MazeMauiApp\Maze.Maui.App.csproj", "{3621A3A1-C682-46D2-BFC9-DA64409CEDB9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Maui.App", "Maze.Maui.App\Maze.Maui.App.csproj", "{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -35,12 +35,12 @@ Global
 		{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3621A3A1-C682-46D2-BFC9-DA64409CEDB9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3621A3A1-C682-46D2-BFC9-DA64409CEDB9}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3621A3A1-C682-46D2-BFC9-DA64409CEDB9}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
-		{3621A3A1-C682-46D2-BFC9-DA64409CEDB9}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3621A3A1-C682-46D2-BFC9-DA64409CEDB9}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3621A3A1-C682-46D2-BFC9-DA64409CEDB9}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Release|Any CPU.Deploy.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
