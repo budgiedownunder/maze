@@ -84,6 +84,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<Content Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+			<Link>maze_wasm.wasm</Link>
+		</Content>
+	</ItemGroup>
+	
+	<ItemGroup>
 	  <None Update="appsettings.json">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
