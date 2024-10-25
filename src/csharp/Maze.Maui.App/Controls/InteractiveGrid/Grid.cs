@@ -183,7 +183,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         }
 
         // (0,0) = (1,1) in display terms
-        virtual public View GetCellContent(int row, int col) 
+        virtual public View GetCellContent(int row, int col)
         {
             return new Label
             {
@@ -710,15 +710,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private void UpdateSelectionFrame()
         {
             if (selectionFrame == null) return;
-
-            selectionFrame.SetLocation(
-                selectedCells?.Top ?? activeCellPoint.Row,
-                selectedCells?.Left ?? activeCellPoint.Col,
-                selectedCells != null ? (selectedCells.Right - selectedCells.Left + 1) * CellWidth : CellWidth,
-                selectedCells != null ? (selectedCells.Bottom - selectedCells.Top + 1) * CellHeight : CellHeight
-              );
-
-            ShowSelectionFrame(true);
+            selectionFrame.SetRange(selectedCells != null ? selectedCells : new CellRange(activeCellPoint.Row, activeCellPoint.Col), true);
         }
 
         private void ShowSelectionFrame(bool show)
@@ -793,6 +785,36 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private Frame? GetColHeaderCell(int col)
         {
             return GetCell(0, col);
+        }
+
+        public double GetCellsWidth(CellRange range)
+        {
+            if (range == null) return 0.0;
+            double width = 0.0;
+            for (int col = range.Left; col <= range.Right && col <= ColCount; col++)
+                width += GetColumnWidth(col);
+            return width;
+        }
+
+        public double GetColumnWidth(int col)
+        {
+            if (col < 0 || col > ColCount) return 0.0;
+            return ColumnDefinitions[col].Width.Value;
+        }
+
+        public double GetCellsHeight(CellRange range)
+        {
+            if (range == null) return 0.0;
+            double height = 0.0;
+            for (int row = range.Top; row <= range.Bottom && row <= RowCount; row++)
+                height += GetRowHeight(row);
+            return height;
+        }
+
+        public double GetRowHeight(int row)
+        {
+            if (row < 0 || row > RowCount) return 0.0;
+            return RowDefinitions[row].Height.Value;
         }
 
         private Frame? GetCell(int row, int col)
