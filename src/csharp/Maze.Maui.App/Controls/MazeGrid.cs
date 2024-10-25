@@ -3,12 +3,12 @@ namespace Maze.Maui.App.Controls
 {
     public class MazeGrid : Maze.Maui.App.Controls.InteractiveGrid.Grid
     {
-      //  private Maze.Api.Maze maze = new Maze.Api.Maze(5, 5);
+        //  private Maze.Api.Maze maze = new Maze.Api.Maze(5, 5);
 
         public MazeGrid()
         {
-            this.RowCount = 10; //(int)maze.RowCount;
-            this.ColCount = 10; //(int)maze.ColCount;
+            this.RowCount = 20; //(int)maze.RowCount;
+            this.ColCount = 30; //(int)maze.ColCount;
             PopulateGrid();
         }
 
@@ -16,7 +16,7 @@ namespace Maze.Maui.App.Controls
         {
             return new Label
             {
-                Text = $"({row},{col})",
+                Text = $"({row + 1},{col + 1})",
                 HorizontalOptions = LayoutOptions.Center,
                 VerticalOptions = LayoutOptions.Center
             };

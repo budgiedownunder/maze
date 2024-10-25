@@ -1,4 +1,10 @@
 ﻿using MauiGestures;
+using Microsoft.Maui.Layouts;
+using System;
+using System.Diagnostics;
+using System.Reflection.PortableExecutable;
+using System.Runtime.ConstrainedExecution;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
@@ -9,13 +15,25 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private Frame? anchorCell = null;
         private CellPoint anchorCellPoint = new CellPoint();
         private CellRange? selectedCells;
+        private Frame? selectionFrame;
+        private List<BoxView>? selectionFrameGrips;
+
+        const double DEFAULT_COL_HEADER_HEIGHT = 75.0;
+        const double DEFAULT_COL_HEADER_MARGIN = 5.0;
+        const double DEFAULT_COL_HEADER_PADDING = 0.0;
+
+        const double DEFAULT_ROW_HEADER_WIDTH = 150.0;
+        const double DEFAULT_ROW_HEADER_MARGIN = 5.0;
+        const double DEFAULT_ROW_HEADER_PADDING = 0.0;
 
         const double DEFAULT_CELL_HEIGHT = 50.0;
         const double DEFAULT_CELL_WIDTH = 50.0;
-        const double DEFAULT_COL_HEADER_HEIGHT = 15.0;
-        const double DEFAULT_ROW_HEADER_WIDTH = 15.0;
+        const double DEFAULT_CELL_MARGIN = 5.0;
+        const double DEFAULT_CELL_PADDING = 0.0;
 
-        private enum HeaderType
+
+
+        public enum HeaderType
         {
             Corner = 0,
             Row = 1,
@@ -23,6 +41,8 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         }
 
         static private Color GRID_LIGHT_GREEN = Color.FromRgb(211, 240, 224);
+        static private Color GRID_VERY_LIGHT_GRAY = Color.FromRgb(240, 240, 240);
+        static private Color GRID_LIGHT_GRAY = Color.FromRgb(225, 225, 225);
 
         public int RowCount { get; set; } = 0;
 
@@ -30,17 +50,31 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public double ColHeaderHeight { get; set; } = DEFAULT_COL_HEADER_HEIGHT;
 
+        public double ColHeaderMargin { get; set; } = DEFAULT_COL_HEADER_MARGIN;
+
+        public double ColHeaderPadding { get; set; } = DEFAULT_COL_HEADER_PADDING;
+
         public double RowHeaderWidth { get; set; } = DEFAULT_ROW_HEADER_WIDTH;
+
+        public double RowHeaderMargin { get; set; } = DEFAULT_ROW_HEADER_MARGIN;
+
+        public double RowHeaderPadding { get; set; } = DEFAULT_ROW_HEADER_PADDING;
 
         public double CellHeight { get; set; } = DEFAULT_CELL_HEIGHT;
 
         public double CellWidth { get; set; } = DEFAULT_CELL_WIDTH;
 
+        public double CellMargin { get; set; } = DEFAULT_CELL_MARGIN;
+
+        public double CellPadding { get; set; } = DEFAULT_CELL_PADDING;
+
         public Color HeaderBorderColor { get; set; } = Colors.Gray;
 
-        public Color HeaderBackgroundColor { get; set; } = Colors.LightGray;
+        public Color HeaderBackgroundColor { get; set; } = GRID_VERY_LIGHT_GRAY;
 
-        public Color HighlightHeaderBackgroundColor { get; set; } = GRID_LIGHT_GREEN;
+        public Color HeaderSelectedBackgroundColor { get; set; } = GRID_LIGHT_GREEN;
+
+        public Color HeaderActiveBackgroundColor { get; set; } = GRID_LIGHT_GRAY;
 
         public Color HeaderTextColor { get; set; } = Colors.Black;
 
@@ -57,10 +91,27 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private bool inExtendedSelectionMode = false;
         //private CommunityToolkit.Maui.Behaviors.TouchBehavior longPressBehaviour;
 
+        public bool AllColumnsSelected
+        {
+            get
+            {
+                return (selectedCells != null && selectedCells.Left == 1 && selectedCells.Right == ColCount) ||
+                    (ColCount == 1 && activeCellPoint.Col == 1);
+            }
+        }
+
+        public bool AllRowsSelected
+        {
+            get
+            {
+                return (selectedCells != null && selectedCells.Top == 1 && selectedCells.Bottom == RowCount) ||
+                    (RowCount == 1 && activeCellPoint.Row == 1);
+            }
+        }
+
         public Grid()
         {
             InitializePlatformSpecificCode();
-            IntializeEventHandlers();
         }
 
         public static readonly BindableProperty ContainerScrollViewProperty =
@@ -73,6 +124,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         }
 
         partial void InitializePlatformSpecificCode();  // Platform-specific method stub
+
 
         private void IntializeEventHandlers()
         {
@@ -124,7 +176,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             for (int row = 0; row < RowCount; row++)
                 this.RowDefinitions.Add(new RowDefinition { Height = new GridLength(this.CellHeight) });
 
-            this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(this.ColHeaderHeight) });
+            this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(this.RowHeaderWidth) });
 
             for (int col = 0; col < ColCount; col++)
                 this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(this.CellWidth) });
@@ -142,10 +194,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                         BorderColor = this.CellBorderColor,
                         BackgroundColor = this.CellBackgroundColor,
                         Content = GetCellContent(row, col),
-                        Padding = 0,
-                        Margin = 0,
+                        Padding = CellPadding,
+                        Margin = CellMargin,
                         CornerRadius = 0,
                         HasShadow = false,
+                        //WidthRequest = CellWidth-(2*CellMargin),
+                        //HeightRequest = CellHeight-(2*CellMargin),
                     };
 
                     var tapGesture = new TapGestureRecognizer();
@@ -156,7 +210,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                     Gesture.SetLongPressPointCommand(cellFrame, new Command<PointEventArgs>(args =>
                      {
                          OnCellLongPressed(cellFrame, currentRow, currentCol);
-                    }));
+                     }));
 
                     /*var longPressBehaviour = new CommunityToolkit.Maui.Behaviors.TouchBehavior()
                     {
@@ -173,10 +227,43 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                     this.Add(cellFrame, currentCol, currentRow);
                 }
             }
-            this.IsVisible = true;
+            //     MinimumWidthRequest = (ColCount * CellWidth) + RowHeaderWidth;
+            //     MinimumHeightRequest = (RowCount * CellHeight) + ColHeaderHeight;
+            //     MaximumWidthRequest = (ColCount * CellWidth) + RowHeaderWidth;
+            //     MaximumHeightRequest = (RowCount  * CellHeight) + ColHeaderHeight;
+
+            IsVisible = true;
+
+        //  InitializeSelectionFrame();
+
+            double totalWidth = 0.0;
+            foreach (var def in this.ColumnDefinitions)
+            {
+                totalWidth += def.Width.Value;
+            }
+
+            double totalHeight = 0.0;
+            foreach (var def in this.RowDefinitions)
+            {
+                totalHeight += def.Height.Value;
+            }
+            Debug.WriteLine($"Total Width = {totalWidth}, Height = {totalHeight}");
+
+        
         }
 
-        virtual public View GetCellContent(int row, int col)
+        virtual public View GetHeaderCellContent(HeaderType type, int index)
+        {
+            return new Label
+            {
+                Text = type != HeaderType.Corner ? $"{index + 1}" : "",
+                FontAttributes = FontAttributes.Bold,
+                HorizontalOptions = LayoutOptions.Center,
+                VerticalOptions = LayoutOptions.Center
+            };
+        }
+
+        virtual public View GetCellContent(int row, int col) // (0,0) = (1,1) in display terms
         {
             return new Label
             {
@@ -186,16 +273,14 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void AddHeaderRow()
         {
-            AddCornerHeader();
             for (int col = 0; col < ColCount; col++)
-            {
                 AddColumnHeader(col);
-            }
+            AddCornerHeader();
         }
 
         private void AddCornerHeader()
         {
-            Frame frame = NewHeaderFrame(HeaderType.Corner);
+            Frame frame = NewHeaderFrame(HeaderType.Corner, 0);
             var tapGesture = new TapGestureRecognizer();
             tapGesture.Tapped += (s, e) => OnCornerHeaderTapped();
             frame.GestureRecognizers.Add(tapGesture);
@@ -208,9 +293,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void AddColumnHeader(int col)
         {
-            Frame frame = NewHeaderFrame(HeaderType.Column);
+            Frame frame = NewHeaderFrame(HeaderType.Column, col);
             var tapGesture = new TapGestureRecognizer();
-            int currentCol = col;
+            int currentCol = col + 1;
             tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(currentCol);
             frame.GestureRecognizers.Add(tapGesture);
             Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
@@ -224,9 +309,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private void AddRowHeader(int row)
         {
             // Button button = NewHeaderButton(HeaderType.Row);
-            Frame frame = NewHeaderFrame(HeaderType.Row);
+            Frame frame = NewHeaderFrame(HeaderType.Row, row);
             var tapGesture = new TapGestureRecognizer();
-            int currentRow = row;
+            int currentRow = row + 1;
             tapGesture.Tapped += (s, e) => OnRowHeaderTapped(currentRow);
             frame.GestureRecognizers.Add(tapGesture);
             Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
@@ -237,21 +322,62 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             this.Add(frame, 0, row + 1);
         }
 
-        private Frame NewHeaderFrame(HeaderType type)
+        /*
+                    {
+                        BorderColor = this.CellBorderColor,
+                        BackgroundColor = this.CellBackgroundColor,
+                        Content = GetCellContent(row, col),
+                        Padding = CellPadding,
+                        Margin = CellMargin,
+                        CornerRadius = 0,
+                        HasShadow = false,
+        */
+
+        private Frame NewHeaderFrame(HeaderType type, int index)
         {
             var frame = new Frame
             {
                 WidthRequest = GetHeaderWidth(type),
                 HeightRequest = GetHeaderHeight(type),
                 CornerRadius = 5,
-                Padding = new Thickness(5),
+                //Margin = GetHeaderMargin(type),
+                Padding = GetHeaderPadding(type),
                 BackgroundColor = this.HeaderBackgroundColor,
                 //BorderWidth = 2,
+                Content = GetHeaderCellContent(type, index),
                 BorderColor = this.HeaderBorderColor,
                 HorizontalOptions = LayoutOptions.Center,
                 VerticalOptions = LayoutOptions.Center,
             };
             return frame;
+        }
+
+        private Thickness GetHeaderMargin(HeaderType type)
+        {
+            switch (type)
+            {
+                case HeaderType.Corner:
+                    return new Thickness(RowHeaderMargin, ColHeaderMargin);
+                case HeaderType.Column:
+                    return new Thickness(ColHeaderMargin);
+                case HeaderType.Row:
+                    return new Thickness(RowHeaderMargin);
+            }
+            return 0.0;
+        }
+
+        private Thickness GetHeaderPadding(HeaderType type)
+        {
+            switch (type)
+            {
+                case HeaderType.Corner:
+                    return new Thickness(RowHeaderPadding);
+                case HeaderType.Column:
+                    return new Thickness(ColHeaderPadding);
+                case HeaderType.Row:
+                    return new Thickness(RowHeaderPadding);
+            }
+            return 0.0;
         }
 
         private Button NewHeaderButton(HeaderType type)
@@ -277,11 +403,11 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             switch (type)
             {
                 case HeaderType.Corner:
-                    return this.RowHeaderWidth;
+                    return this.RowHeaderWidth - (2 * this.RowHeaderMargin);
                 case HeaderType.Row:
-                    return this.RowHeaderWidth;
+                    return this.RowHeaderWidth - (2 * this.RowHeaderMargin);
                 case HeaderType.Column:
-                    return this.CellWidth;
+                    return this.CellWidth - (2 * this.CellMargin);
             }
             return 0;
         }
@@ -291,11 +417,11 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             switch (type)
             {
                 case HeaderType.Corner:
-                    return this.ColHeaderHeight;
+                    return this.ColHeaderHeight - (2 * this.ColHeaderMargin);
                 case HeaderType.Row:
-                    return this.CellHeight;
+                    return this.CellHeight - (2 * this.CellMargin);
                 case HeaderType.Column:
-                    return this.ColHeaderHeight;
+                    return this.ColHeaderHeight - (2 * this.ColHeaderMargin);
             }
             return 0;
         }
@@ -353,12 +479,16 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void SelectRow(bool maintainSelection, int row)
         {
-            int displayRow = row + 1;
+            int displayRow = row;
             if (!maintainSelection || anchorCell == null)
             {
+                bool hadAnchorCell = anchorCell != null;
+                CellPoint activePoint = activeCellPoint.Clone();
                 ClearSelectedCells();
-                MoveActiveCell(false, displayRow, 1, true);
+                MoveActiveCell(false, maintainSelection ? activePoint.Row : displayRow, 1, true);
                 MoveActiveCell(true, displayRow, ColCount, false);
+                if (maintainSelection && !hadAnchorCell)
+                    MoveAnchorCell(activePoint.Row, activePoint.Col);
             }
             else if (selectedCells != null)
             {
@@ -376,17 +506,22 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 }
                 ClearSelectedCells();
                 SelectCells(top, 1, bottom, ColCount, false);
+                activeCellPoint.Row = displayRow;
             }
         }
 
         private void SelectColumn(bool maintainSelection, int col)
         {
-            int displayCol = col + 1;
+            int displayCol = col;
             if (!maintainSelection || anchorCell == null)
             {
+                bool hadAnchorCell = anchorCell != null;
+                CellPoint activePoint = activeCellPoint.Clone();
                 ClearSelectedCells();
-                MoveActiveCell(false, 1, displayCol, true);
+                MoveActiveCell(false, 1, maintainSelection ? activePoint.Col : displayCol, true);
                 MoveActiveCell(true, RowCount, displayCol, false);
+                if (maintainSelection && !hadAnchorCell)
+                    MoveAnchorCell(activePoint.Row, activePoint.Col);
             }
             else if (selectedCells != null)
             {
@@ -404,6 +539,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 }
                 ClearSelectedCells();
                 SelectCells(1, left, RowCount, right, false);
+                activeCellPoint.Col = displayCol;
             }
         }
 
@@ -464,7 +600,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             int newRow = Math.Clamp(referenceRow + deltaY, 1, this.RowDefinitions.Count);
             int newCol = Math.Clamp(referenceCol + deltaX, 1, this.ColumnDefinitions.Count);
 
-            MoveActiveCell(maintainSelection, newRow, newCol, true);
+            if (maintainSelection && AllRowsSelected && deltaX != 0 && deltaY == 0)
+                SelectColumn(true, newCol);
+            else if (maintainSelection && AllColumnsSelected && deltaX == 0 && deltaY != 0)
+                SelectRow(true, newRow);
+            else
+                MoveActiveCell(maintainSelection, newRow, newCol, true);
         }
 
         private void MoveAnchorCellToPrevWithinSelection()
@@ -540,7 +681,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             // Reset the previously active cell if needed
             if (activeCell != null)
+            {
                 activeCell.BackgroundColor = this.CellBackgroundColor;
+                HighlightActiveCellHeaders(true);
+            }
 
             if (maintainSelection)
             {
@@ -570,6 +714,8 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
             if (anchorCell != null)
                 UpdateSelectedCells();
+            else
+                HighlightActiveCellHeaders(false);
 
             if (scrollActiveCellIntoView)
                 ScrollCellIntoView(newActiveCell);
@@ -644,6 +790,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             if (selectedCells != null)
             {
                 HighlightCells(selectedCells, true);
+                ShowSelectionFrame(false);
                 selectedCells = null;
             }
 
@@ -657,11 +804,121 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             int height = Math.Abs(anchorCellPoint.Row - activeCellPoint.Row) + 1;
             selectedCells = new CellRange(startRow, startCol, startRow + height - 1, startCol + width - 1);
             HighlightCells(selectedCells, false);
+            UpdateSelectionFrame();
         }
+
+        private void InitializeSelectionFrame()
+        {
+            selectionFrame = new Frame
+            {
+                BorderColor = Colors.HotPink,
+                CornerRadius = 0,
+                Padding = 0,
+                BackgroundColor = Colors.Transparent,
+                Margin = new Thickness(5),
+                TranslationX = Padding.Left + DEFAULT_ROW_HEADER_WIDTH,
+                TranslationY = Padding.Top + DEFAULT_COL_HEADER_HEIGHT,
+                WidthRequest = CellWidth,
+                HeightRequest = CellHeight,
+                IsVisible = true,
+                InputTransparent = true
+            };
+            //   AbsoluteLayout.SetLayoutFlags(selectionFrame, AbsoluteLayoutFlags.None);
+
+            // Add the frame to the grid
+            this.Children.Add(selectionFrame);
+
+            // Initialize grip points (one for each side: top, bottom, left, right)
+            selectionFrameGrips = new List<BoxView>();
+            for (int i = 0; i < 4; i++)
+            {
+                var grip = new BoxView
+                {
+                    Color = Colors.Red,
+                    WidthRequest = 20,
+                    HeightRequest = 20,
+                    CornerRadius = 10,
+                    IsVisible = false
+                };
+                selectionFrameGrips.Add(grip);
+                this.Children.Add(grip);
+            }
+
+        }
+
+        private void UpdateSelectionFrame()
+        {
+
+            if (selectionFrame == null) return;
+            if (selectedCells == null)
+            {
+                ShowSelectionFrame(false);
+                return;
+            }
+
+            var startCell = GetCell(selectedCells.Top, selectedCells.Left);
+            var startElementBounds = GetCellBounds(selectedCells.Top, selectedCells.Left);
+            var endElementBounds = GetCellBounds(selectedCells.Bottom, selectedCells.Right);
+
+            selectionFrame.WidthRequest = endElementBounds.Right - startElementBounds.Left;
+            selectionFrame.HeightRequest = endElementBounds.Bottom - startElementBounds.Top;
+            selectionFrame.TranslationX = Padding.Left + startElementBounds.Left;
+            selectionFrame.TranslationY = Padding.Top + startElementBounds.Top;
+            ShowSelectionFrame(true);
+
+            selectionFrame.ForceLayout();
+
+        }
+
+        private void ShowSelectionFrame(bool show)
+        {
+            if (selectionFrame == null) return;
+            selectionFrame.IsVisible = show;
+            selectionFrame.ForceLayout();
+        }
+
+        private Rect GetCellBounds(int row, int col)
+        {
+            double x = 0, y = 0;
+            double cellWidth = 0, cellHeight = 0;
+
+            // Calculate the x position and width based on column definitions
+            for (int i = 0; i < ColumnDefinitions.Count; i++)
+            {
+                var columnDef = ColumnDefinitions[i];
+                double columnWidth = columnDef.Width.IsAbsolute ? columnDef.Width.Value : 0; // For now we only support fixed size
+                if (i < col)
+                {
+                    x += columnWidth;
+                }
+                else if (i == col)
+                {
+                    cellWidth = columnWidth;
+                }
+            }
+
+            // Calculate the y position and height based on row definitions
+            for (int i = 0; i < RowDefinitions.Count; i++)
+            {
+                var rowDef = RowDefinitions[i];
+                double rowHeight = rowDef.Height.IsAbsolute ? rowDef.Height.Value : 0; // For now we only support fixed size
+                if (i < row)
+                {
+                    y += rowHeight;
+                }
+                else if (i == row)
+                {
+                    cellHeight = rowHeight;
+                }
+            }
+
+            return new Rect(x, y, cellWidth, cellHeight);
+        }
+
+
         private void HighlightCells(CellRange range, bool clear)
         {
-            HighlightRowHeaders(range, clear);
-            HighlightColHeaders(range, clear);
+            HighlightHeaders(range, clear);
 
             for (int row = range.Top; row <= range.Bottom; row++)
             {
@@ -676,55 +933,60 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 }
             }
         }
+
+        private void HighlightActiveCellHeaders(bool clear)
+        {
+            if (activeCell == null) return;
+            HighlightHeaders(new CellRange(activeCellPoint), clear);
+        }
+
+        private void HighlightHeaders(CellRange range, bool clear)
+        {
+            HighlightRowHeaders(range, clear);
+            HighlightColHeaders(range, clear);
+        }
+
         private void HighlightRowHeaders(CellRange range, bool clear)
         {
-            if (range.Left == 1 && range.Right == ColCount)
-            {
-                for (int row = range.Top; row <= range.Bottom; row++)
-                {
-                    Frame? header = GetRowHeaderCell(row);
-                    if (header != null)
-                        header.BackgroundColor = clear ? this.HeaderBackgroundColor : this.HighlightHeaderBackgroundColor;
-                }
-            }
+            bool allColumnsSelected = range.Left == 1 && range.Right == ColCount;
+            for (int row = range.Top; row <= range.Bottom; row++)
+                HighlightRowHeader(row, clear, allColumnsSelected);
+        }
+
+        private void HighlightRowHeader(int row, bool clear, bool allColumnsSelected)
+        {
+            Frame? header = GetRowHeaderCell(row);
+            if (header != null)
+                header.BackgroundColor = clear ? this.HeaderBackgroundColor : (allColumnsSelected ? this.HeaderSelectedBackgroundColor : this.HeaderActiveBackgroundColor);
         }
 
         private void HighlightColHeaders(CellRange range, bool clear)
         {
-            if (range.Top == 1 && range.Bottom == RowCount)
-            {
-                for (int col = range.Left; col <= range.Right; col++)
-                {
-                    Frame? header = GetColHeaderCell(col);
-                    if (header != null)
-                        header.BackgroundColor = clear ? this.HeaderBackgroundColor : this.HighlightHeaderBackgroundColor;
-                }
-            }
+            bool allRowsSelected = range.Top == 1 && range.Bottom == RowCount;
+            for (int col = range.Left; col <= range.Right; col++)
+                HighlightColHeader(col, clear, allRowsSelected);
+        }
+
+        private void HighlightColHeader(int col, bool clear, bool allRowsSelected)
+        {
+            Frame? header = GetColHeaderCell(col);
+            if (header != null)
+                header.BackgroundColor = clear ? this.HeaderBackgroundColor : (allRowsSelected ? this.HeaderSelectedBackgroundColor : HeaderActiveBackgroundColor);
         }
 
         private Frame? GetRowHeaderCell(int row)
         {
-            foreach (var child in this.Children)
-            {
-                if (this.GetRow(child) == row && this.GetColumn(child) == 0)
-                    return (Frame)child;
-            }
-            return null;
+            return GetCell(row, 0);
         }
 
         private Frame? GetColHeaderCell(int col)
         {
-            foreach (var child in this.Children)
-            {
-                if (this.GetRow(child) == 0 && this.GetColumn(child) == col)
-                    return (Frame)child;
-            }
-            return null;
+            return GetCell(0, col);
         }
 
         private Frame? GetCell(int row, int col)
         {
-            if (row == 0 || col == 0) return null;
+            //            if (row == 0 || col == 0) return null;
             foreach (var child in this.Children)
             {
                 if (this.GetRow(child) == row && this.GetColumn(child) == col)

@@ -32,5 +32,26 @@
             Bottom = Math.Max(top, bottom);
             Right = Math.Max(left, right);
         }
+
+        public CellRange(int row, int col)
+        {
+            Top = row;
+            Left = col;
+            Bottom = Top;
+            Right = Left;
+        }
+
+        public CellRange(CellPoint point)
+        {
+            Top = point.Row;
+            Left = point.Col;
+            Bottom = Top;
+            Right = Left;
+        }
+
+        public CellRange Clone()
+        {
+            return (CellRange)this.MemberwiseClone();
+        }
     }
 }
