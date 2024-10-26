@@ -12,17 +12,17 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private CellRange? selectedCells;
         private SelectionFrame? selectionFrame;
 
-        const double DEFAULT_COL_HEADER_HEIGHT = 75.0;
-        const double DEFAULT_COL_HEADER_MARGIN = 5.0;
+        const double DEFAULT_COL_HEADER_HEIGHT = 35.0;
+        const double DEFAULT_COL_HEADER_MARGIN = 0.0;
         const double DEFAULT_COL_HEADER_PADDING = 0.0;
 
-        const double DEFAULT_ROW_HEADER_WIDTH = 150.0;
-        const double DEFAULT_ROW_HEADER_MARGIN = 5.0;
+        const double DEFAULT_ROW_HEADER_WIDTH = 35.0;
+        const double DEFAULT_ROW_HEADER_MARGIN = 0.0;
         const double DEFAULT_ROW_HEADER_PADDING = 0.0;
 
         const double DEFAULT_CELL_HEIGHT = 50.0;
         const double DEFAULT_CELL_WIDTH = 50.0;
-        const double DEFAULT_CELL_MARGIN = 5.0;
+        const double DEFAULT_CELL_MARGIN = 0.0;
         const double DEFAULT_CELL_PADDING = 0.0;
 
         public enum HeaderType
@@ -80,7 +80,11 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public Color AnchorCellBackgroundColor { get; set; } = Colors.Yellow;
 
-        public Color SelectionFrameBorderColor { get; set; } = Colors.HotPink;
+        public Color SelectionFrameBorderColor { get; set; } = Colors.DarkGreen;
+
+        public double SelectionFrameBorderWidth{ get; set; } = 2.0;
+
+        public double SelectionFrameBorderGripSize { get; set; } = 10.0;
 
         private bool inExtendedSelectionMode = false;
         //private CommunityToolkit.Maui.Behaviors.TouchBehavior longPressBehaviour;
@@ -702,7 +706,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             selectionFrame = new SelectionFrame(this)
             {
-                BorderColor = SelectionFrameBorderColor
+                BorderColor = SelectionFrameBorderColor,
+                BorderWidth = SelectionFrameBorderWidth,
+                BorderGripSize = SelectionFrameBorderGripSize
             };
             selectionFrame.AddToGrid();
         }

@@ -13,13 +13,17 @@
         private const int BORDER_BOX_LAST = BORDER_BOX_RIGHT;
 
         private readonly BoxView[] borderBoxes = new BoxView[4];
+        private readonly BoxView[] borderGrips = new BoxView[4];
 
         //private List<BoxView>? selectionFrameGrips;
 
         static private Color DEFAULT_BORDER_COLOR = Colors.Black;
         const double DEFAULT_BORDER_WIDTH = 2.0;
+        const double DEFAULT_BORDER_GRIP_SIZE = 4.0;
 
         private Color borderColor = DEFAULT_BORDER_COLOR;
+        private double borderWidth = DEFAULT_BORDER_WIDTH;
+        private double borderGripSize = DEFAULT_BORDER_GRIP_SIZE;
 
         public Color BorderColor
         {
@@ -27,9 +31,30 @@
             set
             {
                 borderColor = value;
-                UpdateBorderColor();
+                UpdateBorders();
             }
         }
+
+        public double BorderWidth
+        {
+            get => borderWidth;
+            set
+            {
+                borderWidth = value;
+                UpdateBorders();
+            }
+        }
+
+        public double BorderGripSize
+        {
+            get => borderGripSize;
+            set
+            {
+                borderGripSize = value;
+                UpdateBorders();
+            }
+        }
+
 
         private CellRange? cellRange;
         public CellRange? CellRange
@@ -45,22 +70,27 @@
 
         public int BottomRow { get { return CellRange != null ? CellRange.Bottom : -1; } }
 
+        public int RowCount { get { return CellRange != null ? CellRange.Height : 0; } }
+
         public int LeftColumn { get { return CellRange != null ? CellRange.Left : -1; } }
 
         public int RightColumn { get { return CellRange != null ? CellRange.Right : -1; } }
 
-        public double BorderWidth { get; set; } = DEFAULT_BORDER_WIDTH;
+        public int ColumnCount { get { return CellRange != null ? CellRange.Width : 0; } }
 
         public SelectionFrame(Grid parent)
         {
             this.parent = parent;
-            CreateBorderBoxes();
+            CreateBorders();
         }
 
-        private void CreateBorderBoxes()
+        private void CreateBorders()
         {
             for (int i = BORDER_BOX_FIRST; i <= BORDER_BOX_LAST; i++)
+            {
                 borderBoxes[i] = NewBorderBox();
+                borderGrips[i] = NewBorderGrip();
+            }
         }
 
         private BoxView NewBorderBox()
@@ -77,17 +107,44 @@
             };
         }
 
-        private void UpdateBorderColor()
+        private BoxView NewBorderGrip()
         {
-            foreach (var box in borderBoxes)
-                box.Color = BorderColor;
+            return new BoxView
+            {
+                Color = BorderColor,
+                IsVisible = false,
+                HeightRequest = BorderGripSize,
+                WidthRequest = BorderGripSize,
+                CornerRadius = BorderGripSize / 2.0,
+                HorizontalOptions = LayoutOptions.Start,
+                VerticalOptions = LayoutOptions.Start,
+                InputTransparent = true
+            };
         }
 
+        private void UpdateBorders()
+        {
+            foreach (var box in borderBoxes)
+            {
+                box.Color = BorderColor;
+            }
+
+            foreach (var grip in borderGrips)
+            {
+                grip.Color = BorderColor;
+                grip.HeightRequest = BorderGripSize;
+                grip.WidthRequest = BorderGripSize;
+                grip.CornerRadius = BorderGripSize / 2.0;
+            }
+        }
 
         public void Show(bool show)
         {
             foreach (var box in borderBoxes)
                 box.IsVisible = show;
+
+            foreach (var grip in borderGrips)
+                grip.IsVisible = show;
         }
 
         public void AddToGrid()
@@ -98,6 +155,14 @@
                 parent.SetColumn(box, 0);
                 parent.Children.Add(box);
             }
+
+            foreach (var grip in borderGrips)
+            {
+                parent.SetRow(grip, 0);
+                parent.SetColumn(grip, 0);
+                parent.Children.Add(grip);
+            }
+
         }
 
         public void SetRange(CellRange newRange, bool show)
@@ -119,12 +184,58 @@
         private void SetBorder(int borderID, int row, int column, double width, double height, Thickness margin)
         {
             BoxView box = borderBoxes[borderID];
+            BoxView grip = borderGrips[borderID];
             parent.SetRow(box, row);
             parent.SetColumn(box, column);
             box.WidthRequest = width;
             box.HeightRequest = height;
             box.Margin = margin;
+
+            parent.SetRow(grip, row);
+            parent.SetColumn(grip, column);
+            grip.TranslationX = GetGripTranslationX(borderID, width);
+            grip.TranslationY = GetGripTranslationY(borderID, height);
+            grip.Margin = margin;
         }
+
+        private double GetGripTranslationX(int borderID, double width)
+        {
+            bool singleRow = RowCount == 1;
+            bool singleColumn = ColumnCount == 1;
+
+            switch (borderID)
+            {
+                case BORDER_BOX_TOP:
+                    return -BorderGripSize / 2.0;
+                case BORDER_BOX_LEFT:
+                    return -BorderGripSize / 2.0;
+                case BORDER_BOX_BOTTOM:
+                    return width - BorderGripSize / 2.0; ;
+                case BORDER_BOX_RIGHT:
+                    return 1.0 - BorderGripSize / 2.0;
+            }
+            return 0.0;
+        }
+
+        private double GetGripTranslationY(int borderID, double height)
+        {
+            bool singleRow = RowCount == 1;
+            bool singleColumn = ColumnCount == 1;
+
+            switch (borderID)
+            {
+                case BORDER_BOX_TOP:
+                    return -BorderGripSize / 2.0;
+                case BORDER_BOX_LEFT:
+                    return height - BorderGripSize / 2.0;
+                case BORDER_BOX_BOTTOM:
+                    return height - BorderGripSize / 2.0;
+                case BORDER_BOX_RIGHT:
+                    return -BorderGripSize / 2.0;
+            }
+            return 0.0;
+        }
+
     }
 }
 
