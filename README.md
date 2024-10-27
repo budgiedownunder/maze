@@ -21,7 +21,7 @@ At this stage, the following areas are covered:
 - Automating JavaScript API testing in `node.js` (`chai`, `mocha`)
 - Implementing a `.NET` to Web Assembly ([`maze_wasm`](./src/rust/maze_wasm/README.md)) interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) in `C#`
 - Implementing automated `.NET` API testing with `xUnit` ([`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop.Tests/README.md))
-- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`MazerMauiApp`](./src/csharp/MazeMauiApp/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md))
+- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Mazer.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md))
 - Automating `C#` API documentation generation with `DocFX`
 - Combining `C#` and `Rust` documentation into a single HTML help system with use of `iFrame` containers
 - Architecture diagramming using `PlantUML` ([`architecture.puml`](./docs/diagrams/architecture.puml))
@@ -41,7 +41,7 @@ The following components are present:
 |                                | [`Maze.Api.Tests`](./src/csharp/Maze.Api.Tests/README.md)                     | Unit tests for [`Maze.Api`](./src/csharp/Maze.Api/README.md)
 |                                | [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)               | .NET interop to `maze_wasm` web assembly|
 |                                | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md)         | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) |
-|                                | [`MazerMauiApp`](./src/csharp/MazeMauiApp/README.md)                           | Maze [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application
+|                                | [`MazerMauiApp`](./src/csharp/Maze.Maui.App/README.md)                        | Maze [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application
 | `src/rust`                     | [`maze`](./src/rust/maze/README.md)                                           | Maze definition and calculation library|
 |                                | [`maze_console`](./src/rust/maze_console/README.md)                           | Maze console application
 |                                | [`maze_wasm`](./src/rust/maze_wasm/README.md)                                 | Maze web assembly library |
