@@ -3,7 +3,7 @@
     public class CellPoint
     {
         public int Row { get; set; } = -1;
-        public int Col { get; set; } = -1;
+        public int Column { get; set; } = -1;
 
         public CellPoint Clone()
         {

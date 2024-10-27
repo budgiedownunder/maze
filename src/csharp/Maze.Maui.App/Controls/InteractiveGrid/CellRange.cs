@@ -33,10 +33,10 @@
             Right = Math.Max(left, right);
         }
 
-        public CellRange(int row, int col)
+        public CellRange(int row, int column)
         {
             Top = row;
-            Left = col;
+            Left = column;
             Bottom = Top;
             Right = Left;
         }
@@ -44,7 +44,7 @@
         public CellRange(CellPoint point)
         {
             Top = point.Row;
-            Left = point.Col;
+            Left = point.Column;
             Bottom = Top;
             Right = Left;
         }

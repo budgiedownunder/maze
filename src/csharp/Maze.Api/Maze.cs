@@ -192,9 +192,9 @@ namespace Maze.Api
         /// <param name="row">Target row</param>
         /// <param name="col">Target column</param>
         /// <returns>Cell type</returns>
-        public CellType GetCellType(UInt32 row, UInt32 col)
+        public CellType GetCellType(UInt32 row, UInt32 column)
         {
-            return (CellType)(int)interop.MazeWasmGetCellType(_mazeWasmPtr, row, col);
+            return (CellType)(int)interop.MazeWasmGetCellType(_mazeWasmPtr, row, column);
         }
         /// <summary>
         /// Sets the start cell associated with the maze`, or will throw an exception

@@ -8,7 +8,7 @@ namespace Maze.Maui.App.Controls
         public MazeGrid()
         {
             this.RowCount = 20; //(int)maze.RowCount;
-            this.ColCount = 30; //(int)maze.ColCount;
+            this.ColumnCount = 30; //(int)maze.ColCount;
             PopulateGrid();
         }
 
