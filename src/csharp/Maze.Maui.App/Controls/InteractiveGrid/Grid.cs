@@ -82,7 +82,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public Color SelectionFrameBorderColor { get; set; } = Colors.DarkGreen;
 
-        public double SelectionFrameBorderWidth{ get; set; } = 2.0;
+        public double SelectionFrameBorderWidth { get; set; } = 2.0;
 
         public double SelectionFrameBorderGripSize { get; set; } = 10.0;
 
