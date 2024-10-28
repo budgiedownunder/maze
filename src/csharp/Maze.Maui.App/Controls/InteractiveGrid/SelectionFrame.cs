@@ -85,14 +85,31 @@
 
         private void CreateBorders()
         {
-            for (int i = BORDER_ID_FIRST; i <= BORDER_ID_LAST; i++)
-                frameBorders[i] = NewFrameBorder();
+            for (int id = BORDER_ID_FIRST; id <= BORDER_ID_LAST; id++)
+                frameBorders[id] = NewFrameBorder(ToFrameBorderLocation(id));
         }
 
-        private FrameBorder NewFrameBorder()
+        private FrameBorder.FrameLocation ToFrameBorderLocation(int borderID)
+        {
+            switch (borderID)
+            {
+                case BORDER_ID_TOP:
+                    return FrameBorder.FrameLocation.Top;
+                case BORDER_ID_LEFT:
+                    return FrameBorder.FrameLocation.Left;
+                case BORDER_ID_BOTTOM:
+                    return FrameBorder.FrameLocation.Bottom;
+                case BORDER_ID_RIGHT:
+                    return FrameBorder.FrameLocation.Right;
+            }
+            return FrameBorder.FrameLocation.Top;
+        }
+
+        private FrameBorder NewFrameBorder(FrameBorder.FrameLocation location)
         {
             return new FrameBorder(this)
             {
+                Location = location,
                 Color = BorderColor,
                 GripSize = BorderGripSize
             };
@@ -138,7 +155,7 @@
         private void SetBorder(int borderID, int row, int column, double width, double height, Thickness margin)
         {
             FrameBorder border = frameBorders[borderID];
-            border.SetPosition((FrameBorder.Location)borderID, row, column, width, height, margin);
+            border.SetPosition(row, column, width, height, margin);
         }
 
     }

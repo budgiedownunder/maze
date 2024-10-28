@@ -1,9 +1,4 @@
-﻿using Microsoft.Maui.Graphics;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Maze.Maui.App.Controls.Pointer;
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
@@ -21,7 +16,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         Color color = DEFAULT_COLOR;
         double gripSize = DEFAULT_GRIP_SIZE;
 
-        public enum Location
+        public enum FrameLocation
         {
             Top = 0,
             Left = 1,
@@ -32,6 +27,8 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         public SelectionFrame ParentFrame { get => parentFrame; }
 
         public Grid ParentGrid { get => ParentFrame.ParentGrid; }
+
+        public FrameLocation Location { get; set; } = FrameLocation.Top;
 
         public Color Color
         {
@@ -62,7 +59,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private BoxView NewBox()
         {
-            return new BoxView
+            BoxView box = new BoxView
             {
                 Color = Color,
                 IsVisible = false,
@@ -70,13 +67,15 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 WidthRequest = 0,
                 HorizontalOptions = LayoutOptions.Start,
                 VerticalOptions = LayoutOptions.Start,
-                InputTransparent = true
+                InputTransparent = false
             };
+            RegisterPointerEventHandlers(box, false);
+            return box;
         }
 
         private BoxView NewGrip()
         {
-            return new BoxView
+            BoxView grip = new BoxView
             {
                 Color = Color,
                 IsVisible = false,
@@ -85,8 +84,50 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 CornerRadius = GripSize / 2.0,
                 HorizontalOptions = LayoutOptions.Start,
                 VerticalOptions = LayoutOptions.Start,
-                InputTransparent = true
+                InputTransparent = false
             };
+            RegisterPointerEventHandlers(grip, true);
+            return grip;
+        }
+
+        private void RegisterPointerEventHandlers(BoxView view, bool isGrip)
+        {
+            var pointerGestureRecognizer = new PointerGestureRecognizer();
+            pointerGestureRecognizer.PointerEntered += (s, e) =>
+            {
+                OnPointerEntered(view, getPointerIcon(isGrip));
+            };
+            pointerGestureRecognizer.PointerExited += (s, e) =>
+            {
+                OnPointerExited(view);
+            };
+            view.GestureRecognizers.Add(pointerGestureRecognizer);
+        }
+
+        private void OnPointerEntered(BoxView view, Icon icon)
+        {
+            Pointer.Pointer.SetCursor(view, icon);
+        }
+
+        private void OnPointerExited(BoxView view)
+        {
+            Pointer.Pointer.SetCursor(view, Icon.Arrow);
+        }
+
+        private Icon getPointerIcon(bool isGrip)
+        {
+            switch (Location)
+            {
+                case FrameLocation.Top:
+                    return isGrip ? Icon.SizeNorthWestSouthEast : Icon.SizeNorthSouth;
+                case FrameLocation.Left:
+                    return isGrip ? Icon.SizeNorthEastSouthWest : Icon.SizeWestEast;
+                case FrameLocation.Bottom:
+                    return isGrip ? Icon.SizeNorthWestSouthEast : Icon.SizeNorthSouth;
+                case FrameLocation.Right:
+                    return isGrip ? Icon.SizeNorthEastSouthWest : Icon.SizeWestEast;
+            }
+            return isGrip ? Icon.SizeNorthWestSouthEast : Icon.SizeNorthSouth;
         }
 
         private void UpdateColor()
@@ -121,7 +162,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             ParentGrid.Children.Add(view);
         }
 
-        public void SetPosition(Location location, int row, int column, double width, double height, Thickness margin)
+        public void SetPosition(int row, int column, double width, double height, Thickness margin)
         {
             ParentGrid.SetRow(box, row);
             ParentGrid.SetColumn(box, column);
@@ -131,44 +172,44 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
             ParentGrid.SetRow(grip, row);
             ParentGrid.SetColumn(grip, column);
-            grip.TranslationX = GetGripTranslationX(location, width);
-            grip.TranslationY = GetGripTranslationY(location, height);
+            grip.TranslationX = GetGripTranslationX(width);
+            grip.TranslationY = GetGripTranslationY(height);
             grip.Margin = margin;
         }
 
-        private double GetGripTranslationX(Location location, double width)
+        private double GetGripTranslationX(double width)
         {
             bool singleRow = ParentFrame.RowCount == 1;
             bool singleColumn = ParentFrame.ColumnCount == 1;
 
-            switch (location)
+            switch (Location)
             {
-                case Location.Top:
+                case FrameLocation.Top:
                     return -GripSize / 2.0;
-                case Location.Left:
+                case FrameLocation.Left:
                     return -GripSize / 2.0;
-                case Location.Bottom:
+                case FrameLocation.Bottom:
                     return width - GripSize / 2.0; ;
-                case Location.Right:
+                case FrameLocation.Right:
                     return 1.0 - GripSize / 2.0;
             }
             return 0.0;
         }
 
-        private double GetGripTranslationY(Location location, double height)
+        private double GetGripTranslationY(double height)
         {
             bool singleRow = ParentFrame.RowCount == 1;
             bool singleColumn = ParentFrame.ColumnCount == 1;
 
-            switch (location)
+            switch (Location)
             {
-                case Location.Top:
+                case FrameLocation.Top:
                     return -GripSize / 2.0;
-                case Location.Left:
+                case FrameLocation.Left:
                     return height - GripSize / 2.0;
-                case Location.Bottom:
+                case FrameLocation.Bottom:
                     return height - GripSize / 2.0;
-                case Location.Right:
+                case FrameLocation.Right:
                     return -GripSize / 2.0;
             }
             return 0.0;
