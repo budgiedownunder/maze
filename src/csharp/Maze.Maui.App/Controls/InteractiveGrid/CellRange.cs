@@ -53,5 +53,31 @@
         {
             return (CellRange)this.MemberwiseClone();
         }
+
+        public bool Equals(CellRange? compare)
+        {
+            if (compare == null) return false;
+
+            return this.Top == compare.Top &&
+                this.Left == compare.Left &&
+                this.Bottom == compare.Bottom &&
+                this.Right == compare.Right;
+        }
+
+        public bool ContainsRow(int row)
+        {
+            return row >= Top && row <= Bottom;
+        }
+
+        public bool ContainsColumn(int column)
+        {
+            return column >= Left && column <= Right;
+        }
+
+        public bool ContainsPoint(CellPoint point)
+        {
+            return ContainsRow(point.Row) && ContainsColumn(point.Column);
+        }
+
     }
 }

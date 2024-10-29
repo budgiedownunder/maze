@@ -1,5 +1,4 @@
 ﻿using MauiGestures;
-using System.Diagnostics;
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
@@ -30,6 +29,18 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             Corner = 0,
             Row = 1,
             Column = 2
+        }
+
+        public enum XOffsetType
+        {
+            LeftEdge = 0,
+            RightEdge = 1
+        }
+
+        public enum YOffsetType
+        {
+            TopEdge = 0,
+            BottomEdge = 1
         }
 
         static private Color GRID_LIGHT_GREEN = Color.FromRgb(211, 240, 224);
@@ -107,6 +118,8 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
+        public CellRange? SelectedCells { get => selectedCells; }
+
         public Grid()
         {
             InitializePlatformSpecificCode();
@@ -161,10 +174,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                     tapGesture.Tapped += (s, e) => OnCellTapped(cellFrame, currentRow, currentCol);
                     cellFrame.GestureRecognizers.Add(tapGesture);
 
+                    /*
                     Gesture.SetLongPressPointCommand(cellFrame, new Command<PointEventArgs>(args =>
-                     {
-                         OnCellLongPressed(cellFrame, currentRow, currentCol);
-                     }));
+                    {
+                        OnCellLongPressed(cellFrame, currentRow, currentCol);
+                    }));
+                    */
 
                     this.Add(cellFrame, currentCol, currentRow);
                 }
@@ -208,10 +223,14 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             var tapGesture = new TapGestureRecognizer();
             tapGesture.Tapped += (s, e) => OnCornerHeaderTapped();
             frame.GestureRecognizers.Add(tapGesture);
+
+            /*
             Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
             {
                 OnCornerHeaderLongPressed(frame);
             }));
+            */
+
             this.Add(frame, 0, 0);
         }
 
@@ -222,10 +241,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             int currentCol = column + 1;
             tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(currentCol);
             frame.GestureRecognizers.Add(tapGesture);
+
+            /*
             Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
             {
                 OnColumnHeaderLongPressed(frame, currentCol);
             }));
+            */
 
             this.Add(frame, column + 1, 0);
         }
@@ -237,10 +259,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             int currentRow = row + 1;
             tapGesture.Tapped += (s, e) => OnRowHeaderTapped(currentRow);
             frame.GestureRecognizers.Add(tapGesture);
+
+            /*
             Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
             {
                 OnRowHeaderLongPressed(frame, currentRow);
             }));
+            */
 
             this.Add(frame, 0, row + 1);
         }
@@ -322,44 +347,48 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             SelectCorner();
         }
 
+        /*
         private void OnCornerHeaderLongPressed(Frame frame)
         {
-            inExtendedSelectionMode = !inExtendedSelectionMode;
-            SelectCorner();
+            Debug.WriteLine("Corner header - long pressed");
         }
+        */
 
         private void OnColumnHeaderTapped(int column)
         {
             SelectColumn(inExtendedSelectionMode || IsShiftKeyPressed(), column);
         }
 
+        /*
         private void OnColumnHeaderLongPressed(Frame frame, int column)
         {
-            inExtendedSelectionMode = !inExtendedSelectionMode;
-            OnColumnHeaderTapped(column);
+            Debug.WriteLine($"Column header - long pressed (column = ${column})");
         }
+        */
 
         private void OnRowHeaderTapped(int row)
         {
             SelectRow(inExtendedSelectionMode || IsShiftKeyPressed(), row);
         }
 
+        /*
         private void OnRowHeaderLongPressed(Frame frame, int row)
         {
-            inExtendedSelectionMode = !inExtendedSelectionMode;
-            OnRowHeaderTapped(row);
+            Debug.WriteLine($"Row header - long pressed (row = ${row})");
         }
+        */
 
         private void OnCellTapped(Frame cell, int row, int column)
         {
             MoveActiveCell(this.inExtendedSelectionMode || IsShiftKeyPressed(), row, column, true);
         }
 
+        /*
         private void OnCellLongPressed(Frame cell, int row, int column)
         {
-            this.inExtendedSelectionMode = !this.inExtendedSelectionMode;
-            OnCellTapped(cell, row, column);
+            Debug.WriteLine($"Cell - long pressed (row = ${row}, column = {column})");
         }
+        */
 
         private void SelectCorner()
         {
@@ -431,6 +460,52 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 ClearSelectedCells();
                 SelectCells(1, left, RowCount, right, false);
                 activeCellPoint.Column = displayCol;
+            }
+        }
+
+        public void ResetSelection(CellRange newSelection)
+        {
+            CellRange? prevSelection = selectedCells?.Clone();
+
+            ClearSelectedCells();
+            SelectCells(Math.Clamp(newSelection.Top, 1, RowCount),
+                        Math.Clamp(newSelection.Left, 1, ColumnCount),
+                        Math.Clamp(newSelection.Bottom, 1, RowCount),
+                        Math.Clamp(newSelection.Right, 1, ColumnCount),
+                        false);
+
+            if (selectedCells == null) return;
+
+            if (anchorCell == null && activeCell != null)
+            {
+                // Initialize anchor cell
+                anchorCell = activeCell;
+                anchorCellPoint = activeCellPoint.Clone();
+                anchorCell.BackgroundColor = this.ActiveCellBackgroundColor;
+            }
+
+            if (anchorCell != null && !selectedCells.ContainsPoint(anchorCellPoint))
+            {
+                // Move anchor cell
+                int newRow = Math.Clamp(anchorCellPoint.Row, selectedCells.Top, selectedCells.Bottom);
+                int newColumn = Math.Clamp(anchorCellPoint.Column, selectedCells.Left, selectedCells.Right);
+                Frame prevAnchorCell = anchorCell;
+                MoveAnchorCell(newRow, newColumn);
+                prevAnchorCell.BackgroundColor = this.CellBackgroundColor;
+            }
+
+            if (prevSelection != null)
+            {
+                // Modify active cell if needed
+                if (selectedCells.Top != prevSelection.Top)
+                    activeCellPoint.Row = selectedCells.Top;
+                else if (selectedCells.Bottom != prevSelection.Bottom)
+                    activeCellPoint.Row = selectedCells.Bottom;
+
+                if (selectedCells.Left != prevSelection.Left)
+                    activeCellPoint.Column = selectedCells.Left;
+                else if (selectedCells.Right != prevSelection.Right)
+                    activeCellPoint.Column = selectedCells.Right;
             }
         }
 
@@ -823,9 +898,84 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             return RowDefinitions[row].Height.Value;
         }
 
+        public int FindCellRowAtYOffset(int startRow, YOffsetType type, double offset)
+        {
+            if (offset == 0 ||
+                (offset > 0 && type == YOffsetType.BottomEdge && startRow == RowCount) ||
+                (offset < 0 && type == YOffsetType.TopEdge && startRow <= 1))
+            {
+                return startRow;
+            }
+            int row = FindCellNextRowForYOffset(startRow, type, offset),
+                rowIncrement = offset > 0 ? 1 : -1;
+            double offsetRemaining = Math.Abs(offset), rowHeight = 0.0;
+
+            while (row >= 1 && row <= RowCount)
+            {
+                rowHeight = GetRowHeight(row);
+                if (offsetRemaining <= rowHeight)
+                    break;
+                offsetRemaining -= rowHeight;
+                row += rowIncrement;
+            }
+            return Math.Clamp(row, 1, RowCount);
+        }
+
+        private int FindCellNextRowForYOffset(int startRow, YOffsetType type, double offset)
+        {
+            int nextRow = startRow;
+            switch (type)
+            {
+                case YOffsetType.TopEdge:
+                    nextRow = offset > 0 ? startRow : startRow - 1;
+                    break;
+                case YOffsetType.BottomEdge:
+                    nextRow = offset > 0 ? startRow + 1 : startRow;
+                    break;
+            }
+            return Math.Clamp(nextRow, 1, ColumnCount);
+        }
+
+        public int FindCellColumnAtXOffset(int startColumn, XOffsetType type, double offset)
+        {
+            if (offset == 0 ||
+                (offset > 0 && type == XOffsetType.RightEdge && startColumn == ColumnCount) ||
+                (offset < 0 && type == XOffsetType.LeftEdge && startColumn <= 1))
+            {
+                return startColumn;
+            }
+            int column = FindCellNextColumnForXOffset(startColumn, type, offset),
+                columnIncrement = offset > 0 ? 1 : -1;
+            double offsetRemaining = Math.Abs(offset), columnWidth = 0.0;
+
+            while (column >= 1 && column <= ColumnCount)
+            {
+                columnWidth = GetColumnWidth(column);
+                if (offsetRemaining <= columnWidth)
+                    break;
+                offsetRemaining -= columnWidth;
+                column += columnIncrement;
+            }
+            return Math.Clamp(column, 1, ColumnCount);
+        }
+
+        private int FindCellNextColumnForXOffset(int startColumn, XOffsetType type, double offset)
+        {
+            int nextColumn = startColumn;
+            switch (type)
+            {
+                case XOffsetType.LeftEdge:
+                    nextColumn = offset > 0 ? startColumn : startColumn - 1;
+                    break;
+                case XOffsetType.RightEdge:
+                    nextColumn = offset > 0 ? startColumn + 1 : startColumn;
+                    break;
+            }
+            return Math.Clamp(nextColumn, 1, ColumnCount);
+        }
+
         private Frame? GetCell(int row, int column)
         {
-            //            if (row == 0 || col == 0) return null;
             foreach (var child in this.Children)
             {
                 if (this.GetRow(child) == row && this.GetColumn(child) == column)

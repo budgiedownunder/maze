@@ -14,7 +14,7 @@
 
         static private Color DEFAULT_BORDER_COLOR = Colors.Black;
         const double DEFAULT_BORDER_WIDTH = 2.0;
-        const double DEFAULT_BORDER_GRIP_SIZE = 4.0;
+        const double DEFAULT_BORDER_GRIP_SIZE = 10.0;
 
 
         private Color borderColor = DEFAULT_BORDER_COLOR;
@@ -86,30 +86,30 @@
         private void CreateBorders()
         {
             for (int id = BORDER_ID_FIRST; id <= BORDER_ID_LAST; id++)
-                frameBorders[id] = NewFrameBorder(ToFrameBorderLocation(id));
+                frameBorders[id] = NewFrameBorder(ToFrameBorderEdge(id));
         }
 
-        private FrameBorder.FrameLocation ToFrameBorderLocation(int borderID)
+        private FrameBorder.FrameEdge ToFrameBorderEdge(int borderID)
         {
             switch (borderID)
             {
                 case BORDER_ID_TOP:
-                    return FrameBorder.FrameLocation.Top;
+                    return FrameBorder.FrameEdge.Top;
                 case BORDER_ID_LEFT:
-                    return FrameBorder.FrameLocation.Left;
+                    return FrameBorder.FrameEdge.Left;
                 case BORDER_ID_BOTTOM:
-                    return FrameBorder.FrameLocation.Bottom;
+                    return FrameBorder.FrameEdge.Bottom;
                 case BORDER_ID_RIGHT:
-                    return FrameBorder.FrameLocation.Right;
+                    return FrameBorder.FrameEdge.Right;
             }
-            return FrameBorder.FrameLocation.Top;
+            return FrameBorder.FrameEdge.Top;
         }
 
-        private FrameBorder NewFrameBorder(FrameBorder.FrameLocation location)
+        private FrameBorder NewFrameBorder(FrameBorder.FrameEdge edge)
         {
             return new FrameBorder(this)
             {
-                Location = location,
+                Edge = edge,
                 Color = BorderColor,
                 GripSize = BorderGripSize
             };
