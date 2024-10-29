@@ -83,7 +83,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             set
             {
                 color = value;
-                UpdateColor();
+                UpdateColor(color);
             }
         }
 
@@ -215,7 +215,6 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void OnPanUpdated(BoxView view, PanUpdatedEventArgs e, bool isGrip)
         {
-            var time = DateTime.Now.ToString("hh:mms:ss tt");
             switch (e.StatusType)
             {
                 case GestureStatus.Started:
@@ -301,10 +300,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                     deltaX);
         }
 
-        private void UpdateColor()
+        private void UpdateColor(Color colorUse)
         {
-            box.Color = Color;
-            grip.Color = Color;
+            box.Color = colorUse;
+            grip.Color = colorUse;
         }
 
         private void UpdateGripSize()
