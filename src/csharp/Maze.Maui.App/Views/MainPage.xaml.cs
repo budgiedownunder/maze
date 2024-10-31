@@ -12,9 +12,6 @@
         public MainPage()
         {
             InitializeComponent();
-
-            // this.BindingContext = new MainPageViewModel();
-
         }
 
 
@@ -36,5 +33,6 @@
         {
             DisplayAlert(APP_TITLE, "Reset", "OK");
         }
+
     }
 }
