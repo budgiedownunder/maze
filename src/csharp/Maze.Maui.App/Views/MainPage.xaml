@@ -26,6 +26,7 @@
                         VerticalOptions="FillAndExpand"
                         HorizontalScrollBarVisibility="Always"
                         VerticalScrollBarVisibility="Always"
+                        Padding="10"
                         >
                     <controls:MazeGrid x:Name="MazeGrid" 
                                    ContainerScrollView="{Binding Source={x:Reference MazeGridScrollView}}"
