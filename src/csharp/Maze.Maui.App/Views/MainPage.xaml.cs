@@ -3,7 +3,8 @@
     using System;
     using Maze.Api;
     using Microsoft.Maui.Controls;
-    
+    using Maze.Maui.App.ViewModels;
+
     public partial class MainPage : ContentPage
     {
         const String APP_TITLE = "MAZE";
@@ -12,6 +13,8 @@
         public MainPage()
         {
             InitializeComponent();
+
+            this.BindingContext = new MainPageViewModel();
         }
 
 
