@@ -14,9 +14,28 @@
         {
             InitializeComponent();
 
-            this.BindingContext = new MainPageViewModel();
+            BindingContext = new MainPageViewModel();
         }
 
+        private void OnSelectRangeBtnClicked(object sender, EventArgs e)
+        {
+            if (BindingContext is MainPageViewModel viewModel)
+            {
+                viewModel.ShowSelectRangeBtn = false;
+                viewModel.ShowCancelBtn = true;
+                MazeGrid.EnableExtendedSelection(true);
+            }
+        }
+
+        private void OnCancelBtnClicked(object sender, EventArgs e)
+        {
+            if (BindingContext is MainPageViewModel viewModel)
+            {
+                MazeGrid.EnableExtendedSelection(false);
+                viewModel.ShowSelectRangeBtn = true;
+                viewModel.ShowCancelBtn = false;
+            }
+        }
 
         private void OnCounterClicked(object sender, EventArgs e)
         {

@@ -97,7 +97,8 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public double SelectionFrameBorderGripSize { get; set; } = 10.0;
 
-        private bool inExtendedSelectionMode = false;
+        public bool IsExtendedSelectionMode { get; set; } = false;
+
         //private CommunityToolkit.Maui.Behaviors.TouchBehavior longPressBehaviour;
 
         public bool AllColumnsSelected
@@ -356,7 +357,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void OnColumnHeaderTapped(int column)
         {
-            SelectColumn(inExtendedSelectionMode || IsShiftKeyPressed(), column);
+            SelectColumn(IsExtendedSelectionMode || IsShiftKeyPressed(), column);
         }
 
         /*
@@ -368,7 +369,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void OnRowHeaderTapped(int row)
         {
-            SelectRow(inExtendedSelectionMode || IsShiftKeyPressed(), row);
+            SelectRow(IsExtendedSelectionMode || IsShiftKeyPressed(), row);
         }
 
         /*
@@ -380,7 +381,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void OnCellTapped(Frame cell, int row, int column)
         {
-            MoveActiveCell(this.inExtendedSelectionMode || IsShiftKeyPressed(), row, column, true);
+            MoveActiveCell(this.IsExtendedSelectionMode || IsShiftKeyPressed(), row, column, true);
         }
 
         /*
@@ -463,6 +464,29 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
+        public void EnableExtendedSelection(bool enable) 
+        {
+            if(enable != IsExtendedSelectionMode)
+            {
+                if(enable)
+                {
+                    if(anchorCell == null)
+                        SetAnchorCellToActiveCell(true);
+                }
+                else
+                {
+                    if (anchorCell != null)
+                        SetActiveCellToAnchorCell(false);
+                    ClearAnchorCell();
+                    ClearSelectedCells();
+                    UpdateSelectionFrame();
+                    if(activeCell != null)
+                        activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
+                }
+                IsExtendedSelectionMode = enable;
+            }
+        }
+
         public void ResetSelection(CellRange newSelection)
         {
             CellRange? prevSelection = selectedCells?.Clone();
@@ -479,9 +503,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             if (anchorCell == null && activeCell != null)
             {
                 // Initialize anchor cell
-                anchorCell = activeCell;
-                anchorCellPoint = activeCellPoint.Clone();
-                anchorCell.BackgroundColor = this.ActiveCellBackgroundColor;
+                SetAnchorCellToActiveCell(true);
             }
 
             if (anchorCell != null && !selectedCells.ContainsPoint(anchorCellPoint))
@@ -622,12 +644,11 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             {
                 // Clear anchor cell
                 anchorCell.BackgroundColor = this.CellBackgroundColor;
-                activeCell = anchorCell;
-                activeCellPoint.Column = anchorCellPoint.Column;
-                activeCellPoint.Row = anchorCellPoint.Row;
+                SetActiveCellToAnchorCell(false);
                 ClearAnchorCell();
                 ClearSelectedCells();
-                activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
+                if(activeCell != null)
+                    activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
             }
             // No change in position?
             if (newRow == activeCellPoint.Row && newColumn == activeCellPoint.Column) return;
@@ -753,6 +774,22 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             anchorCell = null;
             anchorCellPoint.Row = -1;
             anchorCellPoint.Column = -1;
+        }
+
+        private void SetAnchorCellToActiveCell(bool setBackgroundColor)
+        {
+            anchorCell = activeCell;
+            anchorCellPoint = activeCellPoint.Clone();
+            if(anchorCell != null && setBackgroundColor)
+                anchorCell.BackgroundColor = this.ActiveCellBackgroundColor;
+        }
+
+        private void SetActiveCellToAnchorCell(bool setBackgroundColor)
+        {
+            activeCell = anchorCell;
+            activeCellPoint = anchorCellPoint.Clone();
+            if (activeCell != null && setBackgroundColor)
+                activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
         }
 
         private void ClearSelectedCells()

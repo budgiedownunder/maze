@@ -6,15 +6,30 @@ namespace Maze.Maui.App.ViewModels
 {
     class MainPageViewModel : INotifyPropertyChanged
     {
-        private bool showEnableRangeSelect = false;
-        public bool ShowEnableRangeSelect
+        private bool showSelectRangeBtn = true;
+        private bool showCancelBtn = false;
+        
+        public bool ShowSelectRangeBtn
         {
-            get => showEnableRangeSelect;
+            get => showSelectRangeBtn;
             set
             {
-                if (showEnableRangeSelect != value)
+                if (showSelectRangeBtn != value)
                 {
-                    showEnableRangeSelect = value;
+                    showSelectRangeBtn = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool ShowCancelBtn
+        {
+            get => showCancelBtn;
+            set
+            {
+                if (showCancelBtn != value)
+                {
+                    showCancelBtn = value;
                     OnPropertyChanged();
                 }
             }
