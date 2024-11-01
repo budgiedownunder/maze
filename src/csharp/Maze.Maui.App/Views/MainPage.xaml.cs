@@ -7,6 +7,7 @@
     using Maze.Maui.App.Controls;
     using System.Runtime.CompilerServices;
     using System.Diagnostics;
+    using Maze.Maui.App.Services;
 
     public partial class MainPage : ContentPage
     {
@@ -18,13 +19,25 @@
         {
             InitializeComponent();
 
-            BindingContext = new MainPageViewModel();
+            BindingContext = new MainPageViewModel(new DeviceTypeService());
 
             MazeGrid.CellTapped += OnMazeGridCellTapped;
             MazeGrid.CellDoubleTapped += OnMazeGridCellDoubleTapped;
             MazeGrid.SelectionChanged += OnMazeGridSelectionChanged;
+
+            UpdateControls();
         }
 
+        private bool IsTouchOnlyDevice
+        {
+            get
+            {
+                bool touchOnly = false;
+                if (BindingContext is MainPageViewModel viewModel)
+                    touchOnly = viewModel.IsTouchOnlyDevice;
+                return touchOnly;
+            }
+        }
         private void OnSelectRangeBtnClicked(object sender, EventArgs e)
         {
             if (BindingContext is MainPageViewModel viewModel)
@@ -67,8 +80,9 @@
         {
             if (BindingContext is MainPageViewModel viewModel)
             {
-                viewModel.ShowSelectRangeBtn = show;
-                viewModel.ShowCancelBtn = !show;
+                bool touchOnly = IsTouchOnlyDevice;
+                viewModel.ShowSelectRangeBtn = show && touchOnly;
+                viewModel.ShowCancelBtn = !show && touchOnly;
                 if (!show)
                     CancelBtn.Text = "Cancel Select Range";
             }
@@ -83,9 +97,13 @@
         {
             if (BindingContext is MainPageViewModel viewModel)
             {
+                bool showSelectRangeButtons = IsTouchOnlyDevice || MazeGrid.IsExtendedSelectionMode;
+                bool showTopRowLayout = showSelectRangeButtons;
+                viewModel.ShowTopRowLayout = showTopRowLayout;
+                if (showTopRowLayout)
+                    ShowSelectRangeButtons(!MazeGrid.IsExtendedSelectionMode);
             }
         }
-
 
         private void OnCounterClicked(object sender, EventArgs e)
         {
@@ -105,6 +123,5 @@
         {
             DisplayAlert(APP_TITLE, "Reset", "OK");
         }
-
     }
 }

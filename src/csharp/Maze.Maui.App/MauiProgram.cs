@@ -1,5 +1,6 @@
 ﻿using CommunityToolkit.Maui;
 using MauiGestures;
+//using Maze.Maui.App.Services;
 using Microsoft.Extensions.Logging;
 
 namespace Maze.Maui.App
@@ -18,6 +19,8 @@ namespace Maze.Maui.App
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
+
+  //     builder.Services.AddSingleton<IDeviceTypeService, DeviceTypeService>();
 
 #if DEBUG
             builder.Logging.AddDebug();

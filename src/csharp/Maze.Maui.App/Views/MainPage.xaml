@@ -13,7 +13,7 @@
             </Grid.RowDefinitions>
 
             <!-- Top buttons -->
-            <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="Fill" Padding="10" BackgroundColor="LightGray">
+        <StackLayout x:Name="TopRowLayout" IsVisible="{Binding ShowTopRowLayout}" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="Fill" Padding="10" BackgroundColor="LightGrey">
             <Button x:Name="SelectRangeBtn" Clicked="OnSelectRangeBtnClicked" IsVisible="{Binding ShowSelectRangeBtn}" Text="Select Range" HorizontalOptions="End"/>
             <Button x:Name="CancelBtn" Clicked="OnCancelBtnClicked" IsVisible="{Binding ShowCancelBtn}" Text="Cancel" HorizontalOptions="End"/>
             </StackLayout>
