@@ -8,7 +8,7 @@ namespace Maze.Maui.App.ViewModels
     {
         private bool showSelectRangeBtn = true;
         private bool showCancelBtn = false;
-        
+
         public bool ShowSelectRangeBtn
         {
             get => showSelectRangeBtn;

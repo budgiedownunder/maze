@@ -4,38 +4,88 @@
     using Maze.Api;
     using Microsoft.Maui.Controls;
     using Maze.Maui.App.ViewModels;
+    using Maze.Maui.App.Controls;
+    using System.Runtime.CompilerServices;
+    using System.Diagnostics;
 
     public partial class MainPage : ContentPage
     {
         const String APP_TITLE = "MAZE";
         int count = 0;
 
+
         public MainPage()
         {
             InitializeComponent();
 
             BindingContext = new MainPageViewModel();
+
+            MazeGrid.CellTapped += OnMazeGridCellTapped;
+            MazeGrid.CellDoubleTapped += OnMazeGridCellDoubleTapped;
+            MazeGrid.SelectionChanged += OnMazeGridSelectionChanged;
         }
 
         private void OnSelectRangeBtnClicked(object sender, EventArgs e)
         {
             if (BindingContext is MainPageViewModel viewModel)
-            {
-                viewModel.ShowSelectRangeBtn = false;
-                viewModel.ShowCancelBtn = true;
-                MazeGrid.EnableExtendedSelection(true);
-            }
+                SetSelectRangeMode(true);
         }
 
         private void OnCancelBtnClicked(object sender, EventArgs e)
         {
             if (BindingContext is MainPageViewModel viewModel)
+                SetSelectRangeMode(false);
+        }
+
+        private void OnMazeGridCellTapped(object sender, MazeGridCellTappedEventArgs e)
+        {
+            MazeGrid.OnCellTapped(e.Cell, e.Row, e.Column, false);
+        }
+
+        private void OnMazeGridCellDoubleTapped(object sender, MazeGridCellTappedEventArgs e)
+        {
+            if (BindingContext is MainPageViewModel viewModel)
             {
-                MazeGrid.EnableExtendedSelection(false);
-                viewModel.ShowSelectRangeBtn = true;
-                viewModel.ShowCancelBtn = false;
+                if (MazeGrid.IsExtendedSelectionMode)
+                    SetSelectRangeMode(false);
+
+                MazeGrid.OnCellDoubleTapped(e.Cell, e.Row, e.Column, false);
             }
         }
+
+        private void SetSelectRangeMode(bool enable)
+        {
+            if (enable)
+                MazeGrid.EnableExtendedSelection();
+            else
+                MazeGrid.CancelExtendedSelection();
+
+            ShowSelectRangeButtons(!enable);
+        }
+
+        private void ShowSelectRangeButtons(bool show)
+        {
+            if (BindingContext is MainPageViewModel viewModel)
+            {
+                viewModel.ShowSelectRangeBtn = show;
+                viewModel.ShowCancelBtn = !show;
+                if (!show)
+                    CancelBtn.Text = "Cancel Select Range";
+            }
+        }
+
+        private void OnMazeGridSelectionChanged(object sender, MazeGridSelectionChangedEventArgs e)
+        {
+            UpdateControls();
+        }
+
+        private void UpdateControls()
+        {
+            if (BindingContext is MainPageViewModel viewModel)
+            {
+            }
+        }
+
 
         private void OnCounterClicked(object sender, EventArgs e)
         {

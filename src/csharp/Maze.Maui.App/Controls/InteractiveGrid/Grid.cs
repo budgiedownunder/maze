@@ -140,6 +140,8 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public void PopulateGrid()
         {
+            int actualRow, actualCol;
+
             this.IsVisible = false;
             this.RowDefinitions.Add(new RowDefinition { Height = new GridLength(this.ColumnHeaderHeight) });
 
@@ -170,11 +172,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                         HasShadow = false,
                     };
 
-                    var tapGesture = new TapGestureRecognizer();
-                    int currentRow = row + 1, currentCol = col + 1;
-                    tapGesture.Tapped += (s, e) => OnCellTapped(cellFrame, currentRow, currentCol);
-                    cellFrame.GestureRecognizers.Add(tapGesture);
-
+                    actualRow = row + 1;
+                    actualCol = col + 1;
+                    AddSingleTapGesture(cellFrame, actualRow, actualCol);
+                    AddDoubleTapGesture(cellFrame, actualRow, actualCol);
                     /*
                     Gesture.SetLongPressPointCommand(cellFrame, new Command<PointEventArgs>(args =>
                     {
@@ -182,7 +183,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                     }));
                     */
 
-                    this.Add(cellFrame, currentCol, currentRow);
+                    this.Add(cellFrame, actualCol, actualRow);
                 }
             }
 
@@ -209,6 +210,28 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             {
                 Text = ""
             };
+        }
+
+        private void AddSingleTapGesture(Frame cell, int row, int column)
+        {
+            var tapGesture = new TapGestureRecognizer
+            {
+                NumberOfTapsRequired = 1
+            };
+            int cellRow = row, cellColumn = column;
+            tapGesture.Tapped += (s, e) => OnCellTapped(cell, cellRow, cellColumn, true);
+            cell.GestureRecognizers.Add(tapGesture);
+        }
+
+        private void AddDoubleTapGesture(Frame cell, int row, int column)
+        {
+            var tapGesture = new TapGestureRecognizer
+            {
+                NumberOfTapsRequired = 2
+            };
+            int cellRow = row, cellColumn = column;
+            tapGesture.Tapped += (s, e) => OnCellDoubleTapped(cell, cellRow, cellColumn, true);
+            cell.GestureRecognizers.Add(tapGesture);
         }
 
         private void AddHeaderRow()
@@ -379,8 +402,16 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         }
         */
 
-        private void OnCellTapped(Frame cell, int row, int column)
+        public virtual void OnCellTapped(Frame cell, int row, int column, bool triggerEvents)
         {
+            MoveActiveCell(this.IsExtendedSelectionMode || IsShiftKeyPressed(), row, column, true);
+        }
+
+        public virtual void OnCellDoubleTapped(Frame cell, int row, int column, bool triggerEvents)
+        {
+            if (IsExtendedSelectionMode)
+                CancelExtendedSelection();
+
             MoveActiveCell(this.IsExtendedSelectionMode || IsShiftKeyPressed(), row, column, true);
         }
 
@@ -464,27 +495,25 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
-        public void EnableExtendedSelection(bool enable) 
+        public void EnableExtendedSelection()
         {
-            if(enable != IsExtendedSelectionMode)
-            {
-                if(enable)
-                {
-                    if(anchorCell == null)
-                        SetAnchorCellToActiveCell(true);
-                }
-                else
-                {
-                    if (anchorCell != null)
-                        SetActiveCellToAnchorCell(false);
-                    ClearAnchorCell();
-                    ClearSelectedCells();
-                    UpdateSelectionFrame();
-                    if(activeCell != null)
-                        activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
-                }
-                IsExtendedSelectionMode = enable;
-            }
+            if (IsExtendedSelectionMode) return;
+            if (anchorCell == null)
+                SetAnchorCellToActiveCell(true);
+            IsExtendedSelectionMode = true;
+        }
+
+        public void CancelExtendedSelection()
+        {
+            if (!IsExtendedSelectionMode) return;
+            if (anchorCell != null)
+                SetActiveCellToAnchorCell(false);
+            ClearAnchorCell();
+            ClearSelectedCells();
+            if (activeCell != null)
+                activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
+            IsExtendedSelectionMode = false;
+            UpdateSelectionFrame();
         }
 
         public void ResetSelection(CellRange newSelection)
@@ -647,7 +676,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 SetActiveCellToAnchorCell(false);
                 ClearAnchorCell();
                 ClearSelectedCells();
-                if(activeCell != null)
+                if (activeCell != null)
                     activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
             }
             // No change in position?
@@ -780,7 +809,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             anchorCell = activeCell;
             anchorCellPoint = activeCellPoint.Clone();
-            if(anchorCell != null && setBackgroundColor)
+            if (anchorCell != null && setBackgroundColor)
                 anchorCell.BackgroundColor = this.ActiveCellBackgroundColor;
         }
 
@@ -800,7 +829,6 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 ShowSelectionFrame(false);
                 selectedCells = null;
             }
-
         }
         private void UpdateSelectedCells()
         {
@@ -828,7 +856,16 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private void UpdateSelectionFrame()
         {
             if (selectionFrame == null) return;
+            CellRange? prevSelection = selectionFrame.CellRange?.Clone();
             selectionFrame.SetRange(selectedCells != null ? selectedCells : new CellRange(activeCellPoint.Row, activeCellPoint.Column), true);
+            CellRange? newSelection = selectionFrame.CellRange?.Clone();
+            bool selectionChange = (prevSelection == null) || !prevSelection.Equals(newSelection);
+            if (selectionChange)
+                OnSelectionChanged();
+        }
+
+        public virtual void OnSelectionChanged()
+        {
         }
 
         private void ShowSelectionFrame(bool show)

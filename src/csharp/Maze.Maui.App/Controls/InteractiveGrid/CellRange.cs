@@ -11,18 +11,17 @@
 
         public int Width
         {
-            get
-            {
-                return this.Right - this.Left + 1;
-            }
+            get => Right - Left + 1;
         }
 
         public int Height
         {
-            get
-            {
-                return this.Bottom - this.Top + 1;
-            }
+            get=> Bottom - Top + 1;
+        }
+
+        public int CellCount
+        {
+            get => Width * Height;
         }
 
         public CellRange(int top, int left, int bottom, int right)
