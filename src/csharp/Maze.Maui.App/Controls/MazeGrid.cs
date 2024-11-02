@@ -1,4 +1,6 @@
 ﻿
+using System.Diagnostics;
+
 namespace Maze.Maui.App.Controls
 {
     public class MazeGrid : InteractiveGrid.Grid
@@ -56,6 +58,7 @@ namespace Maze.Maui.App.Controls
 
         public override void OnSelectionChanged()
         {
+            Debug.WriteLine("OnSelectionChanged() called");
             SelectionChanged?.Invoke(this, new MazeGridSelectionChangedEventArgs());
         }
 

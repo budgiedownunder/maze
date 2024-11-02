@@ -90,6 +90,7 @@
 
         private void OnMazeGridSelectionChanged(object sender, MazeGridSelectionChangedEventArgs e)
         {
+            Debug.WriteLine("OnMazeGridSelectionChanged() called");
             UpdateControls();
         }
 

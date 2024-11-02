@@ -59,7 +59,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                     if (shiftPressed)
                         MoveAnchorCellToPrevWithinSelection();
                     else
-                            MoveAnchorCellToNextWithinSelection();
+                        MoveAnchorCellToNextWithinSelection();
                     break;
             }
         }

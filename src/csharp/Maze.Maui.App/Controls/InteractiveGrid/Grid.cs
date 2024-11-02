@@ -1,4 +1,5 @@
 ﻿using MauiGestures;
+using System.Diagnostics;
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
@@ -636,6 +637,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void MoveAnchorCellToNextWithinSelection()
         {
+            Debug.WriteLine("MoveAnchorCellToNextWithinSelection() called");
             if (anchorCell == null || selectedCells == null) return;
             int newCol = anchorCellPoint.Column + 1;
             int newRow = anchorCellPoint.Row;
@@ -651,13 +653,14 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void MoveAnchorCell(int newRow, int newColumn)
         {
+            Debug.WriteLine("MoveAnchorCell() started");
             if (anchorCell == null) return;
             anchorCell.BackgroundColor = this.HighlightCellBackgroundColor;
             ClearAnchorCell();
             SetAnchorCell(newRow, newColumn);
             if (anchorCell != null)
                 anchorCell.BackgroundColor = this.ActiveCellBackgroundColor;
-
+            Debug.WriteLine("MoveAnchorCell() finished");
         }
 
         private void MoveActiveCell(bool maintainSelection, int newRow, int newColumn, bool scrollActiveCellIntoView)
@@ -680,10 +683,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 .OfType<CellFrame>()
                 .FirstOrDefault(cell => Microsoft.Maui.Controls.Grid.GetRow(cell) == newRow && Microsoft.Maui.Controls.Grid.GetColumn(cell) == newColumn);
 
-            if (newActiveCell != null)
+            if (newActiveCell != null && newActiveCell is CellFrame)
             {
                 // Scroll the new active cell into view and/or update selection state as needed
-                UpdateSelection(newActiveCell, newRow, newColumn, maintainSelection, scrollActiveCellIntoView);
+                UpdateSelection(newActiveCell as CellFrame, newRow, newColumn, maintainSelection, scrollActiveCellIntoView);
             }
         }
 
