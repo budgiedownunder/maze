@@ -81,16 +81,24 @@
             if (BindingContext is MainPageViewModel viewModel)
             {
                 bool touchOnly = IsTouchOnlyDevice;
-                viewModel.ShowSelectRangeBtn = show && touchOnly;
-                viewModel.ShowCancelBtn = !show && touchOnly;
-                if (!show)
+                bool showSelectRangeBtn = show && touchOnly;
+                bool showCancelBtn = !show && touchOnly;
+
+                ShowButton(SelectRangeBtn, showSelectRangeBtn);
+                ShowButton(CancelBtn, showCancelBtn);
+                if (showCancelBtn)
                     CancelBtn.Text = "Cancel Select Range";
             }
         }
 
+        private void ShowButton(Button button, bool show)
+        {
+            button.HeightRequest = show ? -1 : 0;
+            button.WidthRequest = show ? -1 : 0;
+        }
+
         private void OnMazeGridSelectionChanged(object sender, MazeGridSelectionChangedEventArgs e)
         {
-            Debug.WriteLine("OnMazeGridSelectionChanged() called");
             UpdateControls();
         }
 
@@ -100,10 +108,15 @@
             {
                 bool showSelectRangeButtons = IsTouchOnlyDevice || MazeGrid.IsExtendedSelectionMode;
                 bool showTopRowLayout = showSelectRangeButtons;
-                viewModel.ShowTopRowLayout = showTopRowLayout;
+                ShowMainGridRow(0, showTopRowLayout);
                 if (showTopRowLayout)
                     ShowSelectRangeButtons(!MazeGrid.IsExtendedSelectionMode);
             }
+        }
+
+        private void ShowMainGridRow(int row, bool show)
+        {
+            MainGrid.RowDefinitions[row].Height = show ? GridLength.Auto : new GridLength(0);
         }
 
         private void OnCounterClicked(object sender, EventArgs e)

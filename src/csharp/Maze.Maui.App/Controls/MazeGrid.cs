@@ -58,7 +58,6 @@ namespace Maze.Maui.App.Controls
 
         public override void OnSelectionChanged()
         {
-            Debug.WriteLine("OnSelectionChanged() called");
             SelectionChanged?.Invoke(this, new MazeGridSelectionChangedEventArgs());
         }
 

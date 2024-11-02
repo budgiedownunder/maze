@@ -637,7 +637,6 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void MoveAnchorCellToNextWithinSelection()
         {
-            Debug.WriteLine("MoveAnchorCellToNextWithinSelection() called");
             if (anchorCell == null || selectedCells == null) return;
             int newCol = anchorCellPoint.Column + 1;
             int newRow = anchorCellPoint.Row;
@@ -653,14 +652,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void MoveAnchorCell(int newRow, int newColumn)
         {
-            Debug.WriteLine("MoveAnchorCell() started");
             if (anchorCell == null) return;
             anchorCell.BackgroundColor = this.HighlightCellBackgroundColor;
             ClearAnchorCell();
             SetAnchorCell(newRow, newColumn);
             if (anchorCell != null)
                 anchorCell.BackgroundColor = this.ActiveCellBackgroundColor;
-            Debug.WriteLine("MoveAnchorCell() finished");
         }
 
         private void MoveActiveCell(bool maintainSelection, int newRow, int newColumn, bool scrollActiveCellIntoView)
