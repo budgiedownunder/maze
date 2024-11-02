@@ -52,7 +52,7 @@
 
         private void OnMazeGridCellTapped(object sender, MazeGridCellTappedEventArgs e)
         {
-            MazeGrid.OnCellTapped(e.Cell, e.Row, e.Column, false);
+            MazeGrid.OnCellTapped(e.Cell, false);
         }
 
         private void OnMazeGridCellDoubleTapped(object sender, MazeGridCellTappedEventArgs e)
@@ -62,7 +62,7 @@
                 if (MazeGrid.IsExtendedSelectionMode)
                     SetSelectRangeMode(false);
 
-                MazeGrid.OnCellDoubleTapped(e.Cell, e.Row, e.Column, false);
+                MazeGrid.OnCellDoubleTapped(e.Cell, false);
             }
         }
 

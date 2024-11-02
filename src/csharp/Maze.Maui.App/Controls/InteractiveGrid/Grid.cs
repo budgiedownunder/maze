@@ -4,9 +4,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 {
     public partial class Grid : Microsoft.Maui.Controls.Grid
     {
-        private Frame? activeCell = null;
+        private CellFrame? activeCell = null;
         private CellPoint activeCellPoint = new CellPoint();
-        private Frame? anchorCell = null;
+        private CellFrame? anchorCell = null;
         private CellPoint anchorCellPoint = new CellPoint();
         private CellRange? selectedCells;
         private SelectionFrame? selectionFrame;
@@ -23,13 +23,6 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         const double DEFAULT_CELL_WIDTH = 50.0;
         const double DEFAULT_CELL_MARGIN = 0.0;
         const double DEFAULT_CELL_PADDING = 0.0;
-
-        public enum HeaderType
-        {
-            Corner = 0,
-            Row = 1,
-            Column = 2
-        }
 
         public enum XOffsetType
         {
@@ -140,8 +133,6 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public void PopulateGrid()
         {
-            int actualRow, actualCol;
-
             this.IsVisible = false;
             this.RowDefinitions.Add(new RowDefinition { Height = new GridLength(this.ColumnHeaderHeight) });
 
@@ -150,7 +141,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
             this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(this.RowHeaderWidth) });
 
-            for (int col = 0; col < ColumnCount; col++)
+            for (int column = 0; column < ColumnCount; column++)
                 this.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(this.CellWidth) });
 
             for (int row = 0; row < RowCount; row++)
@@ -159,31 +150,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
                 AddRowHeader(row);
 
-                for (int col = 0; col < ColumnCount; col++)
+                for (int column = 0; column < ColumnCount; column++)
                 {
-                    Frame cellFrame = new Frame
-                    {
-                        BorderColor = this.CellBorderColor,
-                        BackgroundColor = this.CellBackgroundColor,
-                        Content = GetCellContent(row, col),
-                        Padding = CellPadding,
-                        Margin = CellMargin,
-                        CornerRadius = 0,
-                        HasShadow = false,
-                    };
-
-                    actualRow = row + 1;
-                    actualCol = col + 1;
-                    AddSingleTapGesture(cellFrame, actualRow, actualCol);
-                    AddDoubleTapGesture(cellFrame, actualRow, actualCol);
-                    /*
-                    Gesture.SetLongPressPointCommand(cellFrame, new Command<PointEventArgs>(args =>
-                    {
-                        OnCellLongPressed(cellFrame, currentRow, currentCol);
-                    }));
-                    */
-
-                    this.Add(cellFrame, actualCol, actualRow);
+                    CellFrame cellFrame = NewCellFrame(row, column);
+                    this.Add(NewCellFrame(row, column), cellFrame.DisplayColumn, cellFrame.DisplayRow);
                 }
             }
 
@@ -192,15 +162,40 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             InitializeSelectionFrame();
         }
 
-        virtual public View GetHeaderCellContent(HeaderType type, int index)
+        virtual public View GetHeaderCellContent(HeaderType type, int position)
         {
             return new Label
             {
-                Text = type != HeaderType.Corner ? $"{index + 1}" : "",
+                Text = type != HeaderType.Corner ? $"{position + 1}" : "",
                 FontAttributes = FontAttributes.Bold,
                 HorizontalOptions = LayoutOptions.Center,
                 VerticalOptions = LayoutOptions.Center
             };
+        }
+
+        public CellFrame NewCellFrame(int row, int column)
+        {
+            CellFrame frame = new CellFrame(row, column)
+            {
+                BorderColor = this.CellBorderColor,
+                BackgroundColor = this.CellBackgroundColor,
+                Content = GetCellContent(row, column),
+                Padding = CellPadding,
+                Margin = CellMargin,
+                CornerRadius = 0,
+                HasShadow = false
+            };
+            AddSingleTapGesture(frame);
+            AddDoubleTapGesture(frame);
+
+            /*
+            Gesture.SetLongPressPointCommand(cellFrame, new Command<PointEventArgs>(args =>
+            {
+                OnCellLongPressed(cellFrame, currentRow, currentCol);
+            }));
+            */
+
+            return frame;
         }
 
         // (0,0) = (1,1) in display terms
@@ -212,38 +207,36 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             };
         }
 
-        private void AddSingleTapGesture(Frame cell, int row, int column)
+        private void AddSingleTapGesture(CellFrame cellFrame)
         {
             var tapGesture = new TapGestureRecognizer
             {
                 NumberOfTapsRequired = 1
             };
-            int cellRow = row, cellColumn = column;
-            tapGesture.Tapped += (s, e) => OnCellTapped(cell, cellRow, cellColumn, true);
-            cell.GestureRecognizers.Add(tapGesture);
+            tapGesture.Tapped += (s, e) => OnCellTapped(cellFrame, true);
+            cellFrame.GestureRecognizers.Add(tapGesture);
         }
 
-        private void AddDoubleTapGesture(Frame cell, int row, int column)
+        private void AddDoubleTapGesture(CellFrame cellFrame)
         {
             var tapGesture = new TapGestureRecognizer
             {
                 NumberOfTapsRequired = 2
             };
-            int cellRow = row, cellColumn = column;
-            tapGesture.Tapped += (s, e) => OnCellDoubleTapped(cell, cellRow, cellColumn, true);
-            cell.GestureRecognizers.Add(tapGesture);
+            tapGesture.Tapped += (s, e) => OnCellDoubleTapped(cellFrame, true);
+            cellFrame.GestureRecognizers.Add(tapGesture);
         }
 
         private void AddHeaderRow()
         {
-            for (int col = 0; col < ColumnCount; col++)
-                AddColumnHeader(col);
+            for (int column = 0; column < ColumnCount; column++)
+                AddColumnHeader(column);
             AddCornerHeader();
         }
 
         private void AddCornerHeader()
         {
-            Frame frame = NewHeaderFrame(HeaderType.Corner, 0);
+            HeaderFrame frame = NewHeaderFrame(HeaderType.Corner, 0);
             var tapGesture = new TapGestureRecognizer();
             tapGesture.Tapped += (s, e) => OnCornerHeaderTapped();
             frame.GestureRecognizers.Add(tapGesture);
@@ -260,7 +253,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void AddColumnHeader(int column)
         {
-            Frame frame = NewHeaderFrame(HeaderType.Column, column);
+            HeaderFrame frame = NewHeaderFrame(HeaderType.Column, column);
             var tapGesture = new TapGestureRecognizer();
             int currentCol = column + 1;
             tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(currentCol);
@@ -278,7 +271,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void AddRowHeader(int row)
         {
-            Frame frame = NewHeaderFrame(HeaderType.Row, row);
+            HeaderFrame frame = NewHeaderFrame(HeaderType.Row, row);
             var tapGesture = new TapGestureRecognizer();
             int currentRow = row + 1;
             tapGesture.Tapped += (s, e) => OnRowHeaderTapped(currentRow);
@@ -293,16 +286,16 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
             this.Add(frame, 0, row + 1);
         }
-        private Frame NewHeaderFrame(HeaderType type, int index)
+        private HeaderFrame NewHeaderFrame(HeaderType type, int position)
         {
-            var frame = new Frame
+            HeaderFrame frame = new HeaderFrame(type, position)
             {
                 WidthRequest = GetHeaderWidth(type),
                 HeightRequest = GetHeaderHeight(type),
                 CornerRadius = 5,
                 Padding = GetHeaderPadding(type),
                 BackgroundColor = this.HeaderBackgroundColor,
-                Content = GetHeaderCellContent(type, index),
+                Content = GetHeaderCellContent(type, position),
                 BorderColor = this.HeaderBorderColor,
                 HorizontalOptions = LayoutOptions.Center,
                 VerticalOptions = LayoutOptions.Center,
@@ -402,17 +395,17 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         }
         */
 
-        public virtual void OnCellTapped(Frame cell, int row, int column, bool triggerEvents)
+        public virtual void OnCellTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            MoveActiveCell(this.IsExtendedSelectionMode || IsShiftKeyPressed(), row, column, true);
+            MoveActiveCell(this.IsExtendedSelectionMode || IsShiftKeyPressed(), cellFrame.DisplayRow, cellFrame.DisplayColumn, true);
         }
 
-        public virtual void OnCellDoubleTapped(Frame cell, int row, int column, bool triggerEvents)
+        public virtual void OnCellDoubleTapped(CellFrame cellFrame, bool triggerEvents)
         {
             if (IsExtendedSelectionMode)
                 CancelExtendedSelection();
 
-            MoveActiveCell(this.IsExtendedSelectionMode || IsShiftKeyPressed(), row, column, true);
+            MoveActiveCell(this.IsExtendedSelectionMode || IsShiftKeyPressed(), cellFrame.DisplayRow, cellFrame.DisplayColumn, true);
         }
 
         /*
@@ -540,7 +533,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 // Move anchor cell
                 int newRow = Math.Clamp(anchorCellPoint.Row, selectedCells.Top, selectedCells.Bottom);
                 int newColumn = Math.Clamp(anchorCellPoint.Column, selectedCells.Left, selectedCells.Right);
-                Frame prevAnchorCell = anchorCell;
+                CellFrame prevAnchorCell = anchorCell;
                 MoveAnchorCell(newRow, newColumn);
                 prevAnchorCell.BackgroundColor = this.CellBackgroundColor;
             }
@@ -684,7 +677,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
             // Find the new active cell
             var newActiveCell = this.Children
-                .OfType<Frame>()
+                .OfType<CellFrame>()
                 .FirstOrDefault(cell => Microsoft.Maui.Controls.Grid.GetRow(cell) == newRow && Microsoft.Maui.Controls.Grid.GetColumn(cell) == newColumn);
 
             if (newActiveCell != null)
@@ -694,7 +687,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
-        private void UpdateSelection(Frame newActiveCell, int row, int column, bool maintainSelection, bool scrollActiveCellIntoView)
+        private void UpdateSelection(CellFrame newActiveCell, int row, int column, bool maintainSelection, bool scrollActiveCellIntoView)
         {
             // Reset the previously active cell if needed
             if (activeCell != null)
@@ -741,7 +734,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 ScrollCellIntoView(newActiveCell);
         }
 
-        private async void ScrollCellIntoView(Frame cell)
+        private async void ScrollCellIntoView(CellFrame cell)
         {
             // Handle scroll
             double cellWidth = cell.Bounds.Width;
@@ -793,7 +786,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 #endif
         private void SetAnchorCell(int row, int column)
         {
-            anchorCell = GetCell(row, column);
+            anchorCell = GetCell(row, column) as CellFrame;
             anchorCellPoint.Row = anchorCell != null ? row : -1;
             anchorCellPoint.Column = anchorCell != null ? column : -1;
         }
@@ -880,11 +873,11 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
             for (int row = range.Top; row <= range.Bottom; row++)
             {
-                for (int col = range.Left; col <= range.Right; col++)
+                for (int column = range.Left; column <= range.Right; column++)
                 {
-                    if (row != anchorCellPoint.Row || col != anchorCellPoint.Column)
+                    if (row != anchorCellPoint.Row || column != anchorCellPoint.Column)
                     {
-                        Frame? cellFrame = GetCell(row, col);
+                        CellFrame? cellFrame = GetCell(row, column) as CellFrame;
                         if (cellFrame != null)
                             cellFrame.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightCellBackgroundColor;
                     }
@@ -913,7 +906,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void HighlightRowHeader(int row, bool clear, bool allColumnsSelected)
         {
-            Frame? header = GetRowHeaderCell(row);
+            HeaderFrame? header = GetRowHeaderCell(row);
             if (header != null)
                 header.BackgroundColor = clear ? this.HeaderBackgroundColor : (allColumnsSelected ? this.HeaderSelectedBackgroundColor : this.HeaderActiveBackgroundColor);
         }
@@ -921,33 +914,33 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private void HighlightColHeaders(CellRange range, bool clear)
         {
             bool allRowsSelected = range.Top == 1 && range.Bottom == RowCount;
-            for (int col = range.Left; col <= range.Right; col++)
-                HighlightColHeader(col, clear, allRowsSelected);
+            for (int column = range.Left; column <= range.Right; column++)
+                HighlightColHeader(column, clear, allRowsSelected);
         }
 
-        private void HighlightColHeader(int col, bool clear, bool allRowsSelected)
+        private void HighlightColHeader(int column, bool clear, bool allRowsSelected)
         {
-            Frame? header = GetColHeaderCell(col);
+            HeaderFrame? header = GetColHeaderCell(column);
             if (header != null)
                 header.BackgroundColor = clear ? this.HeaderBackgroundColor : (allRowsSelected ? this.HeaderSelectedBackgroundColor : HeaderActiveBackgroundColor);
         }
 
-        private Frame? GetRowHeaderCell(int row)
+        private HeaderFrame? GetRowHeaderCell(int row)
         {
-            return GetCell(row, 0);
+            return GetCell(row, 0) as HeaderFrame;
         }
 
-        private Frame? GetColHeaderCell(int column)
+        private HeaderFrame? GetColHeaderCell(int column)
         {
-            return GetCell(0, column);
+            return GetCell(0, column) as HeaderFrame;
         }
 
         public double GetCellsWidth(CellRange range)
         {
             if (range == null) return 0.0;
             double width = 0.0;
-            for (int col = range.Left; col <= range.Right && col <= ColumnCount; col++)
-                width += GetColumnWidth(col);
+            for (int column = range.Left; column <= range.Right && column <= ColumnCount; column++)
+                width += GetColumnWidth(column);
             return width;
         }
 
@@ -1053,7 +1046,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             foreach (var child in this.Children)
             {
                 if (this.GetRow(child) == row && this.GetColumn(child) == column)
-                    return (Frame)child;
+                    return child as Frame;
             }
             return null;
         }

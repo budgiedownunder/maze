@@ -1,7 +1,7 @@
 ﻿
 namespace Maze.Maui.App.Controls
 {
-    public class MazeGrid : Maze.Maui.App.Controls.InteractiveGrid.Grid
+    public class MazeGrid : InteractiveGrid.Grid
     {
         //  private Maze.Api.Maze maze = new Maze.Api.Maze(5, 5);
 
@@ -11,8 +11,8 @@ namespace Maze.Maui.App.Controls
         public delegate void CellDoubleTappedEventHandler(object sender, MazeGridCellTappedEventArgs e);
         public event CellDoubleTappedEventHandler? CellDoubleTapped;
 
-        public delegate void SelectionChnagedEventHandler(object sender, MazeGridSelectionChangedEventArgs e);
-        public event SelectionChnagedEventHandler? SelectionChanged;
+        public delegate void SelectionChangedEventHandler(object sender, MazeGridSelectionChangedEventArgs e);
+        public event SelectionChangedEventHandler? SelectionChanged;
 
         public MazeGrid()
         {
@@ -21,36 +21,36 @@ namespace Maze.Maui.App.Controls
             PopulateGrid();
         }
 
-        public override View GetCellContent(int row, int col)
+        public override View GetCellContent(int row, int column)
         {
             return new Label
             {
-                Text = $"({row + 1},{col + 1})",
+                Text = $"({row + 1},{column + 1})",
                 HorizontalOptions = LayoutOptions.Center,
                 VerticalOptions = LayoutOptions.Center
             };
         }
 
-        public override void OnCellTapped(Frame cell, int row, int column, bool triggerEvents)
+        public override void OnCellTapped(InteractiveGrid.CellFrame cellFrame, bool triggerEvents)
         {
             if(triggerEvents && CellTapped != null)
             {
-                CellTapped.Invoke(this, new MazeGridCellTappedEventArgs(cell, row, column, 1));
+                CellTapped.Invoke(this, new MazeGridCellTappedEventArgs(cellFrame, 1));
             } else
             {
-                base.OnCellTapped(cell, row, column, false);
+                base.OnCellTapped(cellFrame, false);
             }
         }
 
-        public override void OnCellDoubleTapped(Frame cell, int row, int column, bool triggerEvents)
+        public override void OnCellDoubleTapped(InteractiveGrid.CellFrame cellFrame, bool triggerEvents)
         {
             if (triggerEvents && CellDoubleTapped != null)
             {
-                CellDoubleTapped.Invoke(this, new MazeGridCellTappedEventArgs(cell, row, column, 2));
+                CellDoubleTapped.Invoke(this, new MazeGridCellTappedEventArgs(cellFrame, 2));
             }
             else
             {
-                base.OnCellDoubleTapped(cell, row, column, false);
+                base.OnCellDoubleTapped(cellFrame, false);
             }
         }
 
@@ -63,16 +63,14 @@ namespace Maze.Maui.App.Controls
 
     public class MazeGridCellTappedEventArgs : EventArgs
     {
-        public Frame Cell{ get; }
-        public int Row { get; }
-        public int Column { get; }
+        public InteractiveGrid.CellFrame Cell { get; }
+        public int Row { get => Cell.DisplayRow; }
+        public int Column { get => Cell.DisplayColumn; }
         public int NumberTaps { get; }
 
-        public MazeGridCellTappedEventArgs(Frame cell, int row, int column, int numberTaps)
+        public MazeGridCellTappedEventArgs(InteractiveGrid.CellFrame cellFrame, int numberTaps)
         {
-            Cell = cell;
-            Row = row;
-            Column = column;
+            Cell = cellFrame;
             NumberTaps = numberTaps;
         }
     }
