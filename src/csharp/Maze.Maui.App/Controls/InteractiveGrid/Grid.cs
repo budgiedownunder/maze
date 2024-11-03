@@ -1,4 +1,5 @@
 ﻿using MauiGestures;
+using Maze.Maui.App.Services;
 using System.Diagnostics;
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
@@ -24,6 +25,8 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         const double DEFAULT_CELL_WIDTH = 50.0;
         const double DEFAULT_CELL_MARGIN = 0.0;
         const double DEFAULT_CELL_PADDING = 0.0;
+
+        const bool DEFAULT_IS_PAN_SUPPORT_ENABLED = true;
 
         public enum XOffsetType
         {
@@ -92,6 +95,8 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         public double SelectionFrameBorderGripSize { get; set; } = 10.0;
 
         public bool IsExtendedSelectionMode { get; set; } = false;
+
+        public bool IsPanSupportEnabled { get; set; } = DEFAULT_IS_PAN_SUPPORT_ENABLED;
 
         //private CommunityToolkit.Maui.Behaviors.TouchBehavior longPressBehaviour;
 
@@ -837,7 +842,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void InitializeSelectionFrame()
         {
-            selectionFrame = new SelectionFrame(this)
+            selectionFrame = new SelectionFrame(this, IsPanSupportEnabled)
             {
                 BorderColor = SelectionFrameBorderColor,
                 BorderWidth = SelectionFrameBorderWidth,

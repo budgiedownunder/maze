@@ -15,13 +15,15 @@
         static private Color DEFAULT_BORDER_COLOR = Colors.Black;
         const double DEFAULT_BORDER_WIDTH = 2.0;
         const double DEFAULT_BORDER_GRIP_SIZE = 10.0;
-
+        const bool DEFAULT_IS_PAN_SUPPORT_ENABLED = true;
 
         private Color borderColor = DEFAULT_BORDER_COLOR;
         private double borderWidth = DEFAULT_BORDER_WIDTH;
         private double borderGripSize = DEFAULT_BORDER_GRIP_SIZE;
 
         private readonly FrameBorder[] frameBorders = new FrameBorder[4];
+
+        private bool isPanSupportEnabled;
 
         public Color BorderColor
         {
@@ -77,9 +79,12 @@
 
         public int ColumnCount { get { return CellRange != null ? CellRange.Width : 0; } }
 
-        public SelectionFrame(Grid parentGrid)
+        public bool IsPanSupportEnabled { get => isPanSupportEnabled; }
+
+        public SelectionFrame(Grid parentGrid, bool enablePanSupport)
         {
             this.parentGrid = parentGrid;
+            this.isPanSupportEnabled = enablePanSupport;
             CreateBorders();
         }
 

@@ -7,7 +7,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         SelectionFrame parentFrame;
 
         private readonly BoxView box;
-        private readonly BoxView grip;
+        private readonly BoxView? grip;
 
         static private Color DEFAULT_COLOR = Colors.Black;
         const double DEFAULT_WIDTH = 2.0;
@@ -101,7 +101,8 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             this.parentFrame = parentFrame;
             box = NewBox();
-            grip = NewGrip();
+            if (ParentFrame.IsPanSupportEnabled)
+                grip = NewGrip();
         }
 
         private BoxView NewBox()
@@ -116,12 +117,15 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 VerticalOptions = LayoutOptions.Start,
                 InputTransparent = false
             };
-            RegsisterEventHandlers(box, false);
+            RegisterEventHandlers(box, false);
             return box;
         }
 
-        private BoxView NewGrip()
+        private BoxView? NewGrip()
         {
+            if (!ParentFrame.IsPanSupportEnabled) return null;
+
+
             BoxView grip = new BoxView
             {
                 Color = Color,
@@ -133,14 +137,15 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 VerticalOptions = LayoutOptions.Start,
                 InputTransparent = false
             };
-            RegsisterEventHandlers(grip, true);
+            RegisterEventHandlers(grip, true);
             return grip;
         }
 
-        private void RegsisterEventHandlers(BoxView view, bool isGrip)
+        private void RegisterEventHandlers(BoxView view, bool isGrip)
         {
             RegisterPointerEventHandlers(view, isGrip);
-            RegisterPanEventHandlers(view, isGrip);
+            if (ParentFrame.IsPanSupportEnabled)
+                RegisterPanEventHandlers(view, isGrip);
         }
 
 
@@ -303,11 +308,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private void UpdateColor(Color colorUse)
         {
             box.Color = colorUse;
-            grip.Color = colorUse;
+            if (grip != null)
+                grip.Color = colorUse;
         }
 
         private void UpdateGripSize()
         {
+            if (grip == null) return;
             grip.HeightRequest = GripSize;
             grip.WidthRequest = GripSize;
             grip.CornerRadius = GripSize / 2.0;
@@ -316,13 +323,15 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         public void Show(bool show)
         {
             box.IsVisible = show;
-            grip.IsVisible = show;
+            if (grip != null)
+                grip.IsVisible = show;
         }
 
         public void AddToGrid()
         {
             AddViewToGrid(box);
-            AddViewToGrid(grip);
+            if (grip != null)
+                AddViewToGrid(grip);
         }
 
         private void AddViewToGrid(BoxView view)
@@ -343,11 +352,14 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             box.HeightRequest = height;
             box.Margin = margin;
 
-            ParentGrid.SetRow(grip, row);
-            ParentGrid.SetColumn(grip, column);
-            grip.TranslationX = GetGripTranslationX(width);
-            grip.TranslationY = GetGripTranslationY(height);
-            grip.Margin = margin;
+            if (grip != null)
+            {
+                ParentGrid.SetRow(grip, row);
+                ParentGrid.SetColumn(grip, column);
+                grip.TranslationX = GetGripTranslationX(width);
+                grip.TranslationY = GetGripTranslationY(height);
+                grip.Margin = margin;
+            }
         }
 
         private FrameCorner GetGripCorner(FrameEdge edge)

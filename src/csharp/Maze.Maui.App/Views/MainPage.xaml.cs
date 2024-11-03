@@ -18,9 +18,11 @@
         public MainPage()
         {
             InitializeComponent();
+            IDeviceTypeService deviceTypeService = new DeviceTypeService();
 
-            BindingContext = new MainPageViewModel(new DeviceTypeService());
+            BindingContext = new MainPageViewModel(deviceTypeService);
 
+            MazeGrid.Initialize(!deviceTypeService.IsTouchOnlyDevice());
             MazeGrid.CellTapped += OnMazeGridCellTapped;
             MazeGrid.CellDoubleTapped += OnMazeGridCellDoubleTapped;
             MazeGrid.SelectionChanged += OnMazeGridSelectionChanged;

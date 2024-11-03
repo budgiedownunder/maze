@@ -5,8 +5,6 @@ namespace Maze.Maui.App.Controls
 {
     public class MazeGrid : InteractiveGrid.Grid
     {
-        //  private Maze.Api.Maze maze = new Maze.Api.Maze(5, 5);
-
         public delegate void CellTappedEventHandler(object sender, MazeGridCellTappedEventArgs e);
         public event CellTappedEventHandler? CellTapped;
 
@@ -18,6 +16,11 @@ namespace Maze.Maui.App.Controls
 
         public MazeGrid()
         {
+        }
+
+        public void Initialize(bool enablePanSupport)
+        {
+            this.IsPanSupportEnabled = enablePanSupport;
             this.RowCount = 30; //(int)maze.RowCount;
             this.ColumnCount = 15; //(int)maze.ColCount;
             PopulateGrid();
