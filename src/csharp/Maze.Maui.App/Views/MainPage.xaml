@@ -19,7 +19,7 @@
             <Button x:Name="SetFinishBtn" Clicked="OnSetFinishBtnClicked" Text="Finish" HorizontalOptions="End"/>
             <Button x:Name="ClearBtn" Clicked="OnClearBtnClicked" Text="Clear" HorizontalOptions="End"/>
             <Button x:Name="SelectRangeBtn" Clicked="OnSelectRangeBtnClicked" Text="Select Range" HorizontalOptions="End"/>
-            <Button x:Name="CancelBtn" Clicked="OnCancelBtnClicked" Text="Cancel" HorizontalOptions="End"/>
+            <Button x:Name="CancelBtn" Clicked="OnCancelBtnClicked" Text="Cancel Select" HorizontalOptions="End"/>
         </StackLayout>
 
             <!-- Scrollable Maze Grid in Center -->

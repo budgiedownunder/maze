@@ -108,9 +108,7 @@
             bool showCancelBtn = !show && touchOnly;
 
             ShowButton(SelectRangeBtn, showSelectRangeBtn, "Select Range");
-            ShowButton(CancelBtn, showCancelBtn, "Cancel");
-            if (showCancelBtn)
-                CancelBtn.Text = "Cancel";
+            ShowButton(CancelBtn, showCancelBtn, "Cancel Select");
         }
 
         private void ShowCellEditButtons(bool haveSelection)
@@ -125,16 +123,9 @@
 
         private void ShowButton(Button button, bool show, string text)
         {
-            bool touchOnly = IsTouchOnlyDevice;
-           // button.HeightRequest = show ? -1 : 0;
-            //button.WidthRequest = show ? -1 : 0;
-            //button.Text = show ? text : null;
-           // if (touchOnly)
-            {
-                // This needed For iOS which does not hide the buttons if height/width request is zero
-                button.IsVisible = show;
-                button.InputTransparent = !show;
-            }
+            button.Text = show ? text : null;
+            button.IsVisible = show;
+            button.InputTransparent = !show;
         }
         private void OnMazeGridSelectionChanged(object sender, MazeGridSelectionChangedEventArgs e)
         {
