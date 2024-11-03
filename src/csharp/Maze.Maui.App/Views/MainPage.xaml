@@ -13,10 +13,14 @@
             </Grid.RowDefinitions>
 
             <!-- Top buttons -->
-        <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="Fill" Padding="10" BackgroundColor="LightGrey">
+        <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="FillAndExpand" Padding="10" Spacing="10"  BackgroundColor="LightGrey">
+            <Button x:Name="SetWalllBtn" Clicked="OnSetWallBtnClicked" Text="Wall" HorizontalOptions="End"/>
+            <Button x:Name="SetStartBtn" Clicked="OnSetStartBtnClicked" Text="Start" HorizontalOptions="End"/>
+            <Button x:Name="SetFinishBtn" Clicked="OnSetFinishBtnClicked" Text="Finish" HorizontalOptions="End"/>
+            <Button x:Name="ClearBtn" Clicked="OnClearBtnClicked" Text="Clear" HorizontalOptions="End"/>
             <Button x:Name="SelectRangeBtn" Clicked="OnSelectRangeBtnClicked" Text="Select Range" HorizontalOptions="End"/>
             <Button x:Name="CancelBtn" Clicked="OnCancelBtnClicked" Text="Cancel" HorizontalOptions="End"/>
-            </StackLayout>
+        </StackLayout>
 
             <!-- Scrollable Maze Grid in Center -->
             <ScrollView Grid.Row="1" x:Name="MazeGridScrollView"

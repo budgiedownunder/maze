@@ -24,6 +24,11 @@
             get => Width * Height;
         }
 
+        public bool IsSingleCell
+        {
+            get => CellCount == 1;
+        }
+
         public CellRange(int top, int left, int bottom, int right)
         {
             Top = Math.Min(top, bottom);
@@ -73,9 +78,14 @@
             return column >= Left && column <= Right;
         }
 
+        public bool ContainsPosition(int row, int column)
+        {
+            return ContainsRow(row) && ContainsColumn(column);
+        }
+
         public bool ContainsPoint(CellPoint point)
         {
-            return ContainsRow(point.Row) && ContainsColumn(point.Column);
+            return ContainsPosition(point.Row, point.Column);
         }
 
     }

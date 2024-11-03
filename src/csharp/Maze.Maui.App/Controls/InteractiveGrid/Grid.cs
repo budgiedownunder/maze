@@ -118,7 +118,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
-        public CellRange? SelectedCells { get => selectedCells; }
+        public CellFrame? ActiveCell { get => activeCell; }
+
+        public CellRange? CurrentSelection { get => selectedCells != null ? selectedCells.Clone() : new CellRange(activeCellPoint); }
 
         public Grid()
         {
@@ -207,10 +209,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         // (0,0) = (1,1) in display terms
         virtual public View GetCellContent(int row, int column)
         {
-            return new Label
-            {
-                Text = ""
-            };
+            return new DefaultCellContent(); 
         }
 
         private void AddSingleTapGesture(CellFrame cellFrame)
@@ -1046,7 +1045,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             return Math.Clamp(nextColumn, 1, ColumnCount);
         }
 
-        private Frame? GetCell(int row, int column)
+        protected Frame? GetCell(int row, int column)
         {
             foreach (var child in this.Children)
             {

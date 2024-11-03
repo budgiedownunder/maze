@@ -16,5 +16,11 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             this.row = row;
             this.column = column;
         }
+
+        public bool IsPosition(int row, int column)
+        {
+            return row == DisplayRow && column == DisplayColumn;
+        }
+
     }
 }

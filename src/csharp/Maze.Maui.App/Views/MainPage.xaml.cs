@@ -5,15 +5,12 @@
     using Microsoft.Maui.Controls;
     using Maze.Maui.App.ViewModels;
     using Maze.Maui.App.Controls;
-    using System.Runtime.CompilerServices;
-    using System.Diagnostics;
     using Maze.Maui.App.Services;
-
+    
     public partial class MainPage : ContentPage
     {
         const String APP_TITLE = "MAZE";
         int count = 0;
-
 
         public MainPage()
         {
@@ -40,6 +37,7 @@
                 return touchOnly;
             }
         }
+
         private void OnSelectRangeBtnClicked(object sender, EventArgs e)
         {
             if (BindingContext is MainPageViewModel viewModel)
@@ -68,6 +66,31 @@
             }
         }
 
+        private void OnSetWallBtnClicked(object sender, EventArgs e)
+        {
+            MazeGrid.SetSelectionContent(Maze.CellType.Wall);
+            UpdateControls();
+        }
+
+        private void OnSetStartBtnClicked(object sender, EventArgs e)
+        {
+            MazeGrid.SetSelectionContent(Maze.CellType.Start);
+            UpdateControls();
+        }
+
+        private void OnSetFinishBtnClicked(object sender, EventArgs e)
+        {
+            MazeGrid.SetSelectionContent(Maze.CellType.Finish);
+            UpdateControls();
+        }
+
+        private void OnClearBtnClicked(object sender, EventArgs e)
+        {
+            MazeGrid.SetSelectionContent(Maze.CellType.Empty);
+            UpdateControls();
+        }
+
+
         private void SetSelectRangeMode(bool enable)
         {
             if (enable)
@@ -80,26 +103,33 @@
 
         private void ShowSelectRangeButtons(bool show)
         {
-            if (BindingContext is MainPageViewModel viewModel)
-            {
-                bool touchOnly = IsTouchOnlyDevice;
-                bool showSelectRangeBtn = show && touchOnly;
-                bool showCancelBtn = !show && touchOnly;
+            bool touchOnly = IsTouchOnlyDevice;
+            bool showSelectRangeBtn = show && touchOnly;
+            bool showCancelBtn = !show && touchOnly;
 
-                ShowButton(SelectRangeBtn, showSelectRangeBtn, "Select Range");
-                ShowButton(CancelBtn, showCancelBtn, "Cancel Selection");
-                if (showCancelBtn)
-                    CancelBtn.Text = "Cancel Select Range";
-            }
+            ShowButton(SelectRangeBtn, showSelectRangeBtn, "Select Range");
+            ShowButton(CancelBtn, showCancelBtn, "Cancel");
+            if (showCancelBtn)
+                CancelBtn.Text = "Cancel";
+        }
+
+        private void ShowCellEditButtons(bool haveSelection)
+        {
+            CellStatus status = MazeGrid.GetCurrentSelectionStatus();
+
+            ShowButton(SetWalllBtn, !status.IsAllWalls, "Wall");
+            ShowButton(SetStartBtn, status.IsSingleCell && !status.IsStart, "Start");
+            ShowButton(SetFinishBtn, status.IsSingleCell && !status.IsFinish, "Finish");
+            ShowButton(ClearBtn, !status.IsEmpty, "Clear");
         }
 
         private void ShowButton(Button button, bool show, string text)
         {
             bool touchOnly = IsTouchOnlyDevice;
-            button.HeightRequest = show ? -1 : 0;
-            button.WidthRequest = show ? -1 : 0;
-            button.Text = show ? text : "";
-            if (touchOnly)
+           // button.HeightRequest = show ? -1 : 0;
+            //button.WidthRequest = show ? -1 : 0;
+            //button.Text = show ? text : null;
+           // if (touchOnly)
             {
                 // This needed For iOS which does not hide the buttons if height/width request is zero
                 button.IsVisible = show;
@@ -113,13 +143,14 @@
 
         private void UpdateControls()
         {
-            if (BindingContext is MainPageViewModel viewModel)
+            bool showSelectRangeButtons = IsTouchOnlyDevice || MazeGrid.IsExtendedSelectionMode;
+            bool haveSelection = MazeGrid.ActiveCell != null;
+            bool showTopRowLayout = showSelectRangeButtons || haveSelection;
+            ShowMainGridRow(0, showTopRowLayout);
+            if (showTopRowLayout)
             {
-                bool showSelectRangeButtons = IsTouchOnlyDevice || MazeGrid.IsExtendedSelectionMode;
-                bool showTopRowLayout = showSelectRangeButtons;
-                ShowMainGridRow(0, showTopRowLayout);
-                if (showTopRowLayout)
-                    ShowSelectRangeButtons(!MazeGrid.IsExtendedSelectionMode);
+                ShowSelectRangeButtons(!MazeGrid.IsExtendedSelectionMode);
+                ShowCellEditButtons(haveSelection);
             }
         }
 
