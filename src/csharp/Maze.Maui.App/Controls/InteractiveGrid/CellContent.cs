@@ -1,9 +1,10 @@
-﻿using static System.Net.Mime.MediaTypeNames;
-
-namespace Maze.Maui.App.Controls.InteractiveGrid
+﻿namespace Maze.Maui.App.Controls.InteractiveGrid
 {
-    public class DefaultCellContent : Label
+    public class DefaultCellContent : ContentView
     {
-        public DefaultCellContent() {}
+        public DefaultCellContent()
+        {
+            Content = new Label();
+        }
     }
 }

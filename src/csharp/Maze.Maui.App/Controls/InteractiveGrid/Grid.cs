@@ -187,7 +187,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             {
                 BorderColor = this.CellBorderColor,
                 BackgroundColor = this.CellBackgroundColor,
-                Content = GetCellContent(row, column),
+                Content = InitialzeCellContent(row, column),
                 Padding = CellPadding,
                 Margin = CellMargin,
                 CornerRadius = 0,
@@ -207,9 +207,29 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         }
 
         // (0,0) = (1,1) in display terms
-        virtual public View GetCellContent(int row, int column)
+        virtual public ContentView InitialzeCellContent(int row, int column)
         {
-            return new DefaultCellContent(); 
+            return new DefaultCellContent();
+        }
+
+        public CellFrame? SetCellContent(int row, int column, ContentView contentView)
+        {
+            CellFrame? cellFrame = GetCell(row, column) as CellFrame;
+            if (cellFrame != null)
+                SetCellContent(cellFrame, contentView);
+            return cellFrame;
+        }
+
+        public void SetCellContent(CellFrame? cellFrame, ContentView contentView)
+        {
+            if (cellFrame != null)
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    cellFrame.Content = contentView;
+                    InvalidateMeasure();
+                });
+            }
         }
 
         private void AddSingleTapGesture(CellFrame cellFrame)
@@ -402,7 +422,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public virtual void OnCellTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            MoveActiveCell(this.IsExtendedSelectionMode || IsShiftKeyPressed(), cellFrame.DisplayRow, cellFrame.DisplayColumn, true);
+            ActivateCell(cellFrame);
         }
 
         public virtual void OnCellDoubleTapped(CellFrame cellFrame, bool triggerEvents)
@@ -410,7 +430,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             if (IsExtendedSelectionMode)
                 CancelExtendedSelection();
 
-            MoveActiveCell(this.IsExtendedSelectionMode || IsShiftKeyPressed(), cellFrame.DisplayRow, cellFrame.DisplayColumn, true);
+            ActivateCell(cellFrame);
+        }
+
+        private void ActivateCell(CellFrame cellFrame)
+        {
+            MoveActiveCell(IsExtendedSelectionMode || IsShiftKeyPressed(), cellFrame.DisplayRow, cellFrame.DisplayColumn, true);
         }
 
         /*
@@ -666,6 +691,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void MoveActiveCell(bool maintainSelection, int newRow, int newColumn, bool scrollActiveCellIntoView)
         {
+            bool wasExtendedSelection = false;
             if (!maintainSelection && anchorCell != null)
             {
                 // Clear anchor cell
@@ -675,10 +701,15 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 ClearSelectedCells();
                 if (activeCell != null)
                     activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
+                wasExtendedSelection = true;
             }
             // No change in position?
-            if (newRow == activeCellPoint.Row && newColumn == activeCellPoint.Column) return;
-
+            if (activeCellPoint.IsPosition(newRow, newColumn))
+            {
+                if (wasExtendedSelection)
+                    UpdateSelectionFrame();
+                return;
+            }
             // Find the new active cell
             var newActiveCell = this.Children
                 .OfType<CellFrame>()

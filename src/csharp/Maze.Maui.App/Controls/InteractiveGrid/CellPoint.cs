@@ -9,5 +9,9 @@
         {
             return (CellPoint)this.MemberwiseClone();
         }
+        public bool IsPosition(int row, int column)
+        {
+            return Row == row && Column == column;
+        }
     }
 }

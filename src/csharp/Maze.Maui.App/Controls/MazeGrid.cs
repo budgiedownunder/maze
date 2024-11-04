@@ -97,7 +97,7 @@ namespace Maze.Maui.App.Controls
             return Api.Maze.CellType.Empty;
         }
 
-        public override View GetCellContent(int row, int column)
+        public override ContentView InitialzeCellContent(int row, int column)
         {
             return new MazeCellContent(Maze.Api.Maze.CellType.Empty);
         }
@@ -176,7 +176,7 @@ namespace Maze.Maui.App.Controls
         private void SetSelectionContentToType(Maze.Api.Maze.CellType cellType)
         {
             InteractiveGrid.CellRange? currentSelection = CurrentSelection;
-            if (currentSelection != null)
+            if (currentSelection != null && cellType != CellType.Start && cellType != CellType.Finish)
             {
                 for (int row = currentSelection.Top; row <= currentSelection.Bottom; row++)
                 {
@@ -204,7 +204,7 @@ namespace Maze.Maui.App.Controls
             {
                 MazeCellContent? cellContent = cellFrame.Content as MazeCellContent;
                 if (cellContent != null && cellContent.CellType != cellType)
-                    cellFrame.Content = new MazeCellContent(cellType);
+                    SetCellContent(cellFrame, new MazeCellContent(cellType));
             }
             return cellFrame;
         }
@@ -252,7 +252,7 @@ namespace Maze.Maui.App.Controls
         public CellStatus() { }
     }
 
-    public class MazeCellContent : Label
+    public class MazeCellContent : ContentView
     {
         Maze.Api.Maze.CellType cellType = Api.Maze.CellType.Empty;
 
@@ -261,9 +261,12 @@ namespace Maze.Maui.App.Controls
         public MazeCellContent(Maze.Api.Maze.CellType cellType)
         {
             this.cellType = cellType;
-            HorizontalOptions = LayoutOptions.Center;
-            VerticalOptions = LayoutOptions.Center;
-            Text = ToText();
+            Content = new Label
+            {
+                HorizontalOptions = LayoutOptions.Center,
+                VerticalOptions = LayoutOptions.Center,
+                Text = ToText()
+            };
         }
 
         private string ToText()
