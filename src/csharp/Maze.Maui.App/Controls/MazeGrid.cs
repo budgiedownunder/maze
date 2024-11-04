@@ -27,6 +27,7 @@ namespace Maze.Maui.App.Controls
 
         public MazeGrid()
         {
+            this.SelectionFrameBorderColor = Colors.Aqua;
         }
 
         public void Initialize(bool enablePanSupport)
