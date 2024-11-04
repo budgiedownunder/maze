@@ -1,6 +1,5 @@
 ﻿using MauiGestures;
-using Maze.Maui.App.Services;
-using System.Diagnostics;
+using Microsoft.Maui.Controls.Shapes;
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
@@ -185,13 +184,16 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             CellFrame frame = new CellFrame(row, column)
             {
-                BorderColor = this.CellBorderColor,
                 BackgroundColor = this.CellBackgroundColor,
                 Content = InitialzeCellContent(row, column),
                 Padding = CellPadding,
-                Margin = CellMargin,
-                CornerRadius = 0,
-                HasShadow = false
+                Margin = CellMargin == 0.0 ? -0.5 : CellMargin,
+                Stroke = new SolidColorBrush(CellBorderColor),
+                StrokeThickness = 1,
+                StrokeShape = new RoundRectangle
+                {
+                    CornerRadius = 0
+                },
             };
             AddSingleTapGesture(frame);
             AddDoubleTapGesture(frame);
@@ -223,13 +225,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         public void SetCellContent(CellFrame? cellFrame, ContentView contentView)
         {
             if (cellFrame != null)
-            {
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    cellFrame.Content = contentView;
-                    InvalidateMeasure();
-                });
-            }
+                cellFrame.Content = contentView;
         }
 
         private void AddSingleTapGesture(CellFrame cellFrame)
@@ -317,11 +313,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             {
                 WidthRequest = GetHeaderWidth(type),
                 HeightRequest = GetHeaderHeight(type),
-                CornerRadius = 5,
                 Padding = GetHeaderPadding(type),
-                BackgroundColor = this.HeaderBackgroundColor,
+                Margin = CellMargin == 0.0 ? -0.5 : CellMargin,
+                BackgroundColor = HeaderBackgroundColor,
+                Stroke = new SolidColorBrush(HeaderBorderColor),
+                StrokeThickness = 1,
                 Content = GetHeaderCellContent(type, position),
-                BorderColor = this.HeaderBorderColor,
                 HorizontalOptions = LayoutOptions.Center,
                 VerticalOptions = LayoutOptions.Center,
             };
@@ -1076,12 +1073,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             return Math.Clamp(nextColumn, 1, ColumnCount);
         }
 
-        protected Frame? GetCell(int row, int column)
+        protected Border? GetCell(int row, int column)
         {
             foreach (var child in this.Children)
             {
                 if (this.GetRow(child) == row && this.GetColumn(child) == column)
-                    return child as Frame;
+                    return child as Border;
             }
             return null;
         }

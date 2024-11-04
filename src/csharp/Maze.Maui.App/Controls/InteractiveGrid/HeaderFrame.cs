@@ -1,5 +1,4 @@
 ﻿using Microsoft.Maui.Controls;
-using Maze.Maui.App.Controls;
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
@@ -10,7 +9,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         Column = 2
     }
 
-    public class HeaderFrame : Frame
+    public class HeaderFrame : Border
     {
         HeaderType type;
         public HeaderType Type { get => type; }

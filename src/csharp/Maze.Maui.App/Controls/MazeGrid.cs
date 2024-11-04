@@ -158,6 +158,8 @@ namespace Maze.Maui.App.Controls
                 if (startCell != null)
                     SetCellContent(startCell, Maze.Api.Maze.CellType.Empty);
                 startCell = SetCellContent(currentSelection.Top, currentSelection.Left, Maze.Api.Maze.CellType.Start);
+                if (startCell != null && finishCell != null && finishCell.IsPosition(startCell.DisplayRow, startCell.DisplayColumn))
+                    finishCell = null;
             }
         }
         private void SetSelectionToFinishCell()
@@ -170,6 +172,8 @@ namespace Maze.Maui.App.Controls
                 if (finishCell != null)
                     SetCellContent(finishCell, Maze.Api.Maze.CellType.Empty);
                 finishCell = SetCellContent(currentSelection.Top, currentSelection.Left, Maze.Api.Maze.CellType.Finish);
+                if (finishCell != null && startCell != null && startCell.IsPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
+                    startCell = null;
             }
         }
 

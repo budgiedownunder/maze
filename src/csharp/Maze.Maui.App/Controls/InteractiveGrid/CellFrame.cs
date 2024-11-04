@@ -2,7 +2,7 @@
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
-    public class CellFrame : Frame
+    public class CellFrame : Border
     {
         int row;
         int column;
@@ -21,6 +21,5 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             return row == DisplayRow && column == DisplayColumn;
         }
-
     }
 }
