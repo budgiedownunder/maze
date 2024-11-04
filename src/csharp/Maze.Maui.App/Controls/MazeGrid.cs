@@ -265,28 +265,37 @@ namespace Maze.Maui.App.Controls
         public MazeCellContent(Maze.Api.Maze.CellType cellType)
         {
             this.cellType = cellType;
-            Content = new Label
+            switch (cellType)
             {
-                HorizontalOptions = LayoutOptions.Center,
-                VerticalOptions = LayoutOptions.Center,
-                Text = ToText()
-            };
+                case CellType.Start:
+                case CellType.Finish:
+                case CellType.Wall:
+                    Content = new Image
+                    {
+                        Source = GetImageName(true),
+                        Aspect = Aspect.AspectFit,
+                        HorizontalOptions = LayoutOptions.Fill,
+                        VerticalOptions = LayoutOptions.Fill
+                    };
+                    break;
+                case CellType.Empty:
+                default:
+                    Content = new Label();
+                    break;
+            }
         }
-
-        private string ToText()
+        private string GetImageName(bool preferFlag)
         {
             switch (cellType)
             {
-                case Api.Maze.CellType.Empty:
-                    return "";
-                case Api.Maze.CellType.Wall:
-                    return "WALL";
                 case Api.Maze.CellType.Start:
-                    return "START";
+                    return preferFlag ? "start_flag.png" : "start_sign.png";
                 case Api.Maze.CellType.Finish:
-                    return "FINISH";
+                    return preferFlag ? "finish_flag.png" : "finish_sign.png";
+                case Api.Maze.CellType.Wall:
+                    return "wall.png";
             }
-            return "?";
+            return "";
         }
     }
 }
