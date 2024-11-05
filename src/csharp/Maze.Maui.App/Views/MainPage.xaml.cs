@@ -44,7 +44,7 @@
                 SetSelectRangeMode(true);
         }
 
-        private void OnCancelBtnClicked(object sender, EventArgs e)
+        private void OnDoneBtnClicked(object sender, EventArgs e)
         {
             if (BindingContext is MainPageViewModel viewModel)
                 SetSelectRangeMode(false);
@@ -108,7 +108,7 @@
             bool showCancelBtn = !show && touchOnly;
 
             ShowButton(SelectRangeBtn, showSelectRangeBtn, "Select Range");
-            ShowButton(CancelBtn, showCancelBtn, "Cancel Select");
+            ShowButton(DoneBtn, showCancelBtn, "Done");
         }
 
         private void ShowCellEditButtons(bool haveSelection)
@@ -118,7 +118,7 @@
             ShowButton(SetWalllBtn, !status.IsAllWalls, "Wall");
             ShowButton(SetStartBtn, status.IsSingleCell && !status.IsStart, "Start");
             ShowButton(SetFinishBtn, status.IsSingleCell && !status.IsFinish, "Finish");
-            ShowButton(ClearBtn, !status.IsEmpty, "Clear");
+            ShowButton(DoneBtn, !status.IsEmpty, "Done");
         }
 
         private void ShowButton(Button button, bool show, string text)
