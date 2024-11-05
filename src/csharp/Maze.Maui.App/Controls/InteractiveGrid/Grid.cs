@@ -124,6 +124,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         public Grid()
         {
             InitializePlatformSpecificCode();
+            AddPinchGesture();
         }
 
         public static readonly BindableProperty ContainerScrollViewProperty =
@@ -135,8 +136,53 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             set => SetValue(ContainerScrollViewProperty, value);
         }
 
+        public static readonly BindableProperty ContainerContentViewProperty =
+            BindableProperty.Create(nameof(ContainerContentView), typeof(ContentView), typeof(Grid));
+
+        public ContentView ContainerContentView
+        {
+            get => (ContentView)GetValue(ContainerContentViewProperty);
+            set => SetValue(ContainerContentViewProperty, value);
+        }
+
         partial void InitializePlatformSpecificCode();  // Platform-specific method stub
 
+        private void AddPinchGesture()
+        {
+            var pinchGesture = new PinchGestureRecognizer();
+            pinchGesture.PinchUpdated += OnPinchUpdated;
+            GestureRecognizers.Add(pinchGesture);
+        }
+
+        private double currentScale = 1;
+        private double startScale = 1;
+        private bool isPinching = false;
+
+        private void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
+        {
+            if (sender == null) return;
+
+            if (e.Status == GestureStatus.Started)
+            {
+                startScale = currentScale;
+                isPinching = true;
+                ContainerScrollView.IsEnabled = false;
+            }
+            else if (e.Status == GestureStatus.Running && isPinching)
+            {
+                if (Math.Abs(e.Scale - 1) > 0.01)
+                {
+                    currentScale = Math.Clamp(startScale * e.Scale, 0.5, 3.0);
+                    ContainerContentView.Scale = currentScale;
+                }
+            }
+            else if (e.Status == GestureStatus.Completed)
+            {
+                isPinching = false;
+                ContainerScrollView.IsEnabled = true;
+                startScale = currentScale;
+            }
+        }
 
         public void PopulateGrid()
         {

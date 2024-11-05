@@ -31,14 +31,17 @@
                         VerticalScrollBarVisibility="Always"
                         Padding="10"
                         >
+                <ContentView x:Name="MazeGridContentView">
                     <controls:MazeGrid x:Name="MazeGrid" 
-                                   ContainerScrollView="{Binding Source={x:Reference MazeGridScrollView}}"
-                                   RowSpacing="0" 
-                                   ColumnSpacing="0" 
-                                   Padding="0"
-                                   HorizontalOptions="Start"
-                                   VerticalOptions="Start">
+                                       ContainerScrollView="{Binding Source={x:Reference MazeGridScrollView}}"
+                                       ContainerContentView="{Binding Source={x:Reference MazeGridContentView}}"
+                                       RowSpacing="0" 
+                                       ColumnSpacing="0" 
+                                       Padding="0"
+                                       HorizontalOptions="Start"
+                                       VerticalOptions="Start">
                     </controls:MazeGrid>
+                </ContentView>
             </ScrollView>
 
             <!-- Bottom buttons -->
