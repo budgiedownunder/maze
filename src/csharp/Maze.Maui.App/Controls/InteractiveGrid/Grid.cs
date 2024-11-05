@@ -470,9 +470,6 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public virtual void OnCellDoubleTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            if (IsExtendedSelectionMode)
-                CancelExtendedSelection();
-
             ActivateCell(cellFrame);
         }
 

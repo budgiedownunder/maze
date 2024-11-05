@@ -59,56 +59,69 @@
         {
             if (BindingContext is MainPageViewModel viewModel)
             {
-                if (MazeGrid.IsExtendedSelectionMode)
+                bool inExtendedSelectionMode = MazeGrid.IsExtendedSelectionMode;
+                if (IsTouchOnlyDevice && inExtendedSelectionMode)
                     SetSelectRangeMode(false);
-
                 MazeGrid.OnCellDoubleTapped(e.Cell, false);
+                if (IsTouchOnlyDevice && !inExtendedSelectionMode)
+                    SetSelectRangeMode(true);
             }
         }
 
         private void OnSetWallBtnClicked(object sender, EventArgs e)
         {
-            MazeGrid.SetSelectionContent(Maze.CellType.Wall);
-            UpdateControls();
+            ChangeSelectedCellsContent(Maze.CellType.Wall);
         }
 
         private void OnSetStartBtnClicked(object sender, EventArgs e)
         {
-            MazeGrid.SetSelectionContent(Maze.CellType.Start);
-            UpdateControls();
+            ChangeSelectedCellsContent(Maze.CellType.Start);
         }
 
         private void OnSetFinishBtnClicked(object sender, EventArgs e)
         {
-            MazeGrid.SetSelectionContent(Maze.CellType.Finish);
-            UpdateControls();
+            ChangeSelectedCellsContent(Maze.CellType.Finish);
         }
 
         private void OnClearBtnClicked(object sender, EventArgs e)
         {
-            MazeGrid.SetSelectionContent(Maze.CellType.Empty);
+            ChangeSelectedCellsContent(Maze.CellType.Empty);
+        }
+
+        private void ChangeSelectedCellsContent(Maze.CellType newCellType)
+        {
+            MazeGrid.SetSelectionContent(newCellType);
+            EnableExtendedSelectionMode(false);
             UpdateControls();
         }
 
 
         private void SetSelectRangeMode(bool enable)
         {
+            EnableExtendedSelectionMode(enable);
+            ShowSelectRangeButtons(!enable);
+        }
+
+        private void EnableExtendedSelectionMode(bool enable)
+        {
+            if (MazeGrid.IsExtendedSelectionMode == enable) 
+                return;
+
             if (enable)
                 MazeGrid.EnableExtendedSelection();
             else
                 MazeGrid.CancelExtendedSelection();
-
-            ShowSelectRangeButtons(!enable);
         }
+
 
         private void ShowSelectRangeButtons(bool show)
         {
             bool touchOnly = IsTouchOnlyDevice;
             bool showSelectRangeBtn = show && touchOnly;
-            bool showCancelBtn = !show && touchOnly;
+            bool showDoneBtn = !show && touchOnly;
 
             ShowButton(SelectRangeBtn, showSelectRangeBtn, "Select Range");
-            ShowButton(DoneBtn, showCancelBtn, "Done");
+            ShowButton(DoneBtn, showDoneBtn, "Done");
         }
 
         private void ShowCellEditButtons(bool haveSelection)
@@ -118,7 +131,6 @@
             ShowButton(SetWalllBtn, !status.IsAllWalls, "Wall");
             ShowButton(SetStartBtn, status.IsSingleCell && !status.IsStart, "Start");
             ShowButton(SetFinishBtn, status.IsSingleCell && !status.IsFinish, "Finish");
-            ShowButton(DoneBtn, !status.IsEmpty, "Done");
         }
 
         private void ShowButton(Button button, bool show, string text)
