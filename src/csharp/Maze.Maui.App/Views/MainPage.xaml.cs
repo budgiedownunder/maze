@@ -121,7 +121,7 @@
             ChangeSelectedCellsContent(Maze.CellType.Finish);
         }
 
-        private void OnClearBtnClicked(object sender, EventArgs e)
+        private void OnDeleteBtnClicked(object sender, EventArgs e)
         {
             DeleteSelection();
         }
@@ -175,6 +175,7 @@
             ShowButton(SetWalllBtn, !status.IsAllWalls, "Wall");
             ShowButton(SetStartBtn, status.IsSingleCell && !status.IsStart, "Start");
             ShowButton(SetFinishBtn, status.IsSingleCell && !status.IsFinish, "Finish");
+            ShowButton(DeleteBtn, !status.IsEmpty, "Delete");
         }
 
         private void ShowButton(Button button, bool show, string text)
