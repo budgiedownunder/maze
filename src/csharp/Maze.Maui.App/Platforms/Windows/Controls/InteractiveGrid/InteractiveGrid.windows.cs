@@ -26,42 +26,26 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private void OnKeyDown(object sender, KeyRoutedEventArgs e)
         {
-            var shiftPressed = IsShiftKeyPressed();
-            var ctrlPressed = IsCtrlKeyPressed();
+            OnProcessKeyDown(GetKeyState(), GetKey(e.Key), true);
+        }
 
-            switch (e.Key)
-            {
-                case VirtualKey.Left:
-                    MoveActiveCellLeft(shiftPressed, ctrlPressed);
-                    break;
-                case VirtualKey.Right:
-                    MoveActiveCellRight(shiftPressed, ctrlPressed);
-                    break;
-                case VirtualKey.Up:
-                    MoveActiveCellUp(shiftPressed, ctrlPressed);
-                    break;
-                case VirtualKey.Down:
-                    MoveActiveCellDown(shiftPressed, ctrlPressed);
-                    break;
-                case VirtualKey.Home:
-                    MoveActiveCellToRowStart(shiftPressed, ctrlPressed);
-                    break;
-                case VirtualKey.End:
-                    MoveActiveCellToColumnEnd(shiftPressed, ctrlPressed);
-                    break;
-                case VirtualKey.Tab:
-                    if (ctrlPressed) return;
-                    if (anchorCell == null)
-                    {
-                        MoveActiveCellOffset(false, shiftPressed ? -1 : 1, 0);
-                        return;
-                    }
-                    if (shiftPressed)
-                        MoveAnchorCellToPrevWithinSelection();
-                    else
-                        MoveAnchorCellToNextWithinSelection();
-                    break;
-            }
+        Keyboard.KeyState GetKeyState()
+        {
+            Keyboard.KeyState state = Keyboard.KeyState.None;
+
+            if (IsShiftKeyPressed())
+                state |= Keyboard.KeyState.Shift;
+            if (IsCtrlKeyPressed())
+                state |= Keyboard.KeyState.Ctrl;
+            if (IsCapsLockKeyPressed())
+                state |= Keyboard.KeyState.CapsLock;
+
+            return state;
+        }
+
+        Keyboard.Key GetKey(VirtualKey virtualKey)
+        {
+            return (Keyboard.Key)virtualKey;
         }
 
         [DllImport("user32.dll")]
@@ -69,11 +53,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private const int VK_SHIFT = 0x10;
         private const int VK_CTRL = 0x11;
+        private const int VK_CAPITAL = 0x14;
 
         private static bool IsVirtualKeyPressed(int keyCode)
         {
             return (GetAsyncKeyState(keyCode) & 0x8000) != 0;
         }
+
         private static bool IsShiftKeyPressed()
         {
             return IsVirtualKeyPressed(VK_SHIFT);
@@ -83,5 +69,11 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             return IsVirtualKeyPressed(VK_CTRL);
         }
+
+        private static bool IsCapsLockKeyPressed()
+        {
+            return IsVirtualKeyPressed(VK_CAPITAL);
+        }
+
     }
 }

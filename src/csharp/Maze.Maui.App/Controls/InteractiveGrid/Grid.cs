@@ -473,6 +473,49 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             ActivateCell(cellFrame);
         }
 
+        public virtual void OnProcessKeyDown(Keyboard.KeyState state, Keyboard.Key key, bool triggerEvents)
+        {
+            bool shiftPressed = Keyboard.Utiility.IsStateFlagSet(state, Keyboard.KeyState.Shift);
+            bool ctrlPressed = Keyboard.Utiility.IsStateFlagSet(state, Keyboard.KeyState.Ctrl);
+            bool capsLockPressed = Keyboard.Utiility.IsStateFlagSet(state, Keyboard.KeyState.CapsLock);
+
+            switch (key)
+            {
+                case Keyboard.Key.Left:
+                    MoveActiveCellLeft(shiftPressed, ctrlPressed);
+                    break;
+                case Keyboard.Key.Right:
+                    MoveActiveCellRight(shiftPressed, ctrlPressed);
+                    break;
+                case Keyboard.Key.Up:
+                    MoveActiveCellUp(shiftPressed, ctrlPressed);
+                    break;
+                case Keyboard.Key.Down:
+                    MoveActiveCellDown(shiftPressed, ctrlPressed);
+                    break;
+                case Keyboard.Key.Home:
+                    MoveActiveCellToRowStart(shiftPressed, ctrlPressed);
+                    break;
+                case Keyboard.Key.End:
+                    MoveActiveCellToColumnEnd(shiftPressed, ctrlPressed);
+                    break;
+                case Keyboard.Key.Tab:
+                    if (ctrlPressed) return;
+                    if (anchorCell == null)
+                    {
+                        MoveActiveCellOffset(false, shiftPressed ? -1 : 1, 0);
+                        return;
+                    }
+                    if (shiftPressed)
+                        MoveAnchorCellToPrevWithinSelection();
+                    else
+                        MoveAnchorCellToNextWithinSelection();
+                    break;
+                default:
+                    break;
+            }
+        }
+
         private void ActivateCell(CellFrame cellFrame)
         {
             MoveActiveCell(IsExtendedSelectionMode || IsShiftKeyPressed(), cellFrame.DisplayRow, cellFrame.DisplayColumn, true);

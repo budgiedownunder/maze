@@ -15,6 +15,9 @@ namespace Maze.Maui.App.Controls
         public delegate void CellDoubleTappedEventHandler(object sender, MazeGridCellTappedEventArgs e);
         public event CellDoubleTappedEventHandler? CellDoubleTapped;
 
+        public delegate void ProcessKeyDownEventHandler(object sender, MazeGridKeyDownEventArgs e);
+        public event ProcessKeyDownEventHandler? KeyDown;
+
         public delegate void SelectionChangedEventHandler(object sender, MazeGridSelectionChangedEventArgs e);
         public event SelectionChangedEventHandler? SelectionChanged;
 
@@ -127,6 +130,19 @@ namespace Maze.Maui.App.Controls
             }
         }
 
+
+        public override void OnProcessKeyDown(Keyboard.KeyState state, Keyboard.Key key, bool triggerEvents)
+        {
+            if(triggerEvents && KeyDown != null)
+            {
+                KeyDown.Invoke(this, new MazeGridKeyDownEventArgs(state, key));
+            }
+            else
+            {
+                base.OnProcessKeyDown(state, key, false);
+            }
+        }
+
         public override void OnSelectionChanged()
         {
             SelectionChanged?.Invoke(this, new MazeGridSelectionChangedEventArgs());
@@ -226,6 +242,28 @@ namespace Maze.Maui.App.Controls
         {
             Cell = cellFrame;
             NumberTaps = numberTaps;
+        }
+    }
+
+    public class MazeGridKeyDownEventArgs : EventArgs
+    {
+        Keyboard.KeyState keyState = Keyboard.KeyState.None;
+        Keyboard.Key key = Keyboard.Key.None;
+
+        public Keyboard.KeyState KeyState { get => keyState;  }
+
+        public Keyboard.Key Key { get => key; }
+
+        public bool IsShiftKeyPressed { get => Keyboard.Utiility.IsStateFlagSet(KeyState, Keyboard.KeyState.Shift);  }
+
+        public bool IsCtrlKeyPressed { get => Keyboard.Utiility.IsStateFlagSet(KeyState, Keyboard.KeyState.Ctrl); }
+
+        public bool IsCapsLockKeyPressed { get => Keyboard.Utiility.IsStateFlagSet(KeyState, Keyboard.KeyState.CapsLock); }
+
+        public MazeGridKeyDownEventArgs(Keyboard.KeyState keyState, Keyboard.Key key)
+        {
+            this.keyState = keyState;
+            this.key = key;
         }
     }
 
