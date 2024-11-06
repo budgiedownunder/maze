@@ -17,7 +17,7 @@
             <Button x:Name="SetWalllBtn" Clicked="OnSetWallBtnClicked" Text="Wall" HorizontalOptions="End"/>
             <Button x:Name="SetStartBtn" Clicked="OnSetStartBtnClicked" Text="Start" HorizontalOptions="End"/>
             <Button x:Name="SetFinishBtn" Clicked="OnSetFinishBtnClicked" Text="Finish" HorizontalOptions="End"/>
-            <Button x:Name="DeleteBtn" Clicked="OnDeleteBtnClicked" Text="Delete" HorizontalOptions="End"/>
+            <Button x:Name="ClearBtn" Clicked="OnClearBtnClicked" Text="Clear" HorizontalOptions="End"/>
             <Button x:Name="SelectRangeBtn" Clicked="OnSelectRangeBtnClicked" Text="Select Range" HorizontalOptions="End"/>
             <Button x:Name="DoneBtn" Clicked="OnDoneBtnClicked" Text="Done" HorizontalOptions="End"/>
         </StackLayout>

@@ -83,7 +83,7 @@
                     ChangeSelectionToFinish();
                     break;
                 case Controls.Keyboard.Key.Delete:
-                    DeleteSelection();
+                    ClearSelection();
                     break;
                 default:
                     MazeGrid.OnProcessKeyDown(e.KeyState, e.Key, false);
@@ -121,12 +121,12 @@
             ChangeSelectedCellsContent(Maze.CellType.Finish);
         }
 
-        private void OnDeleteBtnClicked(object sender, EventArgs e)
+        private void OnClearBtnClicked(object sender, EventArgs e)
         {
-            DeleteSelection();
+            ClearSelection();
         }
 
-        private void DeleteSelection()
+        private void ClearSelection()
         {
             ChangeSelectedCellsContent(Maze.CellType.Empty);
         }
@@ -175,7 +175,7 @@
             ShowButton(SetWalllBtn, !status.IsAllWalls, "Wall");
             ShowButton(SetStartBtn, status.IsSingleCell && !status.IsStart, "Start");
             ShowButton(SetFinishBtn, status.IsSingleCell && !status.IsFinish, "Finish");
-            ShowButton(DeleteBtn, !status.IsEmpty, "Delete");
+            ShowButton(ClearBtn, !status.IsEmpty, "Clear");
         }
 
         private void ShowButton(Button button, bool show, string text)
