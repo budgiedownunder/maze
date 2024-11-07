@@ -138,6 +138,46 @@
             UpdateControls();
         }
 
+        private void OnDeleteRowsBtnClicked(object sender, EventArgs e)
+        {
+            DeleteSelectedRows();
+        }
+
+        private void DeleteSelectedRows()
+        {
+            DisplayAlert(APP_TITLE, "Delete rows", "OK");
+        }
+
+        private void OnDeleteColumnsBtnClicked(object sender, EventArgs e)
+        {
+            DeleteSelectedColumns();
+        }
+
+        private void DeleteSelectedColumns()
+        {
+            DisplayAlert(APP_TITLE, "Delete columns", "OK");
+        }
+
+        private void OnInsertRowsBtnClicked(object sender, EventArgs e)
+        {
+            InsertRows();
+        }
+
+        private void InsertRows()
+        {
+            DisplayAlert(APP_TITLE, "Insert rows", "OK");
+        }
+
+        private void OnInsertColumnsBtnClicked(object sender, EventArgs e)
+        {
+            InsertColumns();
+        }
+
+        private void InsertColumns()
+        {
+            DisplayAlert(APP_TITLE, "Insert columns", "OK");
+        }
+
         private void SetSelectRangeMode(bool enable)
         {
             EnableExtendedSelectionMode(enable);
@@ -153,6 +193,17 @@
                 MazeGrid.EnableExtendedSelection();
             else
                 MazeGrid.CancelExtendedSelection();
+        }
+
+        private void ShowEditRowColumnButtons()
+        {
+            bool allRowsSelected = MazeGrid.AllRowsSelected;
+            bool allColumnsSelected = MazeGrid.AllColumnsSelected;
+
+            ShowImageButton(InsertRowsBtn, allColumnsSelected);
+            ShowImageButton(DeleteRowsBtn, allColumnsSelected && !allRowsSelected);
+            ShowImageButton(InsertColumnsBtn, allRowsSelected);
+            ShowImageButton(DeleteColumnsBtn, allRowsSelected && !allColumnsSelected);
         }
 
         private void ShowSelectRangeButtons(bool show)
@@ -200,6 +251,7 @@
             ShowMainGridRow(0, showTopRowLayout);
             if (showTopRowLayout)
             {
+                ShowEditRowColumnButtons();
                 ShowSelectRangeButtons(!MazeGrid.IsExtendedSelectionMode);
                 ShowCellEditButtons(haveSelection);
             }

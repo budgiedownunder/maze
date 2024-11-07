@@ -26,6 +26,18 @@
             <ImageButton x:Name="ClearBtn" Clicked="OnClearBtnClicked" Source="clear_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                          Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
+            <ImageButton x:Name="InsertRowsBtn" Clicked="OnInsertRowsBtnClicked" Source="insert_rows_button.png" 
+                         WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
+            <ImageButton x:Name="DeleteRowsBtn" Clicked="OnDeleteRowsBtnClicked" Source="delete_rows_button.png" 
+                         WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
+            <ImageButton x:Name="InsertColumnsBtn" Clicked="OnInsertColumnsBtnClicked" Source="insert_columns_button.png" 
+                         WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
+            <ImageButton x:Name="DeleteColumnsBtn" Clicked="OnDeleteColumnsBtnClicked" Source="delete_columns_button.png" 
+                         WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
             <ImageButton x:Name="SelectRangeBtn" Clicked="OnSelectRangeBtnClicked" Source="select_range_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                          Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="EndAndExpand" IsVisible="False"/>
