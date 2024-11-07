@@ -208,6 +208,8 @@
         private void ShowMainGridRow(int row, bool show)
         {
             MainGrid.RowDefinitions[row].Height = show ? GridLength.Auto : new GridLength(0);
+            if (row == 0 )
+                TopRowLayout.IsVisible = show;
         }
 
         private void OnCounterClicked(object sender, EventArgs e)

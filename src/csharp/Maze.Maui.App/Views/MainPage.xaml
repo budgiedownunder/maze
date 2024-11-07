@@ -7,30 +7,31 @@
         <!-- Main Content Grid -->
         <Grid x:Name="MainGrid">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
+                <RowDefinition Height="0" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- Top buttons -->
-        <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="FillAndExpand" Padding="10" Spacing="5"  BackgroundColor="Transparent">
+        <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="FillAndExpand" Padding="10" Spacing="5"  BackgroundColor="Transparent" IsVisible="False">
             <ImageButton x:Name="SetWallBtn" Clicked="OnSetWallBtnClicked" Source="wall_button.png" 
-                         WidthRequest="32" HeightRequest="32"
-                         Aspect="AspectFill" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
+                         WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
             <ImageButton x:Name="SetStartBtn" Clicked="OnSetStartBtnClicked" Source="start_button.png" 
-                         WidthRequest="32" HeightRequest="32"
-                         Aspect="AspectFill" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
+                         WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
             <ImageButton x:Name="SetFinishBtn" Clicked="OnSetFinishBtnClicked" Source="finish_button.png" 
-                         WidthRequest="32" HeightRequest="32"
-                         Aspect="AspectFill" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
+                         WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
             <ImageButton x:Name="ClearBtn" Clicked="OnClearBtnClicked" Source="clear_button.png" 
-                         WidthRequest="32" HeightRequest="32"
-                         Aspect="AspectFill" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
+                         WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
             <ImageButton x:Name="SelectRangeBtn" Clicked="OnSelectRangeBtnClicked" Source="select_range_button.png" 
-                         WidthRequest="32" HeightRequest="32"
-                         Aspect="AspectFill" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="EndAndExpand" IsVisible="False"/>
-            <Button x:Name="DoneBtn" Clicked="OnDoneBtnClicked" Text="Done" HeightRequest="32" FontAutoScalingEnabled="True" 
-                    FontAttributes="Bold" FontSize="12"  TextColor="Blue" BorderColor="DarkGray" BorderWidth="2" 
+                         WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="EndAndExpand" IsVisible="False"/>
+            <Button x:Name="DoneBtn" Clicked="OnDoneBtnClicked" Text="Done" 
+                    HeightRequest="32" MaximumHeightRequest="32" MinimumHeightRequest="32"
+                    FontAutoScalingEnabled="True"  FontAttributes="Bold" FontSize="12"  TextColor="Blue" BorderColor="DarkGray" BorderWidth="2" 
                     BackgroundColor="Transparent" Padding="0" HorizontalOptions="EndAndExpand" IsVisible="False"/>
         </StackLayout>
 
