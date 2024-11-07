@@ -13,13 +13,25 @@
             </Grid.RowDefinitions>
 
             <!-- Top buttons -->
-        <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="FillAndExpand" Padding="10" Spacing="10"  BackgroundColor="LightGrey">
-            <Button x:Name="SetWalllBtn" Clicked="OnSetWallBtnClicked" Text="Wall" HorizontalOptions="End"/>
-            <Button x:Name="SetStartBtn" Clicked="OnSetStartBtnClicked" Text="Start" HorizontalOptions="End"/>
-            <Button x:Name="SetFinishBtn" Clicked="OnSetFinishBtnClicked" Text="Finish" HorizontalOptions="End"/>
-            <Button x:Name="ClearBtn" Clicked="OnClearBtnClicked" Text="Clear" HorizontalOptions="End"/>
-            <Button x:Name="SelectRangeBtn" Clicked="OnSelectRangeBtnClicked" Text="Select Range" HorizontalOptions="End"/>
-            <Button x:Name="DoneBtn" Clicked="OnDoneBtnClicked" Text="Done" HorizontalOptions="End"/>
+        <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="FillAndExpand" Padding="10" Spacing="5"  BackgroundColor="Transparent">
+            <ImageButton x:Name="SetWallBtn" Clicked="OnSetWallBtnClicked" Source="wall_button.png" 
+                         WidthRequest="32" HeightRequest="32"
+                         Aspect="AspectFill" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
+            <ImageButton x:Name="SetStartBtn" Clicked="OnSetStartBtnClicked" Source="start_button.png" 
+                         WidthRequest="32" HeightRequest="32"
+                         Aspect="AspectFill" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
+            <ImageButton x:Name="SetFinishBtn" Clicked="OnSetFinishBtnClicked" Source="finish_button.png" 
+                         WidthRequest="32" HeightRequest="32"
+                         Aspect="AspectFill" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
+            <ImageButton x:Name="ClearBtn" Clicked="OnClearBtnClicked" Source="clear_button.png" 
+                         WidthRequest="32" HeightRequest="32"
+                         Aspect="AspectFill" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
+            <ImageButton x:Name="SelectRangeBtn" Clicked="OnSelectRangeBtnClicked" Source="select_range_button.png" 
+                         WidthRequest="32" HeightRequest="32"
+                         Aspect="AspectFill" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="EndAndExpand" IsVisible="False"/>
+            <Button x:Name="DoneBtn" Clicked="OnDoneBtnClicked" Text="Done" HeightRequest="32" FontAutoScalingEnabled="True" 
+                    FontAttributes="Bold" FontSize="12"  TextColor="Blue" BorderColor="DarkGray" BorderWidth="2" 
+                    BackgroundColor="Transparent" Padding="0" HorizontalOptions="EndAndExpand" IsVisible="False"/>
         </StackLayout>
 
             <!-- Scrollable Maze Grid in Center -->

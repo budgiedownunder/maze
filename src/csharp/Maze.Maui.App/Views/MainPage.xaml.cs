@@ -164,21 +164,27 @@
             bool showSelectRangeBtn = show && touchOnly;
             bool showDoneBtn = !show && touchOnly;
 
-            ShowButton(SelectRangeBtn, showSelectRangeBtn, "Select Range");
-            ShowButton(DoneBtn, showDoneBtn, "Done");
+            ShowImageButton(SelectRangeBtn, showSelectRangeBtn);
+            ShowTextButton(DoneBtn, showDoneBtn, "Done");
         }
 
         private void ShowCellEditButtons(bool haveSelection)
         {
             CellStatus status = MazeGrid.GetCurrentSelectionStatus();
 
-            ShowButton(SetWalllBtn, !status.IsAllWalls, "Wall");
-            ShowButton(SetStartBtn, status.IsSingleCell && !status.IsStart, "Start");
-            ShowButton(SetFinishBtn, status.IsSingleCell && !status.IsFinish, "Finish");
-            ShowButton(ClearBtn, !status.IsEmpty, "Clear");
+            ShowImageButton(SetWallBtn, !status.IsAllWalls);
+            ShowImageButton(SetStartBtn, status.IsSingleCell && !status.IsStart);
+            ShowImageButton(SetFinishBtn, status.IsSingleCell && !status.IsFinish);
+            ShowImageButton(ClearBtn, !status.IsEmpty);
         }
 
-        private void ShowButton(Button button, bool show, string text)
+        private void ShowImageButton(ImageButton button, bool show)
+        {
+            button.IsVisible = show;
+            button.InputTransparent = !show;
+        }
+
+        private void ShowTextButton(Button button, bool show, string text)
         {
             button.Text = show ? text : null;
             button.IsVisible = show;
