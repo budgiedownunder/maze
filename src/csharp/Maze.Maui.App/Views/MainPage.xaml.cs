@@ -131,14 +131,12 @@
             ChangeSelectedCellsContent(Maze.CellType.Empty);
         }
 
-
         private void ChangeSelectedCellsContent(Maze.CellType newCellType)
         {
             MazeGrid.SetSelectionContent(newCellType);
             EnableExtendedSelectionMode(false);
             UpdateControls();
         }
-
 
         private void SetSelectRangeMode(bool enable)
         {
@@ -156,7 +154,6 @@
             else
                 MazeGrid.CancelExtendedSelection();
         }
-
 
         private void ShowSelectRangeButtons(bool show)
         {
@@ -227,9 +224,5 @@
             }
         }
 
-        private void OnResetBtn_Clicked(object sender, EventArgs e)
-        {
-            DisplayAlert(APP_TITLE, "Reset", "OK");
-        }
     }
 }
