@@ -516,6 +516,22 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
+        // (1, 1) = top-left cell
+        public bool ActivateCell(int displayRow, int displayColumn)
+        {
+            bool activated = false;
+            if (displayColumn > 0 && displayColumn <= RowCount && displayColumn > 0 && displayColumn <= ColumnCount )
+            {
+                CellFrame? cellFrame = GetCell(displayRow, displayColumn) as CellFrame;
+                if (cellFrame != null)
+                {
+                    ActivateCell(cellFrame);
+                    activated = true;
+                }
+            }
+            return activated;
+        }
+
         private void ActivateCell(CellFrame cellFrame)
         {
             MoveActiveCell(IsExtendedSelectionMode || IsShiftKeyPressed(), cellFrame.DisplayRow, cellFrame.DisplayColumn, true);

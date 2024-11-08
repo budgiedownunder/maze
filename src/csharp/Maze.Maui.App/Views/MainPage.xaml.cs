@@ -25,6 +25,8 @@
             MazeGrid.KeyDown += OnMazeGridKeyDown;
             MazeGrid.SelectionChanged += OnMazeGridSelectionChanged;
 
+            MazeGrid.ActivateCell(1, 1);
+
             UpdateControls();
         }
 
