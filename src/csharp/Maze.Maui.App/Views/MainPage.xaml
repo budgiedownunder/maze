@@ -2,7 +2,8 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:Maze.Maui.App.Controls"
-             x:Class="Maze.Maui.App.Views.MainPage">
+             x:Class="Maze.Maui.App.Views.MainPage"
+             Title="Design Maze">
 
     <!-- Main Content Grid -->
         <Grid x:Name="MainGrid">
