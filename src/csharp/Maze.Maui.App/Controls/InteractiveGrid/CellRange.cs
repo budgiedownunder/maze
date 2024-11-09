@@ -16,7 +16,7 @@
 
         public int Height
         {
-            get=> Bottom - Top + 1;
+            get => Bottom - Top + 1;
         }
 
         public int CellCount
@@ -88,5 +88,22 @@
             return ContainsPosition(point.Row, point.Column);
         }
 
+        public void ClampRows(int maxRow)
+        {
+            if (Top > maxRow)
+                Top = maxRow;
+
+            if (Bottom > maxRow)
+                Bottom = maxRow;
+        }
+
+        public void ClampColumns(int maxColumn)
+        {
+            if (Left > maxColumn)
+                Left = maxColumn;
+
+            if (Right > maxColumn)
+                Right = maxColumn;
+        }
     }
 }

@@ -4,17 +4,18 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 {
     public class CellFrame : Border
     {
-        int row;
-        int column;
+        public int Row { get; set; }
 
-        public int DisplayRow { get => row + 1; }
+        public int Column { get; set; }
 
-        public int DisplayColumn { get => column + 1; }
+        public int DisplayRow { get => Row + 1; }
+
+        public int DisplayColumn { get => Column + 1; }
 
         public CellFrame(int row, int column)
         {
-            this.row = row;
-            this.column = column;
+            this.Row = row;
+            this.Column = column;
         }
 
         public bool IsPosition(int row, int column)

@@ -1,5 +1,7 @@
 ﻿using MauiGestures;
+using Microsoft.Maui.Controls;
 using Microsoft.Maui.Controls.Shapes;
+using System.Data.Common;
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
@@ -206,7 +208,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 for (int column = 0; column < ColumnCount; column++)
                 {
                     CellFrame cellFrame = NewCellFrame(row, column);
-                    this.Add(NewCellFrame(row, column), cellFrame.DisplayColumn, cellFrame.DisplayRow);
+                    this.Add(cellFrame, cellFrame.DisplayColumn, cellFrame.DisplayRow);
                 }
             }
 
@@ -322,8 +324,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             HeaderFrame frame = NewHeaderFrame(HeaderType.Column, column);
             var tapGesture = new TapGestureRecognizer();
-            int currentCol = column + 1;
-            tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(currentCol);
+            tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(frame);
             frame.GestureRecognizers.Add(tapGesture);
 
             /*
@@ -340,8 +341,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             HeaderFrame frame = NewHeaderFrame(HeaderType.Row, row);
             var tapGesture = new TapGestureRecognizer();
-            int currentRow = row + 1;
-            tapGesture.Tapped += (s, e) => OnRowHeaderTapped(currentRow);
+            tapGesture.Tapped += (s, e) => OnRowHeaderTapped(frame);
             frame.GestureRecognizers.Add(tapGesture);
 
             /*
@@ -439,9 +439,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         }
         */
 
-        private void OnColumnHeaderTapped(int column)
+        private void OnColumnHeaderTapped(HeaderFrame headerFrame)
         {
-            SelectColumn(IsExtendedSelectionMode || IsShiftKeyPressed(), column);
+            SelectColumn(IsExtendedSelectionMode || IsShiftKeyPressed(), headerFrame.Position + 1);
         }
 
         /*
@@ -451,9 +451,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         }
         */
 
-        private void OnRowHeaderTapped(int row)
+        private void OnRowHeaderTapped(HeaderFrame headerFrame)
         {
-            SelectRow(IsExtendedSelectionMode || IsShiftKeyPressed(), row);
+            SelectRow(IsExtendedSelectionMode || IsShiftKeyPressed(), headerFrame.Position + 1);
         }
 
         /*
@@ -465,12 +465,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public virtual void OnCellTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            ActivateCell(cellFrame);
+            ActivateCell(cellFrame, IsExtendedSelectionMode || IsShiftKeyPressed());
         }
 
         public virtual void OnCellDoubleTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            ActivateCell(cellFrame);
+            ActivateCell(cellFrame, IsExtendedSelectionMode || IsShiftKeyPressed());
         }
 
         public virtual void OnProcessKeyDown(Keyboard.KeyState state, Keyboard.Key key, bool triggerEvents)
@@ -516,25 +516,30 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
+        public bool ActivateCell(CellPoint point, bool maintainSelection)
+        {
+            return ActivateCell(point.Row, point.Column, maintainSelection);
+        }
+
         // (1, 1) = top-left cell
-        public bool ActivateCell(int displayRow, int displayColumn)
+        public bool ActivateCell(int displayRow, int displayColumn, bool maintainSelection)
         {
             bool activated = false;
-            if (displayColumn > 0 && displayColumn <= RowCount && displayColumn > 0 && displayColumn <= ColumnCount )
+            if (displayColumn > 0 && displayColumn <= RowCount && displayColumn > 0 && displayColumn <= ColumnCount)
             {
                 CellFrame? cellFrame = GetCell(displayRow, displayColumn) as CellFrame;
                 if (cellFrame != null)
                 {
-                    ActivateCell(cellFrame);
+                    ActivateCell(cellFrame, maintainSelection);
                     activated = true;
                 }
             }
             return activated;
         }
 
-        private void ActivateCell(CellFrame cellFrame)
+        private void ActivateCell(CellFrame cellFrame, bool maintainSelection)
         {
-            MoveActiveCell(IsExtendedSelectionMode || IsShiftKeyPressed(), cellFrame.DisplayRow, cellFrame.DisplayColumn, true);
+            MoveActiveCell(maintainSelection, cellFrame.DisplayRow, cellFrame.DisplayColumn, true);
         }
 
         /*
@@ -635,7 +640,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             if (activeCell != null)
                 activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
             IsExtendedSelectionMode = false;
-            UpdateSelectionFrame();
+            UpdateSelectionFrame(true);
         }
 
         public void ResetSelection(CellRange newSelection)
@@ -682,11 +687,44 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
+        public SelectionState GetSelectionState()
+        {
+            return new SelectionState(
+                selectedCells?.Clone(),
+                activeCell != null ? activeCellPoint.Clone() : null,
+                anchorCell != null ? anchorCellPoint.Clone() : null);
+        }
+
+        public void RestoreSelectionState(SelectionState selectionState, bool retainAnchorCell, bool show)
+        {
+            if (retainAnchorCell)
+            {
+                if (selectionState.AnchorCellPoint != null)
+                {
+                    SetAnchorCell(selectionState.AnchorCellPoint);
+                    SetActiveCellToAnchorCell(true);
+                }
+            }
+            else if (selectionState.ActiveCellPoint != null)
+            {
+                ActivateCell(selectionState.ActiveCellPoint, false);
+            }
+
+            if (selectionState.SelectedCells != null)
+            {
+                UpdateSelectedCells(new CellPoint(selectionState.SelectedCells.Top, selectionState.SelectedCells.Left),
+                                    new CellPoint(selectionState.SelectedCells.Bottom, selectionState.SelectedCells.Right),
+                                    true, false);
+            }
+            ShowSelectionFrame(show);
+        }
+
+
         private void SelectCells(int top, int left, int bottom, int right, bool clear)
         {
             selectedCells = new CellRange(top, left, bottom, right);
             HighlightCells(selectedCells, clear);
-            UpdateSelectionFrame();
+            UpdateSelectionFrame(true);
         }
 
         private void MoveActiveCellLeft(bool maintainSelection, bool moveToEnd)
@@ -806,7 +844,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             if (activeCellPoint.IsPosition(newRow, newColumn))
             {
                 if (wasExtendedSelection)
-                    UpdateSelectionFrame();
+                    UpdateSelectionFrame(true);
                 return;
             }
             // Find the new active cell
@@ -853,15 +891,14 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             else
                 activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
 
-            activeCellPoint.Row = row;
-            activeCellPoint.Column = column;
+            activeCellPoint.Set(row, column);
 
             if (anchorCell != null)
-                UpdateSelectedCells();
+                UpdateSelectedCells(anchorCellPoint, activeCellPoint, true, true);
             else
             {
                 HighlightActiveCellHeaders(false);
-                UpdateSelectionFrame();
+                UpdateSelectionFrame(true);
             }
 
             if (scrollActiveCellIntoView)
@@ -921,15 +958,21 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private void SetAnchorCell(int row, int column)
         {
             anchorCell = GetCell(row, column) as CellFrame;
-            anchorCellPoint.Row = anchorCell != null ? row : -1;
-            anchorCellPoint.Column = anchorCell != null ? column : -1;
+            if (anchorCell != null)
+                anchorCellPoint.Set(row, column);
+            else
+                anchorCellPoint.Clear();
+        }
+
+        private void SetAnchorCell(CellPoint point)
+        {
+            SetAnchorCell(point.Row, point.Column);
         }
 
         private void ClearAnchorCell()
         {
             anchorCell = null;
-            anchorCellPoint.Row = -1;
-            anchorCellPoint.Column = -1;
+            anchorCellPoint.Clear();
         }
 
         private void SetAnchorCellToActiveCell(bool setBackgroundColor)
@@ -957,16 +1000,17 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 selectedCells = null;
             }
         }
-        private void UpdateSelectedCells()
+        private void UpdateSelectedCells(CellPoint fromPoint, CellPoint toPoint, bool updateSelectionFrame, bool triggerEvents)
         {
             ClearSelectedCells();
-            int startRow = Math.Min(anchorCellPoint.Row, activeCellPoint.Row);
-            int startCol = Math.Min(anchorCellPoint.Column, activeCellPoint.Column);
-            int width = Math.Abs(anchorCellPoint.Column - activeCellPoint.Column) + 1;
-            int height = Math.Abs(anchorCellPoint.Row - activeCellPoint.Row) + 1;
+            int startRow = Math.Min(fromPoint.Row, toPoint.Row);
+            int startCol = Math.Min(fromPoint.Column, toPoint.Column);
+            int width = Math.Abs(fromPoint.Column - toPoint.Column) + 1;
+            int height = Math.Abs(fromPoint.Row - toPoint.Row) + 1;
             selectedCells = new CellRange(startRow, startCol, startRow + height - 1, startCol + width - 1);
             HighlightCells(selectedCells, false);
-            UpdateSelectionFrame();
+            if (updateSelectionFrame)
+                UpdateSelectionFrame(triggerEvents);
         }
 
         private void InitializeSelectionFrame()
@@ -980,15 +1024,21 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             selectionFrame.AddToGrid();
         }
 
-        private void UpdateSelectionFrame()
+        // Return true if selection changed
+        private bool UpdateSelectionFrame(bool triggerEvents)
         {
-            if (selectionFrame == null) return;
+            if (selectionFrame == null)
+                return false;
+
             CellRange? prevSelection = selectionFrame.CellRange?.Clone();
             selectionFrame.SetRange(selectedCells != null ? selectedCells : new CellRange(activeCellPoint.Row, activeCellPoint.Column), true);
             CellRange? newSelection = selectionFrame.CellRange?.Clone();
             bool selectionChange = (prevSelection == null) || !prevSelection.Equals(newSelection);
-            if (selectionChange)
+
+            if (selectionChange && triggerEvents)
                 OnSelectionChanged();
+
+            return selectionChange;
         }
 
         public virtual void OnSelectionChanged()
@@ -1184,5 +1234,276 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
             return null;
         }
+
+        public bool DeleteSelectedRows()
+        {
+            bool deleted = false;
+
+            if (AllColumnsSelected && selectedCells != null)
+                deleted = DeleteRows(selectedCells.Top, selectedCells.Bottom);
+
+            return deleted;
+        }
+
+        public bool DeleteSelectedColumns()
+        {
+            bool deleted = false;
+
+            if (AllRowsSelected && selectedCells != null)
+                deleted = DeleteColumns(selectedCells.Left, selectedCells.Right);
+
+            return deleted;
+        }
+
+        public bool DeleteRows(int startDisplayRow, int endDisplayRow)
+        {
+            bool deleted = false;
+
+            if (IsValidDisplayRow(startDisplayRow) && IsValidDisplayRow(endDisplayRow))
+                deleted = Remove(Target.Row, startDisplayRow, endDisplayRow, true);
+
+            return deleted;
+        }
+
+        public bool DeleteColumns(int startDisplayColumn, int endDisplayColumn)
+        {
+            bool deleted = false;
+
+            if (IsValidDisplayColumn(startDisplayColumn) && IsValidDisplayColumn(endDisplayColumn))
+                deleted = Remove(Target.Column, startDisplayColumn, endDisplayColumn, true);
+
+            return deleted;
+        }
+
+        private enum Target
+        {
+            Row = 1,
+            Column = 2
+        }
+
+        private bool Remove(Target target, int startPosition, int endPosition, bool triggerEvents)
+        {
+            bool removed = false;
+            bool retainAnchorCell = anchorCell != null;
+            SelectionState selectionState = GetSelectionState();
+
+            ClearSelectedCells();
+            ClearAnchorCell();
+            activeCell = null;
+
+            removed = RemoveChildren(target, startPosition, endPosition);
+
+            if (removed)
+            {
+                switch (target)
+                {
+                    case Target.Row:
+                        selectionState.ClampRows(RowCount);
+                        break;
+
+                    case Target.Column:
+                        selectionState.ClampColumns(ColumnCount);
+                        break;
+                }
+            }
+
+            RestoreSelectionState(selectionState, retainAnchorCell, true);
+
+            if (removed && triggerEvents)
+                OnSelectionChanged();
+
+            return removed;
+        }
+
+        private bool RemoveChildren(Target target, int startPosition, int endPosition)
+        {
+            if (endPosition < startPosition)
+            {
+                return false;
+            }
+
+            bool removed = false;
+
+            for (int position = startPosition; position <= endPosition; position++)
+            {
+                if (RemoveChildrenAt(target, position, false))
+                    removed = true;
+            }
+
+            if (removed)
+                ResetPositionsAfterRemoveAt(target, startPosition, endPosition - startPosition + 1);
+
+            return removed;
+        }
+
+
+        private bool RemoveChildrenAt(Target target, int position, bool resetPositions)
+        {
+            if (position <= 0)
+                return false;
+
+            RemoveChildElementsAt(target, position);
+            RemoveDefinitionAt(target, position);
+
+            if (resetPositions)
+                ResetPositionsAfterRemoveAt(target, position, 1);
+
+            IncrementTargetCount(target, -1);
+
+            return true;
+        }
+
+        private void RemoveChildElementsAt(Target target, int position)
+        {
+            for (int i = Children.Count - 1; i >= 0; i--)
+            {
+                var child = Children[i];
+                if (!(child is BoxView))
+                {
+                    if (IsValidRemoveTarget(target, child, position))
+                        Children.RemoveAt(i);
+                }
+            }
+        }
+
+        private bool IsValidRemoveTarget(Target target, IView child, int position)
+        {
+            if (!(child is BoxView))
+            {
+                switch (target)
+                {
+                    case Target.Row:
+                        return GetRow(child) == position;
+                    case Target.Column:
+                        return GetColumn(child) == position;
+                }
+            }
+
+            return false;
+        }
+
+        private void RemoveDefinitionAt(Target target, int position)
+        {
+            switch (target)
+            {
+                case Target.Column:
+                    if (ColumnDefinitions.Count > position)
+                        ColumnDefinitions.RemoveAt(position);
+                    break;
+                case Target.Row:
+                    if (RowDefinitions.Count > position)
+                        RowDefinitions.RemoveAt(position);
+                    break;
+            }
+
+        }
+
+        private void ResetPositionsAfterRemoveAt(Target target, int startPosition, int numRemoved)
+        {
+            if (numRemoved <= 0) return;
+
+            foreach (var child in Children)
+            {
+                int currentPosition = GetChildPosition(target, child);
+                if (currentPosition > startPosition)
+                    SetChildPosition(target, child, currentPosition - numRemoved);
+            }
+        }
+
+        private int GetChildPosition(Target target, IView child)
+        {
+            switch (target)
+            {
+                case Target.Row:
+                    return GetRow(child);
+                case Target.Column:
+                    return GetColumn(child);
+            }
+            return -1;
+        }
+
+        private void SetChildPosition(Target target, IView child, int newPosition)
+        {
+            switch (target)
+            {
+                case Target.Column:
+                    SetChildColumn(child, newPosition);
+                    break;
+                case Target.Row:
+                    SetChildRow(child, newPosition);
+                    break;
+            }
+        }
+
+        private void SetChildColumn(IView child, int newColumn)
+        {
+            int row = GetRow(child);
+            SetColumn(child, newColumn);
+            if (row == 0)
+                UpdateHeaderPosition(HeaderType.Column, child, newColumn - 1);
+            else
+                UpdateCellPosition(Target.Column, child, newColumn - 1);
+        }
+
+        private void SetChildRow(IView child, int newRow)
+        {
+            int column = GetColumn(child);
+            SetRow(child, newRow);
+            if (column == 0)
+                UpdateHeaderPosition(HeaderType.Row, child, newRow - 1);
+            else
+                UpdateCellPosition(Target.Row, child, newRow - 1);
+        }
+
+        private void UpdateCellPosition(Target target, IView child, int newPosition)
+        {
+            CellFrame? cellFrame = child as CellFrame;
+            if (cellFrame != null)
+            {
+                switch (target)
+                {
+                    case Target.Row:
+                        cellFrame.Row = newPosition;
+                        break;
+                    case Target.Column:
+                        cellFrame.Column = newPosition;
+                        break;
+                }
+            }
+        }
+
+        private void UpdateHeaderPosition(HeaderType expectedType, IView child, int newPosition)
+        {
+            HeaderFrame? headerFrame = child as HeaderFrame;
+            if (headerFrame != null && headerFrame.Type == expectedType)
+            {
+                headerFrame.Position = newPosition;
+                headerFrame.Content = GetHeaderCellContent(headerFrame.Type, headerFrame.Position);
+            }
+        }
+
+        private void IncrementTargetCount(Target target, int amount)
+        {
+            switch (target)
+            {
+                case Target.Column:
+                    ColumnCount = ColumnCount + amount;
+                    break;
+                case Target.Row:
+                    RowCount = RowCount + amount;
+                    break;
+            }
+        }
+
+        public bool IsValidDisplayRow(int displayRow)
+        {
+            return displayRow >= 0 && displayRow <= RowCount;
+        }
+
+        public bool IsValidDisplayColumn(int displayColumn)
+        {
+            return displayColumn >= 0 && displayColumn <= ColumnCount;
+        }
+
     }
 }

@@ -4,7 +4,7 @@
              xmlns:controls="clr-namespace:Maze.Maui.App.Controls"
              x:Class="Maze.Maui.App.Views.MainPage">
 
-        <!-- Main Content Grid -->
+    <!-- Main Content Grid -->
         <Grid x:Name="MainGrid">
             <Grid.RowDefinitions>
                 <RowDefinition Height="0" />

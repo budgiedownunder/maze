@@ -6,6 +6,7 @@
     using Maze.Maui.App.ViewModels;
     using Maze.Maui.App.Controls;
     using Maze.Maui.App.Services;
+    using Microsoft.Maui.Dispatching;
 
     public partial class MainPage : ContentPage
     {
@@ -25,7 +26,7 @@
             MazeGrid.KeyDown += OnMazeGridKeyDown;
             MazeGrid.SelectionChanged += OnMazeGridSelectionChanged;
 
-            MazeGrid.ActivateCell(1, 1);
+            MazeGrid.ActivateCell(1, 1, false);
 
             UpdateControls();
         }
@@ -136,8 +137,7 @@
         private void ChangeSelectedCellsContent(Maze.CellType newCellType)
         {
             MazeGrid.SetSelectionContent(newCellType);
-            EnableExtendedSelectionMode(false);
-            UpdateControls();
+            ExitSelectionModeAndUpdateControls();
         }
 
         private void OnDeleteRowsBtnClicked(object sender, EventArgs e)
@@ -147,7 +147,8 @@
 
         private void DeleteSelectedRows()
         {
-            DisplayAlert(APP_TITLE, "Delete rows", "OK");
+            MazeGrid.DeleteSelectedRows();;
+            ExitSelectionModeAndUpdateControls();
         }
 
         private void OnDeleteColumnsBtnClicked(object sender, EventArgs e)
@@ -157,7 +158,8 @@
 
         private void DeleteSelectedColumns()
         {
-            DisplayAlert(APP_TITLE, "Delete columns", "OK");
+            MazeGrid.DeleteSelectedColumns();
+            ExitSelectionModeAndUpdateControls();
         }
 
         private void OnInsertRowsBtnClicked(object sender, EventArgs e)
@@ -184,6 +186,12 @@
         {
             EnableExtendedSelectionMode(enable);
             ShowSelectRangeButtons(!enable);
+        }
+
+        private void ExitSelectionModeAndUpdateControls()
+        {
+            EnableExtendedSelectionMode(false);
+            UpdateControls();
         }
 
         private void EnableExtendedSelectionMode(bool enable)
