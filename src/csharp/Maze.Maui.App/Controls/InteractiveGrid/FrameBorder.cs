@@ -341,6 +341,18 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             ParentGrid.Children.Add(view);
         }
 
+        public void RemoveFromGrid()
+        {
+            RemoveViewFromGrid(box);
+            if (grip != null)
+                RemoveViewFromGrid(grip);
+        }
+
+        private void RemoveViewFromGrid(BoxView view)
+        {
+            ParentGrid.Children.Remove(view);
+        }
+
         public void SetPosition(int row, int column, double width, double height, Thickness margin)
         {
             startRow = row;

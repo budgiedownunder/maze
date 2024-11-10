@@ -38,7 +38,7 @@ namespace Maze.Maui.App.Controls
             this.IsPanSupportEnabled = enablePanSupport;
             this.RowCount = 30; //(int)maze.RowCount;
             this.ColumnCount = 15; //(int)maze.ColCount;
-            PopulateGrid();
+            InitializeContent();
         }
 
         public CellStatus GetCurrentSelectionStatus()
@@ -101,7 +101,7 @@ namespace Maze.Maui.App.Controls
             return Api.Maze.CellType.Empty;
         }
 
-        public override ContentView InitialzeCellContent(int row, int column)
+        public override ContentView GetCellContent(int row, int column)
         {
             return new MazeCellContent(Maze.Api.Maze.CellType.Empty);
         }

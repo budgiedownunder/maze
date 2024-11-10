@@ -18,11 +18,11 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public CellPoint? AnchorCellPoint { get => anchorCellPoint; }
 
-        public SelectionState(CellRange? selectedCells, CellPoint? activeCellPoint, CellPoint? anchorCellPOint)
+        public SelectionState(CellRange? selectedCells, CellPoint? activeCellPoint, CellPoint? anchorCellPoint)
         {
             this.selectedCells = selectedCells;
             this.activeCellPoint = activeCellPoint;
-            this.anchorCellPoint = anchorCellPOint;
+            this.anchorCellPoint = anchorCellPoint;
         }
 
         public void ClampRows(int maxRow)

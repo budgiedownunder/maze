@@ -169,7 +169,8 @@
 
         private void InsertRows()
         {
-            DisplayAlert(APP_TITLE, "Insert rows", "OK");
+            MazeGrid.InsertSelectedRows(); ;
+            ExitSelectionModeAndUpdateControls();
         }
 
         private void OnInsertColumnsBtnClicked(object sender, EventArgs e)
@@ -179,7 +180,8 @@
 
         private void InsertColumns()
         {
-            DisplayAlert(APP_TITLE, "Insert columns", "OK");
+            MazeGrid.InsertSelectedColumns(); ;
+            ExitSelectionModeAndUpdateControls();
         }
 
         private void SetSelectRangeMode(bool enable)

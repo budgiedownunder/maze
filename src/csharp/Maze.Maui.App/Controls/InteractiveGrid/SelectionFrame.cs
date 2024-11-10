@@ -141,6 +141,12 @@
                 border.AddToGrid();
         }
 
+        public void RemoveFromGrid()
+        {
+            foreach (var border in frameBorders)
+                border.RemoveFromGrid();
+        }
+
         public void SetRange(CellRange newRange, bool show)
         {
             CellRange = newRange.Clone();

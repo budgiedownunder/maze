@@ -13,12 +13,14 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
     {
         HeaderType type;
         public HeaderType Type { get => type; }
-        public int Position { get; set; }
+        public int Index { get; set; }
 
-        public HeaderFrame(HeaderType type, int position)
+        public int DisplayIndex { get => type == HeaderType.Corner ? Index : Index + 1; }
+
+        public HeaderFrame(HeaderType type, int index)
         {
             this.type = type;
-            Position = position;    
+            Index = index;
         }
     }
 }
