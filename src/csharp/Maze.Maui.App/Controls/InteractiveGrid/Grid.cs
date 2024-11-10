@@ -1466,7 +1466,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             if (resetPositions)
                 ResetChildPositions(target, position, -1);
 
-            IncrementTargetCount(target, -1);
+            AdjustTargetCount(target, -1);
 
             return true;
         }
@@ -1476,7 +1476,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             for (int i = Children.Count - 1; i >= 0; i--)
             {
                 var child = Children[i];
-                if (!(child is BoxView))
+                if (IsGridCellOrHeader(child))
                 {
                     if (IsValidRemoveTarget(target, child, position))
                         Children.RemoveAt(i);
@@ -1560,13 +1560,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
             InsertDefinitionAt(target, position);
             ResetChildPositions(target, position - 1, 1);
-            InsertContentAt(target, position);
-            IncrementTargetCount(target, 1);
+            InsertChildContentAt(target, position);
+            AdjustTargetCount(target, 1);
 
             return true;
         }
 
-        private void InsertContentAt(Target target, int position)
+        private void InsertChildContentAt(Target target, int position)
         {
             switch (target)
             {
@@ -1681,7 +1681,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
-        private void IncrementTargetCount(Target target, int amount)
+        private void AdjustTargetCount(Target target, int amount)
         {
             switch (target)
             {
