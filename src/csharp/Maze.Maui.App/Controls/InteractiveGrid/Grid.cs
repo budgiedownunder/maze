@@ -1407,7 +1407,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
             ClearSelectedCells();
             ClearAnchorCell(true);
-            activeCell = null;
+            ClearActiveCell(true);
 
             removed = RemoveChildren(target, startPosition, endPosition);
 
