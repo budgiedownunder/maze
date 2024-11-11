@@ -1,27 +1,283 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Input;
 using Maze.Maui.App.Services;
 
 namespace Maze.Maui.App.ViewModels
 {
     class MainPageViewModel : INotifyPropertyChanged
     {
+        private const int COMMAND_DELAY_MS = 50;
+
+        public ICommand InsertRowsCommand { get; }
+        public ICommand DeleteRowsCommand { get; }
+        public ICommand InsertColumnsCommand { get; }
+        public ICommand DeleteColumnsCommand { get; }
+        public ICommand SelectRangeCommand { get; }
+        public ICommand DoneCommand { get; }
+        public ICommand SetWallCommand { get; }
+        public ICommand SetStartCommand { get; }
+        public ICommand SetFinishCommand { get; }
+        public ICommand ClearCommand { get; }
+
+        public event EventHandler? InsertRowsRequested;
+        public event EventHandler? DeleteRowsRequested;
+        public event EventHandler? InsertColumnsRequested;
+        public event EventHandler? DeleteColumnsRequested;
+        public event EventHandler? SelectRangeRequested;
+        public event EventHandler? DoneRequested;
+        public event EventHandler? SetWallRequested;
+        public event EventHandler? SetStartRequested;
+        public event EventHandler? SetFinishRequested;
+        public event EventHandler? ClearRequested;
+
+        private bool _isBusy = false;
         private readonly IDeviceTypeService _deviceTypeService;
+        private bool _canInsertRows = false;
+        private bool _canDeleteRows = false;
+        private bool _canInsertColumns = false;
+        private bool _canDeleteColumns = false;
+        private bool _canSelectRange = false;
+        private bool _canShowDone = false;
+        private bool _canSetWall = false;
+        private bool _canSetStart = false;
+        private bool _canSetFinish = false;
+        private bool _canClear = false;
+
+        public bool IsBusy
+        {
+            get => _isBusy;
+            set
+            {
+                if (_isBusy != value)
+                {
+                    _isBusy = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         public bool IsTouchOnlyDevice
         {
             get => _deviceTypeService.IsTouchOnlyDevice();
         }
 
-        public MainPageViewModel(IDeviceTypeService deviceTypeService)
+        public bool CanInsertRows
         {
-            _deviceTypeService = deviceTypeService;
+            get => _canInsertRows;
+            set
+            {
+                if (_canInsertRows != value)
+                {
+                    _canInsertRows = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool CanDeleteRows
+        {
+            get => _canDeleteRows;
+            set
+            {
+                if (_canDeleteRows != value)
+                {
+                    _canDeleteRows = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool CanInsertColumns
+        {
+            get => _canInsertColumns;
+            set
+            {
+                if (_canInsertColumns != value)
+                {
+                    _canInsertColumns = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool CanDeleteColumns
+        {
+            get => _canDeleteColumns;
+            set
+            {
+                if (_canDeleteColumns != value)
+                {
+                    _canDeleteColumns = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool CanSelectRange
+        {
+            get => _canSelectRange;
+            set
+            {
+                if (_canSelectRange != value)
+                {
+                    _canSelectRange = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+
+        public bool CanShowDone
+        {
+            get => _canShowDone;
+            set
+            {
+                if (_canShowDone!= value)
+                {
+                    _canShowDone = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool CanSetWall
+        {
+            get => _canSetWall;
+            set
+            {
+                if (_canSetWall != value)
+                {
+                    _canSetWall = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool CanSetStart
+        {
+            get => _canSetStart;
+            set
+            {
+                if (_canSetStart != value)
+                {
+                    _canSetStart = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool CanSetFinish
+        {
+            get => _canSetFinish;
+            set
+            {
+                if (_canSetFinish != value)
+                {
+                    _canSetFinish = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool CanClear
+        {
+            get => _canClear;
+            set
+            {
+                if (_canClear != value)
+                {
+                    _canClear = value;
+                    OnPropertyChanged();
+                }
+            }
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
+
         protected void OnPropertyChanged([CallerMemberName] string propertyName = "")
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+
+        public MainPageViewModel(IDeviceTypeService deviceTypeService)
+        {
+            _deviceTypeService = deviceTypeService;
+            InsertRowsCommand = new Command(async () => await OnInsertRows());
+            DeleteRowsCommand = new Command(async () => await OnDeleteRows());
+            InsertColumnsCommand = new Command(async () => await OnInsertColumns());
+            DeleteColumnsCommand = new Command(async () => await OnDeleteColumns());
+            SelectRangeCommand = new Command(async () => await OnSelectRange());
+            DoneCommand = new Command(async () => await OnDone());
+            SetWallCommand = new Command(async () => await OnSetWall());
+            SetStartCommand = new Command(async () => await OnSetStart());
+            SetFinishCommand = new Command(async () => await OnSetFinish());
+            ClearCommand = new Command(async () => await OnClear());
+        }
+
+        private async Task OnInsertRows()
+        {
+            await RunCommand(InsertRowsRequested);
+        }
+
+        private async Task OnDeleteRows()
+        {
+            await RunCommand(DeleteRowsRequested);
+        }
+
+        private async Task OnInsertColumns()
+        {
+            await RunCommand(InsertColumnsRequested);
+        }
+
+        private async Task OnDeleteColumns()
+        {
+            await RunCommand(DeleteColumnsRequested);
+        }
+
+        private async Task OnSelectRange()
+        {
+            await RunCommand(SelectRangeRequested);
+        }
+
+        private async Task OnDone()
+        {
+            await RunCommand(DoneRequested);
+        }
+
+        private async Task OnSetWall()
+        {
+            await RunCommand(SetWallRequested);
+        }
+
+        private async Task OnSetStart()
+        {
+            await RunCommand(SetStartRequested);
+        }
+
+        private async Task OnSetFinish()
+        {
+            await RunCommand(SetFinishRequested);
+        }
+
+        private async Task OnClear()
+        {
+            await RunCommand(ClearRequested);
+        }
+
+        private async Task RunCommand(EventHandler? eventHandler)
+        {
+            try
+            {
+                IsBusy = true;
+                await Task.Delay(COMMAND_DELAY_MS);
+                eventHandler?.Invoke(this, EventArgs.Empty);
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
     }
 }

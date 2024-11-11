@@ -1321,8 +1321,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             bool deleted = false;
 
-            if (AllColumnsSelected && selectedCells != null)
-                deleted = DeleteRows(selectedCells.Top, selectedCells.Bottom);
+            if (AllColumnsSelected && RowCount > 1)
+            {
+                if(selectedCells != null)
+                    deleted = DeleteRows(selectedCells.Top, selectedCells.Bottom);
+                else if (activeCell != null)
+                    deleted = DeleteRows(activeCellPoint.Row, activeCellPoint.Row);
+            }
 
             return deleted;
         }
@@ -1331,8 +1336,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             bool inserted = false;
 
-            if (AllColumnsSelected && selectedCells != null)
-                inserted = InsertRows(selectedCells.Top, selectedCells.Bottom);
+            if(AllColumnsSelected)
+            {
+                if (selectedCells != null)
+                    inserted = InsertRows(selectedCells.Top, selectedCells.Bottom);
+                else if (activeCell != null)
+                    inserted = InsertRows(activeCellPoint.Row, activeCellPoint.Row);
+            }
 
             return inserted;
         }
@@ -1341,8 +1351,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             bool deleted = false;
 
-            if (AllRowsSelected && selectedCells != null)
-                deleted = DeleteColumns(selectedCells.Left, selectedCells.Right);
+            if (AllRowsSelected && ColumnCount > 1)
+            {
+                if (selectedCells != null)
+                    deleted = DeleteColumns(selectedCells.Left, selectedCells.Right);
+                else if (activeCell != null)
+                    deleted = DeleteColumns(activeCellPoint.Column, activeCellPoint.Column);
+            }
 
             return deleted;
         }
@@ -1351,8 +1366,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             bool inserted = false;
 
-            if (AllRowsSelected && selectedCells != null)
-                inserted = InsertColumns(selectedCells.Left, selectedCells.Right);
+            if (AllRowsSelected )
+            {
+                if (selectedCells != null)
+                    inserted = InsertColumns(selectedCells.Left, selectedCells.Right);
+                else if (activeCell != null)
+                    inserted = InsertColumns(activeCellPoint.Column, activeCellPoint.Column);
+            }
 
             return inserted;
         }

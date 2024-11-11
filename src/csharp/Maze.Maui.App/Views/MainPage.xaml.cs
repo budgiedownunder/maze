@@ -6,19 +6,31 @@
     using Maze.Maui.App.ViewModels;
     using Maze.Maui.App.Controls;
     using Maze.Maui.App.Services;
-    using Microsoft.Maui.Dispatching;
 
     public partial class MainPage : ContentPage
     {
         const String APP_TITLE = "MAZE";
         int count = 0;
+        MainPageViewModel _viewModel;
 
         public MainPage()
         {
             InitializeComponent();
             IDeviceTypeService deviceTypeService = new DeviceTypeService();
 
-            BindingContext = new MainPageViewModel(deviceTypeService);
+            _viewModel = new MainPageViewModel(deviceTypeService);
+            BindingContext = _viewModel;
+
+            _viewModel.InsertRowsRequested += (s, e) => InsertRows();
+            _viewModel.DeleteRowsRequested += (s, e) => DeleteRows();
+            _viewModel.InsertColumnsRequested += (s, e) => InsertColumns();
+            _viewModel.DeleteColumnsRequested += (s, e) => DeleteColumns();
+            _viewModel.SelectRangeRequested += (s, e) => { SetSelectRangeMode(true); };
+            _viewModel.DoneRequested += (s, e) => { SetSelectRangeMode(false); };
+            _viewModel.SetWallRequested += (s, e) => { ChangeSelectionToWall(); };
+            _viewModel.SetStartRequested += (s, e) => { ChangeSelectionToStart(); };
+            _viewModel.SetFinishRequested += (s, e) => { ChangeSelectionToFinish(); };
+            _viewModel.ClearRequested += (s, e) => { ClearSelection(); };
 
             MazeGrid.Initialize(!deviceTypeService.IsTouchOnlyDevice());
             MazeGrid.CellTapped += OnMazeGridCellTapped;
@@ -31,28 +43,7 @@
             UpdateControls();
         }
 
-        private bool IsTouchOnlyDevice
-        {
-            get
-            {
-                bool touchOnly = false;
-                if (BindingContext is MainPageViewModel viewModel)
-                    touchOnly = viewModel.IsTouchOnlyDevice;
-                return touchOnly;
-            }
-        }
-
-        private void OnSelectRangeBtnClicked(object sender, EventArgs e)
-        {
-            if (BindingContext is MainPageViewModel viewModel)
-                SetSelectRangeMode(true);
-        }
-
-        private void OnDoneBtnClicked(object sender, EventArgs e)
-        {
-            if (BindingContext is MainPageViewModel viewModel)
-                SetSelectRangeMode(false);
-        }
+        private bool IsTouchOnlyDevice { get => _viewModel.IsTouchOnlyDevice; }
 
         private void OnMazeGridCellTapped(object sender, MazeGridCellTappedEventArgs e)
         {
@@ -61,20 +52,17 @@
 
         private void OnMazeGridCellDoubleTapped(object sender, MazeGridCellTappedEventArgs e)
         {
-            if (BindingContext is MainPageViewModel viewModel)
-            {
-                bool inExtendedSelectionMode = MazeGrid.IsExtendedSelectionMode;
-                if (IsTouchOnlyDevice && inExtendedSelectionMode)
-                    SetSelectRangeMode(false);
-                MazeGrid.OnCellDoubleTapped(e.Cell, false);
-                if (IsTouchOnlyDevice && !inExtendedSelectionMode)
-                    SetSelectRangeMode(true);
-            }
+            bool inExtendedSelectionMode = MazeGrid.IsExtendedSelectionMode;
+            if (IsTouchOnlyDevice && inExtendedSelectionMode)
+                SetSelectRangeMode(false);
+            MazeGrid.OnCellDoubleTapped(e.Cell, false);
+            if (IsTouchOnlyDevice && !inExtendedSelectionMode)
+                SetSelectRangeMode(true);
         }
 
         private void OnMazeGridKeyDown(object sender, MazeGridKeyDownEventArgs e)
         {
-            switch(e.Key)
+            switch (e.Key)
             {
                 case Controls.Keyboard.Key.W:
                     ChangeSelectionToWall();
@@ -94,19 +82,9 @@
             }
         }
 
-        private void OnSetWallBtnClicked(object sender, EventArgs e)
-        {
-            ChangeSelectionToWall();
-        }
-
         private void ChangeSelectionToWall()
         {
             ChangeSelectedCellsContent(Maze.CellType.Wall);
-        }
-
-        private void OnSetStartBtnClicked(object sender, EventArgs e)
-        {
-            ChangeSelectionToStart();
         }
 
         private void ChangeSelectionToStart()
@@ -114,19 +92,9 @@
             ChangeSelectedCellsContent(Maze.CellType.Start);
         }
 
-        private void OnSetFinishBtnClicked(object sender, EventArgs e)
-        {
-            ChangeSelectionToFinish();
-        }
-
         private void ChangeSelectionToFinish()
         {
             ChangeSelectedCellsContent(Maze.CellType.Finish);
-        }
-
-        private void OnClearBtnClicked(object sender, EventArgs e)
-        {
-            ClearSelection();
         }
 
         private void ClearSelection()
@@ -140,42 +108,22 @@
             ExitSelectionModeAndUpdateControls();
         }
 
-        private void OnDeleteRowsBtnClicked(object sender, EventArgs e)
+        private void DeleteRows()
         {
-            DeleteSelectedRows();
-        }
-
-        private void DeleteSelectedRows()
-        {
-            MazeGrid.DeleteSelectedRows();;
+            MazeGrid.DeleteSelectedRows(); ;
             ExitSelectionModeAndUpdateControls();
         }
 
-        private void OnDeleteColumnsBtnClicked(object sender, EventArgs e)
-        {
-            DeleteSelectedColumns();
-        }
-
-        private void DeleteSelectedColumns()
+        private void DeleteColumns()
         {
             MazeGrid.DeleteSelectedColumns();
             ExitSelectionModeAndUpdateControls();
-        }
-
-        private void OnInsertRowsBtnClicked(object sender, EventArgs e)
-        {
-            InsertRows();
         }
 
         private void InsertRows()
         {
             MazeGrid.InsertSelectedRows(); ;
             ExitSelectionModeAndUpdateControls();
-        }
-
-        private void OnInsertColumnsBtnClicked(object sender, EventArgs e)
-        {
-            InsertColumns();
         }
 
         private void InsertColumns()
@@ -198,7 +146,7 @@
 
         private void EnableExtendedSelectionMode(bool enable)
         {
-            if (MazeGrid.IsExtendedSelectionMode == enable) 
+            if (MazeGrid.IsExtendedSelectionMode == enable)
                 return;
 
             if (enable)
@@ -212,10 +160,10 @@
             bool allRowsSelected = MazeGrid.AllRowsSelected;
             bool allColumnsSelected = MazeGrid.AllColumnsSelected;
 
-            ShowImageButton(InsertRowsBtn, allColumnsSelected);
-            ShowImageButton(DeleteRowsBtn, allColumnsSelected && !allRowsSelected);
-            ShowImageButton(InsertColumnsBtn, allRowsSelected);
-            ShowImageButton(DeleteColumnsBtn, allRowsSelected && !allColumnsSelected);
+            _viewModel.CanInsertRows = allColumnsSelected;
+            _viewModel.CanDeleteRows = allColumnsSelected && !allRowsSelected;
+            _viewModel.CanInsertColumns = allRowsSelected;
+            _viewModel.CanDeleteColumns = allRowsSelected && !allColumnsSelected;
         }
 
         private void ShowSelectRangeButtons(bool show)
@@ -224,32 +172,20 @@
             bool showSelectRangeBtn = show && touchOnly;
             bool showDoneBtn = !show && touchOnly;
 
-            ShowImageButton(SelectRangeBtn, showSelectRangeBtn);
-            ShowTextButton(DoneBtn, showDoneBtn, "Done");
+            _viewModel.CanSelectRange = showSelectRangeBtn;
+            _viewModel.CanShowDone = showDoneBtn;
         }
 
         private void ShowCellEditButtons(bool haveSelection)
         {
             CellStatus status = MazeGrid.GetCurrentSelectionStatus();
 
-            ShowImageButton(SetWallBtn, !status.IsAllWalls);
-            ShowImageButton(SetStartBtn, status.IsSingleCell && !status.IsStart);
-            ShowImageButton(SetFinishBtn, status.IsSingleCell && !status.IsFinish);
-            ShowImageButton(ClearBtn, !status.IsEmpty);
+            _viewModel.CanSetWall = !status.IsAllWalls;
+            _viewModel.CanSetStart = status.IsSingleCell && !status.IsStart;
+            _viewModel.CanSetFinish = status.IsSingleCell && !status.IsFinish;
+            _viewModel.CanClear = !status.IsEmpty;
         }
 
-        private void ShowImageButton(ImageButton button, bool show)
-        {
-            button.IsVisible = show;
-            button.InputTransparent = !show;
-        }
-
-        private void ShowTextButton(Button button, bool show, string text)
-        {
-            button.Text = show ? text : null;
-            button.IsVisible = show;
-            button.InputTransparent = !show;
-        }
         private void OnMazeGridSelectionChanged(object sender, MazeGridSelectionChangedEventArgs e)
         {
             UpdateControls();
@@ -272,7 +208,7 @@
         private void ShowMainGridRow(int row, bool show)
         {
             MainGrid.RowDefinitions[row].Height = show ? GridLength.Auto : new GridLength(0);
-            if (row == 0 )
+            if (row == 0)
                 TopRowLayout.IsVisible = show;
         }
 

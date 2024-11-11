@@ -15,48 +15,47 @@
 
             <!-- Top buttons -->
         <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="FillAndExpand" Padding="10" Spacing="5"  BackgroundColor="Transparent" IsVisible="False">
-            <ImageButton x:Name="SetWallBtn" Clicked="OnSetWallBtnClicked" Source="wall_button.png" 
+            <ImageButton x:Name="SetWallBtn" IsVisible="{Binding CanSetWall}" Command="{Binding SetWallCommand}" Source="wall_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
-                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
-            <ImageButton x:Name="SetStartBtn" Clicked="OnSetStartBtnClicked" Source="start_button.png" 
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+            <ImageButton x:Name="SetStartBtn" IsVisible="{Binding CanSetStart}" Command="{Binding SetStartCommand}" Source="start_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
-                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
-            <ImageButton x:Name="SetFinishBtn" Clicked="OnSetFinishBtnClicked" Source="finish_button.png" 
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+            <ImageButton x:Name="SetFinishBtn" IsVisible="{Binding CanSetFinish}" Command="{Binding SetFinishCommand}" Source="finish_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
-                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="False"/>
-            <ImageButton x:Name="ClearBtn" Clicked="OnClearBtnClicked" Source="clear_button.png" 
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+            <ImageButton x:Name="ClearBtn" IsVisible="{Binding CanClear}" Command="{Binding ClearCommand}" Source="clear_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
-                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
-            <ImageButton x:Name="InsertRowsBtn" Clicked="OnInsertRowsBtnClicked" Source="insert_rows_button.png" 
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+            <ImageButton x:Name="InsertRowsBtn" IsVisible="{Binding CanInsertRows}" Command="{Binding InsertRowsCommand}" Source="insert_rows_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
-                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
-            <ImageButton x:Name="DeleteRowsBtn" Clicked="OnDeleteRowsBtnClicked" Source="delete_rows_button.png" 
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+            <ImageButton x:Name="DeleteRowsBtn" IsVisible="{Binding CanDeleteRows}" Command="{Binding DeleteRowsCommand}" Source="delete_rows_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
-                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
-            <ImageButton x:Name="InsertColumnsBtn" Clicked="OnInsertColumnsBtnClicked" Source="insert_columns_button.png" 
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+            <ImageButton x:Name="InsertColumnsBtn" IsVisible="{Binding CanInsertColumns}" Command="{Binding InsertColumnsCommand}" Source="insert_columns_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
-                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
-            <ImageButton x:Name="DeleteColumnsBtn" Clicked="OnDeleteColumnsBtnClicked" Source="delete_columns_button.png" 
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+            <ImageButton x:Name="DeleteColumnsBtn" IsVisible="{Binding CanDeleteColumns}" Command="{Binding DeleteColumnsCommand}" Source="delete_columns_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
-                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End" IsVisible="True"/>
-            <ImageButton x:Name="SelectRangeBtn" Clicked="OnSelectRangeBtnClicked" Source="select_range_button.png" 
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+            <ImageButton x:Name="SelectRangeBtn" IsVisible="{Binding CanSelectedRange}" Command="{Binding SelectRangeCommand}" Source="select_range_button.png" 
                          WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
-                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="EndAndExpand" IsVisible="False"/>
-            <Button x:Name="DoneBtn" Clicked="OnDoneBtnClicked" Text="Done" 
+                         Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="EndAndExpand"/>
+            <Button x:Name="DoneBtn" IsVisible="{Binding CanShowDone}" Command="{Binding DoneCommand}" Text="Done" 
                     HeightRequest="32" MaximumHeightRequest="32" MinimumHeightRequest="32"
                     FontAutoScalingEnabled="True"  FontAttributes="Bold" FontSize="12"  TextColor="Blue" BorderColor="DarkGray" BorderWidth="2" 
-                    BackgroundColor="Transparent" Padding="0" HorizontalOptions="EndAndExpand" IsVisible="False"/>
+                    BackgroundColor="Transparent" Padding="0" HorizontalOptions="EndAndExpand"/>
         </StackLayout>
 
-            <!-- Scrollable Maze Grid in Center -->
+        <!-- Scrollable Maze Grid in Center -->
             <ScrollView Grid.Row="1" x:Name="MazeGridScrollView"
                         Orientation="Both"
                         HorizontalOptions="Start"
                         VerticalOptions="FillAndExpand"
                         HorizontalScrollBarVisibility="Always"
                         VerticalScrollBarVisibility="Always"
-                        Padding="10"
-                        >
+                        Padding="10">
                 <ContentView x:Name="MazeGridContentView">
                     <controls:MazeGrid x:Name="MazeGrid" 
                                        ContainerScrollView="{Binding Source={x:Reference MazeGridScrollView}}"
@@ -79,5 +78,15 @@
                     Clicked="OnCounterClicked"
                     HorizontalOptions="FillAndExpand" />
             </StackLayout>
-        </Grid>
+
+        <ActivityIndicator x:Name="BusyIndicator"
+                           IsRunning="{Binding IsBusy}"
+                           IsVisible="{Binding IsBusy}"
+                           Color="Purple"
+                           VerticalOptions="Center"
+                           HorizontalOptions="Center"
+                           WidthRequest="50"
+                           HeightRequest="50" 
+                           Grid.RowSpan="3"/>
+    </Grid>
 </ContentPage>
