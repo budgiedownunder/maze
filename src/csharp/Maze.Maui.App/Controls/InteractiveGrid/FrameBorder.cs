@@ -1,4 +1,5 @@
 ﻿using Maze.Maui.App.Controls.Pointer;
+using Microsoft.Maui.Controls;
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
@@ -6,8 +7,8 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
     {
         SelectionFrame parentFrame;
 
-        private readonly BoxView box;
-        private readonly BoxView? grip;
+        private readonly BorderBox box;
+        private readonly BorderGrip? grip;
 
         static private Color DEFAULT_COLOR = Colors.Black;
         const double DEFAULT_WIDTH = 2.0;
@@ -76,14 +77,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public int StartColumn { get => startColumn; }
 
-
         public Color Color
         {
             get => color;
             set
             {
-                color = value;
-                UpdateColor(color);
+                UpdateColor(value);
             }
         }
 
@@ -92,22 +91,27 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             get => gripSize;
             set
             {
-                gripSize = value;
-                UpdateGripSize();
+                UpdateGripSize(value);
             }
         }
 
-        public FrameBorder(SelectionFrame parentFrame)
+        public FrameBorder(SelectionFrame parentFrame, FrameEdge edge, Color color, double gripSize)
         {
             this.parentFrame = parentFrame;
+            Edge = edge;
+            Color = color;
+            GripSize = gripSize;
+
             box = NewBox();
             if (ParentFrame.IsPanSupportEnabled)
                 grip = NewGrip();
+
+            RegisterEventHandlers();
         }
 
-        private BoxView NewBox()
+        private BorderBox NewBox()
         {
-            BoxView box = new BoxView
+            BorderBox borderBox = new BorderBox(GetPointerIcon(false))
             {
                 Color = Color,
                 IsVisible = false,
@@ -117,68 +121,61 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 VerticalOptions = LayoutOptions.Start,
                 InputTransparent = false
             };
-            RegisterEventHandlers(box, false);
-            return box;
+            return borderBox;
         }
 
-        private BoxView? NewGrip()
+        private BorderGrip? NewGrip()
         {
             if (!ParentFrame.IsPanSupportEnabled) return null;
 
-
-            BoxView grip = new BoxView
+            BorderGrip grip = new BorderGrip(GetPointerIcon(true), GripSize)
             {
                 Color = Color,
                 IsVisible = false,
-                HeightRequest = GripSize,
-                WidthRequest = GripSize,
-                CornerRadius = GripSize / 2.0,
                 HorizontalOptions = LayoutOptions.Start,
                 VerticalOptions = LayoutOptions.Start,
                 InputTransparent = false
             };
-            RegisterEventHandlers(grip, true);
             return grip;
         }
 
-        private void RegisterEventHandlers(BoxView view, bool isGrip)
+        void RegisterEventHandlers()
         {
-            RegisterPointerEventHandlers(view, isGrip);
+            RegisterBoxEventHandlers();
+            RegisterGripEventHandlers();
+        }
+
+        private void RegisterBoxEventHandlers()
+        {
+            if (box == null) return;
             if (ParentFrame.IsPanSupportEnabled)
-                RegisterPanEventHandlers(view, isGrip);
+                box.PanUpdated += OnBoxPanUpdated;
         }
 
-
-        private void RegisterPointerEventHandlers(BoxView view, bool isGrip)
+        private void OnBoxPanUpdated(BorderBox sender, PanUpdatedEventArgs e)
         {
-            var pointerGestureRecognizer = new PointerGestureRecognizer();
-            pointerGestureRecognizer.PointerEntered += (s, e) =>
-            {
-                OnPointerEntered(view, getPointerIcon(isGrip));
-            };
-            pointerGestureRecognizer.PointerExited += (s, e) =>
-            {
-                OnPointerExited(view);
-            };
-            view.GestureRecognizers.Add(pointerGestureRecognizer);
+            OnPanUpdated(sender, e, false);
         }
 
-        private void OnPointerEntered(BoxView view, Icon icon)
+        private void RegisterGripEventHandlers()
         {
-            Pointer.Pointer.SetCursor(view, icon);
+            if (grip == null) return;
+            if (ParentFrame.IsPanSupportEnabled)
+                grip.PanUpdated += OnGripPanUpdated;
+
         }
 
-        private void OnPointerExited(BoxView view)
+        private void OnGripPanUpdated(BorderGrip sender, PanUpdatedEventArgs e)
         {
-            Pointer.Pointer.SetCursor(view, Icon.Arrow);
+            OnPanUpdated(sender, e, true);
         }
 
-        private Icon getPointerIcon(bool isGrip)
+        private Icon GetPointerIcon(bool isGrip)
         {
-            return isGrip ? getGripPointerIcon() : getEdgePointerIcon();
+            return isGrip ? GetGripPointerIcon() : GetEdgePointerIcon();
         }
 
-        private Icon getEdgePointerIcon()
+        private Icon GetEdgePointerIcon()
         {
             switch (Edge)
             {
@@ -194,7 +191,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             return Icon.Arrow;
         }
 
-        private Icon getGripPointerIcon()
+        private Icon GetGripPointerIcon()
         {
             switch (Corner)
             {
@@ -208,17 +205,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             return Icon.Arrow;
         }
 
-        private void RegisterPanEventHandlers(BoxView view, bool isGrip)
-        {
-            var panGestureRecognizer = new PanGestureRecognizer();
-            panGestureRecognizer.PanUpdated += (s, e) =>
-            {
-                OnPanUpdated(view, e, isGrip);
-            };
-            view.GestureRecognizers.Add(panGestureRecognizer);
-        }
-
-        private void OnPanUpdated(BoxView view, PanUpdatedEventArgs e, bool isGrip)
+        private void OnPanUpdated(IView view, PanUpdatedEventArgs e, bool isGrip)
         {
             switch (e.StatusType)
             {
@@ -305,19 +292,19 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                     deltaX);
         }
 
-        private void UpdateColor(Color colorUse)
+        private void UpdateColor(Color newColor)
         {
-            box.Color = colorUse;
+            color = newColor;
+            if (box != null)
+                box.Color = newColor;
             if (grip != null)
-                grip.Color = colorUse;
+                grip.Color = newColor;
         }
 
-        private void UpdateGripSize()
+        private void UpdateGripSize(double newGripSize)
         {
             if (grip == null) return;
-            grip.HeightRequest = GripSize;
-            grip.WidthRequest = GripSize;
-            grip.CornerRadius = GripSize / 2.0;
+            grip.Size = newGripSize;
         }
 
         public void Show(bool show)

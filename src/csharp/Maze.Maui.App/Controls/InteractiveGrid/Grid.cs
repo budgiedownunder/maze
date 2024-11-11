@@ -852,7 +852,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             if (anchorCell == null) return;
             anchorCell.BackgroundColor = this.HighlightCellBackgroundColor;
-            ClearAnchorCell(true);
+            ClearAnchorCell(false);
             SetAnchorCell(newRow, newColumn);
             if (anchorCell != null)
                 anchorCell.BackgroundColor = this.ActiveCellBackgroundColor;
@@ -1130,7 +1130,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             if (activeCell != null)
             {
-                if(clearFormatting)
+                if (clearFormatting)
                     ClearActiveCellFormatting();
                 activeCellPoint.Clear();
                 activeCell = null;
@@ -1293,18 +1293,22 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             return Math.Clamp(nextColumn, 1, ColumnCount);
         }
 
+        private bool IsSelectionFrameObject(IView child)
+        {
+            return (child is BorderGrip || child is BorderBox);
+        }
         private bool IsGridCellOrHeader(IView child)
         {
-            return !(child is BoxView);
+            return !IsSelectionFrameObject(child);
         }
 
         protected Border? GetCell(int row, int column)
         {
             foreach (var child in this.Children)
             {
-                if (IsGridCellOrHeader(child) && 
-                    this.GetRow(child) == row && 
-                    this.GetColumn(child) == column )
+                if (IsGridCellOrHeader(child) &&
+                    this.GetRow(child) == row &&
+                    this.GetColumn(child) == column)
                 {
                     return child as Border;
                 }
@@ -1531,7 +1535,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
             if (inserted && triggerEvents)
                 OnSelectionChanged();
-            
+
             return inserted;
         }
 

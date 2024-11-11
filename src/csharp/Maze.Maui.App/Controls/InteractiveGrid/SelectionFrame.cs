@@ -112,12 +112,7 @@
 
         private FrameBorder NewFrameBorder(FrameBorder.FrameEdge edge)
         {
-            return new FrameBorder(this)
-            {
-                Edge = edge,
-                Color = BorderColor,
-                GripSize = BorderGripSize
-            };
+            return new FrameBorder(this, edge, BorderColor, BorderGripSize);
         }
 
         private void UpdateBorders()
