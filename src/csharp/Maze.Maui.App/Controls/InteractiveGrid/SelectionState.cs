@@ -14,7 +14,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public CellRange? SelectedCells { get => selectedCells; }
 
-        public CellPoint? ActiveCellPoint { get => anchorCellPoint; }
+        public CellPoint? ActiveCellPoint { get => activeCellPoint; }
 
         public CellPoint? AnchorCellPoint { get => anchorCellPoint; }
 
