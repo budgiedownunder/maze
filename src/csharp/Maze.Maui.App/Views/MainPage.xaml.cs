@@ -65,16 +65,20 @@
             switch (e.Key)
             {
                 case Controls.Keyboard.Key.W:
-                    ChangeSelectionToWall();
+                    if (_viewModel.CanSetWall)
+                        _viewModel.SetWallCommand.Execute(null);
                     break;
                 case Controls.Keyboard.Key.S:
-                    ChangeSelectionToStart();
+                    if (_viewModel.CanSetStart)
+                        _viewModel.SetStartCommand.Execute(null);
                     break;
                 case Controls.Keyboard.Key.F:
-                    ChangeSelectionToFinish();
+                    if (_viewModel.CanSetFinish)
+                        _viewModel.SetFinishCommand.Execute(null);
                     break;
                 case Controls.Keyboard.Key.Delete:
-                    ClearSelection();
+                    if (_viewModel.CanClear)
+                        _viewModel.ClearCommand.Execute(null);
                     break;
                 default:
                     MazeGrid.OnProcessKeyDown(e.KeyState, e.Key, false);
