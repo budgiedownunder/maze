@@ -31,6 +31,8 @@
             _viewModel.SetStartRequested += (s, e) => { ChangeSelectionToStart(); };
             _viewModel.SetFinishRequested += (s, e) => { ChangeSelectionToFinish(); };
             _viewModel.ClearRequested += (s, e) => { ClearSelection(); };
+            _viewModel.SolveRequested += (s, e) => { Solve(); };
+            _viewModel.ClearSolutionRequested += (s, e) => { ClearSolution(); };
 
             MazeGrid.Initialize(!deviceTypeService.IsTouchOnlyDevice());
             MazeGrid.CellTapped += OnMazeGridCellTapped;
@@ -44,6 +46,10 @@
         }
 
         private bool IsTouchOnlyDevice { get => _viewModel.IsTouchOnlyDevice; }
+
+        private bool IsSolveSupported { get => !IsTouchOnlyDevice;  }
+
+        private bool IsSolutionDisplayed { get; set;  } = false;
 
         private void OnMazeGridCellTapped(object sender, MazeGridCellTappedEventArgs e)
         {
@@ -136,6 +142,18 @@
             ExitSelectionModeAndUpdateControls();
         }
 
+        private void Solve()
+        {
+            IsSolutionDisplayed = true;
+            UpdateControls();
+        }
+
+        private void ClearSolution()
+        {
+            IsSolutionDisplayed = false;
+            UpdateControls();
+        }
+
         private void SetSelectRangeMode(bool enable)
         {
             EnableExtendedSelectionMode(enable);
@@ -159,35 +177,42 @@
                 MazeGrid.CancelExtendedSelection();
         }
 
+        private void ShowCellEditButtons(bool haveSelection)
+        {
+            CellStatus status = MazeGrid.GetCurrentSelectionStatus();
+
+            _viewModel.CanSetWall = !status.IsAllWalls && !IsSolutionDisplayed;
+            _viewModel.CanSetStart = status.IsSingleCell && !status.IsStart && !IsSolutionDisplayed;
+            _viewModel.CanSetFinish = status.IsSingleCell && !status.IsFinish && !IsSolutionDisplayed;
+            _viewModel.CanClear = !status.IsEmpty && !IsSolutionDisplayed;
+        }
+
         private void ShowEditRowColumnButtons()
         {
             bool allRowsSelected = MazeGrid.AllRowsSelected;
             bool allColumnsSelected = MazeGrid.AllColumnsSelected;
 
-            _viewModel.CanInsertRows = allColumnsSelected;
-            _viewModel.CanDeleteRows = allColumnsSelected && !allRowsSelected;
-            _viewModel.CanInsertColumns = allRowsSelected;
-            _viewModel.CanDeleteColumns = allRowsSelected && !allColumnsSelected;
+            _viewModel.CanInsertRows = allColumnsSelected && !IsSolutionDisplayed;
+            _viewModel.CanDeleteRows = allColumnsSelected && !allRowsSelected && !IsSolutionDisplayed;
+            _viewModel.CanInsertColumns = allRowsSelected && !IsSolutionDisplayed;
+            _viewModel.CanDeleteColumns = allRowsSelected && !allColumnsSelected && !IsSolutionDisplayed;
         }
 
         private void ShowSelectRangeButtons(bool show)
         {
             bool touchOnly = IsTouchOnlyDevice;
-            bool showSelectRangeBtn = show && touchOnly;
-            bool showDoneBtn = !show && touchOnly;
+            bool showSelectRangeBtn = show && touchOnly && !IsSolutionDisplayed;
+            bool showDoneBtn = !show && touchOnly && !IsSolutionDisplayed;
 
             _viewModel.CanSelectRange = showSelectRangeBtn;
             _viewModel.CanShowDone = showDoneBtn;
         }
 
-        private void ShowCellEditButtons(bool haveSelection)
-        {
-            CellStatus status = MazeGrid.GetCurrentSelectionStatus();
 
-            _viewModel.CanSetWall = !status.IsAllWalls;
-            _viewModel.CanSetStart = status.IsSingleCell && !status.IsStart;
-            _viewModel.CanSetFinish = status.IsSingleCell && !status.IsFinish;
-            _viewModel.CanClear = !status.IsEmpty;
+        private void ShowSolveButtons()
+        {
+            _viewModel.CanSolve = IsSolveSupported && !IsSolutionDisplayed;
+            _viewModel.CanClearSolution = IsSolveSupported && IsSolutionDisplayed;
         }
 
         private void OnMazeGridSelectionChanged(object sender, MazeGridSelectionChangedEventArgs e)
@@ -203,9 +228,10 @@
             ShowMainGridRow(0, showTopRowLayout);
             if (showTopRowLayout)
             {
+                ShowCellEditButtons(haveSelection);
                 ShowEditRowColumnButtons();
                 ShowSelectRangeButtons(!MazeGrid.IsExtendedSelectionMode);
-                ShowCellEditButtons(haveSelection);
+                ShowSolveButtons();
             }
         }
 
@@ -229,6 +255,5 @@
                 SemanticScreenReader.Announce(CounterBtn.Text);
             }
         }
-
     }
 }

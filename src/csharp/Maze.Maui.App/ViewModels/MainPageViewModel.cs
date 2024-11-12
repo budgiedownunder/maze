@@ -19,6 +19,8 @@ namespace Maze.Maui.App.ViewModels
         public ICommand SetStartCommand { get; }
         public ICommand SetFinishCommand { get; }
         public ICommand ClearCommand { get; }
+        public ICommand SolveCommand { get; }
+        public ICommand ClearSolutionCommand { get; }
 
         public event EventHandler? InsertRowsRequested;
         public event EventHandler? DeleteRowsRequested;
@@ -30,6 +32,8 @@ namespace Maze.Maui.App.ViewModels
         public event EventHandler? SetStartRequested;
         public event EventHandler? SetFinishRequested;
         public event EventHandler? ClearRequested;
+        public event EventHandler? SolveRequested;
+        public event EventHandler? ClearSolutionRequested;
 
         private bool _isBusy = false;
         private readonly IDeviceTypeService _deviceTypeService;
@@ -43,6 +47,8 @@ namespace Maze.Maui.App.ViewModels
         private bool _canSetStart = false;
         private bool _canSetFinish = false;
         private bool _canClear = false;
+        private bool _canSolve = false;
+        private bool _canClearSolution = false;
 
         public bool IsBusy
         {
@@ -193,6 +199,32 @@ namespace Maze.Maui.App.ViewModels
             }
         }
 
+        public bool CanSolve
+        {
+            get => _canSolve;
+            set
+            {
+                if (_canSolve != value)
+                {
+                    _canSolve = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool CanClearSolution
+        {
+            get => _canClearSolution;
+            set
+            {
+                if (_canClearSolution != value)
+                {
+                    _canClearSolution = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged([CallerMemberName] string propertyName = "")
@@ -213,6 +245,8 @@ namespace Maze.Maui.App.ViewModels
             SetStartCommand = new Command(async () => await OnSetStart());
             SetFinishCommand = new Command(async () => await OnSetFinish());
             ClearCommand = new Command(async () => await OnClear());
+            SolveCommand = new Command(async () => await OnSolve());
+            ClearSolutionCommand = new Command(async () => await OnClearSolution());
         }
 
         private async Task OnInsertRows()
@@ -263,6 +297,16 @@ namespace Maze.Maui.App.ViewModels
         private async Task OnClear()
         {
             await RunCommand(ClearRequested);
+        }
+
+        private async Task OnSolve()
+        {
+            await RunCommand(SolveRequested);
+        }
+
+        private async Task OnClearSolution()
+        {
+            await RunCommand(ClearSolutionRequested);
         }
 
         private async Task RunCommand(EventHandler? eventHandler)
