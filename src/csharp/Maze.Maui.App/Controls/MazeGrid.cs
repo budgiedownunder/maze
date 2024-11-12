@@ -391,14 +391,24 @@ namespace Maze.Maui.App.Controls
             get => isSolutionCell;
             set
             {
-                if (isSolutionCell != value)
+                if (IsEmpty && isSolutionCell != value)
                 {
                     isSolutionCell = value;
+                    Content = isSolutionCell ? Content = new Image
+                    {
+                        Source = "footsteps_up.png",
+                        Aspect = Aspect.AspectFit,
+                        HorizontalOptions = LayoutOptions.Fill,
+                        VerticalOptions = LayoutOptions.Fill
+                    } : new Label();
+
                     Content.BackgroundColor = isSolutionCell ? COLOR_REF_lIGHT_TURQUOISE : Colors.White;
                 }
             }
         }
         public Maze.Api.Maze.CellType CellType { get => cellType; }
+
+        public bool IsEmpty { get => CellType == CellType.Empty; }
 
         public MazeCellContent(Maze.Api.Maze.CellType cellType)
         {
