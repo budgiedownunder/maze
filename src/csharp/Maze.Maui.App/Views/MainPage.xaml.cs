@@ -10,7 +10,6 @@
     public partial class MainPage : ContentPage
     {
         const String APP_TITLE = "MAZE";
-        int count = 0;
         MainPageViewModel _viewModel;
 
         public MainPage()
@@ -61,7 +60,9 @@
             bool inExtendedSelectionMode = MazeGrid.IsExtendedSelectionMode;
             if (IsTouchOnlyDevice && inExtendedSelectionMode)
                 SetSelectRangeMode(false);
+
             MazeGrid.OnCellDoubleTapped(e.Cell, false);
+
             if (IsTouchOnlyDevice && !inExtendedSelectionMode)
                 SetSelectRangeMode(true);
         }
@@ -144,13 +145,24 @@
 
         private void Solve()
         {
-            IsSolutionDisplayed = true;
-            UpdateControls();
+            try
+            {
+                Maze maze = MazeGrid.ToMaze();
+                Solution solution = maze.Solve();
+
+                IsSolutionDisplayed = MazeGrid.DisplaySolution(solution);
+                UpdateControls();
+            }
+            catch (Exception ex) 
+            { 
+                DisplayAlert(APP_TITLE, $"Unable to solve maze\n\nReason: {ex.Message}", "OK");
+            }
+            
         }
 
         private void ClearSolution()
         {
-            IsSolutionDisplayed = false;
+            IsSolutionDisplayed = !MazeGrid.ClearLastSolution();
             UpdateControls();
         }
 
@@ -240,20 +252,6 @@
             MainGrid.RowDefinitions[row].Height = show ? GridLength.Auto : new GridLength(0);
             if (row == 0)
                 TopRowLayout.IsVisible = show;
-        }
-
-        private void OnCounterClicked(object sender, EventArgs e)
-        {
-            count += 1;
-            using (Maze maze = new Maze(10, 20))
-            {
-                if (count == 1)
-                    CounterBtn.Text = $"Clicked {count} time (maze size = {maze.RowCount} rows x {maze.ColCount} columns";
-                else
-                    CounterBtn.Text = $"Clicked {count} times (maze size = {maze.RowCount} rows x {maze.ColCount} columns";
-
-                SemanticScreenReader.Announce(CounterBtn.Text);
-            }
         }
     }
 }

@@ -9,6 +9,9 @@ namespace Maze.Maui.App.Controls
 {
     public class MazeGrid : InteractiveGrid.Grid
     {
+        private const int DEFAULT_ROW_COUNT = 5;
+        private const int DEFAULT_COLUMN_COUNT = 5;
+
         public delegate void CellTappedEventHandler(object sender, MazeGridCellTappedEventArgs e);
         public event CellTappedEventHandler? CellTapped;
 
@@ -23,6 +26,7 @@ namespace Maze.Maui.App.Controls
 
         private CellFrame? startCell;
         private CellFrame? finishCell;
+        private bool haveSolutionCells = false;
 
         public CellFrame? StartCell { get => startCell; }
 
@@ -36,8 +40,8 @@ namespace Maze.Maui.App.Controls
         public void Initialize(bool enablePanSupport)
         {
             this.IsPanSupportEnabled = enablePanSupport;
-            this.RowCount = 30; //(int)maze.RowCount;
-            this.ColumnCount = 15; //(int)maze.ColCount;
+            this.RowCount = DEFAULT_ROW_COUNT;
+            this.ColumnCount = DEFAULT_COLUMN_COUNT;
             InitializeContent();
         }
 
@@ -84,6 +88,18 @@ namespace Maze.Maui.App.Controls
             };
         }
 
+        public MazeCellContent? GetCellContent(int row, int column)
+        {
+            MazeCellContent? content = null;
+            if (row >= 0 && column >= 0)
+            {
+                InteractiveGrid.CellFrame? cellFrame = GetCell(row, column) as InteractiveGrid.CellFrame;
+                if (cellFrame != null)
+                    content = cellFrame.Content as MazeCellContent;
+            }
+            return content;
+        }
+
         public Maze.Api.Maze.CellType GetCellType(int row, int column)
         {
             if (row >= 0 && column >= 0)
@@ -101,7 +117,7 @@ namespace Maze.Maui.App.Controls
             return Api.Maze.CellType.Empty;
         }
 
-        public override ContentView GetCellContent(int row, int column)
+        public override ContentView CreateCellContent(int row, int column)
         {
             return new MazeCellContent(Maze.Api.Maze.CellType.Empty);
         }
@@ -133,7 +149,7 @@ namespace Maze.Maui.App.Controls
 
         public override void OnProcessKeyDown(Keyboard.KeyState state, Keyboard.Key key, bool triggerEvents)
         {
-            if(triggerEvents && KeyDown != null)
+            if (triggerEvents && KeyDown != null)
             {
                 KeyDown.Invoke(this, new MazeGridKeyDownEventArgs(state, key));
             }
@@ -229,6 +245,75 @@ namespace Maze.Maui.App.Controls
             }
             return cellFrame;
         }
+
+        public Maze.Api.Maze ToMaze()
+        {
+            Maze.Api.Maze maze = new Maze.Api.Maze((uint)RowCount, (uint)ColumnCount);
+            CellType cellType;
+
+            for (int row = 0; row < RowCount; row++)
+            {
+                for (int column = 0; column < ColumnCount; column++)
+                {
+                    cellType = GetCellType(row + 1, column + 1);
+                    switch (cellType)
+                    {
+                        case Api.Maze.CellType.Start:
+                            maze.SetStartCell((uint)row, (uint)column);
+                            break;
+                        case Api.Maze.CellType.Finish:
+                            maze.SetFinishCell((uint)row, (uint)column);
+                            break;
+                        case Api.Maze.CellType.Wall:
+                            maze.SetWallCells((uint)row, (uint)column, (uint)row, (uint)column);
+                            break;
+                    }
+                }
+            }
+
+            return maze;
+        }
+
+        public bool DisplaySolution(Maze.Api.Solution solution)
+        {
+            if (haveSolutionCells)
+                ClearLastSolution();
+
+            List<Api.Maze.Point> points = solution.GetPathPoints();
+            foreach (Api.Maze.Point point in points)
+            {
+                SetSolutionCell((int)point.Row + 1, (int)point.Column + 1, true);
+            }
+            
+            haveSolutionCells = true;
+
+            return true;
+        }
+
+        public bool ClearLastSolution()
+        {
+            if (haveSolutionCells)
+            {
+                for (int row = 0; row < RowCount; row++)
+                {
+                    for (int column = 0; column < ColumnCount; column++)
+                    {
+                        SetSolutionCell(row + 1, column + 1, false);
+                    }
+                }
+                haveSolutionCells = false;
+            }
+            return true;
+        }
+
+        private void SetSolutionCell(int row, int column, bool isSolutionCell)
+        {
+            MazeCellContent? cellContent = GetCellContent(row, column);
+            if (cellContent != null)
+            {
+                cellContent.IsSolutionCell = isSolutionCell;
+            }
+        }
     }
 
     public class MazeGridCellTappedEventArgs : EventArgs
@@ -250,11 +335,11 @@ namespace Maze.Maui.App.Controls
         Keyboard.KeyState keyState = Keyboard.KeyState.None;
         Keyboard.Key key = Keyboard.Key.None;
 
-        public Keyboard.KeyState KeyState { get => keyState;  }
+        public Keyboard.KeyState KeyState { get => keyState; }
 
         public Keyboard.Key Key { get => key; }
 
-        public bool IsShiftKeyPressed { get => Keyboard.Utiility.IsStateFlagSet(KeyState, Keyboard.KeyState.Shift);  }
+        public bool IsShiftKeyPressed { get => Keyboard.Utiility.IsStateFlagSet(KeyState, Keyboard.KeyState.Shift); }
 
         public bool IsCtrlKeyPressed { get => Keyboard.Utiility.IsStateFlagSet(KeyState, Keyboard.KeyState.Ctrl); }
 
@@ -297,8 +382,22 @@ namespace Maze.Maui.App.Controls
 
     public class MazeCellContent : ContentView
     {
-        Maze.Api.Maze.CellType cellType = Api.Maze.CellType.Empty;
+        static private Color COLOR_REF_lIGHT_TURQUOISE = Color.FromRgb(153, 217, 234);
 
+        Maze.Api.Maze.CellType cellType = Api.Maze.CellType.Empty;
+        bool isSolutionCell = false;
+        public bool IsSolutionCell
+        {
+            get => isSolutionCell;
+            set
+            {
+                if (isSolutionCell != value)
+                {
+                    isSolutionCell = value;
+                    Content.BackgroundColor = isSolutionCell ? COLOR_REF_lIGHT_TURQUOISE : Colors.White;
+                }
+            }
+        }
         public Maze.Api.Maze.CellType CellType { get => cellType; }
 
         public MazeCellContent(Maze.Api.Maze.CellType cellType)

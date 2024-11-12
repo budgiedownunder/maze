@@ -235,7 +235,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             CellFrame frame = new CellFrame(row, column)
             {
                 BackgroundColor = this.CellBackgroundColor,
-                Content = GetCellContent(row, column),
+                Content = CreateCellContent(row, column),
                 Padding = CellPadding,
                 Margin = CellMargin == 0.0 ? -0.5 : CellMargin,
                 Stroke = new SolidColorBrush(CellBorderColor),
@@ -259,7 +259,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         }
 
         // (0,0) = (1,1) in display terms
-        virtual public ContentView GetCellContent(int row, int column)
+        virtual public ContentView CreateCellContent(int row, int column)
         {
             return new DefaultCellContent();
         }
