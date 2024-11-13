@@ -280,14 +280,150 @@ namespace Maze.Maui.App.Controls
                 ClearLastSolution();
 
             List<Api.Maze.Point> points = solution.GetPathPoints();
-            foreach (Api.Maze.Point point in points)
+            MazeCellContent.PathDirection prevCellDirection = MazeCellContent.PathDirection.None;
+            Api.Maze.Point? nextPoint = null;
+            Api.Maze.Point thisPoint;
+            MazeCellContent.PathDirection thisCellDirection = MazeCellContent.PathDirection.None;
+
+            for (int i = 0; i < points.Count; i++)
             {
-                SetSolutionCell((int)point.Row + 1, (int)point.Column + 1, true);
+                thisPoint = points[i];
+                thisCellDirection = MazeCellContent.PathDirection.None;
+                nextPoint = (i + 1) < points.Count ? points[i + 1] : null;
+                thisCellDirection = GetCellPathDirection(prevCellDirection, thisPoint, nextPoint);
+                SetSolutionCell((int)(thisPoint.Row) + 1, (int)(thisPoint.Column) + 1, thisCellDirection);
+                prevCellDirection = thisCellDirection;
             }
-            
-            haveSolutionCells = true;
+
+            haveSolutionCells = points.Count > 0;
 
             return true;
+        }
+
+        private MazeCellContent.PathDirection GetCellPathDirection(
+            MazeCellContent.PathDirection prevCellDirection,
+            Api.Maze.Point cellPoint,
+            Api.Maze.Point? nextCellPoint
+        )
+        {
+            MazeCellContent.PathDirection direction = MazeCellContent.PathDirection.None;
+
+            if (nextCellPoint != null)
+            {
+                Api.Maze.Point nextPoint = nextCellPoint.Value;
+
+                direction = GetCellOffsetDirection(prevCellDirection, cellPoint, nextPoint);
+            }
+            else
+            {
+                direction = GetContinueDirection(prevCellDirection);
+            }
+
+            return direction;
+        }
+
+        private MazeCellContent.PathDirection GetCellOffsetDirection(MazeCellContent.PathDirection prevDirection, Api.Maze.Point from, Api.Maze.Point to)
+        {
+            MazeCellContent.PathDirection direction = MazeCellContent.PathDirection.None;
+            bool sameRow = from.Row == to.Row;
+            bool sameColumn = from.Column == to.Column;
+
+            if (!(sameRow && sameColumn))
+            {
+                if (sameColumn)
+                {
+                    direction = to.Row > from.Row ? GetDownDirection(prevDirection) : GetUpDirection(prevDirection);
+                }
+                if (sameRow)
+                {
+                    direction = to.Column > from.Column ? GetRightDirection(prevDirection) : GetLeftDirection(prevDirection);
+                }
+            }
+
+            return direction;
+        }
+
+        private MazeCellContent.PathDirection GetUpDirection(MazeCellContent.PathDirection prevDirection)
+        {
+            switch (prevDirection)
+            {
+                case MazeCellContent.PathDirection.Left:
+                    return MazeCellContent.PathDirection.UpFromLeft;
+                case MazeCellContent.PathDirection.Right:
+                    return MazeCellContent.PathDirection.UpFromRight;
+            }
+
+            return MazeCellContent.PathDirection.Up;
+        }
+
+        private MazeCellContent.PathDirection GetDownDirection(MazeCellContent.PathDirection prevDirection)
+        {
+            switch (prevDirection)
+            {
+                case MazeCellContent.PathDirection.Left:
+                    return MazeCellContent.PathDirection.DownFromLeft;
+                case MazeCellContent.PathDirection.Right:
+                    return MazeCellContent.PathDirection.DownFromRight;
+            }
+
+            return MazeCellContent.PathDirection.Down;
+        }
+
+        private MazeCellContent.PathDirection GetLeftDirection(MazeCellContent.PathDirection prevDirection)
+        {
+            switch (prevDirection)
+            {
+                case MazeCellContent.PathDirection.Up:
+                    return MazeCellContent.PathDirection.LeftFromUp;
+                case MazeCellContent.PathDirection.Down:
+                    return MazeCellContent.PathDirection.LeftFromDown;
+            }
+
+            return MazeCellContent.PathDirection.Left;
+        }
+
+        private MazeCellContent.PathDirection GetRightDirection(MazeCellContent.PathDirection prevDirection)
+        {
+            switch (prevDirection)
+            {
+                case MazeCellContent.PathDirection.Up:
+                    return MazeCellContent.PathDirection.RightFromUp;
+                case MazeCellContent.PathDirection.Down:
+                    return MazeCellContent.PathDirection.RightFromDown;
+            }
+
+            return MazeCellContent.PathDirection.Right;
+        }
+
+        private MazeCellContent.PathDirection GetContinueDirection(MazeCellContent.PathDirection currentDirection)
+        {
+            MazeCellContent.PathDirection direction = MazeCellContent.PathDirection.None;
+
+            switch (currentDirection)
+            {
+                case MazeCellContent.PathDirection.Left:
+                case MazeCellContent.PathDirection.LeftFromDown:
+                case MazeCellContent.PathDirection.LeftFromUp:
+                    direction = MazeCellContent.PathDirection.Left;
+                    break;
+                case MazeCellContent.PathDirection.Right:
+                case MazeCellContent.PathDirection.RightFromDown:
+                case MazeCellContent.PathDirection.RightFromUp:
+                    direction = MazeCellContent.PathDirection.Right;
+                    break;
+                case MazeCellContent.PathDirection.Up:
+                case MazeCellContent.PathDirection.UpFromLeft:
+                case MazeCellContent.PathDirection.UpFromRight:
+                    direction = MazeCellContent.PathDirection.Up;
+                    break;
+                case MazeCellContent.PathDirection.Down:
+                case MazeCellContent.PathDirection.DownFromLeft:
+                case MazeCellContent.PathDirection.DownFromRight:
+                    direction = MazeCellContent.PathDirection.Down;
+                    break;
+            }
+
+            return direction;
         }
 
         public bool ClearLastSolution()
@@ -298,7 +434,7 @@ namespace Maze.Maui.App.Controls
                 {
                     for (int column = 0; column < ColumnCount; column++)
                     {
-                        SetSolutionCell(row + 1, column + 1, false);
+                        SetSolutionCell(row + 1, column + 1, MazeCellContent.PathDirection.None);
                     }
                 }
                 haveSolutionCells = false;
@@ -306,14 +442,15 @@ namespace Maze.Maui.App.Controls
             return true;
         }
 
-        private void SetSolutionCell(int row, int column, bool isSolutionCell)
+        private void SetSolutionCell(int row, int column, MazeCellContent.PathDirection direction)
         {
             MazeCellContent? cellContent = GetCellContent(row, column);
             if (cellContent != null)
             {
-                cellContent.IsSolutionCell = isSolutionCell;
+                cellContent.SetSolutionPath(direction);
             }
         }
+
     }
 
     public class MazeGridCellTappedEventArgs : EventArgs
@@ -382,33 +519,43 @@ namespace Maze.Maui.App.Controls
 
     public class MazeCellContent : ContentView
     {
-        static private Color COLOR_REF_lIGHT_TURQUOISE = Color.FromRgb(153, 217, 234);
+        public enum PathDirection
+        {
+            None = 0,
+            Left = 1,
+            LeftFromDown = 2,
+            LeftFromUp = 3,
+            Right = 4,
+            RightFromDown = 5,
+            RightFromUp = 6,
+            Up = 7,
+            UpFromLeft = 8,
+            UpFromRight = 9,
+            Down = 10,
+            DownFromLeft = 11,
+            DownFromRight = 12
+        }
+
+        static private Color SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR = Colors.White;
+
+        static private Color SOLUTION_PATH_CELL_HIGHLIGHT_COLOR = Colors.LightGreen;
 
         Maze.Api.Maze.CellType cellType = Api.Maze.CellType.Empty;
-        bool isSolutionCell = false;
-        public bool IsSolutionCell
-        {
-            get => isSolutionCell;
-            set
-            {
-                if (IsEmpty && isSolutionCell != value)
-                {
-                    isSolutionCell = value;
-                    Content = isSolutionCell ? Content = new Image
-                    {
-                        Source = "footsteps_up.png",
-                        Aspect = Aspect.AspectFit,
-                        HorizontalOptions = LayoutOptions.Fill,
-                        VerticalOptions = LayoutOptions.Fill
-                    } : new Label();
+        MazeCellContent.PathDirection solutionPathDirection = MazeCellContent.PathDirection.None;
 
-                    Content.BackgroundColor = isSolutionCell ? COLOR_REF_lIGHT_TURQUOISE : Colors.White;
-                }
-            }
-        }
+        public PathDirection SolutionPathDirection { get => solutionPathDirection; }
+
+        public bool ContainsSolutionPath { get => solutionPathDirection != PathDirection.None; }
+
         public Maze.Api.Maze.CellType CellType { get => cellType; }
 
         public bool IsEmpty { get => CellType == CellType.Empty; }
+
+        public bool IsStart { get => CellType == CellType.Start; }
+
+        public bool IsFinish { get => CellType == CellType.Finish; }
+
+        public bool IsStartOrFinish { get => IsStart || IsFinish; }
 
         public MazeCellContent(Maze.Api.Maze.CellType cellType)
         {
@@ -445,5 +592,59 @@ namespace Maze.Maui.App.Controls
             }
             return "";
         }
+
+        public void SetSolutionPath(PathDirection pathDirection)
+        {
+            if (IsEmpty || IsStartOrFinish)
+            {
+                solutionPathDirection = pathDirection;
+
+                if (IsEmpty)
+                {
+                    Content = ContainsSolutionPath ? Content = new Image
+                    {
+                        Source = GetSolutionPathImage(),
+                        Aspect = Aspect.AspectFit,
+                        HorizontalOptions = LayoutOptions.Fill,
+                        VerticalOptions = LayoutOptions.Fill
+                    } : new Label();
+                }
+                Content.BackgroundColor = GetSolutionPathHighlightColor();
+            }
+        }
+
+        private Color GetSolutionPathHighlightColor()
+        {
+            return ContainsSolutionPath
+                ? (IsStartOrFinish ? SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR : SOLUTION_PATH_CELL_HIGHLIGHT_COLOR) 
+                : Colors.Transparent;
+        }
+
+        private string GetSolutionPathImage()
+        {
+            switch (SolutionPathDirection)
+            {
+                case PathDirection.Left:
+                case PathDirection.LeftFromDown:
+                case PathDirection.LeftFromUp:
+                    return "footsteps_left.png";
+                case PathDirection.Right:
+                case PathDirection.RightFromDown:
+                case PathDirection.RightFromUp:
+                    return "footsteps_right.png";
+                case PathDirection.Up:
+                case PathDirection.UpFromLeft:
+                case PathDirection.UpFromRight:
+                    return "footsteps_up.png";
+                case PathDirection.Down:
+                case PathDirection.DownFromLeft:
+                case PathDirection.DownFromRight:
+                    return "footsteps_down.png";
+                case PathDirection.None:
+                default:
+                    return "";
+            }
+        }
     }
+
 }
