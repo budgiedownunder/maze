@@ -42,16 +42,19 @@ namespace Maze.Api
             /// <summary>
             /// Row associated with the point (zero-based)
             /// </summary>
+            /// <returns>Row index</returns>
             public UInt32 Row;
             /// <summary>
             /// Column associated with the point (zero-based)
             /// </summary>
+            /// <returns>Column index</returns>
             public UInt32 Column;
         }
         /// <summary>
-        /// Converts a MazeWasmPoint to a Maze.Point
+        /// Converts a [MazeWasmPoint](xref:Maze.Wasm.Interop.MazeWasmInterop.MazeWasmPoint) to a [Maze.Point](xref:Maze.Api.Maze.Point)
         /// </summary>
-        /// <returns>Maze.Point</returns>
+        /// <param name="wasmPoint">Point to be converted</param>
+        /// <returns>The resultant [Maze.Point](xref:Maze.Api.Maze.Point)</returns>
         static public Maze.Point ToMazePoint(MazeWasmPoint wasmPoint)
         {
             return new Maze.Point
@@ -61,9 +64,10 @@ namespace Maze.Api
             };
         }
         /// <summary>
-        /// Converts a list of MazeWasmPoint to a list of Maze.Point
+        /// Converts a list of [MazeWasmPoint](xref:Maze.Wasm.Interop.MazeWasmInterop.MazeWasmPoint) points to a list of [Maze.Point](xref:Maze.Api.Maze.Point) points
         /// </summary>
-        /// <returns>List of Maze.Point</returns>
+        /// <returns>List of [Maze.Point](xref:Maze.Api.Maze.Point) points</returns>
+        /// <param name="wasmPoints">List of [MazeWasmPoint](xref:Maze.Wasm.Interop.MazeWasmInterop.MazeWasmPoint) points to be converted</param>
         static public List<Maze.Point> ToMazePoints(List<MazeWasmPoint> wasmPoints)
         {
             int numPoints = wasmPoints.Count;
@@ -98,7 +102,7 @@ namespace Maze.Api
             interop.MazeWasmResize(_mazeWasmPtr, rowCount, colCount);
         }
         /// <summary>
-        /// Handles object disposal, releasing managed and unmanaged `MazeWasm.Interop` resources  and marking
+        /// Handles object disposal, releasing managed and unmanaged [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) resources and marking
         /// the object as having been finalized
         /// </summary>
         /// <returns>Nothing</returns>
@@ -150,6 +154,7 @@ namespace Maze.Api
         /// <summary>
         /// The number of rows currently in the maze
         /// </summary>
+        /// <returns>Number of rows</returns>
         public UInt32 RowCount
         {
             get
@@ -160,6 +165,7 @@ namespace Maze.Api
         /// <summary>
         /// The number of columns currently in the maze
         /// </summary>
+        /// <returns>Number of columns</returns>
         public UInt32 ColCount
         {
             get
@@ -190,14 +196,14 @@ namespace Maze.Api
         /// if the cell type cannot be determined
         /// </summary>
         /// <param name="row">Target row</param>
-        /// <param name="col">Target column</param>
+        /// <param name="column">Target column</param>
         /// <returns>Cell type</returns>
         public CellType GetCellType(UInt32 row, UInt32 column)
         {
             return (CellType)(int)interop.MazeWasmGetCellType(_mazeWasmPtr, row, column);
         }
         /// <summary>
-        /// Sets the start cell associated with the maze`, or will throw an exception
+        /// Sets the start cell associated with the maze, or will throw an exception
         /// if the start cell cannot be set
         /// </summary>
         /// <param name="startRow">New start cell row</param>
@@ -231,7 +237,7 @@ namespace Maze.Api
         /// Gets the finish cell associated with the maze, or will throw an exception
         /// if the finish cell cannot be retrieved
         /// </summary>
-        /// <returns>FInish cell point</returns>
+        /// <returns>Finish cell point</returns>
         public Maze.Point GetFinishCell()
         {
             return ToMazePoint(interop.MazeWasmGetFinishCell(_mazeWasmPtr));
@@ -292,7 +298,7 @@ namespace Maze.Api
         /// <summary>
         /// Reinitialises a maze from a JSON string, or will throw an exception if the operation fails
         /// </summary>
-        /// <param name="json">JSON strimg</param>
+        /// <param name="json">JSON string</param>
         /// <returns>Nothing</returns>
         public void FromJson(string json)
         {

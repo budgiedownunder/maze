@@ -15,17 +15,16 @@ namespace Maze.Api
         private bool _disposed = false;
         private UInt32 _solutionWasmPtr = default;
         /// <summary>
-        /// Creates a new solution, or will throw an exception if the operation fails
+        /// Creates a new solution that wraps a [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) solution pointer, or will throw an exception if the operation fails
         /// </summary>
-        /// <param name="rowCount">Number of rows</param>
-        /// <param name="colCount">Number of columns</param>
+        /// <param name="solutionWasmPtr">[Maze.Wasm.Interop](xref:Maze.Wasm.Interop) solution pointer</param>
         /// <returns>New solution instance</returns>
         public Solution(UInt32 solutionWasmPtr)
         {
             _solutionWasmPtr = solutionWasmPtr;
         }
         /// <summary>
-        /// Handles object disposal, releasing managed and unmanaged `MazeWasm.Interop` resources  and marking
+        /// Handles object disposal, releasing managed and unmanaged [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) resources and marking
         /// the object as having been finalized
         /// </summary>
         /// <returns>Nothing</returns>
