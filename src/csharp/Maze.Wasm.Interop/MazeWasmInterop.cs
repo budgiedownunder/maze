@@ -370,7 +370,7 @@
         /// if the finish cell cannot be retrieved
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>FInish cell point</returns>
+        /// <returns>Finish cell point</returns>
         public MazeWasmPoint MazeWasmGetFinishCell(UInt32 mazeWasmPtr)
         {
             if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
