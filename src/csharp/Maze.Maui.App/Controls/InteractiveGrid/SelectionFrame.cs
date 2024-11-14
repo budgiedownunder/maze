@@ -1,4 +1,9 @@
-﻿namespace Maze.Maui.App.Controls.InteractiveGrid
+﻿using Microsoft.Maui;
+using Microsoft.Maui.Controls;
+using Microsoft.Maui.Dispatching;
+using System.Diagnostics;
+
+namespace Maze.Maui.App.Controls.InteractiveGrid
 {
     public class SelectionFrame
     {
@@ -16,6 +21,7 @@
         const double DEFAULT_BORDER_WIDTH = 2.0;
         const double DEFAULT_BORDER_GRIP_SIZE = 10.0;
         const bool DEFAULT_IS_PAN_SUPPORT_ENABLED = true;
+        const int ANIMATION_UPDATE_INTERVAL_MS = 100;
 
         private Color borderColor = DEFAULT_BORDER_COLOR;
         private double borderWidth = DEFAULT_BORDER_WIDTH;
@@ -24,6 +30,8 @@
         private readonly FrameBorder[] frameBorders = new FrameBorder[4];
 
         private bool isPanSupportEnabled;
+
+        private bool isAnimationRunning = false;
 
         public Color BorderColor
         {
@@ -120,6 +128,7 @@
             foreach (var border in frameBorders)
             {
                 border.Color = BorderColor;
+                border.EdgeThickness = BorderWidth;
                 border.GripSize = BorderGripSize;
             }
         }
@@ -162,6 +171,45 @@
         {
             FrameBorder border = frameBorders[borderID];
             border.SetPosition(row, column, width, height, margin);
+        }
+
+        public void EnableDashAnimation(bool enable)
+        {
+            foreach (var border in frameBorders)
+                border.EnableDashAnimation(enable);
+
+            if(enable)
+                StartDashAnimation();
+            else
+                StopDashAnimation();
+        }
+
+        public void UpdateDashAnimation()
+        {
+            foreach (var border in frameBorders)
+                border.UpdateDashAnimation();
+        }
+
+        private void StartDashAnimation() 
+        { 
+            if (isAnimationRunning || Application.Current == null) return;
+            isAnimationRunning = true;
+
+            var dispatcher = Application.Current.Dispatcher;
+
+            dispatcher.StartTimer(TimeSpan.FromMilliseconds(ANIMATION_UPDATE_INTERVAL_MS), () =>
+            {
+                if (!isAnimationRunning)
+                    return false;
+
+                UpdateDashAnimation();
+
+                return true;
+            });
+        }
+
+        private void StopDashAnimation() {
+            isAnimationRunning = false;
         }
 
     }

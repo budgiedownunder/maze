@@ -1,5 +1,6 @@
 ﻿using Maze.Maui.App.Controls.Pointer;
 using Microsoft.Maui.Controls;
+using System.Diagnostics;
 
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
@@ -11,12 +12,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         private readonly BorderGrip? grip;
 
         static private Color DEFAULT_COLOR = Colors.Black;
-        const double DEFAULT_WIDTH = 2.0;
-        const double DEFAULT_GRIP_SIZE = 10.0;
+        private const double DEFAULT_EDGE_THICKNESS = 2.0;
+        private const double DEFAULT_GRIP_SIZE = 10.0;
 
         Color color = DEFAULT_COLOR;
         FrameEdge frameEdge = FrameEdge.None;
         FrameCorner gripCorner = FrameCorner.None;
+        double edgeThickness = DEFAULT_EDGE_THICKNESS;
         double gripSize = DEFAULT_GRIP_SIZE;
 
         int startRow = 0;
@@ -86,6 +88,15 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
+        public double EdgeThickness
+        {
+            get => edgeThickness;
+            set
+            {
+                UpdateEdgeThickness(value);
+            }
+        }
+
         public double GripSize
         {
             get => gripSize;
@@ -111,9 +122,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private BorderBox NewBox()
         {
-            BorderBox borderBox = new BorderBox(GetPointerIcon(false))
+            BorderBox borderBox = new BorderBox(GetPointerIcon(false), (float)EdgeThickness)
             {
-                Color = Color,
+                BackgroundColor = Color,
                 IsVisible = false,
                 HeightRequest = 0,
                 WidthRequest = 0,
@@ -301,6 +312,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 grip.Color = newColor;
         }
 
+        private void UpdateEdgeThickness(double newEdgeThickness)
+        {
+            edgeThickness = newEdgeThickness;
+            box.DashThickness = (float)newEdgeThickness;
+        }
+
         private void UpdateGripSize(double newGripSize)
         {
             if (grip == null) return;
@@ -321,7 +338,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 AddViewToGrid(grip);
         }
 
-        private void AddViewToGrid(BoxView view)
+        private void AddViewToGrid(IView view)
         {
             ParentGrid.SetRow(view, 0);
             ParentGrid.SetColumn(view, 0);
@@ -335,7 +352,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 RemoveViewFromGrid(grip);
         }
 
-        private void RemoveViewFromGrid(BoxView view)
+        private void RemoveViewFromGrid(IView view)
         {
             ParentGrid.Children.Remove(view);
         }
@@ -414,5 +431,16 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
             return 0.0;
         }
+
+        public void EnableDashAnimation(bool enable)
+        {
+            box.EnableDashAnimation(enable);
+        }
+
+        public void UpdateDashAnimation()
+        {
+            box.UpdateDashAnimation();
+        }
+
     }
 }

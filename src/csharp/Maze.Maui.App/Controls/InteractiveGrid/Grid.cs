@@ -660,6 +660,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             if (anchorCell == null)
                 SetAnchorCellToActiveCell(true);
             IsExtendedSelectionMode = true;
+            selectionFrame?.EnableDashAnimation(true);
         }
 
         public void CancelExtendedSelection()
@@ -672,6 +673,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             if (activeCell != null)
                 activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
             IsExtendedSelectionMode = false;
+            selectionFrame?.EnableDashAnimation(false);
             UpdateSelectionFrame(true);
         }
 
