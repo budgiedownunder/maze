@@ -53,5 +53,3 @@ This should build and register the application with `Windows`. You should then b
 ### Testing
 Automated testing is not implemented yet
 
-T
-
