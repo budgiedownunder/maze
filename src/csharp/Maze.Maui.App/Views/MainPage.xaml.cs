@@ -8,10 +8,10 @@
     using Maze.Maui.App.Services;
 
     /// <summary>
-    /// This class represents the main page within the application, which provides
+    /// This class represents the main page within the application. It provides
     /// functionality to design and solve mazes.
     /// 
-    /// <strong>Screenshots (Windows Desktop)</strong>:
+    /// This is how the page appears on Windows Desktop:
     /// 
     ///   <table>
     ///     <thead>
@@ -24,6 +24,23 @@
     ///       <tr>
     ///         <td><img src="/images/screenshots/windows-design.png" width="250"/></td>
     ///         <td><img src="/images/screenshots/windows-solved.png" width="250"/></td>
+    ///       </tr>
+    ///     </tbody> 
+    ///  </table>
+    ///  
+    /// and this is how it appears on Android/iOS devices:
+    /// 
+    ///   <table>
+    ///     <thead>
+    ///       <tr>
+    ///         <th><strong>Android</strong></th>
+    ///         <th><strong>iOS</strong></th>
+    ///       </tr>
+    ///     </thead>
+    ///     <tbody>
+    ///       <tr>
+    ///         <td><img src="/images/screenshots/android-design.png" width="250"/></td>
+    ///         <td><img src="/images/screenshots/ios-design.png" width="250"/></td>
     ///       </tr>
     ///     </tbody> 
     ///  </table>
