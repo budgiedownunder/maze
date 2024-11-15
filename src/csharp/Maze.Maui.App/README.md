@@ -9,6 +9,19 @@ At the moment, it allows the user to:
 - Design a maze containing start, finish and wall cells
 - Attempt to solve and then display the solution, using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly (desktop versions-only)
 
+The screenshots below show the application running on `Windows`:  
+
+| Design      | Solved      |
+|-------------|-------------|
+|<img src = "Screenshots/windows-design.png" width="250"> | <img src = "Screenshots/windows-solved.png" width="250"> |
+
+and these screenshots show the application running on mobile devices:
+
+
+| Android | iOS |
+|-------------|-------------|
+|<img src = "Screenshots/android-design.png" width="250"> | <img src = "Screenshots/ios-design.png" width="250"> |
+
 ## Getting Started
 
 ### Setup
@@ -40,19 +53,5 @@ This should build and register the application with `Windows`. You should then b
 ### Testing
 Automated testing is not implemented yet
 
-### Running - Desktop
-
-The screenshots show the application running on `Windows`:  
-
-| Design      | Solved      |
-|-------------|-------------|
-|<img src = "Screenshots/windows-design.png" width="250"> | <img src = "Screenshots/windows-solved.png" width="250"> |
-
-### Running - Mobile
-
-The screenshots show the application running on mobile devices:  
-
-| Android | iOS |
-|-------------|-------------|
-|<img src = "Screenshots/android-design.png" width="250"> | <img src = "Screenshots/ios-design.png" width="250"> |
+T
 
