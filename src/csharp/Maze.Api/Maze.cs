@@ -142,7 +142,6 @@ namespace Maze.Api
         /// <summary>
         /// Whether the maze is empty
         /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Boolean</returns>
         public bool IsEmpty
         {
