@@ -7,6 +7,27 @@
     using Maze.Maui.App.Controls;
     using Maze.Maui.App.Services;
 
+    /// <summary>
+    /// This class represents the main page within the application, which provides
+    /// functionality to design and solve mazes.
+    /// 
+    /// <strong>Screenshots (Windows Desktop)</strong>:
+    /// 
+    ///   <table>
+    ///     <thead>
+    ///       <tr>
+    ///         <th><strong>Design</strong></th>
+    ///         <th><strong>Solved</strong></th>
+    ///       </tr>
+    ///     </thead>
+    ///     <tbody>
+    ///       <tr>
+    ///         <td><img src="/images/screenshots/windows-design.png" width="250"/></td>
+    ///         <td><img src="/images/screenshots/windows-solved.png" width="250"/></td>
+    ///       </tr>
+    ///     </tbody> 
+    ///  </table>
+    /// </summary>
     public partial class MainPage : ContentPage
     {
         const String APP_TITLE = "MAZE";
