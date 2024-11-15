@@ -44,7 +44,7 @@ Automated testing is not implemented yet
 
 The screenshots show the application running on `Windows`:  
 
-| Design      | Solve       |
+| Design      | Solved      |
 |-------------|-------------|
 |<img src = "Screenshots/windows-design.png" width="250"> | <img src = "Screenshots/windows-solved.png" width="250"> |
 
