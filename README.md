@@ -39,9 +39,9 @@ The following components are present:
 | `src`                          | [`docfx`](./src/docfx/README.md)                                              | HTML help generation|
 | `src/csharp`                   | [`Maze.Api`](./src/csharp/Maze.Api/README.md)                                 | .NET API that sits above  [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)
 |                                | [`Maze.Api.Tests`](./src/csharp/Maze.Api.Tests/README.md)                     | Unit tests for [`Maze.Api`](./src/csharp/Maze.Api/README.md)
+|                                | [`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)                       | Maze [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application
 |                                | [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)               | .NET interop to `maze_wasm` web assembly|
 |                                | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md)         | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) |
-|                                | [`MazerMauiApp`](./src/csharp/Maze.Maui.App/README.md)                        | Maze [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application
 | `src/rust`                     | [`maze`](./src/rust/maze/README.md)                                           | Maze definition and calculation library|
 |                                | [`maze_console`](./src/rust/maze_console/README.md)                           | Maze console application
 |                                | [`maze_wasm`](./src/rust/maze_wasm/README.md)                                 | Maze web assembly library |
