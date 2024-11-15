@@ -7,15 +7,15 @@ The `Maze.Maui.App` .NET application is a work-in-progress [MAUI](https://dotnet
 At the moment, it allows the user to:
 
 - Design a maze containing start, finish and wall cells
-- Attempt to solve and then display the solution, using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly (desktop versions-only)
+- Attempt to solve the maze solution using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly (desktop versions-only)
 
-The screenshots below show the application running on `Windows`:  
+It  has been tested on `Windows` desktop and `Android`/`iOS` devices. The screenshots below show it running on `Windows` desktop:  
 
 | Design      | Solved      |
 |-------------|-------------|
 |<img src = "Screenshots/windows-design.png" width="250"> | <img src = "Screenshots/windows-solved.png" width="250"> |
 
-and these screenshots show the application running on mobile devices:
+and these screenshots show it running on `Android` and `iOS` mobile devices:
 
 
 | Android | iOS |
