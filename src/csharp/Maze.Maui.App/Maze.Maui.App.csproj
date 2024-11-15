@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<TargetFrameworks>net8.0-ios;net8.0-maccatalyst;net8.0-android</TargetFrameworks>
 		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net8.0-windows10.0.19041.0</TargetFrameworks>
-		<!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
+       	<!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
 		<!-- <TargetFrameworks>$(TargetFrameworks);net8.0-tizen</TargetFrameworks> -->
 
 		<!-- Note for MacCatalyst:
@@ -111,4 +111,5 @@
 		<!--<exec command="adb push ..\..\rust\target\wasm32-unknown-unknown\release\maze_wasm.wasm /data/data/com.budgiedownunder.mazemauiapp/files/.__override__/" />-->
 		<Message Text="Finished: Processing post-build events for framework: $(TargetFramework) (Android)" Importance="high" />
 	</Target>
+
 </Project>
