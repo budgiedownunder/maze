@@ -7,749 +7,737 @@ using System.Threading.Tasks;
 
 namespace Maze.Maui.App.Controls.Keyboard
 {
+    /// <summary>
+    /// The static `Utility` class provides utility functionality for keyboard handling
+    /// </summary>
     public static class Utiility
     {
-        public static bool IsStateFlagSet(Keyboard.KeyState state, Keyboard.KeyState check)
+        /// <summary>
+        /// Checks whether a set of key states contains a given key state flag
+        /// </summary>
+        /// <param name="states">Key states</param>
+        /// <param name="state">Key state flag to check for</param>
+        /// <returns>Boolean</returns>
+        public static bool IsStateFlagSet(Keyboard.KeyState states, Keyboard.KeyState state)
         {
-            return (state & check) == check;
+            return (states & state) == state;
         }
     }
 
     [Flags]
+    /// <summary>
+    /// Represents a key state
+    /// </summary>
+    /// <returns>Boolean</returns>
     public enum KeyState
     {
+        /// <summary>
+        /// None
+        /// </summary>
         None = 0,
+        /// <summary>
+        /// Shift key down
+        /// </summary>
         Shift = 0x1,
+        /// <summary>
+        /// Ctrl key down
+        /// </summary>
         Ctrl = 0x2,
+        /// <summary>
+        /// Caps Lock down
+        /// </summary>
         CapsLock = 0x4
     }
 
     public enum Key
     {
-        //
-        // Summary:
-        //     No virtual key value.
+        /// <summary>
+        /// No virtual key value.
+        /// </summary>
         None = 0,
-        //
-        // Summary:
-        //     The left mouse button.
+        /// <summary>
+        /// The left mouse button.
+        /// </summary>
         LeftButton = 1,
-        //
-        // Summary:
-        //     The right mouse button.
+        /// <summary>
+        /// The right mouse button.
+        /// </summary>
         RightButton = 2,
-        //
-        // Summary:
-        //     The cancel key or button
+        /// <summary>
+        /// The cancel key or button
+        /// </summary>
         Cancel = 3,
-        //
-        // Summary:
-        //     The middle mouse button.
+        /// <summary>
+        /// The middle mouse button.
+        /// </summary>
         MiddleButton = 4,
-        //
-        // Summary:
-        //     An additional "extended" device key or button (for example, an additional mouse
-        //     button).
+        /// <summary>
+        /// An additional "extended" device key or button (for example, an additional mouse
+        /// button).
+        /// </summary>
         XButton1 = 5,
-        //
-        // Summary:
-        //     An additional "extended" device key or button (for example, an additional mouse
-        //     button).
+        /// <summary>
+        /// An additional "extended" device key or button (for example, an additional mouse
+        /// button).
+        /// </summary>
         XButton2 = 6,
-        //
-        // Summary:
-        //     The virtual back key or button.
+        /// <summary>
+        /// The virtual back key or button.
+        /// </summary>
         Back = 8,
-        //
-        // Summary:
-        //     The Tab key.
+        /// <summary>
+        /// The Tab key.
+        /// </summary>
         Tab = 9,
-        //
-        // Summary:
-        //     The Clear key or button.
+        /// <summary>
+        /// The Clear key or button.
+        /// </summary>
         Clear = 12,
-        //
-        // Summary:
-        //     The Enter key.
+        /// <summary>
+        /// The Enter key.
+        /// </summary>
         Enter = 13,
-        //
-        // Summary:
-        //     The Shift key. This is the general Shift case, applicable to key layouts with
-        //     only one Shift key or that do not need to differentiate between left Shift and
-        //     right Shift keystrokes.
+        /// <summary>
+        /// The Shift key. This is the general Shift case, applicable to key layouts with
+        /// only one Shift key or that do not need to differentiate between left Shift and
+        /// right Shift keystrokes.
+        /// </summary>
         Shift = 16,
         //
-        // Summary:
-        //     The Ctrl key. This is the general Ctrl case, applicable to key layouts with only
-        //     one Ctrl key or that do not need to differentiate between left Ctrl and right
-        //     Ctrl keystrokes.
+        /// <summary>
+        /// The Ctrl key. This is the general Ctrl case, applicable to key layouts with only
+        /// one Ctrl key or that do not need to differentiate between left Ctrl and right
+        /// Ctrl keystrokes.
+        /// </summary>
         Control = 17,
-        //
-        // Summary:
-        //     The menu key or button.
+        /// <summary>
+        /// The menu key or button.
+        /// </summary>
         Menu = 18,
-        //
-        // Summary:
-        //     The Pause key or button.
+        /// <summary>
+        /// The Pause key or button.
+        /// </summary>
         Pause = 19,
-        //
-        // Summary:
-        //     The Caps Lock key or button.
+        /// <summary>
+        /// The Caps Lock key or button.
+        /// </summary>
         CapitalLock = 20,
-        //
-        // Summary:
-        //     The Kana symbol key-shift button
+        /// <summary>
+        /// The Kana symbol key-shift button
+        /// </summary>
         Kana = 21,
-        //
-        // Summary:
-        //     The Hangul symbol key-shift button.
+        /// <summary>
+        /// The Hangul symbol key-shift button.
+        /// </summary>
         Hangul = 21,
-        //
-        // Summary:
-        //     The Junja symbol key-shift button.
+        /// <summary>
+        /// The Junja symbol key-shift button.
+        /// </summary>
         Junja = 23,
-        //
-        // Summary:
-        //     The Final symbol key-shift button.
+        /// <summary>
+        /// The Final symbol key-shift button.
+        /// </summary>
         Final = 24,
-        //
-        // Summary:
-        //     The Hanja symbol key shift button.
+        /// <summary>
+        /// The Hanja symbol key shift button.
+        /// </summary>
         Hanja = 25,
-        //
-        // Summary:
-        //     The Kanji symbol key-shift button.
+        /// <summary>
+        /// The Kanji symbol key-shift button.
+        /// </summary>
         Kanji = 25,
-        //
-        // Summary:
-        //     The Esc key.
+        /// <summary>
+        /// The Esc key.
+        /// </summary>
         Escape = 27,
-        //
-        // Summary:
-        //     The convert button or key.
+        /// <summary>
+        /// The convert button or key.
+        /// </summary>
         Convert = 28,
-        //
-        // Summary:
-        //     The nonconvert button or key.
+        /// <summary>
+        /// The nonconvert button or key.
+        /// </summary>
         NonConvert = 29,
-        //
-        // Summary:
-        //     The accept button or key.
+        /// <summary>
+        /// The accept button or key.
+        /// </summary>
         Accept = 30,
-        //
-        // Summary:
-        //     The mode change key.
+        /// <summary>
+        /// The mode change key.
+        /// </summary>
         ModeChange = 31,
-        //
-        // Summary:
-        //     The Spacebar key or button.
+        /// <summary>
+        /// The Spacebar key or button.
+        /// </summary>
         Space = 32,
-        //
-        // Summary:
-        //     The Page Up key.
+        /// <summary>
+        /// The Page Up key.
+        /// </summary>
         PageUp = 33,
-        //
-        // Summary:
-        //     The Page Down key.
+        /// <summary>
+        /// The Page Down key.
+        /// </summary>
         PageDown = 34,
-        //
-        // Summary:
-        //     The End key.
+        /// <summary>
+        /// The End key.
+        /// </summary>
         End = 35,
-        //
-        // Summary:
-        //     The Home key.
+        /// <summary>
+        /// The Home key.
+        /// </summary>
         Home = 36,
-        //
-        // Summary:
-        //     The Left Arrow key.
+        /// <summary>
+        /// The Left Arrow key.
+        /// </summary>
         Left = 37,
-        //
-        // Summary:
-        //     The Up Arrow key.
+        /// <summary>
+        /// The Up Arrow key.
+        /// </summary>
         Up = 38,
-        //
-        // Summary:
-        //     The Right Arrow key.
+        /// <summary>
+        /// The Right Arrow key.
+        /// </summary>
         Right = 39,
-        //
-        // Summary:
-        //     The Down Arrow key.
+        /// <summary>
+        /// The Down Arrow key.
+        /// </summary>
         Down = 40,
-        //
-        // Summary:
-        //     The Select key or button.
+        /// <summary>
+        /// The Select key or button.
+        /// </summary>
         Select = 41,
-        //
-        // Summary:
-        //     The Print key or button.
+        /// <summary>
+        /// The Print key or button.
+        /// </summary>
         Print = 42,
-        //
-        // Summary:
-        //     The execute key or button.
+        /// <summary>
+        /// The execute key or button.
+        /// </summary>
         Execute = 43,
-        //
-        // Summary:
-        //     The snapshot key or button.
+        /// <summary>
+        /// The snapshot key or button.
+        /// </summary>
         Snapshot = 44,
-        //
-        // Summary:
-        //     The Insert key.
+        /// <summary>
+        /// The Insert key.
+        /// </summary>
         Insert = 45,
-        //
-        // Summary:
-        //     The Delete key.
+        /// <summary>
+        /// The Delete key.
+        /// </summary>
         Delete = 46,
-        //
-        // Summary:
-        //     The Help key or button.
+        /// <summary>
+        /// The Help key or button.
+        /// </summary>
         Help = 47,
-        //
-        // Summary:
-        //     The number "0" key.
+        /// <summary>
+        /// The number "0" key.
+        /// </summary>
         Number0 = 48,
-        //
-        // Summary:
-        //     The number "1" key.
+        /// <summary>
+        /// The number "1" key.
+        /// </summary>
         Number1 = 49,
-        //
-        // Summary:
-        //     The number "2" key.
+        /// <summary>
+        /// The number "2" key.
+        /// </summary>
         Number2 = 50,
         //
-        // Summary:
-        //     The number "3" key.
+        /// <summary>
+        /// The number "3" key.
+        /// </summary>
         Number3 = 51,
-        //
-        // Summary:
-        //     The number "4" key.
+        /// <summary>
+        /// The number "4" key.
+        /// </summary>
         Number4 = 52,
-        //
-        // Summary:
-        //     The number "5" key.
+        /// <summary>
+        /// The number "5" key.
+        /// </summary>
         Number5 = 53,
-        //
-        // Summary:
-        //     The number "6" key.
+        /// <summary>
+        /// The number "6" key.
+        /// </summary>
         Number6 = 54,
-        //
-        // Summary:
-        //     The number "7" key.
+        /// <summary>
+        /// The number "7" key.
+        /// </summary>
         Number7 = 55,
-        //
-        // Summary:
-        //     The number "8" key.
+        /// <summary>
+        /// The number "8" key.
+        /// </summary>
         Number8 = 56,
-        //
-        // Summary:
-        //     The number "9" key.
+        /// <summary>
+        /// The number "9" key.
+        /// </summary>
         Number9 = 57,
-        //
-        // Summary:
-        //     The letter "A" key.
+        /// <summary>
+        /// The letter "A" key.
+        /// </summary>
         A = 65,
-        //
-        // Summary:
-        //     The letter "B" key.
+        /// <summary>
+        /// The letter "B" key.
+        /// </summary>
         B = 66,
-        //
-        // Summary:
-        //     The letter "C" key.
+        /// <summary>
+        /// The letter "C" key.
+        /// </summary>
         C = 67,
-        //
-        // Summary:
-        //     The letter "D" key.
+        /// <summary>
+        /// The letter "D" key.
+        /// </summary>
         D = 68,
-        //
-        // Summary:
-        //     The letter "E" key.
+        /// <summary>
+        /// The letter "E" key.
+        /// </summary>
         E = 69,
-        //
-        // Summary:
-        //     The letter "F" key.
+        /// <summary>
+        /// The letter "F" key.
+        /// </summary>
         F = 70,
-        //
-        // Summary:
-        //     The letter "G" key.
+        /// <summary>
+        /// The letter "G" key.
+        /// </summary>
         G = 71,
-        //
-        // Summary:
-        //     The letter "H" key.
+        /// <summary>
+        /// The letter "H" key.
+        /// </summary>
         H = 72,
-        //
-        // Summary:
-        //     The letter "I" key.
+        /// <summary>
+        /// The letter "I" key.
+        /// </summary>
         I = 73,
-        //
-        // Summary:
-        //     The letter "J" key.
+        /// <summary>
+        /// The letter "J" key.
+        /// </summary>
         J = 74,
-        //
-        // Summary:
-        //     The letter "K" key.
+        /// <summary>
+        /// The letter "K" key.
+        /// </summary>
         K = 75,
-        //
-        // Summary:
-        //     The letter "L" key.
+        /// <summary>
+        /// The letter "L" key.
+        /// </summary>
         L = 76,
-        //
-        // Summary:
-        //     The letter "M" key.
+        /// <summary>
+        /// The letter "M" key.
+        /// </summary>
         M = 77,
-        //
-        // Summary:
-        //     The letter "N" key.
+        /// <summary>
+        /// The letter "N" key.
+        /// </summary>
         N = 78,
-        //
-        // Summary:
-        //     The letter "O" key.
+        /// <summary>
+        /// The letter "O" key.
+        /// </summary>
         O = 79,
-        //
-        // Summary:
-        //     The letter "P" key.
+        /// <summary>
+        /// The letter "P" key.
+        /// </summary>
         P = 80,
-        //
-        // Summary:
-        //     The letter "Q" key.
+        /// <summary>
+        /// The letter "Q" key.
+        /// </summary>
         Q = 81,
-        //
-        // Summary:
-        //     The letter "R" key.
+        /// <summary>
+        /// The letter "R" key.
+        /// </summary>
         R = 82,
-        //
-        // Summary:
-        //     The letter "S" key.
+        /// <summary>
+        /// The letter "S" key.
+        /// </summary>
         S = 83,
-        //
-        // Summary:
-        //     The letter "T" key.
+        /// <summary>
+        /// The letter "T" key.
+        /// </summary>
         T = 84,
-        //
-        // Summary:
-        //     The letter "U" key.
+        /// <summary>
+        /// The letter "U" key.
+        /// </summary>
         U = 85,
-        //
-        // Summary:
-        //     The letter "V" key.
+        /// <summary>
+        /// The letter "V" key.
+        /// </summary>
         V = 86,
-        //
-        // Summary:
-        //     The letter "W" key.
+        /// <summary>
+        /// The letter "W" key.
+        /// </summary>
         W = 87,
-        //
-        // Summary:
-        //     The letter "X" key.
+        /// <summary>
+        /// The letter "X" key.
+        /// </summary>
         X = 88,
-        //
-        // Summary:
-        //     The letter "Y" key.
+        /// <summary>
+        /// The letter "Y" key.
+        /// </summary>
         Y = 89,
-        //
-        // Summary:
-        //     The letter "Z" key.
+        /// <summary>
+        /// The letter "Z" key.
+        /// </summary>
         Z = 90,
-        //
-        // Summary:
-        //     The left Windows key.
+        /// <summary>
+        /// The left Windows key.
+        /// </summary>
         LeftWindows = 91,
-        //
-        // Summary:
-        //     The right Windows key.
+        /// <summary>
+        /// The right Windows key.
+        /// </summary>
         RightWindows = 92,
-        //
-        // Summary:
-        //     The application key or button.
+        /// <summary>
+        /// The application key or button.
+        /// </summary>
         Application = 93,
-        //
-        // Summary:
-        //     The sleep key or button.
+        /// <summary>
+        /// The sleep key or button.
+        /// </summary>
         Sleep = 95,
-        //
-        // Summary:
-        //     The number "0" key as located on a numeric pad.
+        /// <summary>
+        /// The number "0" key as located on a numeric pad.
+        /// </summary>
         NumberPad0 = 96,
-        //
-        // Summary:
-        //     The number "1" key as located on a numeric pad.
+        /// <summary>
+        /// The number "1" key as located on a numeric pad.
+        /// </summary>
         NumberPad1 = 97,
-        //
-        // Summary:
-        //     The number "2" key as located on a numeric pad.
+        /// <summary>
+        /// The number "2" key as located on a numeric pad.
+        /// </summary>
         NumberPad2 = 98,
-        //
-        // Summary:
-        //     The number "3" key as located on a numeric pad.
+        /// <summary>
+        /// The number "3" key as located on a numeric pad.
+        /// </summary>
         NumberPad3 = 99,
-        //
-        // Summary:
-        //     The number "4" key as located on a numeric pad.
+        /// <summary>
+        /// The number "4" key as located on a numeric pad.
+        /// </summary>
         NumberPad4 = 100,
-        //
-        // Summary:
-        //     The number "5" key as located on a numeric pad.
+        /// <summary>
+        /// The number "5" key as located on a numeric pad.
+        /// </summary>
         NumberPad5 = 101,
-        //
-        // Summary:
-        //     The number "6" key as located on a numeric pad.
+        /// <summary>
+        /// The number "6" key as located on a numeric pad.
+        /// </summary>
         NumberPad6 = 102,
-        //
-        // Summary:
-        //     The number "7" key as located on a numeric pad.
+        /// <summary>
+        /// The number "7" key as located on a numeric pad.
+        /// </summary>
         NumberPad7 = 103,
-        //
-        // Summary:
-        //     The number "8" key as located on a numeric pad.
+        /// <summary>
+        /// The number "8" key as located on a numeric pad.
+        /// </summary>
         NumberPad8 = 104,
-        //
-        // Summary:
-        //     The number "9" key as located on a numeric pad.
+        /// <summary>
+        /// The number "9" key as located on a numeric pad.
+        /// </summary>
         NumberPad9 = 105,
-        //
-        // Summary:
-        //     The multiply (*) operation key as located on a numeric pad.
+        /// <summary>
+        /// The multiply (*) operation key as located on a numeric pad.
+        /// </summary>
         Multiply = 106,
-        //
-        // Summary:
-        //     The add (+) operation key as located on a numeric pad.
+        /// <summary>
+        /// The add (+) operation key as located on a numeric pad.
+        /// </summary>
         Add = 107,
-        //
-        // Summary:
-        //     The separator key as located on a numeric pad.
+        /// <summary>
+        /// The separator key as located on a numeric pad.
+        /// </summary>
         Separator = 108,
-        //
-        // Summary:
-        //     The subtract (-) operation key as located on a numeric pad.
+        /// <summary>
+        /// The subtract (-) operation key as located on a numeric pad.
+        /// </summary>
         Subtract = 109,
-        //
-        // Summary:
-        //     The decimal (.) key as located on a numeric pad.
+        /// <summary>
+        /// The decimal (.) key as located on a numeric pad.
+        /// </summary>
         Decimal = 110,
-        //
-        // Summary:
-        //     The divide (/) operation key as located on a numeric pad.
+        /// <summary>
+        /// The divide (/) operation key as located on a numeric pad.
+        /// </summary>
         Divide = 111,
-        //
-        // Summary:
-        //     The F1 function key.
+        /// <summary>
+        /// The F1 function key.
+        /// </summary>
         F1 = 112,
-        //
-        // Summary:
-        //     The F2 function key.
+        /// <summary>
+        /// The F2 function key.
+        /// </summary>
         F2 = 113,
-        //
-        // Summary:
-        //     The F3 function key.
+        /// <summary>
+        /// The F3 function key.
+        /// </summary>
         F3 = 114,
-        //
-        // Summary:
-        //     The F4 function key.
+        /// <summary>
+        /// The F4 function key.
+        /// </summary>
         F4 = 115,
-        //
-        // Summary:
-        //     The F5 function key.
+        /// <summary>
+        /// The F5 function key.
+        /// </summary>
         F5 = 116,
-        //
-        // Summary:
-        //     The F6 function key.
+        /// <summary>
+        /// The F6 function key.
+        /// </summary>
         F6 = 117,
-        //
-        // Summary:
-        //     The F7 function key.
+        /// <summary>
+        /// The F7 function key.
+        /// </summary>
         F7 = 118,
-        //
-        // Summary:
-        //     The F8 function key.
+        /// <summary>
+        /// The F8 function key.
+        /// </summary>
         F8 = 119,
-        //
-        // Summary:
-        //     The F9 function key.
+        /// <summary>
+        /// The F9 function key.
+        /// </summary>
         F9 = 120,
-        //
-        // Summary:
-        //     The F10 function key.
+        /// <summary>
+        /// The F10 function key.
+        /// </summary>
         F10 = 121,
-        //
-        // Summary:
-        //     The F11 function key.
+        /// <summary>
+        /// The F11 function key.
+        /// </summary>
         F11 = 122,
-        //
-        // Summary:
-        //     The F12 function key.
+        /// <summary>
+        /// The F12 function key.
+        /// </summary>
         F12 = 123,
-        //
-        // Summary:
-        //     The F13 function key.
+        /// <summary>
+        /// The F13 function key.
+        /// </summary>
         F13 = 124,
-        //
-        // Summary:
-        //     The F14 function key.
+        /// <summary>
+        /// The F14 function key.
+        /// </summary>
         F14 = 125,
-        //
-        // Summary:
-        //     The F15 function key.
+        /// <summary>
+        /// The F15 function key.
+        /// </summary>
         F15 = 126,
-        //
-        // Summary:
-        //     The F16 function key.
+        /// <summary>
+        /// The F16 function key.
+        /// </summary>
         F16 = 127,
-        //
-        // Summary:
-        //     The F17 function key.
+        /// <summary>
+        /// The F17 function key.
+        /// </summary>
         F17 = 128,
-        //
-        // Summary:
-        //     The F18 function key.
+        /// <summary>
+        /// The F18 function key.
+        /// </summary>
         F18 = 129,
-        //
-        // Summary:
-        //     The F19 function key.
+        /// <summary>
+        /// The F19 function key.
+        /// </summary>
         F19 = 130,
-        //
-        // Summary:
-        //     The F20 function key.
+        /// <summary>
+        /// The F20 function key.
+        /// </summary>
         F20 = 131,
-        //
-        // Summary:
-        //     The F21 function key.
+        /// <summary>
+        /// The F21 function key.
+        /// </summary>
         F21 = 132,
-        //
-        // Summary:
-        //     The F22 function key.
+        /// <summary>
+        /// The F22 function key.
+        /// </summary>
         F22 = 133,
-        //
-        // Summary:
-        //     The F23 function key.
+        /// <summary>
+        /// The F23 function key.
+        /// </summary>
         F23 = 134,
-        //
-        // Summary:
-        //     The F24 function key.
+        /// <summary>
+        /// The F24 function key.
+        /// </summary>
         F24 = 135,
-        //
-        // Summary:
-        //     The navigation up button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The navigation up button.
+        /// </summary>
         NavigationView = 136,
-        //
-        // Summary:
-        //     The navigation menu button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The navigation menu button.
+        /// </summary>
         NavigationMenu = 137,
-        //
-        // Summary:
-        //     The navigation up button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The navigation up button.
+        /// </summary>
         NavigationUp = 138,
-        //
-        // Summary:
-        //     The navigation down button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The navigation down button.
+        /// </summary>
         NavigationDown = 139,
-        //
-        // Summary:
-        //     The navigation left button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The navigation left button.
+        /// </summary>
         NavigationLeft = 140,
-        //
-        // Summary:
-        //     The navigation right button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The navigation right button.
+        /// </summary>
         NavigationRight = 141,
-        //
-        // Summary:
-        //     The navigation accept button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The navigation accept button.
+        /// </summary>
         NavigationAccept = 142,
-        //
-        // Summary:
-        //     The navigation cancel button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The navigation cancel button.
+        /// </summary>
         NavigationCancel = 143,
-        //
-        // Summary:
-        //     The Num Lock key.
+        /// <summary>
+        /// The Num Lock key.
+        /// </summary>
         NumberKeyLock = 144,
-        //
-        // Summary:
-        //     The Scroll Lock (ScrLk) key.
+        /// <summary>
+        /// The Scroll Lock (ScrLk) key.
+        /// </summary>
         Scroll = 145,
-        //
-        // Summary:
-        //     The left Shift key.
+        /// <summary>
+        /// The left Shift key.
+        /// </summary>
         LeftShift = 160,
-        //
-        // Summary:
-        //     The right Shift key.
+        /// <summary>
+        /// The right Shift key.
+        /// </summary>
         RightShift = 161,
-        //
-        // Summary:
-        //     The left Ctrl key.
+        /// <summary>
+        /// The left Ctrl key.
+        /// </summary>
         LeftControl = 162,
-        //
-        // Summary:
-        //     The right Ctrl key.
+        /// <summary>
+        /// The right Ctrl key.
+        /// </summary>
         RightControl = 163,
-        //
-        // Summary:
-        //     The left menu key.
+        /// <summary>
+        /// The left menu key.
+        /// </summary>
         LeftMenu = 164,
-        //
-        // Summary:
-        //     The right menu key.
+        /// <summary>
+        /// The right menu key.
+        /// </summary>
         RightMenu = 165,
-        //
-        // Summary:
-        //     The go back key.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The go back key.
+        /// </summary>
         GoBack = 166,
-        //
-        // Summary:
-        //     The go forward key.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The go forward key.
+        /// </summary>
         GoForward = 167,
-        //
-        // Summary:
-        //     The refresh key.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The refresh key.
+        /// </summary>
         Refresh = 168,
-        //
-        // Summary:
-        //     The stop key.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The stop key.
+        /// </summary>
         Stop = 169,
-        //
-        // Summary:
-        //     The search key.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The search key.
+        /// </summary>
         Search = 170,
-        //
-        // Summary:
-        //     The favorites key.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The favorites key.
+        /// </summary>
         Favorites = 171,
-        //
-        // Summary:
-        //     The go home key.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The go home key.
+        /// </summary>
         GoHome = 172,
-        //
-        // Summary:
-        //     The gamepad A button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad A button.
+        /// </summary>
         GamepadA = 195,
-        //
-        // Summary:
-        //     The gamepad B button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad B button.
+        /// </summary>
         GamepadB = 196,
-        //
-        // Summary:
-        //     The gamepad X button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad X button.
+        /// </summary>
         GamepadX = 197,
-        //
-        // Summary:
-        //     The gamepad Y button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad Y button.
+        /// </summary>
         GamepadY = 198,
-        //
-        // Summary:
-        //     The gamepad right shoulder.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad right shoulder.
+        /// </summary>
         GamepadRightShoulder = 199,
-        //
-        // Summary:
-        //     The gamepad left shoulder.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad left shoulder.
+        /// </summary>
         GamepadLeftShoulder = 200,
-        //
-        // Summary:
-        //     The gamepad left trigger.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad left trigger.
+        /// </summary>
         GamepadLeftTrigger = 201,
-        //
-        // Summary:
-        //     The gamepad right trigger.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad right trigger.
+        /// </summary>
         GamepadRightTrigger = 202,
-        //
-        // Summary:
-        //     The gamepad d-pad up.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad d-pad up.
+        /// </summary>
         GamepadDPadUp = 203,
-        //
-        // Summary:
-        //     The gamepad d-pad down.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad d-pad down.
+        /// </summary>
         GamepadDPadDown = 204,
-        //
-        // Summary:
-        //     The gamepad d-pad left.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad d-pad left.
+        /// </summary>
         GamepadDPadLeft = 205,
-        //
-        // Summary:
-        //     The gamepad d-pad right.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad d-pad right.
+        /// </summary>
         GamepadDPadRight = 206,
-        //
-        // Summary:
-        //     The gamepad menu button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad menu button.
+        /// </summary>
         GamepadMenu = 207,
-        //
-        // Summary:
-        //     The gamepad view button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad view button.
+        /// </summary>
         GamepadView = 208,
-        //
-        // Summary:
-        //     The gamepad left thumbstick button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad left thumbstick button.
+        /// </summary>
         GamepadLeftThumbstickButton = 209,
-        //
-        // Summary:
-        //     The gamepad right thumbstick button.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad right thumbstick button.
+        /// </summary>
         GamepadRightThumbstickButton = 210,
-        //
-        // Summary:
-        //     The gamepad left thumbstick up.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad left thumbstick up.
+        /// </summary>
         GamepadLeftThumbstickUp = 211,
-        //
-        // Summary:
-        //     The gamepad left thumbstick down.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad left thumbstick down.
+        /// </summary>
         GamepadLeftThumbstickDown = 212,
-        //
-        // Summary:
-        //     The gamepad left thumbstick right.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad left thumbstick right.
+        /// </summary>
         GamepadLeftThumbstickRight = 213,
-        //
-        // Summary:
-        //     The gamepad left thumbstick left.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad left thumbstick left.
+        /// </summary>
         GamepadLeftThumbstickLeft = 214,
-        //
-        // Summary:
-        //     The gamepad right thumbstick up.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad right thumbstick up.
+        /// </summary>
         GamepadRightThumbstickUp = 215,
-        //
-        // Summary:
-        //     The gamepad right thumbstick down.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad right thumbstick down.
+        /// </summary>
         GamepadRightThumbstickDown = 216,
-        //
-        // Summary:
-        //     The gamepad right thumbstick right.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad right thumbstick right.
+        /// </summary>
         GamepadRightThumbstickRight = 217,
-        //
-        // Summary:
-        //     The gamepad right thumbstick left.
-        [SupportedOSPlatform("Windows10.0.10240.0")]
+        /// <summary>
+        /// The gamepad right thumbstick left.
+        /// </summary>
         GamepadRightThumbstickLeft = 218
     }
 }
