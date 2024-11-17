@@ -186,12 +186,12 @@ namespace Maze.Maui.App.Controls
             InteractiveGrid.CellRange? currentSelection = CurrentSelection;
             if (currentSelection != null && currentSelection.IsSingleCell)
             {
-                if (startCell != null && startCell.IsPosition(currentSelection.Top, currentSelection.Left))
+                if (startCell != null && startCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
                     return;
                 if (startCell != null)
                     SetCellContent(startCell, Maze.Api.Maze.CellType.Empty);
                 startCell = SetCellContent(currentSelection.Top, currentSelection.Left, Maze.Api.Maze.CellType.Start);
-                if (startCell != null && finishCell != null && finishCell.IsPosition(startCell.DisplayRow, startCell.DisplayColumn))
+                if (startCell != null && finishCell != null && finishCell.IsDisplayPosition(startCell.DisplayRow, startCell.DisplayColumn))
                     finishCell = null;
             }
         }
@@ -200,12 +200,12 @@ namespace Maze.Maui.App.Controls
             InteractiveGrid.CellRange? currentSelection = CurrentSelection;
             if (currentSelection != null && currentSelection.IsSingleCell)
             {
-                if (finishCell != null && finishCell.IsPosition(currentSelection.Top, currentSelection.Left))
+                if (finishCell != null && finishCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
                     return;
                 if (finishCell != null)
                     SetCellContent(finishCell, Maze.Api.Maze.CellType.Empty);
                 finishCell = SetCellContent(currentSelection.Top, currentSelection.Left, Maze.Api.Maze.CellType.Finish);
-                if (finishCell != null && startCell != null && startCell.IsPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
+                if (finishCell != null && startCell != null && startCell.IsDisplayPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
                     startCell = null;
             }
         }
