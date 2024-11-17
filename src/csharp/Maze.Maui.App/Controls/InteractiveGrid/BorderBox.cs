@@ -82,7 +82,6 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
     public class BorderBox : GraphicsView
     {
         // Private property data
-        private Icon HoverIcon { get; }
         private Color color = Colors.Black;
         private bool dashedAnimationEnabled = false;
         private float dashThickness = 1.0F;
@@ -116,6 +115,11 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             RegisterEventHandlers();
             InitializeDrawable();
         }
+        /// <summary>
+        /// The icon to be displayed when the mouse pointer hovers over the object
+        /// </summary>
+        /// <returns>Hover icon</returns>
+        public Icon HoverIcon { get; set; }
         /// <summary>
         /// The color of the box
         /// </summary>
