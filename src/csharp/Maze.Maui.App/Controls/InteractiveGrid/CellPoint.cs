@@ -25,7 +25,7 @@
             Set(row, column);
         }
         /// <summary>
-        /// Returns a copy of the object
+        /// Creates a copy of the object
         /// </summary>
         /// <returns>Copy of the object</returns>
         public CellPoint Clone()
