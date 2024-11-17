@@ -13,13 +13,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         static private Color DEFAULT_COLOR = Colors.Black;
         private const double DEFAULT_EDGE_THICKNESS = 2.0;
-        private const double DEFAULT_GRIP_SIZE = 10.0;
+        private const double DEFAULT_GRIP_DIAMETER = 10.0;
 
         Color color = DEFAULT_COLOR;
         FrameEdge frameEdge = FrameEdge.None;
         FrameCorner gripCorner = FrameCorner.None;
         double edgeThickness = DEFAULT_EDGE_THICKNESS;
-        double gripSize = DEFAULT_GRIP_SIZE;
+        double gripDiameter = DEFAULT_GRIP_DIAMETER;
 
         int startRow = 0;
         int startColumn = 0;
@@ -97,21 +97,21 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
-        public double GripSize
+        public double GripDiameter
         {
-            get => gripSize;
+            get => gripDiameter;
             set
             {
-                UpdateGripSize(value);
+                UpdateGripDiameter(value);
             }
         }
 
-        public FrameBorder(SelectionFrame parentFrame, FrameEdge edge, Color color, double gripSize)
+        public FrameBorder(SelectionFrame parentFrame, FrameEdge edge, Color color, double gripDiameter)
         {
             this.parentFrame = parentFrame;
             Edge = edge;
             Color = color;
-            GripSize = gripSize;
+            GripDiameter = gripDiameter;
 
             box = NewBox();
             if (ParentFrame.IsPanSupportEnabled)
@@ -139,7 +139,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         {
             if (!ParentFrame.IsPanSupportEnabled) return null;
 
-            BorderGrip grip = new BorderGrip(GetPointerIcon(true), GripSize)
+            BorderGrip grip = new BorderGrip(GetPointerIcon(true), GripDiameter)
             {
                 Color = Color,
                 IsVisible = false,
@@ -318,10 +318,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             box.DashThickness = (float)newEdgeThickness;
         }
 
-        private void UpdateGripSize(double newGripSize)
+        private void UpdateGripDiameter(double newGripDiameter)
         {
             if (grip == null) return;
-            grip.Size = newGripSize;
+            grip.Diameter = newGripDiameter;
         }
 
         public void Show(bool show)
@@ -402,13 +402,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             switch (Edge)
             {
                 case FrameEdge.Top:
-                    return -GripSize / 2.0;
+                    return -GripDiameter / 2.0;
                 case FrameEdge.Left:
-                    return -GripSize / 2.0;
+                    return -GripDiameter / 2.0;
                 case FrameEdge.Bottom:
-                    return width - GripSize / 2.0; ;
+                    return width - GripDiameter / 2.0; ;
                 case FrameEdge.Right:
-                    return 1.0 - GripSize / 2.0;
+                    return 1.0 - GripDiameter / 2.0;
             }
             return 0.0;
         }
@@ -421,13 +421,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             switch (Edge)
             {
                 case FrameEdge.Top:
-                    return -GripSize / 2.0;
+                    return -GripDiameter / 2.0;
                 case FrameEdge.Left:
-                    return height - GripSize / 2.0;
+                    return height - GripDiameter / 2.0;
                 case FrameEdge.Bottom:
-                    return height - GripSize / 2.0;
+                    return height - GripDiameter / 2.0;
                 case FrameEdge.Right:
-                    return -GripSize / 2.0;
+                    return -GripDiameter / 2.0;
             }
             return 0.0;
         }

@@ -27,6 +27,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         const double DEFAULT_CELL_MARGIN = 0.0;
         const double DEFAULT_CELL_PADDING = 0.0;
 
+        const double DEFAULT_SELECTION_FRAME_BORDER_WIDTH = 2.0;
+        const double DEFAULT_SELECTION_FRAME_BORDER_GRIP_DIAMETER = 10.0;
+
         const bool DEFAULT_IS_PAN_SUPPORT_ENABLED = true;
 
         public enum XOffsetType
@@ -91,9 +94,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         public Color SelectionFrameBorderColor { get; set; } = Colors.DarkGreen;
 
-        public double SelectionFrameBorderWidth { get; set; } = 2.0;
+        public double SelectionFrameBorderWidth { get; set; } = DEFAULT_SELECTION_FRAME_BORDER_WIDTH;
 
-        public double SelectionFrameBorderGripSize { get; set; } = 10.0;
+        public double SelectionFrameBorderGripDiameter { get; set; } = DEFAULT_SELECTION_FRAME_BORDER_GRIP_DIAMETER;
 
         public bool IsExtendedSelectionMode { get; set; } = false;
 
@@ -1058,7 +1061,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             {
                 BorderColor = SelectionFrameBorderColor,
                 BorderWidth = SelectionFrameBorderWidth,
-                BorderGripSize = SelectionFrameBorderGripSize
+                BorderGripDiameter = SelectionFrameBorderGripDiameter
             };
             selectionFrame.AddToGrid();
         }

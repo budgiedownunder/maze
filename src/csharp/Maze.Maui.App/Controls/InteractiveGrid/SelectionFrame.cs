@@ -19,13 +19,13 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         static private Color DEFAULT_BORDER_COLOR = Colors.Black;
         const double DEFAULT_BORDER_WIDTH = 2.0;
-        const double DEFAULT_BORDER_GRIP_SIZE = 10.0;
+        const double DEFAULT_BORDER_GRIP_DIAMETER = 10.0;
         const bool DEFAULT_IS_PAN_SUPPORT_ENABLED = true;
         const int ANIMATION_UPDATE_INTERVAL_MS = 100;
 
         private Color borderColor = DEFAULT_BORDER_COLOR;
         private double borderWidth = DEFAULT_BORDER_WIDTH;
-        private double borderGripSize = DEFAULT_BORDER_GRIP_SIZE;
+        private double borderGripDiameter = DEFAULT_BORDER_GRIP_DIAMETER;
 
         private readonly FrameBorder[] frameBorders = new FrameBorder[4];
 
@@ -53,12 +53,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
 
-        public double BorderGripSize
+        public double BorderGripDiameter
         {
-            get => borderGripSize;
+            get => borderGripDiameter;
             set
             {
-                borderGripSize = value;
+                borderGripDiameter = value;
                 UpdateBorders();
             }
         }
@@ -120,7 +120,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
 
         private FrameBorder NewFrameBorder(FrameBorder.FrameEdge edge)
         {
-            return new FrameBorder(this, edge, BorderColor, BorderGripSize);
+            return new FrameBorder(this, edge, BorderColor, BorderGripDiameter);
         }
 
         private void UpdateBorders()
@@ -129,7 +129,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             {
                 border.Color = BorderColor;
                 border.EdgeThickness = BorderWidth;
-                border.GripSize = BorderGripSize;
+                border.GripDiameter = BorderGripDiameter;
             }
         }
 
