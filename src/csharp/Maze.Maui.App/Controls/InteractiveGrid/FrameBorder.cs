@@ -534,9 +534,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// </summary>
         /// <param name="row">Display row</param>
         /// <param name="column">Display column</param>
-        /// <param name="width">Display width</param>
-        /// <param name="height">Display height</param>
-        /// <param name="margin">Margin</param>
+        /// <param name="width">Display width (in DIPs)</param>
+        /// <param name="height">Display height (in DIPs)</param>
+        /// <param name="margin">Margin (in DIPs)</param>
         public void SetPosition(int row, int column, double width, double height, Thickness margin)
         {
             startRow = row;
@@ -578,10 +578,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             return FrameCorner.None;
         }
         /// <summary>
-        /// Gets the grip translation in the `x` direction for a given width
+        /// Gets the grip translation in the X direction for a given width
         /// </summary>
-        /// <param name="width">Object width</param>
-        /// <returns>X translation to apply to object's `x` position to draw grip</returns>
+        /// <param name="width">Object width (in DIPs)</param>
+        /// <returns>X translation to apply to object's X position to draw grip</returns>
         private double GetGripTranslationX(double width)
         {
             bool singleRow = ParentFrame.RowCount == 1;
@@ -601,10 +601,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             return 0.0;
         }
         /// <summary>
-        /// Gets the grip translation in the `y` direction for a given height
+        /// Gets the grip translation in the Y direction for a given height
         /// </summary>
-        /// <param name="height">Object height</param>
-        /// <returns>Ytranslation to apply to object's `y` position to draw grip</returns>
+        /// <param name="height">Object height (in DIPs)</param>
+        /// <returns>Ytranslation to apply to object's Y position to draw grip</returns>
         private double GetGripTranslationY(double height)
         {
             bool singleRow = ParentFrame.RowCount == 1;
