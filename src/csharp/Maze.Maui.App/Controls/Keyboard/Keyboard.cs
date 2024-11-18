@@ -24,11 +24,11 @@ namespace Maze.Maui.App.Controls.Keyboard
         }
     }
 
-    [Flags]
     /// <summary>
     /// Represents a key state
     /// </summary>
     /// <returns>Boolean</returns>
+    [Flags]
     public enum KeyState
     {
         /// <summary>
