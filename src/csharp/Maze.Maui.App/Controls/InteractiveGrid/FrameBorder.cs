@@ -167,7 +167,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
         /// <summary>
-        /// The thickness of the frame edge
+        /// The thickness of the frame edge (in DIPs)
         /// </summary>
         /// <returns>Edge thickness</returns>
         public double EdgeThickness
@@ -179,7 +179,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
         /// <summary>
-        /// The diameter of the frame's grip (if any)
+        /// The diameter of the frame's grip (in DIPs)
         /// </summary>
         /// <returns>Grip diameter</returns>
         public double GripDiameter
@@ -196,7 +196,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// <param name="parentFrame">Parent selection frame</param>
         /// <param name="edge">The edge within the selection frame</param>
         /// <param name="color">Color</param>
-        /// <param name="gripDiameter">Grip diameter</param>
+        /// <param name="gripDiameter">Grip diameter (in DIPs)</param>
         public FrameBorder(SelectionFrame parentFrame, FrameEdge edge, Color color, double gripDiameter)
         {
             this.parentFrame = parentFrame;
@@ -374,11 +374,11 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
         /// <summary>
-        /// Recaculates the selecteed cell range for a pan change in `x` and/or `y`
+        /// Recaculates the selecteed cell range for a pan change in X and/or Y`
         /// </summary>
         /// <param name="isGrip">Flag indicating whether the caclulation is for the grip. If not, it is for the box.</param>
-        /// <param name="deltaX">Change in `x`</param>
-        /// <param name="deltaY">Change in `y`</param>
+        /// <param name="deltaX">Change in X (in DIPs)</param>
+        /// <param name="deltaY">Change in Y (in DIPs)</param>
         private CellRange CalcCellSelectionForPanChange(bool isGrip, double deltaX, double deltaY)
         {
             return new CellRange(
@@ -388,10 +388,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                 CalcRightCellForPanChange(isGrip, deltaX));
         }
         /// <summary>
-        /// Recaculates the new top cell row for a pan change in `y`
+        /// Recaculates the new top cell row for a pan change in Y
         /// </summary>
         /// <param name="isGrip">Flag indicating whether the caclulation is for the grip. If not, it is for the box.</param>
-        /// <param name="deltaY">Change in `y`</param>
+        /// <param name="deltaY">Change in Y (in DIPs)</param>
         /// <returns>New top cell row</returns>
         private int CalcTopCellForPanChange(bool isGrip, double deltaY)
         {
@@ -405,10 +405,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                     deltaY);
         }
         /// <summary>
-        /// Recaculates the new bottom cell row for a pan change in `y`
+        /// Recaculates the new bottom cell row for a pan change in Y
         /// </summary>
         /// <param name="isGrip">Flag indicating whether the caclulation is for the grip. If not, it is for the box.</param>
-        /// <param name="deltaY">Change in `y`</param>
+        /// <param name="deltaY">Change in Y (in DIPs)</param>
         /// <returns>New bottom cell row</returns>
         private int CalcBottomCellForPanChange(bool isGrip, double deltaY)
         {
@@ -422,10 +422,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                     deltaY);
         }
         /// <summary>
-        /// Recaculates the new left cell column for a pan change in `x`
+        /// Recaculates the new left cell column for a pan change in X
         /// </summary>
         /// <param name="isGrip">Flag indicating whether the caclulation is for the grip. If not, it is for the box.</param>
-        /// <param name="deltaX">Change in `x`</param>
+        /// <param name="deltaX">Change in X (in DIPs)</param>
         /// <returns>New left cell column</returns>
         private int CalcLeftCellForPanChange(bool isGrip, double deltaX)
         {
@@ -439,10 +439,10 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
                     deltaX);
         }
         /// <summary>
-        /// Recaculates the new left right column for a pan change in `x`
+        /// Recaculates the new left right column for a pan change in X
         /// </summary>
         /// <param name="isGrip">Flag indicating whether the caclulation is for the grip. If not, it is for the box.</param>
-        /// <param name="deltaX">Change in `x`</param>
+        /// <param name="deltaX">Change in X (in DIPs)</param>
         /// <returns>New right cell column</returns>
         private int CalcRightCellForPanChange(bool isGrip, double deltaX)
         {
@@ -470,7 +470,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// <summary>
         /// Updates the edge thickness to a new thickmess
         /// </summary>
-        /// <param name="newEdgeThickness">New thickness</param>
+        /// <param name="newEdgeThickness">New thickness (in DIPs)</param>
         private void UpdateEdgeThickness(double newEdgeThickness)
         {
             edgeThickness = newEdgeThickness;
@@ -479,7 +479,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// <summary>
         /// Updates the grip diameter to a new diameter
         /// </summary>
-        /// <param name="newGripDiameter">New diameter</param>
+        /// <param name="newGripDiameter">New diameter (in DIPs)</param>
         private void UpdateGripDiameter(double newGripDiameter)
         {
             if (grip == null) return;
@@ -581,7 +581,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// Gets the grip translation in the X direction for a given width
         /// </summary>
         /// <param name="width">Object width (in DIPs)</param>
-        /// <returns>X translation to apply to object's X position to draw grip</returns>
+        /// <returns>X translation to apply to object's X position to draw grip (in DIPs)</returns>
         private double GetGripTranslationX(double width)
         {
             bool singleRow = ParentFrame.RowCount == 1;
@@ -604,7 +604,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// Gets the grip translation in the Y direction for a given height
         /// </summary>
         /// <param name="height">Object height (in DIPs)</param>
-        /// <returns>Ytranslation to apply to object's Y position to draw grip</returns>
+        /// <returns>Ytranslation to apply to object's Y position to draw grip (in DIPs)</returns>
         private double GetGripTranslationY(double height)
         {
             bool singleRow = ParentFrame.RowCount == 1;

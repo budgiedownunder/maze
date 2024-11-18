@@ -79,52 +79,52 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// <returns>Number of columns</returns>
         public int ColumnCount { get; set; } = 0;
         /// <summary>
-        /// Column header height
+        /// Column header height (in DIPs)
         /// </summary>
         /// <returns>Column header height</returns>
         public double ColumnHeaderHeight { get; set; } = DEFAULT_COL_HEADER_HEIGHT;
         /// <summary>
-        /// Column header margin
+        /// Column header margin (in DIPs)
         /// </summary>
         /// <returns>Column header margin</returns>
         public double ColumnHeaderMargin { get; set; } = DEFAULT_COL_HEADER_MARGIN;
         /// <summary>
-        /// Column header padding
+        /// Column header padding (in DIPs)
         /// </summary>
         /// <returns>Column header padding</returns>
         public double ColumnHeaderPadding { get; set; } = DEFAULT_COL_HEADER_PADDING;
         /// <summary>
-        /// Row header width
+        /// Row header width (in DIPs)
         /// </summary>
         /// <returns>Row header width</returns>
         public double RowHeaderWidth { get; set; } = DEFAULT_ROW_HEADER_WIDTH;
         /// <summary>
-        /// Row header margin
+        /// Row header margin (in DIPs)
         /// </summary>
         /// <returns>Row header margin</returns>
         public double RowHeaderMargin { get; set; } = DEFAULT_ROW_HEADER_MARGIN;
         /// <summary>
-        /// Row header padding
+        /// Row header padding (in DIPs)
         /// </summary>
         /// <returns>Row header padding</returns>
         public double RowHeaderPadding { get; set; } = DEFAULT_ROW_HEADER_PADDING;
         /// <summary>
-        /// Cell height
+        /// Cell height (in DIPs)
         /// </summary>
         /// <returns>Cell height</returns>
         public double CellHeight { get; set; } = DEFAULT_CELL_HEIGHT;
         /// <summary>
-        /// Cell width
+        /// Cell width (in DIPs)
         /// </summary>
         /// <returns>Cell width</returns>
         public double CellWidth { get; set; } = DEFAULT_CELL_WIDTH;
         /// <summary>
-        /// Cell margin
+        /// Cell margin (in DIPs)
         /// </summary>
         /// <returns>Cell margin</returns>
         public double CellMargin { get; set; } = DEFAULT_CELL_MARGIN;
         /// <summary>
-        /// Cell padding
+        /// Cell padding (in DIPs)
         /// </summary>
         /// <returns>Cell padding</returns>
         public double CellPadding { get; set; } = DEFAULT_CELL_PADDING;
@@ -189,7 +189,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// <returns>Selection frame border width</returns>
         public double SelectionFrameBorderWidth { get; set; } = DEFAULT_SELECTION_FRAME_BORDER_WIDTH;
         /// <summary>
-        /// Selection frame border grip diameter
+        /// Selection frame border grip diameter (in DIPs)
         /// </summary>
         /// <returns>Selection frame border grip diameter</returns>
         public double SelectionFrameBorderGripDiameter { get; set; } = DEFAULT_SELECTION_FRAME_BORDER_GRIP_DIAMETER;

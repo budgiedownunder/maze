@@ -30,17 +30,17 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// <returns>Dash background color</returns>
         public Color DashBackgroundColor { get; set; } = Colors.Transparent;
         /// <summary>
-        /// The pattern of dashes and gaps used to draw the box
+        /// The pattern of dashes and gaps used to draw the box (in DIPs)
         /// </summary>
         /// <returns>Dash pattern</returns>
         public float[] DashPattern { get; set; } = new float[] {6, 4};
         /// <summary>
-        /// The width/height of the dashes when drawn 
+        /// The width/height of the dashes when drawn (in DIPs)
         /// </summary>
         /// <returns>Dash size</returns>
         public float DashSize { get; set; }
         /// <summary>
-        /// The distance within the dash pattern where dashes begin
+        /// The distance within the dash pattern where dashes begin (in DIPs)
         /// </summary>
         /// <returns>Dash size</returns>
         public int DashOffset { get; set; }
@@ -107,7 +107,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// Constructor
         /// </summary>
         /// <param name="hoverIcon">The icon to be displayed when the mouse pointer hovers over the object</param>
-        /// <param name="dashThickness">The thickness of the dashes. This is their height for a horizontal box and their width for a vertical box.</param>
+        /// <param name="dashThickness">The thickness of the dashes (in DIPs). This is their height for a horizontal box and their width for a vertical box.</param>
         public BorderBox(Icon hoverIcon, float dashThickness)
         {
             HoverIcon = hoverIcon;
@@ -149,12 +149,12 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             }
         }
         /// <summary>
-        /// The pattern of dashes and gaps used to draw the box. Only applies when dash animation is enabled.
+        /// The pattern of dashes and gaps used to draw the box (in DIPs). Only applies when dash animation is enabled.
         /// </summary>
         /// <returns>Dash pattern</returns>
         public float[] DashPattern { get => dashPattern; }
         /// <summary>
-        /// The thickness of the dashes when the border is drawn. This is their height for a horizontal box and their width for a vertical box.
+        /// The thickness of the dashes when the border is drawn (in DIPs). This is their height for a horizontal box and their width for a vertical box.
         /// Only applies when dash animation is enabled.
         /// </summary>
         /// <returns>Dash thickness</returns>

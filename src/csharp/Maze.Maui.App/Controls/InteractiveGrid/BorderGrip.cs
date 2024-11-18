@@ -28,7 +28,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// <returns>Hover icon</returns>
         public Icon HoverIcon { get; set; }
         /// <summary>
-        /// The diameter of the grip
+        /// The diameter of the grip (in DIPs)
         /// </summary>
         /// <returns>Diameter</returns>
         public double Diameter
@@ -46,7 +46,7 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
         /// Constructor
         /// </summary>
         /// <param name="hoverIcon">The icon to be displayed when the mouse pointer hovers over the object</param>
-        /// <param name="diameter">The diameter of the grip</param>
+        /// <param name="diameter">The diameter of the grip (in DIPs)</param>
         public BorderGrip(Icon hoverIcon, double diameter)
         {
             HoverIcon = hoverIcon;
