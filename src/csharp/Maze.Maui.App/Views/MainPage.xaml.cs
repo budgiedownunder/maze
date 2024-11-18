@@ -1,10 +1,11 @@
-﻿namespace Maze.Maui.App.Views
+﻿
+namespace Maze.Maui.App.Views
 {
     using System;
     using Maze.Api;
     using Microsoft.Maui.Controls;
     using Maze.Maui.App.ViewModels;
-    using Maze.Maui.App.Controls;
+    using Maze.Maui.App.Controls.Maze;
     using Maze.Maui.App.Services;
 
     /// <summary>

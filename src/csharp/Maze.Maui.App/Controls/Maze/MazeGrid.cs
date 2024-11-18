@@ -1,11 +1,8 @@
-﻿
-using Maze.Api;
+﻿using Maze.Api;
 using Maze.Maui.App.Controls.InteractiveGrid;
-using Microsoft.Maui.Controls;
-using System.Data.Common;
 using static Maze.Api.Maze;
 
-namespace Maze.Maui.App.Controls
+namespace Maze.Maui.App.Controls.Maze
 {
     /// <summary>
     /// The `MazeGrid` class represents an interactive maze grid
@@ -75,7 +72,7 @@ namespace Maze.Maui.App.Controls
         /// </summary>
         public MazeGrid()
         {
-            this.SelectionFrameBorderColor = Colors.Red;
+            SelectionFrameBorderColor = Colors.Red;
         }
         /// <summary>
         /// Initialize
@@ -83,9 +80,9 @@ namespace Maze.Maui.App.Controls
         /// <param name="enablePanSupport">Enable pan support?</param>
         public void Initialize(bool enablePanSupport)
         {
-            this.IsPanSupportEnabled = enablePanSupport;
-            this.RowCount = DEFAULT_ROW_COUNT;
-            this.ColumnCount = DEFAULT_COLUMN_COUNT;
+            IsPanSupportEnabled = enablePanSupport;
+            RowCount = DEFAULT_ROW_COUNT;
+            ColumnCount = DEFAULT_COLUMN_COUNT;
             InitializeContent();
         }
         /// <summary>
@@ -94,13 +91,13 @@ namespace Maze.Maui.App.Controls
         /// <returns>Selection status</returns>
         public CellStatus GetCurrentSelectionStatus()
         {
-            InteractiveGrid.CellRange? currentSelection = CurrentSelection;
+            CellRange? currentSelection = CurrentSelection;
             int cellCount = 0;
             bool singleCell = false, containsStart = false, containsFinish = false, containsWall = false;
             int numWalls = 0;
             if (currentSelection != null)
             {
-                Maze.Api.Maze.CellType cellType = Maze.Api.Maze.CellType.Empty;
+                CellType cellType = CellType.Empty;
 
                 cellCount = currentSelection.CellCount;
                 singleCell = cellCount == 1;
@@ -111,13 +108,13 @@ namespace Maze.Maui.App.Controls
                         cellType = GetCellType(row, column);
                         switch (cellType)
                         {
-                            case Api.Maze.CellType.Start:
+                            case CellType.Start:
                                 containsStart = true;
                                 break;
-                            case Api.Maze.CellType.Finish:
+                            case CellType.Finish:
                                 containsFinish = true;
                                 break;
-                            case Api.Maze.CellType.Wall:
+                            case CellType.Wall:
                                 containsWall = true;
                                 numWalls++;
                                 break;
@@ -145,7 +142,7 @@ namespace Maze.Maui.App.Controls
             MazeCellContent? content = null;
             if (row >= 0 && column >= 0)
             {
-                InteractiveGrid.CellFrame? cellFrame = GetCell(row, column) as InteractiveGrid.CellFrame;
+                CellFrame? cellFrame = GetCell(row, column) as CellFrame;
                 if (cellFrame != null)
                     content = cellFrame.Content as MazeCellContent;
             }
@@ -157,11 +154,11 @@ namespace Maze.Maui.App.Controls
         /// <param name="row">Row index (zero-based)</param>
         /// <param name="column">Column index (zero-based)</param>
         /// <returns>Maze cell type</returns>
-        public Maze.Api.Maze.CellType GetCellType(int row, int column)
+        public CellType GetCellType(int row, int column)
         {
             if (row >= 0 && column >= 0)
             {
-                InteractiveGrid.CellFrame? cellFrame = GetCell(row, column) as InteractiveGrid.CellFrame;
+                CellFrame? cellFrame = GetCell(row, column) as CellFrame;
                 if (cellFrame != null)
                 {
                     MazeCellContent? cellContent = cellFrame.Content as MazeCellContent;
@@ -171,7 +168,7 @@ namespace Maze.Maui.App.Controls
                     }
                 }
             }
-            return Api.Maze.CellType.Empty;
+            return CellType.Empty;
         }
         /// <summary>
         /// Creates the maze cell content for a given location
@@ -181,14 +178,14 @@ namespace Maze.Maui.App.Controls
         /// <returns>Maze cell content</returns>
         public override ContentView CreateCellContent(int row, int column)
         {
-            return new MazeCellContent(Maze.Api.Maze.CellType.Empty);
+            return new MazeCellContent(CellType.Empty);
         }
         /// <summary>
         /// Handles the cell tapped event
         /// </summary>
         /// <param name="cellFrame">Cell frame</param>
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
-        public override void OnCellTapped(InteractiveGrid.CellFrame cellFrame, bool triggerEvents)
+        public override void OnCellTapped(CellFrame cellFrame, bool triggerEvents)
         {
             if (triggerEvents && CellTapped != null)
             {
@@ -204,7 +201,7 @@ namespace Maze.Maui.App.Controls
         /// </summary>
         /// <param name="cellFrame">Cell frame</param>
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
-        public override void OnCellDoubleTapped(InteractiveGrid.CellFrame cellFrame, bool triggerEvents)
+        public override void OnCellDoubleTapped(CellFrame cellFrame, bool triggerEvents)
         {
             if (triggerEvents && CellDoubleTapped != null)
             {
@@ -243,19 +240,19 @@ namespace Maze.Maui.App.Controls
         /// Sets the content in the selected cells to the given cell type
         /// </summary>
         /// <param name="cellType">Cell type</param>
-        public void SetSelectionContent(Maze.Api.Maze.CellType cellType)
+        public void SetSelectionContent(CellType cellType)
         {
             switch (cellType)
             {
-                case Api.Maze.CellType.Start:
+                case CellType.Start:
                     SetSelectionToStartCell();
                     break;
-                case Api.Maze.CellType.Finish:
+                case CellType.Finish:
                     SetSelectionToFinishCell();
                     break;
 
-                case Api.Maze.CellType.Wall:
-                case Api.Maze.CellType.Empty:
+                case CellType.Wall:
+                case CellType.Empty:
                     SetSelectionContentToType(cellType);
                     break;
             }
@@ -265,14 +262,14 @@ namespace Maze.Maui.App.Controls
         /// </summary>
         private void SetSelectionToStartCell()
         {
-            InteractiveGrid.CellRange? currentSelection = CurrentSelection;
+            CellRange? currentSelection = CurrentSelection;
             if (currentSelection != null && currentSelection.IsSingleCell)
             {
                 if (startCell != null && startCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
                     return;
                 if (startCell != null)
-                    SetCellContent(startCell, Maze.Api.Maze.CellType.Empty);
-                startCell = SetCellContent(currentSelection.Top, currentSelection.Left, Maze.Api.Maze.CellType.Start);
+                    SetCellContent(startCell, CellType.Empty);
+                startCell = SetCellContent(currentSelection.Top, currentSelection.Left, CellType.Start);
                 if (startCell != null && finishCell != null && finishCell.IsDisplayPosition(startCell.DisplayRow, startCell.DisplayColumn))
                     finishCell = null;
             }
@@ -282,14 +279,14 @@ namespace Maze.Maui.App.Controls
         /// </summary>
         private void SetSelectionToFinishCell()
         {
-            InteractiveGrid.CellRange? currentSelection = CurrentSelection;
+            CellRange? currentSelection = CurrentSelection;
             if (currentSelection != null && currentSelection.IsSingleCell)
             {
                 if (finishCell != null && finishCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
                     return;
                 if (finishCell != null)
-                    SetCellContent(finishCell, Maze.Api.Maze.CellType.Empty);
-                finishCell = SetCellContent(currentSelection.Top, currentSelection.Left, Maze.Api.Maze.CellType.Finish);
+                    SetCellContent(finishCell, CellType.Empty);
+                finishCell = SetCellContent(currentSelection.Top, currentSelection.Left, CellType.Finish);
                 if (finishCell != null && startCell != null && startCell.IsDisplayPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
                     startCell = null;
             }
@@ -298,9 +295,9 @@ namespace Maze.Maui.App.Controls
         /// Sets the content in the selected cells to be a given type, providing it is not a start or finish cell type
         /// </summary>
         /// <param name="cellType">Cell type</param>
-        private void SetSelectionContentToType(Maze.Api.Maze.CellType cellType)
+        private void SetSelectionContentToType(CellType cellType)
         {
-            InteractiveGrid.CellRange? currentSelection = CurrentSelection;
+            CellRange? currentSelection = CurrentSelection;
             if (currentSelection != null && cellType != CellType.Start && cellType != CellType.Finish)
             {
                 for (int row = currentSelection.Top; row <= currentSelection.Bottom; row++)
@@ -321,7 +318,7 @@ namespace Maze.Maui.App.Controls
         /// <param name="column">Column index (zero-based)</param>
         /// <param name="cellType">Cell type</param>
         /// <returns>Cell frame</returns>
-        private CellFrame? SetCellContent(int row, int column, Maze.Api.Maze.CellType cellType)
+        private CellFrame? SetCellContent(int row, int column, CellType cellType)
         {
             CellFrame? cellFrame = GetCell(row, column) as CellFrame;
             if (cellFrame != null)
@@ -334,7 +331,7 @@ namespace Maze.Maui.App.Controls
         /// <param name="cellFrame">Cell frame</param>
         /// <param name="cellType">Cell type</param>
         /// <returns>Cell frame</returns>
-        private CellFrame? SetCellContent(CellFrame? cellFrame, Maze.Api.Maze.CellType cellType)
+        private CellFrame? SetCellContent(CellFrame? cellFrame, CellType cellType)
         {
             if (cellFrame != null)
             {
@@ -348,9 +345,9 @@ namespace Maze.Maui.App.Controls
         /// Converts the maze grid content to a `Maze` object
         /// </summary>
         /// <returns>Maze object</returns>
-        public Maze.Api.Maze ToMaze()
+        public Api.Maze ToMaze()
         {
-            Maze.Api.Maze maze = new Maze.Api.Maze((uint)RowCount, (uint)ColumnCount);
+            Api.Maze maze = new Api.Maze((uint)RowCount, (uint)ColumnCount);
             CellType cellType;
 
             for (int row = 0; row < RowCount; row++)
@@ -360,13 +357,13 @@ namespace Maze.Maui.App.Controls
                     cellType = GetCellType(row + 1, column + 1);
                     switch (cellType)
                     {
-                        case Api.Maze.CellType.Start:
+                        case CellType.Start:
                             maze.SetStartCell((uint)row, (uint)column);
                             break;
-                        case Api.Maze.CellType.Finish:
+                        case CellType.Finish:
                             maze.SetFinishCell((uint)row, (uint)column);
                             break;
-                        case Api.Maze.CellType.Wall:
+                        case CellType.Wall:
                             maze.SetWallCells((uint)row, (uint)column, (uint)row, (uint)column);
                             break;
                     }
@@ -380,7 +377,7 @@ namespace Maze.Maui.App.Controls
         /// </summary>
         /// <param name="solution">Maze solution</param>
         /// <returns>Boolean</returns>
-        public bool DisplaySolution(Maze.Api.Solution solution)
+        public bool DisplaySolution(Solution solution)
         {
             if (haveSolutionCells)
                 ClearLastSolution();
@@ -395,9 +392,9 @@ namespace Maze.Maui.App.Controls
             {
                 thisPoint = points[i];
                 thisCellDirection = MazeCellContent.PathDirection.None;
-                nextPoint = (i + 1) < points.Count ? points[i + 1] : null;
+                nextPoint = i + 1 < points.Count ? points[i + 1] : null;
                 thisCellDirection = GetCellPathDirection(prevCellDirection, thisPoint, nextPoint);
-                SetSolutionCell((int)(thisPoint.Row) + 1, (int)(thisPoint.Column) + 1, thisCellDirection);
+                SetSolutionCell((int)thisPoint.Row + 1, (int)thisPoint.Column + 1, thisCellDirection);
                 prevCellDirection = thisCellDirection;
             }
 
@@ -436,7 +433,7 @@ namespace Maze.Maui.App.Controls
         /// <summary>
         /// Gets the cell offset direction to display for moving from one cell to another
         /// </summary>
-        /// <param name="prevCellDirection">Previous cell direction</param>
+        /// <param name="prevDirection">Previous cell direction</param>
         /// <param name="from">From point</param>
         /// <param name="to">To point</param>
         /// <returns>Path direction</returns>
@@ -606,7 +603,7 @@ namespace Maze.Maui.App.Controls
         /// The cell frame that was tapped
         /// </summary>
         /// <returns>Cell frame</returns>
-        public InteractiveGrid.CellFrame Cell { get; }
+        public CellFrame Cell { get; }
         /// <summary>
         /// The display row that was tapped
         /// </summary>
@@ -627,7 +624,7 @@ namespace Maze.Maui.App.Controls
         /// </summary>
         /// <param name="cellFrame">Cell frame</param>
         /// <param name="numberTaps">Number of taps</param>
-        public MazeGridCellTappedEventArgs(InteractiveGrid.CellFrame cellFrame, int numberTaps)
+        public MazeGridCellTappedEventArgs(CellFrame cellFrame, int numberTaps)
         {
             Cell = cellFrame;
             NumberTaps = numberTaps;
@@ -808,8 +805,8 @@ namespace Maze.Maui.App.Controls
         static private Color SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR = Colors.White;
         static private Color SOLUTION_PATH_CELL_HIGHLIGHT_COLOR = Colors.LightGreen;
 
-        Maze.Api.Maze.CellType cellType = Api.Maze.CellType.Empty;
-        MazeCellContent.PathDirection solutionPathDirection = MazeCellContent.PathDirection.None;
+        CellType cellType = CellType.Empty;
+        PathDirection solutionPathDirection = PathDirection.None;
 
         /// <summary>
         /// The solution path direction associated with the cell (if any)
@@ -825,7 +822,7 @@ namespace Maze.Maui.App.Controls
         /// The cell type
         /// </summary>
         /// <returns>Cell type</returns>
-        public Maze.Api.Maze.CellType CellType { get => cellType; }
+        public CellType CellType { get => cellType; }
         /// <summary>
         /// Indicates whether the cell is empty
         /// </summary>
@@ -851,7 +848,7 @@ namespace Maze.Maui.App.Controls
         /// </summary>
         /// <param name="cellType">Cell type</param>
         /// <returns>Boolean</returns>
-        public MazeCellContent(Maze.Api.Maze.CellType cellType)
+        public MazeCellContent(CellType cellType)
         {
             this.cellType = cellType;
             switch (cellType)
@@ -882,11 +879,11 @@ namespace Maze.Maui.App.Controls
         {
             switch (cellType)
             {
-                case Api.Maze.CellType.Start:
+                case CellType.Start:
                     return preferFlag ? "start_flag.png" : "start_sign.png";
-                case Api.Maze.CellType.Finish:
+                case CellType.Finish:
                     return preferFlag ? "finish_flag.png" : "finish_sign.png";
-                case Api.Maze.CellType.Wall:
+                case CellType.Wall:
                     return "wall.png";
             }
             return "";
@@ -921,7 +918,7 @@ namespace Maze.Maui.App.Controls
         private Color GetSolutionPathHighlightColor()
         {
             return ContainsSolutionPath
-                ? (IsStartOrFinish ? SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR : SOLUTION_PATH_CELL_HIGHLIGHT_COLOR) 
+                ? IsStartOrFinish ? SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR : SOLUTION_PATH_CELL_HIGHLIGHT_COLOR
                 : Colors.Transparent;
         }
         /// <summary>
