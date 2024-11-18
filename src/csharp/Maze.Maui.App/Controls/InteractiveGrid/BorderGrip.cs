@@ -105,8 +105,9 @@ namespace Maze.Maui.App.Controls.InteractiveGrid
             GestureRecognizers.Add(panGestureRecognizer);
         }
         /// <summary>
-        /// Handles the pan updated event, triggering any registed PanUpdated handler
+        /// Handles the pan updated event, triggering any registered PanUpdated handler
         /// </summary>
+        /// <param name="e">Pan updated event arguments</param>
         private void OnPanUpdated(PanUpdatedEventArgs e)
         {
             if (PanUpdated != null)
