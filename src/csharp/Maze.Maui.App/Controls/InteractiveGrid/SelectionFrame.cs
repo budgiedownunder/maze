@@ -6,7 +6,7 @@ using System.Diagnostics;
 namespace Maze.Maui.App.Controls.InteractiveGrid
 {
     /// <summary>
-    /// The `SelectionFrane` class represents a selection frame that is used to
+    /// The `SelectionFrame` class represents a selection frame that is used to
     /// border a rectangular or square region of cells. It consists of four 
     /// borders (with optional circular grips) that respond to pointer/pan events
     /// for resizing the selected aread. In addition, the frame can run in
