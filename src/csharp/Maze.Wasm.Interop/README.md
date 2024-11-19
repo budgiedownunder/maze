@@ -38,7 +38,6 @@ dotnet restore
 ### Build
 To build the `Maze.Wasm.Interop` assembly, run the following from the `Maze.Wasm.Interop` directory:
 
-
 ```
 dotnet build
 ```
