@@ -740,9 +740,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
         public virtual void OnProcessKeyDown(Keyboard.KeyState state, Keyboard.Key key, bool triggerEvents)
         {
-            bool shiftPressed = Keyboard.Utiility.IsStateFlagSet(state, Keyboard.KeyState.Shift);
-            bool ctrlPressed = Keyboard.Utiility.IsStateFlagSet(state, Keyboard.KeyState.Ctrl);
-            bool capsLockPressed = Keyboard.Utiility.IsStateFlagSet(state, Keyboard.KeyState.CapsLock);
+            bool shiftPressed = Keyboard.Utility.IsStateFlagSet(state, Keyboard.KeyState.Shift);
+            bool ctrlPressed = Keyboard.Utility.IsStateFlagSet(state, Keyboard.KeyState.Ctrl);
+            bool capsLockPressed = Keyboard.Utility.IsStateFlagSet(state, Keyboard.KeyState.CapsLock);
 
             switch (key)
             {

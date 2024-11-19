@@ -10,7 +10,7 @@ namespace Maze.Maui.Controls.Keyboard
     /// <summary>
     /// The static `Utility` class provides utility functionality for keyboard handling
     /// </summary>
-    public static class Utiility
+    public static class Utility
     {
         /// <summary>
         /// Checks whether a set of key states contains a given key state flag

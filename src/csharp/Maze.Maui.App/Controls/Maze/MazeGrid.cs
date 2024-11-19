@@ -653,17 +653,17 @@ namespace Maze.Maui.App
         /// Indicates whether the shift key was down at the time the key was pressed
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool IsShiftKeyPressed { get => Controls.Keyboard.Utiility.IsStateFlagSet(KeyState, Controls.Keyboard.KeyState.Shift); }
+        public bool IsShiftKeyPressed { get => Controls.Keyboard.Utility.IsStateFlagSet(KeyState, Controls.Keyboard.KeyState.Shift); }
         /// <summary>
         /// Indicates whether the Ctrl key was down at the time the key was pressed
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool IsCtrlKeyPressed { get => Controls.Keyboard.Utiility.IsStateFlagSet(KeyState, Controls.Keyboard.KeyState.Ctrl); }
+        public bool IsCtrlKeyPressed { get => Controls.Keyboard.Utility.IsStateFlagSet(KeyState, Controls.Keyboard.KeyState.Ctrl); }
         /// <summary>
         /// Indicates whether the Caps Lock key was down at the time the key was pressed
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool IsCapsLockKeyPressed { get => Controls.Keyboard.Utiility.IsStateFlagSet(KeyState, Controls.Keyboard.KeyState.CapsLock); }
+        public bool IsCapsLockKeyPressed { get => Controls.Keyboard.Utility.IsStateFlagSet(KeyState, Controls.Keyboard.KeyState.CapsLock); }
         /// <summary>
         /// Constructor
         /// </summary>
