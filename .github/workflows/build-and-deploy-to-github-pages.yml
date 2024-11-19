@@ -25,7 +25,7 @@ defaults:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -37,16 +37,15 @@ jobs:
       working-directory: ./
       run: dotnet tool install -g docfx
 
-    - name: Install .NET MAUI workload for Windows
-      if: runner.os == 'Windows'
+    - name: Install .NET MAUI workload
       working-directory: ./src/csharp 
       run: |
-        dotnet workload install maui-windows
+        dotnet workload install maui
 
     - name: Build HTML documentation
       working-directory: ./src/docfx
       run: |
-        sh build_all.bat
+        sh build_all.sh
 
     - name: Setup GitHub Pages
       id: pages
