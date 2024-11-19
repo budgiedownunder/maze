@@ -23,8 +23,8 @@ namespace Maze.Maui.App.Views
     ///     </thead>
     ///     <tbody>
     ///       <tr>
-    ///         <td><img src="/images/screenshots/windows-design.png" width="250"/></td>
-    ///         <td><img src="/images/screenshots/windows-solved.png" width="250"/></td>
+    ///         <td><img src="../../images/screenshots/windows-design.png" width="250"/></td>
+    ///         <td><img src="../../images/screenshots/windows-solved.png" width="250"/></td>
     ///       </tr>
     ///     </tbody> 
     ///  </table>
@@ -40,8 +40,8 @@ namespace Maze.Maui.App.Views
     ///     </thead>
     ///     <tbody>
     ///       <tr>
-    ///         <td><img src="/images/screenshots/android-design.png" width="250"/></td>
-    ///         <td><img src="/images/screenshots/ios-design.png" width="250"/></td>
+    ///         <td><img src="../../images/screenshots/android-design.png" width="250"/></td>
+    ///         <td><img src="../../images/screenshots/ios-design.png" width="250"/></td>
     ///       </tr>
     ///     </tbody> 
     ///  </table>
