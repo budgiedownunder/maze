@@ -1,0 +1,63 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34607.119
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Wasm.Interop", "Maze.Wasm.Interop\Maze.Wasm.Interop.csproj", "{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Wasm.Interop.Tests", "Maze.Wasm.Interop.Tests\Maze.Wasm.Interop.Tests.csproj", "{57DE5792-1129-459C-BBDF-BB2728312D03}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Api", "Maze.Api\Maze.Api.csproj", "{E53F98B1-D49A-4E9D-B271-BDF900B3C549}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Api.Tests", "Maze.Api.Tests\Maze.Api.Tests.csproj", "{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Maui.App", "Maze.Maui.App\Maze.Maui.App.csproj", "{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Maze.Maui.Controls", "Maze.Maui.Controls\Maze.Maui.Controls.csproj", "{EFBBFAE7-D532-499D-B6EA-8C8772FEB359}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Maze.Maui.Services", "Maze.Maui.Services\Maze.Maui.Services.csproj", "{286398DE-0F55-4C72-A8D9-68A666DC130E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57DE5792-1129-459C-BBDF-BB2728312D03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57DE5792-1129-459C-BBDF-BB2728312D03}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57DE5792-1129-459C-BBDF-BB2728312D03}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57DE5792-1129-459C-BBDF-BB2728312D03}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E53F98B1-D49A-4E9D-B271-BDF900B3C549}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E53F98B1-D49A-4E9D-B271-BDF900B3C549}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E53F98B1-D49A-4E9D-B271-BDF900B3C549}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E53F98B1-D49A-4E9D-B271-BDF900B3C549}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD9C41EE-11DD-484F-9EB7-5C83F7B20D43}.Release|Any CPU.Build.0 = Release|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{307CBBD2-06F0-4E1E-B83C-FDAD45E7ACD8}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{EFBBFAE7-D532-499D-B6EA-8C8772FEB359}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EFBBFAE7-D532-499D-B6EA-8C8772FEB359}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EFBBFAE7-D532-499D-B6EA-8C8772FEB359}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EFBBFAE7-D532-499D-B6EA-8C8772FEB359}.Release|Any CPU.Build.0 = Release|Any CPU
+		{286398DE-0F55-4C72-A8D9-68A666DC130E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{286398DE-0F55-4C72-A8D9-68A666DC130E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{286398DE-0F55-4C72-A8D9-68A666DC130E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{286398DE-0F55-4C72-A8D9-68A666DC130E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3B490C62-9290-4ED4-B945-0B11887F8950}
+	EndGlobalSection
+EndGlobal

@@ -1,6 +1,8 @@
 ﻿namespace Maze.Wasm.Interop
 {
+    using System.Reflection;
     using System.Runtime.InteropServices;
+    using Microsoft.Extensions.Configuration;
     using System.Text;
     using Wasmtime;
 
@@ -126,7 +128,7 @@
         private MazeWasmInterop(string wasmPath)
         {
             var engine = new Engine();
-            var module = Module.FromFile(engine, wasmPath);
+            var module = Wasmtime.Module.FromFile(engine, wasmPath);
             using var linker = new Linker(engine);
             store = new Store(engine);
 
@@ -180,15 +182,54 @@
             return func;
         }
         /// <summary>
+        /// Returns the path to the 'maze_wasm' Web Assembly
+        /// </summary>
+        /// <returns>Web Assembly path</returns>
+        static private string GetWasmPath()
+        {
+            const string WASM_FILE_NAME = "maze_wasm.wasm";
+            const string APP_SETTINGS_FILE_NAME = "appsettings.json";
+
+            // Check app settings first (if they exist)
+            var executionPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            if (string.IsNullOrEmpty(executionPath))
+            {
+                throw new InvalidOperationException("Could not determine execution directory");
+            }
+            string appsettingsFile = Path.Combine(executionPath, APP_SETTINGS_FILE_NAME);
+            if (File.Exists(appsettingsFile))
+            {
+                var configuration = new ConfigurationBuilder()
+                .SetBasePath(executionPath)
+                .AddJsonFile(APP_SETTINGS_FILE_NAME)
+                .AddEnvironmentVariables()
+                .Build();
+
+                string? path = configuration["MAZE_WASM_PATH"];
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    return path;
+                }
+            }
+
+            // Default to execution path
+            string wasmExecutionFile = Path.Combine(executionPath, WASM_FILE_NAME);
+            if (!File.Exists(wasmExecutionFile))
+            {
+                throw new InvalidOperationException($"Web assembly file '{WASM_FILE_NAME}' not found at path ${wasmExecutionFile}");
+            }
+
+            return wasmExecutionFile;
+        }
+        /// <summary>
         /// Returns the instance for the interop (creating if needed)
         /// </summary>
-        /// <param name="wasmPath">Path to the `maze_wasm` Web Assembly file</param>
         /// <returns>Interop instance</returns>
-        static public MazeWasmInterop GetInstance(string wasmPath)
+        static public MazeWasmInterop GetInstance()
         {
             if (instance == null)
             {
-                instance = new MazeWasmInterop(wasmPath);
+                instance = new MazeWasmInterop(GetWasmPath());
             }
             return instance;
         }
@@ -199,9 +240,10 @@
         public UInt32 NewMazeWasm()
         {
             UInt32 mazeWasmPtr = (UInt32)(Int32)(newMazeWasm?.Invoke() ?? 0);
-            if (mazeWasmPtr == 0) {
+            if (mazeWasmPtr == 0)
+            {
                 throw new Exception("newMazeWasm() failed (returned zero), possibly due to low memory");
-            } 
+            }
             return mazeWasmPtr;
         }
         /// <summary>
@@ -228,7 +270,7 @@
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <param name="newRowCount">New number of rows</param>
         /// <param name="newColCount">New number of columns</param>
-        /// <returns>Zero if successful, as a pointer to an error</returns>
+        /// <returns>Nothing</returns>
         public void MazeWasmResize(UInt32 mazeWasmPtr, UInt32 newRowCount, UInt32 newColCount)
         {
             mazeWasmResize?.Invoke(mazeWasmPtr, newRowCount, newColCount);
@@ -328,7 +370,7 @@
         /// if the finish cell cannot be retrieved
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>FInish cell point</returns>
+        /// <returns>Finish cell point</returns>
         public MazeWasmPoint MazeWasmGetFinishCell(UInt32 mazeWasmPtr)
         {
             if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
@@ -491,7 +533,7 @@
             return solutionPtr;
         }
         /// <summary>
-        /// Returns the list of points associated a solution's path, or will throw an exception if the operation fails
+        /// Returns the list of points associated with a solution's path, or will throw an exception if the operation fails
         /// </summary>
         /// <param name="solutionPtr">Pointer to solution</param>
         /// <returns>List of points</returns>

@@ -24,10 +24,13 @@ jobs:
     strategy:
       matrix:
         os: 
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
+         - ubuntu-latest
+         - macos-latest
+         - windows-latest
 
+    env:
+      NET_BUILD_SOLUTION: ${{ matrix.os == 'windows-latest' && 'Build-Windows.sln' || 'Build-Non-Windows.sln' }}
+      
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -57,6 +60,12 @@ jobs:
       working-directory: ./
       run: dotnet tool install -g docfx
   
+    - name: Install .NET MAUI workload for Windows
+      if: runner.os == 'Windows'
+      working-directory: ./src/csharp 
+      run: |
+        dotnet workload install maui-windows
+
     - name: Build Rust Components
       working-directory: ./src/rust
       run: |
@@ -101,20 +110,20 @@ jobs:
       run: |
         cargo bench -p maze
 
-    - name: Setup .NET build environment
+    - name: Restore .NET dependencies
       working-directory: ./src/csharp 
       run: |
-        dotnet restore
+        dotnet restore ${{ env.NET_BUILD_SOLUTION }}
   
     - name: Build .NET components
       working-directory: ./src/csharp 
       run: |
-        dotnet build
+        dotnet build ${{ env.NET_BUILD_SOLUTION }}
 
     - name: Test .NET components
       working-directory: ./src/csharp 
       run: |
-        dotnet test
+        dotnet test ${{ env.NET_BUILD_SOLUTION }}
 
     - name: Build HTML documentation (Windows)
       if: runner.os == 'Windows'

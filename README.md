@@ -21,6 +21,7 @@ At this stage, the following areas are covered:
 - Automating JavaScript API testing in `node.js` (`chai`, `mocha`)
 - Implementing a `.NET` to Web Assembly ([`maze_wasm`](./src/rust/maze_wasm/README.md)) interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) in `C#`
 - Implementing automated `.NET` API testing with `xUnit` ([`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop.Tests/README.md))
+- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Mazer.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md))
 - Automating `C#` API documentation generation with `DocFX`
 - Combining `C#` and `Rust` documentation into a single HTML help system with use of `iFrame` containers
 - Architecture diagramming using `PlantUML` ([`architecture.puml`](./docs/diagrams/architecture.puml))
@@ -30,19 +31,24 @@ At this stage, the following areas are covered:
 
 The following components are present:
 
-| Folder | Component | Description |
-|--------|-----------|--------------- |
-| `.github/workflows` | `*.yml` | GitHub Action workflow files
-| `docs` | [`README.md`](./docs/README.md) | Project overview documentation
-| `research/alorithms/excel` | `maze-algorithms.xls` | Excel workbook containing maze algorithms
-| `src` | [`docfx`](./src/docfx/README.md) | HTML help generation|
-| `src/csharp`| [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) | .NET interop to `maze_wasm` web assembly|
-|            | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md) | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) |
-| `src/rust` | [`maze`](./src/rust/maze/README.md) | maze definition and calculation library|
-|            | [`maze_console`](./src/rust/maze_console/README.md) | maze console application |
-|            | [`maze_wasm`](./src/rust/maze_wasm/README.md) | maze web assembly library |
-|            | [`storage`](./src/rust/storage/README.md) | maze storage library |
-|            | [`utils`](./src/rust/utils/README.md) | utilities library |
+| Folder                         | Component                                                                     | Description
+|--------------------------------|-------------------------------------------------------------------------------|---------------
+| `.github/workflows`            | `*.yml`                                                                       | GitHub Action workflow files
+| `docs`                         | [`README.md`](./docs/README.md)                                               | Project overview documentation
+| `research/alorithms/excel`     | `maze-algorithms.xls`                                                         | Excel workbook containing maze algorithms
+| `src`                          | [`docfx`](./src/docfx/README.md)                                              | HTML help generation|
+| `src/csharp`                   | [`Maze.Api`](./src/csharp/Maze.Api/README.md)                                 | .NET API that sits above  [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)
+|                                | [`Maze.Api.Tests`](./src/csharp/Maze.Api.Tests/README.md)                     | Unit tests for [`Maze.Api`](./src/csharp/Maze.Api/README.md)
+|                                | [`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)                       | Maze [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application
+|                                | [`Maze.Maui.Controls`](./src/csharp/Maze.Maui.Controls/README.md)             | Custom [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) controls and definitions
+|                                | [`Maze.Maui.Services`](./src/csharp/Maze.Maui.Services/README.md)             | Custom [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) services
+|                                | [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)               | .NET interop to `maze_wasm` web assembly|
+|                                | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md)         | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md) |
+| `src/rust`                     | [`maze`](./src/rust/maze/README.md)                                           | Maze definition and calculation library|
+|                                | [`maze_console`](./src/rust/maze_console/README.md)                           | Maze console application
+|                                | [`maze_wasm`](./src/rust/maze_wasm/README.md)                                 | Maze web assembly library |
+|                                | [`storage`](./src/rust/storage/README.md)                                     | Maze storage library |
+|                                | [`utils`](./src/rust/utils/README.md)                                         | Utilities library |
 
 ## Getting Started
 
