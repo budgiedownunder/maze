@@ -5,8 +5,8 @@ namespace Maze.Maui.App.Views
     using Maze.Api;
     using Microsoft.Maui.Controls;
     using Maze.Maui.App.ViewModels;
-    using Maze.Maui.App.Controls.Maze;
-    using Maze.Maui.App.Services;
+    using Maze.Maui.Controls;
+    using Maze.Maui.Services;
 
     /// <summary>
     /// This class represents the main page within the application. It provides

@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
-using Maze.Maui.App.Services;
+using Maze.Maui.Services;
 
 namespace Maze.Maui.App.ViewModels
 {

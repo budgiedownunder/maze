@@ -79,10 +79,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\Maze.Api\Maze.Api.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<Content Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 			<Link>maze_wasm.wasm</Link>
@@ -98,6 +94,12 @@
 	<ItemGroup>
 	  <Folder Include="Models\" />
 	  <Folder Include="ViewModels\" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\Maze.Api\Maze.Api.csproj" />
+	  <ProjectReference Include="..\Maze.Maui.Controls\Maze.Maui.Controls.csproj" />
+	  <ProjectReference Include="..\Maze.Maui.Services\Maze.Maui.Services.csproj" />
 	</ItemGroup>
 
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">

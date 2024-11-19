@@ -1,13 +1,13 @@
-﻿using Maze.Api;
-using Maze.Maui.App.Controls.InteractiveGrid;
-using static Maze.Api.Maze;
+﻿using static Maze.Api.Maze;
+using Maze.Maui.Controls.InteractiveGrid;
+using Maze.Maui.Controls.Keyboard;
 
-namespace Maze.Maui.App.Controls.Maze
+namespace Maze.Maui.App
 {
     /// <summary>
     /// The `MazeGrid` class represents an interactive maze grid
     /// </summary>
-    public class MazeGrid : InteractiveGrid.Grid
+    public class MazeGrid : Controls.InteractiveGrid.Grid
     {
         // Private properties
         private const int DEFAULT_ROW_COUNT = 5;
@@ -218,7 +218,7 @@ namespace Maze.Maui.App.Controls.Maze
         /// <param name="state">Key state</param>
         /// <param name="key">Key pressed</param>
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
-        public override void OnProcessKeyDown(Keyboard.KeyState state, Keyboard.Key key, bool triggerEvents)
+        public override void OnProcessKeyDown(Controls.Keyboard.KeyState state, Controls.Keyboard.Key key, bool triggerEvents)
         {
             if (triggerEvents && KeyDown != null)
             {
@@ -377,7 +377,7 @@ namespace Maze.Maui.App.Controls.Maze
         /// </summary>
         /// <param name="solution">Maze solution</param>
         /// <returns>Boolean</returns>
-        public bool DisplaySolution(Solution solution)
+        public bool DisplaySolution(Api.Solution solution)
         {
             if (haveSolutionCells)
                 ClearLastSolution();
@@ -636,40 +636,40 @@ namespace Maze.Maui.App.Controls.Maze
     public class MazeGridKeyDownEventArgs : EventArgs
     {
         // Private properties
-        Keyboard.KeyState keyState = Keyboard.KeyState.None;
-        Keyboard.Key key = Keyboard.Key.None;
+        Controls.Keyboard.KeyState keyState = Controls.Keyboard.KeyState.None;
+        Controls.Keyboard.Key key = Controls.Keyboard.Key.None;
 
         /// <summary>
         /// Additional key state information
         /// </summary>
         /// <returns>Key state</returns>
-        public Keyboard.KeyState KeyState { get => keyState; }
+        public Controls.Keyboard.KeyState KeyState { get => keyState; }
         /// <summary>
         /// Key that was pressed
         /// </summary>
         /// <returns>Key</returns>
-        public Keyboard.Key Key { get => key; }
+        public Controls.Keyboard.Key Key { get => key; }
         /// <summary>
         /// Indicates whether the shift key was down at the time the key was pressed
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool IsShiftKeyPressed { get => Keyboard.Utiility.IsStateFlagSet(KeyState, Keyboard.KeyState.Shift); }
+        public bool IsShiftKeyPressed { get => Controls.Keyboard.Utiility.IsStateFlagSet(KeyState, Controls.Keyboard.KeyState.Shift); }
         /// <summary>
         /// Indicates whether the Ctrl key was down at the time the key was pressed
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool IsCtrlKeyPressed { get => Keyboard.Utiility.IsStateFlagSet(KeyState, Keyboard.KeyState.Ctrl); }
+        public bool IsCtrlKeyPressed { get => Controls.Keyboard.Utiility.IsStateFlagSet(KeyState, Controls.Keyboard.KeyState.Ctrl); }
         /// <summary>
         /// Indicates whether the Caps Lock key was down at the time the key was pressed
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool IsCapsLockKeyPressed { get => Keyboard.Utiility.IsStateFlagSet(KeyState, Keyboard.KeyState.CapsLock); }
+        public bool IsCapsLockKeyPressed { get => Controls.Keyboard.Utiility.IsStateFlagSet(KeyState, Controls.Keyboard.KeyState.CapsLock); }
         /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="keyState">Additional key state information</param>
         /// <param name="key">Key that was pressed</param>
-        public MazeGridKeyDownEventArgs(Keyboard.KeyState keyState, Keyboard.Key key)
+        public MazeGridKeyDownEventArgs(Controls.Keyboard.KeyState keyState, Controls.Keyboard.Key key)
         {
             this.keyState = keyState;
             this.key = key;
