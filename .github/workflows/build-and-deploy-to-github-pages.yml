@@ -37,15 +37,15 @@ jobs:
       working-directory: ./
       run: dotnet tool install -g docfx
 
- #   - name: Install .NET MAUI workload
- #     working-directory: ./src/csharp 
- #     run: |
- #       dotnet workload install maui-windows
+    - name: Install .NET MAUI workload
+      working-directory: ./src/csharp 
+      run: |
+        dotnet workload install maui-windows
 
     - name: Build HTML documentation
       working-directory: ./src/docfx
+      shell: cmd
       run: |
-        dir
         build_all.bat
 
     - name: Setup GitHub Pages
