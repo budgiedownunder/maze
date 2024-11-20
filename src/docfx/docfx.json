@@ -19,7 +19,8 @@
         "files": [
           "api/net/**.yml",
           "api/net/index.md",
-          "api/rust/**.md"
+          "api/rust/**.md",
+          "api/js/**.md"
         ]
       },
       {

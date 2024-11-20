@@ -1,0 +1,1 @@
+Placeholder page for `maze_wasm.js` library documentation

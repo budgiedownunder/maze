@@ -1,0 +1,4 @@
+- name: All libraries
+  href: index.md
+- name: maze_wasm
+  href: maze_wasm/view_content.md
