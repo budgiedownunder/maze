@@ -11,7 +11,7 @@ use maze::Point;
 use storage::Store;
 
 static WELCOME_BANNER: &str = r#"*********************************************
-       *           Welcome to the Maze CLI !!      *
+       *       Welcome to the Maze Console !!      *
        *********************************************
     "#;
 
