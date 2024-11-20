@@ -25,7 +25,7 @@ and these screenshots show it running on `Android` and `iOS` mobile devices:
 
 This short animation clip demonstrates it being used on `Windows` to solve a more complex maze before introducing a blocking wall that then forces the solver to go via a different route on the next solve attempt:
 
-<img src="./gifs/windows/solve-demo.gif" height="600">
+<img src="Gifs/windows/solve-demo.gif" height="600">
 
 ## Keyboard Support
 In addition to mouse/pointer support on the desktop, the following keyboard shortcuts are supported for selecting/editing cells and cell navigation:
