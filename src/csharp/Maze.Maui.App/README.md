@@ -35,7 +35,7 @@ In addition to mouse/pointer support on the desktop, the following keyboard shor
 **Editing:**
 
 | Shortcut    | Description  |
-|-------------|--------------|
+|:------------|:-------------|
 | `F`         | Set `Finish` |
 | `S`         | Set `Start`  |
 | `W`         | Set `Wall`   |
@@ -44,7 +44,7 @@ In addition to mouse/pointer support on the desktop, the following keyboard shor
 **Navigation and Selection:**
 
 | Shortcut        | Description       
-|-----------------|-------------------
+|:----------------|:------------------
 | `Shift`         | Extend selection  
 | `↓`             | Move down
 | `←`             | Move left
