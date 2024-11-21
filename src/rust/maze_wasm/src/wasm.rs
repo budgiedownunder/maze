@@ -2,7 +2,7 @@ use crate::wasm_common::{new_maze, to_cell_type_enum, MazeWasm};
 use maze::{Point, Solution};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ptr;
-/// Creates a new, emtpy `MazeWasm`
+/// Creates a new, empty `MazeWasm`
 ///
 /// # Returns
 ///
