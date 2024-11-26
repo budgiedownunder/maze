@@ -7,6 +7,7 @@ mod store_error;
 pub use file_store::FileStore;
 pub use store::MazeItem;
 pub use store::Store;
+pub use store::SharedStore;
 pub use store_error::StoreError;
 
 /// Represents the supported store types

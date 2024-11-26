@@ -1,4 +1,5 @@
 use maze::MazeError;
+use std::io;
 
 /// Represents a store error
 #[derive(Debug)]
@@ -51,5 +52,11 @@ impl From<MazeError> for StoreError {
 impl From<serde_json::Error> for StoreError {
     fn from(error: serde_json::Error) -> Self {
         StoreError::SerdeJson(error)
+    }
+}
+
+impl From<StoreError> for io::Error {
+    fn from(err: StoreError) -> Self {
+        io::Error::new(io::ErrorKind::Other, err.to_string())
     }
 }

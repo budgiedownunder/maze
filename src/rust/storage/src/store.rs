@@ -1,6 +1,7 @@
 use crate::StoreError;
 use maze::Maze;
 use serde::Serialize;
+use std::sync::{Arc, Mutex};
 use utoipa::ToSchema;
 
 /// Contains the identifying details for a maze item
@@ -11,7 +12,7 @@ pub struct MazeItem {
 }
 
 /// Represents a store for holding mazes and related objects
-pub trait Store {
+pub trait Store: Send + Sync {
     /// Adds a new maze to the store and sets the allocated `id` within the maze object
     fn create_maze(&self, maze: &mut Maze) -> Result<(), StoreError>;
     /// Deletes a maze from the store
@@ -26,3 +27,6 @@ pub trait Store {
     /// alphabetically in ascending order
     fn get_maze_items(&self) -> Result<Vec<MazeItem>, StoreError>;
 }
+
+#[allow(dead_code)]
+pub type SharedStore = Arc<Mutex<Box<dyn Store>>>;
