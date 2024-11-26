@@ -1,7 +1,10 @@
 use crate::StoreError;
 use maze::Maze;
+use serde::Serialize;
+use utoipa::ToSchema;
 
 /// Contains the identifying details for a maze item
+#[derive(Serialize, ToSchema)]
 pub struct MazeItem {
     pub id: String,
     pub name: String,
