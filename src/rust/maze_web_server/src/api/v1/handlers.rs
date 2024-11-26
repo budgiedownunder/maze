@@ -12,7 +12,7 @@ use actix_web::{get, web, HttpResponse, Responder};
 )]
 #[get("/mazes")]
 pub async fn get_maze_list(store: web::Data<SharedStore>) -> impl Responder {
-    let store_lock = match store.lock() {
+    let store_lock = match store.read() {
         Ok(lock) => lock,
         Err(_) => {
             return HttpResponse::InternalServerError().body("Failed to acquire store lock");

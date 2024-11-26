@@ -1,7 +1,7 @@
 use crate::StoreError;
 use maze::Maze;
 use serde::Serialize;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use utoipa::ToSchema;
 
 /// Contains the identifying details for a maze item
@@ -29,4 +29,4 @@ pub trait Store: Send + Sync {
 }
 
 #[allow(dead_code)]
-pub type SharedStore = Arc<Mutex<Box<dyn Store>>>;
+pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;

@@ -5,7 +5,7 @@ use storage::get_store;
 
 use actix_web::{ App, middleware::Logger, HttpServer, web};
 use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 
 pub async fn run_server() -> std::io::Result<()> {
@@ -14,7 +14,7 @@ pub async fn run_server() -> std::io::Result<()> {
     let address = "127.0.0.1:8080";
     let max_workers = std::thread::available_parallelism()?; // This is actix_web's default too
 
-    let store: SharedStore = Arc::new(Mutex::new(get_store(storage::StoreType::File)?));
+    let store: SharedStore = Arc::new(RwLock::new(get_store(storage::StoreType::File)?));
 
     HttpServer::new(move || {
         App::new()
