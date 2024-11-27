@@ -40,8 +40,25 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
 
+
+    #[derive(Clone, Debug)]
+    struct MazeStoreItem {
+        id: String,
+        name: String,
+    }
+
+    impl MazeStoreItem {
+        pub fn to_maze_item(&self) -> MazeItem {
+            MazeItem {
+                id: self.id.clone(),
+                name: self.name.clone()
+            }
+        } 
+    } 
+
+    //type MazeStoreItemMap HashMap<String, MazeStoreItem>;
     struct MockMazeStore {
-        items: HashMap<String, MazeItem>,
+        items: HashMap<String, MazeStoreItem>,
     }
 
     #[derive(Clone)]
@@ -52,28 +69,52 @@ mod tests {
         ThreeMazes,
     }
 
-    fn get_startup_content(startup_content: StoreStartupContent, sort_asc: bool) -> Vec<MazeItem> {
-        let mut result: Vec<MazeItem>;
+    fn maze_store_items_to_maze_items(from: Vec<MazeStoreItem>) -> Vec<MazeItem> {
+        from.iter()
+            .map( |value| value.to_maze_item())
+            .collect()
+    }
+
+    fn maze_store_items_to_map(items: &Vec<MazeStoreItem>) -> HashMap<String, MazeStoreItem> {
+        let mut map: HashMap<String, MazeStoreItem> = HashMap::new();
+        for item in items {
+            map.insert(item.id.clone(), item.clone());
+        }
+        map 
+    }
+    
+
+    fn maze_items_from_map(from: &HashMap<String, MazeStoreItem>) -> Vec<MazeItem> {
+        from.iter()
+            .map(|(_key, value) | MazeItem {
+                    id: value.id.clone(),
+                    name: value.name.clone(),
+            })
+            .collect()
+    }
+
+    fn get_startup_content(startup_content: StoreStartupContent, sort_asc: bool) -> Vec<MazeStoreItem> {
+        let mut result: Vec<MazeStoreItem>;
         match startup_content {
             StoreStartupContent::Empty => {
                 result = Vec::new();
             } 
             StoreStartupContent::OneMaze => {
                 result = vec![
-                    MazeItem {id:"maze_a.json".to_string(), name: "maze_a".to_string()}
+                    MazeStoreItem {id:"maze_a.json".to_string(), name: "maze_a".to_string()}
                 ]
             } 
             StoreStartupContent::TwoMazes => {
                 result = vec![
-                    MazeItem {id:"maze_b.json".to_string(), name: "maze_b".to_string()},
-                    MazeItem {id:"maze_a.json".to_string(), name: "maze_a".to_string()},
+                    MazeStoreItem {id:"maze_b.json".to_string(), name: "maze_b".to_string()},
+                    MazeStoreItem {id:"maze_a.json".to_string(), name: "maze_a".to_string()},
                 ]
             } 
             StoreStartupContent::ThreeMazes => {
                 result = vec![
-                    MazeItem {id:"maze_c.json".to_string(), name: "maze_c".to_string()},
-                    MazeItem {id:"maze_b.json".to_string(), name: "maze_b".to_string()},
-                    MazeItem {id:"maze_a.json".to_string(), name: "maze_a".to_string()},
+                    MazeStoreItem {id:"maze_c.json".to_string(), name: "maze_c".to_string()},
+                    MazeStoreItem {id:"maze_b.json".to_string(), name: "maze_b".to_string()},
+                    MazeStoreItem {id:"maze_a.json".to_string(), name: "maze_a".to_string()},
                 ]
             } 
         }
@@ -85,13 +126,8 @@ mod tests {
         result
     }
 
-    fn new_item_map(startup_content: StoreStartupContent) -> HashMap<String, MazeItem> {
-        let items = get_startup_content(startup_content, false);
-        let mut map: HashMap<String, MazeItem> = HashMap::new();
-        for item in items {
-            map.insert(item.id.clone(), item.clone());
-        }
-        map 
+    fn new_item_map(startup_content: StoreStartupContent) -> HashMap<String, MazeStoreItem> {
+        maze_store_items_to_map(&get_startup_content(startup_content, false))
     }
 
     impl MockMazeStore {
@@ -126,9 +162,9 @@ mod tests {
         }
 
         fn get_maze_items(&self) -> Result<Vec<MazeItem>, StoreError> {
-           let mut items: Vec<MazeItem> = self.items.clone().into_values().collect();
-           items.sort_by_key(|item| item.name.clone());
-           Ok(items)
+            let mut items: Vec<MazeItem> = maze_items_from_map(&self.items);
+            items.sort_by_key(|item| item.name.clone());
+            Ok(items)
         }
     }
 
@@ -159,7 +195,7 @@ mod tests {
         let maze_items: Vec<MazeItem> = serde_json::from_slice(&body).expect("failed to deserialize response");
         assert_eq!(
             maze_items,
-            get_startup_content(startup_content, true)     
+            maze_store_items_to_maze_items(get_startup_content(startup_content, true))   
         );        
     }
 
