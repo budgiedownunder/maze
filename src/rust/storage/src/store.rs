@@ -1,11 +1,11 @@
 use crate::StoreError;
 use maze::Maze;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use utoipa::ToSchema;
 
 /// Contains the identifying details for a maze item
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
 pub struct MazeItem {
     pub id: String,
     pub name: String,
