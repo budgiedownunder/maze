@@ -138,44 +138,48 @@ function registerMazeTests() {
             expect(() => new MazeWasm().from_json("{")).to.throw(eofParsingObjectError());
         });
 
+        it('should expect from_json() to fail if provided with a string argument with a missing id field', function () {
+            expect(() => new MazeWasm().from_json("{}")).to.throw(missingFieldError("id", 1, 2));
+        });
+
         it('should expect from_json() to fail if provided with a string argument with a missing name field', function () {
-            expect(() => new MazeWasm().from_json("{}")).to.throw(missingFieldError("name", 1, 2));
+            expect(() => new MazeWasm().from_json(`{"id":"maze_id"}`)).to.throw(missingFieldError("name", 1, 16));
         });
 
         it('should expect from_json() to fail if provided with a string argument with a missing name field value', function () {
-            expect(() => new MazeWasm().from_json(`{"name":}`)).to.throw(expectedValueError(1, 9));
+            expect(() => new MazeWasm().from_json(`{"id":"maze_id","name":}`)).to.throw(expectedValueError(1, 24));
         });
 
         it('should expect from_json() to fail if provided with a string argument with a trailing comma', function () {
-            expect(() => new MazeWasm().from_json(`{"name":"test",}`)).to.throw(trailingCommaError(1, 16));
+            expect(() => new MazeWasm().from_json(`{"id":"maze_id","name":"test",}`)).to.throw(trailingCommaError(1, 31));
         });
 
         it('should expect from_json() to fail if provided with a string argument with a missing colon token for definition value', function () {
-            expect(() => new MazeWasm().from_json(`{"name":"test", "definition"}`)).to.throw(expectedTokenError(":", 1, 29));
+            expect(() => new MazeWasm().from_json(`{"id":"maze_id","name":"test", "definition"}`)).to.throw(expectedTokenError(":", 1, 44));
         });
 
         it('should expect from_json() to fail if provided with a string argument with a missing definition field value', function () {
-            expect(() => new MazeWasm().from_json(`{"name":"test", "definition":}`)).to.throw(expectedValueError(1, 30));
+            expect(() => new MazeWasm().from_json(`{"id":"maze_id","name":"test", "definition":}`)).to.throw(expectedValueError(1, 45));
         });
 
         it('should expect from_json() to fail if provided with a string argument with a missing grid field', function () {
-            expect(() => new MazeWasm().from_json(`{"name":"test", "definition":{}}`)).to.throw(missingFieldError("grid", 1, 32));
+            expect(() => new MazeWasm().from_json(`{"id":"maze_id","name":"test", "definition":{}}`)).to.throw(missingFieldError("grid", 1, 47));
         });
 
         it('should expect from_json() to fail if provided with a string argument with a missing colon token for grid field value', function () {
-            expect(() => new MazeWasm().from_json(`{"name":"test", "definition":{"grid"}}`)).to.throw(expectedTokenError(":", 1, 37));
+            expect(() => new MazeWasm().from_json(`{"id":"maze_id","name":"test", "definition":{"grid"}}`)).to.throw(expectedTokenError(":", 1, 52));
         });
 
         it('should expect from_json() to fail if provided with a string argument with a missing grid value', function () {
-            expect(() => new MazeWasm().from_json(`{"name":"test", "definition":{"grid":}}`)).to.throw(expectedValueError(1, 38));
+            expect(() => new MazeWasm().from_json(`{"id":"maze_id","name":"test", "definition":{"grid":}}`)).to.throw(expectedValueError(1, 53));
         });
 
         it('should expect from_json() to fail if provided with a string argument with a missing grid value closing array bracket', function () {
-            expect(() => new MazeWasm().from_json(`{"name":"test", "definition":{"grid":[}}`)).to.throw(expectedValueError(1, 39));
+            expect(() => new MazeWasm().from_json(`{"id":"maze_id","name":"test", "definition":{"grid":[}}`)).to.throw(expectedValueError(1, 54));
         });
 
         it('should expect from_json() to succeed if provided with a valid string argument with an empty array for the grid value', function () {
-            expect(() => new MazeWasm().from_json(`{"name":"test", "definition":{"grid":[]}}`)).to.not.throw();
+            expect(() => new MazeWasm().from_json(`{"id":"maze_id","name":"test", "definition":{"grid":[]}}`)).to.not.throw();
         });
 
         // MazeWasm::resize()
