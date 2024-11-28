@@ -197,6 +197,9 @@ impl Store for FileStore {
         if id.is_empty() {
             return Err(StoreError::IdMissing());
         }
+        if !self.maze_exists(id) {
+            return Err(StoreError::IdNotFound(id.to_string()));
+        }
         delete_file(id);
         Ok(())
     }
