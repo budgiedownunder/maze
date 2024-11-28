@@ -1,6 +1,6 @@
 use maze::{Maze};
 use storage::{MazeItem, Store, SharedStore, StoreError};
-use actix_web::{delete, get, post, web, HttpResponse, Error};
+use actix_web::{delete, get, post, put, web, HttpResponse, Error};
 use std::sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, Arc};
 use urlencoding::encode;
 
@@ -39,6 +39,11 @@ fn get_maze_exists_error(id: &str) -> Error {
 fn get_maze_fetch_internal_error(id: &str, err: &StoreError) -> Error {
     actix_web::error::ErrorInternalServerError(format!("Error fetching maze item with id '{}': {}", id, err))
 }
+
+fn get_maze_id_mismatch_error(url_id: &str, maze_id: &str) -> Error {
+    actix_web::error::ErrorBadRequest(format!("URL ID '{}' and body maze ID '{}' do not match", url_id, maze_id))
+}
+
 
 // get_maze_list
 #[utoipa::path(
@@ -115,6 +120,46 @@ pub async fn get_maze(
 
     match store_lock.get_maze(&id) {
         Ok(maze) => Ok(HttpResponse::Ok().json(maze)),
+        Err(err) => {
+            match err {
+               StoreError::IdNotFound(id) => Err(get_maze_not_found_error(&id)),
+                _ => Err(get_maze_fetch_internal_error(&id, &err))
+            }    
+        }
+    }
+}
+
+// update_maze
+#[utoipa::path(
+    put,
+    path = "/api/v1/mazes/{id}",
+    params(
+        ("id" = String, Path, description = "Unique ID of the maze to update")
+    ),
+    request_body = Maze,
+    responses(
+        (status = 200, description = "Maze updated successfully", body = Maze),
+        (status = 400, description = "Invalid request"),
+        (status = 404, description = "Maze not found")
+    ),
+    tags = ["v1"]
+)]
+#[put("/mazes/{id}")]
+pub async fn update_maze(
+    path: web::Path<String>, 
+    req: web::Json<Maze>,
+    store: web::Data<SharedStore>,  
+) -> Result<HttpResponse, Error> {
+    let mut store_lock = get_store_write_lock(&store)?;
+    let id = path.into_inner();
+    let mut maze = req.into_inner();
+
+    if id != maze.id {
+        return Err(get_maze_id_mismatch_error(&id, &maze.id));
+    }
+
+    match store_lock.update_maze(&mut maze) {
+        Ok(_) => Ok(HttpResponse::Ok().json(maze)),
         Err(err) => {
             match err {
                StoreError::IdNotFound(id) => Err(get_maze_not_found_error(&id)),
@@ -228,8 +273,18 @@ mod tests {
             }
         }
 
-        fn update_maze(&mut self, _maze: &mut Maze) -> Result<(), StoreError> {
-            return Err(StoreError::Other("Mock interface not implemented".to_string()));
+        fn update_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError> {
+            if let Some(_) = self.items.get(&maze.id) {
+                self.items.insert(
+                    maze.id.to_string(),
+                    MazeStoreItem {
+                        id: maze.id.to_string(),
+                        name: maze.name.to_string(),
+                        maze: maze.clone(),
+                });
+                return Ok(());
+            }
+            Err(StoreError::IdNotFound(maze.id.to_string()))
         }
 
         fn get_maze(&self, id: &str) -> Result<Maze, StoreError> {
@@ -356,6 +411,7 @@ mod tests {
                     .service(handlers::get_maze_list)
                     .service(handlers::create_maze)
                     .service(handlers::get_maze)
+                    .service(handlers::update_maze)
                     .service(handlers::delete_maze),
             );
     }
@@ -392,12 +448,17 @@ mod tests {
         let url = format!("/api/v1/mazes/");
         let req = test::TestRequest::post()
             .uri(&url)
-            .set_json(maze)
+            .set_json(maze.clone())
             .to_request();
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), expected_status_code);
 
         if expected_status_code == StatusCode::OK {
+            let body = test::read_body(resp).await;
+            let response_maze: Maze = serde_json::from_slice(&body).expect("failed to deserialize response");
+            let mut maze_copy = maze.clone();
+            maze_copy.id = MockMazeStore::create_id_from_name(&maze.name);
+            assert_eq!(maze_copy, response_maze);        
         }
     }
 
@@ -421,8 +482,8 @@ mod tests {
         if expected_status_code == StatusCode::OK {
             // Verify content
             let body = test::read_body(resp).await;
-             let maze: Maze = serde_json::from_slice(&body).expect("failed to deserialize response");
-             match expected_maze {
+            let maze: Maze = serde_json::from_slice(&body).expect("failed to deserialize response");
+            match expected_maze {
                 Some(value) => {
                     assert_eq!(
                         maze,
@@ -432,7 +493,34 @@ mod tests {
                 None => {
                     panic!("No maze comparison value provided for get_maze() test!");
                 }
-             }
+            }
+        }
+    }
+
+    async fn run_update_maze_test(
+        startup_content: StoreStartupContent, 
+        id: &str, 
+        maze: Maze,
+        expected_status_code: StatusCode, 
+        ) {
+        let app = test::init_service(
+            App::new().configure(|cfg| configure_mock_app(cfg, startup_content.clone())),
+        )
+        .await;
+
+        // Create
+        let url = format!("/api/v1/mazes/{}", id);
+        let req = test::TestRequest::put()
+            .uri(&url)
+            .set_json(maze.clone())
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::OK {
+            let body = test::read_body(resp).await;
+            let response_maze: Maze = serde_json::from_slice(&body).expect("failed to deserialize response");
+            assert_eq!(maze, response_maze);        
         }
     }
 
@@ -495,6 +583,27 @@ mod tests {
         let id = "maze_a.json";
         let name = "maze_a";
         run_get_maze_test(StoreStartupContent::ThreeMazes, id, StatusCode::OK, Some(new_solvable_maze(id, name))).await
+    }
+
+    #[actix_web::test]
+    async fn test_update_maze_that_exists() {
+        let id = "maze_a.json";
+        let name = "maze_a";
+        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze(id, name), StatusCode::OK).await
+    }
+
+    #[actix_web::test]
+    async fn test_update_maze_that_does_not_exist() {
+        let id = "maze_d.json";
+        let name = "maze_d";
+        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze(id, name), StatusCode::NOT_FOUND).await
+    }
+
+    #[actix_web::test]
+    async fn test_update_maze_with_mismatching_id() {
+        let id = "maze_a.json";
+        let name = "maze_a";
+        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze("some_other_id", name), StatusCode::BAD_REQUEST).await
     }
 
     #[actix_web::test]
