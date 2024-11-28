@@ -6,6 +6,7 @@ use utoipa::OpenApi;
 #[openapi(
     paths(
         crate::api::v1::handlers::get_maze_list,
+        crate::api::v1::handlers::create_maze,
         crate::api::v1::handlers::get_maze,
         crate::api::v1::handlers::delete_maze,
     ),

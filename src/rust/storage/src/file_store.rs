@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, Write};
@@ -82,16 +83,30 @@ impl FileStore {
         path: &str,
         overwrite: bool,
     ) -> Result<(), StoreError> {
+        let os_path = PathBuf::from(path);
+
+        let full_path = if os_path.is_absolute() {
+            os_path.clone()
+        } else {
+            env::current_dir()?.join(&os_path)
+        };
+
+        let normalized_path = full_path
+            .strip_prefix(r"\\?\")
+            .unwrap_or(&full_path)
+            .to_path_buf();
+
+        maze.id = normalized_path.to_string_lossy().to_string();
+
         if !overwrite {
-            let os_path = PathBuf::from(path);
             if StdPath::new(&os_path).exists() {
                 return Err(StoreError::IdAlreadyExists(path.to_string()));
             }
         }
+        
         let s = maze.to_json()?;
         let mut file = File::create(path)?;
         file.write_all(s.as_bytes())?;
-        maze.id = path.to_string();
         Ok(())
     }
 }

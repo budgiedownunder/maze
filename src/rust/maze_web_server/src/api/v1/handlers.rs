@@ -1,7 +1,8 @@
 use maze::{Maze};
 use storage::{MazeItem, Store, SharedStore, StoreError};
-use actix_web::{get, delete, web, HttpResponse, Error};
+use actix_web::{delete, get, post, web, HttpResponse, Error};
 use std::sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, Arc};
+use urlencoding::encode;
 
 fn get_store_read_lock<'a>(
     store: &'a web::Data<Arc<RwLock<Box<dyn Store>>>>,
@@ -23,8 +24,16 @@ fn get_mazes_fetch_internal_error(err: &StoreError) -> Error {
     actix_web::error::ErrorInternalServerError(format!("Error fetching maze items: {}", err))
 }
 
+fn get_maze_create_internal_error(err: &StoreError) -> Error {
+    actix_web::error::ErrorInternalServerError(format!("Error creating maze: {}", err))
+}
+
 fn get_maze_not_found_error(id: &str) -> Error {
     actix_web::error::ErrorNotFound(format!("Maze with id '{}' not found", id))
+}
+
+fn get_maze_exists_error(id: &str) -> Error {
+    actix_web::error::ErrorConflict(format!("Maze with id '{}' already exists", id))
 }
 
 fn get_maze_fetch_internal_error(id: &str, err: &StoreError) -> Error {
@@ -47,6 +56,40 @@ pub async fn get_maze_list(store: web::Data<SharedStore>) -> Result<HttpResponse
         get_mazes_fetch_internal_error(&err)
     })?;
     Ok(HttpResponse::Ok().json(stored_items))    
+}
+
+// create_maze
+#[utoipa::path(
+    post,
+    path = "/api/v1/mazes/",
+    request_body = Maze,
+    responses(
+        (status = 201, description = "Maze created successfully", body = Maze),
+        (status = 400, description = "Invalid request"),
+        (status = 409, description = "Maze with the given id already exists")
+    ),
+    tags = ["v1"]
+)]
+#[post("/mazes/")]
+pub async fn create_maze(
+    req: web::Json<Maze>,
+    store: web::Data<SharedStore>,  
+) -> Result<HttpResponse, Error> {
+    let mut store_lock = get_store_write_lock(&store)?;
+    let mut maze: Maze = req.into_inner();
+
+    match store_lock.create_maze(&mut maze) {
+        Ok(()) => Ok(
+                HttpResponse::Created()
+                .insert_header(("Location", format!("/api/v1/mazes/{}", encode(&maze.id))))
+                .json(maze)),
+        Err(err) => {
+            match err {
+                StoreError::IdAlreadyExists(id) => Err(get_maze_exists_error(&id)),
+                _ => Err(get_maze_create_internal_error(&err))
+            }    
+        }
+    }
 }
 
 // get_maze
@@ -139,9 +182,72 @@ mod tests {
         } 
     } 
 
-    //type MazeStoreItemMap HashMap<String, MazeStoreItem>;
     struct MockMazeStore {
         items: HashMap<String, MazeStoreItem>,
+    }
+
+    impl MockMazeStore {
+        pub fn new(startup_content: StoreStartupContent) -> Self {
+            MockMazeStore {
+                items: new_item_map(startup_content)
+            }
+        }
+
+        fn create_id_from_name(name: &str) -> String {
+            format!("{}.json", name)
+        }
+
+    }
+
+    impl Store for MockMazeStore {
+
+       fn create_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError> {
+            let id = MockMazeStore::create_id_from_name(&maze.name);
+
+            if let Some(_) = self.items.get(&id) {
+                println!("{} already exists", id);
+                return Err(StoreError::IdAlreadyExists(id.to_string()));
+            }
+
+            self.items.insert(
+                id.to_string(),
+                MazeStoreItem {
+                    id: id,
+                    name: maze.name.to_string(),
+                    maze: maze.clone(),
+            });
+
+            Ok(())
+        }
+
+        fn delete_maze(&mut self, id: &str) -> Result<(), StoreError> {
+            if let Some(_) = self.items.remove(id) {
+                Ok(())                
+            } else {
+                Err(StoreError::IdNotFound(id.to_string()))
+            }
+        }
+
+        fn update_maze(&mut self, _maze: &mut Maze) -> Result<(), StoreError> {
+            return Err(StoreError::Other("Mock interface not implemented".to_string()));
+        }
+
+        fn get_maze(&self, id: &str) -> Result<Maze, StoreError> {
+            if let Some(store_item) = self.items.get(id) {
+                return Ok(store_item.maze.clone());
+            }
+            Err(StoreError::IdNotFound(id.to_string()))
+        }
+
+        fn find_maze_by_name(&self, _name: &str) -> Result<MazeItem, StoreError> {
+            return Err(StoreError::Other("Mock interface not implemented".to_string()));
+        }
+
+        fn get_maze_items(&self) -> Result<Vec<MazeItem>, StoreError> {
+            let mut items: Vec<MazeItem> = maze_items_from_map(&self.items);
+            items.sort_by_key(|item| item.name.clone());
+            Ok(items)
+        }
     }
 
     #[derive(Clone)]
@@ -237,50 +343,6 @@ mod tests {
         maze_store_items_to_map(&get_startup_content(startup_content, false))
     }
 
-    impl MockMazeStore {
-        pub fn new(startup_content: StoreStartupContent) -> Self {
-            MockMazeStore {
-                items: new_item_map(startup_content)
-            }
-        } 
-    }
-
-    impl Store for MockMazeStore {
-
-        fn create_maze(&mut self, _maze: &mut Maze) -> Result<(), StoreError> {
-            return Err(StoreError::Other("Mock interface not implemented".to_string()));
-        }
-
-        fn delete_maze(&mut self, id: &str) -> Result<(), StoreError> {
-            if let Some(_) = self.items.remove(id) {
-                Ok(())                
-            } else {
-                Err(StoreError::IdNotFound(id.to_string()))
-            }
-        }
-
-        fn update_maze(&mut self, _maze: &mut Maze) -> Result<(), StoreError> {
-            return Err(StoreError::Other("Mock interface not implemented".to_string()));
-        }
-
-        fn get_maze(&self, id: &str) -> Result<Maze, StoreError> {
-            if let Some(store_item) = self.items.get(id) {
-                return Ok(store_item.maze.clone());
-            }
-            Err(StoreError::IdNotFound(id.to_string()))
-        }
-
-        fn find_maze_by_name(&self, _name: &str) -> Result<MazeItem, StoreError> {
-            return Err(StoreError::Other("Mock interface not implemented".to_string()));
-        }
-
-        fn get_maze_items(&self) -> Result<Vec<MazeItem>, StoreError> {
-            let mut items: Vec<MazeItem> = maze_items_from_map(&self.items);
-            items.sort_by_key(|item| item.name.clone());
-            Ok(items)
-        }
-    }
-
     fn new_shared_mock_maze_store(startup_content: StoreStartupContent) -> SharedStore {
         Arc::new(RwLock::new(Box::new(MockMazeStore::new(startup_content))))
     }
@@ -292,6 +354,7 @@ mod tests {
             .service(
                 web::scope("/api/v1")
                     .service(handlers::get_maze_list)
+                    .service(handlers::create_maze)
                     .service(handlers::get_maze)
                     .service(handlers::delete_maze),
             );
@@ -313,6 +376,29 @@ mod tests {
             maze_items,
             maze_store_items_to_maze_items(get_startup_content(startup_content, true))   
         );        
+    }
+
+    async fn run_create_maze_test(
+        startup_content: StoreStartupContent, 
+        maze: Maze,
+        expected_status_code: StatusCode, 
+        ) {
+        let app = test::init_service(
+            App::new().configure(|cfg| configure_mock_app(cfg, startup_content.clone())),
+        )
+        .await;
+
+        // Create
+        let url = format!("/api/v1/mazes/");
+        let req = test::TestRequest::post()
+            .uri(&url)
+            .set_json(maze)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::OK {
+        }
     }
 
     async fn run_get_maze_test(
@@ -392,6 +478,16 @@ mod tests {
     #[actix_web::test]
     async fn test_get_mazes_with_three_mazes_that_require_sorting() {
         run_get_mazes_test(StoreStartupContent::ThreeMazes).await
+    }
+
+    #[actix_web::test]
+    async fn test_create_maze_that_does_not_exist() {
+        run_create_maze_test(StoreStartupContent::ThreeMazes, new_solvable_maze("", "maze_d"), StatusCode::CREATED).await
+    }
+
+    #[actix_web::test]
+    async fn test_create_maze_that_already_exists() {
+        run_create_maze_test(StoreStartupContent::ThreeMazes, new_solvable_maze("", "maze_a"), StatusCode::CONFLICT).await
     }
 
     #[actix_web::test]
