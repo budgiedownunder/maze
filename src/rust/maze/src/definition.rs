@@ -1,11 +1,12 @@
 use serde::{de, Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+use utoipa::ToSchema;
 
 use crate::CellState;
 use crate::MazeError;
 use crate::Point;
 #[allow(dead_code)]
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug, ToSchema)]
 /// Represents a maze definition
 pub struct Definition {
     // 2-d grid (rows x columns) of characters describing the maze layout, where
