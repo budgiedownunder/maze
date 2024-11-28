@@ -12,8 +12,7 @@ use crate::Path;
 use crate::Solver;
 
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Clone, Debug, ToSchema)]
-
+#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 /// Represents a maze
 pub struct Maze {
     pub id: String,

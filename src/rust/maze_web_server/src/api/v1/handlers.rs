@@ -1,4 +1,4 @@
-use maze::{Maze};
+use maze::{Maze, MazeError, Solution};
 use storage::{MazeItem, Store, SharedStore, StoreError};
 use actix_web::{delete, get, post, put, web, HttpResponse, Error};
 use std::sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, Arc};
@@ -44,6 +44,13 @@ fn get_maze_id_mismatch_error(url_id: &str, maze_id: &str) -> Error {
     actix_web::error::ErrorBadRequest(format!("URL ID '{}' and body maze ID '{}' do not match", url_id, maze_id))
 }
 
+fn get_maze_solve_error_string(err: &MazeError) -> String {
+    format!("The maze could not be solved: {}", err)
+}
+
+fn get_maze_solve_error(err: &MazeError) -> Error {
+    actix_web::error::ErrorUnprocessableEntity(get_maze_solve_error_string(err))
+}
 
 // get_maze_list
 #[utoipa::path(
@@ -200,10 +207,49 @@ pub async fn delete_maze(
         }
     }
 }
+
+// get_maze_solution
+#[utoipa::path(
+    get,
+    path = "/api/v1/mazes/{id}/solution",
+    params(
+        ("id" = String, Path, description = "Unique ID of the maze to solve")
+    ),
+    responses(
+        (status = 200, description = "Maze solved successfully", body = Solution),
+        (status = 404, description = "Maze not found"),
+        (status = 422, description = "Maze could not be solved")
+    ),
+    tags = ["v1"]
+)]
+#[get("/mazes/{id}/solution")]
+pub async fn get_maze_solution(
+    path: web::Path<String>, 
+    store: web::Data<SharedStore>,  
+) -> Result<HttpResponse, Error> {
+    let store_lock = get_store_read_lock(&store)?;
+    let id = path.into_inner();
+
+    match store_lock.get_maze(&id) {
+        Ok(maze) => {
+            match maze.solve() {
+                Ok(solution) => Ok(HttpResponse::Ok().json(solution)),
+                Err(err) => Err(get_maze_solve_error(&err))
+            }
+        }    
+        Err(err) => {
+            match err {
+               StoreError::IdNotFound(id) => Err(get_maze_not_found_error(&id)),
+                _ => Err(get_maze_fetch_internal_error(&id, &err))
+            }    
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::api::v1::handlers;
-    use maze::{Definition, Maze};
+    use crate::api::v1::handlers::get_maze_solve_error_string;
+    use maze::{Definition, Maze, MazeError, Solution, Path, Point};
     use storage::{SharedStore, Store, StoreError, MazeItem};
 
     use actix_web::{http::StatusCode, test, web, App};
@@ -311,6 +357,7 @@ mod tests {
         OneMaze,
         TwoMazes,
         ThreeMazes,
+        SolutionTestMazes,
     }
 
     fn maze_store_items_to_maze_items(from: Vec<MazeStoreItem>) -> Vec<MazeItem> {
@@ -361,6 +408,31 @@ mod tests {
         }
     }
 
+    fn new_solve_test_maze(id: &str, name: &str, with_start: bool, with_finish: bool, with_block: bool) -> Maze {
+        let start_char:char = if with_start {'S'} else {' '};
+        let finish_char:char = if with_finish {'F'} else {' '};
+        let block_char:char = if with_block {'W'} else {' '};
+
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec![start_char, 'W', ' '],
+            vec![' ', 'W', ' '],
+            vec![' ', block_char, finish_char],
+        ];
+        let mut maze:Maze = Maze::new(Definition::from_vec(grid));
+        maze.id = id.to_string();
+        maze.name = name.to_string();
+        maze
+    }    
+
+    fn new_solve_test_maze_store_item(id: &str, name: &str, with_start: bool, with_finish: bool, with_block: bool) -> MazeStoreItem {
+        MazeStoreItem {
+            id: id.to_string(),
+            name: name.to_string(),
+            maze: new_solve_test_maze(id, name, with_start, with_finish, with_block),
+        }
+    }
+
     fn get_startup_content(startup_content: StoreStartupContent, sort_asc: bool) -> Vec<MazeStoreItem> {
         let mut result: Vec<MazeStoreItem>;
         match startup_content {
@@ -383,6 +455,14 @@ mod tests {
                     new_solvable_maze_store_item("maze_c.json", "maze_c"),
                     new_solvable_maze_store_item("maze_b.json", "maze_b"),
                     new_solvable_maze_store_item("maze_a.json", "maze_a"),
+                ]
+            } 
+            StoreStartupContent::SolutionTestMazes => {
+                result = vec![
+                    new_solve_test_maze_store_item("solvable.json", "solvable", true, true, false),
+                    new_solve_test_maze_store_item("no_start.json", "no_start", false, true, false),
+                    new_solve_test_maze_store_item("no_finish.json", "no_finish", true, false, false),
+                    new_solve_test_maze_store_item("no_solution.json", "no_solution", true, true, true),
                 ]
             } 
         }
@@ -412,7 +492,8 @@ mod tests {
                     .service(handlers::create_maze)
                     .service(handlers::get_maze)
                     .service(handlers::update_maze)
-                    .service(handlers::delete_maze),
+                    .service(handlers::delete_maze)
+                    .service(handlers::get_maze_solution),
             );
     }
 
@@ -463,10 +544,10 @@ mod tests {
     }
 
     async fn run_get_maze_test(
-        startup_content: StoreStartupContent, 
-        id: &str, 
-        expected_status_code: StatusCode, 
-        expected_maze: Option<Maze>
+            startup_content: StoreStartupContent, 
+            id: &str, 
+            expected_status_code: StatusCode, 
+            expected_maze: Option<Maze>
         ) {
         let app = test::init_service(
             App::new().configure(|cfg| configure_mock_app(cfg, startup_content.clone())),
@@ -484,24 +565,17 @@ mod tests {
             let body = test::read_body(resp).await;
             let maze: Maze = serde_json::from_slice(&body).expect("failed to deserialize response");
             match expected_maze {
-                Some(value) => {
-                    assert_eq!(
-                        maze,
-                        value
-                    );        
-                }
-                None => {
-                    panic!("No maze comparison value provided for get_maze() test!");
-                }
+                Some(value) => { assert_eq!(maze, value); }        
+                None => { panic!("No maze comparison value provided for get_maze() test!"); }
             }
         }
     }
 
     async fn run_update_maze_test(
-        startup_content: StoreStartupContent, 
-        id: &str, 
-        maze: Maze,
-        expected_status_code: StatusCode, 
+            startup_content: StoreStartupContent, 
+            id: &str, 
+            maze: Maze,
+            expected_status_code: StatusCode, 
         ) {
         let app = test::init_service(
             App::new().configure(|cfg| configure_mock_app(cfg, startup_content.clone())),
@@ -525,9 +599,9 @@ mod tests {
     }
 
     async fn run_delete_maze_test(
-        startup_content: StoreStartupContent, 
-        id: &str, 
-        expected_status_code: StatusCode 
+            startup_content: StoreStartupContent, 
+            id: &str, 
+            expected_status_code: StatusCode 
         ) {
         let app = test::init_service(
             App::new().configure(|cfg| configure_mock_app(cfg, startup_content.clone())),
@@ -545,6 +619,45 @@ mod tests {
             let req2 = test::TestRequest::get().uri(&url2).to_request();
             let resp2 = test::call_service(&app, req2).await;
             assert_eq!(resp2.status(), StatusCode::NOT_FOUND);
+        }
+    }
+
+    async fn run_get_maze_solution_test(
+        startup_content: StoreStartupContent, 
+        id: &str, 
+        expected_status_code: StatusCode,
+        expected_solution: Option<Solution>,
+        expected_err_message: Option<String>
+        ) {
+        let app = test::init_service(
+            App::new().configure(|cfg| configure_mock_app(cfg, startup_content.clone())),
+        )
+        .await;
+        // Get solution
+        let url = format!("/api/v1/mazes/{}/solution", id);
+        let req = test::TestRequest::get().uri(&url).to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::OK {
+            // Confirm and validate solution response
+            let body = test::read_body(resp).await;
+            let solution: Solution = serde_json::from_slice(&body).expect("failed to deserialize response");
+             match expected_solution {
+                Some(value) => { assert_eq!(solution, value);}        
+                None => { panic!("No maze solution comparison value provided for get_maze_solution() test!"); }
+            }
+        }
+        else {
+            match expected_err_message {
+                Some(value) => { 
+                    // Validate error response
+                    let body = test::read_body(resp).await;
+                    let error_message = String::from_utf8(body.to_vec()).expect("Failed to parse body as UTF-8");
+                    assert_eq!(error_message, value);
+                }        
+                None => { panic!("No maze solution error message provided for get_maze_solution() test!"); }
+            }
         }
     }
 
@@ -619,6 +732,42 @@ mod tests {
     #[actix_web::test]
     async fn test_delete_maze_that_does_not_exist() {
         run_delete_maze_test(StoreStartupContent::ThreeMazes, "does_not_exist.json", StatusCode::NOT_FOUND).await
+    }
+
+    #[actix_web::test]
+    async fn test_get_maze_solution_that_should_succeed() {
+        let path = Path {
+            points: vec![
+                Point { row: 0, col: 0 },
+                Point { row: 1, col: 0 },
+                Point { row: 2, col: 0 },
+                Point { row: 2, col: 1 },
+                Point { row: 2, col: 2 },
+            ],
+        };
+        let expected_solution = Solution::new(path);       
+        run_get_maze_solution_test(StoreStartupContent::SolutionTestMazes, "solvable.json", StatusCode::OK, Some(expected_solution), None).await
+    }
+
+    #[actix_web::test]
+    async fn test_get_maze_solution_should_fail_with_no_start() {
+        run_get_maze_solution_test(StoreStartupContent::SolutionTestMazes, "no_start.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
+            Some( get_maze_solve_error_string(&MazeError::new("no start cell found within maze".to_string())))
+        ).await
+    }
+
+    #[actix_web::test]
+    async fn test_get_maze_solution_should_fail_with_no_finish() {
+        run_get_maze_solution_test(StoreStartupContent::SolutionTestMazes, "no_finish.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
+        Some( get_maze_solve_error_string(&MazeError::new("no finish cell found within maze".to_string())))
+    ).await
+    }
+
+    #[actix_web::test]
+    async fn test_get_maze_solution_should_fail_with_no_solution() {
+        run_get_maze_solution_test(StoreStartupContent::SolutionTestMazes, "no_solution.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
+        Some( get_maze_solve_error_string(&MazeError::new("no solution found".to_string())))
+        ).await
     }
 
 }

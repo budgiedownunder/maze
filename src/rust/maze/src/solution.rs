@@ -1,6 +1,9 @@
 use crate::Path;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// Represents a maze solution
+#[derive(Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub struct Solution {
     /// Solution path
     pub path: Path,

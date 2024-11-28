@@ -10,6 +10,7 @@ use utoipa::OpenApi;
         crate::api::v1::handlers::get_maze,
         crate::api::v1::handlers::update_maze,
         crate::api::v1::handlers::delete_maze,
+        crate::api::v1::handlers::get_maze_solution,
     ),
     components(schemas(MazeItem, Maze)),
     tags(

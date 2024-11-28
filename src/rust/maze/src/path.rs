@@ -1,9 +1,11 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
+use utoipa::ToSchema;
 
 use crate::Point;
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 /// Represents a path composed of a sequence of maze points
 pub struct Path {
     /// Vector of successive points within the path 
