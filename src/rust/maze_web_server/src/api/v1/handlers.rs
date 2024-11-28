@@ -1,13 +1,21 @@
 use maze::{Maze};
 use storage::{MazeItem, Store, SharedStore, StoreError};
-use actix_web::{get, web, HttpResponse, Error};
-use std::sync::{RwLockReadGuard, RwLock, Arc};
+use actix_web::{get, delete, web, HttpResponse, Error};
+use std::sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, Arc};
 
 fn get_store_read_lock<'a>(
     store: &'a web::Data<Arc<RwLock<Box<dyn Store>>>>,
 ) -> Result<RwLockReadGuard<'a, Box<dyn Store>>, Error> {
     store.read().map_err(|_| {
-        actix_web::error::ErrorInternalServerError("Failed to acquire store lock")
+        actix_web::error::ErrorInternalServerError("Failed to acquire store read lock")
+    })
+}
+
+fn get_store_write_lock<'a>(
+    store: &'a web::Data<Arc<RwLock<Box<dyn Store>>>>,
+) -> Result<RwLockWriteGuard<'a, Box<dyn Store>>, Error> {
+    store.write().map_err(|_| {
+        actix_web::error::ErrorInternalServerError("Failed to acquire store write lock")
     })
 }
 
@@ -38,7 +46,6 @@ pub async fn get_maze_list(store: web::Data<SharedStore>) -> Result<HttpResponse
     let stored_items = store_lock.get_maze_items().map_err(|err| {
         get_mazes_fetch_internal_error(&err)
     })?;
-
     Ok(HttpResponse::Ok().json(stored_items))    
 }
 
@@ -74,6 +81,37 @@ pub async fn get_maze(
     }
 }
 
+// delete_maze
+#[utoipa::path(
+    delete,
+    path = "/api/v1/mazes/{id}",
+    params(
+        ("id" = String, Path, description = "Unique ID of the maze to delete")
+    ),
+    responses(
+        (status = 200, description = "Maze deleted successfully", body = Maze),
+        (status = 404, description = "Maze not found")
+    ),
+    tags = ["v1"]
+)]
+#[delete("/mazes/{id}")]
+pub async fn delete_maze(
+    path: web::Path<String>, 
+    store: web::Data<SharedStore>,  
+) -> Result<HttpResponse, Error> {
+    let mut store_lock = get_store_write_lock(&store)?;
+    let id = path.into_inner();
+
+    match store_lock.delete_maze(&id) {
+        Ok(()) => Ok(HttpResponse::Ok().body(format!("maze with id '{}' deleted", id))),
+        Err(err) => {
+            match err {
+                    StoreError::IdNotFound(id) => Err(get_maze_not_found_error(&id)),
+                _ => Err(get_maze_fetch_internal_error(&id, &err))
+            }
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::api::v1::handlers;
@@ -209,15 +247,19 @@ mod tests {
 
     impl Store for MockMazeStore {
 
-        fn create_maze(&self, _maze: &mut Maze) -> Result<(), StoreError> {
+        fn create_maze(&mut self, _maze: &mut Maze) -> Result<(), StoreError> {
             return Err(StoreError::Other("Mock interface not implemented".to_string()));
         }
 
-        fn delete_maze(&self, _id: &str) -> Result<(), StoreError> {
-            return Err(StoreError::Other("Mock interface not implemented".to_string()));
+        fn delete_maze(&mut self, id: &str) -> Result<(), StoreError> {
+            if let Some(_) = self.items.remove(id) {
+                Ok(())                
+            } else {
+                Err(StoreError::IdNotFound(id.to_string()))
+            }
         }
 
-        fn update_maze(&self, _maze: &mut Maze) -> Result<(), StoreError> {
+        fn update_maze(&mut self, _maze: &mut Maze) -> Result<(), StoreError> {
             return Err(StoreError::Other("Mock interface not implemented".to_string()));
         }
 
@@ -250,7 +292,8 @@ mod tests {
             .service(
                 web::scope("/api/v1")
                     .service(handlers::get_maze_list)
-                    .service(handlers::get_maze),
+                    .service(handlers::get_maze)
+                    .service(handlers::delete_maze),
             );
     }
 
@@ -260,6 +303,7 @@ mod tests {
         )
         .await;
 
+        // Get
         let req = test::TestRequest::get().uri("/api/v1/mazes").to_request();
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
@@ -282,12 +326,15 @@ mod tests {
         )
         .await;
 
+        // Get
         let url = format!("/api/v1/mazes/{}", id);
         let req = test::TestRequest::get().uri(&url).to_request();
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), expected_status_code);
+
         if expected_status_code == StatusCode::OK {
-             let body = test::read_body(resp).await;
+            // Verify content
+            let body = test::read_body(resp).await;
              let maze: Maze = serde_json::from_slice(&body).expect("failed to deserialize response");
              match expected_maze {
                 Some(value) => {
@@ -300,6 +347,30 @@ mod tests {
                     panic!("No maze comparison value provided for get_maze() test!");
                 }
              }
+        }
+    }
+
+    async fn run_delete_maze_test(
+        startup_content: StoreStartupContent, 
+        id: &str, 
+        expected_status_code: StatusCode 
+        ) {
+        let app = test::init_service(
+            App::new().configure(|cfg| configure_mock_app(cfg, startup_content.clone())),
+        )
+        .await;
+        // Delete
+        let url = format!("/api/v1/mazes/{}", id);
+        let req = test::TestRequest::delete().uri(&url).to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::OK {
+            // Confirm it has been deleted
+            let url2 = format!("/api/v1/mazes/{}", id);
+            let req2 = test::TestRequest::get().uri(&url2).to_request();
+            let resp2 = test::call_service(&app, req2).await;
+            assert_eq!(resp2.status(), StatusCode::NOT_FOUND);
         }
     }
 
@@ -333,6 +404,16 @@ mod tests {
     #[actix_web::test]
     async fn test_get_maze_that_does_not_exist() {
         run_get_maze_test(StoreStartupContent::ThreeMazes, "does_not_exist.json", StatusCode::NOT_FOUND, None).await
+    }
+
+    #[actix_web::test]
+    async fn test_delete_maze_that_exists() {
+        run_delete_maze_test(StoreStartupContent::ThreeMazes, "maze_a.json", StatusCode::OK).await
+    }
+
+    #[actix_web::test]
+    async fn test_delete_maze_that_does_not_exist() {
+        run_delete_maze_test(StoreStartupContent::ThreeMazes, "does_not_exist.json", StatusCode::NOT_FOUND).await
     }
 
 }

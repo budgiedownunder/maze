@@ -14,11 +14,11 @@ pub struct MazeItem {
 /// Represents a store for holding mazes and related objects
 pub trait Store: Send + Sync {
     /// Adds a new maze to the store and sets the allocated `id` within the maze object
-    fn create_maze(&self, maze: &mut Maze) -> Result<(), StoreError>;
+    fn create_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError>;
     /// Deletes a maze from the store
-    fn delete_maze(&self, id: &str) -> Result<(), StoreError>;
+    fn delete_maze(&mut self, id: &str) -> Result<(), StoreError>;
     /// Updates a maze within the store
-    fn update_maze(&self, maze: &mut Maze) -> Result<(), StoreError>;
+    fn update_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError>;
     /// Loads a maze from the store
     fn get_maze(&self, id: &str) -> Result<Maze, StoreError>;
     /// Locates a maze item by its name within the store

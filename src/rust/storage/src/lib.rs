@@ -45,7 +45,7 @@ pub enum StoreType {
 ///
 /// // Access the file store
 /// match get_store(StoreType::File) {
-///     Ok(store) => {
+///     Ok(mut store) => {
 ///         // Create the maze within the store
 ///         if let Err(error) = store.create_maze(&mut maze_to_create) {
 ///             panic!(
