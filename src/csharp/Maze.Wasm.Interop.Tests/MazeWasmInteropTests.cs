@@ -406,7 +406,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmToJson_ShouldSucceed()
         {
-            var expected = @"{""name"":"""",""definition"":{""grid"":[]}}";
+            var expected = @"{""id"":"""",""name"":"""",""definition"":{""grid"":[]}}";
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             var json = interop.MazeWasmToJson(mazeWasmPtr);
             FreeMazeWasm(mazeWasmPtr);
@@ -428,6 +428,7 @@ namespace Maze.Wasm.Interop.Tests
         {
             var jsonStr = @"
             {
+                ""id"":""test"",
                 ""name"":""test"",
                 ""definition"": {
                     ""grid"":[
@@ -455,6 +456,7 @@ namespace Maze.Wasm.Interop.Tests
         {
             var jsonStr = @"
             {
+                ""id"":""test"",
                 ""name"":""test"",
                 ""definition"": {
                     ""grid"":[
@@ -478,6 +480,7 @@ namespace Maze.Wasm.Interop.Tests
         {
             var jsonStr = @"
             {
+                ""id"":""test"",
                 ""name"":""test"",
                 ""definition"": {
                     ""grid"":[
@@ -501,6 +504,7 @@ namespace Maze.Wasm.Interop.Tests
         {
             var jsonStr = @"
             {
+                ""id"":""test"",
                 ""name"":""test"",
                 ""definition"": {
                     ""grid"":[
@@ -526,6 +530,7 @@ namespace Maze.Wasm.Interop.Tests
         {
             var jsonStr = @"
                 {
+                    ""id"":""test"",
                     ""name"":""test"",
                     ""definition"": {
                         ""grid"":[
