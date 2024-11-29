@@ -7,6 +7,7 @@ mod store_error;
 pub use file_store::FileStore;
 pub use store::MazeItem;
 pub use store::Store;
+pub use store::SharedStore;
 pub use store_error::StoreError;
 
 /// Represents the supported store types
@@ -44,7 +45,7 @@ pub enum StoreType {
 ///
 /// // Access the file store
 /// match get_store(StoreType::File) {
-///     Ok(store) => {
+///     Ok(mut store) => {
 ///         // Create the maze within the store
 ///         if let Err(error) = store.create_maze(&mut maze_to_create) {
 ///             panic!(

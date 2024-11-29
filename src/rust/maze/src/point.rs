@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use utoipa::ToSchema;
 
 #[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 /// Represents a point within a maze
 pub struct Point {
     /// Row index (zero-based)

@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, Write};
@@ -45,7 +46,7 @@ impl FileStore {
     /// maze_to_create.name = "maze_1".to_string();
     ///
     /// // Create the file store
-    /// let store = FileStore::new();
+    /// let mut store = FileStore::new();
     ///
     /// // Create a maze within the file store
     /// match store.create_maze(&mut maze_to_create) {
@@ -82,16 +83,30 @@ impl FileStore {
         path: &str,
         overwrite: bool,
     ) -> Result<(), StoreError> {
+        let os_path = PathBuf::from(path);
+
+        let full_path = if os_path.is_absolute() {
+            os_path.clone()
+        } else {
+            env::current_dir()?.join(&os_path)
+        };
+
+        let normalized_path = full_path
+            .strip_prefix(r"\\?\")
+            .unwrap_or(&full_path)
+            .to_path_buf();
+
+        maze.id = normalized_path.to_string_lossy().to_string();
+
         if !overwrite {
-            let os_path = PathBuf::from(path);
             if StdPath::new(&os_path).exists() {
                 return Err(StoreError::IdAlreadyExists(path.to_string()));
             }
         }
+        
         let s = maze.to_json()?;
         let mut file = File::create(path)?;
         file.write_all(s.as_bytes())?;
-        maze.id = path.to_string();
         Ok(())
     }
 }
@@ -127,7 +142,7 @@ impl Store for FileStore {
     /// maze_to_create.name = "maze_1".to_string();
     ///
     /// // Create the file store
-    /// let store = FileStore::new();
+    /// let mut store = FileStore::new();
     ///
     /// // Create maze within the file store
     /// match store.create_maze(&mut maze_to_create) {
@@ -145,7 +160,7 @@ impl Store for FileStore {
     ///     }
     /// }
     /// ```
-    fn create_maze(&self, maze: &mut Maze) -> Result<(), StoreError> {
+    fn create_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError> {
         if maze.name.is_empty() {
             return Err(StoreError::NameMissing());
         }
@@ -173,7 +188,7 @@ impl Store for FileStore {
     /// # if let Ok(_) = File::create("maze_1.json") {}
 
     /// // Create the file store
-    /// let store = FileStore::new();
+    /// let mut store = FileStore::new();
     ///
     /// // Delete maze from within the file store
     /// let id = "maze_1.json".to_string();
@@ -193,9 +208,12 @@ impl Store for FileStore {
     ///     }
     /// }
     /// ```
-    fn delete_maze(&self, id: &str) -> Result<(), StoreError> {
+    fn delete_maze(&mut self, id: &str) -> Result<(), StoreError> {
         if id.is_empty() {
             return Err(StoreError::IdMissing());
+        }
+        if !self.maze_exists(id) {
+            return Err(StoreError::IdNotFound(id.to_string()));
         }
         delete_file(id);
         Ok(())
@@ -225,7 +243,7 @@ impl Store for FileStore {
     /// maze_to_update.id = "maze_1".to_string();
     ///
     /// // Create the file store
-    /// let store = FileStore::new();
+    /// let mut store = FileStore::new();
     ///
     /// // Update maze within the file store
     /// match store.update_maze(&mut maze_to_update) {
@@ -243,7 +261,7 @@ impl Store for FileStore {
     ///     }
     /// }
     /// ```
-    fn update_maze(&self, maze: &mut Maze) -> Result<(), StoreError> {
+    fn update_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError> {
         if maze.id.is_empty() {
             return Err(StoreError::IdMissing());
         }
@@ -283,7 +301,7 @@ impl Store for FileStore {
     /// maze_to_create.name = "maze_1".to_string();
     ///
     /// // Create the file store
-    /// let store = FileStore::new();
+    /// let mut store = FileStore::new();
     ///
     /// // Create the maze within the store
     /// if let Err(error) = store.create_maze(&mut maze_to_create) {
@@ -510,7 +528,7 @@ mod tests {
 
     #[test]
     fn can_create_maze_that_does_not_exist() {
-        let store = FileStore::new();
+        let mut store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", false, true);
 
         delete_file(&path);
@@ -524,7 +542,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "No name provided")]
     fn cannot_create_maze_with_empty_name() {
-        let store = FileStore::new();
+        let mut store = FileStore::new();
         let (_, mut maze) = init_test_maze(&store, "maze", false, false);
         match store.create_maze(&mut maze) {
             Ok(_) => panic!("Successfully saved unnamed maze but did not expect to"),
@@ -535,7 +553,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Item with id 'maze.json' already exists")]
     fn cannot_create_maze_that_exists() {
-        let store = FileStore::new();
+        let mut store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", false, true);
         let mut _file = File::create(&path).expect("Failed to create file");
 
@@ -556,7 +574,7 @@ mod tests {
 
     #[test]
     fn can_update_existing_maze() {
-        let store = FileStore::new();
+        let mut store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", true, true);
         let mut _file = File::create(&path).expect("Failed to create file");
 
@@ -574,7 +592,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Item with id 'maze.json' not found")]
     fn cannot_update_non_existant_maze() {
-        let store = FileStore::new();
+        let mut store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", true, true);
 
         delete_file(&path);
@@ -596,7 +614,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "No id provided")]
     fn cannot_update_maze_with_no_id() {
-        let store = FileStore::new();
+        let mut store = FileStore::new();
         let (_, mut maze) = init_test_maze(&store, "maze", false, true);
 
         match store.update_maze(&mut maze) {
@@ -611,7 +629,7 @@ mod tests {
 
     #[test]
     fn can_delete_maze() {
-        let store = FileStore::new();
+        let mut store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", true, true);
 
         delete_file(&path);
@@ -638,7 +656,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "No id provided")]
     fn cannot_delete_maze_with_empty_id() {
-        let store = FileStore::new();
+        let mut store = FileStore::new();
 
         match store.delete_maze("") {
             Ok(()) => {
@@ -652,7 +670,7 @@ mod tests {
 
     #[test]
     fn can_get_maze_that_exists() {
-        let store = FileStore::new();
+        let mut store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", true, true);
 
         delete_file(&path);
@@ -714,7 +732,7 @@ mod tests {
 
     #[test]
     fn maze_item_list_should_not_be_empty() {
-        let store = FileStore::new();
+        let mut store = FileStore::new();
 
         let _ = delete_files_with_ext(".", "json");
 

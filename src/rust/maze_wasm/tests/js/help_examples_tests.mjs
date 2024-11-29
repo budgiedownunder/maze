@@ -406,7 +406,7 @@ function testMazeToJSON() {
 
 function testMazeToJSONExpectedOutput() {
     return [
-        `to_json() returned:  {"name":"","definition":{"grid":[[" ","W","W","W","W"],[" ","W","W","W","W"],[" ","W","W","W","W"],[" "," "," "," "," "],[" "," "," "," "," "],[" "," "," "," "," "]]}}`
+        `to_json() returned:  {"id":"","name":"","definition":{"grid":[[" ","W","W","W","W"],[" ","W","W","W","W"],[" ","W","W","W","W"],[" "," "," "," "," "],[" "," "," "," "," "],[" "," "," "," "," "]]}}`
     ];
 }
 
@@ -415,6 +415,7 @@ function testMazeFromJSON() {
     try {
         let maze = new MazeWasm();
         maze.from_json(`{
+                    \"id\":\"maze_id\",
                     \"name\":\"test\",
                     \"definition\": {
                         \"grid\":[
@@ -484,6 +485,7 @@ function testMazeSolve() {
     try {
         let maze = new MazeWasm();
         maze.from_json(`{
+                    \"id\":\"maze_id\",
                     \"name\":\"test\",
                     \"definition\": {
                         \"grid\":[
@@ -531,6 +533,7 @@ function testMazeSolutionGetPathPoints() {
     try {
         let maze = new MazeWasm();
         maze.from_json(`{
+            \"id\":\"maze_id\",
             \"name\":\"test\",
             \"definition\": {
                 \"grid\":[

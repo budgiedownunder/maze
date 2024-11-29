@@ -1,0 +1,1 @@
+Placeholder page for `maze_web_server` crate documentation

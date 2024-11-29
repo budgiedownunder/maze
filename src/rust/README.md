@@ -4,13 +4,14 @@
 ## Introduction
 The following `Rust` crates are present:
 
-| Folder | Crate | Description |
-|--------|-----------|--------------- |
-| `src/rust` | [`maze`](./maze/README.md) | maze definition and calculation library|
-|            | [`maze_console`](./maze_console/README.md) | maze console application |
-|            | [`maze_wasm`](./maze_wasm/README.md) | maze web assembly library |
-|            | [`storage`](./storage/README.md) | maze storage library |
-|            | [`utils`](./utils/README.md) | utilities library |
+| Folder | Crate | Description
+|--------|-----------|---------------
+| `src/rust` | [`maze`](./maze/README.md) | maze definition and calculation library
+|            | [`maze_console`](./maze_console/README.md) | maze console application
+|            | [`maze_wasm`](./maze_wasm/README.md) | maze web assembly library
+|            | [`maze_web_server`](./maze_web_server/README.md) | maze web server console application
+|            | [`storage`](./storage/README.md) | maze storage library
+|            | [`utils`](./utils/README.md) | utilities library
 
 ## Getting Started
 
@@ -49,6 +50,13 @@ cd src/rust/maze_console
 cargo run
 ```
 
+To run the `maze_web_server` application:
+
+```
+cd src/rust/maze_web_server
+cargo run
+```
+
 ### Testing
 #### 1. Rust Crates
 To test all `Rust` crates:
@@ -59,6 +67,7 @@ cargo test -p maze
 cargo test -p maze_console -- --test-threads=1
 cargo test -p storage -- --test-threads=1
 cargo test -p maze_wasm
+cargo test -p maze_web_server
 ```
 
 #### 2. JavaScript APIs

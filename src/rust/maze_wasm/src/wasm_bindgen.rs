@@ -73,6 +73,7 @@ impl MazeSolutionWasm {
     ///     try {
     ///         let maze = new MazeWasm();
     ///         maze.from_json(`{
+    ///             \"id\":\"maze_id\",
     ///             \"name\":\"test\",
     ///             \"definition\": {
     ///                 \"grid\":[
@@ -934,6 +935,7 @@ impl MazeWasm {
     ///     try {
     ///         let maze = new MazeWasm();
     ///         maze.from_json(`{
+    ///             \"id\":\"maze_id\",
     ///             \"name\":\"test\",
     ///             \"definition\": {
     ///                 \"grid\":[
@@ -988,6 +990,7 @@ impl MazeWasm {
     ///     try {
     ///         let maze = new MazeWasm();
     ///         maze.from_json(`{
+    ///             \"id\":\"maze_id\",
     ///             \"name\":\"test\",
     ///             \"definition\": {
     ///                 \"grid\":[

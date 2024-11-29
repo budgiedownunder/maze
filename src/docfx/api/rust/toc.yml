@@ -6,6 +6,8 @@
   href: maze_console/view_content.md
 - name: maze_wasm
   href: maze_wasm/view_content.md
+- name: maze_web_server
+  href: maze_web_server/view_content.md
 - name: storage
   href: storage/view_content.md
 - name: utils

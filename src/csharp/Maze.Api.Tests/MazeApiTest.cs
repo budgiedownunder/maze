@@ -402,7 +402,7 @@
         [Fact]
         public void MazeToJson_ShouldSucceed()
         {
-            var expected = @"{""name"":"""",""definition"":{""grid"":[]}}";
+            var expected = @"{""id"":"""",""name"":"""",""definition"":{""grid"":[]}}";
             using (Maze maze = new Maze(0, 0))
             {
                 var json = maze.ToJson();
@@ -426,6 +426,7 @@
         {
             var jsonStr = @"
             {
+                ""id"":""test"",
                 ""name"":""test"",
                 ""definition"": {
                     ""grid"":[
@@ -452,6 +453,7 @@
         {
             var jsonStr = @"
             {
+                ""id"":""test"",
                 ""name"":""test"",
                 ""definition"": {
                     ""grid"":[
@@ -476,6 +478,7 @@
         {
             var jsonStr = @"
             {
+                ""id"":""test"",
                 ""name"":""test"",
                 ""definition"": {
                     ""grid"":[
@@ -500,6 +503,7 @@
         {
             var jsonStr = @"
             {
+                ""id"":""test"",
                 ""name"":""test"",
                 ""definition"": {
                     ""grid"":[
@@ -528,6 +532,7 @@
         {
             var jsonStr = @"
                 {
+                    ""id"":""test"",
                     ""name"":""test"",
                     ""definition"": {
                         ""grid"":[
