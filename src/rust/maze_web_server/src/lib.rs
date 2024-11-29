@@ -7,7 +7,7 @@ use actix_web::{ App, middleware::Logger, HttpServer, web};
 use std::sync::Arc;
 use std::sync::RwLock;
 
-
+/// Runs the Maze Web Server, which hosts the Maze Web API
 pub async fn run_server() -> std::io::Result<()> {
     // TO DO - make these  environment/config settings with defaults
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
