@@ -273,10 +273,14 @@ pub async fn solve_maze(
 mod tests {
     use crate::api::v1::handlers;
     use crate::api::v1::handlers::get_maze_solve_error_string;
+    use crate::api::v1::openapi::ApiDocV1;
+
     use maze::{Definition, Maze, MazeError, Solution, Path, Point};
     use storage::{SharedStore, Store, StoreError, MazeItem};
 
     use actix_web::{http::StatusCode, test, web, App};
+    use utoipa::OpenApi;
+    use utoipa_swagger_ui::SwaggerUi;
     
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
@@ -532,7 +536,9 @@ mod tests {
                     .service(handlers::update_maze)
                     .service(handlers::delete_maze)
                     .service(handlers::get_maze_solution)
-                    .service(handlers::solve_maze),
+                    .service(handlers::solve_maze)
+                )
+                .service(SwaggerUi::new("api-docs/v1/swagger-ui/{_:.*}").url("/api-docs/v1/openapi.json", ApiDocV1::openapi()),
             );
     }
 
@@ -743,78 +749,94 @@ mod tests {
 
         validate_solution_response("solve_maze()", resp, expected_status_code, expected_solution, expected_err_message).await;
     }
+
+    async fn run_get_url_test(
+        url: &str
+        ) {
+        let app = test::init_service(
+            App::new().configure(|cfg| configure_mock_app(cfg, StoreStartupContent::Empty)),
+        )
+        .await;
+
+        let req = test::TestRequest::get()
+            .uri(url)
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
  
     #[actix_web::test]
     async fn test_get_mazes_with_no_mazes() {
-        run_get_mazes_test(StoreStartupContent::Empty).await
+        run_get_mazes_test(StoreStartupContent::Empty).await;
     }
 
     #[actix_web::test]
     async fn test_get_mazes_with_one_maze() {
-        run_get_mazes_test(StoreStartupContent::OneMaze).await
+        run_get_mazes_test(StoreStartupContent::OneMaze).await;
     }
 
     #[actix_web::test]
     async fn test_get_mazes_with_two_mazes_that_require_sorting() {
-        run_get_mazes_test(StoreStartupContent::TwoMazes).await
+        run_get_mazes_test(StoreStartupContent::TwoMazes).await;
     }
 
     #[actix_web::test]
     async fn test_get_mazes_with_three_mazes_that_require_sorting() {
-        run_get_mazes_test(StoreStartupContent::ThreeMazes).await
+        run_get_mazes_test(StoreStartupContent::ThreeMazes).await;
     }
 
     #[actix_web::test]
     async fn test_create_maze_that_does_not_exist() {
-        run_create_maze_test(StoreStartupContent::ThreeMazes, new_solvable_maze("", "maze_d"), StatusCode::CREATED).await
+        run_create_maze_test(StoreStartupContent::ThreeMazes, new_solvable_maze("", "maze_d"), StatusCode::CREATED).await;
     }
 
     #[actix_web::test]
     async fn test_create_maze_that_already_exists() {
-        run_create_maze_test(StoreStartupContent::ThreeMazes, new_solvable_maze("", "maze_a"), StatusCode::CONFLICT).await
+        run_create_maze_test(StoreStartupContent::ThreeMazes, new_solvable_maze("", "maze_a"), StatusCode::CONFLICT).await;
     }
 
     #[actix_web::test]
     async fn test_get_maze_that_exists() {
         let id = "maze_a.json";
         let name = "maze_a";
-        run_get_maze_test(StoreStartupContent::ThreeMazes, id, StatusCode::OK, Some(new_solvable_maze(id, name))).await
+        run_get_maze_test(StoreStartupContent::ThreeMazes, id, StatusCode::OK, Some(new_solvable_maze(id, name))).await;
     }
 
     #[actix_web::test]
     async fn test_update_maze_that_exists() {
         let id = "maze_a.json";
         let name = "maze_a";
-        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze(id, name), StatusCode::OK).await
+        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze(id, name), StatusCode::OK).await;
     }
 
     #[actix_web::test]
     async fn test_update_maze_that_does_not_exist() {
         let id = "maze_d.json";
         let name = "maze_d";
-        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze(id, name), StatusCode::NOT_FOUND).await
+        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze(id, name), StatusCode::NOT_FOUND).await;
     }
 
     #[actix_web::test]
     async fn test_update_maze_with_mismatching_id() {
         let id = "maze_a.json";
         let name = "maze_a";
-        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze("some_other_id", name), StatusCode::BAD_REQUEST).await
+        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze("some_other_id", name), StatusCode::BAD_REQUEST).await;
     }
 
     #[actix_web::test]
     async fn test_get_maze_that_does_not_exist() {
-        run_get_maze_test(StoreStartupContent::ThreeMazes, "does_not_exist.json", StatusCode::NOT_FOUND, None).await
+        run_get_maze_test(StoreStartupContent::ThreeMazes, "does_not_exist.json", StatusCode::NOT_FOUND, None).await;
     }
 
     #[actix_web::test]
     async fn test_delete_maze_that_exists() {
-        run_delete_maze_test(StoreStartupContent::ThreeMazes, "maze_a.json", StatusCode::OK).await
+        run_delete_maze_test(StoreStartupContent::ThreeMazes, "maze_a.json", StatusCode::OK).await;
     }
 
     #[actix_web::test]
     async fn test_delete_maze_that_does_not_exist() {
-        run_delete_maze_test(StoreStartupContent::ThreeMazes, "does_not_exist.json", StatusCode::NOT_FOUND).await
+        run_delete_maze_test(StoreStartupContent::ThreeMazes, "does_not_exist.json", StatusCode::NOT_FOUND).await;
     }
 
     #[actix_web::test]
@@ -822,7 +844,7 @@ mod tests {
         run_get_maze_solution_test(
             StoreStartupContent::SolutionTestMazes, "solvable.json", StatusCode::OK, 
             Some(get_solve_test_maze_solution()), None
-        ).await
+        ).await;
     }
 
     #[actix_web::test]
@@ -830,7 +852,7 @@ mod tests {
         run_get_maze_solution_test(
             StoreStartupContent::SolutionTestMazes, "no_start.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_start_cell_error_str())
-        ).await
+        ).await;
     }
 
     #[actix_web::test]
@@ -838,7 +860,7 @@ mod tests {
         run_get_maze_solution_test(
             StoreStartupContent::SolutionTestMazes, "no_finish.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_finish_cell_error_str())
-        ).await
+        ).await;
     }
 
     #[actix_web::test]
@@ -846,7 +868,7 @@ mod tests {
         run_get_maze_solution_test(
             StoreStartupContent::SolutionTestMazes, "no_solution.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_solution_error_str())
-        ).await
+        ).await;
     }
 
     #[actix_web::test]
@@ -856,7 +878,7 @@ mod tests {
             StatusCode::OK, 
             Some(get_solve_test_maze_solution()), 
             None
-        ).await
+        ).await;
     }
 
     #[actix_web::test]
@@ -865,7 +887,7 @@ mod tests {
             new_solve_test_maze("", "", false, true, false), 
             StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_start_cell_error_str())
-        ).await
+        ).await;
     }
 
     #[actix_web::test]
@@ -874,7 +896,7 @@ mod tests {
             new_solve_test_maze("", "", true, false, false), 
             StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_finish_cell_error_str())
-        ).await
+        ).await;
     }
 
     #[actix_web::test]
@@ -883,7 +905,17 @@ mod tests {
             new_solve_test_maze("", "", true, true, true), 
             StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_solution_error_str())
-        ).await
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn test_load_swagger_ui_page() {
+        run_get_url_test("/api-docs/v1/swagger-ui/").await;
+    }
+
+    #[actix_web::test]
+    async fn test_load_openapi_json() {
+        run_get_url_test("/api-docs/v1/openapi.json").await;
     }
     
 }
