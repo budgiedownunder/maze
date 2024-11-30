@@ -1,0 +1,39 @@
+# `maze_openapi_generator` Crate
+
+## Introduction
+
+The `maze_openapi_generator` crate is written in `Rust` and is a console application that generates the `openapi.json` file that is used for generating static help content for the `Maze Web API` documentation.
+
+
+## Getting Started
+
+### Build
+To build the `maze_openapi_generator` application, run the following from within the `maze_openapi_generator` directory:
+```
+cargo build
+```
+
+### Run
+To run the `maze_openapi_generator` application, run the following from within the `maze_openapi_generator` directory:
+```
+cargo run
+```
+If successful, this will generate the `openapi.json` file in the working directory with output similar to the following:
+
+```
+Running Maze API OpenAPI generator...
+Maze API OpenAPI specification sucessfully generated as file:
+/path/to/working/directory/openapi.json
+```
+
+### Testing
+There are no automated tests implemented for the crate, as it essentially makes a single call into the `maze_web_server` crate (which does have tests for that exposed function) 
+
+### Benchmarking
+No benchmarking tests are currently implemented for the crate
+
+### Generating Documentation
+To generate and view `Rust` documentation for the crate in your default browser, run the following from within the `maze_openapi_generator` directory:
+```
+cargo doc --open
+```

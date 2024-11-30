@@ -4,6 +4,8 @@
   href: maze/view_content.md
 - name: maze_console
   href: maze_console/view_content.md
+- name: maze_openapi_generator
+  href: maze_openapi_generator/view_content.md
 - name: maze_wasm
   href: maze_wasm/view_content.md
 - name: maze_web_server

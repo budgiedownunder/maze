@@ -15,7 +15,7 @@ use utoipa::OpenApi;
     ),
     components(schemas(MazeItem, Maze)),
     tags(
-        (name = "v1", description = "Version 1 of the API")
+        (name = "Maze Web API v1", description = "Version 1 of the Maze Web API")
     )
 )]
 pub struct ApiDocV1;

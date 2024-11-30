@@ -8,6 +8,7 @@ The following `Rust` crates are present:
 |--------|-----------|---------------
 | `src/rust` | [`maze`](./maze/README.md) | maze definition and calculation library
 |            | [`maze_console`](./maze_console/README.md) | maze console application
+|            | [`maze_openapi_generator`](./maze_openapi_generator/README.md) | maze OpenAPI generator console application
 |            | [`maze_wasm`](./maze_wasm/README.md) | maze web assembly library
 |            | [`maze_web_server`](./maze_web_server/README.md) | maze web server console application
 |            | [`storage`](./storage/README.md) | maze storage library
@@ -54,6 +55,13 @@ To run the `maze_web_server` application:
 
 ```
 cd src/rust/maze_web_server
+cargo run
+```
+
+To run the `maze_openapi_generator` application:
+
+```
+cd src/rust/maze_openapi_generator
 cargo run
 ```
 

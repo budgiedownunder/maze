@@ -1,0 +1,1 @@
+Placeholder page for `maze_openapi_generator` crate documentation

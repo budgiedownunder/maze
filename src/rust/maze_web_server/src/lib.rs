@@ -1,4 +1,4 @@
-mod api;
+pub mod api;
 
 use storage::SharedStore;
 use storage::get_store;

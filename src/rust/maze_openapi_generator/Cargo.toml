@@ -1,0 +1,10 @@
+[package]
+name = "maze_openapi_generator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+maze_web_server = { path = "../maze_web_server" }
+
+[build-dependencies]
+maze_web_server = { path = "../maze_web_server" }
