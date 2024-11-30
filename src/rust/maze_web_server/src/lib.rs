@@ -24,6 +24,8 @@ pub async fn run_server() -> std::io::Result<()> {
             .app_data(web::Data::new(store.clone())) // Share the store
             .wrap(Logger::default())
             .service(api::register_api())
+            .service(api::register_redoc())
+            .service(api::register_rapidoc())
             .service(api::register_swagger_ui())
     })
     .bind(address)?
