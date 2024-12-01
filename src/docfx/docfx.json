@@ -20,7 +20,8 @@
           "api/net/**.yml",
           "api/net/index.md",
           "api/rust/**.md",
-          "api/js/**.md"
+          "api/js/**.md",
+          "api/web/**.md"
         ]
       },
       {

@@ -23,3 +23,5 @@ The following components are present:
 |              | [`maze_web_server`](../api/rust/maze_web_server/view_content.md)               | Maze web server console application
 |              | [`storage`](../api/rust/storage/view_content.md)                               | Maze storage library
 |              | [`utils`](../api/rust/utils/view_content.md)                                   | Utilities library
+|              |                                                                                |
+| `Web`        | [`Maze REST API`](../api/web/maze_rest/view_content.md)                        | RESTful Web API for managing and solving mazes 

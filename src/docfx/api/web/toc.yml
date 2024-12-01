@@ -1,0 +1,4 @@
+- name: All APIs
+  href: index.md
+- name: Maze REST API
+  href: maze_rest/view_content.md

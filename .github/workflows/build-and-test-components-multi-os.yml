@@ -60,6 +60,10 @@ jobs:
       working-directory: ./
       run: dotnet tool install -g docfx
   
+    - name: Install Redocly
+      working-directory: ./
+      run: npm install -g @redocly/cli
+
     - name: Install .NET MAUI workload for Windows
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
