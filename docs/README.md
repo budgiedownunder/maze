@@ -35,7 +35,7 @@ For more detailed explanations, see the [Architecture Documentation](diagrams/RE
 
 ## Setup and Installation
 
-To get started with this project, follow the instructions in the [main README](../README.md) at the root of the repository.
+To get started with this project, follow the instructions in the main [README](../README.md) at the root of the repository.
 
 ## Usage Guide
 
