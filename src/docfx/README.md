@@ -23,8 +23,6 @@ dotnet tool install -g docfx
 npm install -g @redocly/cli
 ```
 
-
-
 ## Build
 To generate the HTML documentation, run the following from the `docfx` directory:
 
