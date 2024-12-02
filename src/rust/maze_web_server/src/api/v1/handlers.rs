@@ -60,10 +60,16 @@ fn get_maze_solve_error(err: &MazeError) -> Error {
 // Handler:  get_maze_list()
 // **************************************************************************************************
 #[utoipa::path(
+    summary = "Returns the list of available mazes",
+    description = "This endpoint returns the list of mazes that the user currently has access to",
     get,
     path = "/api/v1/mazes",
     responses(
-        (status = 200, description = "Maze definitions", body=[MazeItem])
+        (status = 200, description = "Maze definitions", body=[MazeItem]),
+        (status = 400, description = "Invalid request"),
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -81,13 +87,18 @@ pub async fn get_maze_list(store: web::Data<SharedStore>) -> Result<HttpResponse
 // Handler:  create_maze()
 // **************************************************************************************************
 #[utoipa::path(
+    summary = "Creates a new maze from the supplied definition",
+    description = "This endpoint creates a new maze and, if successful, returns the newly created maze object containing its allocated ID",
     post,
-    path = "/api/v1/mazes/",
+    path = "/api/v1/mazes",
     request_body = Maze,
     responses(
         (status = 201, description = "Maze created successfully", body = Maze),
         (status = 400, description = "Invalid request"),
         (status = 409, description = "Maze with the given id already exists")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -117,6 +128,8 @@ pub async fn create_maze(
 // Handler:  get_maze()
 // **************************************************************************************************
 #[utoipa::path(
+    summary = "Loads an existing maze definition",
+    description = "This endpoint attempts to load a maze given its ID and, if successful, returns the maze definition",
     get,
     path = "/api/v1/mazes/{id}",
     params(
@@ -125,6 +138,9 @@ pub async fn create_maze(
     responses(
         (status = 200, description = "Maze retrieved successfully", body = Maze),
         (status = 404, description = "Maze not found")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -151,6 +167,8 @@ pub async fn get_maze(
 // Handler:  update_maze()
 // **************************************************************************************************
 #[utoipa::path(
+    summary = "Updates an existing maze with a new definition",
+    description = "This endpoint attempts to update an existing maze given its ID and, if successful, returns the updated maze definition",
     put,
     path = "/api/v1/mazes/{id}",
     params(
@@ -161,6 +179,9 @@ pub async fn get_maze(
         (status = 200, description = "Maze updated successfully", body = Maze),
         (status = 400, description = "Invalid request"),
         (status = 404, description = "Maze not found")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -193,6 +214,8 @@ pub async fn update_maze(
 // Handler:  delete_maze()
 // **************************************************************************************************
 #[utoipa::path(
+    summary = "Deletes an existing maze",
+    description = "This endpoint attempts to delete an existing maze given its ID",
     delete,
     path = "/api/v1/mazes/{id}",
     params(
@@ -201,6 +224,9 @@ pub async fn update_maze(
     responses(
         (status = 200, description = "Maze deleted successfully", body = Maze),
         (status = 404, description = "Maze not found")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -227,6 +253,8 @@ pub async fn delete_maze(
 // Handler:  get_maze_solution()
 // **************************************************************************************************
 #[utoipa::path(
+    summary = "Attempts to solve an existing maze",
+    description = "This endpoint attempts to solve a maze given its ID and, if successful, returns a maze solution containing the solution path",
     get,
     path = "/api/v1/mazes/{id}/solution",
     params(
@@ -236,6 +264,9 @@ pub async fn delete_maze(
         (status = 200, description = "Maze solved successfully", body = Solution),
         (status = 404, description = "Maze not found"),
         (status = 422, description = "Maze could not be solved")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -267,13 +298,18 @@ pub async fn get_maze_solution(
 // Handler:  solve_maze()
 // **************************************************************************************************
 #[utoipa::path(
+    summary = "Attempts to solve a maze definition that is supplied by the caller",
+    description = "This endpoint attempts to solve a maze definition that is supplied by the caller and, if successful, returns a maze solution containing the solution path",
     post,
-    path = "/api/v1/solve-maze/",
+    path = "/api/v1/solve-maze",
     request_body = Maze,
     responses(
         (status = 200, description = "Maze solved successfully", body = Solution),
         (status = 400, description = "Invalid request"),
         (status = 422, description = "Maze could not be solved")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]

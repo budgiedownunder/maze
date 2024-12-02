@@ -67,6 +67,7 @@ The following components are present:
 |                                | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md)         | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)
 | `src/rust`                     | [`maze`](./src/rust/maze/README.md)                                           | Maze definition and calculation library
 |                                | [`maze_console`](./src/rust/maze_console/README.md)                           | Maze console application
+|                                | [`maze_openapi_generator`](./src/rust/maze_openapi_generator/README.md)       | Maze OpenAPI generator console application
 |                                | [`maze_wasm`](./src/rust/maze_wasm/README.md)                                 | Maze web assembly library
 |                                | [`maze_web_server`](./src/rust/maze_web_server/README.md)                     | Maze web server console application
 |                                | [`storage`](./src/rust/storage/README.md)                                     | Maze storage library

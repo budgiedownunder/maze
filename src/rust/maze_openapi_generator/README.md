@@ -26,6 +26,28 @@ Maze API OpenAPI specification sucessfully generated as file:
 /path/to/working/directory/openapi.json
 ```
 
+### Checking for Errors/Warnings in `openapi.json`
+To  check for errors or warnings in the generated `openapi.json` file, you need to ensure that the [Redocly](https://redocly.com/) CLI is installed. If it isn't, you can install it by running the following command:  
+
+```
+npm install -g @redocly/cli
+```
+
+Then run the following `lint` command from within the `maze_openapi_generator` directory:
+
+```
+redocly lint openapi.json --config ../../docfx/redocly.yaml
+```
+
+If there are no errors or warnings, the output should appear similar to the following:
+```
+validating openapi.json...
+openapi.json: validated in 7ms
+
+Woohoo! Your API description is valid. 🎉
+```
+You should always ensure that any changes you make to the endpoint definitions in `maze_web_server` do not introduce any errors or warnings in their associated `OpenAPI` specifications. 
+
 ### Testing
 There are no automated tests implemented for the crate, as it essentially makes a single call into the `maze_web_server` crate (which does have tests for that exposed function) 
 
