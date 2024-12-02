@@ -61,11 +61,11 @@ fn get_maze_solve_error(err: &MazeError) -> Error {
 // **************************************************************************************************
 #[utoipa::path(
     summary = "Returns the list of available mazes",
-    description = "This endpoint returns the list of mazes that the user currently has access to",
+    description = "This endpoint returns the list of maze IDs (and names) that the user currently has access to",
     get,
     path = "/api/v1/mazes",
     responses(
-        (status = 200, description = "Maze definitions", body=[MazeItem]),
+        (status = 200, description = "Maze list loaded sucessfully", body=[MazeItem]),
         (status = 400, description = "Invalid request"),
     ),
     security(
