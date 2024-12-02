@@ -6,3 +6,5 @@
   href: api/js/index.md
 - name: Rust APIs
   href: api/rust/index.md
+- name: Web APIs
+  href: api/web/index.md

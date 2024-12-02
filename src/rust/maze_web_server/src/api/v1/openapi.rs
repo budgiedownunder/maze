@@ -4,6 +4,15 @@ use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(
+    info (
+        title="Maze REST Web API",
+        version = "1.0.0",
+        description = "RESTful Web API for managing and solving mazes",
+        license(
+            name = "MIT",
+            url = "https://opensource.org/licenses/MIT"
+        )
+    ),
     paths(
         crate::api::v1::handlers::get_maze_list,
         crate::api::v1::handlers::create_maze,
@@ -14,8 +23,11 @@ use utoipa::OpenApi;
         crate::api::v1::handlers::solve_maze
     ),
     components(schemas(MazeItem, Maze)),
+    servers(
+        (url = "http://localhost:8080", description = "Local development server")
+    ),
     tags(
-        (name = "v1", description = "Version 1 of the API")
+        (name = "Maze Web API v1", description = "Version 1 of the Maze Web API")
     )
 )]
 pub struct ApiDocV1;

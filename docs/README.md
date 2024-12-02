@@ -8,7 +8,6 @@ Welcome to the documentation section of this project. This directory contains al
 - [Project Structure](#project-structure)
 - [Diagrams](#diagrams)
 - [Setup and Installation](#setup-and-installation)
-- [Usage Guide](#usage-guide)
 
 ## Introduction
 
@@ -35,9 +34,5 @@ For more detailed explanations, see the [Architecture Documentation](diagrams/RE
 
 ## Setup and Installation
 
-To get started with this project, follow the instructions in the [main README](../README.md) at the root of the repository.
-
-## Usage Guide
-
-For a detailed guide on how to use this project, please refer to the [Usage Guide](usage-guide.md) where you’ll find step-by-step instructions, examples, and common use cases.
+To get started with this project, follow the instructions in the main [README](../README.md) at the root of the repository.
 

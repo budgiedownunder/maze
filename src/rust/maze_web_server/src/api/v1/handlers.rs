@@ -4,6 +4,9 @@ use actix_web::{delete, get, post, put, web, HttpResponse, Error};
 use std::sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, Arc};
 use urlencoding::encode;
 
+// **************************************************************************************************
+// Private utility functions
+// **************************************************************************************************
 fn get_store_read_lock<'a>(
     store: &'a web::Data<Arc<RwLock<Box<dyn Store>>>>,
 ) -> Result<RwLockReadGuard<'a, Box<dyn Store>>, Error> {
@@ -52,12 +55,21 @@ fn get_maze_solve_error(err: &MazeError) -> Error {
     actix_web::error::ErrorUnprocessableEntity(get_maze_solve_error_string(err))
 }
 
-// get_maze_list
+// **************************************************************************************************
+// Endpoint: GET /api/v1/mazes
+// Handler:  get_maze_list()
+// **************************************************************************************************
 #[utoipa::path(
+    summary = "Returns the list of available mazes",
+    description = "This endpoint returns the list of mazes that the user currently has access to",
     get,
     path = "/api/v1/mazes",
     responses(
-        (status = 200, description = "Maze definitions", body=[MazeItem])
+        (status = 200, description = "Maze definitions", body=[MazeItem]),
+        (status = 400, description = "Invalid request"),
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -70,15 +82,23 @@ pub async fn get_maze_list(store: web::Data<SharedStore>) -> Result<HttpResponse
     Ok(HttpResponse::Ok().json(stored_items))    
 }
 
-// create_maze
+// **************************************************************************************************
+// Endpoint: PUT /api/v1/mazes/
+// Handler:  create_maze()
+// **************************************************************************************************
 #[utoipa::path(
+    summary = "Creates a new maze from the supplied definition",
+    description = "This endpoint creates a new maze and, if successful, returns the newly created maze object containing its allocated ID",
     post,
-    path = "/api/v1/mazes/",
+    path = "/api/v1/mazes",
     request_body = Maze,
     responses(
         (status = 201, description = "Maze created successfully", body = Maze),
         (status = 400, description = "Invalid request"),
         (status = 409, description = "Maze with the given id already exists")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -103,9 +123,13 @@ pub async fn create_maze(
         }
     }
 }
-
-// get_maze
+// **************************************************************************************************
+// Endpoint: GET /api/v1/maze/{id}
+// Handler:  get_maze()
+// **************************************************************************************************
 #[utoipa::path(
+    summary = "Loads an existing maze definition",
+    description = "This endpoint attempts to load a maze given its ID and, if successful, returns the maze definition",
     get,
     path = "/api/v1/mazes/{id}",
     params(
@@ -114,6 +138,9 @@ pub async fn create_maze(
     responses(
         (status = 200, description = "Maze retrieved successfully", body = Maze),
         (status = 404, description = "Maze not found")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -135,9 +162,13 @@ pub async fn get_maze(
         }
     }
 }
-
-// update_maze
+// **************************************************************************************************
+// Endpoint: PUT /api/v1/mazes/{id}
+// Handler:  update_maze()
+// **************************************************************************************************
 #[utoipa::path(
+    summary = "Updates an existing maze with a new definition",
+    description = "This endpoint attempts to update an existing maze given its ID and, if successful, returns the updated maze definition",
     put,
     path = "/api/v1/mazes/{id}",
     params(
@@ -148,6 +179,9 @@ pub async fn get_maze(
         (status = 200, description = "Maze updated successfully", body = Maze),
         (status = 400, description = "Invalid request"),
         (status = 404, description = "Maze not found")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -175,9 +209,13 @@ pub async fn update_maze(
         }
     }
 }
-
-// delete_maze
+// **************************************************************************************************
+// Endpoint: DELETE /api/v1/mazes/{id}
+// Handler:  delete_maze()
+// **************************************************************************************************
 #[utoipa::path(
+    summary = "Deletes an existing maze",
+    description = "This endpoint attempts to delete an existing maze given its ID",
     delete,
     path = "/api/v1/mazes/{id}",
     params(
@@ -186,6 +224,9 @@ pub async fn update_maze(
     responses(
         (status = 200, description = "Maze deleted successfully", body = Maze),
         (status = 404, description = "Maze not found")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -207,9 +248,13 @@ pub async fn delete_maze(
         }
     }
 }
-
-// get_maze_solution
+// **************************************************************************************************
+// Endpoint: GET /api/v1/mazes/{id}/solution
+// Handler:  get_maze_solution()
+// **************************************************************************************************
 #[utoipa::path(
+    summary = "Attempts to solve an existing maze",
+    description = "This endpoint attempts to solve a maze given its ID and, if successful, returns a maze solution containing the solution path",
     get,
     path = "/api/v1/mazes/{id}/solution",
     params(
@@ -219,6 +264,9 @@ pub async fn delete_maze(
         (status = 200, description = "Maze solved successfully", body = Solution),
         (status = 404, description = "Maze not found"),
         (status = 422, description = "Maze could not be solved")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -245,16 +293,23 @@ pub async fn get_maze_solution(
         }
     }
 }
-
-// solve_maze
+// **************************************************************************************************
+// Endpoint: POST /api/v1/solve-maze/
+// Handler:  solve_maze()
+// **************************************************************************************************
 #[utoipa::path(
+    summary = "Attempts to solve a maze definition that is supplied by the caller",
+    description = "This endpoint attempts to solve a maze definition that is supplied by the caller and, if successful, returns a maze solution containing the solution path",
     post,
-    path = "/api/v1/solve-maze/",
+    path = "/api/v1/solve-maze",
     request_body = Maze,
     responses(
         (status = 200, description = "Maze solved successfully", body = Solution),
         (status = 400, description = "Invalid request"),
         (status = 422, description = "Maze could not be solved")
+    ),
+    security(
+        ()
     ),
     tags = ["v1"]
 )]
@@ -271,6 +326,9 @@ pub async fn solve_maze(
 
 #[cfg(test)]
 mod tests {
+    // **************************************************************************************************
+    // Unit tests for API and documentation endpoints, via injection of MockMazeStore
+    // **************************************************************************************************
     use crate::api::v1::handlers;
     use crate::api::v1::handlers::get_maze_solve_error_string;
     use crate::api::v1::openapi::ApiDocV1;
@@ -280,8 +338,10 @@ mod tests {
 
     use actix_web::{http::StatusCode, test, web, App};
     use utoipa::OpenApi;
+    use utoipa_rapidoc::RapiDoc;
+    use utoipa_redoc::{Redoc, Servable};
     use utoipa_swagger_ui::SwaggerUi;
-    
+        
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
 
@@ -538,8 +598,9 @@ mod tests {
                     .service(handlers::get_maze_solution)
                     .service(handlers::solve_maze)
                 )
-                .service(SwaggerUi::new("api-docs/v1/swagger-ui/{_:.*}").url("/api-docs/v1/openapi.json", ApiDocV1::openapi()),
-            );
+                .service(SwaggerUi::new("api-docs/v1/swagger-ui/{_:.*}").url("/api-docs/v1/openapi.json", ApiDocV1::openapi()))
+                .service(Redoc::with_url("/api-docs/v1/redoc", ApiDocV1::openapi()))
+                .service(RapiDoc::new("/api-docs/v1/openapi.json").path("/api-docs/v1/rapidoc"));
     }
 
     async fn run_get_mazes_test(startup_content: StoreStartupContent) {
@@ -917,5 +978,14 @@ mod tests {
     async fn test_load_openapi_json() {
         run_get_url_test("/api-docs/v1/openapi.json").await;
     }
-    
+
+    #[actix_web::test]
+    async fn test_load_redoc_page() {
+        run_get_url_test("/api-docs/v1/redoc").await;
+    }
+
+    #[actix_web::test]
+    async fn test_load_rapidoc_page() {
+        run_get_url_test("/api-docs/v1/rapidoc").await;
+    }
 }

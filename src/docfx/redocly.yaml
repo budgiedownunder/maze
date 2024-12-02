@@ -1,0 +1,5 @@
+theme:
+  openapi: {}
+
+rules:
+  no-server-example.com: off

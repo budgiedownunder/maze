@@ -13,22 +13,42 @@ This is an experimental project that has been created for exploring various prog
 At this stage, the following areas are covered:
 
 - Creating library crates in `Rust`
+
 - Creating a `Rust` console application ([`maze_console`](./src/rust/maze_console/README.md)) that leverages `Rust` library crates for calculation ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md))
+
 - Implementing automated unit and mock testing (dependency injection) in `Rust` 
+
 - Automating `Rust` documentation-generation with `cargo doc`
+
 - Web Assembly implementation and generation (`wasm32` and `wasm-bindgen`) in `Rust` ([`maze_wasm`](./src/rust/maze_wasm/README.md))
+
 - Generating JavaScript APIs from `Rust` crates (`wasm-pack`)
+
 - Automating JavaScript API testing in `node.js` (`chai`, `mocha`)
-- Creating a `Rust` web server application ([`maze_web_server`](./src/rust/maze_web_server/README.md)) that leverages the `Rust` library crates for calculation ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md)) and exposes them as a `REST`ful Web API. This uses [`actix`](https://actix.rs/) to serve the API and [`utoipa`](https://docs.rs/utoipa/latest/utoipa/) to publish it as an [`OpenAPI`](https://www.openapis.org/)-compliant interface for use in third party products such as [`Swagger`](https://swagger.io/). 
+
+- Creating a `Rust` web server application ([`maze_web_server`](./src/rust/maze_web_server/README.md)) that:
+  - Leverages the `Rust` library crates for calculation ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md)) and exposes them as a `REST`ful Web API
+  - Uses [`actix`](https://actix.rs/) to serve the API and [`utoipa`](https://docs.rs/utoipa/latest/utoipa/) to publish it as an [`OpenAPI`](https://www.openapis.org/)-compliant interface for use in third party products such as [`Swagger`](https://swagger.io/)
+  - Supports interactive documentation in the form of [RapiDoc](https://rapidocweb.com/), [Redoc](https://redocly.com/redoc) and [Swagger UI](https://swagger.io/tools/swagger-ui/)
+
 - Implementing a `.NET` to Web Assembly ([`maze_wasm`](./src/rust/maze_wasm/README.md)) interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) in `C#`
+
 - Implementing automated `.NET` API testing with `xUnit` ([`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop.Tests/README.md))
+
 - Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)) 
+
 - Automating `C#` API documentation generation with `DocFX`
+
 - Combining `C#` and `Rust` documentation into a single HTML help system with use of `iFrame` containers
+
 - Architecture diagramming using `PlantUML` ([`architecture.puml`](./docs/diagrams/architecture.puml))
+
 - Automating image generation workflows using GitHub Actions ([`generate-png-from-puml.yml`](./.github/workflows/generate-png-from-puml.yml))
+
 - Automating build and testing workflows using GitHub Actions ([`build-and-test-components-multi-os.yml`](./.github/workflows/build-and-test-components-multi-os.yml))
+
 - Automating GitHub Pages asset generation and deployment [`build-and-deploy-to-github-pages`](./.github/workflows/build-and-deploy-to-github-pages.yml)
+
 
 The following components are present:
 
@@ -47,6 +67,7 @@ The following components are present:
 |                                | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md)         | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)
 | `src/rust`                     | [`maze`](./src/rust/maze/README.md)                                           | Maze definition and calculation library
 |                                | [`maze_console`](./src/rust/maze_console/README.md)                           | Maze console application
+|                                | [`maze_openapi_generator`](./src/rust/maze_openapi_generator/README.md)       | Maze OpenAPI generator console application
 |                                | [`maze_wasm`](./src/rust/maze_wasm/README.md)                                 | Maze web assembly library
 |                                | [`maze_web_server`](./src/rust/maze_web_server/README.md)                     | Maze web server console application
 |                                | [`storage`](./src/rust/storage/README.md)                                     | Maze storage library

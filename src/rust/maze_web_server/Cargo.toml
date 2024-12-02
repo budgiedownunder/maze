@@ -3,18 +3,27 @@ name = "maze_web_server"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "maze_web_server"
+
+[[bin]]
+name = "maze_web_server"
+path = "src/main.rs"
+
 [dependencies]
 maze = { path = "../maze" }
 storage = { path = "../storage" }
 
 actix-web = "4"
+env_logger = "0.10"
 lazy_static = "1.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.41", features = ["full"] }
 tokio-macros = "=2.4.0"
+urlencoding = "2.1"
 utoipa = { version = "5.2" }
+utoipa-rapidoc = { version = "5.0.0", features = ["actix-web"] }
+utoipa-redoc = { version = "5.0.0", features = ["actix-web"] }
 utoipa-swagger-ui = { version = "8.0.3", features = [ "actix-web"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
-env_logger = "0.10"
-urlencoding = "2.1"

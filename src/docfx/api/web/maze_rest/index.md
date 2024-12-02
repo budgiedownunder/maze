@@ -1,0 +1,1 @@
+Placeholder page for `Maze REST API` API documentation

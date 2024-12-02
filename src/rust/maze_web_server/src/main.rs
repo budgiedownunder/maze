@@ -1,4 +1,4 @@
-use maze_web_server:: run_server;
+use maze_web_server::run_server;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
