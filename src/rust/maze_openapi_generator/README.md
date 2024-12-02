@@ -49,7 +49,10 @@ Woohoo! Your API description is valid. 🎉
 You should always ensure that any changes you make to the endpoint definitions in `maze_web_server` do not introduce any errors or warnings in their associated `OpenAPI` specifications. 
 
 ### Testing
-There are no automated tests implemented for the crate, as it essentially makes a single call into the `maze_web_server` crate (which does have tests for that exposed function) 
+To test the `maze_openapi_generator` crate, run the following from within the `maze_openapi_generator` directory:
+```
+cargo test
+```
 
 ### Benchmarking
 No benchmarking tests are currently implemented for the crate

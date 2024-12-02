@@ -18,3 +18,18 @@ pub fn run_generator(out_dir: &str) -> Result<(), Box<dyn std::error::Error>>  {
     Ok(())
 }
   
+
+#[cfg(test)]
+mod tests {
+    use crate::run_generator;
+    use std::error::Error;
+    use std::path::Path;
+
+    #[test]
+    fn should_be_able_to_create_openapi_json_file() -> Result<(), Box<dyn Error>> {
+        run_generator("")?;
+        let path = Path::new("openapi.json");
+        assert!(path.exists(), "The expected output file '{:?}' was not found", path);
+        Ok(())
+    }
+} 

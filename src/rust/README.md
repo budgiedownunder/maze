@@ -76,6 +76,7 @@ cargo test -p maze_console -- --test-threads=1
 cargo test -p storage -- --test-threads=1
 cargo test -p maze_wasm
 cargo test -p maze_web_server
+cargo test -p maze_openapi_generator
 ```
 
 #### 2. JavaScript APIs
