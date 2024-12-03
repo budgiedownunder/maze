@@ -25,3 +25,5 @@ The following components are present:
 |              | [`utils`](../api/rust/utils/view_content.md)                                   | Utilities library
 |              |                                                                                |
 | `Web`        | [`Maze REST API`](../api/web/maze_rest/view_content.md)                        | RESTful Web API for managing and solving mazes 
+|              |                                                                                |
+| `WebAssembly`| [`maze_wasm`](../api/wasm/maze_wasm/view_content.md)                           | WebAssembly API for defining and solving mazes 
