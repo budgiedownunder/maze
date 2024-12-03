@@ -6,13 +6,13 @@ The following `Rust` crates are present:
 
 | Folder | Crate | Description
 |--------|-----------|---------------
-| `src/rust` | [`maze`](./maze/README.md) | maze definition and calculation library
-|            | [`maze_console`](./maze_console/README.md) | maze console application
-|            | [`maze_openapi_generator`](./maze_openapi_generator/README.md) | maze OpenAPI generator console application
-|            | [`maze_wasm`](./maze_wasm/README.md) | maze web assembly library
-|            | [`maze_web_server`](./maze_web_server/README.md) | maze web server console application
-|            | [`storage`](./storage/README.md) | maze storage library
-|            | [`utils`](./utils/README.md) | utilities library
+| `src/rust` | [`maze`](./maze/README.md) | Maze definition and calculation library
+|            | [`maze_console`](./maze_console/README.md) | Maze console application
+|            | [`maze_openapi_generator`](./maze_openapi_generator/README.md) | Maze OpenAPI generator console application
+|            | [`maze_wasm`](./maze_wasm/README.md) | Maze WebAssembly API library
+|            | [`maze_web_server`](./maze_web_server/README.md) | Maze web server console application
+|            | [`storage`](./storage/README.md) | Maze storage library
+|            | [`utils`](./utils/README.md) | Utilities library
 
 ## Getting Started
 
