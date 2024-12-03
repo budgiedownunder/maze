@@ -21,6 +21,7 @@
           "api/net/index.md",
           "api/rust/**.md",
           "api/js/**.md",
+          "api/wasm/**.md",
           "api/web/**.md"
         ]
       },

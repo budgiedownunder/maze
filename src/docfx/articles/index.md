@@ -19,9 +19,11 @@ The following components are present:
 | `Rust`       | [`maze`](../api/rust/maze/view_content.md)                                     | Maze definition and calculation library
 |              | [`maze_console`](../api/rust/maze_console/view_content.md)                     | Maze console application
 |              | [`maze_openapi_generator`](../api/rust/maze_openapi_generator/view_content.md) | Maze OpenAPI generator console application
-|              | [`maze_wasm`](../api/rust/maze_wasm/view_content.md)                           | Maze Web Assembly library
+|              | [`maze_wasm`](../api/rust/maze_wasm/view_content.md)                           | Maze WebAssembly API library
 |              | [`maze_web_server`](../api/rust/maze_web_server/view_content.md)               | Maze web server console application
 |              | [`storage`](../api/rust/storage/view_content.md)                               | Maze storage library
 |              | [`utils`](../api/rust/utils/view_content.md)                                   | Utilities library
 |              |                                                                                |
 | `Web`        | [`Maze REST API`](../api/web/maze_rest/view_content.md)                        | RESTful Web API for managing and solving mazes 
+|              |                                                                                |
+| `WebAssembly`| [`maze_wasm`](../api/wasm/maze_wasm/view_content.md)                           | WebAssembly API for defining and solving mazes 

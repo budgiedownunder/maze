@@ -14,7 +14,7 @@ The `docfx` project is responsible for the generation of HTML documentation for 
 
 Note: 
 
-The `JavaScript`, `Rust` and `Web` documentation pages are displayed in `iFrame` containers within the main documentation. This allows the [`DocFX`](https://dotnet.github.io/docfx/) navigation bar and table of contents to be made consistently available for all API help topics.
+The `JavaScript API`, `Rust API` `WebAssembly APi` AND `Web API` documentation pages are displayed in `iFrame` containers within the main documentation. This allows the [`DocFX`](https://dotnet.github.io/docfx/) navigation bar and table of contents to be made consistently available for all API help topics.
 
 ## Setup
 The project uses [`DocFX`](https://dotnet.github.io/docfx/) and [Redocly](https://redocly.com/) to generate the help content. These can be installed by running the following commands:

@@ -8,3 +8,5 @@
   href: api/rust/index.md
 - name: Web APIs
   href: api/web/index.md
+- name: WebAssembly APIs
+  href: api/wasm/index.md
