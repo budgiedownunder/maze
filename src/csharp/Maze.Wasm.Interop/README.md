@@ -44,3 +44,9 @@ dotnet build
 
 ### Testing
 Testing can be performed via the [`Maze.Wasm.Interop.Tests`](../Maze.Wasm.Interop.Tests/README.md) assembly.
+
+### Wasmer
+
+Download wasmer from https://github.com/wasmerio/wasmer/releases
+
+> - `wasmer-v8-windows-amd64.tar.gz` (contains`wasmer.dll`)
