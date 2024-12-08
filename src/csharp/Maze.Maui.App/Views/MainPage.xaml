@@ -76,13 +76,14 @@
             </ScrollView>
 
             <!-- Bottom buttons -->
-            <!--<StackLayout x:Name="BottomRowLayout" Grid.Row="2" Orientation="Horizontal" VerticalOptions="EndAndExpand" HorizontalOptions="Start" Padding="10" Spacing="10">
+            <StackLayout x:Name="BottomRowLayout" Grid.Row="2" Orientation="Horizontal" VerticalOptions="EndAndExpand" HorizontalOptions="Start" Padding="10" Spacing="10">
                 <Button
                         x:Name="TestBtn"
                         Text="Test"
                         SemanticProperties.Hint="Does not do anything yet"
+                        Clicked="OnTestBtnClicked"
                         HorizontalOptions="FillAndExpand" />
-            </StackLayout>-->
+            </StackLayout>
 
 
             <ActivityIndicator x:Name="BusyIndicator"

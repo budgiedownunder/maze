@@ -23,7 +23,7 @@
         // Singleton instance
         private static MazeWasmInterop? instance = null;
 
-        private static Wasmtime.Memory? wasmMemory;
+       private static Wasmtime.Memory? wasmMemory;
 
         // Wasmtime Store and Instance
         private static string? instanceWasmPath;
@@ -185,7 +185,7 @@
         /// Returns the path to the 'maze_wasm' Web Assembly
         /// </summary>
         /// <returns>Web Assembly path</returns>
-        static private string GetWasmPath()
+        static public string GetWasmPath()
         {
             const string WASM_FILE_NAME = "maze_wasm.wasm";
             const string APP_SETTINGS_FILE_NAME = "appsettings.json";
