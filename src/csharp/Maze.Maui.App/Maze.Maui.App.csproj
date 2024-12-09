@@ -96,11 +96,13 @@
 	  <ProjectReference Include="..\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj" />
 	</ItemGroup>
 
-	<Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
-		<Message Text="Started: Processing post-build events for framework: $(TargetFramework) (Windows)" Importance="high" />
-		<Exec Command="copy ..\..\rust\target\wasm32-unknown-unknown\release\maze_wasm.wasm $(OutDir)AppX" />
-		<Message Text="Finished: Post-build events for framework: $(TargetFramework) (Windows) (RuntimeIdentifier: $(RuntimeIdentifier))" Importance="high" />
-	</Target>
+  <!--- Make sure runtime identifiers are initialized if not set for the target framework -->
+  <PropertyGroup>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-android'">android-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-ios'">ios-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-maccatalyst'">maccatalyst-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">win10-x64</RuntimeIdentifier>
+  </PropertyGroup>
 
 	<Target Name="PostBuild" AfterTargets="Build" Condition="'$(TargetFramework)' == 'net8.0-android'">
 		<!--<Message Text="Started: Processing post-build events for framework: $(TargetFramework) (Android)" Importance="high" />
@@ -109,21 +111,28 @@
     <Exec command="adb shell chmod 666 /data/data/com.budgiedownunder.mazemauiapp/files/.__override__/maze_wasm.wasm" />
 		<Message Text="Finished: Processing post-build events for framework: $(TargetFramework) (Android)" Importance="high" />-->
 	</Target>
-
+ 
   <Target Name="DebugRuntimeIdentifier" AfterTargets="Build">
     <Message Importance="high" Text="RuntimeIdentifier: $(RuntimeIdentifier)" />
   </Target>
+
+  <Target Name="DebugNativeLibrary" BeforeTargets="Build">
+    <Message Importance="high" Text="Native Libraries: @(NativeLibrary)" />
+  </Target>  
 
   <Target Name="ValidateNativeLibrary" BeforeTargets="Build">
     <ItemGroup>
       <MissingNativeLibraries Include="@(NativeLibrary)" Condition="!Exists('%(Identity)')" />
     </ItemGroup>
+    <Message Importance="high" Text="Evaluated Native Libraries: @(NativeLibrary)" />
     <Error Text="Native library file not found: %(MissingNativeLibraries.Identity)" Condition="@(MissingNativeLibraries-&gt;Count()) &gt; 0" />
   </Target>
   
   <ItemGroup>
+    <!--<NativeLibrary Include="runtimes/android-x64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'android-x64'" />
+    <NativeLibrary Include="runtimes/ios-arm64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'ios-arm64'" />
+    <NativeLibrary Include="runtimes/maccatalyst-x64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'maccatalyst-x64'" />-->
     <NativeLibrary Include="runtimes/win-x64/native/wasmer.dll" Condition="'$(RuntimeIdentifier)' == 'win10-x64'" />
-    <!--<NativeLibrary Include="runtimes/android-x64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'android-x64'" />-->
   </ItemGroup>  
 
   <Target Name="CopyNativeLibrariesToOutput" AfterTargets="Build">
@@ -143,4 +152,8 @@
     <AndroidAsset Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <BuildInParallel>false</BuildInParallel>
+  </PropertyGroup>
+  
 </Project>
