@@ -316,7 +316,8 @@ namespace Maze.Maui.App.Views
 #elif OSX
         "libwasmer.dylib"; // For macOS
 #else
-                "__Internal"; // For iOS with static linking
+        //"__Internal"; // For iOS with static linking
+        "libwasmer.so";
 #endif
 
             // Wasmer function: Create a new engine
@@ -536,7 +537,7 @@ namespace Maze.Maui.App.Views
                 Debug.WriteLine("maze_wasm.wasm contents:");
                 Debug.WriteLine($"Length = {wasmBytes.Length}");  
                 await DisplayAlert("", "Read maze_wasm.wasm", "OK");
-#if WINDOWS
+//#if WINDOWS
                 engine = WasmerInterop.wasm_engine_new();
                 if (engine == IntPtr.Zero)
                 {
@@ -606,7 +607,7 @@ namespace Maze.Maui.App.Views
                 }
 
                 await DisplayAlert("", $"Successfully loaded WASM, initialised engine and compiled WASM - found {instanceExports.size} exports, {functionCount} functions, {asFunctionCount} as func count", "OK");
-#endif            
+//#endif            
             }
             catch (Exception ex) {
                 await DisplayAlert("Error", $"{ex.Message}", "OK");
