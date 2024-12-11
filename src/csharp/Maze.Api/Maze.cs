@@ -42,12 +42,12 @@ namespace Maze.Api
             /// <summary>
             /// Row associated with the point (zero-based)
             /// </summary>
-            /// <returns>Row index</returns>
+            /// <returns>Row index (zero-based)</returns>
             public UInt32 Row;
             /// <summary>
             /// Column associated with the point (zero-based)
             /// </summary>
-            /// <returns>Column index</returns>
+            /// <returns>Column index (zero-based)</returns>
             public UInt32 Column;
         }
         /// <summary>
