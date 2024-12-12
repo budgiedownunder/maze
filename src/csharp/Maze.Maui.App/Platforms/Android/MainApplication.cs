@@ -10,7 +10,7 @@ namespace Maze.Maui.App
         public MainApplication(IntPtr handle, JniHandleOwnership ownership)
             : base(handle, ownership)
         {
-            string? nativeLibraryDir = Android.App.Application.Context.ApplicationInfo.NativeLibraryDir;
+            string? nativeLibraryDir = Android.App.Application.Context.ApplicationInfo?.NativeLibraryDir;
             if(nativeLibraryDir != null)
             {
                 Console.WriteLine($"*********** => Native library directory: {nativeLibraryDir}");
