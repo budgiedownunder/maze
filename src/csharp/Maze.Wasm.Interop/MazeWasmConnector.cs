@@ -7,7 +7,7 @@ using static Maze.Wasm.Interop.MazeWasmInterop;
 
 namespace Maze.Wasm.Interop
 {
-    internal interface IMazeWasmConnector
+    internal interface IMazeWasmConnector : IDisposable
     {
         /// <summary>
         /// Creates a new, empty `MazeWasm`, or will throw an exception if the operation fails

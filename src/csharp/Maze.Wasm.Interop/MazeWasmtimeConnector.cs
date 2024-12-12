@@ -20,6 +20,7 @@
     /// </summary>
     class MazeWasmtimeConnector : IMazeWasmConnector
     {
+        private bool _disposed = false;
         private static Wasmtime.Memory? wasmMemory;
 
         // Wasmtime Store and Instance
@@ -72,6 +73,38 @@
 
             InitializeFunctions();
         }
+        /// <summary>
+        /// Handles object finalization (deletion)
+        /// </summary>
+        /// <returns>Nothing</returns>
+        ~MazeWasmtimeConnector()
+        {
+            Dispose(false);
+        }
+        /// <summary>
+        /// Handles object disposal, releasing managed and unmanaged resources and marking
+        /// the object as having been finalized
+        /// </summary>
+        /// <returns>Nothing</returns>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        /// <summary>
+        /// Handles object disposal
+        /// </summary>
+        /// <param name="disposing">Flag indicating whether the object should be fully disposed (ie. including managed
+        /// as well as unmanaged  resources)</param>
+        /// <returns>Nothing</returns>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                _disposed = true;
+            }
+        }
+
         private void InitializeFunctions()
         {
             newMazeWasm = ResolveFunction("new_maze_wasm");

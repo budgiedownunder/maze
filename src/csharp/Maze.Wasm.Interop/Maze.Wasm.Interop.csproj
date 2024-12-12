@@ -15,4 +15,46 @@
     <PackageReference Include="Wasmtime" Version="22.0.0" />
   </ItemGroup>
 
+  <!--- Make sure runtime identifiers are initialized if not set for the target framework -->
+  <PropertyGroup>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-android'">android-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-ios'">ios-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-maccatalyst'">maccatalyst-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">win10-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <Target Name="DebugRuntimeIdentifier" AfterTargets="Build">
+    <Message Importance="high" Text="RuntimeIdentifier: $(RuntimeIdentifier)" />
+  </Target>
+
+  <Target Name="DebugNativeLibrary" BeforeTargets="Build">
+    <Message Importance="high" Text="Native Libraries: @(NativeLibrary)" />
+  </Target>
+
+  <Target Name="ValidateNativeLibrary" BeforeTargets="Build">
+    <ItemGroup>
+      <MissingNativeLibraries Include="@(NativeLibrary)" Condition="!Exists('%(Identity)')" />
+    </ItemGroup>
+    <Message Importance="high" Text="Evaluated Native Libraries: @(NativeLibrary)" />
+    <Error Text="Native library file not found: %(MissingNativeLibraries.Identity)" Condition="@(MissingNativeLibraries-&gt;Count()) &gt; 0" />
+  </Target>
+
+  <ItemGroup>
+    <AndroidNativeLibrary Include="runtimes/android-x64/native/libwasmer.so" />
+    <!--<NativeLibrary Include="runtimes/android-x64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'android-x64'" />-->
+    <!--<NativeLibrary Include="runtimes/ios-arm64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'ios-arm64'" />
+    <NativeLibrary Include="runtimes/maccatalyst-x64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'maccatalyst-x64'" />-->
+    <NativeLibrary Include="runtimes/win-x64/native/wasmer.dll" Condition="'$(RuntimeIdentifier)' == 'win10-x64'" />
+  </ItemGroup>
+
+  <Target Name="PrintAppxPackageDir" AfterTargets="Build">
+    <Message Text="AppxPackageDir: $(AppxPackageDir)" Importance="High" />
+  </Target>
+
+  <Target Name="CopyNativeLibrariesToOutput" AfterTargets="Build">
+    <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)" />
+    <!--<Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(AppxPackageDir)"/>-->
+    <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)/AppX"  Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'"/>
+  </Target>
+
 </Project>

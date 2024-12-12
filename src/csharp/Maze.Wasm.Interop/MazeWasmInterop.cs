@@ -18,7 +18,7 @@
     /// Once finished with, a maze should be destroyed using <see cref="FreeMazeWasm(UInt32)">FreeMazeWasm()</see>
     /// to prevent memory leaks within Web Assembly.
     /// </summary>
-    public class MazeWasmInterop
+    public class MazeWasmInterop : IDisposable
     {
         /// <summary>
         /// Represents a type of WebAssembly interop connection technology
@@ -26,12 +26,17 @@
         public enum ConnectionType
         {
             /// <summary>
-            /// The [Wasmtime](https://docs.wasmtime.dev/) standalone runtime
+            /// The [Wasmtime](https://docs.wasmtime.dev/) WebAssembly runtime
             /// </summary>
-            Wasmtime = 1
+            Wasmtime = 1,
+            /// <summary>
+            /// The [Wasmer](https://wasmer.io/) WebAssembly runtime
+            /// </summary>
+            Wasmer = 2
         }
         // Singleton instance
         private static MazeWasmInterop? instance = null;
+        private bool _disposed = false;
 
         private IMazeWasmConnector connector;
 
@@ -111,6 +116,38 @@
             }
         }
         /// <summary>
+        /// Handles object finalization (deletion)
+        /// </summary>
+        /// <returns>Nothing</returns>
+        ~MazeWasmInterop()
+        {
+            Dispose(false);
+        }
+        /// <summary>
+        /// Handles object disposal, releasing managed and unmanaged resources and marking
+        /// the object as having been finalized
+        /// </summary>
+        /// <returns>Nothing</returns>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        /// <summary>
+        /// Handles object disposal
+        /// </summary>
+        /// <param name="disposing">Flag indicating whether the object should be fully disposed (ie. including managed
+        /// as well as unmanaged  resources)</param>
+        /// <returns>Nothing</returns>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                connector.Dispose();
+                _disposed = true;
+            }
+        }
+        /// <summary>
         /// Returns the path to the 'maze_wasm' Web Assembly
         /// </summary>
         /// <returns>Web Assembly path</returns>
@@ -154,12 +191,17 @@
         /// Returns the instance for the interop (creating if needed)
         /// </summary>
         /// <param name="connectionType">Type of WebAssembly connection technology to use</param>
+        /// <param name="createNew">Create a new instance even if a global one already exists</param>
+        /// 
         /// <returns>Interop instance</returns>
-        static public MazeWasmInterop GetInstance(ConnectionType connectionType= ConnectionType.Wasmtime)
+        static public MazeWasmInterop GetInstance(ConnectionType connectionType= ConnectionType.Wasmtime, bool createNew = false)
         {
-            if (instance == null)
+            if (instance == null || createNew)
             {
-                instance = new MazeWasmInterop(GetWasmPath(), connectionType);
+                MazeWasmInterop newInstance = new MazeWasmInterop(GetWasmPath(), connectionType);
+                if (instance != null)
+                    return newInstance;
+                instance = newInstance;
             }
             return instance;
         }

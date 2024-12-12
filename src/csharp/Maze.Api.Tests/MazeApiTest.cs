@@ -2,6 +2,7 @@
 {
     using Xunit;
     using global::Maze.Api;
+    using global::Maze.Wasm.Interop;
     using System;
 
     /// <summary>
@@ -9,6 +10,11 @@
     /// </summary>
     public class MazeApiTest
     {
+        public MazeApiTest()
+        {
+            MazeWasmInterop.Initialize(MazeWasmInterop.ConnectionType.Wasmtime);
+        }
+
         private void AssertRowCount(UInt32 actual, UInt32 expected)
         {
             Assert.True(actual == expected, $"Expected rowCount to be {expected} but got {actual}");

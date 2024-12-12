@@ -1,3 +1,5 @@
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
+
 namespace Maze.Wasm.Interop.Tests
 {
     using Xunit;
@@ -6,24 +8,25 @@ namespace Maze.Wasm.Interop.Tests
     using System;
 
     /// <summary>
-    ///  This class contains [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class
+    ///  This base class contains the [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class
     /// </summary>
-    public class MazeWasmInteropTest
+    public abstract class MazeWasmInteropTestBase
     {
-        MazeWasmInterop interop = MazeWasmInterop.GetInstance();
+        // Abstract or virtual method to retrieve the interop instance
+        protected abstract MazeWasmInterop GetInterop();
 
         private UInt32 CreateNewMazeWasm(UInt32 numRows, UInt32 numCols)
         {
-            UInt32 mazeWasmPtr = interop.NewMazeWasm();
+            UInt32 mazeWasmPtr = GetInterop().NewMazeWasm();
             if (numRows > 0 || numCols > 0)
             {
-                interop.MazeWasmResize(mazeWasmPtr, numRows, numCols);
+                GetInterop().MazeWasmResize(mazeWasmPtr, numRows, numCols);
             }
             return mazeWasmPtr;
         }
         private void FreeMazeWasm(UInt32 mazeWasmPtr)
         {
-            interop.FreeMazeWasm(mazeWasmPtr);
+            GetInterop().FreeMazeWasm(mazeWasmPtr);
         }
         private void AssertRowCount(UInt32 actual, UInt32 expected)
         {
@@ -52,6 +55,7 @@ namespace Maze.Wasm.Interop.Tests
         }
         private void AssertRangeCellType(UInt32 mazeWasmPtr, UInt32 fromRow, UInt32 fromCol, UInt32 toRow, UInt32 toCol, MazeWasmCellType expected, bool freeMazePtrOnFail)
         {
+            MazeWasmInterop interop = GetInterop();
             for (UInt32 row = fromRow; row <= toRow; row++)
             {
                 for (UInt32 col = fromCol; col <= toCol; col++)
@@ -76,7 +80,7 @@ namespace Maze.Wasm.Interop.Tests
             UInt32 targetRowCount = 10;
             UInt32 targetColCount = 5;
             UInt32 mazeWasmPtr = CreateNewMazeWasm(targetRowCount, targetColCount);
-            var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
+            var rowCount = GetInterop().MazeWasmGetRowCount(mazeWasmPtr);
             FreeMazeWasm(mazeWasmPtr);
             AssertRowCount(rowCount, targetRowCount);
         }
@@ -86,13 +90,14 @@ namespace Maze.Wasm.Interop.Tests
             UInt32 targetRowCount = 10;
             UInt32 targetColCount = 5;
             UInt32 mazeWasmPtr = CreateNewMazeWasm(targetRowCount, targetColCount);
-            var colCount = interop.MazeWasmGetColCount(mazeWasmPtr);
+            var colCount = GetInterop().MazeWasmGetColCount(mazeWasmPtr);
             FreeMazeWasm(mazeWasmPtr);
             AssertColCount(colCount, targetColCount);
         }
         [Fact]
         public void MazeWasmReset_ShouldSucceed()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(10, 5);
             interop.MazeWasmReset(mazeWasmPtr);
             var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
@@ -104,6 +109,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmResize_ChangesRowAndColumnCounts()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             UInt32 targetRowCount = 10;
             UInt32 targetColCount = 5;
@@ -118,6 +124,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmInsertRows_SucceedsForValidStartRow()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             interop.MazeWasmInsertRows(mazeWasmPtr, 0, 2);
             var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
@@ -127,6 +134,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmInsertRows_FailsForInvalidStartRow()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -138,6 +146,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmDeleteRows_FailsForEmptyMaze()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -149,6 +158,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmDeleteRows_FailsForInvalidStartRow()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(1, 1);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -160,6 +170,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmDeleteRows_FailsIfCountTooLarge()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(2, 1);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -171,6 +182,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmDeleteRows_SucceedsForValidStartRow()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(3, 1);
             interop.MazeWasmDeleteRows(mazeWasmPtr, 0, 1);
             var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
@@ -180,6 +192,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmInsertCols_FailsForEmptyMaze()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -191,6 +204,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmInsertCols_FailsForInvalidStartCol()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(1, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -202,6 +216,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmInsertCols_SucceedsForValidStartCol()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(1, 0);
             interop.MazeWasmInsertCols(mazeWasmPtr, 0, 3);
             var colCount = interop.MazeWasmGetColCount(mazeWasmPtr);
@@ -211,6 +226,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmDeleteCols_FailsForEmptyMaze()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -222,6 +238,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmDeleteCols_FailsForInvalidStartCol()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(1, 1);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -233,6 +250,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmDeleteCols_FailsIfCountTooLarge()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(2, 2);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -244,6 +262,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmDeleteCols_SucceedsForValidStartCol()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(1, 3);
             interop.MazeWasmDeleteCols(mazeWasmPtr, 0, 1);
             var colCount = interop.MazeWasmGetColCount(mazeWasmPtr);
@@ -253,6 +272,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetCellType_FailsForEmptyMaze()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             MazeWasmCellType cellType = MazeWasmCellType.Empty;
             var exception = Assert.ThrowsAny<Exception>(() =>
@@ -265,6 +285,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetCellType_FailsForInvalidRow()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(10, 5);
             MazeWasmCellType cellType = MazeWasmCellType.Empty;
             var exception = Assert.ThrowsAny<Exception>(() =>
@@ -277,6 +298,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetCellType_FailsForInvalidCol()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(10, 5);
             MazeWasmCellType cellType = MazeWasmCellType.Empty;
             var exception = Assert.ThrowsAny<Exception>(() =>
@@ -289,6 +311,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetCellType_SucceedsForValidCellLocation()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(1, 1);
             MazeWasmCellType cellType = interop.MazeWasmGetCellType(mazeWasmPtr, 0, 0);
             FreeMazeWasm(mazeWasmPtr);
@@ -297,6 +320,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetStartCell_FailsForEmptyMaze()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             MazeWasmPoint? start;
             var exception = Assert.ThrowsAny<Exception>(() =>
@@ -309,6 +333,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetStartCell_FailsIfNotDefined()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(5, 5);
             MazeWasmPoint start;
             var exception = Assert.ThrowsAny<Exception>(() =>
@@ -321,6 +346,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetStartCell_SucceedsIfDefined()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(5, 5);
             MazeWasmPoint start = new MazeWasmPoint();
             interop.MazeWasmSetStartCell(mazeWasmPtr, 1, 2);
@@ -331,6 +357,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetFinishCell_FailsForEmptyMaze()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             MazeWasmPoint? finish;
             var exception = Assert.ThrowsAny<Exception>(() =>
@@ -343,6 +370,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetFinishCell_FailsIfNotDefined()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(5, 5);
             MazeWasmPoint finish;
             var exception = Assert.ThrowsAny<Exception>(() =>
@@ -355,6 +383,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetFinishCell_SucceedsIfDefined()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(5, 5);
             MazeWasmPoint finish = new MazeWasmPoint();
             interop.MazeWasmSetFinishCell(mazeWasmPtr, 3, 4);
@@ -365,6 +394,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmSetWallCells_FailsForEmptyMaze()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -376,6 +406,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmSetWallCells_FailsForInvalidFromLocation()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(5, 10);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -387,6 +418,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmSetWallCells_FailsForInvalidToLocation()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(5, 10);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -398,6 +430,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmSetWallCells_SucceedsForValidCellRange()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(5, 10);
             interop.MazeWasmSetWallCells(mazeWasmPtr, 0, 0, 3, 6);
             AssertRangeCellType(mazeWasmPtr, 0, 0, 3, 6, MazeWasmCellType.Wall, true);
@@ -406,6 +439,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmToJson_ShouldSucceed()
         {
+            MazeWasmInterop interop = GetInterop();
             var expected = @"{""id"":"""",""name"":"""",""definition"":{""grid"":[]}}";
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             var json = interop.MazeWasmToJson(mazeWasmPtr);
@@ -415,6 +449,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmFromJson_ShouldFail()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
@@ -443,6 +478,7 @@ namespace Maze.Wasm.Interop.Tests
                 }
             }
             ";
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             interop.MazeWasmFromJson(mazeWasmPtr, jsonStr);
             var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
@@ -466,6 +502,7 @@ namespace Maze.Wasm.Interop.Tests
                 }
             }
             ";
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             interop.MazeWasmFromJson(mazeWasmPtr, jsonStr);
             var exception = Assert.ThrowsAny<Exception>(() =>
@@ -490,6 +527,7 @@ namespace Maze.Wasm.Interop.Tests
                 }
             }
             ";
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             interop.MazeWasmFromJson(mazeWasmPtr, jsonStr);
             var exception = Assert.ThrowsAny<Exception>(() =>
@@ -519,6 +557,7 @@ namespace Maze.Wasm.Interop.Tests
                 }
             }
             ";
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             interop.MazeWasmFromJson(mazeWasmPtr, jsonStr);
             UInt32 solution = interop.MazeWasmSolve(mazeWasmPtr);
@@ -545,6 +584,7 @@ namespace Maze.Wasm.Interop.Tests
                     }
                 }
                 ";
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             interop.MazeWasmFromJson(mazeWasmPtr, jsonStr);
             UInt32 solution = interop.MazeWasmSolve(mazeWasmPtr);
@@ -557,6 +597,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetSizedMemoryUsed_ShouldSucceedAndBeZero()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             var bytesUsed = interop.GetSizedMemoryUsed();
             FreeMazeWasm(mazeWasmPtr);
@@ -566,6 +607,7 @@ namespace Maze.Wasm.Interop.Tests
         [Fact]
         public void MazeWasmGetNumObjectsAllocated_ShouldSucceedAndBeNonZero()
         {
+            MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(0, 0);
             var numObjects = interop.GetNumObjectsAllocated();
             FreeMazeWasm(mazeWasmPtr);
@@ -573,4 +615,25 @@ namespace Maze.Wasm.Interop.Tests
             Assert.True(numObjects == numObjectsExpected, $"Expected {numObjectsExpected} but got '{numObjects}'");
         }
     }
+    /// <summary>
+    ///  This class contains the `Wasmtime` <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class
+    /// </summary>
+    public class MazeWasmInteropWasmtimeTest : MazeWasmInteropTestBase
+    {
+        private readonly MazeWasmInterop _interop;
+
+        public MazeWasmInteropWasmtimeTest()
+        {
+            _interop = MazeWasmInterop.GetInstance(ConnectionType.Wasmtime, true);
+        }
+        /// <summary>
+        /// Returns the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> instance to be used for the tests
+        /// </summary>
+        /// <returns> <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> instance</returns>
+        protected override MazeWasmInterop GetInterop()
+        {
+            return _interop;
+        }
+    }
+
 }
