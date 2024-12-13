@@ -21,15 +21,15 @@
     class MazeWasmtimeConnector : IMazeWasmConnector
     {
         private bool _disposed = false;
-        private static Wasmtime.Memory? wasmMemory;
+        private Wasmtime.Memory? wasmMemory;
 
         // Wasmtime Store and Instance
-        private static string? instanceWasmPath;
-        private static Store? store;
-        private static Instance? instanceWasm;
+        private string? instanceWasmPath;
+        private Store? store;
+        private Instance? instanceWasm;
 
         // WebAssembly functions
-        private static Function? newMazeWasm;
+        private Function? newMazeWasm;
         private Function? freeMazeWasm;
         private Function? mazeWasmIsEmpty;
         private Function? mazeWasmResize;

@@ -106,7 +106,7 @@
         // Private constructor (singleton pattern)
         private MazeWasmInterop(string wasmPath, ConnectionType connectionType=ConnectionType.Wasmtime)
         {
-            switch(connectionType)
+            switch (connectionType)
             {
                 case ConnectionType.Wasmtime:
                     connector = new MazeWasmtimeConnector(wasmPath);
@@ -209,14 +209,26 @@
         /// Initializes the interop instance if needed
         /// </summary>
         /// <param name="connectionType">Type of WebAssembly connection technology to use</param>
+        /// <param name="createNew">Create a new instance, even if a global one already exists (overwriting existing)</param>
         /// <returns>Interop instance</returns>
-        static public void Initialize(ConnectionType connectionType = ConnectionType.Wasmtime)
+        static public void Initialize(ConnectionType connectionType = ConnectionType.Wasmtime, bool createNew = false)
         {
-            if (instance == null)
+            if (instance == null || createNew) 
             {
                 instance = new MazeWasmInterop(GetWasmPath(), connectionType);
             }
         }
+        /// <summary>
+        /// Disconnects the WebAssembly connector
+        /// </summary>
+        static public void Disconnect()
+        {
+            if (instance == null) 
+                return;
+            instance.Dispose();
+            instance = null;
+        }
+
         /// <summary>
         /// Creates a new, empty `MazeWasm`, or will throw an exception if the operation fails
         /// </summary>
