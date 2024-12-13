@@ -1,8 +1,8 @@
+using Xunit;
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace Maze.Wasm.Interop.Tests
 {
-    using Xunit;
     using Maze.Wasm.Interop;
     using static Maze.Wasm.Interop.MazeWasmInterop;
     using System;
@@ -12,7 +12,11 @@ namespace Maze.Wasm.Interop.Tests
     /// </summary>
     public abstract class MazeWasmInteropTestBase
     {
-        // Abstract or virtual method to retrieve the interop instance
+        /// <summary>
+        /// Returns the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> instance to be used for the tests
+        /// </summary>
+        /// <returns>
+        /// <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> instance</returns>
         protected abstract MazeWasmInterop GetInterop();
 
         private UInt32 CreateNewMazeWasm(UInt32 numRows, UInt32 numCols)
@@ -616,7 +620,7 @@ namespace Maze.Wasm.Interop.Tests
         }
     }
     /// <summary>
-    ///  This class contains the `Wasmtime` <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class
+    ///  This class contains the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class
     /// </summary>
     public class MazeWasmInteropWasmtimeTest : MazeWasmInteropTestBase
     {

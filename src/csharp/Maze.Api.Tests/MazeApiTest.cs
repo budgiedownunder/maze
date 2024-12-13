@@ -1,20 +1,21 @@
-﻿namespace Maze.Api.Tests
+﻿using Xunit;
+
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
+namespace Maze.Api.Tests
 {
-    using Xunit;
     using global::Maze.Api;
     using global::Maze.Wasm.Interop;
+    using Microsoft.VisualStudio.TestPlatform.Utilities;
     using System;
+    using System.Diagnostics;
+    using System.Diagnostics.Metrics;
+    using Xunit.Abstractions;
 
     /// <summary>
-    ///  This class contains [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) .NET class library
+    ///  This base class contains the [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) .NET class library
     /// </summary>
-    public class MazeApiTest
+    public abstract class MazeApiTestBase()
     {
-        public MazeApiTest()
-        {
-            MazeWasmInterop.Initialize(MazeWasmInterop.ConnectionType.Wasmtime);
-        }
-
         private void AssertRowCount(UInt32 actual, UInt32 expected)
         {
             Assert.True(actual == expected, $"Expected rowCount to be {expected} but got {actual}");
@@ -566,4 +567,48 @@
             }
         }
     }
+    /// <summary>
+    ///  This class defines the Wasmtime text fixture used by the <see cref="Maze.Api.Tests.MazeApiWasmtimeTest"/> class
+    /// </summary>
+    public class WasmtimeTestFixture
+    {
+        public WasmtimeTestFixture()
+        {
+            MazeWasmInterop.Disconnect();
+            MazeWasmInterop.Initialize(MazeWasmInterop.ConnectionType.Wasmtime, true);
+        }
+    }
+    /// <summary>
+    ///  This class is used to apply `[CollectionDefinition]` and `ICollectionFixture` to the <see cref="Maze.Api.Tests.MazeApiWasmtimeTest"/> class
+    /// </summary>
+    [CollectionDefinition("WasmtimeTestFixtureCollection")]
+    public class WasmtimeTestFixtureCollection : ICollectionFixture<WasmtimeTestFixture>
+    {
+        // This class is intentionally left empty
+        // It is used to apply [CollectionDefinition] and ICollectionFixture
+    }
+    /// <summary>
+    ///  This class contains the <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Api"/> class
+    /// </summary>
+    [Collection("WasmtimeTestFixtureCollection")]
+    public class MazeApiWasmtimeTest: MazeApiTestBase
+    {
+        private readonly WasmtimeTestFixture _fixture;
+        public MazeApiWasmtimeTest(WasmtimeTestFixture fixture)
+        {
+            _fixture = fixture;
+        }
+    }
+    /// <summary>
+    ///  This class contains the <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Api"/> class
+    /// </summary>
+    // [Collection("WasmtimeTestFixtureCollection")]
+    // public class MazeApiWasmtimeTest2 : MazeApiTestBase
+    // {
+    //     private readonly WasmtimeTestFixture _fixture;
+    //     public MazeApiWasmtimeTest2(WasmtimeTestFixture fixture)
+    //     {
+    //         _fixture = fixture;
+    //     }
+    // }
 }
