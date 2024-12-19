@@ -104,16 +104,21 @@
             Wall = 3,
         }
 
-        // Private constructor (singleton pattern)
-        private MazeWasmInterop(string wasmPath, ConnectionType connectionType=ConnectionType.Wasmtime)
+        /// <summary>
+        /// Private constructor (singleton pattern)
+        /// </summary>
+        /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
+        /// <param name="connectionType">Type of WebAssembly connection technology to use</param>
+        /// <param name="wasmBytes">WebAssembly bytes(</param>
+        private MazeWasmInterop(string wasmPathOrName, ConnectionType connectionType=ConnectionType.Wasmtime, byte[]? wasmBytes = null)
         {
             switch (connectionType)
             {
                 case ConnectionType.Wasmtime:
-                    connector = new MazeWasmtimeConnector(wasmPath);
+                    connector = new MazeWasmtimeConnector(wasmPathOrName, wasmBytes);
                     break;
                 case ConnectionType.Wasmer:
-                    connector = new MazeWasmerConnector(wasmPath);
+                    connector = new MazeWasmerConnector(wasmPathOrName, wasmBytes);
                     break;
                 default:
                     throw new InvalidOperationException($"Unsupported connection type: {connectionType}");
@@ -153,7 +158,7 @@
             }
         }
         /// <summary>
-        /// Returns the path to the 'maze_wasm' Web Assembly
+        /// Returns the path to the `maze_wasm` Web Assembly
         /// </summary>
         /// <returns>Web Assembly path</returns>
         static public string GetWasmPath()
@@ -170,7 +175,6 @@
                 throw new InvalidOperationException("Could not determine execution directory");
             }
             string appsettingsFile = Path.Combine(executionPath, APP_SETTINGS_FILE_NAME);
-           // Console.WriteLine($"appsSettingsFile:{appsettingsFile}");
             if (File.Exists(appsettingsFile))
             {
                 var configuration = new ConfigurationBuilder()
@@ -180,12 +184,10 @@
                 .Build();
 
                 string? path = configuration["MAZE_WASM_PATH"];
-            //    Console.WriteLine($"appsSettingsFile:MAZE_WASM_PATH = {path}");
                 if (!string.IsNullOrEmpty(path) && File.Exists(path))
                 {
                     return path;
                 }
-            //    Console.WriteLine($"appsSettingsFile:MAZE_WASM_PATH = {path} NOT FOUND");
             }
 
             // Default to execution path
@@ -194,7 +196,6 @@
             {
                 throw new InvalidOperationException($"Web assembly file '{WASM_FILE_NAME}' not found at path ${wasmExecutionFile}");
             }
-         //   Console.WriteLine($"Returning:{wasmExecutionFile}");
 
             return wasmExecutionFile;
         }
@@ -203,13 +204,14 @@
         /// </summary>
         /// <param name="connectionType">Type of WebAssembly connection technology to use</param>
         /// <param name="createNew">Create a new instance even if a global one already exists</param>
-        /// 
+        /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then at attempt is made to load the WebAssembly from the default location.(</param>
         /// <returns>Interop instance</returns>
-        static public MazeWasmInterop GetInstance(ConnectionType connectionType= ConnectionType.Wasmtime, bool createNew = false)
+        static public MazeWasmInterop GetInstance(ConnectionType connectionType= ConnectionType.Wasmtime, 
+            bool createNew = false, byte[]? wasmBytes = null)
         {
             if (instance == null || createNew)
             {
-                MazeWasmInterop newInstance = new MazeWasmInterop(GetWasmPath(), connectionType);
+                MazeWasmInterop newInstance = new MazeWasmInterop(GetWasmPath(), connectionType, wasmBytes);
                 if (instance != null)
                     return newInstance;
                 instance = newInstance;
@@ -221,12 +223,14 @@
         /// </summary>
         /// <param name="connectionType">Type of WebAssembly connection technology to use</param>
         /// <param name="createNew">Create a new instance, even if a global one already exists (overwriting existing)</param>
+        /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then at attempt is made to load the WebAssembly from the default location.(</param>
         /// <returns>Interop instance</returns>
-        static public void Initialize(ConnectionType connectionType = ConnectionType.Wasmtime, bool createNew = false)
+        static public void Initialize(ConnectionType connectionType = ConnectionType.Wasmtime, 
+            bool createNew = false, byte[]? wasmBytes = null)
         {
             if (instance == null || createNew) 
             {
-                instance = new MazeWasmInterop(GetWasmPath(), connectionType);
+                instance = new MazeWasmInterop(GetWasmPath(), connectionType, wasmBytes);
             }
         }
         /// <summary>

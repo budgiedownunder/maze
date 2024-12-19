@@ -699,7 +699,7 @@
         bool _disposed = false;
 
         // Wasmtime Store and Instance
-        string instanceWasmPath;
+        string wasmPathOrName;
 
         IntPtr _engine = IntPtr.Zero;
         IntPtr _store = IntPtr.Zero;
@@ -718,11 +718,14 @@
         /// <summary>
         /// Constructor
         /// </summary>
-        /// <param name="wasmPath">WebAssembly path</param>
-        public MazeWasmerConnector(string wasmPath)
+        /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
+        /// <param name="wasmBytes">WebAssembly bytes(</param>
+        public MazeWasmerConnector(string wasmPathOrName, byte[]? wasmBytes = null)
         {
-            instanceWasmPath = wasmPath;
-            Initialize();
+            if (wasmPathOrName == null)
+                throw new Exception("WebAssembly path or name is not defined");
+            this.wasmPathOrName = wasmPathOrName;
+            Initialize(wasmBytes);
         }
         /// <summary>
         /// Handles object finalization (deletion)
@@ -777,17 +780,21 @@
         /// <summary>
         /// Initializes the object
         /// </summary>
+        /// <param name="wasmBytes">WebAssembly bytes. If this is `null`, then the WebAssembly will be loaded from the path
+        /// defined by `wasmPathOrName`.(</param>
         /// <returns>Nothing</returns>
-        private void Initialize()
+        private void Initialize(byte[]? wasmBytes)
         {
-            InitializeModule();
+            InitializeModule(wasmBytes);
             InitializePointers();
         }
         /// <summary>
         /// Initializes the Wasmer engine and loads the target WebAssembly into a module
         /// </summary>
+        /// <param name="wasmBytes">WebAssembly bytes. If this is `null`, then the WebAssembly will be loaded from the path
+        /// defined by `wasmPathOrName`.(</param>
         /// <returns>Nothing</returns>
-        private void InitializeModule()
+        private void InitializeModule(byte[]? wasmBytes)
         {
             _engine = WasmerInterop.wasm_engine_new();
             if (_engine == IntPtr.Zero)
@@ -800,7 +807,9 @@
                 throw new Exception("Failed to create Wasm store.");
             }
 
-            byte[] wasmBytes = File.ReadAllBytes(instanceWasmPath);
+            if(wasmBytes == null)
+                wasmBytes = File.ReadAllBytes(wasmPathOrName);
+
             _wasmVec = new WasmerInterop.wasm_byte_vec_t();
 
             _handle = GCHandle.Alloc(wasmBytes, GCHandleType.Pinned);
@@ -937,7 +946,7 @@
                 ref IFunction? function = ref kvp.Value();
                 if (function == null)
                 {
-                    throw new Exception($"Failed to load the WebAssembly function: {functionName} in {instanceWasmPath}.");
+                    throw new Exception($"Failed to load the WebAssembly function: {functionName} in {wasmPathOrName}.");
                 }
             }
         }
@@ -949,7 +958,7 @@
         private void VerifyMemoryPtrs()
         {
             if (memory == null)
-                throw new Exception($"Failed to load the WebAssembly memory from {instanceWasmPath}.");
+                throw new Exception($"Failed to load the WebAssembly memory from {wasmPathOrName}.");
         }
     }
 }

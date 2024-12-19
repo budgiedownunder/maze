@@ -177,18 +177,21 @@
         private bool _disposed = false;
 
         // Wasmtime Store and Instance
-        private string instanceWasmPath = null!;
+        private string wasmPathOrName = null!;
         private Store store = null!;
         private Instance instanceWasm= null!;
 
         /// <summary>
         /// Constructor
         /// </summary>
-        /// <param name="wasmPath">WebAssembly path</param>
-        public MazeWasmtimeConnector(string wasmPath)
+        /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
+        /// <param name="wasmBytes">WebAssembly bytes(</param>
+        public MazeWasmtimeConnector(string wasmPathOrName, byte[]? wasmBytes = null)
         {
-            instanceWasmPath = wasmPath;
-            Initialize();
+            if (wasmPathOrName == null)
+                throw new Exception("WebAssembly path or name is not defined");
+            this.wasmPathOrName = wasmPathOrName;
+            Initialize(wasmBytes);
         }
         /// <summary>
         /// Handles object finalization (deletion)
@@ -225,23 +228,24 @@
         /// Initializes the object
         /// </summary>
         /// <returns>Nothing</returns>
-        private void Initialize()
+        private void Initialize(byte[]? wasmBytes)
         {
-            InitializeModule();
+            InitializeModule(wasmBytes);
             InitializeMemory();
             InitializeFunctions();
         }
         /// <summary>
         /// Initializes the WebAssembly module
         /// </summary>
+        /// <param name="wasmBytes">WebAssembly bytes. If this is `null`, then the WebAssembly will be loaded from the path
+        /// defined by `wasmPathOrName`.(</param>
         /// <returns>Nothing</returns>
-        private void InitializeModule()
+        private void InitializeModule(byte[]? wasmBytes)
         {
-            if(instanceWasmPath == null)
-                throw new Exception("WebAssembly path is not defined");
-
             var engine = new Engine();
-            var module = Wasmtime.Module.FromFile(engine, instanceWasmPath);
+            var module = wasmBytes != null 
+                ? Wasmtime.Module.FromBytes(engine, "maze_wasm", wasmBytes)
+                : Wasmtime.Module.FromFile(engine, wasmPathOrName);
             using var linker = new Linker(engine);
             store = new Store(engine);
 
@@ -288,11 +292,9 @@
             mazeWasmToJson = ResolveFunction("maze_wasm_to_json");
             mazeWasmSolve = ResolveFunction("maze_wasm_solve");
             mazeWasmSolutionGetPathPoints = ResolveFunction("maze_wasm_solution_get_path_points");
-
             freeMazeWasmResult = ResolveFunction("free_maze_wasm_result");
             freeMazeWasmSolution = ResolveFunction("free_maze_wasm_solution");
             freeMazeWasmError = ResolveFunction("free_maze_wasm_error");
-
             allocateSizedMemory = ResolveFunction("allocate_sized_memory");
             freeSizedMemory = ResolveFunction("free_sized_memory");
             getSizedMemoryUsed = ResolveFunction("get_sized_memory_used");
@@ -307,7 +309,7 @@
             Wasmtime.Function? func = instanceWasm?.GetFunction(functionName);
             if (func == null)
             {
-                throw new Exception($"Failed to load the WebAssembly function: {functionName} from {instanceWasmPath}.");
+                throw new Exception($"Failed to load the WebAssembly function: {functionName} from {wasmPathOrName}.");
             }
             return new MazeWasmtimeFunction(func);
         }

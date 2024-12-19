@@ -767,11 +767,12 @@ namespace Maze.Wasm.Interop.Tests
         }
     }
     /// <summary>
-    ///  This class contains the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class
+    ///  This class contains the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit 
+    ///  tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class, where the interop is initialized using the default WebAssembly file loader mechanism.
     /// </summary>
     public class MazeWasmInteropWasmtimeTest : MazeWasmInteropTestBase
     {
-        private readonly MazeWasmInterop _interop;
+        private readonly MazeWasmInterop _interop = null!;
 
         public MazeWasmInteropWasmtimeTest()
         {
@@ -787,7 +788,30 @@ namespace Maze.Wasm.Interop.Tests
         }
     }
     /// <summary>
-    ///  This class contains the [Wasmer](https://wasmer.io/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class
+    ///  This class contains the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit 
+    ///  tests for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class, where the interop is initialized using WebAssembly bytes passed to it in the constructor.
+    /// </summary>
+    public class MazeWasmInteropWasmtimeTestFromBytes : MazeWasmInteropTestBase
+    {
+        private readonly MazeWasmInterop _interop;
+
+        public MazeWasmInteropWasmtimeTestFromBytes()
+        {
+            byte[] wasmBytes = System.IO.File.ReadAllBytes(MazeWasmInterop.GetWasmPath());
+            _interop = MazeWasmInterop.GetInstance(ConnectionType.Wasmtime, true, wasmBytes);
+        }
+        /// <summary>
+        /// Returns the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> instance to be used for the tests
+        /// </summary>
+        /// <returns> <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> instance</returns>
+        protected override MazeWasmInterop GetInterop()
+        {
+            return _interop;
+        }
+    }
+    /// <summary>
+    ///  This class contains the [Wasmer](https://wasmer.io/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests 
+    ///  for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class, where the interop is initialized using the default WebAssembly file loader mechanism.
     /// </summary>
     public class MazeWasmInteropWasmerTest : MazeWasmInteropTestBase
     {
@@ -796,6 +820,28 @@ namespace Maze.Wasm.Interop.Tests
         public MazeWasmInteropWasmerTest()
         {
             _interop = MazeWasmInterop.GetInstance(ConnectionType.Wasmer, true);
+        }
+        /// <summary>
+        /// Returns the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> instance to be used for the tests
+        /// </summary>
+        /// <returns> <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> instance</returns>
+        protected override MazeWasmInterop GetInterop()
+        {
+            return _interop;
+        }
+    }
+    /// <summary>
+    ///  This class contains the [Wasmer](https://wasmer.io/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests 
+    ///  for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class, where the interop is initialized using WebAssembly bytes passed to it in the constructor.
+    /// </summary>
+    public class MazeWasmInteropWasmerTestFromBytes : MazeWasmInteropTestBase
+    {
+        private readonly MazeWasmInterop _interop;
+
+        public MazeWasmInteropWasmerTestFromBytes()
+        {
+            byte[] wasmBytes = System.IO.File.ReadAllBytes(MazeWasmInterop.GetWasmPath());
+            _interop = MazeWasmInterop.GetInstance(ConnectionType.Wasmer, true, wasmBytes);
         }
         /// <summary>
         /// Returns the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> instance to be used for the tests
