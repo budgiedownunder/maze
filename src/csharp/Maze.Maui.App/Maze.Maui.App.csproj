@@ -96,7 +96,6 @@
 	  <ProjectReference Include="..\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj" />
 	</ItemGroup>
 
-  <!--- Make sure runtime identifiers are initialized if not set for the target framework -->
   <PropertyGroup>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-android'">android-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-ios'">ios-arm64</RuntimeIdentifier>

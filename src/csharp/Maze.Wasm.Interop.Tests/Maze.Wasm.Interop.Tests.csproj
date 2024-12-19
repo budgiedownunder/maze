@@ -49,24 +49,11 @@
   <!--- Make sure runtime identifiers are initialized if not set for the target framework -->
   <PropertyGroup>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0'">win-x64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-android'">android-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-android'">android-x64</RuntimeIdentifier>
     <!--<RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-ios'">ios-arm64</RuntimeIdentifier>-->
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-maccatalyst'">osx-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">win-x64</RuntimeIdentifier>
   </PropertyGroup>
-
-  <!--<PropertyGroup Condition="'$(RuntimeIdentifier)' == 'win-x64'">
-    <PlatformTarget>x64</PlatformTarget>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'android-arm64'">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    --><!-- Runtime determines architecture --><!--
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64'">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-  </PropertyGroup>-->
 
   <ItemGroup>
     <None Update="appsettings.json">
