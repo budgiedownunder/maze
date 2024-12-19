@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static Maze.Wasm.Interop.MazeWasmInterop;
+using static Maze.Wasm.Interop.WasmerInterop;
 
 namespace Maze.Wasm.Interop
 {
@@ -181,6 +182,20 @@ namespace Maze.Wasm.Interop
         /// <param name="solutionPtr">Pointer to solution</param>
         /// <returns>Nothing</returns>
         public void FreeMazeWasmSolution(UInt32 solutionPtr);
+        /// <summary>
+        /// Allocates a sized memory block of a given size. A sized memory block is a block of 
+        /// memory of (`size` + 4) bytes, where the first 4 bytes contain the size of the block (u32)
+        /// and then the next `size` bytes is reserved for data use.
+        /// </summary>
+        /// <param name="size">Number of bytes to allocate</param>
+        /// <returns>Pointer to memory</returns>
+        public UInt32 AllocateSizedMemory(UInt32 size);
+        /// <summary>
+        /// Frees the sized memory associated with a given pointer
+        /// </summary>
+        /// <param name="ptr">Pointer to memory</param>
+        /// <returns>Nothing</returns>
+        public void FreeSizedMemory(UInt32 ptr);
         /// <summary>
         /// Gets the amount of sized memory currenty allocated
         /// </summary>

@@ -5,6 +5,7 @@
     using Microsoft.Extensions.Configuration;
     using System.Text;
     using Wasmtime;
+    using System.IO;
 
     /// <summary>
     ///  This class provides C# interop to the `maze_wasm` web assembly, insulating the
@@ -111,6 +112,9 @@
                 case ConnectionType.Wasmtime:
                     connector = new MazeWasmtimeConnector(wasmPath);
                     break;
+                case ConnectionType.Wasmer:
+                    connector = new MazeWasmerConnector(wasmPath);
+                    break;
                 default:
                     throw new InvalidOperationException($"Unsupported connection type: {connectionType}");
             }
@@ -143,7 +147,8 @@
         {
             if (!_disposed)
             {
-                connector.Dispose();
+                if(connector != null)
+                    connector.Dispose();
                 _disposed = true;
             }
         }
@@ -153,6 +158,8 @@
         /// <returns>Web Assembly path</returns>
         static public string GetWasmPath()
         {
+           // Console.WriteLine("Current Directory: " + Environment.CurrentDirectory);
+
             const string WASM_FILE_NAME = "maze_wasm.wasm";
             const string APP_SETTINGS_FILE_NAME = "appsettings.json";
 
@@ -163,6 +170,7 @@
                 throw new InvalidOperationException("Could not determine execution directory");
             }
             string appsettingsFile = Path.Combine(executionPath, APP_SETTINGS_FILE_NAME);
+           // Console.WriteLine($"appsSettingsFile:{appsettingsFile}");
             if (File.Exists(appsettingsFile))
             {
                 var configuration = new ConfigurationBuilder()
@@ -172,10 +180,12 @@
                 .Build();
 
                 string? path = configuration["MAZE_WASM_PATH"];
+            //    Console.WriteLine($"appsSettingsFile:MAZE_WASM_PATH = {path}");
                 if (!string.IsNullOrEmpty(path) && File.Exists(path))
                 {
                     return path;
                 }
+            //    Console.WriteLine($"appsSettingsFile:MAZE_WASM_PATH = {path} NOT FOUND");
             }
 
             // Default to execution path
@@ -184,6 +194,7 @@
             {
                 throw new InvalidOperationException($"Web assembly file '{WASM_FILE_NAME}' not found at path ${wasmExecutionFile}");
             }
+         //   Console.WriteLine($"Returning:{wasmExecutionFile}");
 
             return wasmExecutionFile;
         }
@@ -469,6 +480,26 @@
         public void FreeMazeWasmSolution(UInt32 solutionPtr)
         {
             connector.FreeMazeWasmSolution(solutionPtr);
+        }
+        /// <summary>
+        /// Allocates a sized memory block of a given size. A sized memory block is a block of 
+        /// memory of (`size` + 4) bytes, where the first 4 bytes contain the size of the block (u32)
+        /// and then the next `size` bytes is reserved for data use.
+        /// </summary>
+        /// <param name="size">Number of bytes to allocate</param>
+        /// <returns>Pointer to memory</returns>
+        public UInt32 AllocateSizedMemory(UInt32 size)
+        {
+            return connector.AllocateSizedMemory(size);
+        }
+        /// <summary>
+        /// Frees the sized memory associated with a given pointer
+        /// </summary>
+        /// <param name="ptr">Pointer to memory</param>
+        /// <returns>Nothing</returns>
+        public void FreeSizedMemory(UInt32 ptr)
+        {
+            connector.FreeSizedMemory(ptr);
         }
         /// <summary>
         /// Gets the amount of sized memory currenty allocated

@@ -5,73 +5,190 @@
     using Microsoft.Extensions.Configuration;
     using System.Text;
     using Wasmtime;
+    using System.Runtime.CompilerServices;
 
     /// <summary>
-    ///  This class provides C# connector to the `maze_wasm` web assembly via `Wasmtime`, insulating the
+    /// Provides a wrapper to [Wasmtime](https://docs.wasmtime.dev/) WebAssembly memory
+    /// </summary>
+    internal class MazeWasmtimeMemory : IMemory
+    {
+        private Wasmtime.Memory _memory = null!;
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="memory">WebAssembly memory</param>
+        internal MazeWasmtimeMemory(Wasmtime.Memory memory)
+        {
+            if (memory == null)
+            {
+                throw new Exception("Null wasmMemory supplied to MazeWasmerMemory constructor");
+            }
+            _memory = memory;
+        }
+        /// <summary>
+        /// Reads an unsigned integer from unmanaged memory
+        /// </summary>
+        /// <param name="ptrOffset">Memory pointer offset to value</param>
+        /// <returns>Value</returns>
+        public UInt32 ReadUInt32(UInt32 ptrOffset)
+        {
+            return _memory.Read<UInt32>(ptrOffset);
+        }
+        /// <summary>
+        /// Writes an array of bytes to a give target unmanaged memory offset,
+        /// which is assumed to have sufficient space
+        /// </summary>
+        /// <param name="ptrTargetOffset">Target memory pointer offset to write to</param>
+        /// <param name="bytes">Byte array</param>
+        /// <returns>Value</returns>
+        public void WriteBytes(UInt32 ptrTargetOffset, byte[] bytes)
+        {
+            Span<byte> memory = _memory.GetSpan((int)ptrTargetOffset, bytes.Length);
+            bytes.CopyTo(memory);
+        }
+        /// <summary>
+        /// Reads a `MazeWasmResult` pointer into a `MazeWasmResult`
+        /// </summary>
+        /// <param name="ptrOffset">Memory pointer offset to result</param>
+        /// <returns>`MazeWasmResult` value</returns>
+        public MazeWasmInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset)
+        {
+            return _memory.Read<MazeWasmInterop.MazeWasmResult>(ptrOffset);
+        }
+        /// <summary>
+        /// Reads a `MazeWasmPoint` pointer into a `MazeWasmPoint`
+        /// </summary>
+        /// <param name="ptrOffset">Memory pointer offset to point</param>
+        /// <returns>`MazeWasmResult` value</returns>
+        public MazeWasmInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset)
+        {
+            return _memory.Read<MazeWasmInterop.MazeWasmPoint>(ptrOffset);
+        }
+        /// <summary>
+        /// Reads a `MazeWasmError` pointer into a `MazeWasmError`
+        /// </summary>
+        /// <param name="ptrOffset">Memory pointer offset to error</param>
+        /// <returns>`MazeWasmResult` value</returns>
+        public MazeWasmInterop.MazeWasmError ReadMazeWasmError(UInt32 ptrOffset)
+        {
+            return _memory.Read<MazeWasmInterop.MazeWasmError>(ptrOffset);
+        }
+        /// <summary>
+        /// Extracts the string value from a string pointer, else throws
+        /// an exception if the operaiton failed.
+        /// </summary>
+        /// <param name="ptrOffset">Memory offset pointer to string</param>
+        /// <returns>String value if successful</returns>
+        public string StringPtrToString(UInt32 ptrOffset)
+        {
+            Span<byte> sizeBytes = _memory.GetSpan(ptrOffset, 4);
+            UInt32 length = BitConverter.ToUInt32(sizeBytes);
+            return Encoding.UTF8.GetString(_memory.GetSpan(ptrOffset + 4, (int)length));
+        }
+    };
+    /// <summary>
+    ///  This class provides a C# wrapper to a [Wasmtime](https://docs.wasmtime.dev/) WebAssembly
+    ///  function
+    /// </summary>
+    class MazeWasmtimeFunction : IFunction
+    {
+        Wasmtime.Function _func;
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        public MazeWasmtimeFunction(Wasmtime.Function func)
+        {
+            this._func = func;
+        }
+        /// <summary>
+        /// Invokes the given function with the given arguments
+        /// </summary>
+        /// <param name="args">Function arguments</param>
+        /// <returns>Result (will be `null` if the function has no result)</returns>
+        public object? Invoke(params object[] args)
+        {
+            ValueBox[] wasmerArgs = ToValueBoxArray(args);
+            return this._func?.Invoke(wasmerArgs);
+        }
+        /// <summary>
+        /// Converts an array of object values to an array of [Wasmtime](https://docs.wasmtime.dev/) `ValueBox`
+        /// values
+        /// </summary>
+        /// <returns>Array result</returns>
+        private ValueBox[] ToValueBoxArray(params object[] values)
+        {
+            if (values.Length == 0)
+                return [];
+            ValueBox[] arr = new ValueBox[values.Length];
+            for (int i = 0; i < values.Length; i++)
+            {
+                arr[i] = ToValueBox(values[i]);
+            }
+            return arr;
+        }
+        /// <summary>
+        /// Converts an object value to a [Wasmtime](https://docs.wasmtime.dev/) `ValueBox`
+        /// value
+        /// </summary>
+        /// <returns>Result</returns>
+        private ValueBox ToValueBox(object value) 
+        {
+            ValueBox result= new ValueBox();
+            switch (value)
+            {
+                case int intValue:
+                    result = intValue;
+                    break;
+                case uint uintValue:
+                    result = uintValue;
+                    break;
+                case long longValue:
+                    result = longValue;
+                    break;
+                case ulong ulongValue:
+                    result = ulongValue;
+                    break;
+                case float floatValue:
+                    result = floatValue;
+                    break;
+                case double doubleValue:
+                    result = doubleValue;
+                    break;
+                default:
+                    throw new Exception($"unable to convert argument value to Wasmtime ValueBox - unsupported type {value.GetType().ToString()}");
+            }
+            return result;
+        }
+    }
+    /// <summary>
+    ///  This class provides a C# connector to the `maze_wasm` web assembly via [Wasmtime](https://docs.wasmtime.dev/), insulating the
     ///  calling application from the specifics of the underlying Web Assembly interop operations.
     ///  
-    /// Developers can use <see cref="NewMazeWasm()">NewMazeWasm()</see> to create
+    /// Developers can use <see cref="MazeWasmConnectorBase.NewMazeWasm()">NewMazeWasm()</see> to create
     /// a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 
-    ///  <see cref="MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see> and 
-    ///  <see cref="MazeWasmSolve(UInt32)">MazeWasmSolve()</see>, to interact with the maze.
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see> and 
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmSolve(UInt32)">MazeWasmSolve()</see>, to interact with the maze.
     ///  
-    /// Once finished with, a maze should be destroyed using <see cref="FreeMazeWasm(UInt32)">FreeMazeWasm()</see>
+    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UInt32)">FreeMazeWasm()</see>
     /// to prevent memory leaks within Web Assembly.
     /// </summary>
-    class MazeWasmtimeConnector : IMazeWasmConnector
+    class MazeWasmtimeConnector : MazeWasmConnectorBase, IMazeWasmConnector
     {
         private bool _disposed = false;
-        private Wasmtime.Memory? wasmMemory;
 
         // Wasmtime Store and Instance
-        private string? instanceWasmPath;
-        private Store? store;
-        private Instance? instanceWasm;
+        private string instanceWasmPath = null!;
+        private Store store = null!;
+        private Instance instanceWasm= null!;
 
-        // WebAssembly functions
-        private Function? newMazeWasm;
-        private Function? freeMazeWasm;
-        private Function? mazeWasmIsEmpty;
-        private Function? mazeWasmResize;
-        private Function? mazeWasmReset;
-        private Function? mazeWasmGetRowCount;
-        private Function? mazeWasmGetColCount;
-        private Function? mazeWasmGetCellType;
-        private Function? mazeWasmSetStartCell;
-        private Function? mazeWasmGetStartCell;
-        private Function? mazeWasmSetFinishCell;
-        private Function? mazeWasmGetFinishCell;
-        private Function? mazeWasmSetWallCells;
-        private Function? mazeWasmClearCells;
-        private Function? mazeWasmInsertRows;
-        private Function? mazeWasmDeleteRows;
-        private Function? mazeWasmInsertCols;
-        private Function? mazeWasmDeleteCols;
-        private Function? mazeWasmFromJson;
-        private Function? mazeWasmToJson;
-        private Function? mazeWasmSolve;
-        private Function? mazeWasmSolutionGetPathPoints;
-        private Function? freeMazeWasmResult;
-        private Function? freeMazeWasmSolution;
-
-        private Function? freeMazeWasmError;
-        private Function? allocateSizedMemory;
-        private Function? freeSizedMemory;
-        private Function? getSizedMemoryUsed;
-        private Function? getNumObjectsAllocated;
-
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="wasmPath">WebAssembly path</param>
         public MazeWasmtimeConnector(string wasmPath)
         {
-            var engine = new Engine();
-            var module = Wasmtime.Module.FromFile(engine, wasmPath);
-            using var linker = new Linker(engine);
-            store = new Store(engine);
-
             instanceWasmPath = wasmPath;
-            instanceWasm = new Instance(store, module);
-            wasmMemory = instanceWasm?.GetMemory("memory");
-
-            InitializeFunctions();
+            Initialize();
         }
         /// <summary>
         /// Handles object finalization (deletion)
@@ -104,7 +221,49 @@
                 _disposed = true;
             }
         }
+        /// <summary>
+        /// Initializes the object
+        /// </summary>
+        /// <returns>Nothing</returns>
+        private void Initialize()
+        {
+            InitializeModule();
+            InitializeMemory();
+            InitializeFunctions();
+        }
+        /// <summary>
+        /// Initializes the WebAssembly module
+        /// </summary>
+        /// <returns>Nothing</returns>
+        private void InitializeModule()
+        {
+            if(instanceWasmPath == null)
+                throw new Exception("WebAssembly path is not defined");
 
+            var engine = new Engine();
+            var module = Wasmtime.Module.FromFile(engine, instanceWasmPath);
+            using var linker = new Linker(engine);
+            store = new Store(engine);
+
+            instanceWasm = new Instance(store, module);
+            if (instanceWasm == null)
+                throw new Exception("Failed to create Wasmtime instance");
+        }
+        /// <summary>
+        /// Initializes the WebAssembly memory
+        /// </summary>
+        /// <returns>Nothing</returns>
+        private void InitializeMemory()
+        {
+            var wasmtimeMemory = instanceWasm.GetMemory("memory");
+            if (wasmtimeMemory == null)
+                throw new Exception("Failed to locate memory in WebAssembly");
+            base.memory = new MazeWasmtimeMemory(wasmtimeMemory);
+        }
+        /// <summary>
+        /// Initializes the WebAssembly functions
+        /// </summary>
+        /// <returns>Nothing</returns>
         private void InitializeFunctions()
         {
             newMazeWasm = ResolveFunction("new_maze_wasm");
@@ -139,486 +298,18 @@
             getSizedMemoryUsed = ResolveFunction("get_sized_memory_used");
             getNumObjectsAllocated = ResolveFunction("get_num_objects_allocated");
         }
-        private Function ResolveFunction(string functionName)
+        /// <summary>
+        /// Locates a WebAssembly function. Will throw an exception if the function is not found.
+        /// </summary>
+        /// <returns>Function</returns>
+        private IFunction ResolveFunction(string functionName)
         {
-            Function? func = instanceWasm?.GetFunction(functionName);
+            Wasmtime.Function? func = instanceWasm?.GetFunction(functionName);
             if (func == null)
             {
                 throw new Exception($"Failed to load the WebAssembly function: {functionName} from {instanceWasmPath}.");
             }
-            return func;
+            return new MazeWasmtimeFunction(func);
         }
-        /// <summary>
-        /// Creates a new, empty `MazeWasm`, or will throw an exception if the operation fails
-        /// </summary>
-        /// <returns>Pointer to the `MazeWasm`, which should later be freed by calling <see cref="FreeMazeWasm(UInt32)">FreeMazeWasm()</see></returns>
-        public UInt32 NewMazeWasm()
-        {
-            UInt32 mazeWasmPtr = (UInt32)(Int32)(newMazeWasm?.Invoke() ?? 0);
-            if (mazeWasmPtr == 0)
-            {
-                throw new Exception("newMazeWasm() failed (returned zero), possibly due to low memory");
-            }
-            return mazeWasmPtr;
-        }
-        /// <summary>
-        /// Frees a `MazeWasm` pointer
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to `MazeWasm`</param>
-        /// <returns>Nothing</returns>
-        public void FreeMazeWasm(UInt32 mazeWasmPtr)
-        {
-            freeMazeWasm?.Invoke(mazeWasmPtr);
-        }
-        /// <summary>
-        /// Tests whether a `MazeWasm` is empty
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>Boolean</returns>
-        public bool MazeWasmIsEmpty(UInt32 mazeWasmPtr)
-        {
-            return (Int32)(mazeWasmIsEmpty?.Invoke(mazeWasmPtr) ?? 0) != 0;
-        }
-        /// <summary>
-        /// Resizes a `MazeWasm`
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="newRowCount">New number of rows</param>
-        /// <param name="newColCount">New number of columns</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmResize(UInt32 mazeWasmPtr, UInt32 newRowCount, UInt32 newColCount)
-        {
-            mazeWasmResize?.Invoke(mazeWasmPtr, newRowCount, newColCount);
-        }
-        /// <summary>
-        /// Resets a `MazeWasm` to empty
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmReset(UInt32 mazeWasmPtr)
-        {
-            mazeWasmReset?.Invoke(mazeWasmPtr);
-        }
-        /// <summary>
-        /// Gets the row count associated with a `MazeWasm`
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>Row count</returns>
-        public UInt32 MazeWasmGetRowCount(UInt32 mazeWasmPtr)
-        {
-            return (UInt32)(Int32)(mazeWasmGetRowCount?.Invoke(mazeWasmPtr) ?? 0);
-        }
-        /// <summary>
-        /// Gets the column count associated with a `MazeWasm`
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>Column count</returns>
-        public UInt32 MazeWasmGetColCount(UInt32 mazeWasmPtr)
-        {
-            return (UInt32)(Int32)(mazeWasmGetColCount?.Invoke(mazeWasmPtr) ?? 0);
-        }
-        /// <summary>
-        /// Gets the cell type associated with a cell within a `MazeWasm`, or will throw an exception
-        /// if the cell type cannot be determined
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="row">Target row</param>
-        /// <param name="col">Target column</param>
-        /// <returns>Cell type</returns>
-        public MazeWasmInterop.MazeWasmCellType MazeWasmGetCellType(UInt32 mazeWasmPtr, UInt32 row, UInt32 col)
-        {
-            if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
-            UInt32 resultPtr = (UInt32)(Int32)(mazeWasmGetCellType?.Invoke(mazeWasmPtr, row, col) ?? 0);
-            MazeWasmInterop.MazeWasmResult result = wasmMemory.Read<MazeWasmInterop.MazeWasmResult>(resultPtr);
-            if (result.error_ptr != 0)
-            {
-                string errorMessage = GetErrorMessage(result.error_ptr);
-                FreeMazeWasmResult(resultPtr, true);
-                throw new Exception(errorMessage);
-            }
-            MazeWasmInterop.MazeWasmCellType cellType = result.value_ptr != 0 ? (MazeWasmInterop.MazeWasmCellType)(result.value_ptr) : MazeWasmInterop.MazeWasmCellType.Empty;
-            FreeMazeWasmResult(resultPtr, true);
-            return cellType;
-        }
-        /// <summary>
-        /// Sets the start cell associated with a `MazeWasm`, or will throw an exception
-        /// if the start cell cannot be set
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="startRow">New start cell row</param>
-        /// <param name="startCol">New start cell column</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmSetStartCell(UInt32 mazeWasmPtr, UInt32 startRow, UInt32 startCol)
-        {
-            UInt32 errorPtr = (UInt32)(Int32)(mazeWasmSetStartCell?.Invoke(mazeWasmPtr, startRow, startCol) ?? 0);
-            if (errorPtr != 0)
-                TidyAndThrowError(errorPtr);
-        }
-        /// <summary>
-        /// Gets the start cell associated with a `MazeWasm`, or will throw an exception
-        /// if the start cell cannot be retrieved
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>Start cell point</returns>
-        public MazeWasmInterop.MazeWasmPoint MazeWasmGetStartCell(UInt32 mazeWasmPtr)
-        {
-            if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
-            UInt32 resultPtr = (UInt32)(Int32)(mazeWasmGetStartCell?.Invoke(mazeWasmPtr) ?? 0);
-            return MazeWasmResultGetPoint(resultPtr, true);
-        }
-        /// <summary>
-        /// Sets the finish cell associated with a `MazeWasm`, or will throw an exception
-        /// if the finish cell cannot be set
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="finishRow">New finish cell row</param>
-        /// <param name="finishCol">New finsh cell column</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmSetFinishCell(UInt32 mazeWasmPtr, UInt32 finishRow, UInt32 finishCol)
-        {
-            UInt32 errorPtr = (UInt32)(Int32)(mazeWasmSetFinishCell?.Invoke(mazeWasmPtr, finishRow, finishCol) ?? 0);
-            if (errorPtr != 0)
-                TidyAndThrowError(errorPtr);
-        }
-        /// <summary>
-        /// Gets the finish cell associated with a `MazeWasm`, or will throw an exception
-        /// if the finish cell cannot be retrieved
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>Finish cell point</returns>
-        public MazeWasmInterop.MazeWasmPoint MazeWasmGetFinishCell(UInt32 mazeWasmPtr)
-        {
-            if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
-            UInt32 resultPtr = (UInt32)(Int32)(mazeWasmGetFinishCell?.Invoke(mazeWasmPtr) ?? 0);
-            return MazeWasmResultGetPoint(resultPtr, true);
-        }
-        /// <summary>
-        /// Sets a range of cells to walls within a `MazeWasm`, or will throw an exception
-        /// if the walls cannot be set
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="startRow">Target start row</param>
-        /// <param name="startCol">Target start column</param>
-        /// <param name="endRow">Target end row</param>
-        /// <param name="endCol">Target end column</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmSetWallCells(UInt32 mazeWasmPtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
-        {
-            UInt32 errorPtr = (UInt32)(Int32)(mazeWasmSetWallCells?.Invoke(mazeWasmPtr, startRow, startCol, endRow, endCol) ?? 0);
-            if (errorPtr != 0)
-                TidyAndThrowError(errorPtr);
-        }
-        /// <summary>
-        /// Clears a range of wall cells within a `MazeWasm`, or will throw an exception
-        /// if the cells cannot be cleared
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="startRow">Target start row</param>
-        /// <param name="startCol">Target start column</param>
-        /// <param name="endRow">Target end row</param>
-        /// <param name="endCol">Target end column</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmClearCells(UInt32 mazeWasmPtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
-        {
-            UInt32 errorPtr = (UInt32)(Int32)(mazeWasmClearCells?.Invoke(mazeWasmPtr, startRow, startCol, endRow, endCol) ?? 0);
-            if (errorPtr != 0)
-                TidyAndThrowError(errorPtr);
-        }
-        /// <summary>
-        /// Inserts rows into a `MazeWasm`, or will throw an exception if the rows cannot be inserted
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="startRow">Target start row</param>
-        /// <param name="count">Number rows to insert</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmInsertRows(UInt32 mazeWasmPtr, UInt32 startRow, UInt32 count)
-        {
-            UInt32 errorPtr = (UInt32)(Int32)(mazeWasmInsertRows?.Invoke(mazeWasmPtr, startRow, count) ?? 0);
-            if (errorPtr != 0)
-                TidyAndThrowError(errorPtr);
-        }
-        /// <summary>
-        /// Deletes rows from a `MazeWasm`, or will throw an exception if the rows cannot be deleted
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="startRow">Target start row</param>
-        /// <param name="count">Number rows to delete</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmDeleteRows(UInt32 mazeWasmPtr, UInt32 startRow, UInt32 count)
-        {
-            UInt32 errorPtr = (UInt32)(Int32)(mazeWasmDeleteRows?.Invoke(mazeWasmPtr, startRow, count) ?? 0);
-            if (errorPtr != 0)
-                TidyAndThrowError(errorPtr);
-        }
-        /// <summary>
-        /// Inserts columns into a `MazeWasm`, or will throw an exception if the columns cannot be inserted
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="startCol">Target start column</param>
-        /// <param name="count">Number columns to insert</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmInsertCols(UInt32 mazeWasmPtr, UInt32 startCol, UInt32 count)
-        {
-            UInt32 errorPtr = (UInt32)(Int32)(mazeWasmInsertCols?.Invoke(mazeWasmPtr, startCol, count) ?? 0);
-            if (errorPtr != 0)
-                TidyAndThrowError(errorPtr);
-        }
-        /// <summary>
-        /// Deletes columns from a `MazeWasm`, or will throw an exception if the columns cannot be deleted
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="startCol">Target start column</param>
-        /// <param name="count">Number columns to delete</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmDeleteCols(UInt32 mazeWasmPtr, UInt32 startCol, UInt32 count)
-        {
-            UInt32 errorPtr = (UInt32)(Int32)(mazeWasmDeleteCols?.Invoke(mazeWasmPtr, startCol, count) ?? 0);
-            if (errorPtr != 0)
-                TidyAndThrowError(errorPtr);
-        }
-        /// <summary>
-        /// Reinitialises a `MazeWasm` from a JSON string, or will throw an exception if the operation fails
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <param name="json">JSON strimg</param>
-        /// <returns>Nothing</returns>
-        public void MazeWasmFromJson(UInt32 mazeWasmPtr, string json)
-        {
-            var jsonStrPtr = ToStringPtr(json);
-            UInt32 errorPtr = (UInt32)(Int32)(mazeWasmFromJson?.Invoke(mazeWasmPtr, jsonStrPtr) ?? 0);
-            FreeStringPtr(jsonStrPtr);
-            if (errorPtr != 0)
-                TidyAndThrowError(errorPtr);
-        }
-        /// <summary>
-        /// Converts a `MazeWasm` to a JSON string, or will throw an exception if the operation fails
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>JSON string</returns>
-        public string MazeWasmToJson(UInt32 mazeWasmPtr)
-        {
-            if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
-            UInt32 resultPtr = (UInt32)(Int32)(mazeWasmToJson?.Invoke(mazeWasmPtr) ?? 0);
-            MazeWasmInterop.MazeWasmResult result = wasmMemory.Read<MazeWasmInterop.MazeWasmResult>(resultPtr);
-            if (result.error_ptr != 0)
-            {
-                string errorMessage = GetErrorMessage(result.error_ptr);
-                FreeMazeWasmResult(resultPtr, true);
-                throw new Exception(errorMessage);
-            }
-            if ((MazeWasmInterop.MazeWasmResultValueType)(result.value_type) != MazeWasmInterop.MazeWasmResultValueType.String)
-            {
-                FreeMazeWasmResult(resultPtr, true);
-                throw new Exception("Result value is not a string");
-            }
-            string json = "";
-            if (result.value_ptr != 0)
-                json = StringPtrToString(result.value_ptr);
-            FreeMazeWasmResult(resultPtr, true);
-            return json;
-        }
-        /// <summary>
-        /// Solves a maze, else will throw an exception if the operation fails. 
-        ///
-        /// If successful, use <see cref="MazeWasmSolutionGetPathPoints(UInt32)">MazeWasmSolutionGetPathPoints()</see> to obtain the
-        /// solution path.
-        /// </summary>
-        /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>Solution pointer, which should later be freed by calling <see cref="FreeMazeWasmSolution(UInt32)">FreeMazeWasmSolution()</see></returns>
-        public UInt32 MazeWasmSolve(UInt32 mazeWasmPtr)
-        {
-            if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
-            UInt32 resultPtr = (UInt32)(Int32)(mazeWasmSolve?.Invoke(mazeWasmPtr) ?? 0);
-            MazeWasmInterop.MazeWasmResult result = wasmMemory.Read<MazeWasmInterop.MazeWasmResult>(resultPtr);
-            if (result.error_ptr != 0)
-            {
-                string errorMessage = GetErrorMessage(result.error_ptr);
-                FreeMazeWasmResult(resultPtr, true);
-                throw new Exception(errorMessage);
-            }
-            if ((MazeWasmInterop.MazeWasmResultValueType)(result.value_type) != MazeWasmInterop.MazeWasmResultValueType.Solution)
-            {
-                FreeMazeWasmResult(resultPtr, true);
-                throw new Exception("Result value is not a solution");
-            }
-            UInt32 solutionPtr = 0;
-            if (result.value_ptr != 0)
-                solutionPtr = result.value_ptr;
-            FreeMazeWasmResult(resultPtr, false);
-            return solutionPtr;
-        }
-        /// <summary>
-        /// Returns the list of points associated with a solution's path, or will throw an exception if the operation fails
-        /// </summary>
-        /// <param name="solutionPtr">Pointer to solution</param>
-        /// <returns>List of points</returns>
-        public List<MazeWasmInterop.MazeWasmPoint> MazeWasmSolutionGetPathPoints(UInt32 solutionPtr)
-        {
-            if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
-            if (solutionPtr == 0) throw new Exception("solutionPtr is zero");
-            UInt32 pathPointsPtr = (UInt32)(Int32)(mazeWasmSolutionGetPathPoints?.Invoke(solutionPtr) ?? 0);
-            UInt32 dataPtr = pathPointsPtr + 4;
-            UInt32 numPoints = wasmMemory.Read<UInt32>(dataPtr);
-            dataPtr += 4;
-            List<MazeWasmInterop.MazeWasmPoint> points = new List<MazeWasmInterop.MazeWasmPoint>();
-            for (UInt32 i = 0; i < numPoints; i++)
-            {
-                MazeWasmInterop.MazeWasmPoint point = wasmMemory.Read<MazeWasmInterop.MazeWasmPoint>(dataPtr);
-                points.Add(point);
-                dataPtr += 8;
-            }
-            FreeSizedMemory(pathPointsPtr);
-            return points;
-        }
-        /// <summary>
-        /// Tides an error pointer and then throws an exception containing the error message associated with that pointer
-        /// </summary>
-        /// <param name="errorPtr">Pointer to error</param>
-        /// <returns>Nothing</returns>
-        private void TidyAndThrowError(UInt32 errorPtr)
-        {
-            string message = GetErrorMessage(errorPtr);
-            FreeMazeWasmError(errorPtr);
-            throw new Exception(message);
-        }
-        /// <summary>
-        /// Extracts the error message associated with an error pointer or throws an exception of the operation cannot be performed
-        /// </summary>
-        /// <param name="errorPtr">Pointer to error</param>
-        /// <returns>Error message</returns>
-        private string GetErrorMessage(UInt32 errorPtr)
-        {
-            if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
-            MazeWasmInterop.MazeWasmError mazeWasmError = wasmMemory.Read<MazeWasmInterop.MazeWasmError>(errorPtr);
-            return StringPtrToString(mazeWasmError.message_ptr);
-        }
-        /// <summary>
-        /// Frees a `MazeWasmError` pointer
-        /// </summary>
-        /// <param name="mazeErrorPtr">Pointer to `MazeWasmError`</param>
-        /// <returns>Nothing</returns>
-        void FreeMazeWasmError(UInt32 mazeErrorPtr)
-        {
-            freeMazeWasmError?.Invoke(mazeErrorPtr);
-        }
-        /// <summary>
-        /// Frees a `MazeWasmResult` pointer
-        /// </summary>
-        /// <param name="resultPtr">Pointer to result</param>
-        /// <param name="freeResultValue">Flag indicating whether to free the result value pointed to by `value_ptr` in the `MazeWasmResult`</param>
-        /// <returns>Nothing</returns>
-        void FreeMazeWasmResult(UInt32 resultPtr, bool freeResultValue)
-        {
-            freeMazeWasmResult?.Invoke(resultPtr, freeResultValue ? 1 : 0);
-        }
-        /// <summary>
-        /// Frees a maze solution pointer
-        /// </summary>
-        /// <param name="solutionPtr">Pointer to solution</param>
-        /// <returns>Nothing</returns>
-        public void FreeMazeWasmSolution(UInt32 solutionPtr)
-        {
-            freeMazeWasmSolution?.Invoke(solutionPtr);
-        }
-        /// <summary>
-        /// Extracts the point value from a result pointer if it exists, else throws
-        /// an exception if the result contains an error. In all cases, the result pointer is
-        /// free'd if requested.
-        /// </summary>
-        /// <param name="resultPtr">Pointer to result</param>
-        /// <param name="freeResultPtr">Flag indicating whether to free the result</param>
-        /// <returns>Point value if successful</returns>
-        MazeWasmInterop.MazeWasmPoint MazeWasmResultGetPoint(UInt32 resultPtr, bool freeResultPtr)
-        {
-            if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
-            MazeWasmInterop.MazeWasmResult result = wasmMemory.Read<MazeWasmInterop.MazeWasmResult>(resultPtr);
-            if (result.error_ptr != 0)
-            {
-                string errorMessage = GetErrorMessage(result.error_ptr);
-                if (freeResultPtr) FreeMazeWasmResult(resultPtr, true);
-                throw new Exception(errorMessage);
-            }
-            if ((MazeWasmInterop.MazeWasmResultValueType)(result.value_type) != MazeWasmInterop.MazeWasmResultValueType.Point)
-            {
-                if (freeResultPtr) FreeMazeWasmResult(resultPtr, true);
-                throw new Exception("Result value is not a Point");
-            }
-            MazeWasmInterop.MazeWasmPoint point = wasmMemory.Read<MazeWasmInterop.MazeWasmPoint>(result.value_ptr + 4);
-            if (freeResultPtr) FreeMazeWasmResult(resultPtr, true);
-            return point;
-        }
-        /// <summary>
-        /// Allocates a sized memory block of a given size. A sized memory block is a block of 
-        /// memory of (`size` + 4) bytes, where the first 4 bytes contain the size of the block (u32)
-        /// and then the next `size` bytes is reserved for data use.
-        /// </summary>
-        /// <param name="size">Number of bytes to allocate</param>
-        /// <returns>Pointer to memory</returns>
-        UInt32 AllocateSizedMemory(UInt32 size)
-        {
-            return (UInt32)(Int32)(allocateSizedMemory?.Invoke(size) ?? 0);
-        }
-        /// <summary>
-        /// Frees the sized memory associated with a given pointer
-        /// </summary>
-        /// <param name="ptr">Pointer to memory</param>
-        /// <returns>Nothing</returns>
-        void FreeSizedMemory(UInt32 ptr)
-        {
-            freeSizedMemory?.Invoke(ptr);
-        }
-        /// <summary>
-        /// Gets the amount of sized memory currenty allocated
-        /// </summary>
-        /// <returns>Memory used count</returns>
-        public Int64 GetSizedMemoryUsed()
-        {
-            return (Int64)(getSizedMemoryUsed?.Invoke() ?? 0);
-        }
-        /// <summary>
-        /// Gets the number of objects currenty allocated
-        /// </summary>
-        /// <returns>Object count</returns>
-        public Int64 GetNumObjectsAllocated()
-        {
-            return (Int64)(getNumObjectsAllocated?.Invoke() ?? 0);
-        }
-        /// <summary>
-        /// Extracts the string value from a string pointer, else throws
-        /// an exception if the operaiton failed.
-        /// </summary>
-        /// <param name="strPtr">Memory pointer to string</param>
-        /// <returns>String value if successful</returns>
-        string StringPtrToString(UInt32 strPtr)
-        {
-            if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
-            Span<byte> sizeBytes = wasmMemory.GetSpan(strPtr, 4);
-            uint length = BitConverter.ToUInt32(sizeBytes);
-            return Encoding.UTF8.GetString(wasmMemory.GetSpan(strPtr + 4, (int)length));
-        }
-        /// <summary>
-        /// Converts a string value to a string pointer, else throws
-        /// an exception if the operaiton failed.
-        /// </summary>
-        /// <param name="value">String value to convert</param>
-        /// <returns>String pointer if successful</returns>
-        UInt32 ToStringPtr(string value)
-        {
-            if (wasmMemory == null) throw new Exception("wasmMemory is not initialized");
-            var strPtr = AllocateSizedMemory((UInt32)value.Length);
-            byte[] utf8Bytes = Encoding.UTF8.GetBytes(value);
-            Span<byte> memory = wasmMemory.GetSpan((int)strPtr + 4, utf8Bytes.Length);
-            utf8Bytes.CopyTo(memory);
-            return strPtr;
-        }
-        /// <summary>
-        /// Frees a string pointer
-        /// </summary>
-        /// <param name="strPtr">Memory pointer to string</param>
-        /// <returns>Nothing</returns>
-        void FreeStringPtr(UInt32 strPtr)
-        {
-            FreeSizedMemory(strPtr);
-        }
-    }
+     }
 }
