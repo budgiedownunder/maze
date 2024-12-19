@@ -568,7 +568,7 @@ namespace Maze.Api.Tests
         }
     }
     /// <summary>
-    ///  This class defines the Wasmtime text fixture used by the <see cref="Maze.Api.Tests.MazeApiWasmtimeTest"/> class
+    ///  This class defines the [Wasmtime](https://docs.wasmtime.dev/) text fixture used by the <see cref="Maze.Api.Tests.MazeApiWasmtimeTest"/> class
     /// </summary>
     public class WasmtimeTestFixture
     {
@@ -579,7 +579,7 @@ namespace Maze.Api.Tests
         }
     }
     /// <summary>
-    ///  This class is used to apply `[CollectionDefinition]` and `ICollectionFixture` to the <see cref="Maze.Api.Tests.MazeApiWasmtimeTest"/> class
+    ///  This class is used to apply [Wasmtime](https://docs.wasmtime.dev/) `[CollectionDefinition]` and `ICollectionFixture` to the <see cref="Maze.Api.Tests.MazeApiWasmtimeTest"/> class
     /// </summary>
     [CollectionDefinition("WasmtimeTestFixtureCollection")]
     public class WasmtimeTestFixtureCollection : ICollectionFixture<WasmtimeTestFixture>
@@ -588,27 +588,80 @@ namespace Maze.Api.Tests
         // It is used to apply [CollectionDefinition] and ICollectionFixture
     }
     /// <summary>
-    ///  This class contains the <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Api"/> class
+    ///  This class contains the static [Wasmtime](https://docs.wasmtime.dev/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Api"/> class
     /// </summary>
     [Collection("WasmtimeTestFixtureCollection")]
-    public class MazeApiWasmtimeTest: MazeApiTestBase
+    public class MazeApiWasmtimeTest_Static: MazeApiTestBase
     {
         private readonly WasmtimeTestFixture _fixture;
-        public MazeApiWasmtimeTest(WasmtimeTestFixture fixture)
+        public MazeApiWasmtimeTest_Static(WasmtimeTestFixture fixture)
         {
             _fixture = fixture;
+            Maze.UseStaticInterop = true;
+            Solution.UseStaticInterop = true;
         }
     }
     /// <summary>
-    ///  This class contains the <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Api"/> class
+    ///  This class contains the non-static [Wasmtime](https://docs.wasmtime.dev/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Api"/> class
     /// </summary>
-    // [Collection("WasmtimeTestFixtureCollection")]
-    // public class MazeApiWasmtimeTest2 : MazeApiTestBase
-    // {
-    //     private readonly WasmtimeTestFixture _fixture;
-    //     public MazeApiWasmtimeTest2(WasmtimeTestFixture fixture)
-    //     {
-    //         _fixture = fixture;
-    //     }
-    // }
+    [Collection("WasmtimeTestFixtureCollection")]
+    public class MazeApiWasmtimeTest_NonStatic : MazeApiTestBase
+    {
+        private readonly WasmtimeTestFixture _fixture;
+        public MazeApiWasmtimeTest_NonStatic(WasmtimeTestFixture fixture)
+        {
+            _fixture = fixture;
+            Maze.UseStaticInterop = false;
+            Solution.UseStaticInterop = false;
+        }
+    }
+
+    /// <summary>
+    ///  This class defines the [Wasmer](https://wasmer.io/) text fixture used by the <see cref="Maze.Api.Tests.MazeApiWasmerTest"/> class
+    /// </summary>
+    public class WasmerTestFixture
+    {
+        public WasmerTestFixture()
+        {
+            MazeWasmInterop.Disconnect();
+            MazeWasmInterop.Initialize(MazeWasmInterop.ConnectionType.Wasmer, true);
+        }
+    }
+    /// <summary>
+    ///  This class is used to apply [Wasmer](https://wasmer.io/) `[CollectionDefinition]` and `ICollectionFixture` to the <see cref="Maze.Api.Tests.MazeApiWasmerTest"/> class
+    /// </summary>
+    [CollectionDefinition("WasmerTestFixtureCollection")]
+    public class WasmerTestFixtureCollection : ICollectionFixture<WasmerTestFixture>
+    {
+        // This class is intentionally left empty
+        // It is used to apply [CollectionDefinition] and ICollectionFixture
+    }
+    /// <summary>
+    ///  This class contains the static [Wasmer](https://wasmer.io/) <see cref = "Maze.Wasm.Interop.MazeWasmInterop.ConnectionType" /> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Api"/> class
+    //// </ summary >
+    [Collection("WasmerTestFixtureCollection")]
+    public class MazeApiWasmerTest_Static : MazeApiTestBase
+    {
+        private readonly WasmerTestFixture _fixture;
+        public MazeApiWasmerTest_Static(WasmerTestFixture fixture)
+        {
+            _fixture = fixture;
+            Maze.UseStaticInterop = true;
+            Solution.UseStaticInterop = true;
+        }
+    }
+    /// <summary>
+    ///  This class contains the non-static [Wasmer](https://wasmer.io/) <see cref = "Maze.Wasm.Interop.MazeWasmInterop.ConnectionType" /> [`xUnit`](https://xunit.net/) unit tests for the <see cref="Maze.Api"/> class
+    //// </ summary >
+    [Collection("WasmerTestFixtureCollection")]
+    public class MazeApiWasmerTest_NonStatic : MazeApiTestBase
+    {
+        private readonly WasmerTestFixture _fixture;
+        public MazeApiWasmerTest_NonStatic(WasmerTestFixture fixture)
+        {
+            _fixture = fixture;
+            Maze.UseStaticInterop = false;
+            Solution.UseStaticInterop = false;
+        }
+    }
 }

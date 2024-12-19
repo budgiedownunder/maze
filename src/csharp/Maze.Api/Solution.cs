@@ -11,9 +11,27 @@ namespace Maze.Api
     /// </summary>
     public class Solution : IDisposable
     {
-        static MazeWasmInterop interop = MazeWasmInterop.GetInstance();
+        // Private data
+        static MazeWasmInterop _interop = MazeWasmInterop.GetInstance(); // Used when UseStaticInterop = true
         private bool _disposed = false;
         private UInt32 _solutionWasmPtr = default;
+        /// <summary>
+        /// Controls whether the object uses a statically defined [Maze.Wasm.Interop](xref:Maze.Interop) instance (default = `true`). If
+        /// `false`, then the maze determines the current instance on a per-API call basis.
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public static bool UseStaticInterop { get; set; } = true;
+        /// <summary>
+        /// The current [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) associated with the object
+        /// </summary>
+        /// <returns>[Maze.Wasm.Interop](xref:Maze.Wasm.Interop) instance</returns>
+        public MazeWasmInterop Interop
+        {
+            get
+            {
+                return UseStaticInterop ? _interop : MazeWasmInterop.GetInstance();
+            }
+        }
         /// <summary>
         /// Creates a new solution that wraps a [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) solution pointer, or will throw an exception if the operation fails
         /// </summary>
@@ -46,7 +64,7 @@ namespace Maze.Api
                 // Dispose unmanaged resources
                 if (_solutionWasmPtr != 0)
                 {
-                    interop.FreeMazeWasmSolution(_solutionWasmPtr);
+                    Interop.FreeMazeWasmSolution(_solutionWasmPtr);
                     _solutionWasmPtr = 0;
                 }
 
@@ -67,7 +85,7 @@ namespace Maze.Api
         /// <returns>List of points</returns>
         public List<Maze.Point> GetPathPoints()
         {
-            return Maze.ToMazePoints(interop.MazeWasmSolutionGetPathPoints(_solutionWasmPtr));
+            return Maze.ToMazePoints(Interop.MazeWasmSolutionGetPathPoints(_solutionWasmPtr));
         }
     }
 }
