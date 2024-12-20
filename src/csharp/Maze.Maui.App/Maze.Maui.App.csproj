@@ -138,7 +138,7 @@
   </Target>
 
   <ItemGroup>
-    <Content Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm">
+    <Content Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm" Condition="'$(TargetFramework)' != 'net8.0-android'">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <Link>maze_wasm.wasm</Link>
     </Content>

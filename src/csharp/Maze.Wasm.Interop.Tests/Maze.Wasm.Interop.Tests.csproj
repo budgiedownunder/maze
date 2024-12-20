@@ -29,26 +29,22 @@
     <ProjectReference Include="..\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <TargetFrameworks>net8.0;</TargetFrameworks>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(OS)' == 'Unix'">
-    <!-- macOS/Linux -->
-    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-  </PropertyGroup>
-  
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
-  
-  <!--- Make sure runtime identifiers are initialized if not set for the target framework -->
+
   <PropertyGroup>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0'">win-x64</RuntimeIdentifier>
+    <TargetFrameworks>net8.0;</TargetFrameworks>
+  </PropertyGroup>
+ 
+  <!--- Make sure runtime identifiers are initialized if not set for the target framework -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0' and '$(RuntimeIdentifier)' == ''">
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('windows'))">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('osx'))">osx-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('linux'))">linux-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-android'">android-x64</RuntimeIdentifier>
     <!--<RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-ios'">ios-arm64</RuntimeIdentifier>-->
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-maccatalyst'">osx-x64</RuntimeIdentifier>

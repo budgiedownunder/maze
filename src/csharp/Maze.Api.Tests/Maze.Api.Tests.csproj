@@ -41,13 +41,11 @@
     <TargetFrameworks>net8.0;</TargetFrameworks>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(OS)' == 'Unix'">
-    <!-- macOS/Linux -->
-    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+  <!--- Make sure runtime identifiers are initialized if not set for the target framework -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0' and '$(RuntimeIdentifier)' == ''">
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('windows'))">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('osx'))">osx-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('linux'))">linux-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>
