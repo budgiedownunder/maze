@@ -809,6 +809,7 @@ namespace Maze.Wasm.Interop.Tests
             return _interop;
         }
     }
+#if WINDOWS
     /// <summary>
     ///  This class contains the [Wasmer](https://wasmer.io/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit tests 
     ///  for the <see cref="Maze.Wasm.Interop.MazeWasmInterop"/> class, where the interop is initialized using the default WebAssembly file loader mechanism.
@@ -852,4 +853,5 @@ namespace Maze.Wasm.Interop.Tests
             return _interop;
         }
     }
+#endif
 }

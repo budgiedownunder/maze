@@ -615,7 +615,7 @@ namespace Maze.Api.Tests
             Solution.UseStaticInterop = false;
         }
     }
-
+#if WINDOWS
     /// <summary>
     ///  This class defines the [Wasmer](https://wasmer.io/) text fixture used by the <see cref="Maze.Api.Tests.MazeApiWasmerTest"/> class
     /// </summary>
@@ -664,4 +664,5 @@ namespace Maze.Api.Tests
             Solution.UseStaticInterop = false;
         }
     }
+#endif
 }
