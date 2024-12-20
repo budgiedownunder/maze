@@ -21,6 +21,8 @@
     /// </summary>
     public class MazeWasmInterop : IDisposable
     {
+        const string DEFAULT_WEBASSEMBLY_NAME = "maze_wasm.wasm";
+
         /// <summary>
         /// Represents a type of WebAssembly interop connection technology
         /// </summary>
@@ -200,6 +202,16 @@
             return wasmExecutionFile;
         }
         /// <summary>
+        /// Returns the path or name to the `maze_wasm` Web Assembly to use
+        /// </summary>
+        /// <param name="returnDefaultName">Flag indicating whether to return the default name without determing the
+        /// physical path and verifying its existence.</param>
+        /// <returns>Web Assembly path</returns>
+        static private string GetWasmPathOrName(bool returnDefaultName)
+        {
+            return returnDefaultName ? DEFAULT_WEBASSEMBLY_NAME : GetWasmPath();
+        }
+        /// <summary>
         /// Returns the instance for the interop (creating if needed)
         /// </summary>
         /// <param name="connectionType">Type of WebAssembly connection technology to use</param>
@@ -211,7 +223,8 @@
         {
             if (instance == null || createNew)
             {
-                MazeWasmInterop newInstance = new MazeWasmInterop(GetWasmPath(), connectionType, wasmBytes);
+                bool useDefaultName = wasmBytes != null;
+                MazeWasmInterop newInstance = new MazeWasmInterop(GetWasmPathOrName(useDefaultName), connectionType, wasmBytes);
                 if (instance != null)
                     return newInstance;
                 instance = newInstance;
@@ -230,7 +243,8 @@
         {
             if (instance == null || createNew) 
             {
-                instance = new MazeWasmInterop(GetWasmPath(), connectionType, wasmBytes);
+                bool useDefaultName = wasmBytes != null;
+                instance = new MazeWasmInterop(GetWasmPathOrName(useDefaultName), connectionType, wasmBytes);
             }
         }
         /// <summary>
