@@ -119,14 +119,6 @@
     <Error Text="Native library file not found: %(MissingNativeLibraries.Identity)" Condition="@(MissingNativeLibraries-&gt;Count()) &gt; 0" />
   </Target>
 
-  <ItemGroup>
-    <AndroidNativeLibrary Include="runtimes/android-x64/native/libwasmer.so" />
-    <!--<NativeLibrary Include="runtimes/android-x64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'android-x64'" />-->
-    <!--<NativeLibrary Include="runtimes/ios-arm64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'ios-arm64'" />
-    <NativeLibrary Include="runtimes/maccatalyst-x64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'maccatalyst-x64'" />-->
-    <NativeLibrary Include="runtimes/win-x64/native/wasmer.dll" Condition="'$(RuntimeIdentifier)' == 'win10-x64'" />
-  </ItemGroup>
-
   <Target Name="PrintAppxPackageDir" AfterTargets="Build">
     <Message Text="AppxPackageDir: $(AppxPackageDir)" Importance="High" />
   </Target>
