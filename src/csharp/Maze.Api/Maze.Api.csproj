@@ -12,20 +12,12 @@
     <ProjectReference Include="..\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj" />
   </ItemGroup>
 
+  <!-- Always define all target frameworks -->
   <PropertyGroup>
-    <TargetFrameworks>
-      net8.0;
-    </TargetFrameworks>
-    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net8.0-windows10.0.19041.0;net8.0-ios;net8.0-android;net8.0-maccatalyst;</TargetFrameworks>
+    <TargetFrameworks>net8.0;net8.0-windows10.0.19041.0;net8.0-ios;net8.0-android;net8.0-maccatalyst</TargetFrameworks>
   </PropertyGroup>
-
-  <!-- RuntimeIdentifiers per TargetFramework -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('windows'))">win-x64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('osx'))">osx-x64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('linux'))">linux-x64</RuntimeIdentifier>
-  </PropertyGroup>
-
+ 
+  <!-- Define runtime identifiers for specific frameworks -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
     <RuntimeIdentifier>android-x64</RuntimeIdentifier>
   </PropertyGroup>
@@ -37,6 +29,17 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <!-- Configure default output directories -->
+  <PropertyGroup>
+    <OutDir>bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\</OutDir>
+  </PropertyGroup>
+
+
+  <!-- Dynamic OutDir -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <OutDir>bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\</OutDir>
   </PropertyGroup>
 
   <!-- Debugging Targets -->

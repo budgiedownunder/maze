@@ -7,22 +7,17 @@
     <DocumentationFile>bin\Maze.Wasm.Interop.xml</DocumentationFile>
   </PropertyGroup>
 
-  <!-- TargetFrameworks: Use additional frameworks only on Windows -->
+  <!-- Always define all target frameworks -->
   <PropertyGroup>
-    <TargetFrameworks>net8.0</TargetFrameworks>
-    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">
-      $(TargetFrameworks);net8.0-windows10.0.19041.0;net8.0-ios;net8.0-android;net8.0-maccatalyst
-    </TargetFrameworks>
+    <TargetFrameworks>net8.0;net8.0-windows10.0.19041.0;net8.0-ios;net8.0-android;net8.0-maccatalyst</TargetFrameworks>
   </PropertyGroup>
 
-  <!-- RuntimeIdentifier for net8.0 -->
+  <!-- Define runtime identifiers for specific frameworks -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
     <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('windows'))">win-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('osx'))">osx-arm64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('linux'))">linux-x64</RuntimeIdentifier>
   </PropertyGroup>
-
-  <!-- Platform-Specific RuntimeIdentifiers -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
     <RuntimeIdentifier>android-x64</RuntimeIdentifier>
   </PropertyGroup>
@@ -50,6 +45,7 @@
 
   <!-- Platform-Specific Native Libraries -->
   <ItemGroup>
+    <!--<NativeLibrary Include="runtimes/linux-x64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'linux-x64'" />-->
     <NativeLibrary Include="runtimes/android-x64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'android-x64'" />
     <!--<NativeLibrary Include="runtimes/ios-arm64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'ios-arm64'" />
     <NativeLibrary Include="runtimes/maccatalyst-x64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'maccatalyst-x64'" />
@@ -72,3 +68,4 @@
     <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)" />
   </Target>
 </Project>
+
