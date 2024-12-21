@@ -43,11 +43,14 @@
 
   
   <!--- Make sure runtime identifiers are initialized if not set for the target framework -->
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) and '$(Platform)' == 'x64'">
-    <RuntimeIdentifier>osx-x64</RuntimeIdentifier>
-  </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) and '$(Platform)' == 'ARM64'">
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx'))">
     <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux'))">
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0' and '$(RuntimeIdentifier)' == ''">

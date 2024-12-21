@@ -1,27 +1,28 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <ImplicitUsings>enable</ImplicitUsings>
+    <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <DocumentationFile>bin\Maze.Wasm.Interop.xml</DocumentationFile>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
-    <PackageReference Include="Wasmtime" Version="22.0.0" />
-  </ItemGroup>
-
+  <!-- TargetFrameworks: Use additional frameworks only on Windows -->
   <PropertyGroup>
-    <TargetFrameworks>
-      net8.0;
+    <TargetFrameworks>net8.0</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">
+      $(TargetFrameworks);net8.0-windows10.0.19041.0;net8.0-ios;net8.0-android;net8.0-maccatalyst
     </TargetFrameworks>
-    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net8.0-windows10.0.19041.0;net8.0-ios;net8.0-android;net8.0-maccatalyst;</TargetFrameworks>
   </PropertyGroup>
 
-  <!-- Set RuntimeIdentifier for each TargetFramework -->
+  <!-- RuntimeIdentifier for net8.0 -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('windows'))">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('osx'))">osx-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('linux'))">linux-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <!-- Platform-Specific RuntimeIdentifiers -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
     <RuntimeIdentifier>android-x64</RuntimeIdentifier>
   </PropertyGroup>
@@ -35,51 +36,39 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) and '$(Platform)' == 'x64'">
-    <RuntimeIdentifier>osx-x64</RuntimeIdentifier>
+  <!-- Dynamic OutDir -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <OutDir>bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\</OutDir>
   </PropertyGroup>
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx')) and '$(Platform)' == 'ARM64'">
-    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
-  </PropertyGroup>
-
-  <!-- Fallback for net8.0 if RuntimeIdentifier is not set -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0' and '$(RuntimeIdentifier)' == ''">
-    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('windows'))">win-x64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('linux'))">linux-x64</RuntimeIdentifier>
-  </PropertyGroup>
-
-
-  <Target Name="DebugRuntimeIdentifier" AfterTargets="Build">
-    <Message Importance="high" Text="RuntimeIdentifier: $(RuntimeIdentifier)" />
-  </Target>
-
-  <Target Name="DebugNativeLibrary" BeforeTargets="Build">
-    <Message Importance="high" Text="Native Libraries: @(NativeLibrary)" />
-  </Target>
-
-  <Target Name="ValidateNativeLibrary" BeforeTargets="Build">
-    <ItemGroup>
-      <MissingNativeLibraries Include="@(NativeLibrary)" Condition="!Exists('%(Identity)')" />
-    </ItemGroup>
-    <Message Importance="high" Text="Evaluated Native Libraries: @(NativeLibrary)" />
-    <Error Text="Native library file not found: %(MissingNativeLibraries.Identity)" Condition="@(MissingNativeLibraries-&gt;Count()) &gt; 0" />
-  </Target>
 
   <ItemGroup>
-    <AndroidNativeLibrary Include="runtimes/android-x64/native/libwasmer.so" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
+    <PackageReference Include="Wasmtime" Version="22.0.0" />
+  </ItemGroup>
+
+  <!-- Platform-Specific Native Libraries -->
+  <ItemGroup>
     <NativeLibrary Include="runtimes/android-x64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'android-x64'" />
-    <!--<NativeLibrary Include="runtimes/ios-arm64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'ios-arm64'" />
+    <!--<NativeLibrary Include="runtimes/ios-arm64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'ios-arm64'" />
     <NativeLibrary Include="runtimes/maccatalyst-x64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'maccatalyst-x64'" />
     <NativeLibrary Include="runtimes/maccatalyst-arm64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'maccatalyst-arm64'" />-->
     <NativeLibrary Include="runtimes/win-x64/native/wasmer.dll" Condition="'$(RuntimeIdentifier)' == 'win-x64'" />
   </ItemGroup>
 
-  <Target Name="PrintAppxPackageDir" AfterTargets="Build">
-    <Message Text="AppxPackageDir: $(AppxPackageDir)" Importance="High" />
+  <!-- Debugging Information -->
+  <Target Name="DebugNativeLibraryDetails" AfterTargets="Build">
+    <Message Text="**************************" Importance="High" />
+    <Message Text="RuntimeIdentifier: $(RuntimeIdentifier)" Importance="High" />
+    <Message Text="TargetFrameworks: $(TargetFrameworks)" Importance="High" />
+    <Message Text="TargetFramework: $(TargetFramework)" Importance="High" />
+    <Message Text="Native Libraries: @(NativeLibrary)" Importance="High" />
+    <Message Text="**************************" Importance="High" />
   </Target>
 
-  <Target Name="CopyNativeLibrariesToOutput" AfterTargets="Build">
+  <Target Name="CopyNativeLibrariesToOutput" AfterTargets="Build" Condition="@(NativeLibrary->Count()) > 0 And '$(OutDir)' != ''">
+    <Message Text="OutDir: $(OutDir)" Importance="High" />
     <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)" />
   </Target>
-
 </Project>
