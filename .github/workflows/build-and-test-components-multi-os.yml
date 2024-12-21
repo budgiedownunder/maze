@@ -64,6 +64,11 @@ jobs:
       working-directory: ./
       run: npm install -g @redocly/cli
 
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.404 # Match the version in global.json
+
     - name: Install .NET MAUI workload for Windows
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
