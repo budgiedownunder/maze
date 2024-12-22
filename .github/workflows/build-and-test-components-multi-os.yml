@@ -25,8 +25,8 @@ jobs:
       matrix:
         os: 
         #  - ubuntu-latest
-          - macos-latest
-        # - windows-latest
+        #  - macos-latest
+          - windows-latest
 
     env:
       NET_BUILD_SOLUTION: ${{ matrix.os == 'windows-latest' && 'Build-Windows.sln' || 'Build-Non-Windows.sln' }}
