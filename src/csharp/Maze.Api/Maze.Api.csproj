@@ -12,11 +12,20 @@
     <ProjectReference Include="..\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj" />
   </ItemGroup>
 
-  <!-- Always define all target frameworks -->
+  <!-- Define helper property to control whether mobile frameworks are targeted -->
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net8.0-windows10.0.19041.0;net8.0-ios;net8.0-android;net8.0-maccatalyst</TargetFrameworks>
+    <IsWindowsAndIncludeMobileFrameworks Condition="$([MSBuild]::IsOSPlatform('windows')) And '$(ExcludeMobileFrameworks)' != 'true'">true</IsWindowsAndIncludeMobileFrameworks>
   </PropertyGroup>
- 
+
+  <!-- Define target frameworks -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0</TargetFrameworks>
+
+    <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">
+      $(TargetFrameworks);net8.0-android;net8.0-ios;net8.0-windows10.0.19041.0
+    </TargetFrameworks>
+  </PropertyGroup>
+
   <!-- Define runtime identifiers for specific frameworks -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
     <RuntimeIdentifier>android-x64</RuntimeIdentifier>
