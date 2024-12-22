@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <!-- Define helper property to control whether mobile frameworks are targeted -->
   <PropertyGroup>
     <IsWindowsAndIncludeMobileFrameworks Condition="$([MSBuild]::IsOSPlatform('windows')) And '$(ExcludeMobileFrameworks)' != 'true'">true</IsWindowsAndIncludeMobileFrameworks>

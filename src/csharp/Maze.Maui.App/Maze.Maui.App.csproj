@@ -1,11 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
 	<!-- Define helper property to control whether mobile frameworks are targeted -->
 	<PropertyGroup>
 		<IsWindowsAndIncludeMobileFrameworks Condition="$([MSBuild]::IsOSPlatform('windows')) And '$(ExcludeMobileFrameworks)' != 'true'">true</IsWindowsAndIncludeMobileFrameworks>
-  </PropertyGroup>
+ 	 </PropertyGroup>
 
 	<PropertyGroup>
+		<!-- <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net8.0-windows10.0.19041.0;net8.0-maccatalyst;</TargetFrameworks> -->
 		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net8.0-windows10.0.19041.0;net8.0-maccatalyst;</TargetFrameworks>
 		<TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">$(TargetFrameworks);net8.0-android;net8.0-ios;</TargetFrameworks>
 

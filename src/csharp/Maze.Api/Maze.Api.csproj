@@ -19,10 +19,10 @@
 
   <!-- Define target frameworks -->
   <PropertyGroup>
-    <TargetFrameworks>net8.0</TargetFrameworks>
+    <TargetFramework>net8.0</TargetFramework>
 
     <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">
-      $(TargetFrameworks);net8.0-android;net8.0-ios;net8.0-windows10.0.19041.0
+      net8.0;net8.0-android;net8.0-ios;net8.0-windows10.0.19041.0
     </TargetFrameworks>
   </PropertyGroup>
 
