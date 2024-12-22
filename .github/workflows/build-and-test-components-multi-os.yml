@@ -77,6 +77,8 @@ jobs:
       working-directory: ./src/csharp 
       run: |
         dotnet workload install maui-windows
+        dotnet workload install maccatalyst
+        dotnet workload install android
 
     - name: Build Rust Components
       working-directory: ./src/rust
