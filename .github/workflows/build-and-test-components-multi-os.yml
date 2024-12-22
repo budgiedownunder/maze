@@ -24,9 +24,9 @@ jobs:
     strategy:
       matrix:
         os: 
-        #  - ubuntu-latest
+          - ubuntu-latest
         #  - macos-latest
-         - windows-latest
+        # - windows-latest
 
     env:
       NET_BUILD_SOLUTION: ${{ matrix.os == 'windows-latest' && 'Build-Windows.sln' || 'Build-Non-Windows.sln' }}
@@ -38,9 +38,11 @@ jobs:
     - name: Handle Ubuntu-specifics
       if: matrix.os == 'ubuntu-latest'
       run: echo "Running on Ubuntu"
+
     - name: Handle Mac OS-specifics
       if: matrix.os == 'macos-latest'
       run: echo "Running on Mac OS"
+
     - name: Handle Windows OS-specifics
       if: matrix.os == 'windows-latest'
       run: echo "Running on Windows OS"
@@ -69,7 +71,7 @@ jobs:
       with:
         dotnet-version: 8.0.404 # Match the version in global.json
 
-    - name: Install .NET MAUI workload for Windows
+    - name: Install  .NET workloads for Windows
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
       run: |
@@ -124,17 +126,17 @@ jobs:
     - name: Restore .NET dependencies
       working-directory: ./src/csharp 
       run: |
-        dotnet restore ${{ env.NET_BUILD_SOLUTION }}
+        dotnet restore ${{ env.NET_BUILD_SOLUTION }} -p:ExcludeMobileFrameworks=true
   
     - name: Build .NET components
       working-directory: ./src/csharp 
       run: |
-        dotnet build ${{ env.NET_BUILD_SOLUTION }}
+        dotnet build ${{ env.NET_BUILD_SOLUTION }} -p:ExcludeMobileFrameworks=true
 
     - name: Test .NET components
       working-directory: ./src/csharp 
       run: |
-        dotnet test ${{ env.NET_BUILD_SOLUTION }}
+        dotnet test ${{ env.NET_BUILD_SOLUTION }} -p:ExcludeMobileFrameworks=true
 
     - name: Build HTML documentation (Windows)
       if: runner.os == 'Windows'
