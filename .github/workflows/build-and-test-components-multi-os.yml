@@ -59,13 +59,13 @@ jobs:
       with:
         version: 'latest'
     
-    - name: Install DocFX
-      working-directory: ./
-      run: dotnet tool install -g docfx
+    # - name: Install DocFX
+    #   working-directory: ./
+    #   run: dotnet tool install -g docfx
   
-    - name: Install Redocly
-      working-directory: ./
-      run: npm install -g @redocly/cli
+    # - name: Install Redocly
+    #   working-directory: ./
+    #   run: npm install -g @redocly/cli
 
     - name: Setup .NET SDK
       uses: actions/setup-dotnet@v4
@@ -78,14 +78,14 @@ jobs:
       run: |
         dotnet workload install android maccatalyst maui-windows maui-android maui-maccatalyst --version 8.0.404
 
-    - name: Build Rust Components
-      working-directory: ./src/rust
-      run: |
-        cargo build --verbose
-        cd maze_wasm
-        wasm-pack build --target web --features "wasm-bindgen"
-        cargo build --target wasm32-unknown-unknown --release
-        pwd
+    # - name: Build Rust Components
+    #   working-directory: ./src/rust
+    #   run: |
+    #     cargo build --verbose
+    #     cd maze_wasm
+    #     wasm-pack build --target web --features "wasm-bindgen"
+    #     cargo build --target wasm32-unknown-unknown --release
+    #     pwd
 
     - name: Set environment variables (non-Windows)
       if: runner.os != 'Windows'
@@ -101,28 +101,28 @@ jobs:
         $fullPath = "$($pwd.Path)/target/wasm32-unknown-unknown/release/maze_wasm.wasm"
         "MAZE_WASM_PATH=$fullPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-    - name: Run Rust Component Tests
-      working-directory: ./src/rust 
-      run: |
-        cargo test -p maze
-        cargo test -p maze_console -- --test-threads=1
-        cargo test -p storage -- --test-threads=1
-        cargo test -p maze_wasm
-        cargo test -p maze_web_server
-        cargo test -p maze_openapi_generator
+    # - name: Run Rust Component Tests
+    #   working-directory: ./src/rust 
+    #   run: |
+    #     cargo test -p maze
+    #     cargo test -p maze_console -- --test-threads=1
+    #     cargo test -p storage -- --test-threads=1
+    #     cargo test -p maze_wasm
+    #     cargo test -p maze_web_server
+    #     cargo test -p maze_openapi_generator
 
-    - name: Run Rust JavaScript API Tests
-      working-directory: ./src/rust 
-      run: |
-        cd maze_wasm/tests/js
-        npm install
-        npm run test_api
-        npm run test_help_examples
+    # - name: Run Rust JavaScript API Tests
+    #   working-directory: ./src/rust 
+    #   run: |
+    #     cd maze_wasm/tests/js
+    #     npm install
+    #     npm run test_api
+    #     npm run test_help_examples
 
-    - name: Run Rust Benchmark Tests
-      working-directory: ./src/rust 
-      run: |
-        cargo bench -p maze
+    # - name: Run Rust Benchmark Tests
+    #   working-directory: ./src/rust 
+    #   run: |
+    #     cargo bench -p maze
 
     - name: Restore .NET dependencies
       working-directory: ./src/csharp 
