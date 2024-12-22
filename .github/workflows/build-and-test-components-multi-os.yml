@@ -30,7 +30,7 @@ jobs:
 
     env:
       NET_BUILD_SOLUTION: ${{ matrix.os == 'windows-latest' && 'Build-Windows.sln' || 'Build-Non-Windows.sln' }}
-      NET_MOBILE_FRAMEWORK_INCLUSION: ${{ matrix.os == 'windows-latest' && '-p:ExcludeMobileFrameworks=false' || '-p:ExcludeMobileFrameworks=true' }}
+      NET_MOBILE_FRAMEWORK_INCLUSION: ${{ matrix.os == 'windows-latest' && '-p:ExcludeMobileFrameworks=true' || '-p:ExcludeMobileFrameworks=true' }}
       
     steps:
     - name: Checkout repository
@@ -76,7 +76,8 @@ jobs:
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
       run: |
-        dotnet workload install android maccatalyst maui-windows maui-android maui-maccatalyst --version 8.0.404
+        dotnet workload install maui-windows
+        # dotnet workload install android maccatalyst maui-windows maui-android maui-maccatalyst --version 8.0.404
 
     # - name: Build Rust Components
     #   working-directory: ./src/rust
