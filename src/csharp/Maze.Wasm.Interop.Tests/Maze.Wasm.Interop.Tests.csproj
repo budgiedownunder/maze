@@ -38,10 +38,9 @@
   </ItemGroup>
 
   <PropertyGroup>
-    <!-- <TargetFramework>net8.0</TargetFramework> -->
-    <TargetFrameworks>net8.0;</TargetFrameworks>
+    <TargetFramework Condition="'$(IsBuildingHelp)' == 'true'">net8.0</TargetFramework> 
+    <TargetFrameworks Condition="'$(IsBuildingHelp)' != 'true'">net8.0;</TargetFrameworks>
   </PropertyGroup>
-
   
   <!--- Make sure runtime identifiers are initialized if not set for the target framework -->
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx'))">

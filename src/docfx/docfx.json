@@ -10,7 +10,13 @@
       ],
       "dest": "api/net",
       "disableGitFeatures": false,
-      "disableDefaultFilter": false
+      "disableDefaultFilter": false,
+      "properties": {
+        "ExcludeMobileFrameworks": "true",
+        "IsBuildingHelp": "true",
+        "Configuration": "Debug",
+        "RuntimeIdentifiers": "win-x64"
+      }        
     }
   ],
   "build": {

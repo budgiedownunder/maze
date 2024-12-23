@@ -4,8 +4,8 @@
 		<IsWindowsAndIncludeMobileFrameworks Condition="$([MSBuild]::IsOSPlatform('windows')) And '$(ExcludeMobileFrameworks)' != 'true'">true</IsWindowsAndIncludeMobileFrameworks>
  	 </PropertyGroup>
 
-	<PropertyGroup>
-		<!-- <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net8.0-windows10.0.19041.0;net8.0-maccatalyst;</TargetFrameworks> -->
+	<PropertyGroup Condition="'$(IsBuildingHelp)' != 'true'">
+  		<!-- <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net8.0-windows10.0.19041.0;net8.0-maccatalyst;</TargetFrameworks> -->
 		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net8.0-windows10.0.19041.0;</TargetFrameworks>
 		<TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">$(TargetFrameworks);net8.0-android;net8.0-ios;</TargetFrameworks>
 
@@ -18,7 +18,14 @@
 		The Mac App Store will NOT accept apps with ONLY maccatalyst-arm64 indicated;
 		either BOTH runtimes must be indicated or ONLY macatalyst-x64. -->
 		<!-- For example: <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers> -->
+	</PropertyGroup>
+	
+	<PropertyGroup Condition="'$(IsBuildingHelp)' == 'true'">
+    	<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    	<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+ 	 </PropertyGroup>
 
+	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<RootNamespace>Maze.Maui.App</RootNamespace>
 		<UseMaui>true</UseMaui>
