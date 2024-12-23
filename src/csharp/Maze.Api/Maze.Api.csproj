@@ -18,12 +18,17 @@
   </PropertyGroup>
 
   <!-- Define target frameworks -->
-  <PropertyGroup>
+  <PropertyGroup Condition="'$(IsBuildingHelp)' != 'true'">
     <TargetFramework>net8.0</TargetFramework>
 
     <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">
       net8.0;net8.0-android;net8.0-ios;net8.0-windows10.0.19041.0
     </TargetFrameworks>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsBuildingHelp)' == 'true'">
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <!-- Define runtime identifiers for specific frameworks -->
