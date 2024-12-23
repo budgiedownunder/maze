@@ -139,14 +139,14 @@ jobs:
       run: |
         dotnet test ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }}
 
-   # - name: Build HTML documentation (Windows)
-    #   if: runner.os == 'Windows'
-    #   working-directory: ./src/docfx
-    #   shell: cmd
-    #   run: |
-    #     build_all.bat
+    - name: Build HTML documentation (Windows)
+      if: runner.os == 'Windows'
+      working-directory: ./src/docfx
+      shell: cmd
+      run: |
+        build_all.bat
   
-   # - name: Build HTML documentation (non-Windows)
+    # - name: Build HTML documentation (non-Windows)
     #   if: runner.os != 'Windows'
     #   working-directory: ./src/docfx
     #   run: |
