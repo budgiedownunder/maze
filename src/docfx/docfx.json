@@ -25,6 +25,7 @@
         "files": [
           "api/net/**.yml",
           "api/net/index.md",
+          "api/net/Maze.Maui.Controls.md",
           "api/rust/**.md",
           "api/js/**.md",
           "api/wasm/**.md",

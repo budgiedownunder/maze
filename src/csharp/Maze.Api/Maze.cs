@@ -16,7 +16,7 @@ namespace Maze.Api
         private bool _disposed = false;
         private UInt32 _mazeWasmPtr = default;
         /// <summary>
-        /// Controls whether the object uses a statically defined [Maze.Wasm.Interop](xref:Maze.Interop) instance (default = `true`). If
+        /// Controls whether the object uses a statically defined [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) instance (default = `true`). If
         /// `false`, then the maze determines the current instance on a per-API call basis.
         /// </summary>
         /// <returns>Boolean</returns>

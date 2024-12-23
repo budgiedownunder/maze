@@ -105,7 +105,6 @@
             /// </summary>
             Wall = 3,
         }
-
         /// <summary>
         /// Private constructor (singleton pattern)
         /// </summary>
