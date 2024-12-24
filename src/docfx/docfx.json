@@ -15,7 +15,8 @@
         "ExcludeMobileFrameworks": "true",
         "IsBuildingHelp": "true",
         "Configuration": "Debug",
-        "RuntimeIdentifiers": "win-x64"
+        "RuntimeIdentifiers": "win-x64",
+        "TargetFramework": "net8.0-windows10.0.19041.0"
       }        
     }
   ],
