@@ -5,7 +5,7 @@ rmdir /s /q js-doc-tmp
 rmdir /s /q web-doc-tmp
 
 call copy_files.bat
-docfx docfx.json
+docfx build docfx.json
 
 cd ../rust
 cargo doc --no-deps --target-dir ../docfx/rust-doc-tmp
