@@ -67,17 +67,38 @@ jobs:
       working-directory: ./
       run: npm install -g @redocly/cli
 
+    - name: List Windows SDK versions (before)
+      if: runner.os == 'Windows'
+      run: |
+        dir "C:\Program Files (x86)\Windows Kits\10\bin" 
+        
     - name: Setup .NET SDK
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.404 # Match the version in global.json
 
+    - name: List Windows SDK versions (after)
+      if: runner.os == 'Windows'
+      run: |
+        dir "C:\Program Files (x86)\Windows Kits\10\bin" 
+  
+    - name: List NET workload versions (before)
+      if: runner.os == 'Windows'
+      run: |
+        dotnet workload list 
+  
     - name: Install .NET workloads for Windows
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
       run: |
-        dotnet workload install maui-windows
+        dotnet workload install maui --version 8.0.83
+        dotnet workload install maui-windows --version 8.0.83      
 
+    - name: List NET workload versions (after)
+      if: runner.os == 'Windows'
+      run: |
+        dotnet workload list 
+  
     - name: Build Rust Components
       working-directory: ./src/rust
       run: |
