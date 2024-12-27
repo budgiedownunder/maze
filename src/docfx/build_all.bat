@@ -7,9 +7,9 @@ rmdir /s /q web-doc-tmp
 call copy_files.bat
 docfx metadata docfx.json
 
-type api\net\toc.yml
+@REM type api\net\toc.yml
 
-powershell -ExecutionPolicy Bypass -File cleanup_tocs.ps1
+@REM powershell -ExecutionPolicy Bypass -File cleanup_tocs.ps1
 
 docfx build docfx.json
 
