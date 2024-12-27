@@ -6,8 +6,15 @@ using Maze.Wasm.Interop;
 
 namespace Maze.Maui.App
 {
+    /// <summary>
+    /// MAUI program class
+    /// </summary>
     public static class MauiProgram
     {
+        /// <summary>
+        /// Initializes the application static instance
+        /// </summary>
+        /// <returns>Instance</returns>
         public static MauiApp CreateMauiApp()
         {
             var builder = MauiApp.CreateBuilder();

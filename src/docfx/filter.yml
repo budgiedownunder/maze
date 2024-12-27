@@ -1,0 +1,9 @@
+filter:
+  - exclude:
+      namespace: "__XamlGeneratedCode__*"
+  - exclude:
+      type: "__XamlGeneratedCode__*"
+  - exclude:
+      member: "__XamlGeneratedCode__*"
+  - exclude:
+      uid: "__XamlGeneratedCode__*"

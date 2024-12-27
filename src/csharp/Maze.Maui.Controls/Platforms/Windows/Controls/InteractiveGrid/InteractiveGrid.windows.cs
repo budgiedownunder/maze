@@ -29,7 +29,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             OnProcessKeyDown(GetKeyState(), GetKey(e.Key), true);
         }
-
+        /// <summary>
+        /// Determines the current keyboard press state
+        /// </summary>
+        /// <returns>Key state</returns>
         Keyboard.KeyState GetKeyState()
         {
             Keyboard.KeyState state = Keyboard.KeyState.None;
@@ -48,6 +51,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             return (Keyboard.Key)virtualKey;
         }
+        /// <summary>
+        /// Determines the current press state of a given key
+        /// </summary>
+        /// <returns>Key state</returns>
 
         [DllImport("user32.dll")]
         public static extern short GetAsyncKeyState(int vKey);

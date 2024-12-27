@@ -138,7 +138,7 @@
   <Target Name="CopyNativeLibrariesToOutput" AfterTargets="Build">
     <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)" />
     <!--<Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(AppxPackageDir)"/>-->
-    <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)/AppX"  Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'"/>
+    <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)/AppX" Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'" />
   </Target>
 
   <ItemGroup>
@@ -154,6 +154,11 @@
 
   <PropertyGroup>
     <BuildInParallel>false</BuildInParallel>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
   </PropertyGroup>
   
+  <PropertyGroup>
+	<NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
 </Project>

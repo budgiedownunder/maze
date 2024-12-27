@@ -1,3 +1,6 @@
+// Disable missing XML comments warning
+#pragma warning disable CS1591
+
 using Xunit;
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
 

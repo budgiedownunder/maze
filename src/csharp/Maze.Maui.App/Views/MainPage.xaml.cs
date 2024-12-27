@@ -54,6 +54,9 @@ namespace Maze.Maui.App.Views
         const String APP_TITLE = "MAZE";
         MainPageViewModel _viewModel;
 
+        /// <summary>
+        /// Constructor 
+        /// </summary>
         public MainPage()
         {
             InitializeComponent();

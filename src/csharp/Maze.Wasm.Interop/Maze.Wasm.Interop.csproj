@@ -4,7 +4,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <DocumentationFile>bin\Maze.Wasm.Interop.xml</DocumentationFile>
   </PropertyGroup>
 
   <!-- Define helper property to control whether mobile frameworks are targeted -->
@@ -76,7 +75,7 @@
     <Message Text="**************************" Importance="High" />
   </Target>
 
-  <Target Name="CopyNativeLibrariesToOutput" AfterTargets="Build" Condition="@(NativeLibrary->Count()) > 0 And '$(OutDir)' != ''">
+  <Target Name="CopyNativeLibrariesToOutput" AfterTargets="Build" Condition="@(NativeLibrary-&gt;Count()) &gt; 0 And '$(OutDir)' != ''">
     <Message Text="OutDir: $(OutDir)" Importance="High" />
     <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)" />
   </Target>

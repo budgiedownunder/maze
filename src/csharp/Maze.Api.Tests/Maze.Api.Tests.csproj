@@ -43,6 +43,7 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
   </PropertyGroup>
 
   <!--- Make sure runtime identifiers are initialized if not set for the target framework -->

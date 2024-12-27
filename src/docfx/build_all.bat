@@ -5,7 +5,11 @@ rmdir /s /q js-doc-tmp
 rmdir /s /q web-doc-tmp
 
 call copy_files.bat
-docfx docfx.json
+docfx metadata docfx.json
+
+powershell -ExecutionPolicy Bypass -File cleanup_tocs.ps1
+
+docfx build docfx.json
 
 cd ../rust
 cargo doc --no-deps --target-dir ../docfx/rust-doc-tmp

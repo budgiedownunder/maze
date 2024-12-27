@@ -3,6 +3,9 @@ using UIKit;
 
 namespace Maze.Maui.App
 {
+    /// <summary>
+    /// Application program class
+    /// </summary>
     public class Program
     {
         // This is the main entry point of the application.
