@@ -91,8 +91,8 @@ jobs:
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
       run: |
-        dotnet workload install maui --version 8.0.83
-        dotnet workload install maui-windows --version 8.0.83      
+        dotnet workload install maui
+        dotnet workload install maui-windows      
 
     - name: List NET workload versions (after)
       if: runner.os == 'Windows'
