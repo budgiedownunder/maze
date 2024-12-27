@@ -4,7 +4,9 @@ rm -rf rust-doc-tmp
 rm -rf web-doc-tmp
 
 sh copy_files.sh
-docfx docfx-non-windows.json
+docfx metadata docfx-non-windows.json
+
+docfx build docfx-non-windows.json
 
 cd ../rust
 cargo doc --no-deps --target-dir ../docfx/rust-doc-tmp
