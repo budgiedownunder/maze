@@ -1,7 +1,4 @@
-﻿// Disable missing XML comments warning
-#pragma warning disable CS1591
-
-using Xunit;
+﻿using Xunit;
 
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
 namespace Maze.Api.Tests
@@ -55,6 +52,9 @@ namespace Maze.Api.Tests
                 }
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.RowCount"/> returns the expected number of rows
+        /// </summary>
         [Fact]
         public void MazeRowCount_ShouldReturnCorrectNumberRows()
         {
@@ -65,6 +65,9 @@ namespace Maze.Api.Tests
                 AssertRowCount(maze.RowCount, targetRowCount);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.ColCount"/> returns the expected number of columns
+        /// </summary>
         [Fact]
         public void MazeColCount_ShouldReturnCorrectNumberCols()
         {
@@ -73,6 +76,9 @@ namespace Maze.Api.Tests
             Maze maze = new Maze(targetRowCount, targetColCount);
             AssertColCount(maze.ColCount, targetColCount);
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Reset"/> removes all rows and columns
+        /// </summary>
         [Fact]
         public void MazeReset_ShouldSucceed()
         {
@@ -87,6 +93,9 @@ namespace Maze.Api.Tests
                 AssertColCount(maze.RowCount, 0);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Resize"/> correctly adjusts the number of rows and columns
+        /// </summary>
         [Fact]
         public void MazeResize_ChangesRowAndColumnCounts()
         {
@@ -100,6 +109,9 @@ namespace Maze.Api.Tests
                 AssertColCount(maze.ColCount, targetColCount);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.InsertRows"/> succeeds and results in the expected number of rows
+        /// </summary>
         [Fact]
         public void MazeInsertRows_SucceedsForValidStartRow()
         {
@@ -109,6 +121,9 @@ namespace Maze.Api.Tests
                 AssertRowCount(maze.RowCount, 2);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.InsertRows"/> fails for an invalid start row
+        /// </summary>
         [Fact]
         public void MazeInsertRows_FailsForInvalidStartRow()
         {
@@ -119,6 +134,9 @@ namespace Maze.Api.Tests
             });
             Assert.Equal("invalid 'start_row' index (1)", exception.Message);
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.DeleteRows"/> fails for an empty maze
+        /// </summary>
         [Fact]
         public void MazeDeleteRows_FailsForEmptyMaze()
         {
@@ -131,6 +149,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("definition is empty", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.DeleteRows"/> fails for an invalid start row
+        /// </summary>
         [Fact]
         public void MazeDeleteRows_FailsForInvalidStartRow()
         {
@@ -143,6 +164,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("invalid 'start_row' index (1)", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.DeleteRows"/> fails if the number of rows requested is too large
+        /// </summary>
         [Fact]
         public void MazeDeleteRows_FailsIfCountTooLarge()
         {
@@ -155,6 +179,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("invalid 'count' (3) - too large", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.DeleteRows"/> succeeds for a valid start row and row count
+        /// </summary>
         [Fact]
         public void MazeDeleteRows_SucceedsForValidStartRow()
         {
@@ -164,6 +191,9 @@ namespace Maze.Api.Tests
                 AssertRowCount(maze.RowCount, 2);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.InsertCols"/> fails for an empty maze
+        /// </summary>
         [Fact]
         public void MazeInsertCols_FailsForEmptyMaze()
         {
@@ -176,6 +206,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("definition is empty", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.InsertCols"/> fails for an invalid start column
+        /// </summary>
         [Fact]
         public void MazeInsertCols_FailsForInvalidStartCol()
         {
@@ -188,6 +221,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("invalid 'start_col' index (2)", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.InsertCols"/> succeeds for a valid start column
+        /// </summary>
         [Fact]
         public void MazeInsertCols_SucceedsForValidStartCol()
         {
@@ -197,6 +233,9 @@ namespace Maze.Api.Tests
                 AssertColCount(maze.ColCount, 3);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.DeleteCols"/> fails for an empty maze
+        /// </summary>
         [Fact]
         public void MazeDeleteCols_FailsForEmptyMaze()
         {
@@ -209,6 +248,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("definition is empty", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.DeleteCols"/> fails for an invalid start column
+        /// </summary>
         [Fact]
         public void MazeDeleteCols_FailsForInvalidStartCol()
         {
@@ -221,6 +263,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("invalid 'start_col' index (1)", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.DeleteCols"/> fails if the number of columns requested is too large
+        /// </summary>
         [Fact]
         public void MazeDeleteCols_FailsIfCountTooLarge()
         {
@@ -233,6 +278,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("invalid 'count' (3) - too large", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.DeleteCols"/> succeeds for a valid start column and column count
+        /// </summary>
         [Fact]
         public void MazeDeleteCols_SucceedsForValidStartCol()
         {
@@ -242,6 +290,9 @@ namespace Maze.Api.Tests
                 AssertColCount(maze.ColCount, 2);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.GetCellType"/> fails for an empty maze
+        /// </summary>
         [Fact]
         public void MazeGetCellType_FailsForEmptyMaze()
         {
@@ -255,6 +306,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("row index (0) out of bounds", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.GetCellType"/> fails for an invalid target row
+        /// </summary>
         [Fact]
         public void MazeGetCellType_FailsForInvalidRow()
         {
@@ -268,6 +322,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("row index (10) out of bounds", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.GetCellType"/> fails for an invalid target column
+        /// </summary>
         [Fact]
         public void MazeGetCellType_FailsForInvalidCol()
         {
@@ -281,6 +338,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("column index (5) out of bounds", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.GetCellType"/> succeeds for valid cell location
+        /// </summary>
         [Fact]
         public void MazeGetCellType_SucceedsForValidCellLocation()
         {
@@ -290,6 +350,9 @@ namespace Maze.Api.Tests
                 AssertCellType(cellType, Maze.CellType.Empty);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.GetStartCell"/> fails for an empty maze
+        /// </summary>
         [Fact]
         public void MazeGetStartCell_FailsForEmptyMaze()
         {
@@ -303,6 +366,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("no start cell defined", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.GetStartCell"/> fails if a start cell is not defined
+        /// </summary>
         [Fact]
         public void MazeGetStartCell_FailsIfNotDefined()
         {
@@ -316,6 +382,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("no start cell defined", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.GetStartCell"/> succeeds if a start cell is defined
+        /// </summary>
         [Fact]
         public void MazeGetStartCell_SucceedsIfDefined()
         {
@@ -327,6 +396,9 @@ namespace Maze.Api.Tests
                 AssertStartCell(start, new Maze.Point() { Row = 1, Column = 2 });
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.GetFinishCell"/> fails for an empty maze
+        /// </summary>
         [Fact]
         public void MazeGetFinishCell_FailsForEmptyMaze()
         {
@@ -340,6 +412,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("no finish cell defined", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.GetFinishCell"/> fails if a finish cell is not defined
+        /// </summary>
         [Fact]
         public void MazeGetFinishCell_FailsIfNotDefined()
         {
@@ -353,6 +428,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("no finish cell defined", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.GetFinishCell"/> succeeds if a finish cell is defined
+        /// </summary>
         [Fact]
         public void MazeGetFinishCell_SucceedsIfDefined()
         {
@@ -364,6 +442,9 @@ namespace Maze.Api.Tests
                 AssertFinishCell(finish, new Maze.Point() { Row = 3, Column = 4 });
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.SetWallCells"/> fails for an empty maze
+        /// </summary>
         [Fact]
         public void MazeSetWallCells_FailsForEmptyMaze()
         {
@@ -376,8 +457,11 @@ namespace Maze.Api.Tests
                 Assert.Equal("invalid 'from' point [0, 0]", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.SetWallCells"/> fails for an invalid start location
+        /// </summary>
         [Fact]
-        public void MazeSetWallCells_FailsForInvalidFromLocation()
+        public void MazeSetWallCells_FailsForInvalidStartLocation()
         {
             using (Maze maze = new Maze(5, 10))
             {
@@ -388,8 +472,11 @@ namespace Maze.Api.Tests
                 Assert.Equal("invalid 'from' point [5, 1]", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.SetWallCells"/> fails for an invalid end location
+        /// </summary>
         [Fact]
-        public void MazeSetWallCells_FailsForInvalidToLocation()
+        public void MazeSetWallCells_FailsForInvalidEndLocation()
         {
             using (Maze maze = new Maze(5, 10))
             {
@@ -400,6 +487,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("invalid 'to' point [5, 6]", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.SetWallCells"/> succeeds for a valid cell range
+        /// </summary>
         [Fact]
         public void MazeSetWallCells_SucceedsForValidCellRange()
         {
@@ -409,6 +499,9 @@ namespace Maze.Api.Tests
                 AssertRangeCellType(maze, 0, 0, 3, 6, Maze.CellType.Wall);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.ToJson"/> succeeds
+        /// </summary>
         [Fact]
         public void MazeToJson_ShouldSucceed()
         {
@@ -419,6 +512,9 @@ namespace Maze.Api.Tests
                 Assert.Equal(json, expected);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.FromJson"/> fails for invalid JSON
+        /// </summary>
         [Fact]
         public void MazeFromJson_ShouldFail()
         {
@@ -431,6 +527,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("EOF while parsing an object at line 1 column 1", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.FromJson"/> succeeds for valid JSON
+        /// </summary>
         [Fact]
         public void MazeFromJson_ShouldSucceed()
         {
@@ -458,6 +557,9 @@ namespace Maze.Api.Tests
                 AssertColCount(maze.ColCount, 5);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Solve"/> fails for a maze that has no start cell defined and with the expected error
+        /// </summary>
         [Fact]
         public void MazeSolve_ShouldFailWithNoStartCell()
         {
@@ -483,6 +585,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("no start cell found within maze", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Solve"/> fails for a maze that has no finish cell defined and with the expected error
+        /// </summary>
         [Fact]
         public void MazeWasmSolve_ShouldFailWithNoFinishCell()
         {
@@ -508,6 +613,9 @@ namespace Maze.Api.Tests
                 Assert.Equal("no finish cell found within maze", exception.Message);
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Solve"/> succeeds for a valid maze that has a solution
+        /// </summary>
         [Fact]
         public void MazeSolve_ShouldSucceed()
         {
@@ -537,6 +645,9 @@ namespace Maze.Api.Tests
                 }
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Solution.GetPathPoints"/> succeeds for a solution and returns the expected number of points
+        /// </summary>
         [Fact]
         public void MazeSolutionGetPathPoints_ShouldSucceed()
         {
@@ -576,6 +687,9 @@ namespace Maze.Api.Tests
     /// </summary>
     public class WasmtimeTestFixture
     {
+        /// <summary>
+        ///  Constructor for the [Wasmtime](https://docs.wasmtime.dev/) test fixture
+        /// </summary>
         public WasmtimeTestFixture()
         {
             MazeWasmInterop.Disconnect();
@@ -600,6 +714,9 @@ namespace Maze.Api.Tests
     public class MazeApiWasmtimeTest_Static: MazeApiTestBase
     {
         private readonly WasmtimeTestFixture _fixture;
+        /// <summary>
+        ///  Constructor for the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Api"/> tests that use a statically allocated <see cref="MazeWasmInterop"/>
+        /// </summary>
         public MazeApiWasmtimeTest_Static(WasmtimeTestFixture fixture)
         {
             _fixture = fixture;
@@ -614,6 +731,9 @@ namespace Maze.Api.Tests
     public class MazeApiWasmtimeTest_NonStatic : MazeApiTestBase
     {
         private readonly WasmtimeTestFixture _fixture;
+        /// <summary>
+        ///  Constructor for the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Api"/> tests that use a dynamically allocated <see cref="MazeWasmInterop"/>
+        /// </summary>
         public MazeApiWasmtimeTest_NonStatic(WasmtimeTestFixture fixture)
         {
             _fixture = fixture;
@@ -628,6 +748,9 @@ namespace Maze.Api.Tests
     /// </summary>
     public class WasmerTestFixture
     {
+        /// <summary>
+        ///  Constructor for the [Wasmer](https://wasmer.io/) test fixture
+        /// </summary>
         public WasmerTestFixture()
         {
             MazeWasmInterop.Disconnect();
@@ -651,6 +774,9 @@ namespace Maze.Api.Tests
     public class MazeApiWasmerTest_Static : MazeApiTestBase
     {
         private readonly WasmerTestFixture _fixture;
+        /// <summary>
+        ///  Constructor for the [Wasmer](https://wasmer.io/) <see cref="Api"/> tests that use a statically allocated <see cref="MazeWasmInterop"/>
+        /// </summary>
         public MazeApiWasmerTest_Static(WasmerTestFixture fixture)
         {
             _fixture = fixture;
@@ -665,6 +791,9 @@ namespace Maze.Api.Tests
     public class MazeApiWasmerTest_NonStatic : MazeApiTestBase
     {
         private readonly WasmerTestFixture _fixture;
+        /// <summary>
+        ///  Constructor for the [Wasmer](https://wasmer.io/) <see cref="Api"/> tests that use a dynamically allocated <see cref="MazeWasmInterop"/>
+        /// </summary>
         public MazeApiWasmerTest_NonStatic(WasmerTestFixture fixture)
         {
             _fixture = fixture;

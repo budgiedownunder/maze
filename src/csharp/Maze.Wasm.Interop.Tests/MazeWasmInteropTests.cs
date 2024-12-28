@@ -654,10 +654,10 @@ namespace Maze.Wasm.Interop.Tests
             Assert.Equal("invalid 'from' point [0, 0]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.MazeWasmSetWallCells"/> fails for an invalid `from` location
+        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.MazeWasmSetWallCells"/> fails for an invalid start location
         /// </summary>
         [Fact]
-        public void MazeWasmSetWallCells_FailsForInvalidFromLocation()
+        public void MazeWasmSetWallCells_FailsForInvalidStartLocation()
         {
             MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(5, 10);
@@ -669,10 +669,10 @@ namespace Maze.Wasm.Interop.Tests
             Assert.Equal("invalid 'from' point [5, 1]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.MazeWasmSetWallCells"/> fails for an invalid `to` location
+        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.MazeWasmSetWallCells"/> fails for an invalid end location
         /// </summary>
         [Fact]
-        public void MazeWasmSetWallCells_FailsForInvalidToLocation()
+        public void MazeWasmSetWallCells_FailsForInvalidEndLocation()
         {
             MazeWasmInterop interop = GetInterop();
             UInt32 mazeWasmPtr = CreateNewMazeWasm(5, 10);
