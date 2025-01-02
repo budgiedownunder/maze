@@ -43,8 +43,8 @@ namespace Maze.Maui.App.Views
     ///     </thead>
     ///     <tbody>
     ///       <tr>
-    ///         <td><img src="../../images/screenshots/android-design.png" width="250"/></td>
-    ///         <td><img src="../../images/screenshots/ios-design.png" width="250"/></td>
+    ///         <td><img src="../../images/screenshots/android-solved.png" width="250"/></td>
+    ///         <td><img src="../../images/screenshots/ios-solved.png" width="250"/></td>
     ///       </tr>
     ///     </tbody> 
     ///  </table>
