@@ -25,7 +25,7 @@ This short animation clip demonstrates it being used on `Windows` to solve a mor
 
 <img src="Gifs/windows/solve-demo.gif" height="600">
 
-and this one shows the design process being performed on an `iOS` device using extended (animated) selection:
+and this one shows the design and solve processes being performed on an `iOS` device using extended (animated) selection:
 
 <img src="Gifs/ios/solve-demo.gif" height="400">
 
