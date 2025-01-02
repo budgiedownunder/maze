@@ -27,7 +27,6 @@ namespace Maze.Maui.Controls.Keyboard
     /// <summary>
     /// Represents a key state
     /// </summary>
-    /// <returns>Boolean</returns>
     [Flags]
     public enum KeyState
     {
@@ -48,7 +47,9 @@ namespace Maze.Maui.Controls.Keyboard
         /// </summary>
         CapsLock = 0x4
     }
-
+    /// <summary>
+    /// Represents a key
+    /// </summary>
     public enum Key
     {
         /// <summary>

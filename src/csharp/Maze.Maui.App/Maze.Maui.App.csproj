@@ -1,9 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
+	<!-- Define helper property to control whether mobile frameworks are targeted -->
 	<PropertyGroup>
-		<TargetFrameworks>net8.0-ios;net8.0-maccatalyst;net8.0-android</TargetFrameworks>
-		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net8.0-windows10.0.19041.0</TargetFrameworks>
-       	<!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
+		<IsWindowsAndIncludeMobileFrameworks Condition="$([MSBuild]::IsOSPlatform('windows')) And '$(ExcludeMobileFrameworks)' != 'true'">true</IsWindowsAndIncludeMobileFrameworks>
+ 	 </PropertyGroup>
+
+	<PropertyGroup Condition="'$(IsBuildingHelp)' != 'true'">
+  		<!-- <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net8.0-windows10.0.19041.0;net8.0-maccatalyst;</TargetFrameworks> -->
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net8.0-windows10.0.19041.0;</TargetFrameworks>
+		<TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">$(TargetFrameworks);net8.0-android;net8.0-ios;</TargetFrameworks>
+
+    <!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
 		<!-- <TargetFrameworks>$(TargetFrameworks);net8.0-tizen</TargetFrameworks> -->
 
 		<!-- Note for MacCatalyst:
@@ -12,7 +18,14 @@
 		The Mac App Store will NOT accept apps with ONLY maccatalyst-arm64 indicated;
 		either BOTH runtimes must be indicated or ONLY macatalyst-x64. -->
 		<!-- For example: <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers> -->
+	</PropertyGroup>
+	
+	<PropertyGroup Condition="'$(IsBuildingHelp)' == 'true'">
+    	<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    	<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+ 	 </PropertyGroup>
 
+	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<RootNamespace>Maze.Maui.App</RootNamespace>
 		<UseMaui>true</UseMaui>
@@ -79,13 +92,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<Content Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-			<Link>maze_wasm.wasm</Link>
-		</Content>
-	</ItemGroup>
-	
-	<ItemGroup>
 	  <None Update="appsettings.json">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
@@ -100,18 +106,59 @@
 	  <ProjectReference Include="..\Maze.Api\Maze.Api.csproj" />
 	  <ProjectReference Include="..\Maze.Maui.Controls\Maze.Maui.Controls.csproj" />
 	  <ProjectReference Include="..\Maze.Maui.Services\Maze.Maui.Services.csproj" />
+	  <ProjectReference Include="..\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj" />
 	</ItemGroup>
 
-	<Target Name="PostBuild" AfterTargets="PostBuildEvent" Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
-		<Message Text="Started: Processing post-build events for framework: $(TargetFramework) (Windows)" Importance="high" />
-		<Exec Command="copy ..\..\rust\target\wasm32-unknown-unknown\release\maze_wasm.wasm $(OutDir)AppX" />
-		<Message Text="Finished: Post-build events for framework: $(TargetFramework) (Windows)" Importance="high" />
-	</Target>
+  <PropertyGroup>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-android'">android-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-ios'">ios-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">win-x64</RuntimeIdentifier>
+  </PropertyGroup>
 
-	<Target Name="PostBuild" AfterTargets="Build" Condition="'$(TargetFramework)' == 'net8.0-android'">
-		<Message Text="Started: Processing post-build events for framework: $(TargetFramework) (Android)" Importance="high" />
-		<!--<exec command="adb push ..\..\rust\target\wasm32-unknown-unknown\release\maze_wasm.wasm /data/data/com.budgiedownunder.mazemauiapp/files/.__override__/" />-->
-		<Message Text="Finished: Processing post-build events for framework: $(TargetFramework) (Android)" Importance="high" />
-	</Target>
+  <Target Name="DebugRuntimeIdentifier" AfterTargets="Build">
+    <Message Importance="high" Text="RuntimeIdentifier: $(RuntimeIdentifier)" />
+  </Target>
+
+  <Target Name="DebugNativeLibrary" BeforeTargets="Build">
+    <Message Importance="high" Text="Native Libraries: @(NativeLibrary)" />
+  </Target>  
+
+  <Target Name="ValidateNativeLibrary" BeforeTargets="Build">
+    <ItemGroup>
+      <MissingNativeLibraries Include="@(NativeLibrary)" Condition="!Exists('%(Identity)')" />
+    </ItemGroup>
+    <Message Importance="high" Text="Evaluated Native Libraries: @(NativeLibrary)" />
+    <Error Text="Native library file not found: %(MissingNativeLibraries.Identity)" Condition="@(MissingNativeLibraries-&gt;Count()) &gt; 0" />
+  </Target>
+
+  <Target Name="PrintAppxPackageDir" AfterTargets="Build">
+    <Message Text="AppxPackageDir: $(AppxPackageDir)" Importance="High" />
+  </Target>
+  
+  <Target Name="CopyNativeLibrariesToOutput" AfterTargets="Build">
+    <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)" />
+    <!--<Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(AppxPackageDir)"/>-->
+    <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)/AppX" Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'" />
+  </Target>
+
+  <ItemGroup>
+    <Content Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm" Condition="'$(TargetFramework)' != 'net8.0-android'">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <Link>maze_wasm.wasm</Link>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+    <AndroidAsset Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <BuildInParallel>false</BuildInParallel>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+  </PropertyGroup>
+  
+  <PropertyGroup>
+	<NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
 
 </Project>

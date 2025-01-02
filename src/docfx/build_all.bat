@@ -5,7 +5,13 @@ rmdir /s /q js-doc-tmp
 rmdir /s /q web-doc-tmp
 
 call copy_files.bat
-docfx docfx.json
+docfx metadata docfx.json
+
+@REM type api\net\toc.yml
+
+@REM powershell -ExecutionPolicy Bypass -File cleanup_tocs.ps1
+
+docfx build docfx.json
 
 cd ../rust
 cargo doc --no-deps --target-dir ../docfx/rust-doc-tmp

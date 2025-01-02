@@ -18,7 +18,10 @@ namespace Maze.Maui.App.WinUI
         {
             this.InitializeComponent();
         }
-
+        /// <summary>
+        /// Application instance creation override
+        /// </summary>
+        /// <returns>Instance</returns>
         protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
     }
 

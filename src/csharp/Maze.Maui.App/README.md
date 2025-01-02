@@ -19,15 +19,15 @@ and these screenshots show it running on `Android` and `iOS` mobile devices:
 
 | Android     | iOS 
 |-------------|-------------
-|<img src = "Screenshots/android-design.png" width="250"> | <img src = "Screenshots/ios-design.png" width="250">
+|<img src = "Screenshots/android-solved.png" width="250"> | <img src = "Screenshots/ios-solved.png" width="250">
 
 This short animation clip demonstrates it being used on `Windows` to solve a more complex maze before introducing a blocking wall that then forces the solver to go via a different route on the next solve attempt:
 
 <img src="Gifs/windows/solve-demo.gif" height="600">
 
-and this one shows the design process being performed on an `iOS` device using extended (animated) selection:
+and this one shows the design and solve processes being performed on an `iOS` device using extended (animated) selection:
 
-<img src="Gifs/ios/design-demo.gif" height="400">
+<img src="Gifs/ios/solve-demo.gif" height="400">
 
 ## Keyboard Support
 In addition to mouse/pointer support on the desktop, the following keyboard shortcuts are supported for selecting/editing cells and cell navigation:

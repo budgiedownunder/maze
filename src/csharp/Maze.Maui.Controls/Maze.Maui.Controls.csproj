@@ -1,11 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- Define helper property to control whether mobile frameworks are targeted -->
+  <PropertyGroup>
+    <IsWindowsAndIncludeMobileFrameworks Condition="$([MSBuild]::IsOSPlatform('windows')) And '$(ExcludeMobileFrameworks)' != 'true'">true</IsWindowsAndIncludeMobileFrameworks>
+  </PropertyGroup>
 
-	<PropertyGroup>
-		<TargetFrameworks>net8.0-android;net8.0-ios;net8.0-maccatalyst</TargetFrameworks>
-		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net8.0-windows10.0.19041.0</TargetFrameworks>
-		<!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
+  <PropertyGroup Condition="'$(IsBuildingHelp)' != 'true'">
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net8.0-windows10.0.19041.0;</TargetFrameworks>
+    <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">$(TargetFrameworks);net8.0-android;net8.0-ios;</TargetFrameworks>
+    <!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
 		<!-- <TargetFrameworks>$(TargetFrameworks);net8.0-tizen</TargetFrameworks> -->
-		<UseMaui>true</UseMaui>
+	</PropertyGroup>  
+  	
+  <PropertyGroup Condition="'$(IsBuildingHelp)' == 'true'">
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup>  
+    <UseMaui>true</UseMaui>
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
@@ -16,6 +28,7 @@
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
 		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'tizen'">6.5</SupportedOSPlatformVersion>
+		<GenerateDocumentationFile>True</GenerateDocumentationFile>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -28,11 +41,27 @@
 	  <ProjectReference Include="..\Maze.Maui.Services\Maze.Maui.Services.csproj" />
 	</ItemGroup>
 
-	<ItemGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+    <RuntimeIdentifier>android-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+    <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
+  </PropertyGroup>
+
+    <ItemGroup>
 	  <Folder Include="Platforms\Android\" />
 	  <Folder Include="Platforms\iOS\" />
 	  <Folder Include="Platforms\MacCatalyst\" />
 	  <Folder Include="Platforms\Tizen\" />
 	</ItemGroup>
+
+  <PropertyGroup>
+  	<NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
 
 </Project>

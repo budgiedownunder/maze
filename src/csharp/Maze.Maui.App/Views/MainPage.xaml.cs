@@ -8,6 +8,9 @@ namespace Maze.Maui.App.Views
     using Maze.Maui.Controls;
     using Maze.Maui.Services;
 
+    //using static Maze.Maui.App.Views.MainPage.WasmerInterop;
+
+
     /// <summary>
     /// This class represents the main page within the application. It provides
     /// functionality to design and solve mazes.
@@ -51,6 +54,9 @@ namespace Maze.Maui.App.Views
         const String APP_TITLE = "MAZE";
         MainPageViewModel _viewModel;
 
+        /// <summary>
+        /// Constructor 
+        /// </summary>
         public MainPage()
         {
             InitializeComponent();
@@ -85,9 +91,9 @@ namespace Maze.Maui.App.Views
 
         private bool IsTouchOnlyDevice { get => _viewModel.IsTouchOnlyDevice; }
 
-        private bool IsSolveSupported { get => !IsTouchOnlyDevice;  }
+        private bool IsSolveSupported { get => OperatingSystem.IsWindows() || OperatingSystem.IsAndroid() || OperatingSystem.IsIOS(); }
 
-        private bool IsSolutionDisplayed { get; set;  } = false;
+        private bool IsSolutionDisplayed { get; set; } = false;
 
         private void OnMazeGridCellTapped(object sender, MazeGridCellTappedEventArgs e)
         {
@@ -192,11 +198,11 @@ namespace Maze.Maui.App.Views
                 IsSolutionDisplayed = MazeGrid.DisplaySolution(solution);
                 UpdateControls();
             }
-            catch (Exception ex) 
-            { 
+            catch (Exception ex)
+            {
                 DisplayAlert(APP_TITLE, $"Unable to solve maze\n\nReason: {ex.Message}", "OK");
             }
-            
+
         }
 
         private void ClearSolution()

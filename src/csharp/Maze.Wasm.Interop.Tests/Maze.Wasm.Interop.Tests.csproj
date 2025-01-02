@@ -1,14 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
   </PropertyGroup>
 
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>  
+ 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2">
       <PrivateAssets>all</PrivateAssets>
@@ -30,10 +37,43 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <TargetFramework Condition="'$(IsBuildingHelp)' == 'true'">net8.0</TargetFramework> 
+    <TargetFrameworks Condition="'$(IsBuildingHelp)' != 'true'">net8.0;</TargetFrameworks> 
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+  </PropertyGroup>
+  
+  <!--- Make sure runtime identifiers are initialized if not set for the target framework -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('osx'))">
+    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('linux'))">
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('windows'))">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0' and '$(RuntimeIdentifier)' == ''">
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('windows'))">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('linux'))">linux-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-android'">android-x64</RuntimeIdentifier>
+    <!--<RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-ios'">ios-arm64</RuntimeIdentifier>-->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-maccatalyst'">osx-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
   <ItemGroup>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(ProjectDir)../Maze.Wasm.Interop/bin/Debug/net8.0/win-x64/wasmer.dll" Condition="'$(RuntimeIdentifier)' == 'win-x64'" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -1,13 +1,71 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj" />
   </ItemGroup>
+
+  <!-- Define helper property to control whether mobile frameworks are targeted -->
+  <PropertyGroup>
+    <IsWindowsAndIncludeMobileFrameworks Condition="$([MSBuild]::IsOSPlatform('windows')) And '$(ExcludeMobileFrameworks)' != 'true'">true</IsWindowsAndIncludeMobileFrameworks>
+  </PropertyGroup>
+
+  <!-- Define target frameworks -->
+  <PropertyGroup Condition="'$(IsBuildingHelp)' != 'true'">
+    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">
+      net8.0;net8.0-android;net8.0-ios;net8.0-windows10.0.19041.0
+    </TargetFrameworks>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IsBuildingHelp)' == 'true'">
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <!-- Define runtime identifiers for specific frameworks -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+    <RuntimeIdentifier>android-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+    <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-maccatalyst'">
+    <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <!-- Configure default output directories -->
+  <PropertyGroup>
+    <OutDir>bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\</OutDir>
+  </PropertyGroup>
+
+
+  <!-- Dynamic OutDir -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <OutDir>bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\</OutDir>
+  </PropertyGroup>
+
+  <!-- Debugging Targets -->
+  <Target Name="DebugRuntimeIdentifier" AfterTargets="Build">
+    <Message Importance="high" Text="RuntimeIdentifier: $(RuntimeIdentifier)" />
+  </Target>
+
+  <Target Name="DebugNativeLibraries" AfterTargets="Build">
+    <Message Importance="high" Text="Native Libraries: @(NativeLibrary)" />
+  </Target>
+
+  <!-- Copy Native Libraries -->
+  <Target Name="CopyNativeLibraries" AfterTargets="Build">
+    <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)" />
+  </Target>
 
 </Project>
