@@ -26,12 +26,27 @@ defaults:
 jobs:
   build:
     runs-on: windows-latest
+
+    env:
+      NET_BUILD_SOLUTION: 'Build-Windows.sln'
+      NET_MOBILE_FRAMEWORK_INCLUSION: ${{ '-p:ExcludeMobileFrameworks=true' }}
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.404 # Match the version in global.json
+
     - name: Build Step
       run: echo "Building on ${{ runner.os }}"
+
+    - name: Install wasm-pack on Windows
+      uses: jetli/wasm-pack-action@v0.4.0
+      with:
+        version: 'latest'
 
     - name: Install DocFX
       working-directory: ./
@@ -41,17 +56,41 @@ jobs:
       working-directory: ./
       run: npm install -g @redocly/cli
 
-    - name: Install .NET MAUI workload
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.404 # Match the version in global.json
+
+    - name: Install .NET workloads for Windows
       working-directory: ./src/csharp 
       run: |
         dotnet workload install maui-windows
 
+    - name: Build Rust Components
+      working-directory: ./src/rust
+      run: |
+        cargo build --verbose
+        cd maze_wasm
+        wasm-pack build --target web --features "wasm-bindgen"
+        cargo build --target wasm32-unknown-unknown --release
+        pwd
+
+    - name: Restore .NET dependencies
+      working-directory: ./src/csharp 
+      run: |
+        dotnet restore ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }} 
+  
+    - name: Build .NET components
+      working-directory: ./src/csharp 
+      run: |
+        dotnet build ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }}
+          
     - name: Build HTML documentation
       working-directory: ./src/docfx
       shell: cmd
       run: |
         build_all.bat
-
+       
     - name: Setup GitHub Pages
       id: pages
       uses: actions/configure-pages@v3
