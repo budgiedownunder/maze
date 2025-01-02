@@ -91,7 +91,7 @@ namespace Maze.Maui.App.Views
 
         private bool IsTouchOnlyDevice { get => _viewModel.IsTouchOnlyDevice; }
 
-        private bool IsSolveSupported { get => !OperatingSystem.IsIOS(); }
+        private bool IsSolveSupported { get => OperatingSystem.IsWindows() || OperatingSystem.IsAndroid() || OperatingSystem.IsIOS(); }
 
         private bool IsSolutionDisplayed { get; set; } = false;
 

@@ -33,8 +33,8 @@
         "libwasmer.dylib";
 #elif ANDROID
         "libwasmer.so";
-//#elif IOS
-//        "libwasmer.so";
+#elif IOS
+        "__Internal";
 #else
         "wasmer.dll";
 #endif

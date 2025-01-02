@@ -59,12 +59,28 @@
   <ItemGroup>
     <!--<NativeLibrary Include="runtimes/linux-x64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'linux-x64'" />-->
     <NativeLibrary Include="runtimes/android-x64/native/libwasmer.so" Condition="'$(RuntimeIdentifier)' == 'android-x64'" />
-    <!--<NativeLibrary Include="runtimes/ios-arm64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'ios-arm64'" />
-    <NativeLibrary Include="runtimes/maccatalyst-x64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'maccatalyst-x64'" />
-    <NativeLibrary Include="runtimes/maccatalyst-arm64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'maccatalyst-arm64'" />-->
+    <!--<NativeLibrary Include="runtimes/ios-arm64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'ios-arm64'" />-->
+    <!-- <NativeLibrary Include="runtimes/maccatalyst-x64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'maccatalyst-x64'" />
+    <NativeLibrary Include="runtimes/maccatalyst-arm64/native/libwasmer.dylib" Condition="'$(RuntimeIdentifier)' == 'maccatalyst-arm64'" /> -->
     <NativeLibrary Include="runtimes/win-x64/native/wasmer.dll" Condition="'$(RuntimeIdentifier)' == 'win-x64'" />
   </ItemGroup>
 
+  <!-- <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+    <Content Include="runtimes/ios-arm64/native/libwasmer.a">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup> -->
+
+<ItemGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+    <Content Include="runtimes/ios-sim-arm64/native/libwasmer.a">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+    <AdditionalMtouchArguments>--gcc_flags "-framework CoreFoundation"</AdditionalMtouchArguments>
+  </PropertyGroup>
+  
   <!-- Debugging Information -->
   <Target Name="DebugNativeLibraryDetails" AfterTargets="Build">
     <Message Text="**************************" Importance="High" />
