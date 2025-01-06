@@ -8,9 +8,6 @@ namespace Maze.Maui.App.Views
     using Maze.Maui.Controls;
     using Maze.Maui.Services;
 
-    //using static Maze.Maui.App.Views.MainPage.WasmerInterop;
-
-
     /// <summary>
     /// This class represents the main page within the application. It provides
     /// functionality to design and solve mazes.
@@ -49,20 +46,20 @@ namespace Maze.Maui.App.Views
     ///     </tbody> 
     ///  </table>
     /// </summary>
-    public partial class MainPage : ContentPage
+    public partial class MazePage : ContentPage
     {
         const String APP_TITLE = "MAZE";
-        MainPageViewModel _viewModel;
+        MazePageViewModel _viewModel;
 
         /// <summary>
         /// Constructor 
         /// </summary>
-        public MainPage()
+        public MazePage()
         {
             InitializeComponent();
             IDeviceTypeService deviceTypeService = new DeviceTypeService();
 
-            _viewModel = new MainPageViewModel(deviceTypeService);
+            _viewModel = new MazePageViewModel(deviceTypeService);
             BindingContext = _viewModel;
 
             _viewModel.InsertRowsRequested += (s, e) => InsertRows();

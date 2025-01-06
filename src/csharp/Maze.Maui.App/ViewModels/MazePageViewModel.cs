@@ -5,7 +5,7 @@ using Maze.Maui.Services;
 
 namespace Maze.Maui.App.ViewModels
 {
-    class MainPageViewModel : INotifyPropertyChanged
+    class MazePageViewModel : INotifyPropertyChanged
     {
         private const int COMMAND_DELAY_MS = 50;
 
@@ -232,7 +232,7 @@ namespace Maze.Maui.App.ViewModels
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        public MainPageViewModel(IDeviceTypeService deviceTypeService)
+        public MazePageViewModel(IDeviceTypeService deviceTypeService)
         {
             _deviceTypeService = deviceTypeService;
             InsertRowsCommand = new Command(async () => await OnInsertRows());
