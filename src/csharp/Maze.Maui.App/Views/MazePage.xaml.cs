@@ -9,7 +9,7 @@ namespace Maze.Maui.App.Views
     using Maze.Maui.Services;
 
     /// <summary>
-    /// This class represents the main page within the application. It provides
+    /// This class represents the maze page within the application. It provides
     /// functionality to design and solve mazes.
     /// 
     /// This is how the page appears on Windows Desktop:
