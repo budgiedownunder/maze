@@ -259,7 +259,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void RegisterBoxEventHandlers()
         {
-            if (box == null) return;
+            if (box is null) return;
             if (ParentFrame.IsPanSupportEnabled)
                 box.PanUpdated += OnBoxPanUpdated;
         }
@@ -278,7 +278,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void RegisterGripEventHandlers()
         {
-            if (grip == null) return;
+            if (grip is null) return;
             if (ParentFrame.IsPanSupportEnabled)
                 grip.PanUpdated += OnGripPanUpdated;
 
@@ -349,7 +349,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             switch (e.StatusType)
             {
                 case GestureStatus.Started:
-                    if (ParentFrame != null && ParentFrame.CellRange != null)
+                    if (ParentFrame is not null && ParentFrame.CellRange is not null)
                     {
                         havePanSelection = true;
                         panStartSelection = ParentFrame.CellRange.Clone();
@@ -365,7 +365,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                     CellRange newCellRamge = CalcCellSelectionForPanChange(isGrip, deltaX, deltaY);
                     bool needSelectionChange = !newCellRamge.Equals(panStartSelection);
 
-                    if (needSelectionChange && newCellRamge != null)
+                    if (needSelectionChange && newCellRamge is not null)
                         ParentGrid.ResetSelection(newCellRamge);
                     break;
 
@@ -462,9 +462,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void UpdateColor(Color newColor)
         {
             color = newColor;
-            if (box != null)
+            if (box is not null)
                 box.Color = newColor;
-            if (grip != null)
+            if (grip is not null)
                 grip.Color = newColor;
         }
         /// <summary>
@@ -482,7 +482,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="newGripDiameter">New diameter (in DIPs)</param>
         private void UpdateGripDiameter(double newGripDiameter)
         {
-            if (grip == null) return;
+            if (grip is null) return;
             grip.Diameter = newGripDiameter;
         }
         /// <summary>
@@ -492,7 +492,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         public void Show(bool show)
         {
             box.IsVisible = show;
-            if (grip != null)
+            if (grip is not null)
                 grip.IsVisible = show;
         }
         /// <summary>
@@ -501,7 +501,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         public void AddToGrid()
         {
             AddViewToGrid(box);
-            if (grip != null)
+            if (grip is not null)
                 AddViewToGrid(grip);
         }
         /// <summary>
@@ -519,7 +519,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         public void RemoveFromGrid()
         {
             RemoveViewFromGrid(box);
-            if (grip != null)
+            if (grip is not null)
                 RemoveViewFromGrid(grip);
         }
         /// <summary>
@@ -548,7 +548,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             box.HeightRequest = height;
             box.Margin = margin;
 
-            if (grip != null)
+            if (grip is not null)
             {
                 ParentGrid.SetRow(grip, row);
                 ParentGrid.SetColumn(grip, column);

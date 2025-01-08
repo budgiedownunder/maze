@@ -277,7 +277,7 @@ namespace Maze.Maui.App.Views
         private void UpdateControls()
         {
             bool showSelectRangeButtons = IsTouchOnlyDevice || MazeGrid.IsExtendedSelectionMode;
-            bool haveSelection = MazeGrid.ActiveCell != null;
+            bool haveSelection = MazeGrid.ActiveCell is not null;
             bool showTopRowLayout = showSelectRangeButtons || haveSelection;
             ShowMainGridRow(0, showTopRowLayout);
             if (showTopRowLayout)

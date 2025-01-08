@@ -95,7 +95,7 @@ namespace Maze.Maui.App
             int cellCount = 0;
             bool singleCell = false, containsStart = false, containsFinish = false, containsWall = false;
             int numWalls = 0;
-            if (currentSelection != null)
+            if (currentSelection is not null)
             {
                 CellType cellType = CellType.Empty;
 
@@ -143,7 +143,7 @@ namespace Maze.Maui.App
             if (row >= 0 && column >= 0)
             {
                 CellFrame? cellFrame = GetCell(row, column) as CellFrame;
-                if (cellFrame != null)
+                if (cellFrame is not null)
                     content = cellFrame.Content as MazeCellContent;
             }
             return content;
@@ -159,10 +159,10 @@ namespace Maze.Maui.App
             if (row >= 0 && column >= 0)
             {
                 CellFrame? cellFrame = GetCell(row, column) as CellFrame;
-                if (cellFrame != null)
+                if (cellFrame is not null)
                 {
                     MazeCellContent? cellContent = cellFrame.Content as MazeCellContent;
-                    if (cellContent != null)
+                    if (cellContent is not null)
                     {
                         return cellContent.CellType;
                     }
@@ -187,7 +187,7 @@ namespace Maze.Maui.App
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
         public override void OnCellTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            if (triggerEvents && CellTapped != null)
+            if (triggerEvents && CellTapped is not null)
             {
                 CellTapped.Invoke(this, new MazeGridCellTappedEventArgs(cellFrame, 1));
             }
@@ -203,7 +203,7 @@ namespace Maze.Maui.App
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
         public override void OnCellDoubleTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            if (triggerEvents && CellDoubleTapped != null)
+            if (triggerEvents && CellDoubleTapped is not null)
             {
                 CellDoubleTapped.Invoke(this, new MazeGridCellTappedEventArgs(cellFrame, 2));
             }
@@ -220,7 +220,7 @@ namespace Maze.Maui.App
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
         public override void OnProcessKeyDown(Controls.Keyboard.KeyState state, Controls.Keyboard.Key key, bool triggerEvents)
         {
-            if (triggerEvents && KeyDown != null)
+            if (triggerEvents && KeyDown is not null)
             {
                 KeyDown.Invoke(this, new MazeGridKeyDownEventArgs(state, key));
             }
@@ -263,14 +263,14 @@ namespace Maze.Maui.App
         private void SetSelectionToStartCell()
         {
             CellRange? currentSelection = CurrentSelection;
-            if (currentSelection != null && currentSelection.IsSingleCell)
+            if (currentSelection is not null && currentSelection.IsSingleCell)
             {
-                if (startCell != null && startCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
+                if (startCell is not null && startCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
                     return;
-                if (startCell != null)
+                if (startCell is not null)
                     SetCellContent(startCell, CellType.Empty);
                 startCell = SetCellContent(currentSelection.Top, currentSelection.Left, CellType.Start);
-                if (startCell != null && finishCell != null && finishCell.IsDisplayPosition(startCell.DisplayRow, startCell.DisplayColumn))
+                if (startCell is not null && finishCell is not null && finishCell.IsDisplayPosition(startCell.DisplayRow, startCell.DisplayColumn))
                     finishCell = null;
             }
         }
@@ -280,14 +280,14 @@ namespace Maze.Maui.App
         private void SetSelectionToFinishCell()
         {
             CellRange? currentSelection = CurrentSelection;
-            if (currentSelection != null && currentSelection.IsSingleCell)
+            if (currentSelection is not null && currentSelection.IsSingleCell)
             {
-                if (finishCell != null && finishCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
+                if (finishCell is not null && finishCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
                     return;
-                if (finishCell != null)
+                if (finishCell is not null)
                     SetCellContent(finishCell, CellType.Empty);
                 finishCell = SetCellContent(currentSelection.Top, currentSelection.Left, CellType.Finish);
-                if (finishCell != null && startCell != null && startCell.IsDisplayPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
+                if (finishCell is not null && startCell is not null && startCell.IsDisplayPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
                     startCell = null;
             }
         }
@@ -298,16 +298,16 @@ namespace Maze.Maui.App
         private void SetSelectionContentToType(CellType cellType)
         {
             CellRange? currentSelection = CurrentSelection;
-            if (currentSelection != null && cellType != CellType.Start && cellType != CellType.Finish)
+            if (currentSelection is not null && cellType != CellType.Start && cellType != CellType.Finish)
             {
                 for (int row = currentSelection.Top; row <= currentSelection.Bottom; row++)
                 {
                     for (int column = currentSelection.Left; column <= currentSelection.Right; column++)
                         SetCellContent(row, column, cellType);
                 }
-                if (startCell != null && currentSelection.ContainsPosition(startCell.DisplayRow, startCell.DisplayColumn))
+                if (startCell is not null && currentSelection.ContainsPosition(startCell.DisplayRow, startCell.DisplayColumn))
                     startCell = null;
-                if (finishCell != null && currentSelection.ContainsPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
+                if (finishCell is not null && currentSelection.ContainsPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
                     finishCell = null;
             }
         }
@@ -321,7 +321,7 @@ namespace Maze.Maui.App
         private CellFrame? SetCellContent(int row, int column, CellType cellType)
         {
             CellFrame? cellFrame = GetCell(row, column) as CellFrame;
-            if (cellFrame != null)
+            if (cellFrame is not null)
                 cellFrame = SetCellContent(cellFrame, cellType);
             return cellFrame;
         }
@@ -333,10 +333,10 @@ namespace Maze.Maui.App
         /// <returns>Cell frame</returns>
         private CellFrame? SetCellContent(CellFrame? cellFrame, CellType cellType)
         {
-            if (cellFrame != null)
+            if (cellFrame is not null)
             {
                 MazeCellContent? cellContent = cellFrame.Content as MazeCellContent;
-                if (cellContent != null && cellContent.CellType != cellType)
+                if (cellContent is not null && cellContent.CellType != cellType)
                     SetCellContent(cellFrame, new MazeCellContent(cellType));
             }
             return cellFrame;
@@ -417,7 +417,7 @@ namespace Maze.Maui.App
         {
             MazeCellContent.PathDirection direction = MazeCellContent.PathDirection.None;
 
-            if (nextCellPoint != null)
+            if (nextCellPoint is not null)
             {
                 Api.Maze.Point nextPoint = nextCellPoint.Value;
 
@@ -588,7 +588,7 @@ namespace Maze.Maui.App
         private void SetSolutionCell(int row, int column, MazeCellContent.PathDirection direction)
         {
             MazeCellContent? cellContent = GetCellContent(row, column);
-            if (cellContent != null)
+            if (cellContent is not null)
             {
                 cellContent.SetSolutionPath(direction);
             }

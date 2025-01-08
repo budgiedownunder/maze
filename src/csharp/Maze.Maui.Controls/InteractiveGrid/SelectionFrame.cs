@@ -99,32 +99,32 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// Top row of cell range
         /// </summary>
         /// <returns>Top row</returns>
-        public int TopRow { get { return CellRange != null ? CellRange.Top : -1; } }
+        public int TopRow { get { return CellRange is not null ? CellRange.Top : -1; } }
         /// <summary>
         /// Bottom row of cell range
         /// </summary>
         /// <returns>Bottom row</returns>
-        public int BottomRow { get { return CellRange != null ? CellRange.Bottom : -1; } }
+        public int BottomRow { get { return CellRange is not null ? CellRange.Bottom : -1; } }
         /// <summary>
         /// Number of rows in the cell range
         /// </summary>
         /// <returns>Number of rows in cell range</returns>
-        public int RowCount { get { return CellRange != null ? CellRange.Height : 0; } }
+        public int RowCount { get { return CellRange is not null ? CellRange.Height : 0; } }
         /// <summary>
         /// Left column of cell range
         /// </summary>
         /// <returns>Left column</returns>
-        public int LeftColumn { get { return CellRange != null ? CellRange.Left : -1; } }
+        public int LeftColumn { get { return CellRange is not null ? CellRange.Left : -1; } }
         /// <summary>
         /// Right column of cell range
         /// </summary>
         /// <returns>Right column</returns>
-        public int RightColumn { get { return CellRange != null ? CellRange.Right : -1; } }
+        public int RightColumn { get { return CellRange is not null ? CellRange.Right : -1; } }
         /// <summary>
         /// Number of columns in the cell range
         /// </summary>
         /// <returns>Number of columns in cell range</returns>
-        public int ColumnCount { get { return CellRange != null ? CellRange.Width : 0; } }
+        public int ColumnCount { get { return CellRange is not null ? CellRange.Width : 0; } }
         /// <summary>
         /// Indicates whether pan support is enabled
         /// </summary>
@@ -277,7 +277,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void StartDashAnimation() 
         { 
-            if (isAnimationRunning || Application.Current == null) return;
+            if (isAnimationRunning || Application.Current is null) return;
             isAnimationRunning = true;
 
             var dispatcher = Application.Current.Dispatcher;

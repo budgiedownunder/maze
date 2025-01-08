@@ -16,7 +16,7 @@ namespace Maze.Maui.App.Models
         public string DimensionsSummary
         {
             get {
-                if (Definition != null)
+                if (Definition is not null)
                 {
                     string rowsLabel = Definition.RowCount == 1 ? "row" : "rows";
                     string colsLabel = Definition.ColCount == 1 ? "column" : "columns";
