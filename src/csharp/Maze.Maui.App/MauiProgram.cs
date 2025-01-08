@@ -3,6 +3,9 @@ using MauiGestures;
 //using Maze.Maui.App.Services;
 using Microsoft.Extensions.Logging;
 using Maze.Wasm.Interop;
+using Maze.Maui.App.Services;
+using Maze.Maui.App.ViewModels;
+using Maze.Maui.App.Views;
 
 namespace Maze.Maui.App
 {
@@ -28,14 +31,24 @@ namespace Maze.Maui.App
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
 
-  //     builder.Services.AddSingleton<IDeviceTypeService, DeviceTypeService>();
+            InitializeMazeWasmInterop();
+
+            builder.Services.AddSingleton<IMazeService>(provider =>
+            {
+                // To DO - drive the choice of client service and endpoint(s) from
+                // configuration file settings
+                return new MazeHttpClientService();
+            });
+
+            builder.Services.AddSingleton<MazesViewModel>();
+
+            builder.Services.AddSingleton<MazesPage>();
+
+            //     builder.Services.AddSingleton<IDeviceTypeService, DeviceTypeService>();
 
 #if DEBUG
             builder.Logging.AddDebug();
 #endif
-
-            InitializeMazeWasmInterop();
-
             return builder.Build();
         }
 

@@ -387,12 +387,14 @@ impl Store for FileStore {
             return Ok(MazeItem {
                 id: file_id,
                 name: name.to_string(),
+                definition: None
             });
         }
         Err(StoreError::NameNotFound(name.to_string()))
     }
     /// Returns the list of maze items within the file store instance, sorted
-    /// alphabetically in ascending order
+    /// alphabetically in ascending order, optionally including the
+    /// maze definitions as a JSON string
     ///
     /// # Returns
     ///
@@ -410,8 +412,8 @@ impl Store for FileStore {
     /// // Create the file store
     /// let store = FileStore::new();
     ///
-    /// // Attempt to load the maze items
-    /// match store.get_maze_items() {
+    /// // Attempt to load the maze items along with their definitions
+    /// match store.get_maze_items(true) {
     ///     Ok(maze_items) => {
     ///         println!("Successfully loaded {} maze items",
     ///             maze_items.len()
@@ -425,7 +427,7 @@ impl Store for FileStore {
     ///     }
     /// }
     /// ```
-    fn get_maze_items(&self) -> Result<Vec<MazeItem>, StoreError> {
+    fn get_maze_items(&self, include_definitions: bool) -> Result<Vec<MazeItem>, StoreError> {
         let mut items: Vec<MazeItem> = Vec::new();
         let current_dir = std::env::current_dir()?;
 
@@ -441,9 +443,20 @@ impl Store for FileStore {
                     if extension == "json" {
                         if let Some(name) = path.file_stem() {
                             if let Some(name_str) = name.to_str() {
+                                let mut definition:Option<String> = None;
+                                if include_definitions {
+                                    match self.get_maze(&path_str) {
+                                        Ok(maze_loaded) => {
+                                            definition = Some(serde_json::to_string(&maze_loaded).expect("Failed to serialize"));
+                                        }
+                                        Err(_) => {},
+                                    }    
+                                } 
+                    
                                 items.push(MazeItem {
                                     id: path_str.to_string(),
                                     name: name_str.to_string(),
+                                    definition: definition,
                                 });
                             }
                         }
@@ -718,7 +731,7 @@ mod tests {
 
         let _ = delete_files_with_ext(".", "json");
 
-        match store.get_maze_items() {
+        match store.get_maze_items(false) {
             Ok(items) => {
                 if !items.is_empty() {
                     panic!("Maze item list is not empty ({} items found)", items.len());
@@ -748,24 +761,45 @@ mod tests {
             Err(error) => panic!("Failed to create maze {}: {}", maze_2.name, error),
         }
 
-        match store.get_maze_items() {
+        match store.get_maze_items(false) {
             Ok(items) => {
                 if items.len() != 2 {
                     panic!("Maze item list does not contain the expected number of items (2 expected, {} found)", items.len());
                 }
-                check_maze_item(&items, 0, "maze_1");
-                check_maze_item(&items, 1, "maze_2");
+                check_maze_item(&items, 0, "maze_1", true);
+                check_maze_item(&items, 1, "maze_2", true);
             }
             Err(error) => {
                 panic!("{}", error);
             }
         }
 
-        fn check_maze_item(items: &[MazeItem], idx: usize, expected: &str) {
+        match store.get_maze_items(true) {
+            Ok(items) => {
+                if items.len() != 2 {
+                    panic!("Maze item list does not contain the expected number of items (2 expected, {} found)", items.len());
+                }
+                check_maze_item(&items, 0, "maze_1", false);
+                check_maze_item(&items, 1, "maze_2", false);
+            }
+            Err(error) => {
+                panic!("{}", error);
+            }
+        }
+
+        fn check_maze_item(items: &[MazeItem], idx: usize, expected: &str, no_definition_expected: bool) {
             if items[idx].name != expected {
                 panic!(
                     "Item at index {} contains unexpected value (expected = {}, found: {})",
                     idx, expected, items[idx].name
+                );
+            }
+            if items[idx].definition.is_none() != no_definition_expected {
+                panic!(
+                    "Item at index {} contains an unexpected definition value  (expected_none = {}, is_none = {})",
+                    idx,
+                    no_definition_expected,
+                    items[idx].definition.is_none()
                 );
             }
         }
