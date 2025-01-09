@@ -89,13 +89,13 @@
             </StackLayout>
 
             <ActivityIndicator x:Name="BusyIndicator"
-                                    IsRunning="{Binding IsBusy}"
-                                    IsVisible="{Binding IsBusy}"
-                                    Color="Purple"
-                                    VerticalOptions="Center"
-                                    HorizontalOptions="Center"
-                                    WidthRequest="50"
-                                    HeightRequest="50"
-                                    Grid.RowSpan="3"/>
+                               IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               Color="Purple"
+                               VerticalOptions="Center"
+                               HorizontalOptions="Center"
+                               WidthRequest="50"
+                               HeightRequest="50"
+                               Grid.RowSpan="3"/>
     </Grid>
 </ContentPage>

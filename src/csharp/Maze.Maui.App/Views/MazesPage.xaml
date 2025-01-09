@@ -6,37 +6,47 @@
              x:DataType="viewmodel:MazesViewModel"
              x:Class="Maze.Maui.App.Views.MazesPage"
              Title="{Binding Title}">
+
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Refresh"
+                     Command="{Binding GetMazesCommand}">
+        </ToolbarItem>
+    </ContentPage.ToolbarItems>
+    
     <Grid>
-        <CollectionView ItemsSource="{Binding MazeItems}"
+        <RefreshView Command="{Binding GetMazesCommand}"
+                     IsRefreshing="{Binding IsRefreshing}">
+            <CollectionView ItemsSource="{Binding MazeItems}"
                         SelectionMode="None">
-            <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="model:MazeItem">
-                    <Grid Padding="10">
-                        <Frame HeightRequest="125"
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="model:MazeItem">
+                        <Grid Padding="10">
+                            <Frame HeightRequest="125"
                                Padding="0">
-                            <Frame.GestureRecognizers>
-                                <TapGestureRecognizer NumberOfTapsRequired="1"
+                                <Frame.GestureRecognizers>
+                                    <TapGestureRecognizer NumberOfTapsRequired="1"
                                                       CommandParameter="{Binding .}"
                                                       Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
-                            </Frame.GestureRecognizers>
-                            <Grid Padding="0">
-                                <HorizontalStackLayout Padding="10">
-                                    <Image Source="maze.png"
+                                </Frame.GestureRecognizers>
+                                <Grid Padding="0">
+                                    <HorizontalStackLayout Padding="10">
+                                        <Image Source="maze.png"
                                         HeightRequest="125" 
                                         WidthRequest="125" 
                                         Aspect="AspectFill">
-                                    </Image>
-                                    <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="CenterAndExpand">
-                                        <Label Text="{Binding Name}" FontSize="24"/>
-                                        <Label Text ="{Binding DimensionsSummary}" FontSize="12"/>
-                                    </VerticalStackLayout>
-                                </HorizontalStackLayout>
-                            </Grid>
-                        </Frame>
-                    </Grid>
-                </DataTemplate>
-            </CollectionView.ItemTemplate>
-        </CollectionView>
+                                        </Image>
+                                        <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="CenterAndExpand">
+                                            <Label Text="{Binding Name}" FontSize="24"/>
+                                            <Label Text ="{Binding DimensionsSummary}" FontSize="12"/>
+                                        </VerticalStackLayout>
+                                    </HorizontalStackLayout>
+                                </Grid>
+                            </Frame>
+                        </Grid>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
 
         <ActivityIndicator IsVisible="{Binding IsBusy}"
                        IsRunning="{Binding IsBusy}"

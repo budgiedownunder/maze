@@ -3,6 +3,7 @@ using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -14,11 +15,14 @@ namespace Maze.Maui.App.ViewModels
         {
             Title = "Mazes";
             this.mazeService = mazeService;
-            _ = GetMazeItemsAsync();
+            _ = GetMazesAsync();
         }
 
+        [ObservableProperty]
+        bool isRefreshing;
+
         [RelayCommandAttribute]
-        async Task GetMazeItemsAsync()
+        async Task GetMazesAsync()
         {
             if (IsBusy)
                 return;
@@ -44,6 +48,7 @@ namespace Maze.Maui.App.ViewModels
             finally
             {
                 IsBusy = false;
+                IsRefreshing = false;
             }
         }
         [RelayCommandAttribute]

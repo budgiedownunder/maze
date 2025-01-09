@@ -5,16 +5,17 @@
              Title="About">
     <VerticalStackLayout Spacing="20" Margin="10">
         <HorizontalStackLayout Spacing="10">
-            <Frame HeightRequest="100"
+            <Border HeightRequest="100"
                    WidthRequest="100"
-                   CornerRadius ="50">
+                   StrokeShape ="Ellipse"
+                   Padding="0">
                 <Image Source="app.png"
                        Aspect="AspectFill"
                        HeightRequest="100"
                        WidthRequest="100"
                        HorizontalOptions="Center"
                        VerticalOptions="Center" />
-            </Frame>
+            </Border>
             <VerticalStackLayout Spacing="10">
                 <Label FontSize="20"
                        FontAttributes="Bold"

@@ -48,9 +48,6 @@ namespace Maze.Maui.App.Services
         }
         public async Task<List<Models.MazeItem>> GetMazeItems(bool includeDefinitions)
         {
-            if (_mazeItems.Count > 0)
-                return _mazeItems;
-
             var url = $"{_rootUrl}/mazes?includeDefinitions={(includeDefinitions ? "true" : "false")}";
             var response = await _httpClient.GetAsync(url);
 
