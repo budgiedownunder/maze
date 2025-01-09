@@ -7,6 +7,7 @@ namespace Maze.Maui.App.Views
     using Maze.Maui.App.ViewModels;
     using Maze.Maui.Controls;
     using Maze.Maui.Services;
+    using Maze.Maui.App.Models;
 
     /// <summary>
     /// This class represents the maze page within the application. It provides
@@ -51,17 +52,20 @@ namespace Maze.Maui.App.Views
         const String APP_TITLE = "MAZE";
         MazePageViewModel _viewModel;
 
+        private bool IsInitialized { get; set; }
+        private bool IsPanSupported { get; set; }
+        public MazeItem? MazeItem { get; set; }
+
         /// <summary>
         /// Constructor 
         /// </summary>
-        public MazePage()
+        public MazePage(MazePageViewModel viewModel)
         {
             InitializeComponent();
             IDeviceTypeService deviceTypeService = new DeviceTypeService();
-
-            _viewModel = new MazePageViewModel(deviceTypeService);
-            BindingContext = _viewModel;
-
+            IsPanSupported = !deviceTypeService.IsTouchOnlyDevice();
+            BindingContext = viewModel;
+            _viewModel = viewModel;
             _viewModel.InsertRowsRequested += (s, e) => InsertRows();
             _viewModel.DeleteRowsRequested += (s, e) => DeleteRows();
             _viewModel.InsertColumnsRequested += (s, e) => InsertColumns();
@@ -75,7 +79,16 @@ namespace Maze.Maui.App.Views
             _viewModel.SolveRequested += (s, e) => { Solve(); };
             _viewModel.ClearSolutionRequested += (s, e) => { ClearSolution(); };
 
-            MazeGrid.Initialize(!deviceTypeService.IsTouchOnlyDevice());
+        }
+
+        private void Initialize()
+        {
+            if (IsInitialized)
+                return;
+
+            MazeItem = _viewModel.MazeItem;
+
+            MazeGrid.Initialize(IsPanSupported, MazeItem);
             MazeGrid.CellTapped += OnMazeGridCellTapped;
             MazeGrid.CellDoubleTapped += OnMazeGridCellDoubleTapped;
             MazeGrid.KeyDown += OnMazeGridKeyDown;
@@ -84,6 +97,8 @@ namespace Maze.Maui.App.Views
             MazeGrid.ActivateCell(1, 1, false);
 
             UpdateControls();
+
+            IsInitialized = true;
         }
 
         private bool IsTouchOnlyDevice { get => _viewModel.IsTouchOnlyDevice; }
@@ -94,6 +109,7 @@ namespace Maze.Maui.App.Views
 
         private void OnMazeGridCellTapped(object sender, MazeGridCellTappedEventArgs e)
         {
+            Initialize();
             MazeGrid.OnCellTapped(e.Cell, false);
         }
 
@@ -294,6 +310,13 @@ namespace Maze.Maui.App.Views
             MainGrid.RowDefinitions[row].Height = show ? GridLength.Auto : new GridLength(0);
             if (row == 0)
                 TopRowLayout.IsVisible = show;
+        }
+
+        protected override void OnNavigatedTo(NavigatedToEventArgs args)
+        {
+            if (!IsInitialized)
+                Initialize();
+            base.OnNavigatedTo(args);
         }
     }
 }

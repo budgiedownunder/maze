@@ -3,7 +3,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:Maze.Maui.App"
              x:Class="Maze.Maui.App.Views.MazePage"
-             Title="Design Maze">
+             xmlns:model ="clr-namespace:Maze.Maui.App.Models"
+             xmlns:viewmodel ="clr-namespace:Maze.Maui.App.ViewModels"
+             x:DataType="viewmodel:MazePageViewModel"
+             Title="{Binding MazeItem.Name}">
 
     <!-- Main Content Grid -->
         <Grid x:Name="MainGrid">

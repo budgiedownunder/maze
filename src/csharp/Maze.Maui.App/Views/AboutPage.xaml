@@ -5,8 +5,16 @@
              Title="About">
     <VerticalStackLayout Spacing="20" Margin="10">
         <HorizontalStackLayout Spacing="10">
-            <Image Source="app.png"
-                   HeightRequest="64" />
+            <Frame HeightRequest="100"
+                   WidthRequest="100"
+                   CornerRadius ="50">
+                <Image Source="app.png"
+                       Aspect="AspectFill"
+                       HeightRequest="100"
+                       WidthRequest="100"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center" />
+            </Frame>
             <VerticalStackLayout Spacing="10">
                 <Label FontSize="20"
                        FontAttributes="Bold"
@@ -14,13 +22,13 @@
                        VerticalOptions="Start"
                        HorizontalOptions="Start" />
                 <Label FontSize="14"
-                       FontAttributes="Bold"
+                       FontAttributes="None"
                        Text="© BudgieDownUnder, 2025"
                        VerticalOptions="End"
                        HorizontalOptions="Start" />
             </VerticalStackLayout>
         </HorizontalStackLayout>
         <BoxView HeightRequest="1" BackgroundColor="Gray" HorizontalOptions="FillAndExpand" />
-        <Label Text ="An application for designing and solving mazes" />
+        <Label Text ="An app for designing and solving mazes" />
     </VerticalStackLayout>
 </ContentPage>

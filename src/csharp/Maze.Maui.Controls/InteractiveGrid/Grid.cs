@@ -365,7 +365,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             AddHeaderRow();
 
             for (int row = 0; row < RowCount; row++)
-                AddRowContent(row);
+                AddRowContent(row, true);
 
             IsVisible = true;
 
@@ -392,13 +392,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <param name="row">Row index</param>
         /// <param name="column">Column index</param>
+        /// <param name="gridInitializing">Grid is initializing?</param>
         /// <returns>Cell framw</returns>
-        private CellFrame NewCellFrame(int row, int column)
+        private CellFrame NewCellFrame(int row, int column, bool gridInitializing)
         {
             CellFrame frame = new CellFrame(row, column)
             {
                 BackgroundColor = this.CellBackgroundColor,
-                Content = CreateCellContent(row, column),
                 Padding = CellPadding,
                 Margin = CellMargin == 0.0 ? -0.5 : CellMargin,
                 Stroke = new SolidColorBrush(CellBorderColor),
@@ -408,6 +408,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                     CornerRadius = 0
                 },
             };
+            frame.Content = CreateCellContent(frame, row, column, gridInitializing);
             AddSingleTapGesture(frame);
             AddDoubleTapGesture(frame);
 
@@ -423,10 +424,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <summary>
         /// Creates cell content, where (0,0) corresponds to (1,1) in display terms
         /// </summary>
+        /// <param name="frame">Container frame</param>
         /// <param name="row">Row index</param>
         /// <param name="column">Column index</param>
+        /// <param name="gridInitializing">Grid is initializing?</param>
         /// <returns>Cell content view</returns>
-        virtual public ContentView CreateCellContent(int row, int column)
+        virtual public ContentView CreateCellContent(CellFrame frame, int row, int column, bool gridInitializing)
         {
             return new DefaultCellContent();
         }
@@ -495,13 +498,15 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// Adds row content to the grid
         /// </summary>
         /// <param name="row">Row index</param>
-        private void AddRowContent(int row)
+        /// <param name="gridInitializing">Grid is initializing?</param>
+        /// 
+        private void AddRowContent(int row, bool gridInitializing)
         {
             AddRowHeader(row);
 
             for (int column = 0; column < ColumnCount; column++)
             {
-                AddRowCell(row, column);
+                AddRowCell(row, column, gridInitializing);
             }
         }
         /// <summary>
@@ -514,7 +519,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             for (int row = 0; row < RowCount; row++)
             {
-                AddRowCell(row, column);
+                AddRowCell(row, column, false);
             }
         }
         /// <summary>
@@ -522,10 +527,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <param name="row">Row index</param>
         /// <param name="column">Column index</param>
+        /// <param name="gridInitializing">Grid is initializing?</param>
         /// <returns>Cell frame</returns>
-        private CellFrame AddRowCell(int row, int column)
+        private CellFrame AddRowCell(int row, int column, bool gridInitializing)
         {
-            CellFrame cellFrame = NewCellFrame(row, column);
+            CellFrame cellFrame = NewCellFrame(row, column, gridInitializing);
 
             this.Add(cellFrame, cellFrame.DisplayColumn, cellFrame.DisplayRow);
 
@@ -2163,7 +2169,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             switch (target)
             {
                 case Target.Row:
-                    AddRowContent(position - 1);
+                    AddRowContent(position - 1, false);
                     break;
                 case Target.Column:
                     AddColumnContent(position - 1);

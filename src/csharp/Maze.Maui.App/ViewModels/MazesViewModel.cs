@@ -1,5 +1,6 @@
 ﻿using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
+using Maze.Maui.App.Views;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -44,6 +45,25 @@ namespace Maze.Maui.App.ViewModels
             {
                 IsBusy = false;
             }
+        }
+        [RelayCommandAttribute]
+        async Task GoToDesignAsync(MazeItem mazeItem)
+        {
+            if (mazeItem is null)
+                return;
+
+            if (IsBusy)
+                return;
+
+            IsBusy = true;
+
+            await Shell.Current.GoToAsync($"{nameof(MazePage)}", true,
+                new Dictionary<string, object>
+                {
+                    {"MazeItem", mazeItem }
+                });
+
+            IsBusy = false;
         }
     }
 }

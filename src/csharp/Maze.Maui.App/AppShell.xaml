@@ -10,11 +10,13 @@
         <ShellContent
             Title="Mazes"
             ContentTemplate="{DataTemplate views:MazesPage}" 
-            Icon="{OnPlatform 'mazes.png', iOS='mazes.png',MacCatalyst='mazes.png'}"/>
+            Icon="{OnPlatform 'mazes.png', iOS='mazes.png',MacCatalyst='mazes.png'}"
+            Route="MainPage" />
         <ShellContent
             Title="About"
             ContentTemplate="{DataTemplate views:AboutPage}"
-            Icon="{OnPlatform 'icon_about.png', iOS='icon_about_ios.png',MacCatalyst='icon_about_ios.png'}"/>
+            Icon="{OnPlatform 'icon_about.png', iOS='icon_about_ios.png',MacCatalyst='icon_about_ios.png'}"
+            Route="AboutPage" />
     </TabBar>
 
 </Shell>

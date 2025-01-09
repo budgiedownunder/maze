@@ -3,6 +3,7 @@ using MauiGestures;
 //using Maze.Maui.App.Services;
 using Microsoft.Extensions.Logging;
 using Maze.Wasm.Interop;
+using Maze.Maui.Services;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;
 using Maze.Maui.App.Views;
@@ -40,11 +41,17 @@ namespace Maze.Maui.App
                 return new MazeHttpClientService();
             });
 
+            builder.Services.AddSingleton<IDeviceTypeService>(provider =>
+            {
+                return new DeviceTypeService();
+            });
+
             builder.Services.AddSingleton<MazesViewModel>();
+            builder.Services.AddTransient<MazePageViewModel>();
 
             builder.Services.AddSingleton<MazesPage>();
+            builder.Services.AddTransient<MazePage>();
 
-            //     builder.Services.AddSingleton<IDeviceTypeService, DeviceTypeService>();
 
 #if DEBUG
             builder.Logging.AddDebug();

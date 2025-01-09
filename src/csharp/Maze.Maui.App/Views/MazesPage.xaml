@@ -8,20 +8,32 @@
              Title="{Binding Title}">
     <Grid>
         <CollectionView ItemsSource="{Binding MazeItems}"
-                    SelectionMode="None">
+                        SelectionMode="None">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="model:MazeItem">
-                    <HorizontalStackLayout Padding="10">
-                        <Image Source="maze.png"
-                           HeightRequest="100" 
-                           WidthRequest="100" 
-                           Aspect="AspectFill">
-                    </Image>
-                        <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="Center">
-                            <Label Text="{Binding Name}" FontSize="24"/>
-                            <Label Text ="{Binding DimensionsSummary}" FontSize="12"/>
-                        </VerticalStackLayout>
-                    </HorizontalStackLayout>
+                    <Grid Padding="10">
+                        <Frame HeightRequest="125"
+                               Padding="0">
+                            <Frame.GestureRecognizers>
+                                <TapGestureRecognizer NumberOfTapsRequired="1"
+                                                      CommandParameter="{Binding .}"
+                                                      Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
+                            </Frame.GestureRecognizers>
+                            <Grid Padding="0">
+                                <HorizontalStackLayout Padding="10">
+                                    <Image Source="maze.png"
+                                        HeightRequest="125" 
+                                        WidthRequest="125" 
+                                        Aspect="AspectFill">
+                                    </Image>
+                                    <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="CenterAndExpand">
+                                        <Label Text="{Binding Name}" FontSize="24"/>
+                                        <Label Text ="{Binding DimensionsSummary}" FontSize="12"/>
+                                    </VerticalStackLayout>
+                                </HorizontalStackLayout>
+                            </Grid>
+                        </Frame>
+                    </Grid>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
         </CollectionView>

@@ -1,5 +1,6 @@
 ﻿using static Maze.Api.Maze;
 using Maze.Maui.Controls.InteractiveGrid;
+using Maze.Maui.App.Models;
 using Maze.Maui.Controls.Keyboard;
 
 namespace Maze.Maui.App
@@ -12,7 +13,7 @@ namespace Maze.Maui.App
         // Private properties
         private const int DEFAULT_ROW_COUNT = 5;
         private const int DEFAULT_COLUMN_COUNT = 5;
-
+        private MazeItem? mazeItem;
         private CellFrame? startCell;
         private CellFrame? finishCell;
         private bool haveSolutionCells = false;
@@ -78,11 +79,13 @@ namespace Maze.Maui.App
         /// Initialize
         /// </summary>
         /// <param name="enablePanSupport">Enable pan support?</param>
-        public void Initialize(bool enablePanSupport)
+        /// <param name="mazeItem">Maze item (nullable)</param>
+        public void Initialize(bool enablePanSupport, MazeItem? mazeItem)
         {
             IsPanSupportEnabled = enablePanSupport;
-            RowCount = DEFAULT_ROW_COUNT;
-            ColumnCount = DEFAULT_COLUMN_COUNT;
+            this.mazeItem = mazeItem;
+            RowCount = (int)(mazeItem?.Definition?.RowCount ?? DEFAULT_ROW_COUNT);
+            ColumnCount = (int)(mazeItem?.Definition?.ColCount ?? DEFAULT_COLUMN_COUNT);
             InitializeContent();
         }
         /// <summary>
@@ -171,14 +174,36 @@ namespace Maze.Maui.App
             return CellType.Empty;
         }
         /// <summary>
-        /// Creates the maze cell content for a given location
+        /// Creates the maze cell content for a given location. If the grid is initializing, then cell content
+        /// is returned that reflects the content of the maze item (if any) - otherwise, an empty cell is returned.
+        /// </summary>
+        /// <param name="frame">Container frame</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="column">Column index (zero-based)</param>
+        /// <param name="gridInitializing">Grid is initializing?</param>
+        /// <returns>Maze cell content</returns>
+        public override ContentView CreateCellContent(CellFrame frame, int row, int column, bool gridInitializing)
+        {
+            MazeCellContent content =  gridInitializing ? new MazeCellContent(GetMazeItemCellType(row, column))
+                                                        : new MazeCellContent(CellType.Empty);
+            if (gridInitializing)
+            {
+                if (content.CellType == CellType.Start)
+                    startCell = frame;
+                else if (content.CellType == CellType.Finish)
+                    finishCell = frame;
+            }
+            return content;
+        }
+        /// <summary>
+        /// Returns the cell type associated with the current maze item for a given location
         /// </summary>
         /// <param name="row">Row index (zero-based)</param>
         /// <param name="column">Column index (zero-based)</param>
-        /// <returns>Maze cell content</returns>
-        public override ContentView CreateCellContent(int row, int column)
+        /// <returns>Maze cell type</returns>
+        private CellType GetMazeItemCellType(int row, int column)
         {
-            return new MazeCellContent(CellType.Empty);
+            return this.mazeItem?.Definition?.GetCellType((uint)row, (uint)column) ?? CellType.Empty;
         }
         /// <summary>
         /// Handles the cell tapped event

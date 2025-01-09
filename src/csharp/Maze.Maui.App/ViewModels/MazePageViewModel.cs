@@ -1,11 +1,14 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Maze.Maui.App.Models;
 using Maze.Maui.Services;
 
 namespace Maze.Maui.App.ViewModels
-{
-    class MazePageViewModel : INotifyPropertyChanged
+{   
+    [QueryProperty("MazeItem", "MazeItem")]
+    public partial class MazePageViewModel : BaseViewModel
     {
         private const int COMMAND_DELAY_MS = 50;
 
@@ -35,7 +38,6 @@ namespace Maze.Maui.App.ViewModels
         public event EventHandler? SolveRequested;
         public event EventHandler? ClearSolutionRequested;
 
-        private bool _isBusy = false;
         private readonly IDeviceTypeService _deviceTypeService;
         private bool _canInsertRows = false;
         private bool _canDeleteRows = false;
@@ -49,19 +51,6 @@ namespace Maze.Maui.App.ViewModels
         private bool _canClear = false;
         private bool _canSolve = false;
         private bool _canClearSolution = false;
-
-        public bool IsBusy
-        {
-            get => _isBusy;
-            set
-            {
-                if (_isBusy != value)
-                {
-                    _isBusy = value;
-                    OnPropertyChanged();
-                }
-            }
-        }
 
         public bool IsTouchOnlyDevice
         {
@@ -225,13 +214,6 @@ namespace Maze.Maui.App.ViewModels
             }
         }
 
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        protected void OnPropertyChanged([CallerMemberName] string propertyName = "")
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-
         public MazePageViewModel(IDeviceTypeService deviceTypeService)
         {
             _deviceTypeService = deviceTypeService;
@@ -247,7 +229,10 @@ namespace Maze.Maui.App.ViewModels
             ClearCommand = new Command(async () => await OnClear());
             SolveCommand = new Command(async () => await OnSolve());
             ClearSolutionCommand = new Command(async () => await OnClearSolution());
+
         }
+        [ObservableProperty]
+        MazeItem mazeItem = new MazeItem();
 
         private async Task OnInsertRows()
         {
