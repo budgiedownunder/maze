@@ -10,7 +10,7 @@
         <ShellContent
             Title="Mazes"
             ContentTemplate="{DataTemplate views:MazesPage}" 
-            Icon="{OnPlatform 'mazes.png', iOS='mazes.png',MacCatalyst='mazes.png'}"
+            Icon="{OnPlatform 'icon_mazes.png', iOS='icon_mazes_ios.png',MacCatalyst='icon_mazes_ios.png'}"
             Route="MainPage" />
         <ShellContent
             Title="About"
