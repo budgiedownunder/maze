@@ -9,7 +9,8 @@
 
     <ContentPage.ToolbarItems>
         <ToolbarItem Text="Refresh"
-                     Command="{Binding GetMazesCommand}">
+                     Command="{Binding GetMazesCommand}"
+                     IconImageSource="refresh.png">
         </ToolbarItem>
     </ContentPage.ToolbarItems>
     
