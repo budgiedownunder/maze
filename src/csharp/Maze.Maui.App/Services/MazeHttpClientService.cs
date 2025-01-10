@@ -44,6 +44,7 @@ namespace Maze.Maui.App.Services
         public MazeHttpClientService()
         {
             _httpClient = new HttpClient();
+            _httpClient.Timeout = TimeSpan.FromSeconds(30);
 
         }
         public async Task<List<Models.MazeItem>> GetMazeItems(bool includeDefinitions)

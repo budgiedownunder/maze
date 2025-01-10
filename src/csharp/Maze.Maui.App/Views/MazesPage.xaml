@@ -19,6 +19,14 @@
                      IsRefreshing="{Binding IsRefreshing}">
             <CollectionView ItemsSource="{Binding MazeItems}"
                         SelectionMode="None">
+                <CollectionView.EmptyView>
+                    <StackLayout VerticalOptions="Center"
+                                 HorizontalOptions="Center"
+                                 HeightRequest="200"
+                                 Padding="10">
+                        <Label Text="{Binding LoadStatus}"/>
+                    </StackLayout>
+                </CollectionView.EmptyView>
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="model:MazeItem">
                         <Grid Padding="10">

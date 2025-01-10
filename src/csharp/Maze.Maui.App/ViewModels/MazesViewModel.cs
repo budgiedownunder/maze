@@ -11,12 +11,16 @@ namespace Maze.Maui.App.ViewModels
     {
         IMazeService mazeService;
         public ObservableCollection<MazeItem> MazeItems { get; } = new();
+        
         public MazesViewModel(IMazeService mazeService)
         {
             Title = "Mazes";
             this.mazeService = mazeService;
             _ = GetMazesAsync();
         }
+
+        [ObservableProperty]
+        string loadStatus = "No mazes found";
 
         [ObservableProperty]
         bool isRefreshing;
@@ -26,6 +30,8 @@ namespace Maze.Maui.App.ViewModels
         {
             if (IsBusy)
                 return;
+
+            LoadStatus = "Loading mazes...";
 
             try
             {
@@ -50,6 +56,9 @@ namespace Maze.Maui.App.ViewModels
                 IsBusy = false;
                 IsRefreshing = false;
             }
+
+            LoadStatus = MazeItems.Count == 0 ? "No mazes found" : "";
+
         }
         [RelayCommandAttribute]
         async Task GoToDesignAsync(MazeItem mazeItem)
