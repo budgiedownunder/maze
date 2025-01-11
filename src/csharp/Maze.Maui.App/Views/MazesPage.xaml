@@ -56,11 +56,26 @@
                             <Border HeightRequest="125"
                                     Padding="0"
                                     Margin="5">
+
+                                <FlyoutBase.ContextFlyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="Edit.."
+                                                        IconImageSource="icon_edit.png"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Delete"
+                                                        IconImageSource="icon_delete.png"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=DeleteCommand}"/>
+                                    </MenuFlyout>
+                                </FlyoutBase.ContextFlyout>
+
                                 <Grid Padding="10">
                                     <Border.GestureRecognizers>
                                         <TapGestureRecognizer NumberOfTapsRequired="1"
-                                                        CommandParameter="{Binding .}"
-                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
+                                                              CommandParameter="{Binding .}"
+                                                              Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
                                     </Border.GestureRecognizers>
                                     <Grid Padding="0">
                                         <HorizontalStackLayout Padding="10">
