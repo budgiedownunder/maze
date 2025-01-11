@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:android="clr-namespace:Microsoft.Maui.Controls.PlatformConfiguration.AndroidSpecific;assembly=Microsoft.Maui.Controls"
+             xmlns:ios="clr-namespace:Microsoft.Maui.Controls.PlatformConfiguration.iOSSpecific;assembly=Microsoft.Maui.Controls"
              xmlns:model ="clr-namespace:Maze.Maui.App.Models"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              xmlns:viewmodel ="clr-namespace:Maze.Maui.App.ViewModels"
              x:DataType="viewmodel:MazesViewModel"
              x:Class="Maze.Maui.App.Views.MazesPage"
@@ -18,10 +21,10 @@
         <RefreshView Command="{Binding GetMazesCommand}"
                      IsRefreshing="{Binding IsRefreshing}">
             <CollectionView ItemsSource="{Binding MazeItems}"
-                        SelectionMode="None">
+                            SelectionMode="None">
                 <CollectionView.EmptyView>
-                    <StackLayout VerticalOptions="Center"
-                                 HorizontalOptions="Center"
+                    <StackLayout VerticalOptions="CenterAndExpand"
+                                 HorizontalOptions="CenterAndExpand"
                                  HeightRequest="200"
                                  Padding="10">
                         <Label Text="{Binding LoadStatus}"/>
@@ -29,29 +32,52 @@
                 </CollectionView.EmptyView>
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="model:MazeItem">
-                        <Grid Padding="10">
-                            <Frame HeightRequest="125"
-                               Padding="0">
-                                <Frame.GestureRecognizers>
-                                    <TapGestureRecognizer NumberOfTapsRequired="1"
-                                                      CommandParameter="{Binding .}"
-                                                      Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
-                                </Frame.GestureRecognizers>
-                                <Grid Padding="0">
-                                    <HorizontalStackLayout Padding="10">
-                                        <Image Source="maze.png"
-                                        HeightRequest="125" 
-                                        WidthRequest="125" 
-                                        Aspect="AspectFill">
-                                        </Image>
-                                        <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="CenterAndExpand">
-                                            <Label Text="{Binding Name}" FontSize="24"/>
-                                            <Label Text ="{Binding DimensionsSummary}" FontSize="12"/>
-                                        </VerticalStackLayout>
-                                    </HorizontalStackLayout>
+                        <SwipeView android:SwipeView.SwipeTransitionMode="Drag"
+                                   ios:SwipeView.SwipeTransitionMode="Drag">
+                            <SwipeView.RightItems>
+                                <!-- Note: tried to use SwipeItemView here, in preference to SwipeItem, for better control of image sizes and layout, but there
+                                           are issues with content/swipeitems overlapping on drag and the IconTintColorBehaviour not applying the color to images -->
+                                <SwipeItems>
+                                    <SwipeItem
+                                        Text="Delete"
+                                        BackgroundColor = "Red"
+                                        IconImageSource="{OnPlatform 'icon_delete.png', iOS='icon_delete_ios.png',MacCatalyst='icon_delete_ios.png'}"
+                                        CommandParameter="{Binding .}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=DeleteCommand}"/>
+                                    <SwipeItem
+                                        Text="Edit"
+                                        BackgroundColor = "Blue"
+                                        IconImageSource="{OnPlatform 'icon_edit.png', iOS='icon_edit_ios.png',MacCatalyst='icon_edit_ios.png'}"
+                                        CommandParameter="{Binding .}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
+                                </SwipeItems>
+                            </SwipeView.RightItems>
+
+                            <Border HeightRequest="125"
+                                    Padding="0"
+                                    Margin="5">
+                                <Grid Padding="10">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer NumberOfTapsRequired="1"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
+                                    </Border.GestureRecognizers>
+                                    <Grid Padding="0">
+                                        <HorizontalStackLayout Padding="10">
+                                            <Image Source="maze.png"
+                                                   HeightRequest="125" 
+                                                   WidthRequest="125" 
+                                                   Aspect="AspectFill">
+                                            </Image>
+                                            <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="CenterAndExpand">
+                                                <Label Text="{Binding Name}" FontSize="24"/>
+                                                <Label Text ="{Binding DimensionsSummary}" FontSize="12"/>
+                                            </VerticalStackLayout>
+                                        </HorizontalStackLayout>
+                                    </Grid>
                                 </Grid>
-                            </Frame>
-                        </Grid>
+                            </Border>
+                        </SwipeView>
                     </DataTemplate>
                 </CollectionView.ItemTemplate>
             </CollectionView>

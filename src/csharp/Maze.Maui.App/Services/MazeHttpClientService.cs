@@ -2,6 +2,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Web;
 
 namespace Maze.Maui.App.Services
 {
@@ -61,9 +62,20 @@ namespace Maze.Maui.App.Services
 
                 options.Converters.Add(new DefinitionConverter());
 
-                _mazeItems = await response.Content.ReadFromJsonAsync<List<Models.MazeItem>>(options) ?? new ();
+                _mazeItems = await response.Content.ReadFromJsonAsync<List<Models.MazeItem>>(options) ?? new();
             }
             return _mazeItems;
+        }
+        public async Task DeleteMazeItem(Models.MazeItem item)
+        {
+            if (item is null)
+            {
+                throw new Exception("Maze item is null");
+            }
+            string idEncoded = HttpUtility.UrlEncode(item.ID);
+            var url = $"{_rootUrl}/mazes/{idEncoded}";
+            var response = await _httpClient.DeleteAsync(url);
+            response.EnsureSuccessStatusCode();
         }
     }
 }

@@ -11,7 +11,7 @@ namespace Maze.Maui.App.ViewModels
     {
         IMazeService mazeService;
         public ObservableCollection<MazeItem> MazeItems { get; } = new();
-        
+
         public MazesViewModel(IMazeService mazeService)
         {
             Title = "Mazes";
@@ -41,15 +41,14 @@ namespace Maze.Maui.App.ViewModels
                 if (MazeItems.Count != 0)
                     MazeItems.Clear();
 
-                foreach (MazeItem item in mazeItems) 
+                foreach (MazeItem item in mazeItems)
                 {
                     MazeItems.Add(item);
                 }
             }
             catch (Exception ex)
             {
-                await Shell.Current.DisplayAlert("Error", 
-                    $"Unable to load mazes: {ex.Message}", "OK");
+                await ShowAlert("Error", $"Unable to load mazes: {ex.Message}", "OK");
             }
             finally
             {
@@ -78,6 +77,64 @@ namespace Maze.Maui.App.ViewModels
                 });
 
             IsBusy = false;
+        }
+
+        [RelayCommandAttribute]
+        async Task DeleteAsync(MazeItem mazeItem)
+        {
+            if (mazeItem is null)
+                return;
+
+            if (IsBusy)
+                return;
+
+            if (await ShowConfirmation(
+                "Delete Maze",
+                $"Are you sure you want to delete the maze '{mazeItem.Name}'?",
+                "Yes",
+                "No"
+                ))
+            {
+                bool deleted = await DeleteMaze(mazeItem);
+                if (deleted)
+                {
+                    await GetMazesAsync();
+                }
+            }
+        }
+
+        async Task<bool> DeleteMaze(MazeItem mazeItem)
+        {
+            bool deleted = false;
+            if (IsBusy)
+                return deleted;
+
+            try
+            {
+                IsBusy = true;
+                await mazeService.DeleteMazeItem(mazeItem);
+                deleted = true;
+            }
+            catch (Exception ex)
+            {
+                await ShowAlert("Error", $"Unable to delete mazes: {ex.Message}", "OK");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+            return deleted;
+        }
+
+        // TO DO - move these to a dialog service
+        private async Task ShowAlert(string title, string message, string cancel)
+        {
+            await Shell.Current.DisplayAlert(title, message, cancel);
+        }
+
+        private async Task<bool> ShowConfirmation(string title, string message, string accept, string cancel)
+        {
+            return await Shell.Current.DisplayAlert(title, message, accept, cancel);
         }
     }
 }
