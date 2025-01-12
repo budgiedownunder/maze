@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Maze.Maui.App.Models;
+using Maze.Maui.App.Services;
 using Maze.Maui.Services;
 
 namespace Maze.Maui.App.ViewModels
@@ -24,6 +25,8 @@ namespace Maze.Maui.App.ViewModels
         public ICommand ClearCommand { get; }
         public ICommand SolveCommand { get; }
         public ICommand ClearSolutionCommand { get; }
+        public ICommand SaveCommand { get; }
+        public ICommand RefreshCommand { get; }
 
         public event EventHandler? InsertRowsRequested;
         public event EventHandler? DeleteRowsRequested;
@@ -37,8 +40,11 @@ namespace Maze.Maui.App.ViewModels
         public event EventHandler? ClearRequested;
         public event EventHandler? SolveRequested;
         public event EventHandler? ClearSolutionRequested;
+        public event EventHandler? SaveRequested;
 
         private readonly IDeviceTypeService _deviceTypeService;
+        private readonly IMazeService _mazeService;
+
         private bool _canInsertRows = false;
         private bool _canDeleteRows = false;
         private bool _canInsertColumns = false;
@@ -51,11 +57,16 @@ namespace Maze.Maui.App.ViewModels
         private bool _canClear = false;
         private bool _canSolve = false;
         private bool _canClearSolution = false;
+        private bool _canSave = true;
+        private bool _canRefresh = false;
 
         public bool IsTouchOnlyDevice
         {
             get => _deviceTypeService.IsTouchOnlyDevice();
         }
+
+        public bool IsStored { get; set; }
+        public bool IsDirty { get; set; }
 
         public bool CanInsertRows
         {
@@ -214,9 +225,37 @@ namespace Maze.Maui.App.ViewModels
             }
         }
 
-        public MazePageViewModel(IDeviceTypeService deviceTypeService)
+        public bool CanSave
         {
-            _deviceTypeService = deviceTypeService;
+            get => _canSave;
+            set
+            {
+                if (_canSave != value)
+                {
+                    _canSave= value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool CanRefresh
+        {
+            get => _canRefresh;
+            set
+            {
+                if (_canRefresh != value)
+                {
+                    _canRefresh = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public MazePageViewModel(IDeviceTypeService deviceTypeService, IMazeService mazeService)
+        {
+            this._deviceTypeService = deviceTypeService;
+            this._mazeService = mazeService;
+
             InsertRowsCommand = new Command(async () => await OnInsertRows());
             DeleteRowsCommand = new Command(async () => await OnDeleteRows());
             InsertColumnsCommand = new Command(async () => await OnInsertColumns());
@@ -229,7 +268,8 @@ namespace Maze.Maui.App.ViewModels
             ClearCommand = new Command(async () => await OnClear());
             SolveCommand = new Command(async () => await OnSolve());
             ClearSolutionCommand = new Command(async () => await OnClearSolution());
-
+            SaveCommand = new Command(async () => await OnSave());
+            RefreshCommand = new Command(async () => await OnRefresh());
         }
         [ObservableProperty]
         MazeItem mazeItem = new MazeItem();
@@ -237,21 +277,25 @@ namespace Maze.Maui.App.ViewModels
         private async Task OnInsertRows()
         {
             await RunCommand(InsertRowsRequested);
+            UpdateCanSaveRefresh(true);
         }
 
         private async Task OnDeleteRows()
         {
             await RunCommand(DeleteRowsRequested);
+            UpdateCanSaveRefresh(true);
         }
 
         private async Task OnInsertColumns()
         {
             await RunCommand(InsertColumnsRequested);
+            UpdateCanSaveRefresh(true);
         }
 
         private async Task OnDeleteColumns()
         {
             await RunCommand(DeleteColumnsRequested);
+            UpdateCanSaveRefresh(true);
         }
 
         private async Task OnSelectRange()
@@ -267,21 +311,25 @@ namespace Maze.Maui.App.ViewModels
         private async Task OnSetWall()
         {
             await RunCommand(SetWallRequested);
+            UpdateCanSaveRefresh(true);
         }
 
         private async Task OnSetStart()
         {
             await RunCommand(SetStartRequested);
+            UpdateCanSaveRefresh(true);
         }
 
         private async Task OnSetFinish()
         {
             await RunCommand(SetFinishRequested);
+            UpdateCanSaveRefresh(true);
         }
 
         private async Task OnClear()
         {
             await RunCommand(ClearRequested);
+            UpdateCanSaveRefresh(true);
         }
 
         private async Task OnSolve()
@@ -292,6 +340,64 @@ namespace Maze.Maui.App.ViewModels
         private async Task OnClearSolution()
         {
             await RunCommand(ClearSolutionRequested);
+        }
+
+        private async Task OnSave()
+        {
+            await RunCommand(SaveRequested);
+        }
+
+        private async Task CreateMazeItem(Api.Maze definition)
+        {
+            throw new Exception("CreateMazeItem not implemented");
+        }
+
+        private async Task UpdateMazeItem(Api.Maze definition)
+        {
+            MazeItem mazeItem = new MazeItem
+            {
+                ID = MazeItem.ID,
+                Name = MazeItem.Name,
+                Definition = definition
+            };
+            await _mazeService.UpdateMazeItem(mazeItem);
+            MazeItem.Definition = definition;
+        }
+
+        public async Task<bool> SaveMaze(Api.Maze definition)
+        {
+            bool saved = false;
+
+            try
+            {
+                if (IsStored)
+                    await UpdateMazeItem(definition);
+                else
+                    await CreateMazeItem(definition);
+                UpdateCanSaveRefresh(false);
+                saved = true;
+            }
+            catch (Exception ex)
+            {
+                await ShowAlert("Error", $"Unable to save maze: {ex.Message}", "OK");
+            }
+            finally
+            {
+            }
+            return saved;
+        }
+
+        private async Task OnRefresh()
+        {
+            await ShowAlert("Action", "Would attempt to refresh maze", "OK");
+        }
+
+        private void UpdateCanSaveRefresh(bool dirty)
+        {
+            IsDirty = dirty;
+            if (IsStored)
+                CanRefresh = IsDirty;
+            CanSave = IsDirty;
         }
 
         private async Task RunCommand(EventHandler? eventHandler)
@@ -306,6 +412,12 @@ namespace Maze.Maui.App.ViewModels
             {
                 IsBusy = false;
             }
+        }
+
+        // TO DO - move these to a dialog service
+        private async Task ShowAlert(string title, string message, string cancel)
+        {
+            await Shell.Current.DisplayAlert(title, message, cancel);
         }
 
     }

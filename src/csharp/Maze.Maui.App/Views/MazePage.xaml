@@ -8,6 +8,17 @@
              x:DataType="viewmodel:MazePageViewModel"
              Title="{Binding MazeItem.Name}">
 
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Refresh"
+                     IsEnabled="{Binding CanRefresh}"
+                     Command="{Binding RefreshCommand}"
+                     IconImageSource="refresh.png"/>
+        <ToolbarItem Text="Save"
+                     IsEnabled="{Binding CanSave}"
+                     Command="{Binding SaveCommand}"
+                     IconImageSource="{OnPlatform 'icon_save.png', Android={x:Null}, iOS={x:Null}}" />
+    </ContentPage.ToolbarItems>
+
     <!-- Main Content Grid -->
         <Grid x:Name="MainGrid">
             <Grid.RowDefinitions>

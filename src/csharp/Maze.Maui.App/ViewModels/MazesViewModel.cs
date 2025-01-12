@@ -80,6 +80,12 @@ namespace Maze.Maui.App.ViewModels
         }
 
         [RelayCommandAttribute]
+        async Task NewAsync()
+        {
+            await GoToDesignAsync(new MazeItem());
+        }
+
+        [RelayCommandAttribute]
         async Task DeleteAsync(MazeItem mazeItem)
         {
             if (mazeItem is null)
@@ -112,7 +118,7 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 IsBusy = true;
-                await mazeService.DeleteMazeItem(mazeItem);
+                await mazeService.DeleteMazeItem(mazeItem.ID);
                 deleted = true;
             }
             catch (Exception ex)

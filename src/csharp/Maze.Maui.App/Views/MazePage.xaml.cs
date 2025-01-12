@@ -51,6 +51,7 @@ namespace Maze.Maui.App.Views
     {
         const String APP_TITLE = "MAZE";
         MazePageViewModel _viewModel;
+        MazesViewModel _mazesViewModel;
 
         private bool IsInitialized { get; set; }
         private bool IsPanSupported { get; set; }
@@ -59,13 +60,14 @@ namespace Maze.Maui.App.Views
         /// <summary>
         /// Constructor 
         /// </summary>
-        public MazePage(MazePageViewModel viewModel)
+        public MazePage(MazePageViewModel viewModel, MazesViewModel mazesViewModel)
         {
             InitializeComponent();
             IDeviceTypeService deviceTypeService = new DeviceTypeService();
             IsPanSupported = !deviceTypeService.IsTouchOnlyDevice();
             BindingContext = viewModel;
             _viewModel = viewModel;
+            _mazesViewModel = mazesViewModel;
             _viewModel.InsertRowsRequested += (s, e) => InsertRows();
             _viewModel.DeleteRowsRequested += (s, e) => DeleteRows();
             _viewModel.InsertColumnsRequested += (s, e) => InsertColumns();
@@ -78,7 +80,8 @@ namespace Maze.Maui.App.Views
             _viewModel.ClearRequested += (s, e) => { ClearSelection(); };
             _viewModel.SolveRequested += (s, e) => { Solve(); };
             _viewModel.ClearSolutionRequested += (s, e) => { ClearSolution(); };
-
+            _viewModel.SaveRequested += async (s, e) => { await Save(); };
+            _mazesViewModel = mazesViewModel;
         }
 
         private void Initialize()
@@ -95,6 +98,10 @@ namespace Maze.Maui.App.Views
             MazeGrid.SelectionChanged += OnMazeGridSelectionChanged;
 
             MazeGrid.ActivateCell(1, 1, false);
+
+            _viewModel.IsStored = MazeItem.ID != "";
+            _viewModel.CanRefresh = false;
+            _viewModel.CanSave = MazeItem.ID == "";
 
             UpdateControls();
 
@@ -218,6 +225,11 @@ namespace Maze.Maui.App.Views
 
         }
 
+        private Task<bool> Save()
+        {
+            return _viewModel.SaveMaze(MazeGrid.ToMaze());
+        }
+
         private void ClearSolution()
         {
             IsSolutionDisplayed = !MazeGrid.ClearLastSolution();
@@ -318,5 +330,53 @@ namespace Maze.Maui.App.Views
                 Initialize();
             base.OnNavigatedTo(args);
         }
+
+        protected override void OnAppearing()
+        {
+            base.OnAppearing();
+
+            // Subscribe to Shell's Navigating event
+            Shell.Current.Navigating += OnShellNavigating;
+        }
+
+        protected override void OnDisappearing()
+        {
+            base.OnDisappearing();
+
+            // Unsubscribe to prevent memory leaks
+            Shell.Current.Navigating -= OnShellNavigating;
+        }
+
+        private async void OnShellNavigating(object? sender, ShellNavigatingEventArgs e)
+        {
+            if (_viewModel.CanSave && e.Source == ShellNavigationSource.PopToRoot)
+            {
+                var deferral = e.GetDeferral();
+                bool saveChanges = await ShowConfirmation(
+                    "Unsaved Changes",
+                    "Do you want to save your changes?",
+                    "Yes",
+                    "No"
+                );
+                if (saveChanges)
+                {
+                    bool saved = await Save();
+                    if (!saved)
+                        e.Cancel();
+                }
+                deferral.Complete();
+            }
+        }
+        // TO DO - move these to a dialog service
+        private async Task ShowAlert(string title, string message, string cancel)
+        {
+            await Shell.Current.DisplayAlert(title, message, cancel);
+        }
+
+        private async Task<bool> ShowConfirmation(string title, string message, string accept, string cancel)
+        {
+            return await Shell.Current.DisplayAlert(title, message, accept, cancel);
+        }
+
     }
 }

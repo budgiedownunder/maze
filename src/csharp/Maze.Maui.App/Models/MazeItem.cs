@@ -1,18 +1,52 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Maze.Api;
 
 namespace Maze.Maui.App.Models
 {
-    public class MazeItem
+    public class MazeItem : INotifyPropertyChanged
     {
-        public string ID { get; set; } = "";
-        public string Name { get; set; } = "";
-        public Api.Maze? Definition { get; set; }
+        private string name = "";
+        private Api.Maze? definition;
 
+
+        [JsonPropertyName("id")]
+        public string ID { get; set; } = "";
+
+        [JsonPropertyName("name")]
+        public string Name { 
+            get => name;
+            set
+            {
+                if (name != value)
+                {
+                    name = value;
+                    OnPropertyChanged(nameof(Name));
+                }
+            } 
+        }
+
+        [JsonPropertyName("definition")]
+        public Api.Maze? Definition
+        {
+            get => definition;
+            set
+            {
+                if (definition != value)
+                {
+                    definition = value;
+                    OnPropertyChanged(nameof(Definition));
+                    OnPropertyChanged(nameof(DimensionsSummary));
+                }
+            }
+        }
+
+        [JsonIgnore]
         public string DimensionsSummary
         {
             get {
@@ -27,6 +61,12 @@ namespace Maze.Maui.App.Models
         }
 
         public MazeItem() { 
-        }    
+        }
+       
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 }

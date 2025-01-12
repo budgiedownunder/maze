@@ -1,5 +1,7 @@
 ﻿using Maze.Maui.App.Models;
+using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Web;
@@ -23,7 +25,19 @@ namespace Maze.Maui.App.Services
 
         public override void Write(Utf8JsonWriter writer, Api.Maze value, JsonSerializerOptions options)
         {
-            writer.WriteStringValue(value.ToString());
+            string jsonMaze = value.ToJson();
+            Dictionary<string, object>? fields = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonMaze);
+
+            if (fields is null || !fields.TryGetValue("definition", out var definitionValue))
+            {
+                writer.WriteStringValue("{\"grid\":[]}\"");
+                return;
+            }
+
+            if (definitionValue is JsonElement jsonElement)
+            {
+                jsonElement.WriteTo(writer);
+            }
         }
     }
     public class MazeHttpClientService : IMazeService
@@ -48,6 +62,7 @@ namespace Maze.Maui.App.Services
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
 
         }
+
         public async Task<List<Models.MazeItem>> GetMazeItems(bool includeDefinitions)
         {
             var url = $"{_rootUrl}/mazes?includeDefinitions={(includeDefinitions ? "true" : "false")}";
@@ -66,16 +81,38 @@ namespace Maze.Maui.App.Services
             }
             return _mazeItems;
         }
-        public async Task DeleteMazeItem(Models.MazeItem item)
+
+        public async Task UpdateMazeItem(Models.MazeItem item)
         {
-            if (item is null)
+            if (item is null || item.ID == "")
             {
-                throw new Exception("Maze item is null");
+                throw new Exception("Maze item id is null or empty");
             }
-            string idEncoded = HttpUtility.UrlEncode(item.ID);
-            var url = $"{_rootUrl}/mazes/{idEncoded}";
+            string url = GetIdUrlPath(item.ID);
+            string json = GetMazeItemJson(item);
+            HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PutAsync(url, content);
+            response.EnsureSuccessStatusCode();
+        }
+
+        public async Task DeleteMazeItem(string id)
+        {
+            string url = GetIdUrlPath(id);
             var response = await _httpClient.DeleteAsync(url);
             response.EnsureSuccessStatusCode();
+        }
+
+        private string GetIdUrlPath(string id)
+        {
+            string idEncoded = HttpUtility.UrlEncode(id);
+            return $"{_rootUrl}/mazes/{idEncoded}";
+        }
+
+        private string GetMazeItemJson(MazeItem item)
+        {
+            var options = new JsonSerializerOptions();
+            options.Converters.Add(new DefinitionConverter());
+            return JsonSerializer.Serialize(item, options);
         }
     }
 }
