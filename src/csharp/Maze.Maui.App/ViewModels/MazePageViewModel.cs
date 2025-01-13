@@ -45,6 +45,8 @@ namespace Maze.Maui.App.ViewModels
 
         private readonly IDeviceTypeService _deviceTypeService;
         private readonly IMazeService _mazeService;
+        private readonly IDialogService _dialogService;
+
         private readonly MazesViewModel _mazesViewModel;
 
         private bool _canInsertRows = false;
@@ -253,11 +255,12 @@ namespace Maze.Maui.App.ViewModels
             }
         }
 
-        public MazePageViewModel(IDeviceTypeService deviceTypeService, IMazeService mazeService, MazesViewModel mazesViewModel)
+        public MazePageViewModel(IDeviceTypeService deviceTypeService, IMazeService mazeService, MazesViewModel mazesViewModel, IDialogService dialogService)
         {
             this._deviceTypeService = deviceTypeService;
             this._mazeService = mazeService;
             this._mazesViewModel = mazesViewModel;
+            this._dialogService = dialogService;
 
             InsertRowsCommand = new Command(async () => await OnInsertRows());
             DeleteRowsCommand = new Command(async () => await OnDeleteRows());
@@ -274,6 +277,7 @@ namespace Maze.Maui.App.ViewModels
             SaveCommand = new Command(async () => await OnSave());
             RefreshCommand = new Command(async () => await OnRefresh());
             _mazesViewModel = mazesViewModel;
+            _dialogService = dialogService;
         }
         [ObservableProperty]
         MazeItem mazeItem = new MazeItem();
@@ -370,7 +374,7 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (Exception ex)
             {
-                await ShowAlert("Error", $"Unable to save maze: {ex.Message}", "OK");
+                await _dialogService.ShowAlert("Error", $"Unable to save maze: {ex.Message}", "OK");
             }
             finally
             {
@@ -381,8 +385,8 @@ namespace Maze.Maui.App.ViewModels
         private async Task<bool> CreateMazeItem(Api.Maze definition)
         {
             bool created = false;
-            string? name = await DisplayPrompt("Create Maze", "Name", "OK", "Cancel", "Enter maze name", 
-                                               -1, Keyboard.Text);
+            string? name = await _dialogService.DisplayPrompt("Create Maze", "Name", "Name", "OK", "Cancel", "Enter maze name", 
+                                                keyboard: Keyboard.Text, allowEmpty: false, trimResult: true);
             if (name is not null)
             {
                 MazeItem item = new MazeItem
@@ -419,7 +423,7 @@ namespace Maze.Maui.App.ViewModels
         public async Task<bool> RefreshMaze()
         {
             bool refreshed = false;
-            if (await ShowConfirmation("Refresh Maze", 
+            if (await _dialogService.ShowConfirmation("Refresh Maze", 
                 "Are you sure you want to refresh the maze?\n\nNote: any changes you have made will be lost", 
                 "Yes", "No")) {
                 try
@@ -436,7 +440,7 @@ namespace Maze.Maui.App.ViewModels
                 }
                 catch (Exception ex )
                 {
-                    await ShowAlert("Error", $"Failed to refresh maze: {ex.Message}", "OK");
+                    await _dialogService.ShowAlert("Error", $"Failed to refresh maze: {ex.Message}", "OK");
                 }
                 finally
                 {
@@ -467,23 +471,5 @@ namespace Maze.Maui.App.ViewModels
                 IsBusy = false;
             }
         }
-
-        // TO DO - move these to a dialog service
-        private async Task ShowAlert(string title, string message, string cancel)
-        {
-            await Shell.Current.DisplayAlert(title, message, cancel);
-        }
-
-        private async Task<bool> ShowConfirmation(string title, string message, string accept, string cancel)
-        {
-            return await Shell.Current.DisplayAlert(title, message, accept, cancel);
-        }
-
-        private async Task<string> DisplayPrompt(string title, string message, string accept = "OK", string cancel = "Cancel", 
-            string? placeholder = null, int maxlength = -1, Keyboard? keyboard = null, string? initialValue = "")
-        {
-            return await Shell.Current.DisplayPromptAsync(title, message, accept, cancel, placeholder, maxlength, keyboard, initialValue);
-        }
-
-    }
+     }
 }

@@ -46,6 +46,11 @@ namespace Maze.Maui.App
                 return new DeviceTypeService();
             });
 
+            builder.Services.AddSingleton<IDialogService>(provider =>
+            {
+                return new DialogService();
+            });
+
             builder.Services.AddSingleton<MazesViewModel>();
             builder.Services.AddTransient<MazePageViewModel>();
 

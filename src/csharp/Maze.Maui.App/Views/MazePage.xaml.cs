@@ -8,6 +8,7 @@ namespace Maze.Maui.App.Views
     using Maze.Maui.Controls;
     using Maze.Maui.Services;
     using Maze.Maui.App.Models;
+    using Maze.Maui.App.Services;
 
     /// <summary>
     /// This class represents the maze page within the application. It provides
@@ -52,6 +53,8 @@ namespace Maze.Maui.App.Views
         const String APP_TITLE = "MAZE";
         MazePageViewModel _viewModel;
         MazesViewModel _mazesViewModel;
+        IDialogService _dialogService;
+        IDeviceTypeService _deviceTypeService;
 
         private bool IsInitialized { get; set; }
         private bool IsPanSupported { get; set; }
@@ -60,14 +63,18 @@ namespace Maze.Maui.App.Views
         /// <summary>
         /// Constructor 
         /// </summary>
-        public MazePage(MazePageViewModel viewModel, MazesViewModel mazesViewModel)
+        public MazePage(MazePageViewModel viewModel, MazesViewModel mazesViewModel, IDialogService dialogService, IDeviceTypeService deviceTypeService)
         {
             InitializeComponent();
-            IDeviceTypeService deviceTypeService = new DeviceTypeService();
-            IsPanSupported = !deviceTypeService.IsTouchOnlyDevice();
-            BindingContext = viewModel;
+            _deviceTypeService = deviceTypeService;
+            _dialogService = dialogService;
             _viewModel = viewModel;
             _mazesViewModel = mazesViewModel;
+
+            BindingContext = viewModel;
+
+            IsPanSupported = !_deviceTypeService.IsTouchOnlyDevice();
+
             _viewModel.InsertRowsRequested += (s, e) => InsertRows();
             _viewModel.DeleteRowsRequested += (s, e) => DeleteRows();
             _viewModel.InsertColumnsRequested += (s, e) => InsertColumns();
@@ -82,7 +89,6 @@ namespace Maze.Maui.App.Views
             _viewModel.ClearSolutionRequested += (s, e) => { ClearSolution(); };
             _viewModel.SaveRequested += async (s, e) => { await Save(); };
             _viewModel.RefreshRequested += async (s, e) => { await Refresh(); };
-            _mazesViewModel = mazesViewModel;
         }
 
         private void Initialize()
@@ -228,7 +234,7 @@ namespace Maze.Maui.App.Views
             }
             catch (Exception ex)
             {
-                DisplayAlert(APP_TITLE, $"Unable to solve maze\n\nReason: {ex.Message}", "OK");
+                _dialogService.ShowAlert(APP_TITLE, $"Unable to solve maze\n\nReason: {ex.Message}", "OK");
             }
         }
 
@@ -248,7 +254,7 @@ namespace Maze.Maui.App.Views
             }
             catch (Exception ex)
             {
-                await DisplayAlert(APP_TITLE, $"Failed to refresh maze\n\nReason: {ex.Message}", "OK");
+                await _dialogService.ShowAlert(APP_TITLE, $"Failed to refresh maze\n\nReason: {ex.Message}", "OK");
             }
             return refreshed;
         }
@@ -357,16 +363,12 @@ namespace Maze.Maui.App.Views
         protected override void OnAppearing()
         {
             base.OnAppearing();
-
-            // Subscribe to Shell's Navigating event
             Shell.Current.Navigating += OnShellNavigating;
         }
 
         protected override void OnDisappearing()
         {
             base.OnDisappearing();
-
-            // Unsubscribe to prevent memory leaks
             Shell.Current.Navigating -= OnShellNavigating;
         }
 
@@ -377,7 +379,7 @@ namespace Maze.Maui.App.Views
             if (_viewModel.CanSave && e.Source == ShellNavigationSource.PopToRoot)
             {
                 var deferral = e.GetDeferral();
-                bool saveChanges = await ShowConfirmation(
+                bool saveChanges = await _dialogService.ShowConfirmation(
                     "Unsaved Changes",
                     "Do you want to save your changes?",
                     "Yes",
@@ -392,16 +394,5 @@ namespace Maze.Maui.App.Views
                 deferral.Complete();
             }
         }
-        // TO DO - move these to a dialog service
-        private async Task ShowAlert(string title, string message, string cancel)
-        {
-            await Shell.Current.DisplayAlert(title, message, cancel);
-        }
-
-        private async Task<bool> ShowConfirmation(string title, string message, string accept, string cancel)
-        {
-            return await Shell.Current.DisplayAlert(title, message, accept, cancel);
-        }
-
     }
 }

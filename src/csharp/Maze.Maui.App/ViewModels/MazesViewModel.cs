@@ -12,12 +12,14 @@ namespace Maze.Maui.App.ViewModels
     public partial class MazesViewModel : BaseViewModel
     {
         IMazeService mazeService;
+        IDialogService dialogService;
         public ObservableCollection<MazeItem> MazeItems { get; } = new();
 
-        public MazesViewModel(IMazeService mazeService)
+        public MazesViewModel(IMazeService mazeService, IDialogService dialogService)
         {
             Title = "Mazes";
             this.mazeService = mazeService;
+            this.dialogService = dialogService;
             _ = GetMazesAsync();
         }
 
@@ -42,7 +44,7 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (Exception ex)
             {
-                await ShowAlert("Error", $"Unable to load mazes: {ex.Message}", "OK");
+                await dialogService.ShowAlert("Error", $"Unable to load mazes: {ex.Message}", "OK");
             }
             finally
             {
@@ -93,8 +95,9 @@ namespace Maze.Maui.App.ViewModels
 
             while (!finished)
             {
-                string? name = await DisplayPrompt("Rename Maze", "Name", "Name", "OK", "Cancel", "Enter new maze name",
-                                                    -1, Keyboard.Text, initialName, false, true);
+                string? name = await dialogService.DisplayPrompt("Rename Maze", "Name", "Name", "OK", "Cancel", "Enter new maze name",
+                                                   keyboard: Keyboard.Text, initialValue: initialName,
+                                                   allowEmpty: false, trimResult: true);
                 if (name is not null && name != mazeItem.Name)
                 {
                     finished = await RenameMaze(mazeItem, name);
@@ -115,7 +118,7 @@ namespace Maze.Maui.App.ViewModels
             if (IsBusy)
                 return;
 
-            if (await ShowConfirmation(
+            if (await dialogService.ShowConfirmation(
                 "Delete Maze",
                 $"Are you sure you want to delete '{mazeItem.Name}'?",
                 "Yes",
@@ -135,7 +138,7 @@ namespace Maze.Maui.App.ViewModels
 
             if (NameExists(newName))
             {
-                await ShowAlert("Error", $"The name '{newName}' is already in use.\n\nPlease choose another name.", "OK");
+                await dialogService.ShowAlert("Error", $"The name '{newName}' is already in use.\n\nPlease choose another name.", "OK");
                 return false;
             }
 
@@ -149,7 +152,7 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (Exception ex)
             {
-                await ShowAlert("Error", $"Failed to rename maze: {ex.Message}", "OK");
+                await dialogService.ShowAlert("Error", $"Failed to rename maze: {ex.Message}", "OK");
             }
             finally
             {
@@ -172,7 +175,7 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (Exception ex)
             {
-                await ShowAlert("Error", $"Failed to delete maze: {ex.Message}", "OK");
+                await dialogService.ShowAlert("Error", $"Failed to delete maze: {ex.Message}", "OK");
             }
             finally
             {
@@ -211,46 +214,8 @@ namespace Maze.Maui.App.ViewModels
 
         private bool NameExists(string name)
         {
-            return MazeItems.Any(item => item.Name == name);
-        }
-
-        // TO DO - move these to a dialog service
-        private async Task ShowAlert(string title, string message, string cancel)
-        {
-            await Shell.Current.DisplayAlert(title, message, cancel);
-        }
-
-        private async Task<bool> ShowConfirmation(string title, string message, string accept, string cancel)
-        {
-            return await Shell.Current.DisplayAlert(title, message, accept, cancel);
-        }
-
-        private async Task<string> DisplayPrompt(string title, string message, string valueName, string accept = "OK", string cancel = "Cancel",
-            string? placeholder = null, int maxlength = -1, Keyboard? keyboard = null, string? initialValue = "", bool allowEmpty = false, bool trimResult = true)
-        {
-            string? result = null;
-            bool finished = false;
-
-            while (!finished)
-            {
-                result = await Shell.Current.DisplayPromptAsync(title, message, accept, cancel, placeholder, maxlength, keyboard, initialValue);
-
-                if (result is not null)
-                {
-                    initialValue = result;
-
-                    if (trimResult)
-                        result = result.Trim();
-
-                    if (allowEmpty || result.Length > 0)
-                        finished = true;
-                    else
-                        await ShowAlert(title, $"{valueName} cannot be empty or blank", "OK");
-                }
-                else
-                    finished = true;
-            }
-            return result!;
+            string nameUpper = name.ToUpper();
+            return MazeItems.Any(item => item.Name.ToUpper() == nameUpper);
         }
     }
 }
