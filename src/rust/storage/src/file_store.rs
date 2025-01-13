@@ -443,19 +443,23 @@ impl Store for FileStore {
                     if extension == "json" {
                         if let Some(name) = path.file_stem() {
                             if let Some(name_str) = name.to_str() {
+                                let mut name_use = name_str.to_string();
                                 let mut definition:Option<String> = None;
-                                if include_definitions {
-                                    match self.get_maze(&path_str) {
-                                        Ok(maze_loaded) => {
+                                match self.get_maze(&path_str) {
+                                    Ok(maze_loaded) => {
+                                        if include_definitions {
                                             definition = Some(serde_json::to_string(&maze_loaded).expect("Failed to serialize"));
                                         }
-                                        Err(_) => {},
-                                    }    
-                                } 
+                                        if maze_loaded.name != "" {
+                                            name_use = maze_loaded.name.to_string();
+                                        }
+                                    }
+                                    Err(_) => {},
+                                }    
                     
                                 items.push(MazeItem {
                                     id: path_str.to_string(),
-                                    name: name_str.to_string(),
+                                    name: name_use,
                                     definition: definition,
                                 });
                             }
