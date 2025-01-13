@@ -44,6 +44,7 @@ namespace Maze.Maui.App.ViewModels
 
         private readonly IDeviceTypeService _deviceTypeService;
         private readonly IMazeService _mazeService;
+        private readonly MazesViewModel _mazesViewModel;
 
         private bool _canInsertRows = false;
         private bool _canDeleteRows = false;
@@ -251,10 +252,11 @@ namespace Maze.Maui.App.ViewModels
             }
         }
 
-        public MazePageViewModel(IDeviceTypeService deviceTypeService, IMazeService mazeService)
+        public MazePageViewModel(IDeviceTypeService deviceTypeService, IMazeService mazeService, MazesViewModel mazesViewModel)
         {
             this._deviceTypeService = deviceTypeService;
             this._mazeService = mazeService;
+            this._mazesViewModel = mazesViewModel;
 
             InsertRowsCommand = new Command(async () => await OnInsertRows());
             DeleteRowsCommand = new Command(async () => await OnDeleteRows());
@@ -270,6 +272,7 @@ namespace Maze.Maui.App.ViewModels
             ClearSolutionCommand = new Command(async () => await OnClearSolution());
             SaveCommand = new Command(async () => await OnSave());
             RefreshCommand = new Command(async () => await OnRefresh());
+            _mazesViewModel = mazesViewModel;
         }
         [ObservableProperty]
         MazeItem mazeItem = new MazeItem();
@@ -347,20 +350,36 @@ namespace Maze.Maui.App.ViewModels
             await RunCommand(SaveRequested);
         }
 
-        private async Task CreateMazeItem(Api.Maze definition)
+        private async Task<bool> CreateMazeItem(Api.Maze definition)
         {
-            throw new Exception("CreateMazeItem not implemented");
+            bool created = false;
+            string? name = await DisplayPrompt("Create Maze", "Name", "OK", "Cancel", "Enter maze name", 
+                                               -1, Keyboard.Text);
+            if (name is not null)
+            {
+                MazeItem item = new MazeItem
+                {
+                    Name = name,
+                    Definition = definition
+                };
+
+                await _mazeService.CreateMazeItem(item);
+                MazeItem.Name = name;
+                _mazesViewModel.AddNewItem(item);
+                created = true;
+            }
+            return created;
         }
 
         private async Task UpdateMazeItem(Api.Maze definition)
         {
-            MazeItem mazeItem = new MazeItem
+            MazeItem item = new MazeItem
             {
                 ID = MazeItem.ID,
                 Name = MazeItem.Name,
                 Definition = definition
             };
-            await _mazeService.UpdateMazeItem(mazeItem);
+            await _mazeService.UpdateMazeItem(item);
             MazeItem.Definition = definition;
         }
 
@@ -371,11 +390,14 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 if (IsStored)
+                {
                     await UpdateMazeItem(definition);
+                    saved = true;
+                }
                 else
-                    await CreateMazeItem(definition);
-                UpdateCanSaveRefresh(false);
-                saved = true;
+                    saved = await CreateMazeItem(definition);
+                if(saved)
+                    UpdateCanSaveRefresh(false);
             }
             catch (Exception ex)
             {
@@ -418,6 +440,11 @@ namespace Maze.Maui.App.ViewModels
         private async Task ShowAlert(string title, string message, string cancel)
         {
             await Shell.Current.DisplayAlert(title, message, cancel);
+        }
+        private async Task<string> DisplayPrompt(string title, string message, string accept = "OK", string cancel = "Cancel", 
+            string? placeholder = null, int maxlength = -1, Keyboard? keyboard = null, string? initialValue = "")
+        {
+            return await Shell.Current.DisplayPromptAsync(title, message, accept, cancel, placeholder, maxlength, keyboard, initialValue);
         }
 
     }

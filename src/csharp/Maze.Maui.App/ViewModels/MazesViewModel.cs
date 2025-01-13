@@ -4,6 +4,8 @@ using Maze.Maui.App.Views;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Maui.Controls;
+using System.Xml.Linq;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -36,15 +38,7 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 IsBusy = true;
-                var mazeItems = await mazeService.GetMazeItems(true);
-
-                if (MazeItems.Count != 0)
-                    MazeItems.Clear();
-
-                foreach (MazeItem item in mazeItems)
-                {
-                    MazeItems.Add(item);
-                }
+                DisplayItems(await mazeService.GetMazeItems(true));
             }
             catch (Exception ex)
             {
@@ -86,6 +80,33 @@ namespace Maze.Maui.App.ViewModels
         }
 
         [RelayCommandAttribute]
+        async Task RenameAsync(MazeItem mazeItem)
+        {
+            if (mazeItem is null)
+                return;
+
+            if (IsBusy)
+                return;
+
+            bool finished = false;
+            string initialName = mazeItem.Name;
+
+            while (!finished)
+            {
+                string? name = await DisplayPrompt("Rename Maze", "Name", "Name", "OK", "Cancel", "Enter new maze name",
+                                                    -1, Keyboard.Text, initialName, false, true);
+                if (name is not null && name != mazeItem.Name)
+                {
+                    finished = await RenameMaze(mazeItem, name);
+                    if (!finished)
+                        initialName = name;
+                }
+                else
+                    finished = true;
+            }
+        }
+
+        [RelayCommandAttribute]
         async Task DeleteAsync(MazeItem mazeItem)
         {
             if (mazeItem is null)
@@ -96,17 +117,45 @@ namespace Maze.Maui.App.ViewModels
 
             if (await ShowConfirmation(
                 "Delete Maze",
-                $"Are you sure you want to delete the maze '{mazeItem.Name}'?",
+                $"Are you sure you want to delete '{mazeItem.Name}'?",
                 "Yes",
                 "No"
                 ))
             {
                 bool deleted = await DeleteMaze(mazeItem);
                 if (deleted)
-                {
-                    await GetMazesAsync();
-                }
+                    RemoveItem(mazeItem);
             }
+        }
+
+        async Task<bool> RenameMaze(MazeItem mazeItem, string newName)
+        {
+            if (IsBusy)
+                return false;
+
+            if (NameExists(newName))
+            {
+                await ShowAlert("Error", $"The name '{newName}' is already in use.\n\nPlease choose another name.", "OK");
+                return false;
+            }
+
+            bool renamed = false;
+
+            try
+            {
+                IsBusy = true;
+                await mazeService.RenameMazeItem(mazeItem, newName);
+                renamed = true;
+            }
+            catch (Exception ex)
+            {
+                await ShowAlert("Error", $"Failed to rename maze: {ex.Message}", "OK");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+            return renamed;
         }
 
         async Task<bool> DeleteMaze(MazeItem mazeItem)
@@ -123,13 +172,46 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (Exception ex)
             {
-                await ShowAlert("Error", $"Unable to delete mazes: {ex.Message}", "OK");
+                await ShowAlert("Error", $"Failed to delete maze: {ex.Message}", "OK");
             }
             finally
             {
                 IsBusy = false;
             }
             return deleted;
+        }
+
+        public void AddNewItem(MazeItem item)
+        {
+            MazeItems.Add(item);
+            SortItems();
+        }
+
+        public void RemoveItem(MazeItem item)
+        {
+            MazeItems.Remove(item);
+        }
+
+        private void SortItems()
+        {
+            var sortedItems = MazeItems.OrderBy(i => i.Name).ToList();
+            DisplayItems(sortedItems);
+        }
+
+        private void DisplayItems(List<MazeItem> items)
+        {
+            if (MazeItems.Count != 0)
+                MazeItems.Clear();
+
+            foreach (MazeItem item in items)
+            {
+                MazeItems.Add(item);
+            }
+        }
+
+        private bool NameExists(string name)
+        {
+            return MazeItems.Any(item => item.Name == name);
         }
 
         // TO DO - move these to a dialog service
@@ -141,6 +223,34 @@ namespace Maze.Maui.App.ViewModels
         private async Task<bool> ShowConfirmation(string title, string message, string accept, string cancel)
         {
             return await Shell.Current.DisplayAlert(title, message, accept, cancel);
+        }
+
+        private async Task<string> DisplayPrompt(string title, string message, string valueName, string accept = "OK", string cancel = "Cancel",
+            string? placeholder = null, int maxlength = -1, Keyboard? keyboard = null, string? initialValue = "", bool allowEmpty = false, bool trimResult = true)
+        {
+            string? result = null;
+            bool finished = false;
+
+            while (!finished)
+            {
+                result = await Shell.Current.DisplayPromptAsync(title, message, accept, cancel, placeholder, maxlength, keyboard, initialValue);
+
+                if (result is not null)
+                {
+                    initialValue = result;
+
+                    if (trimResult)
+                        result = result.Trim();
+
+                    if (allowEmpty || result.Length > 0)
+                        finished = true;
+                    else
+                        await ShowAlert(title, $"{valueName} cannot be empty or blank", "OK");
+                }
+                else
+                    finished = true;
+            }
+            return result!;
         }
     }
 }

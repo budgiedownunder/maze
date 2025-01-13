@@ -1,10 +1,8 @@
 ﻿using Maze.Maui.App.Models;
-using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Web;
 
 namespace Maze.Maui.App.Services
 {
@@ -20,7 +18,7 @@ namespace Maze.Maui.App.Services
                 return maze;
             }
 
-            throw new JsonException("Expected a JSON string for Definition");
+            throw new JsonException("Expected a JSON string for 'definition' field");
         }
 
         public override void Write(Utf8JsonWriter writer, Api.Maze value, JsonSerializerOptions options)
@@ -35,9 +33,7 @@ namespace Maze.Maui.App.Services
             }
 
             if (definitionValue is JsonElement jsonElement)
-            {
                 jsonElement.WriteTo(writer);
-            }
         }
     }
     public class MazeHttpClientService : IMazeService
@@ -70,29 +66,72 @@ namespace Maze.Maui.App.Services
 
             if (response.IsSuccessStatusCode)
             {
-                var options = new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                };
-
+                var options = new JsonSerializerOptions();
                 options.Converters.Add(new DefinitionConverter());
 
                 _mazeItems = await response.Content.ReadFromJsonAsync<List<Models.MazeItem>>(options) ?? new();
             }
+
             return _mazeItems;
+        }
+
+        public async Task CreateMazeItem(Models.MazeItem item)
+        {
+            if (item is null)
+            {
+                throw new Exception("Maze item is null");
+            }
+
+            string url = $"{_rootUrl}/mazes/";
+            string json = GetMazeItemJson(item);
+            HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync(url, content);
+            response.EnsureSuccessStatusCode();
+
+            item.ID = await ExtractId(response);
+        }
+
+        private static async Task<string> ExtractId(HttpResponseMessage response)
+        {
+            string id = "";
+            string jsonResponse = await response.Content.ReadAsStringAsync();
+            Dictionary<string, object>? fields = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonResponse);
+
+            if (fields is null || !fields.TryGetValue("id", out var idValue))
+                throw new Exception("'id' not found in POST response");
+
+            if (idValue is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.String)
+                id = jsonElement.GetString() ?? "";
+
+            if (id == "")
+                throw new Exception("'id' is blank or empty in response");
+
+            return id;
         }
 
         public async Task UpdateMazeItem(Models.MazeItem item)
         {
             if (item is null || item.ID == "")
             {
-                throw new Exception("Maze item id is null or empty");
+                throw new Exception("Maze item or id is null or empty");
             }
             string url = GetIdUrlPath(item.ID);
             string json = GetMazeItemJson(item);
             HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await _httpClient.PutAsync(url, content);
             response.EnsureSuccessStatusCode();
+        }
+
+        public async Task RenameMazeItem(Models.MazeItem item, string newName)
+        {
+            Models.MazeItem tempItem = new MazeItem
+            {
+                ID = item.ID,
+                Name = newName,
+                Definition = item.Definition,
+            };
+            await UpdateMazeItem(tempItem);
+            item.Name = newName;
         }
 
         public async Task DeleteMazeItem(string id)
@@ -104,7 +143,7 @@ namespace Maze.Maui.App.Services
 
         private string GetIdUrlPath(string id)
         {
-            string idEncoded = HttpUtility.UrlEncode(id);
+            string idEncoded = Uri.EscapeDataString(id);
             return $"{_rootUrl}/mazes/{idEncoded}";
         }
 
