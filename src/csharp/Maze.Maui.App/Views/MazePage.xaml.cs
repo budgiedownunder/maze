@@ -81,6 +81,7 @@ namespace Maze.Maui.App.Views
             _viewModel.SolveRequested += (s, e) => { Solve(); };
             _viewModel.ClearSolutionRequested += (s, e) => { ClearSolution(); };
             _viewModel.SaveRequested += async (s, e) => { await Save(); };
+            _viewModel.RefreshRequested += async (s, e) => { await Refresh(); };
             _mazesViewModel = mazesViewModel;
         }
 
@@ -106,6 +107,13 @@ namespace Maze.Maui.App.Views
             UpdateControls();
 
             IsInitialized = true;
+        }
+
+        private void ResetDisplay()
+        {
+            MazeGrid.Initialize(IsPanSupported, MazeItem);
+            MazeGrid.ActivateCell(1, 1, false);
+            UpdateControls();
         }
 
         private bool IsTouchOnlyDevice { get => _viewModel.IsTouchOnlyDevice; }
@@ -222,12 +230,27 @@ namespace Maze.Maui.App.Views
             {
                 DisplayAlert(APP_TITLE, $"Unable to solve maze\n\nReason: {ex.Message}", "OK");
             }
-
         }
 
         private Task<bool> Save()
         {
             return _viewModel.SaveMaze(MazeGrid.ToMaze());
+        }
+
+        private async Task<bool> Refresh()
+        {
+            bool refreshed = false;
+            try
+            {
+                refreshed = await _viewModel.RefreshMaze();
+                if (refreshed)
+                    ResetDisplay();
+            }
+            catch (Exception ex)
+            {
+                await DisplayAlert(APP_TITLE, $"Failed to refresh maze\n\nReason: {ex.Message}", "OK");
+            }
+            return refreshed;
         }
 
         private void ClearSolution()
@@ -349,6 +372,8 @@ namespace Maze.Maui.App.Views
 
         private async void OnShellNavigating(object? sender, ShellNavigatingEventArgs e)
         {
+            if (_viewModel.IsBusy) return;
+
             if (_viewModel.CanSave && e.Source == ShellNavigationSource.PopToRoot)
             {
                 var deferral = e.GetDeferral();

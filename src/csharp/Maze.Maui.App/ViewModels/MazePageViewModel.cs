@@ -41,6 +41,7 @@ namespace Maze.Maui.App.ViewModels
         public event EventHandler? SolveRequested;
         public event EventHandler? ClearSolutionRequested;
         public event EventHandler? SaveRequested;
+        public event EventHandler? RefreshRequested;
 
         private readonly IDeviceTypeService _deviceTypeService;
         private readonly IMazeService _mazeService;
@@ -350,6 +351,33 @@ namespace Maze.Maui.App.ViewModels
             await RunCommand(SaveRequested);
         }
 
+        public async Task<bool> SaveMaze(Api.Maze definition)
+        {
+            bool saved = false;
+
+            try
+            {
+                if (IsStored)
+                {
+                    await UpdateMazeItem(definition);
+                    saved = true;
+                }
+                else
+                    saved = await CreateMazeItem(definition);
+
+                if (saved)
+                    UpdateCanSaveRefresh(false);
+            }
+            catch (Exception ex)
+            {
+                await ShowAlert("Error", $"Unable to save maze: {ex.Message}", "OK");
+            }
+            finally
+            {
+            }
+            return saved;
+        }
+
         private async Task<bool> CreateMazeItem(Api.Maze definition)
         {
             bool created = false;
@@ -383,43 +411,47 @@ namespace Maze.Maui.App.ViewModels
             MazeItem.Definition = definition;
         }
 
-        public async Task<bool> SaveMaze(Api.Maze definition)
-        {
-            bool saved = false;
-
-            try
-            {
-                if (IsStored)
-                {
-                    await UpdateMazeItem(definition);
-                    saved = true;
-                }
-                else
-                    saved = await CreateMazeItem(definition);
-                if(saved)
-                    UpdateCanSaveRefresh(false);
-            }
-            catch (Exception ex)
-            {
-                await ShowAlert("Error", $"Unable to save maze: {ex.Message}", "OK");
-            }
-            finally
-            {
-            }
-            return saved;
-        }
-
         private async Task OnRefresh()
         {
-            await ShowAlert("Action", "Would attempt to refresh maze", "OK");
+            await RunCommand(RefreshRequested);
+        }
+
+        public async Task<bool> RefreshMaze()
+        {
+            bool refreshed = false;
+            if (await ShowConfirmation("Refresh Maze", 
+                "Are you sure you want to refresh the maze?\n\nNote: any changes you have made will be lost", 
+                "Yes", "No")) {
+                try
+                {
+                    IsBusy = true;
+                    MazeItem? item = await _mazeService.GetMazeItem(MazeItem.ID);
+                    if (item is not null)
+                    {
+                        MazeItem.Name = item?.Name ?? "";
+                        MazeItem.Definition = item?.Definition ?? new Api.Maze(1, 1);
+                        UpdateCanSaveRefresh(false);
+                        refreshed = true;
+                    }
+                }
+                catch (Exception ex )
+                {
+                    await ShowAlert("Error", $"Failed to refresh maze: {ex.Message}", "OK");
+                }
+                finally
+                {
+                    IsBusy = false;
+                }
+            }
+            return refreshed;
         }
 
         private void UpdateCanSaveRefresh(bool dirty)
         {
             IsDirty = dirty;
             if (IsStored)
-                CanRefresh = IsDirty;
-            CanSave = IsDirty;
+                CanRefresh = IsDirty && !IsBusy;
+            CanSave = IsDirty && !IsBusy;
         }
 
         private async Task RunCommand(EventHandler? eventHandler)
@@ -441,6 +473,12 @@ namespace Maze.Maui.App.ViewModels
         {
             await Shell.Current.DisplayAlert(title, message, cancel);
         }
+
+        private async Task<bool> ShowConfirmation(string title, string message, string accept, string cancel)
+        {
+            return await Shell.Current.DisplayAlert(title, message, accept, cancel);
+        }
+
         private async Task<string> DisplayPrompt(string title, string message, string accept = "OK", string cancel = "Cancel", 
             string? placeholder = null, int maxlength = -1, Keyboard? keyboard = null, string? initialValue = "")
         {

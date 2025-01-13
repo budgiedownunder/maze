@@ -75,6 +75,18 @@ namespace Maze.Maui.App.Services
             return _mazeItems;
         }
 
+        public async Task<Models.MazeItem?> GetMazeItem(string id)
+        {
+            if (id is null || id == "")
+            {
+                throw new Exception("Maze item or id is null or empty");
+            }
+            string url = GetIdUrlPath(id);
+            var response = await _httpClient.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+            return await ReadItem(response);
+        }
+
         public async Task CreateMazeItem(Models.MazeItem item)
         {
             if (item is null)
@@ -88,25 +100,7 @@ namespace Maze.Maui.App.Services
             var response = await _httpClient.PostAsync(url, content);
             response.EnsureSuccessStatusCode();
 
-            item.ID = await ExtractId(response);
-        }
-
-        private static async Task<string> ExtractId(HttpResponseMessage response)
-        {
-            string id = "";
-            string jsonResponse = await response.Content.ReadAsStringAsync();
-            Dictionary<string, object>? fields = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonResponse);
-
-            if (fields is null || !fields.TryGetValue("id", out var idValue))
-                throw new Exception("'id' not found in POST response");
-
-            if (idValue is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.String)
-                id = jsonElement.GetString() ?? "";
-
-            if (id == "")
-                throw new Exception("'id' is blank or empty in response");
-
-            return id;
+            item.ID = await ReadId(response);
         }
 
         public async Task UpdateMazeItem(Models.MazeItem item)
@@ -152,6 +146,44 @@ namespace Maze.Maui.App.Services
             var options = new JsonSerializerOptions();
             options.Converters.Add(new DefinitionConverter());
             return JsonSerializer.Serialize(item, options);
+        }
+
+        private static string ReadStringField(Dictionary<string, object>? fields, string name, bool allowEmpty)
+        {
+            string value = "";
+
+            if (fields is null || !fields.TryGetValue(name, out var idValue))
+                throw new Exception($"'{name}' not found in response");
+
+            if (idValue is JsonElement jsonElement && jsonElement.ValueKind == JsonValueKind.String)
+                value = jsonElement.GetString() ?? "";
+
+            if (!allowEmpty && value == "")
+                throw new Exception($"'{name}' is blank or empty in response");
+
+            return value;
+        }
+
+        private static async Task<string> ReadId(HttpResponseMessage response)
+        {
+            string jsonResponse = await response.Content.ReadAsStringAsync();
+            Dictionary<string, object>? fields = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonResponse);
+            return ReadStringField(fields, "id", false);
+        }
+
+        private static async Task<MazeItem> ReadItem(HttpResponseMessage response)
+        {
+            string jsonResponse = await response.Content.ReadAsStringAsync();
+            Dictionary<string, object>? fields = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonResponse);
+
+            MazeItem item = new MazeItem
+            {
+                ID = ReadStringField(fields, "id", false),
+                Name = ReadStringField(fields, "name", false),
+                Definition = new Api.Maze(0, 0)
+            };
+            item.Definition.FromJson(jsonResponse);
+            return item;
         }
     }
 }

@@ -1,6 +1,5 @@
 ﻿using MauiGestures;
 using Microsoft.Maui.Controls.Shapes;
-using System.Data.Common;
 
 namespace Maze.Maui.Controls.InteractiveGrid
 {
@@ -344,32 +343,65 @@ namespace Maze.Maui.Controls.InteractiveGrid
             return new ColumnDefinition { Width = new GridLength(rowHeader ? this.RowHeaderWidth : this.CellWidth) };
         }
         /// <summary>
-        /// Initializes the grid's content, based on the number of rows and columns that have been specified.
+        /// Initializes the grid's content based on the number of rows and columns that have been specified.
         /// Will call <see cref="GetHeaderCellContent"/> and <see cref="CreateCellContent"/> to initialize individual header 
         /// and cell content. These methods should be overridden in your derived class. If this is not done, numbered headers
         /// will be inserted and each cell will be initialized with an empty label.
         /// </summary>
         public void InitializeContent()
         {
-            this.IsVisible = false;
-            this.RowDefinitions.Add(NewRowDefinition(true));
+            IsVisible = false;
+            ClearContent();
+            AddContent();
+            IsVisible = true;
+            ReinitializeSelectionFrame();
+        }
+        /// <summary>
+        /// Clears the grid's content
+        /// </summary>
+        private void ClearContent()
+        {
+            RowDefinitions.Clear();
+            ColumnDefinitions.Clear();
+            Children.Clear();
+        }
+        /// <summary>
+        /// Adds the grid's content 
+        /// </summary>
+        private void AddContent()
+        {
+            AddRowDefinitions();
+            AddColumnDefinitions();
+            AddHeaderRow();
+            AddRowsContent();
+        }
+        /// <summary>
+        /// Adds the grid's row definitions 
+        /// </summary>
+        private void AddRowDefinitions()
+        {
+            RowDefinitions.Add(NewRowDefinition(true));
 
             for (int row = 0; row < RowCount; row++)
-                this.RowDefinitions.Add(NewRowDefinition(false));
-
-            this.ColumnDefinitions.Add(NewColumnDefinition(true));
+                RowDefinitions.Add(NewRowDefinition(false));
+        }
+        /// <summary>
+        /// Adds the grid's column definitions 
+        /// </summary>
+        private void AddColumnDefinitions()
+        {
+            ColumnDefinitions.Add(NewColumnDefinition(true));
 
             for (int column = 0; column < ColumnCount; column++)
-                this.ColumnDefinitions.Add(NewColumnDefinition(false));
-
-            AddHeaderRow();
-
+                ColumnDefinitions.Add(NewColumnDefinition(false));
+        }
+        /// <summary>
+        /// Adds the grid's rows content (row header + cells)
+        /// </summary>
+        private void AddRowsContent()
+        {
             for (int row = 0; row < RowCount; row++)
                 AddRowContent(row, true);
-
-            IsVisible = true;
-
-            InitializeSelectionFrame();
         }
         /// <summary>
         /// Gets the content for a header cell

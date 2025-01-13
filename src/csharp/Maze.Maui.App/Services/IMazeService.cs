@@ -12,6 +12,8 @@ namespace Maze.Maui.App.Services
 
         public Task CreateMazeItem(Models.MazeItem item);
 
+        public Task<Models.MazeItem?> GetMazeItem(string id);
+
         public Task UpdateMazeItem(Models.MazeItem item);
 
         public Task RenameMazeItem(Models.MazeItem item, string newName);
