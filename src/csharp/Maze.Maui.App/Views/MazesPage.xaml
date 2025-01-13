@@ -27,7 +27,6 @@
                 <CollectionView.EmptyView>
                     <StackLayout VerticalOptions="CenterAndExpand"
                                  HorizontalOptions="CenterAndExpand"
-                                 HeightRequest="200"
                                  Padding="10">
                         <Label Text="{Binding LoadStatus}"/>
                     </StackLayout>
