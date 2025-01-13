@@ -18,18 +18,25 @@
                      Command="{Binding GetMazesCommand}"
                      IconImageSource="refresh.png"/>
     </ContentPage.ToolbarItems>
-    
-    <Grid>
+
+    <Grid VerticalOptions="FillAndExpand" HorizontalOptions="FillAndExpand">
         <RefreshView Command="{Binding GetMazesCommand}"
                      IsRefreshing="{Binding IsRefreshing}">
             <CollectionView ItemsSource="{Binding MazeItems}"
-                            SelectionMode="None">
+                            SelectionMode="None"
+                            VerticalOptions="FillAndExpand"
+                            HorizontalOptions="FillAndExpand"
+                            x:Name="MazesCollectionView">
                 <CollectionView.EmptyView>
-                    <StackLayout VerticalOptions="CenterAndExpand"
-                                 HorizontalOptions="CenterAndExpand"
-                                 Padding="10">
-                        <Label Text="{Binding LoadStatus}"/>
-                    </StackLayout>
+                    <Grid VerticalOptions="FillAndExpand"
+                          HorizontalOptions="FillAndExpand"
+                          Padding="10"
+                          WidthRequest="{Binding Source={x:Reference MazesCollectionView}, Path=Width}"
+                          HeightRequest="{Binding Source={x:Reference MazesCollectionView}, Path=Height}">
+                        <Label Text="{Binding LoadStatus}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"/>
+                    </Grid>
                 </CollectionView.EmptyView>
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="model:MazeItem">
