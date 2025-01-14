@@ -102,7 +102,6 @@
             <ActivityIndicator x:Name="BusyIndicator"
                                IsRunning="{Binding IsBusy}"
                                IsVisible="{Binding IsBusy}"
-                               Color="Purple"
                                VerticalOptions="Center"
                                HorizontalOptions="Center"
                                WidthRequest="50"
