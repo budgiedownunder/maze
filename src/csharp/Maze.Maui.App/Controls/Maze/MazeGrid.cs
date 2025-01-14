@@ -23,40 +23,48 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="sender">Sender</param>
         /// <param name="e">Maze grid cell tapped event arguments</param>
+        /// <returns>Event handler</returns>
         public delegate void CellTappedEventHandler(object sender, MazeGridCellTappedEventArgs e);
         /// <summary>
         /// Registered cell tapped event handler
         /// </summary>
+        /// <returns>Event handler</returns>
         public event CellTappedEventHandler? CellTapped;
         /// <summary>
         /// Cell double-tapped event handler delegate
         /// </summary>
         /// <param name="sender">Sender</param>
         /// <param name="e">Maze grid cell tapped event arguments</param>
+        /// <returns>Event handler</returns>
         public delegate void CellDoubleTappedEventHandler(object sender, MazeGridCellTappedEventArgs e);
         /// <summary>
         /// Registered cell double-tapped event handler
         /// </summary>
+        /// <returns>Event handler</returns>
         public event CellDoubleTappedEventHandler? CellDoubleTapped;
         /// <summary>
         /// Key down event handler delegate
         /// </summary>
         /// <param name="sender">Sender</param>
         /// <param name="e">Maze grid key down event arguments</param>
+        /// <returns>Event handler</returns>
         public delegate void ProcessKeyDownEventHandler(object sender, MazeGridKeyDownEventArgs e);
         /// <summary>
         /// Registered key down event handler
         /// </summary>
+        /// <returns>Event handler</returns>
         public event ProcessKeyDownEventHandler? KeyDown;
         /// <summary>
         /// Selection changed event handler delegate
         /// </summary>
         /// <param name="sender">Sender</param>
         /// <param name="e">Maze grid selection changed event arguments</param>
+        /// <returns>Event handler</returns>
         public delegate void SelectionChangedEventHandler(object sender, MazeGridSelectionChangedEventArgs e);
         /// <summary>
         /// Registered selection changed event handler
         /// </summary>
+        /// <returns>Event handler</returns>
         public event SelectionChangedEventHandler? SelectionChanged;
         /// <summary>
         /// Start cell (if any)
@@ -775,54 +783,67 @@ namespace Maze.Maui.App
             /// <summary>
             /// No direction
             /// </summary>
+            /// <returns>No direction</returns>
             None = 0,
             /// <summary>
             /// To left
             /// </summary>
+            /// <returns>To left</returns>
             Left = 1,
             /// <summary>
             /// To left from down
             /// </summary>
+            /// <returns>To left from down</returns>
             LeftFromDown = 2,
             /// <summary>
             /// To left from up
             /// </summary>
+            /// <returns>To left from up</returns>
             LeftFromUp = 3,
             /// <summary>
             /// To right
             /// </summary>
+            /// <returns>To right</returns>
             Right = 4,
             /// <summary>
             /// To right from down
             /// </summary>
+            /// <returns>To right from down</returns>
             RightFromDown = 5,
             /// <summary>
             /// To right from up
             /// </summary>
+            /// <returns>To right from up</returns>
             RightFromUp = 6,
             /// <summary>
             /// Upwards
             /// </summary>
+            /// <returns>Upwards</returns>
             Up = 7,
             /// <summary>
             /// Upwards from left
             /// </summary>
+            /// <returns>Upwards from left</returns>
             UpFromLeft = 8,
             /// <summary>
             /// Upwards from right
             /// </summary>
+            /// <returns>Upwards from right</returns>
             UpFromRight = 9,
             /// <summary>
             /// Downwards
             /// </summary>
+            /// <returns>Downwards</returns>
             Down = 10,
             /// <summary>
             /// Downwards from left
             /// </summary>
+            /// <returns>Downwards from left</returns>
             DownFromLeft = 11,
             /// <summary>
             /// Downwards from right
             /// </summary>
+            /// <returns>Downwards from right</returns>
             DownFromRight = 12
         }
 

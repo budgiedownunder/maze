@@ -1,23 +1,27 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
+﻿using System.ComponentModel;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
-using Maze.Api;
 
 namespace Maze.Maui.App.Models
 {
+    /// <summary>
+    /// The `MazeItem` class represents a stored maze
+    /// </summary>
     public class MazeItem : INotifyPropertyChanged
     {
+        // Private properties
         private string name = "";
         private Api.Maze? definition;
 
-
+        /// <summary>
+        /// The ID of the maze item within the store
+        /// </summary>
+        /// <returns>Maze ID</returns>
         [JsonPropertyName("id")]
         public string ID { get; set; } = "";
-
+        /// <summary>
+        /// The name of the maze within the store
+        /// </summary>
+        /// <returns>Maze name</returns>
         [JsonPropertyName("name")]
         public string Name { 
             get => name;
@@ -30,7 +34,10 @@ namespace Maze.Maui.App.Models
                 }
             } 
         }
-
+        /// <summary>
+        /// The maze definition
+        /// </summary>
+        /// <returns>Maze definition</returns>
         [JsonPropertyName("definition")]
         public Api.Maze? Definition
         {
@@ -45,7 +52,10 @@ namespace Maze.Maui.App.Models
                 }
             }
         }
-
+        /// <summary>
+        /// Provides a textual summary of the maze's dimensions
+        /// </summary>
+        /// <returns>Dimensions summary</returns>
         [JsonIgnore]
         public string DimensionsSummary
         {
@@ -59,11 +69,20 @@ namespace Maze.Maui.App.Models
                 return "Definition not available";
             }
         }
-
+        /// <summary>
+        /// Constructor
+        /// </summary>
         public MazeItem() { 
         }
-       
+        /// <summary>
+        /// Registered property changed event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
         public event PropertyChangedEventHandler? PropertyChanged;
+        /// <summary>
+        /// Triggers a property changed event on any subscribed handlers
+        /// </summary>
+        /// <param name="propertyName">Property name</param>
         protected virtual void OnPropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

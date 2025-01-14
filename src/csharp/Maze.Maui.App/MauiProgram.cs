@@ -34,22 +34,9 @@ namespace Maze.Maui.App
 
             InitializeMazeWasmInterop();
 
-            builder.Services.AddSingleton<IMazeService>(provider =>
-            {
-                // To DO - drive the choice of client service and endpoint(s) from
-                // configuration file settings
-                return new MazeHttpClientService();
-            });
-
-            builder.Services.AddSingleton<IDeviceTypeService>(provider =>
-            {
-                return new DeviceTypeService();
-            });
-
-            builder.Services.AddSingleton<IDialogService>(provider =>
-            {
-                return new DialogService();
-            });
+            builder.Services.AddSingleton<IMazeService>(provider => GetMazeService());
+            builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());
+            builder.Services.AddSingleton<IDialogService>(provider => new DialogService());
 
             builder.Services.AddSingleton<MazesViewModel>();
             builder.Services.AddTransient<MazePageViewModel>();
@@ -64,7 +51,23 @@ namespace Maze.Maui.App
             return builder.Build();
         }
 
-        // To do - move to a service
+        private static IMazeService GetMazeService()
+        {
+            // TO DO - drive the choice of client service and endpoint(s) from
+            // configuration file settings
+#if WINDOWS
+            string rootUri = "http://localhost:8080/api/v1";
+#elif ANDROID
+        string rootUri = "http://10.0.2.2:8080/api/v1";
+#elif IOS
+        string rootUri = "http://localhost:8080/api/v1";
+#else
+        string rootUri = "http://localhost:8080/api/v1";
+#endif
+            return new MazeHttpClientService(rootUri);
+        }
+
+        // TO DO - move to a service
         private static async void InitializeMazeWasmInterop()
         {
             try
