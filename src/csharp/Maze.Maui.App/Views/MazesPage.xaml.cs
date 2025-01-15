@@ -44,6 +44,8 @@ public partial class MazesPage : ContentPage
     /// <summary>
     /// Constructor 
     /// </summary>
+    /// <param name="viewModel">Injected mazes view model</param>
+    /// 
     public MazesPage(MazesViewModel viewModel)
     {
         InitializeComponent();
