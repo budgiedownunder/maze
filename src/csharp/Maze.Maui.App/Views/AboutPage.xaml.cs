@@ -13,7 +13,7 @@ namespace Maze.Maui.App.Views;
 ///     </thead>
 ///     <tbody>
 ///       <tr>
-///         <td><img src="../../images/screenshots/windows-about.png" width="250"/></td>
+///         <td><img src="../../images/screenshots/windows-about.png" height="500" width="500"/></td>
 ///       </tr>
 ///     </tbody> 
 ///  </table>

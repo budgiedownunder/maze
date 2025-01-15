@@ -87,5 +87,26 @@ namespace Maze.Maui.App.Models
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+        /// <summary>
+        /// Duplicates the item
+        /// </summary>
+        /// <returns>Duplicated item</returns>
+        public MazeItem Duplicate()
+        {
+            MazeItem duplicateItem = new MazeItem()
+            {
+                ID = this.ID,
+                Name = this.Name,
+                Definition = new Api.Maze(0, 0),
+            };
+
+            if (this.Definition is not null)
+            {
+                string definitionJson = this.Definition.ToJson();
+                duplicateItem.Definition.FromJson(definitionJson);
+            }
+
+            return duplicateItem;
+        }
     }
 }

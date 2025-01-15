@@ -8,12 +8,17 @@ using System.Text.Json.Serialization;
 namespace Maze.Maui.App.Services
 {
     /// <summary>
-    /// Represents a mock service for managing the load, save and deletion of mazes. Mazes are stored in-memory only.
+    /// Represents a mock service for managing the load, save and deletion of mazes. Mazes are stored in memory, 
+    /// with an empty list at start-up.
     /// </summary>
     public class MockMazeService : IMazeService
     {
         // Private properties
         List<Models.MazeItem> _mazeItems = new();
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
         public MockMazeService()
         {
         }
@@ -41,7 +46,6 @@ namespace Maze.Maui.App.Services
                     Name = item.Name,
                 });
             }
-
             return emptyItems;
         }
         /// <summary>
@@ -67,6 +71,8 @@ namespace Maze.Maui.App.Services
                 Name = item.Name,   
                 Definition = item.Definition,
             });
+
+            SortItems();
         }
         /// <summary>
         /// Loads a maze item based on its `ID`
@@ -108,6 +114,8 @@ namespace Maze.Maui.App.Services
                 storedItem.Name = item.Name;
                 storedItem.Definition = item.Definition;
             }
+
+            SortItems();
         }
         /// <summary>
         /// Renames a maze item
@@ -132,6 +140,8 @@ namespace Maze.Maui.App.Services
             }
 
             item.Name = newName;
+
+            SortItems();
         }
         /// <summary>
         /// Deletes a maze item based on its `ID`
@@ -146,7 +156,7 @@ namespace Maze.Maui.App.Services
             RemoveItem(id);
         }
         /// <summary>
-        /// Locates an maze item by its ID
+        /// Locates an maze item by its ID in the stored items
         /// </summary>
         /// <param name="id">Maze item ID</param>
         /// <returns>Maze item. If unsuccessful, an exception will be thrown.</returns>
@@ -160,13 +170,21 @@ namespace Maze.Maui.App.Services
             return item;
         }
         /// <summary>
-        /// Locates an maze item by its ID
+        /// Locates an maze item by its ID within the stored items
         /// </summary>
         /// <param name="id">Maze item ID</param>
         /// <returns>Nothing</returns>
         private void RemoveItem(string id)
         {
             _mazeItems.RemoveAll(item => item.ID == id);
+        }
+        /// <summary>
+        /// Sorts the stored maze items
+        /// </summary>
+        /// <returns>Nothing</returns>
+        private void SortItems()
+        {
+            _mazeItems = _mazeItems.OrderBy(i => i.Name).ToList();
         }
     }
 }

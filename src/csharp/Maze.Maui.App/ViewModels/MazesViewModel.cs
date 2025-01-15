@@ -4,6 +4,7 @@ using Maze.Maui.App.Views;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using System.Reflection;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -55,7 +56,8 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 IsBusy = true;
-                DisplayItems(await _mazeService.GetMazeItems(true));
+                List<MazeItem> items = await _mazeService.GetMazeItems(true);
+                DisplayItems(items.OrderBy(i => i.Name).ToList());
             }
             catch (Exception ex)
             {
@@ -73,12 +75,12 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>
         /// Activates the maze (design) page for the given maze item
         /// </summary>
-        /// <param name="mazeItem">Maze item</param>
+        /// <param name="item">Maze item</param>
         /// <returns>Task</returns>
         [RelayCommandAttribute]
-        async Task GoToDesignAsync(MazeItem mazeItem)
+        async Task GoToDesignAsync(MazeItem item)
         {
-            if (mazeItem is null)
+            if (item is null)
                 return;
 
             if (IsBusy)
@@ -89,7 +91,7 @@ namespace Maze.Maui.App.ViewModels
             await Shell.Current.GoToAsync($"{nameof(MazePage)}", true,
                 new Dictionary<string, object>
                 {
-                    {"MazeItem", mazeItem }
+                    {"MazeItem", item }
                 });
 
             IsBusy = false;
@@ -106,19 +108,19 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>
         /// Handles rename of the given maze item
         /// </summary>
-        /// <param name="mazeItem">Maze item</param>
+        /// <param name="item">Maze item</param>
         /// <returns>Task</returns>
         [RelayCommandAttribute]
-        async Task RenameAsync(MazeItem mazeItem)
+        async Task RenameAsync(MazeItem item)
         {
-            if (mazeItem is null)
+            if (item is null)
                 return;
 
             if (IsBusy)
                 return;
 
             bool finished = false;
-            string initialName = mazeItem.Name;
+            string initialName = item.Name;
 
             while (!finished)
             {
@@ -126,9 +128,43 @@ namespace Maze.Maui.App.ViewModels
                                             "OK", "Cancel", "Enter new maze name",
                                             keyboard: Keyboard.Text, initialValue: initialName,
                                             allowEmpty: false, trimResult: true);
-                if (name is not null && name != mazeItem.Name)
+
+                if (name is not null && name != item.Name)
                 {
-                    finished = await RenameMaze(mazeItem, name);
+                    finished = await RenameMaze(item, name);
+                    if (!finished)
+                        initialName = name;
+                }
+                else
+                    finished = true;
+            }
+        }
+        /// <summary>
+        /// Handles duplication of the given maze item
+        /// </summary>
+        /// <param name="item">Maze item</param>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        async Task DuplicateAsync(MazeItem item)
+        {
+            if (item is null)
+                return;
+
+            if (IsBusy)
+                return;
+
+            bool finished = false;
+            string initialName = $"Copy of {item.Name}";
+
+            while (!finished)
+            {
+                string? name = await _dialogService.DisplayPrompt("Duplicate Maze", "Name", "Name",
+                                            "OK", "Cancel", "Enter new maze name",
+                                            keyboard: Keyboard.Text, initialValue: initialName,
+                                            allowEmpty: false, trimResult: true);
+                if (name is not null)
+                {
+                    finished = await DuplicateMaze(item, name);
                     if (!finished)
                         initialName = name;
                 }
@@ -139,12 +175,12 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>
         /// Handles deletion of the given maze item
         /// </summary>
-        /// <param name="mazeItem">Maze item</param>
+        /// <param name="item">Maze item</param>
         /// <returns>Task</returns>
         [RelayCommandAttribute]
-        async Task DeleteAsync(MazeItem mazeItem)
+        async Task DeleteAsync(MazeItem item)
         {
-            if (mazeItem is null)
+            if (item is null)
                 return;
 
             if (IsBusy)
@@ -152,23 +188,23 @@ namespace Maze.Maui.App.ViewModels
 
             if (await _dialogService.ShowConfirmation(
                 "Delete Maze",
-                $"Are you sure you want to delete '{mazeItem.Name}'?",
+                $"Are you sure you want to delete '{item.Name}'?",
                 "Yes",
                 "No"
                 ))
             {
-                bool deleted = await DeleteMaze(mazeItem);
+                bool deleted = await DeleteMaze(item);
                 if (deleted)
-                    RemoveItem(mazeItem);
+                    RemoveItem(item);
             }
         }
         /// <summary>
         /// Renames a maze item to the given name
         /// </summary>
-        /// <param name="mazeItem">Maze item</param>
+        /// <param name="item">Maze item</param>
         /// <param name="newName">New name</param>
         /// <returns>Task containing a boolean result</returns>
-        async Task<bool> RenameMaze(MazeItem mazeItem, string newName)
+        async Task<bool> RenameMaze(MazeItem item, string newName)
         {
             if (IsBusy)
                 return false;
@@ -184,7 +220,8 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 IsBusy = true;
-                await _mazeService.RenameMazeItem(mazeItem, newName);
+                await _mazeService.RenameMazeItem(item, newName);
+                SortItems();
                 renamed = true;
             }
             catch (Exception ex)
@@ -198,11 +235,50 @@ namespace Maze.Maui.App.ViewModels
             return renamed;
         }
         /// <summary>
+        /// Duplicates a maze item with the given name
+        /// </summary>
+        /// <param name="item">Maze item</param>
+        /// <param name="newName">New name</param>
+        /// <returns>Task containing a boolean result</returns>
+        async Task<bool> DuplicateMaze(MazeItem item, string newName)
+        {
+            if (IsBusy)
+                return false;
+
+            if (NameExists(newName))
+            {
+                await _dialogService.ShowAlert("Error", $"The name '{newName}' is already in use.\n\nPlease choose another name.", "OK");
+                return false;
+            }
+
+            bool duplicated = false;
+
+            try
+            {
+                IsBusy = true;
+                MazeItem duplicateItem = item.Duplicate();
+                duplicateItem.ID = "";
+                duplicateItem.Name = newName;
+                await _mazeService.CreateMazeItem(duplicateItem);
+                AddNewItem(duplicateItem);
+                duplicated = true;
+            }
+            catch (Exception ex)
+            {
+                await _dialogService.ShowAlert("Error", $"Failed to duplicate maze: {ex.Message}", "OK");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+            return duplicated;
+        }
+        /// <summary>
         /// Deletes the given maze item
         /// </summary>
-        /// <param name="mazeItem">Maze item</param>
+        /// <param name="item">Maze item</param>
         /// <returns>Task containing a boolean result</returns>
-        async Task<bool> DeleteMaze(MazeItem mazeItem)
+        async Task<bool> DeleteMaze(MazeItem item)
         {
             bool deleted = false;
             if (IsBusy)
@@ -211,7 +287,7 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 IsBusy = true;
-                await _mazeService.DeleteMazeItem(mazeItem.ID);
+                await _mazeService.DeleteMazeItem(item.ID);
                 deleted = true;
             }
             catch (Exception ex)
@@ -244,7 +320,7 @@ namespace Maze.Maui.App.ViewModels
             MazeItems.Remove(item);
         }
         /// <summary>
-        /// Sorts the list of mazes into ascending name order
+        /// Sorts the list of displayed mazes into ascending order by name
         /// </summary>
         /// <returns>Nothing</returns>
         private void SortItems()
@@ -252,6 +328,7 @@ namespace Maze.Maui.App.ViewModels
             var sortedItems = MazeItems.OrderBy(i => i.Name).ToList();
             DisplayItems(sortedItems);
         }
+
         /// <summary>
         /// Updates the display with the given list of maze items
         /// </summary>

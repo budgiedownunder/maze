@@ -15,12 +15,12 @@ namespace Maze.Maui.App.Views;
 ///     </thead>
 ///     <tbody>
 ///       <tr>
-///         <td><img src="../../images/screenshots/windows-mazes.png" width="250"/></td>
+///         <td><img src="../../images/screenshots/windows-mazes.png" height="500" width="500"/></td>
 ///       </tr>
 ///     </tbody> 
 ///  </table>
 ///  
-/// and this is how it appears on Android/iOS devices:
+/// and this is how it appears on Android/iOS devices as a list:
 /// 
 ///   <table>
 ///     <thead>
@@ -33,6 +33,23 @@ namespace Maze.Maui.App.Views;
 ///       <tr>
 ///         <td><img src="../../images/screenshots/android-mazes.png" width="250"/></td>
 ///         <td><img src="../../images/screenshots/ios-mazes.png" width="250"/></td>
+///       </tr>
+///     </tbody> 
+///  </table>
+///
+/// and this is how it appears on Android/iOS devices with the swipe-left buttons visible:
+/// 
+///   <table>
+///     <thead>
+///       <tr>
+///         <th><strong>Android</strong></th>
+///         <th><strong>iOS</strong></th>
+///       </tr>
+///     </thead>
+///     <tbody>
+///       <tr>
+///         <td><img src="../../images/screenshots/android-mazes-swipe-left.png" width="250"/></td>
+///         <td><img src="../../images/screenshots/ios-mazes-swipe-left.png" width="250"/></td>
 ///       </tr>
 ///     </tbody> 
 ///  </table>
