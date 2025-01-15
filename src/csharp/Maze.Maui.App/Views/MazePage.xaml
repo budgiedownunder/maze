@@ -5,7 +5,7 @@
              x:Class="Maze.Maui.App.Views.MazePage"
              xmlns:model ="clr-namespace:Maze.Maui.App.Models"
              xmlns:viewmodel ="clr-namespace:Maze.Maui.App.ViewModels"
-             x:DataType="viewmodel:MazePageViewModel"
+             x:DataType="viewmodel:MazeViewModel"
              Title="{Binding MazeItem.Name}">
 
     <ContentPage.ToolbarItems>

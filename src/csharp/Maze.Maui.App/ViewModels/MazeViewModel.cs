@@ -10,7 +10,7 @@ namespace Maze.Maui.App.ViewModels
     /// Represents a maze view model
     /// </summary>
     [QueryProperty("MazeItem", "MazeItem")]
-    public partial class MazePageViewModel : BaseViewModel
+    public partial class MazeViewModel : BaseViewModel
     {
         // Private definitions
         private const int COMMAND_DELAY_MS = 50;
@@ -206,7 +206,7 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="dialogService">Injected dialog service</param>
         /// <param name="mazeService">Injected maze service</param>
         /// <param name="mazesViewModel">Injected mazes view model</param>
-        public MazePageViewModel(IDeviceTypeService deviceTypeService, IDialogService dialogService, IMazeService mazeService, MazesViewModel mazesViewModel)
+        public MazeViewModel(IDeviceTypeService deviceTypeService, IDialogService dialogService, IMazeService mazeService, MazesViewModel mazesViewModel)
         {
             this._deviceTypeService = deviceTypeService;
             this._mazeService = mazeService;

@@ -9,7 +9,7 @@ namespace Maze.Maui.App.Services
     /// <summary>
     /// Represents a popup window dialog service
     /// </summary>
-    public class DialogService : IDialogService
+    public class PopupWindowService : IDialogService
     {
         /// <summary>
         /// Displays a alert message to the user as a popup window with a single `cancel` button

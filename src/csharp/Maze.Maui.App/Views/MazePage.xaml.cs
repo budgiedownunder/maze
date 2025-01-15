@@ -51,7 +51,7 @@ namespace Maze.Maui.App.Views
     public partial class MazePage : ContentPage
     {
         const String APP_TITLE = "MAZE";
-        MazePageViewModel _viewModel;
+        MazeViewModel _viewModel;
         MazesViewModel _mazesViewModel;
         IDialogService _dialogService;
         IDeviceTypeService _deviceTypeService;
@@ -63,7 +63,7 @@ namespace Maze.Maui.App.Views
         /// <summary>
         /// Constructor 
         /// </summary>
-        public MazePage(MazePageViewModel viewModel, MazesViewModel mazesViewModel, IDialogService dialogService, IDeviceTypeService deviceTypeService)
+        public MazePage(MazeViewModel viewModel, MazesViewModel mazesViewModel, IDialogService dialogService, IDeviceTypeService deviceTypeService)
         {
             InitializeComponent();
             _deviceTypeService = deviceTypeService;
