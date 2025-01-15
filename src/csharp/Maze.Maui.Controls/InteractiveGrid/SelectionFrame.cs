@@ -1,9 +1,4 @@
-﻿using Microsoft.Maui;
-using Microsoft.Maui.Controls;
-using Microsoft.Maui.Dispatching;
-using System.Diagnostics;
-
-namespace Maze.Maui.Controls.InteractiveGrid
+﻿namespace Maze.Maui.Controls.InteractiveGrid
 {
     /// <summary>
     /// The `SelectionFrame` class represents a selection frame that is used to

@@ -1,20 +1,9 @@
 ﻿namespace Maze.Wasm.Interop
 {
-    using System.Reflection;
     using System.Runtime.InteropServices;
-    using Microsoft.Extensions.Configuration;
     using System.Text;
-    using Wasmtime;
-    using System.Reflection.Metadata;
-    using System.Diagnostics;
-    using static System.Formats.Asn1.AsnWriter;
     using static Maze.Wasm.Interop.WasmerInterop;
     using System;
-    using System.Numerics;
-    using static System.Runtime.InteropServices.JavaScript.JSType;
-    using System.Drawing;
-    using System.Xml.Schema;
-    using static Maze.Wasm.Interop.MazeWasmInterop;
 
     //using Wasmtime;
 

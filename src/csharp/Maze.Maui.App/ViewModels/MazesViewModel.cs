@@ -4,7 +4,6 @@ using Maze.Maui.App.Views;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
-using System.Reflection;
 
 namespace Maze.Maui.App.ViewModels
 {

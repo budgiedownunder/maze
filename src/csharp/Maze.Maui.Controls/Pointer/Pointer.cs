@@ -1,5 +1,4 @@
-﻿
-namespace Maze.Maui.Controls.Pointer
+﻿namespace Maze.Maui.Controls.Pointer
 {
     /// <summary>
     /// The static `Pointer` class manages application pointers

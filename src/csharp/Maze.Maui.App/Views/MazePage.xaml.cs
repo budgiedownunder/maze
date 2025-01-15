@@ -5,7 +5,6 @@ namespace Maze.Maui.App.Views
     using Maze.Api;
     using Microsoft.Maui.Controls;
     using Maze.Maui.App.ViewModels;
-    using Maze.Maui.Controls;
     using Maze.Maui.Services;
     using Maze.Maui.App.Models;
     using Maze.Maui.App.Services;

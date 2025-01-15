@@ -1,10 +1,4 @@
-﻿using System.Threading.Tasks;
-using System.Collections.Generic;
-using Maze.Maui.App.Models;
-using Microsoft.Maui.Controls;
-using System.Xml.Linq;
-
-namespace Maze.Maui.App.Services
+﻿namespace Maze.Maui.App.Services
 {
     /// <summary>
     /// Represents a service interface for managing the load, save and deletion of mazes

@@ -1,11 +1,7 @@
 ﻿namespace Maze.Wasm.Interop
 {
-    using System.Reflection;
-    using System.Runtime.InteropServices;
-    using Microsoft.Extensions.Configuration;
     using System.Text;
     using Wasmtime;
-    using System.Runtime.CompilerServices;
 
     /// <summary>
     /// Provides a wrapper to [Wasmtime](https://docs.wasmtime.dev/) WebAssembly memory
