@@ -110,7 +110,7 @@
         /// <returns>Boolean</returns>
         public bool Equals(CellRange? compare)
         {
-            if (compare == null) return false;
+            if (compare is null) return false;
 
             return this.Top == compare.Top &&
                 this.Left == compare.Left &&

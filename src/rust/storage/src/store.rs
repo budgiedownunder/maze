@@ -1,14 +1,16 @@
 use crate::StoreError;
-use maze::Maze;
+use maze::{Maze};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use utoipa::ToSchema;
 
-/// Contains the identifying details for a maze item
+/// Contains the identifying details for a maze item and (optionally)
+/// the definition JSON
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
 pub struct MazeItem {
     pub id: String,
     pub name: String,
+    pub definition: Option<String>, // JSON
 }
 
 /// Represents a store for holding mazes and related objects
@@ -25,7 +27,7 @@ pub trait Store: Send + Sync {
     fn find_maze_by_name(&self, name: &str) -> Result<MazeItem, StoreError>;
     /// Returns the list of maze items within the store, sorted
     /// alphabetically in ascending order
-    fn get_maze_items(&self) -> Result<Vec<MazeItem>, StoreError>;
+    fn get_maze_items(&self, include_definitions: bool) -> Result<Vec<MazeItem>, StoreError>;
 }
 
 #[allow(dead_code)]

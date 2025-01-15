@@ -12,13 +12,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             // Get the native WinUI Window
             var windowObject = Application.Current?.Windows[0].Handler?.PlatformView;
-            if (windowObject == null)
+            if (windowObject is null)
             {
                 System.Diagnostics.Debug.WriteLine("PlatformView is null");
                 return;
             }
             var mauiWinWindow = (Microsoft.UI.Xaml.Window)windowObject;
-            if (mauiWinWindow != null)
+            if (mauiWinWindow is not null)
             {
                 // Subscribe to KeyDown event on the window's content (which is the root element)
                 mauiWinWindow.Content.KeyDown += OnKeyDown;

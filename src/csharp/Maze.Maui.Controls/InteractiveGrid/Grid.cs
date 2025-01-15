@@ -1,6 +1,5 @@
 ﻿using MauiGestures;
 using Microsoft.Maui.Controls.Shapes;
-using System.Data.Common;
 
 namespace Maze.Maui.Controls.InteractiveGrid
 {
@@ -213,7 +212,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             get
             {
-                return (selectedCells != null && selectedCells.Left == 1 && selectedCells.Right == ColumnCount) ||
+                return (selectedCells is not null && selectedCells.Left == 1 && selectedCells.Right == ColumnCount) ||
                     (ColumnCount == 1 && activeCellPoint.Column == 1);
             }
         }
@@ -225,7 +224,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             get
             {
-                return (selectedCells != null && selectedCells.Top == 1 && selectedCells.Bottom == RowCount) ||
+                return (selectedCells is not null && selectedCells.Top == 1 && selectedCells.Bottom == RowCount) ||
                     (RowCount == 1 && activeCellPoint.Row == 1);
             }
         }
@@ -238,7 +237,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// The current selected cell range (if any)
         /// </summary>
         /// <returns>Selected cell range</returns>
-        public CellRange? CurrentSelection { get => selectedCells != null ? selectedCells.Clone() : new CellRange(activeCellPoint); }
+        public CellRange? CurrentSelection { get => selectedCells is not null ? selectedCells.Clone() : new CellRange(activeCellPoint); }
         /// <summary>
         /// Constructor
         /// </summary>
@@ -302,7 +301,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="e">Pinch gesture updated event arguments</param>
         private void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
         {
-            if (sender == null) return;
+            if (sender is null) return;
 
             if (e.Status == GestureStatus.Started)
             {
@@ -344,32 +343,65 @@ namespace Maze.Maui.Controls.InteractiveGrid
             return new ColumnDefinition { Width = new GridLength(rowHeader ? this.RowHeaderWidth : this.CellWidth) };
         }
         /// <summary>
-        /// Initializes the grid's content, based on the number of rows and columns that have been specified.
+        /// Initializes the grid's content based on the number of rows and columns that have been specified.
         /// Will call <see cref="GetHeaderCellContent"/> and <see cref="CreateCellContent"/> to initialize individual header 
         /// and cell content. These methods should be overridden in your derived class. If this is not done, numbered headers
         /// will be inserted and each cell will be initialized with an empty label.
         /// </summary>
         public void InitializeContent()
         {
-            this.IsVisible = false;
-            this.RowDefinitions.Add(NewRowDefinition(true));
+            IsVisible = false;
+            ClearContent();
+            AddContent();
+            IsVisible = true;
+            ReinitializeSelectionFrame();
+        }
+        /// <summary>
+        /// Clears the grid's content
+        /// </summary>
+        private void ClearContent()
+        {
+            RowDefinitions.Clear();
+            ColumnDefinitions.Clear();
+            Children.Clear();
+        }
+        /// <summary>
+        /// Adds the grid's content 
+        /// </summary>
+        private void AddContent()
+        {
+            AddRowDefinitions();
+            AddColumnDefinitions();
+            AddHeaderRow();
+            AddRowsContent();
+        }
+        /// <summary>
+        /// Adds the grid's row definitions 
+        /// </summary>
+        private void AddRowDefinitions()
+        {
+            RowDefinitions.Add(NewRowDefinition(true));
 
             for (int row = 0; row < RowCount; row++)
-                this.RowDefinitions.Add(NewRowDefinition(false));
-
-            this.ColumnDefinitions.Add(NewColumnDefinition(true));
+                RowDefinitions.Add(NewRowDefinition(false));
+        }
+        /// <summary>
+        /// Adds the grid's column definitions 
+        /// </summary>
+        private void AddColumnDefinitions()
+        {
+            ColumnDefinitions.Add(NewColumnDefinition(true));
 
             for (int column = 0; column < ColumnCount; column++)
-                this.ColumnDefinitions.Add(NewColumnDefinition(false));
-
-            AddHeaderRow();
-
+                ColumnDefinitions.Add(NewColumnDefinition(false));
+        }
+        /// <summary>
+        /// Adds the grid's rows content (row header + cells)
+        /// </summary>
+        private void AddRowsContent()
+        {
             for (int row = 0; row < RowCount; row++)
-                AddRowContent(row);
-
-            IsVisible = true;
-
-            InitializeSelectionFrame();
+                AddRowContent(row, true);
         }
         /// <summary>
         /// Gets the content for a header cell
@@ -392,13 +424,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <param name="row">Row index</param>
         /// <param name="column">Column index</param>
+        /// <param name="gridInitializing">Grid is initializing?</param>
         /// <returns>Cell framw</returns>
-        private CellFrame NewCellFrame(int row, int column)
+        private CellFrame NewCellFrame(int row, int column, bool gridInitializing)
         {
             CellFrame frame = new CellFrame(row, column)
             {
                 BackgroundColor = this.CellBackgroundColor,
-                Content = CreateCellContent(row, column),
                 Padding = CellPadding,
                 Margin = CellMargin == 0.0 ? -0.5 : CellMargin,
                 Stroke = new SolidColorBrush(CellBorderColor),
@@ -408,6 +440,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                     CornerRadius = 0
                 },
             };
+            frame.Content = CreateCellContent(frame, row, column, gridInitializing);
             AddSingleTapGesture(frame);
             AddDoubleTapGesture(frame);
 
@@ -423,10 +456,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <summary>
         /// Creates cell content, where (0,0) corresponds to (1,1) in display terms
         /// </summary>
+        /// <param name="frame">Container frame</param>
         /// <param name="row">Row index</param>
         /// <param name="column">Column index</param>
+        /// <param name="gridInitializing">Grid is initializing?</param>
         /// <returns>Cell content view</returns>
-        virtual public ContentView CreateCellContent(int row, int column)
+        virtual public ContentView CreateCellContent(CellFrame frame, int row, int column, bool gridInitializing)
         {
             return new DefaultCellContent();
         }
@@ -440,7 +475,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         public CellFrame? SetCellContent(int row, int column, ContentView contentView)
         {
             CellFrame? cellFrame = GetCell(row, column) as CellFrame;
-            if (cellFrame != null)
+            if (cellFrame is not null)
                 SetCellContent(cellFrame, contentView);
             return cellFrame;
         }
@@ -451,7 +486,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="contentView">Content to attach to cell</param>
         public void SetCellContent(CellFrame? cellFrame, ContentView contentView)
         {
-            if (cellFrame != null)
+            if (cellFrame is not null)
                 cellFrame.Content = contentView;
         }
         /// <summary>
@@ -495,13 +530,15 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// Adds row content to the grid
         /// </summary>
         /// <param name="row">Row index</param>
-        private void AddRowContent(int row)
+        /// <param name="gridInitializing">Grid is initializing?</param>
+        /// 
+        private void AddRowContent(int row, bool gridInitializing)
         {
             AddRowHeader(row);
 
             for (int column = 0; column < ColumnCount; column++)
             {
-                AddRowCell(row, column);
+                AddRowCell(row, column, gridInitializing);
             }
         }
         /// <summary>
@@ -514,7 +551,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             for (int row = 0; row < RowCount; row++)
             {
-                AddRowCell(row, column);
+                AddRowCell(row, column, false);
             }
         }
         /// <summary>
@@ -522,10 +559,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <param name="row">Row index</param>
         /// <param name="column">Column index</param>
+        /// <param name="gridInitializing">Grid is initializing?</param>
         /// <returns>Cell frame</returns>
-        private CellFrame AddRowCell(int row, int column)
+        private CellFrame AddRowCell(int row, int column, bool gridInitializing)
         {
-            CellFrame cellFrame = NewCellFrame(row, column);
+            CellFrame cellFrame = NewCellFrame(row, column, gridInitializing);
 
             this.Add(cellFrame, cellFrame.DisplayColumn, cellFrame.DisplayRow);
 
@@ -766,7 +804,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                     break;
                 case Keyboard.Key.Tab:
                     if (ctrlPressed) return;
-                    if (anchorCell == null)
+                    if (anchorCell is null)
                     {
                         MoveActiveCellOffset(false, shiftPressed ? -1 : 1, 0);
                         return;
@@ -803,7 +841,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             if (displayColumn > 0 && displayColumn <= RowCount && displayColumn > 0 && displayColumn <= ColumnCount)
             {
                 CellFrame? cellFrame = GetCell(displayRow, displayColumn) as CellFrame;
-                if (cellFrame != null)
+                if (cellFrame is not null)
                 {
                     ActivateCell(cellFrame, maintainSelection);
                     activated = true;
@@ -844,9 +882,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void SelectRow(int row, bool maintainSelection)
         {
             int displayRow = row;
-            if (!maintainSelection || anchorCell == null)
+            if (!maintainSelection || anchorCell is null)
             {
-                bool hadAnchorCell = anchorCell != null;
+                bool hadAnchorCell = anchorCell is not null;
                 CellPoint activePoint = activeCellPoint.Clone();
                 ClearSelectedCells();
                 MoveActiveCell(false, maintainSelection ? activePoint.Row : displayRow, 1, true);
@@ -854,7 +892,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 if (maintainSelection && !hadAnchorCell)
                     MoveAnchorCell(activePoint.Row, activePoint.Column);
             }
-            else if (selectedCells != null)
+            else if (selectedCells is not null)
             {
                 int top = selectedCells.Top,
                     bottom = selectedCells.Bottom;
@@ -881,9 +919,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void SelectColumn(int column, bool maintainSelection)
         {
             int displayCol = column;
-            if (!maintainSelection || anchorCell == null)
+            if (!maintainSelection || anchorCell is null)
             {
-                bool hadAnchorCell = anchorCell != null;
+                bool hadAnchorCell = anchorCell is not null;
                 CellPoint activePoint = activeCellPoint.Clone();
                 ClearSelectedCells();
                 MoveActiveCell(false, 1, maintainSelection ? activePoint.Column : displayCol, true);
@@ -891,7 +929,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 if (maintainSelection && !hadAnchorCell)
                     MoveAnchorCell(activePoint.Row, activePoint.Column);
             }
-            else if (selectedCells != null)
+            else if (selectedCells is not null)
             {
                 int left = selectedCells.Left,
                     right = selectedCells.Right;
@@ -916,7 +954,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         public void EnableExtendedSelection()
         {
             if (IsExtendedSelectionMode) return;
-            if (anchorCell == null)
+            if (anchorCell is null)
                 SetAnchorCellToActiveCell(true);
             IsExtendedSelectionMode = true;
             selectionFrame?.EnableDashAnimation(true);
@@ -927,11 +965,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
         public void CancelExtendedSelection()
         {
             if (!IsExtendedSelectionMode) return;
-            if (anchorCell != null)
+            if (anchorCell is not null)
                 SetActiveCellToAnchorCell(false);
             ClearAnchorCell(true);
             ClearSelectedCells();
-            if (activeCell != null)
+            if (activeCell is not null)
                 activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
             IsExtendedSelectionMode = false;
             selectionFrame?.EnableDashAnimation(false);
@@ -952,15 +990,15 @@ namespace Maze.Maui.Controls.InteractiveGrid
                         Math.Clamp(newSelection.Right, 1, ColumnCount),
                         false);
 
-            if (selectedCells == null) return;
+            if (selectedCells is null) return;
 
-            if (anchorCell == null && activeCell != null)
+            if (anchorCell is null && activeCell is not null)
             {
                 // Initialize anchor cell
                 SetAnchorCellToActiveCell(true);
             }
 
-            if (anchorCell != null && !selectedCells.ContainsPoint(anchorCellPoint))
+            if (anchorCell is not null && !selectedCells.ContainsPoint(anchorCellPoint))
             {
                 // Move anchor cell
                 int newRow = Math.Clamp(anchorCellPoint.Row, selectedCells.Top, selectedCells.Bottom);
@@ -970,7 +1008,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 prevAnchorCell.BackgroundColor = this.CellBackgroundColor;
             }
 
-            if (prevSelection != null)
+            if (prevSelection is not null)
             {
                 // Modify active cell if needed
                 if (selectedCells.Top != prevSelection.Top)
@@ -992,8 +1030,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             return new SelectionState(
                 selectedCells?.Clone(),
-                activeCell != null ? activeCellPoint.Clone() : null,
-                anchorCell != null ? anchorCellPoint.Clone() : null);
+                activeCell is not null ? activeCellPoint.Clone() : null,
+                anchorCell is not null ? anchorCellPoint.Clone() : null);
         }
         /// <summary>
         /// Restores the selection to the given selection state
@@ -1005,18 +1043,18 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             if (retainAnchorCell)
             {
-                if (selectionState.AnchorCellPoint != null)
+                if (selectionState.AnchorCellPoint is not null)
                 {
                     SetAnchorCell(selectionState.AnchorCellPoint);
                     SetActiveCellToAnchorCell(true);
                 }
             }
-            else if (selectionState.ActiveCellPoint != null)
+            else if (selectionState.ActiveCellPoint is not null)
             {
                 ActivateCell(selectionState.ActiveCellPoint, false);
             }
 
-            if (selectionState.SelectedCells != null)
+            if (selectionState.SelectedCells is not null)
             {
                 UpdateSelectedCells(new CellPoint(selectionState.SelectedCells.Top, selectionState.SelectedCells.Left),
                                     new CellPoint(selectionState.SelectedCells.Bottom, selectionState.SelectedCells.Right),
@@ -1045,7 +1083,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="moveToEnd">Move to end?</param>
         private void MoveActiveCellLeft(bool maintainSelection, bool moveToEnd)
         {
-            bool useActiveCell = maintainSelection || (anchorCell == null);
+            bool useActiveCell = maintainSelection || (anchorCell is null);
             int colOffset = moveToEnd ? (useActiveCell ? -activeCellPoint.Column : -anchorCellPoint.Column) + 1 : -1;
             MoveActiveCellOffset(maintainSelection, colOffset, 0);
         }
@@ -1056,7 +1094,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="moveToEnd">Move to end?</param>
         private void MoveActiveCellRight(bool maintainSelection, bool moveToEnd)
         {
-            bool useActiveCell = maintainSelection || (anchorCell == null);
+            bool useActiveCell = maintainSelection || (anchorCell is null);
             int colOffset = moveToEnd ? this.ColumnCount - (useActiveCell ? activeCellPoint.Column : anchorCellPoint.Column) : 1;
             MoveActiveCellOffset(maintainSelection, colOffset, 0);
         }
@@ -1067,7 +1105,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="moveToEnd">Move to end?</param>
         private void MoveActiveCellUp(bool maintainSelection, bool moveToEnd)
         {
-            bool useActiveCell = maintainSelection || (anchorCell == null);
+            bool useActiveCell = maintainSelection || (anchorCell is null);
             int rowOffset = moveToEnd ? (useActiveCell ? -activeCellPoint.Row : -anchorCellPoint.Row) + 1 : -1;
             MoveActiveCellOffset(maintainSelection, 0, rowOffset);
         }
@@ -1078,7 +1116,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="moveToEnd">Move to end?</param>
         private void MoveActiveCellDown(bool maintainSelection, bool moveToEnd)
         {
-            bool useActiveCell = maintainSelection || (anchorCell == null);
+            bool useActiveCell = maintainSelection || (anchorCell is null);
             int rowOffset = moveToEnd ? this.RowCount - (useActiveCell ? activeCellPoint.Row : anchorCellPoint.Row) : 1;
             MoveActiveCellOffset(maintainSelection, 0, rowOffset);
         }
@@ -1089,7 +1127,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="moveToTop">Move to top row?</param>
         private void MoveActiveCellToRowStart(bool maintainSelection, bool moveToTop)
         {
-            bool useActiveCell = maintainSelection || (anchorCell == null);
+            bool useActiveCell = maintainSelection || (anchorCell is null);
             int rowOffset = moveToTop ? (useActiveCell ? -activeCellPoint.Row : -anchorCellPoint.Row) + 1 : 0;
             int colOffset = useActiveCell ? -activeCellPoint.Column : -anchorCellPoint.Column;
             MoveActiveCellOffset(maintainSelection, colOffset, rowOffset);
@@ -1101,7 +1139,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="moveToTop">Move to top row?</param>
         private void MoveActiveCellToColumnEnd(bool maintainSelection, bool moveToTop)
         {
-            bool useActiveCell = maintainSelection || (anchorCell == null);
+            bool useActiveCell = maintainSelection || (anchorCell is null);
             int rowOffset = moveToTop ? this.RowCount - (useActiveCell ? activeCellPoint.Row : anchorCellPoint.Row) : 0;
             int colOffset = this.ColumnCount - (useActiveCell ? activeCellPoint.Column : anchorCellPoint.Column);
             MoveActiveCellOffset(maintainSelection, colOffset, rowOffset);
@@ -1114,8 +1152,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="deltaY">Y offset?</param>
         private void MoveActiveCellOffset(bool maintainSelection, int deltaX, int deltaY)
         {
-            int referenceRow = !maintainSelection && (anchorCell != null) ? anchorCellPoint.Row : activeCellPoint.Row;
-            int referenceCol = !maintainSelection && (anchorCell != null) ? anchorCellPoint.Column : activeCellPoint.Column;
+            int referenceRow = !maintainSelection && (anchorCell is not null) ? anchorCellPoint.Row : activeCellPoint.Row;
+            int referenceCol = !maintainSelection && (anchorCell is not null) ? anchorCellPoint.Column : activeCellPoint.Column;
             int newRow = Math.Clamp(referenceRow + deltaY, 1, this.RowDefinitions.Count);
             int newCol = Math.Clamp(referenceCol + deltaX, 1, this.ColumnDefinitions.Count);
 
@@ -1131,7 +1169,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void MoveAnchorCellToPrevWithinSelection()
         {
-            if (anchorCell == null || selectedCells == null) return;
+            if (anchorCell is null || selectedCells is null) return;
             int newCol = anchorCellPoint.Column - 1;
             int newRow = anchorCellPoint.Row;
             if (newCol < selectedCells.Left)
@@ -1148,7 +1186,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void MoveAnchorCellToNextWithinSelection()
         {
-            if (anchorCell == null || selectedCells == null) return;
+            if (anchorCell is null || selectedCells is null) return;
             int newCol = anchorCellPoint.Column + 1;
             int newRow = anchorCellPoint.Row;
             if (newCol > selectedCells.Right)
@@ -1167,11 +1205,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="newColumn">New column</param>
         private void MoveAnchorCell(int newRow, int newColumn)
         {
-            if (anchorCell == null) return;
+            if (anchorCell is null) return;
             anchorCell.BackgroundColor = this.HighlightCellBackgroundColor;
             ClearAnchorCell(false);
             SetAnchorCell(newRow, newColumn);
-            if (anchorCell != null)
+            if (anchorCell is not null)
                 anchorCell.BackgroundColor = this.ActiveCellBackgroundColor;
         }
         /// <summary>
@@ -1184,14 +1222,14 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void MoveActiveCell(bool maintainSelection, int newRow, int newColumn, bool scrollActiveCellIntoView)
         {
             bool wasExtendedSelection = false;
-            if (!maintainSelection && anchorCell != null)
+            if (!maintainSelection && anchorCell is not null)
             {
                 // Clear anchor cell
                 anchorCell.BackgroundColor = this.CellBackgroundColor;
                 SetActiveCellToAnchorCell(false);
                 ClearAnchorCell(true);
                 ClearSelectedCells();
-                if (activeCell != null)
+                if (activeCell is not null)
                     activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
                 wasExtendedSelection = true;
             }
@@ -1207,7 +1245,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 .OfType<CellFrame>()
                 .FirstOrDefault(cell => Microsoft.Maui.Controls.Grid.GetRow(cell) == newRow && Microsoft.Maui.Controls.Grid.GetColumn(cell) == newColumn);
 
-            if (newActiveCell != null && newActiveCell is CellFrame)
+            if (newActiveCell is not null && newActiveCell is CellFrame)
             {
                 // Scroll the new active cell into view and/or update selection state as needed
                 UpdateSelection(newActiveCell as CellFrame, newRow, newColumn, maintainSelection, scrollActiveCellIntoView);
@@ -1224,14 +1262,14 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void UpdateSelection(CellFrame newActiveCell, int row, int column, bool maintainSelection, bool scrollActiveCellIntoView)
         {
             // Reset the previously active cell if needed
-            if (activeCell != null)
+            if (activeCell is not null)
                 ClearActiveCellFormatting();
 
             if (maintainSelection)
             {
-                if (anchorCell == null)
+                if (anchorCell is null)
                 {
-                    if (activeCell == null)
+                    if (activeCell is null)
                         SetAnchorCell(row, column);
                     else
                         SetAnchorCell(activeCellPoint.Row, activeCellPoint.Column);
@@ -1245,14 +1283,14 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             // Set the new active cell
             activeCell = newActiveCell;
-            if (anchorCell != null)
+            if (anchorCell is not null)
                 anchorCell.BackgroundColor = this.AnchorCellBackgroundColor;
             else
                 activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
 
             activeCellPoint.Set(row, column);
 
-            if (anchorCell != null)
+            if (anchorCell is not null)
                 UpdateSelectedCells(anchorCellPoint, activeCellPoint, true, true);
             else
             {
@@ -1329,7 +1367,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void SetAnchorCell(int row, int column)
         {
             anchorCell = GetCell(row, column) as CellFrame;
-            if (anchorCell != null)
+            if (anchorCell is not null)
                 anchorCellPoint.Set(row, column);
             else
                 anchorCellPoint.Clear();
@@ -1347,7 +1385,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         void ClearAnchorCellFormatting()
         {
-            if (anchorCell != null)
+            if (anchorCell is not null)
                 anchorCell.BackgroundColor = this.CellBackgroundColor;
         }
         /// <summary>
@@ -1369,7 +1407,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             anchorCell = activeCell;
             anchorCellPoint = activeCellPoint.Clone();
-            if (anchorCell != null && setBackgroundColor)
+            if (anchorCell is not null && setBackgroundColor)
                 anchorCell.BackgroundColor = this.ActiveCellBackgroundColor;
         }
         /// <summary>
@@ -1380,7 +1418,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             activeCell = anchorCell;
             activeCellPoint = anchorCellPoint.Clone();
-            if (activeCell != null && setBackgroundColor)
+            if (activeCell is not null && setBackgroundColor)
                 activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
         }
         /// <summary>
@@ -1388,7 +1426,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void ClearSelectedCells()
         {
-            if (selectedCells != null)
+            if (selectedCells is not null)
             {
                 HighlightCells(selectedCells, true);
                 ShowSelectionFrame(false);
@@ -1450,13 +1488,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>True if the selection changed </returns>
         private bool UpdateSelectionFrame(bool triggerEvents)
         {
-            if (selectionFrame == null)
+            if (selectionFrame is null)
                 return false;
 
             CellRange? prevSelection = selectionFrame.CellRange?.Clone();
-            selectionFrame.SetRange(selectedCells != null ? selectedCells : new CellRange(activeCellPoint.Row, activeCellPoint.Column), true);
+            selectionFrame.SetRange(selectedCells is not null ? selectedCells : new CellRange(activeCellPoint.Row, activeCellPoint.Column), true);
             CellRange? newSelection = selectionFrame.CellRange?.Clone();
-            bool selectionChange = (prevSelection == null) || !prevSelection.Equals(newSelection);
+            bool selectionChange = (prevSelection is null) || !prevSelection.Equals(newSelection);
 
             if (selectionChange && triggerEvents)
                 OnSelectionChanged();
@@ -1475,7 +1513,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="show">Show?</param>
         private void ShowSelectionFrame(bool show)
         {
-            if (selectionFrame == null) return;
+            if (selectionFrame is null) return;
             selectionFrame.Show(show);
         }
         /// <summary>
@@ -1494,7 +1532,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                     if (row != anchorCellPoint.Row || column != anchorCellPoint.Column)
                     {
                         CellFrame? cellFrame = GetCell(row, column) as CellFrame;
-                        if (cellFrame != null)
+                        if (cellFrame is not null)
                             cellFrame.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightCellBackgroundColor;
                     }
                 }
@@ -1505,7 +1543,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void ClearActiveCellFormatting()
         {
-            if (activeCell == null) return;
+            if (activeCell is null) return;
             activeCell.BackgroundColor = this.CellBackgroundColor;
             HighlightActiveCellHeaders(true);
         }
@@ -1515,7 +1553,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="clearFormatting">Clear formatting?</param>
         private void ClearActiveCell(bool clearFormatting)
         {
-            if (activeCell != null)
+            if (activeCell is not null)
             {
                 if (clearFormatting)
                     ClearActiveCellFormatting();
@@ -1529,7 +1567,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="clear">Clear highlighting?</param>
         private void HighlightActiveCellHeaders(bool clear)
         {
-            if (activeCell == null) return;
+            if (activeCell is null) return;
             HighlightHeaders(new CellRange(activeCellPoint), clear);
         }
         /// <summary>
@@ -1562,7 +1600,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void HighlightRowHeader(int row, bool clear, bool allColumnsSelected)
         {
             HeaderFrame? header = GetRowHeaderCell(row);
-            if (header != null)
+            if (header is not null)
                 header.BackgroundColor = clear ? this.HeaderBackgroundColor : (allColumnsSelected ? this.HeaderSelectedBackgroundColor : this.HeaderActiveBackgroundColor);
         }
         /// <summary>
@@ -1585,7 +1623,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void HighlightColHeader(int column, bool clear, bool allRowsSelected)
         {
             HeaderFrame? header = GetColHeaderCell(column);
-            if (header != null)
+            if (header is not null)
                 header.BackgroundColor = clear ? this.HeaderBackgroundColor : (allRowsSelected ? this.HeaderSelectedBackgroundColor : HeaderActiveBackgroundColor);
         }
         /// <summary>
@@ -1613,7 +1651,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Total display width</returns>
         public double GetCellsWidth(CellRange range)
         {
-            if (range == null) return 0.0;
+            if (range is null) return 0.0;
             double width = 0.0;
             for (int column = range.Left; column <= range.Right && column <= ColumnCount; column++)
                 width += GetColumnWidth(column);
@@ -1636,7 +1674,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Total display height</returns>
         public double GetCellsHeight(CellRange range)
         {
-            if (range == null) return 0.0;
+            if (range is null) return 0.0;
             double height = 0.0;
             for (int row = range.Top; row <= range.Bottom && row <= RowCount; row++)
                 height += GetRowHeight(row);
@@ -1800,9 +1838,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             if (AllColumnsSelected && RowCount > 1)
             {
-                if(selectedCells != null)
+                if(selectedCells is not null)
                     deleted = DeleteRows(selectedCells.Top, selectedCells.Bottom);
-                else if (activeCell != null)
+                else if (activeCell is not null)
                     deleted = DeleteRows(activeCellPoint.Row, activeCellPoint.Row);
             }
 
@@ -1818,9 +1856,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             if(AllColumnsSelected)
             {
-                if (selectedCells != null)
+                if (selectedCells is not null)
                     inserted = InsertRows(selectedCells.Top, selectedCells.Bottom);
-                else if (activeCell != null)
+                else if (activeCell is not null)
                     inserted = InsertRows(activeCellPoint.Row, activeCellPoint.Row);
             }
 
@@ -1836,9 +1874,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             if (AllRowsSelected && ColumnCount > 1)
             {
-                if (selectedCells != null)
+                if (selectedCells is not null)
                     deleted = DeleteColumns(selectedCells.Left, selectedCells.Right);
-                else if (activeCell != null)
+                else if (activeCell is not null)
                     deleted = DeleteColumns(activeCellPoint.Column, activeCellPoint.Column);
             }
 
@@ -1854,9 +1892,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             if (AllRowsSelected )
             {
-                if (selectedCells != null)
+                if (selectedCells is not null)
                     inserted = InsertColumns(selectedCells.Left, selectedCells.Right);
-                else if (activeCell != null)
+                else if (activeCell is not null)
                     inserted = InsertColumns(activeCellPoint.Column, activeCellPoint.Column);
             }
 
@@ -1947,7 +1985,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private bool Remove(Target target, int startPosition, int endPosition, bool triggerEvents)
         {
             bool removed = false;
-            bool retainAnchorCell = anchorCell != null;
+            bool retainAnchorCell = anchorCell is not null;
             SelectionState selectionState = GetSelectionState();
 
             ClearSelectedCells();
@@ -2093,7 +2131,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private bool Insert(Target target, int startPosition, int endPosition, bool triggerEvents)
         {
             bool inserted = false;
-            bool retainAnchorCell = anchorCell != null;
+            bool retainAnchorCell = anchorCell is not null;
             SelectionState selectionState = GetSelectionState();
 
             ClearSelectedCells();
@@ -2163,7 +2201,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             switch (target)
             {
                 case Target.Row:
-                    AddRowContent(position - 1);
+                    AddRowContent(position - 1, false);
                     break;
                 case Target.Column:
                     AddColumnContent(position - 1);
@@ -2280,7 +2318,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void UpdateCellIndex(Target target, IView child, int newIndex)
         {
             CellFrame? cellFrame = child as CellFrame;
-            if (cellFrame != null)
+            if (cellFrame is not null)
             {
                 switch (target)
                 {
@@ -2302,7 +2340,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void UpdateHeaderIndex(HeaderType expectedType, IView child, int newIndex)
         {
             HeaderFrame? headerFrame = child as HeaderFrame;
-            if (headerFrame != null && headerFrame.Type == expectedType)
+            if (headerFrame is not null && headerFrame.Type == expectedType)
             {
                 headerFrame.Index = newIndex;
                 headerFrame.Content = GetHeaderCellContent(headerFrame.Type, headerFrame.Index);

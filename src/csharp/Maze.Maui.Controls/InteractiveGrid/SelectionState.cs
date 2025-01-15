@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Maze.Maui.Controls.InteractiveGrid
+﻿namespace Maze.Maui.Controls.InteractiveGrid
 {
     /// <summary>
     /// The `SelectionFrane` class holds a selection state for a grid
@@ -49,13 +43,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="maxRow">Maximum row number</param>
         public void ClampRows(int maxRow)
         {
-            if (activeCellPoint != null)
+            if (activeCellPoint is not null)
                 activeCellPoint.ClampRow(maxRow);
 
-            if (anchorCellPoint != null)
+            if (anchorCellPoint is not null)
                 anchorCellPoint.ClampRow(maxRow);
 
-            if (selectedCells != null)
+            if (selectedCells is not null)
                 selectedCells.ClampRows(maxRow);
         }
         /// <summary>
@@ -64,13 +58,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="maxColumn">Maximum column number</param>
         public void ClampColumns(int maxColumn)
         {
-            if (activeCellPoint != null)
+            if (activeCellPoint is not null)
                 activeCellPoint.ClampColumn(maxColumn);
 
-            if (anchorCellPoint != null)
+            if (anchorCellPoint is not null)
                 anchorCellPoint.ClampColumn(maxColumn);
 
-            if (selectedCells != null)
+            if (selectedCells is not null)
                 selectedCells.ClampColumns(maxColumn);
         }
     }

@@ -76,7 +76,7 @@ jobs:
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
       run: |
-        dotnet workload install maui-windows      
+        dotnet workload install maui-windows            
  
     - name: Build Rust Components
       working-directory: ./src/rust

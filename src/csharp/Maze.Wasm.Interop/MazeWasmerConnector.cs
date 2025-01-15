@@ -1,20 +1,9 @@
 ﻿namespace Maze.Wasm.Interop
 {
-    using System.Reflection;
     using System.Runtime.InteropServices;
-    using Microsoft.Extensions.Configuration;
     using System.Text;
-    using Wasmtime;
-    using System.Reflection.Metadata;
-    using System.Diagnostics;
-    using static System.Formats.Asn1.AsnWriter;
     using static Maze.Wasm.Interop.WasmerInterop;
     using System;
-    using System.Numerics;
-    using static System.Runtime.InteropServices.JavaScript.JSType;
-    using System.Drawing;
-    using System.Xml.Schema;
-    using static Maze.Wasm.Interop.MazeWasmInterop;
 
     //using Wasmtime;
 
@@ -400,7 +389,7 @@
             wasm_val_vec_delete(ref resultVec);
             argsHandle.Free();
 
-            if (exception != null)
+            if (exception is not null)
                 throw (exception);
         }
          /// <summary>
@@ -722,7 +711,7 @@
         /// <param name="wasmBytes">WebAssembly bytes(</param>
         public MazeWasmerConnector(string wasmPathOrName, byte[]? wasmBytes = null)
         {
-            if (wasmPathOrName == null)
+            if (wasmPathOrName is null)
                 throw new Exception("WebAssembly path or name is not defined");
             this.wasmPathOrName = wasmPathOrName;
             Initialize(wasmBytes);
@@ -807,7 +796,7 @@
                 throw new Exception("Failed to create Wasm store.");
             }
 
-            if(wasmBytes == null)
+            if(wasmBytes is null)
                 wasmBytes = File.ReadAllBytes(wasmPathOrName);
 
             _wasmVec = new WasmerInterop.wasm_byte_vec_t();
@@ -924,7 +913,7 @@
         /// <returns>Nothing</returns>
         private void AssignFunctionPtr(string name, IntPtr wasmFuncPtr)
         {
-            if (_functionMap == null) return;
+            if (_functionMap is null) return;
 
             if (_functionMap.ContainsKey(name))
             {
@@ -939,12 +928,12 @@
         /// <returns>Nothing</returns>
         private void VerifyFunctions()
         {
-            if (_functionMap == null) return;
+            if (_functionMap is null) return;
             foreach (var kvp in _functionMap)
             {
                 string functionName = kvp.Key;
                 ref IFunction? function = ref kvp.Value();
-                if (function == null)
+                if (function is null)
                 {
                     throw new Exception($"Failed to load the WebAssembly function: {functionName} in {wasmPathOrName}.");
                 }
@@ -957,7 +946,7 @@
         /// <returns>Nothing</returns>
         private void VerifyMemoryPtrs()
         {
-            if (memory == null)
+            if (memory is null)
                 throw new Exception($"Failed to load the WebAssembly memory from {wasmPathOrName}.");
         }
     }

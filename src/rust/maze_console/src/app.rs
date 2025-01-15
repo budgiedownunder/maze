@@ -462,7 +462,7 @@ pub trait App: LinePrinter {
     }
 
     fn get_maze_names(&mut self) -> Result<Vec<String>, Box<dyn Error>> {
-        let items = self.get_store().get_maze_items()?;
+        let items = self.get_store().get_maze_items(false)?;
         let mut names: Vec<String> = Vec::new();
         for item in items {
             names.push(item.name);

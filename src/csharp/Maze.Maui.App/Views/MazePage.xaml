@@ -1,0 +1,111 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Maze.Maui.App"
+             x:Class="Maze.Maui.App.Views.MazePage"
+             xmlns:model ="clr-namespace:Maze.Maui.App.Models"
+             xmlns:viewmodel ="clr-namespace:Maze.Maui.App.ViewModels"
+             x:DataType="viewmodel:MazeViewModel"
+             Title="{Binding MazeItem.Name}">
+
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="Refresh"
+                     IsEnabled="{Binding CanRefresh}"
+                     Command="{Binding RefreshCommand}"
+                     IconImageSource="refresh.png"/>
+        <ToolbarItem Text="Save"
+                     IsEnabled="{Binding CanSave}"
+                     Command="{Binding SaveCommand}"
+                     IconImageSource="{OnPlatform 'icon_save.png', Android={x:Null}, iOS={x:Null}}" />
+    </ContentPage.ToolbarItems>
+
+    <!-- Main Content Grid -->
+        <Grid x:Name="MainGrid">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="0" />
+                <RowDefinition Height="*" />
+               <!--<RowDefinition Height="Auto" />-->
+            </Grid.RowDefinitions>
+
+            <!-- Top buttons -->
+            <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="FillAndExpand" Padding="10" Spacing="5"  BackgroundColor="Transparent" IsVisible="False">
+                <ImageButton x:Name="SetWallBtn" IsVisible="{Binding CanSetWall}" Command="{Binding SetWallCommand}" Source="wall_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="SetStartBtn" IsVisible="{Binding CanSetStart}" Command="{Binding SetStartCommand}" Source="start_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="SetFinishBtn" IsVisible="{Binding CanSetFinish}" Command="{Binding SetFinishCommand}" Source="finish_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="ClearBtn" IsVisible="{Binding CanClear}" Command="{Binding ClearCommand}" Source="clear_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="InsertRowsBtn" IsVisible="{Binding CanInsertRows}" Command="{Binding InsertRowsCommand}" Source="insert_rows_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="DeleteRowsBtn" IsVisible="{Binding CanDeleteRows}" Command="{Binding DeleteRowsCommand}" Source="delete_rows_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="InsertColumnsBtn" IsVisible="{Binding CanInsertColumns}" Command="{Binding InsertColumnsCommand}" Source="insert_columns_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="DeleteColumnsBtn" IsVisible="{Binding CanDeleteColumns}" Command="{Binding DeleteColumnsCommand}" Source="delete_columns_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="SolveBtn" IsVisible="{Binding CanSolve}" Command="{Binding SolveCommand}" Source="solve_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="ClearSolutionBtn" IsVisible="{Binding CanClearSolution}" Command="{Binding ClearSolutionCommand}" Source="clear_solution_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="SelectRangeBtn" IsVisible="{Binding CanSelectRange}" Command="{Binding SelectRangeCommand}" Source="select_range_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="EndAndExpand"/>
+                <Button x:Name="DoneBtn" IsVisible="{Binding CanShowDone}" Command="{Binding DoneCommand}" Text="Done"
+                        HeightRequest="32" MaximumHeightRequest="32" MinimumHeightRequest="32"
+                        FontAutoScalingEnabled="True"  FontAttributes="Bold" FontSize="12"  TextColor="Blue" BorderColor="DarkGray" BorderWidth="2"
+                        BackgroundColor="Transparent" Padding="0" HorizontalOptions="EndAndExpand"/>
+            </StackLayout>
+
+            <!-- Scrollable Maze Grid in Center -->
+            <ScrollView Grid.Row="1" x:Name="MazeGridScrollView"
+                        Orientation="Both"
+                        HorizontalOptions="Start"
+                        VerticalOptions="StartAndExpand"
+                        HorizontalScrollBarVisibility="Always"
+                        VerticalScrollBarVisibility="Always"
+                        Padding="10">
+                <ContentView x:Name="MazeGridContentView">
+                    <controls:MazeGrid x:Name="MazeGrid"
+                                       ContainerScrollView="{Binding Source={x:Reference MazeGridScrollView}}"
+                                       ContainerContentView="{Binding Source={x:Reference MazeGridContentView}}"
+                                       RowSpacing="0"
+                                       ColumnSpacing="0"
+                                       Padding="0"
+                                       HorizontalOptions="Start"
+                                       VerticalOptions="Start">
+                    </controls:MazeGrid>
+                </ContentView>
+            </ScrollView>
+
+            <!-- Bottom buttons -->
+            <StackLayout x:Name="BottomRowLayout" Grid.Row="2" Orientation="Horizontal" VerticalOptions="EndAndExpand" HorizontalOptions="Start" Padding="10" Spacing="10">
+                <!--<Button
+                        x:Name="TestBtn"
+                        Text="Test"
+                        SemanticProperties.Hint="Does not do anything yet"
+                        Clicked="OnTestBtnClicked"
+                        HorizontalOptions="FillAndExpand" />-->
+            </StackLayout>
+
+            <ActivityIndicator x:Name="BusyIndicator"
+                               IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               VerticalOptions="Center"
+                               HorizontalOptions="Center"
+                               WidthRequest="50"
+                               HeightRequest="50"
+                               Grid.RowSpan="3"/>
+    </Grid>
+</ContentPage>

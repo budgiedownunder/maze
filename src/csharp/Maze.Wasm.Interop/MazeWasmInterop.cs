@@ -3,8 +3,6 @@
     using System.Reflection;
     using System.Runtime.InteropServices;
     using Microsoft.Extensions.Configuration;
-    using System.Text;
-    using Wasmtime;
     using System.IO;
 
     /// <summary>
@@ -153,7 +151,7 @@
         {
             if (!_disposed)
             {
-                if(connector != null)
+                if(connector is not null)
                     connector.Dispose();
                 _disposed = true;
             }
@@ -220,11 +218,11 @@
         static public MazeWasmInterop GetInstance(ConnectionType connectionType= ConnectionType.Wasmtime, 
             bool createNew = false, byte[]? wasmBytes = null)
         {
-            if (instance == null || createNew)
+            if (instance is null || createNew)
             {
-                bool useDefaultName = wasmBytes != null;
+                bool useDefaultName = wasmBytes is not null;
                 MazeWasmInterop newInstance = new MazeWasmInterop(GetWasmPathOrName(useDefaultName), connectionType, wasmBytes);
-                if (instance != null)
+                if (instance is not null)
                     return newInstance;
                 instance = newInstance;
             }
@@ -240,9 +238,9 @@
         static public void Initialize(ConnectionType connectionType = ConnectionType.Wasmtime, 
             bool createNew = false, byte[]? wasmBytes = null)
         {
-            if (instance == null || createNew) 
+            if (instance is null || createNew) 
             {
-                bool useDefaultName = wasmBytes != null;
+                bool useDefaultName = wasmBytes is not null;
                 instance = new MazeWasmInterop(GetWasmPathOrName(useDefaultName), connectionType, wasmBytes);
             }
         }
@@ -251,7 +249,7 @@
         /// </summary>
         static public void Disconnect()
         {
-            if (instance == null) 
+            if (instance is null) 
                 return;
             instance.Dispose();
             instance = null;

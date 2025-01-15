@@ -1,5 +1,6 @@
 ﻿using static Maze.Api.Maze;
 using Maze.Maui.Controls.InteractiveGrid;
+using Maze.Maui.App.Models;
 using Maze.Maui.Controls.Keyboard;
 
 namespace Maze.Maui.App
@@ -12,7 +13,7 @@ namespace Maze.Maui.App
         // Private properties
         private const int DEFAULT_ROW_COUNT = 5;
         private const int DEFAULT_COLUMN_COUNT = 5;
-
+        private MazeItem? mazeItem;
         private CellFrame? startCell;
         private CellFrame? finishCell;
         private bool haveSolutionCells = false;
@@ -22,40 +23,48 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="sender">Sender</param>
         /// <param name="e">Maze grid cell tapped event arguments</param>
+        /// <returns>Event handler</returns>
         public delegate void CellTappedEventHandler(object sender, MazeGridCellTappedEventArgs e);
         /// <summary>
         /// Registered cell tapped event handler
         /// </summary>
+        /// <returns>Event handler</returns>
         public event CellTappedEventHandler? CellTapped;
         /// <summary>
         /// Cell double-tapped event handler delegate
         /// </summary>
         /// <param name="sender">Sender</param>
         /// <param name="e">Maze grid cell tapped event arguments</param>
+        /// <returns>Event handler</returns>
         public delegate void CellDoubleTappedEventHandler(object sender, MazeGridCellTappedEventArgs e);
         /// <summary>
         /// Registered cell double-tapped event handler
         /// </summary>
+        /// <returns>Event handler</returns>
         public event CellDoubleTappedEventHandler? CellDoubleTapped;
         /// <summary>
         /// Key down event handler delegate
         /// </summary>
         /// <param name="sender">Sender</param>
         /// <param name="e">Maze grid key down event arguments</param>
+        /// <returns>Event handler</returns>
         public delegate void ProcessKeyDownEventHandler(object sender, MazeGridKeyDownEventArgs e);
         /// <summary>
         /// Registered key down event handler
         /// </summary>
+        /// <returns>Event handler</returns>
         public event ProcessKeyDownEventHandler? KeyDown;
         /// <summary>
         /// Selection changed event handler delegate
         /// </summary>
         /// <param name="sender">Sender</param>
         /// <param name="e">Maze grid selection changed event arguments</param>
+        /// <returns>Event handler</returns>
         public delegate void SelectionChangedEventHandler(object sender, MazeGridSelectionChangedEventArgs e);
         /// <summary>
         /// Registered selection changed event handler
         /// </summary>
+        /// <returns>Event handler</returns>
         public event SelectionChangedEventHandler? SelectionChanged;
         /// <summary>
         /// Start cell (if any)
@@ -78,11 +87,13 @@ namespace Maze.Maui.App
         /// Initialize
         /// </summary>
         /// <param name="enablePanSupport">Enable pan support?</param>
-        public void Initialize(bool enablePanSupport)
+        /// <param name="mazeItem">Maze item (nullable)</param>
+        public void Initialize(bool enablePanSupport, MazeItem? mazeItem)
         {
             IsPanSupportEnabled = enablePanSupport;
-            RowCount = DEFAULT_ROW_COUNT;
-            ColumnCount = DEFAULT_COLUMN_COUNT;
+            this.mazeItem = mazeItem;
+            RowCount = (int)(mazeItem?.Definition?.RowCount ?? DEFAULT_ROW_COUNT);
+            ColumnCount = (int)(mazeItem?.Definition?.ColCount ?? DEFAULT_COLUMN_COUNT);
             InitializeContent();
         }
         /// <summary>
@@ -95,7 +106,7 @@ namespace Maze.Maui.App
             int cellCount = 0;
             bool singleCell = false, containsStart = false, containsFinish = false, containsWall = false;
             int numWalls = 0;
-            if (currentSelection != null)
+            if (currentSelection is not null)
             {
                 CellType cellType = CellType.Empty;
 
@@ -143,7 +154,7 @@ namespace Maze.Maui.App
             if (row >= 0 && column >= 0)
             {
                 CellFrame? cellFrame = GetCell(row, column) as CellFrame;
-                if (cellFrame != null)
+                if (cellFrame is not null)
                     content = cellFrame.Content as MazeCellContent;
             }
             return content;
@@ -159,10 +170,10 @@ namespace Maze.Maui.App
             if (row >= 0 && column >= 0)
             {
                 CellFrame? cellFrame = GetCell(row, column) as CellFrame;
-                if (cellFrame != null)
+                if (cellFrame is not null)
                 {
                     MazeCellContent? cellContent = cellFrame.Content as MazeCellContent;
-                    if (cellContent != null)
+                    if (cellContent is not null)
                     {
                         return cellContent.CellType;
                     }
@@ -171,14 +182,36 @@ namespace Maze.Maui.App
             return CellType.Empty;
         }
         /// <summary>
-        /// Creates the maze cell content for a given location
+        /// Creates the maze cell content for a given location. If the grid is initializing, then cell content
+        /// is returned that reflects the content of the maze item (if any) - otherwise, an empty cell is returned.
+        /// </summary>
+        /// <param name="frame">Container frame</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="column">Column index (zero-based)</param>
+        /// <param name="gridInitializing">Grid is initializing?</param>
+        /// <returns>Maze cell content</returns>
+        public override ContentView CreateCellContent(CellFrame frame, int row, int column, bool gridInitializing)
+        {
+            MazeCellContent content =  gridInitializing ? new MazeCellContent(GetMazeItemCellType(row, column))
+                                                        : new MazeCellContent(CellType.Empty);
+            if (gridInitializing)
+            {
+                if (content.CellType == CellType.Start)
+                    startCell = frame;
+                else if (content.CellType == CellType.Finish)
+                    finishCell = frame;
+            }
+            return content;
+        }
+        /// <summary>
+        /// Returns the cell type associated with the current maze item for a given location
         /// </summary>
         /// <param name="row">Row index (zero-based)</param>
         /// <param name="column">Column index (zero-based)</param>
-        /// <returns>Maze cell content</returns>
-        public override ContentView CreateCellContent(int row, int column)
+        /// <returns>Maze cell type</returns>
+        private CellType GetMazeItemCellType(int row, int column)
         {
-            return new MazeCellContent(CellType.Empty);
+            return this.mazeItem?.Definition?.GetCellType((uint)row, (uint)column) ?? CellType.Empty;
         }
         /// <summary>
         /// Handles the cell tapped event
@@ -187,7 +220,7 @@ namespace Maze.Maui.App
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
         public override void OnCellTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            if (triggerEvents && CellTapped != null)
+            if (triggerEvents && CellTapped is not null)
             {
                 CellTapped.Invoke(this, new MazeGridCellTappedEventArgs(cellFrame, 1));
             }
@@ -203,7 +236,7 @@ namespace Maze.Maui.App
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
         public override void OnCellDoubleTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            if (triggerEvents && CellDoubleTapped != null)
+            if (triggerEvents && CellDoubleTapped is not null)
             {
                 CellDoubleTapped.Invoke(this, new MazeGridCellTappedEventArgs(cellFrame, 2));
             }
@@ -220,7 +253,7 @@ namespace Maze.Maui.App
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
         public override void OnProcessKeyDown(Controls.Keyboard.KeyState state, Controls.Keyboard.Key key, bool triggerEvents)
         {
-            if (triggerEvents && KeyDown != null)
+            if (triggerEvents && KeyDown is not null)
             {
                 KeyDown.Invoke(this, new MazeGridKeyDownEventArgs(state, key));
             }
@@ -263,14 +296,14 @@ namespace Maze.Maui.App
         private void SetSelectionToStartCell()
         {
             CellRange? currentSelection = CurrentSelection;
-            if (currentSelection != null && currentSelection.IsSingleCell)
+            if (currentSelection is not null && currentSelection.IsSingleCell)
             {
-                if (startCell != null && startCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
+                if (startCell is not null && startCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
                     return;
-                if (startCell != null)
+                if (startCell is not null)
                     SetCellContent(startCell, CellType.Empty);
                 startCell = SetCellContent(currentSelection.Top, currentSelection.Left, CellType.Start);
-                if (startCell != null && finishCell != null && finishCell.IsDisplayPosition(startCell.DisplayRow, startCell.DisplayColumn))
+                if (startCell is not null && finishCell is not null && finishCell.IsDisplayPosition(startCell.DisplayRow, startCell.DisplayColumn))
                     finishCell = null;
             }
         }
@@ -280,14 +313,14 @@ namespace Maze.Maui.App
         private void SetSelectionToFinishCell()
         {
             CellRange? currentSelection = CurrentSelection;
-            if (currentSelection != null && currentSelection.IsSingleCell)
+            if (currentSelection is not null && currentSelection.IsSingleCell)
             {
-                if (finishCell != null && finishCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
+                if (finishCell is not null && finishCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
                     return;
-                if (finishCell != null)
+                if (finishCell is not null)
                     SetCellContent(finishCell, CellType.Empty);
                 finishCell = SetCellContent(currentSelection.Top, currentSelection.Left, CellType.Finish);
-                if (finishCell != null && startCell != null && startCell.IsDisplayPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
+                if (finishCell is not null && startCell is not null && startCell.IsDisplayPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
                     startCell = null;
             }
         }
@@ -298,16 +331,16 @@ namespace Maze.Maui.App
         private void SetSelectionContentToType(CellType cellType)
         {
             CellRange? currentSelection = CurrentSelection;
-            if (currentSelection != null && cellType != CellType.Start && cellType != CellType.Finish)
+            if (currentSelection is not null && cellType != CellType.Start && cellType != CellType.Finish)
             {
                 for (int row = currentSelection.Top; row <= currentSelection.Bottom; row++)
                 {
                     for (int column = currentSelection.Left; column <= currentSelection.Right; column++)
                         SetCellContent(row, column, cellType);
                 }
-                if (startCell != null && currentSelection.ContainsPosition(startCell.DisplayRow, startCell.DisplayColumn))
+                if (startCell is not null && currentSelection.ContainsPosition(startCell.DisplayRow, startCell.DisplayColumn))
                     startCell = null;
-                if (finishCell != null && currentSelection.ContainsPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
+                if (finishCell is not null && currentSelection.ContainsPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
                     finishCell = null;
             }
         }
@@ -321,7 +354,7 @@ namespace Maze.Maui.App
         private CellFrame? SetCellContent(int row, int column, CellType cellType)
         {
             CellFrame? cellFrame = GetCell(row, column) as CellFrame;
-            if (cellFrame != null)
+            if (cellFrame is not null)
                 cellFrame = SetCellContent(cellFrame, cellType);
             return cellFrame;
         }
@@ -333,10 +366,10 @@ namespace Maze.Maui.App
         /// <returns>Cell frame</returns>
         private CellFrame? SetCellContent(CellFrame? cellFrame, CellType cellType)
         {
-            if (cellFrame != null)
+            if (cellFrame is not null)
             {
                 MazeCellContent? cellContent = cellFrame.Content as MazeCellContent;
-                if (cellContent != null && cellContent.CellType != cellType)
+                if (cellContent is not null && cellContent.CellType != cellType)
                     SetCellContent(cellFrame, new MazeCellContent(cellType));
             }
             return cellFrame;
@@ -417,7 +450,7 @@ namespace Maze.Maui.App
         {
             MazeCellContent.PathDirection direction = MazeCellContent.PathDirection.None;
 
-            if (nextCellPoint != null)
+            if (nextCellPoint is not null)
             {
                 Api.Maze.Point nextPoint = nextCellPoint.Value;
 
@@ -588,7 +621,7 @@ namespace Maze.Maui.App
         private void SetSolutionCell(int row, int column, MazeCellContent.PathDirection direction)
         {
             MazeCellContent? cellContent = GetCellContent(row, column);
-            if (cellContent != null)
+            if (cellContent is not null)
             {
                 cellContent.SetSolutionPath(direction);
             }
@@ -750,54 +783,67 @@ namespace Maze.Maui.App
             /// <summary>
             /// No direction
             /// </summary>
+            /// <returns>No direction</returns>
             None = 0,
             /// <summary>
             /// To left
             /// </summary>
+            /// <returns>To left</returns>
             Left = 1,
             /// <summary>
             /// To left from down
             /// </summary>
+            /// <returns>To left from down</returns>
             LeftFromDown = 2,
             /// <summary>
             /// To left from up
             /// </summary>
+            /// <returns>To left from up</returns>
             LeftFromUp = 3,
             /// <summary>
             /// To right
             /// </summary>
+            /// <returns>To right</returns>
             Right = 4,
             /// <summary>
             /// To right from down
             /// </summary>
+            /// <returns>To right from down</returns>
             RightFromDown = 5,
             /// <summary>
             /// To right from up
             /// </summary>
+            /// <returns>To right from up</returns>
             RightFromUp = 6,
             /// <summary>
             /// Upwards
             /// </summary>
+            /// <returns>Upwards</returns>
             Up = 7,
             /// <summary>
             /// Upwards from left
             /// </summary>
+            /// <returns>Upwards from left</returns>
             UpFromLeft = 8,
             /// <summary>
             /// Upwards from right
             /// </summary>
+            /// <returns>Upwards from right</returns>
             UpFromRight = 9,
             /// <summary>
             /// Downwards
             /// </summary>
+            /// <returns>Downwards</returns>
             Down = 10,
             /// <summary>
             /// Downwards from left
             /// </summary>
+            /// <returns>Downwards from left</returns>
             DownFromLeft = 11,
             /// <summary>
             /// Downwards from right
             /// </summary>
+            /// <returns>Downwards from right</returns>
             DownFromRight = 12
         }
 

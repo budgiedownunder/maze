@@ -1,6 +1,7 @@
 use maze::{Maze, MazeError, Solution};
 use storage::{MazeItem, Store, SharedStore, StoreError};
-use actix_web::{delete, get, post, put, web, HttpResponse, Error};
+use actix_web::{delete, get, post, put, web, web::Query, HttpResponse, Error};
+use serde::Deserialize;
 use std::sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, Arc};
 use urlencoding::encode;
 
@@ -59,11 +60,19 @@ fn get_maze_solve_error(err: &MazeError) -> Error {
 // Endpoint: GET /api/v1/mazes
 // Handler:  get_maze_list()
 // **************************************************************************************************
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")] 
+struct GetMazeListQueryParams {
+    include_definitions: Option<bool>,
+}
 #[utoipa::path(
     summary = "Returns the list of available mazes",
-    description = "This endpoint returns the list of maze IDs (and names) that the user currently has access to",
+    description = "This endpoint returns the list of maze IDs, names and (optionally) their definitions that the user currently has access to",
     get,
     path = "/api/v1/mazes",
+    params(
+        ("includeDefinitions" = bool, Query, description = "Include the definitions for the mazes (default: false)")
+    ),    
     responses(
         (status = 200, description = "Maze list loaded sucessfully", body=[MazeItem]),
         (status = 400, description = "Invalid request"),
@@ -74,9 +83,13 @@ fn get_maze_solve_error(err: &MazeError) -> Error {
     tags = ["v1"]
 )]
 #[get("/mazes")]
-pub async fn get_maze_list(store: web::Data<SharedStore>) -> Result<HttpResponse, Error> {
+pub async fn get_maze_list(
+    store: web::Data<SharedStore>,
+    query: Query<GetMazeListQueryParams>
+) -> Result<HttpResponse, Error> {
+    let include_definitions = query.include_definitions.unwrap_or(false); 
     let store_lock = get_store_read_lock(&store)?;
-    let stored_items = store_lock.get_maze_items().map_err(|err| {
+    let stored_items = store_lock.get_maze_items(include_definitions).map_err(|err| {
         get_mazes_fetch_internal_error(&err)
     })?;
     Ok(HttpResponse::Ok().json(stored_items))    
@@ -353,10 +366,15 @@ mod tests {
     }
 
     impl MazeStoreItem {
-        pub fn to_maze_item(&self) -> MazeItem {
+        pub fn to_maze_item(&self, include_definitions: bool) -> MazeItem {
             MazeItem {
                 id: self.id.clone(),
-                name: self.name.clone()
+                name: self.name.clone(),
+                definition: if include_definitions {
+                    Some(serde_json::to_string(&self.maze.definition).expect("Failed to serialize"))
+                } else {
+                    None
+                },
             }
         } 
     } 
@@ -432,8 +450,8 @@ mod tests {
             return Err(StoreError::Other("Mock interface not implemented".to_string()));
         }
 
-        fn get_maze_items(&self) -> Result<Vec<MazeItem>, StoreError> {
-            let mut items: Vec<MazeItem> = maze_items_from_map(&self.items);
+        fn get_maze_items(&self, include_definitions: bool) -> Result<Vec<MazeItem>, StoreError> {
+            let mut items: Vec<MazeItem> = maze_items_from_map(&self.items, include_definitions);
             items.sort_by_key(|item| item.name.clone());
             Ok(items)
         }
@@ -448,9 +466,9 @@ mod tests {
         SolutionTestMazes,
     }
 
-    fn maze_store_items_to_maze_items(from: Vec<MazeStoreItem>) -> Vec<MazeItem> {
+    fn maze_store_items_to_maze_items(from: Vec<MazeStoreItem>, include_definitions: bool) -> Vec<MazeItem> {
         from.iter()
-            .map( |value| value.to_maze_item())
+            .map( |value| value.to_maze_item(include_definitions))
             .collect()
     }
 
@@ -462,11 +480,16 @@ mod tests {
         map 
     }
 
-    fn maze_items_from_map(from: &HashMap<String, MazeStoreItem>) -> Vec<MazeItem> {
+    fn maze_items_from_map(from: &HashMap<String, MazeStoreItem>, include_definitions: bool) -> Vec<MazeItem> {
         from.iter()
             .map(|(_key, value) | MazeItem {
                     id: value.id.clone(),
                     name: value.name.clone(),
+                    definition: if include_definitions {
+                        Some(serde_json::to_string(&value.maze.definition).expect("Failed to serialize"))
+                    } else {
+                        None
+                    },                   
             })
             .collect()
     }
@@ -603,21 +626,22 @@ mod tests {
                 .service(RapiDoc::new("/api-docs/v1/openapi.json").path("/api-docs/v1/rapidoc"));
     }
 
-    async fn run_get_mazes_test(startup_content: StoreStartupContent) {
+    async fn run_get_mazes_test(startup_content: StoreStartupContent, include_definitions: bool) {
         let app = test::init_service(
             App::new().configure(|cfg| configure_mock_app(cfg, startup_content.clone())),
         )
         .await;
 
         // Get
-        let req = test::TestRequest::get().uri("/api/v1/mazes").to_request();
+        let path_str = format!("/api/v1/mazes?includeDefinitions={}", include_definitions);
+        let req = test::TestRequest::get().uri(&path_str).to_request();
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let body = test::read_body(resp).await;
         let maze_items: Vec<MazeItem> = serde_json::from_slice(&body).expect("failed to deserialize response");
         assert_eq!(
             maze_items,
-            maze_store_items_to_maze_items(get_startup_content(startup_content, true))   
+            maze_store_items_to_maze_items(get_startup_content(startup_content, true), include_definitions)
         );        
     }
 
@@ -829,22 +853,37 @@ mod tests {
  
     #[actix_web::test]
     async fn test_get_mazes_with_no_mazes() {
-        run_get_mazes_test(StoreStartupContent::Empty).await;
+        run_get_mazes_test(StoreStartupContent::Empty, false).await;
     }
 
     #[actix_web::test]
-    async fn test_get_mazes_with_one_maze() {
-        run_get_mazes_test(StoreStartupContent::OneMaze).await;
+    async fn test_get_mazes_with_one_maze_without_definitions() {
+        run_get_mazes_test(StoreStartupContent::OneMaze, false).await;
     }
 
     #[actix_web::test]
-    async fn test_get_mazes_with_two_mazes_that_require_sorting() {
-        run_get_mazes_test(StoreStartupContent::TwoMazes).await;
+    async fn test_get_mazes_with_one_maze_with_defintions() {
+        run_get_mazes_test(StoreStartupContent::OneMaze, true).await;
+    }
+ 
+    #[actix_web::test]
+    async fn test_get_mazes_with_two_mazes_that_require_sorting_without_definitions() {
+        run_get_mazes_test(StoreStartupContent::TwoMazes, false).await;
     }
 
     #[actix_web::test]
-    async fn test_get_mazes_with_three_mazes_that_require_sorting() {
-        run_get_mazes_test(StoreStartupContent::ThreeMazes).await;
+    async fn test_get_mazes_with_two_mazes_that_require_sorting_with_definitions() {
+        run_get_mazes_test(StoreStartupContent::TwoMazes, true).await;
+    }
+
+    #[actix_web::test]
+    async fn test_get_mazes_with_three_mazes_that_require_sorting_without_definitions() {
+        run_get_mazes_test(StoreStartupContent::ThreeMazes, false).await;
+    }
+
+    #[actix_web::test]
+    async fn test_get_mazes_with_three_mazes_that_require_sorting_with_definitions() {
+        run_get_mazes_test(StoreStartupContent::ThreeMazes, true).await;
     }
 
     #[actix_web::test]

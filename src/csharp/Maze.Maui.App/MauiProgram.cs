@@ -3,6 +3,10 @@ using MauiGestures;
 //using Maze.Maui.App.Services;
 using Microsoft.Extensions.Logging;
 using Maze.Wasm.Interop;
+using Maze.Maui.Services;
+using Maze.Maui.App.Services;
+using Maze.Maui.App.ViewModels;
+using Maze.Maui.App.Views;
 
 namespace Maze.Maui.App
 {
@@ -11,6 +15,13 @@ namespace Maze.Maui.App
     /// </summary>
     public static class MauiProgram
     {
+        // Define whether or not to use the mock maze service
+#if IOS
+        static bool useMockMazeService = true;
+#else
+        static bool useMockMazeService = false;
+#endif
+
         /// <summary>
         /// Initializes the application static instance
         /// </summary>
@@ -28,18 +39,42 @@ namespace Maze.Maui.App
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
 
-  //     builder.Services.AddSingleton<IDeviceTypeService, DeviceTypeService>();
+            InitializeMazeWasmInterop();
+
+            builder.Services.AddSingleton<IMazeService>(provider => GetMazeService(useMockMazeService));
+            builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());
+            builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService());
+
+            builder.Services.AddSingleton<MazesViewModel>();
+            builder.Services.AddTransient<MazeViewModel>();
+
+            builder.Services.AddSingleton<MazesPage>();
+            builder.Services.AddTransient<MazePage>();
+
 
 #if DEBUG
             builder.Logging.AddDebug();
 #endif
-
-            InitializeMazeWasmInterop();
-
             return builder.Build();
         }
 
-        // To do - move to a service
+        private static IMazeService GetMazeService(bool useMock)
+        {
+            // TO DO - drive the choice of client service and endpoint(s) from
+            // configuration file settings
+#if WINDOWS
+            string rootUri = "http://localhost:8080/api/v1";
+#elif ANDROID
+        string rootUri = "http://10.0.2.2:8080/api/v1";
+#elif IOS
+        string rootUri = "http://localhost:8080/api/v1";
+#else
+        string rootUri = "http://localhost:8080/api/v1";
+#endif
+            return useMock ? new MockMazeService() : new MazeHttpClientService(rootUri);
+        }
+
+        // TO DO - move to a service
         private static async void InitializeMazeWasmInterop()
         {
             try

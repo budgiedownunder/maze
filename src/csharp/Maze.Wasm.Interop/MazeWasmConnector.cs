@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static Maze.Wasm.Interop.MazeWasmInterop;
+﻿using static Maze.Wasm.Interop.MazeWasmInterop;
 using static Maze.Wasm.Interop.WasmerInterop;
 
 namespace Maze.Wasm.Interop

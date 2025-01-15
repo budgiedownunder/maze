@@ -1,11 +1,7 @@
 ﻿namespace Maze.Wasm.Interop
 {
-    using System.Reflection;
-    using System.Runtime.InteropServices;
-    using Microsoft.Extensions.Configuration;
     using System.Text;
     using Wasmtime;
-    using System.Runtime.CompilerServices;
 
     /// <summary>
     /// Provides a wrapper to [Wasmtime](https://docs.wasmtime.dev/) WebAssembly memory
@@ -19,7 +15,7 @@
         /// <param name="memory">WebAssembly memory</param>
         internal MazeWasmtimeMemory(Wasmtime.Memory memory)
         {
-            if (memory == null)
+            if (memory is null)
             {
                 throw new Exception("Null wasmMemory supplied to MazeWasmerMemory constructor");
             }
@@ -188,7 +184,7 @@
         /// <param name="wasmBytes">WebAssembly bytes(</param>
         public MazeWasmtimeConnector(string wasmPathOrName, byte[]? wasmBytes = null)
         {
-            if (wasmPathOrName == null)
+            if (wasmPathOrName is null)
                 throw new Exception("WebAssembly path or name is not defined");
             this.wasmPathOrName = wasmPathOrName;
             Initialize(wasmBytes);
@@ -243,14 +239,14 @@
         private void InitializeModule(byte[]? wasmBytes)
         {
             var engine = new Engine();
-            var module = wasmBytes != null 
+            var module = wasmBytes is not null 
                 ? Wasmtime.Module.FromBytes(engine, "maze_wasm", wasmBytes)
                 : Wasmtime.Module.FromFile(engine, wasmPathOrName);
             using var linker = new Linker(engine);
             store = new Store(engine);
 
             instanceWasm = new Instance(store, module);
-            if (instanceWasm == null)
+            if (instanceWasm is null)
                 throw new Exception("Failed to create Wasmtime instance");
         }
         /// <summary>
@@ -260,7 +256,7 @@
         private void InitializeMemory()
         {
             var wasmtimeMemory = instanceWasm.GetMemory("memory");
-            if (wasmtimeMemory == null)
+            if (wasmtimeMemory is null)
                 throw new Exception("Failed to locate memory in WebAssembly");
             base.memory = new MazeWasmtimeMemory(wasmtimeMemory);
         }
@@ -307,7 +303,7 @@
         private IFunction ResolveFunction(string functionName)
         {
             Wasmtime.Function? func = instanceWasm?.GetFunction(functionName);
-            if (func == null)
+            if (func is null)
             {
                 throw new Exception($"Failed to load the WebAssembly function: {functionName} from {wasmPathOrName}.");
             }

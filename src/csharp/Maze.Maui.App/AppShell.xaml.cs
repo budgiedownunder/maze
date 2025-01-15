@@ -1,4 +1,6 @@
-﻿namespace Maze.Maui.App
+﻿using Maze.Maui.App.Views;
+
+namespace Maze.Maui.App
 {
     /// <summary>
     /// MAUI application shell class
@@ -11,6 +13,7 @@
         public AppShell()
         {
             InitializeComponent();
+            Routing.RegisterRoute(nameof(MazePage), typeof(MazePage));
         }
     }
 }

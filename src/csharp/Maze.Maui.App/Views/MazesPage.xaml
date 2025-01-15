@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:android="clr-namespace:Microsoft.Maui.Controls.PlatformConfiguration.AndroidSpecific;assembly=Microsoft.Maui.Controls"
+             xmlns:ios="clr-namespace:Microsoft.Maui.Controls.PlatformConfiguration.iOSSpecific;assembly=Microsoft.Maui.Controls"
+             xmlns:model ="clr-namespace:Maze.Maui.App.Models"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             xmlns:viewmodel ="clr-namespace:Maze.Maui.App.ViewModels"
+             x:DataType="viewmodel:MazesViewModel"
+             x:Class="Maze.Maui.App.Views.MazesPage"
+             Title="{Binding Title}">
+
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="New"
+                     Command="{Binding NewCommand}"
+                     IconImageSource="{OnPlatform 'icon_new.png', iOS='icon_new_ios.png',MacCatalyst='icon_new_ios.png'}"/>
+        <ToolbarItem Text="Refresh"
+                     Command="{Binding GetMazesCommand}"
+                     IconImageSource="refresh.png"/>
+    </ContentPage.ToolbarItems>
+
+    <Grid VerticalOptions="FillAndExpand" HorizontalOptions="FillAndExpand">
+        <RefreshView Command="{Binding GetMazesCommand}"
+                     IsRefreshing="{Binding IsRefreshing}">
+            <CollectionView ItemsSource="{Binding MazeItems}"
+                            SelectionMode="None"
+                            VerticalOptions="FillAndExpand"
+                            HorizontalOptions="FillAndExpand"
+                            x:Name="MazesCollectionView">
+                <CollectionView.EmptyView>
+                    <Grid VerticalOptions="FillAndExpand"
+                          HorizontalOptions="FillAndExpand"
+                          Padding="10"
+                          WidthRequest="{Binding Source={x:Reference MazesCollectionView}, Path=Width}"
+                          HeightRequest="{Binding Source={x:Reference MazesCollectionView}, Path=Height}">
+                        <Label Text="{Binding LoadStatus}"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"/>
+                    </Grid>
+                </CollectionView.EmptyView>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="model:MazeItem">
+                        <SwipeView android:SwipeView.SwipeTransitionMode="Drag"
+                                   ios:SwipeView.SwipeTransitionMode="Drag">
+                            <SwipeView.RightItems>
+                                <!-- Note: tried to use SwipeItemView here, in preference to SwipeItem, for better control of image sizes and layout, but there
+                                           are issues with content/swipeitems overlapping on drag and the IconTintColorBehaviour not applying the color to images -->
+                                <SwipeItems>
+                                    <SwipeItem
+                                        Text="Delete"
+                                        BackgroundColor = "Red"
+                                        IconImageSource="{OnPlatform 'icon_delete.png', iOS='icon_delete_ios.png',MacCatalyst='icon_delete_ios.png'}"
+                                        CommandParameter="{Binding .}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=DeleteCommand}"/>
+                                    <SwipeItem
+                                        Text="Duplicate"
+                                        BackgroundColor = "LightGreen"
+                                        IconImageSource="{OnPlatform 'icon_duplicate.png', iOS='icon_duplicate_ios.png',MacCatalyst='icon_duplicate_ios.png'}"
+                                        CommandParameter="{Binding .}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=DuplicateCommand}"/>
+                                    <SwipeItem
+                                        Text="Rename"
+                                        BackgroundColor = "Orange"
+                                        IconImageSource="{OnPlatform 'icon_rename.png', iOS='icon_rename_ios.png',MacCatalyst='icon_rename_ios.png'}"
+                                        CommandParameter="{Binding .}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=RenameCommand}"/>
+                                    <SwipeItem
+                                        Text="Edit"
+                                        BackgroundColor = "Blue"
+                                        IconImageSource="{OnPlatform 'icon_edit.png', iOS='icon_edit_ios.png',MacCatalyst='icon_edit_ios.png'}"
+                                        CommandParameter="{Binding .}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
+                                </SwipeItems>
+                            </SwipeView.RightItems>
+
+                            <Border HeightRequest="125"
+                                    Padding="0"
+                                    Margin="5">
+
+                                <FlyoutBase.ContextFlyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="New..."
+                                                        IconImageSource="icon_new.png"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=NewCommand}"/>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Edit..."
+                                                        IconImageSource="icon_edit.png"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Duplicate..."
+                                                        IconImageSource="icon_dupplicate.png"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=DuplicateCommand}"/>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Rename..."
+                                                        IconImageSource="icon_rename.png"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=RenameCommand}"/>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Delete"
+                                                        IconImageSource="icon_delete.png"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=DeleteCommand}"/>
+                                    </MenuFlyout>
+                                </FlyoutBase.ContextFlyout>
+
+                                <Grid Padding="10">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer NumberOfTapsRequired="1"
+                                                              CommandParameter="{Binding .}"
+                                                              Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
+                                    </Border.GestureRecognizers>
+                                    <Grid Padding="0">
+                                        <HorizontalStackLayout Padding="10">
+                                            <Image Source="maze.png"
+                                                   HeightRequest="125" 
+                                                   WidthRequest="125" 
+                                                   Aspect="AspectFill">
+                                            </Image>
+                                            <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="CenterAndExpand">
+                                                <Label Text="{Binding Name}" FontSize="24"/>
+                                                <Label Text ="{Binding DimensionsSummary}" FontSize="12"/>
+                                            </VerticalStackLayout>
+                                        </HorizontalStackLayout>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </SwipeView>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </RefreshView>
+
+        <ActivityIndicator IsVisible="{Binding IsBusy}"
+                       IsRunning="{Binding IsBusy}"
+                       HorizontalOptions="FillAndExpand"
+                       VerticalOptions="CenterAndExpand" />
+
+    </Grid>
+</ContentPage>

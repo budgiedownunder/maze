@@ -3,13 +3,20 @@
     x:Class="Maze.Maui.App.AppShell"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    xmlns:local="clr-namespace:Maze.Maui.App.Views"
-    Shell.FlyoutBehavior="Disabled"
-    Title="Maze Maui App">
+    xmlns:views="clr-namespace:Maze.Maui.App.Views"
+    Shell.FlyoutBehavior="Disabled">
 
-    <ShellContent
-        Title="Maze"
-        ContentTemplate="{DataTemplate local:MainPage}"
-        Route="MainPage" />
+    <TabBar>
+        <ShellContent
+            Title="Mazes"
+            ContentTemplate="{DataTemplate views:MazesPage}" 
+            Icon="{OnPlatform 'icon_mazes.png', iOS='icon_mazes_ios.png', MacCatalyst='icon_mazes_ios.png'}"
+            Route="MainPage" />
+        <ShellContent
+            Title="About"
+            ContentTemplate="{DataTemplate views:AboutPage}"
+            Icon="{OnPlatform 'icon_about.png', iOS='icon_about_ios.png', MacCatalyst='icon_about_ios.png'}"
+            Route="AboutPage" />
+    </TabBar>
 
 </Shell>
