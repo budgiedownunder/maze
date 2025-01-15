@@ -13,8 +13,8 @@ namespace Maze.Maui.App.ViewModels
     public partial class MazesViewModel : BaseViewModel
     {
         // Private properties
-        IMazeService mazeService;
-        IDialogService dialogService;
+        IMazeService _mazeService;
+        IDialogService _dialogService;
         public ObservableCollection<MazeItem> MazeItems { get; } = new();
         /// <summary>
         /// Constructor
@@ -24,8 +24,8 @@ namespace Maze.Maui.App.ViewModels
         public MazesViewModel(IDialogService dialogService, IMazeService mazeService)
         {
             Title = "Mazes";
-            this.mazeService = mazeService;
-            this.dialogService = dialogService;
+            _mazeService = mazeService;
+            _dialogService = dialogService;
             _ = GetMazesAsync();
         }
         /// <summary>
@@ -55,11 +55,11 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 IsBusy = true;
-                DisplayItems(await mazeService.GetMazeItems(true));
+                DisplayItems(await _mazeService.GetMazeItems(true));
             }
             catch (Exception ex)
             {
-                await dialogService.ShowAlert("Error", $"Unable to load mazes: {ex.Message}", "OK");
+                await _dialogService.ShowAlert("Error", $"Unable to load mazes: {ex.Message}", "OK");
             }
             finally
             {
@@ -122,9 +122,10 @@ namespace Maze.Maui.App.ViewModels
 
             while (!finished)
             {
-                string? name = await dialogService.DisplayPrompt("Rename Maze", "Name", "Name", "OK", "Cancel", "Enter new maze name",
-                                                   keyboard: Keyboard.Text, initialValue: initialName,
-                                                   allowEmpty: false, trimResult: true);
+                string? name = await _dialogService.DisplayPrompt("Rename Maze", "Name", "Name", 
+                                            "OK", "Cancel", "Enter new maze name",
+                                            keyboard: Keyboard.Text, initialValue: initialName,
+                                            allowEmpty: false, trimResult: true);
                 if (name is not null && name != mazeItem.Name)
                 {
                     finished = await RenameMaze(mazeItem, name);
@@ -149,7 +150,7 @@ namespace Maze.Maui.App.ViewModels
             if (IsBusy)
                 return;
 
-            if (await dialogService.ShowConfirmation(
+            if (await _dialogService.ShowConfirmation(
                 "Delete Maze",
                 $"Are you sure you want to delete '{mazeItem.Name}'?",
                 "Yes",
@@ -174,7 +175,7 @@ namespace Maze.Maui.App.ViewModels
 
             if (NameExists(newName))
             {
-                await dialogService.ShowAlert("Error", $"The name '{newName}' is already in use.\n\nPlease choose another name.", "OK");
+                await _dialogService.ShowAlert("Error", $"The name '{newName}' is already in use.\n\nPlease choose another name.", "OK");
                 return false;
             }
 
@@ -183,12 +184,12 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 IsBusy = true;
-                await mazeService.RenameMazeItem(mazeItem, newName);
+                await _mazeService.RenameMazeItem(mazeItem, newName);
                 renamed = true;
             }
             catch (Exception ex)
             {
-                await dialogService.ShowAlert("Error", $"Failed to rename maze: {ex.Message}", "OK");
+                await _dialogService.ShowAlert("Error", $"Failed to rename maze: {ex.Message}", "OK");
             }
             finally
             {
@@ -210,12 +211,12 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 IsBusy = true;
-                await mazeService.DeleteMazeItem(mazeItem.ID);
+                await _mazeService.DeleteMazeItem(mazeItem.ID);
                 deleted = true;
             }
             catch (Exception ex)
             {
-                await dialogService.ShowAlert("Error", $"Failed to delete maze: {ex.Message}", "OK");
+                await _dialogService.ShowAlert("Error", $"Failed to delete maze: {ex.Message}", "OK");
             }
             finally
             {
