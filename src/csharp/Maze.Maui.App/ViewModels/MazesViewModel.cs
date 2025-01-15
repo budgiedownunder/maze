@@ -7,26 +7,43 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Maze.Maui.App.ViewModels
 {
+    /// <summary>
+    /// Represents a mazes view model
+    /// </summary>
     public partial class MazesViewModel : BaseViewModel
     {
+        // Private properties
         IMazeService mazeService;
         IDialogService dialogService;
         public ObservableCollection<MazeItem> MazeItems { get; } = new();
-
-        public MazesViewModel(IMazeService mazeService, IDialogService dialogService)
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="dialogService">Injected dialog service</param>
+        /// <param name="mazeService">Injected maze service</param>
+        public MazesViewModel(IDialogService dialogService, IMazeService mazeService)
         {
             Title = "Mazes";
             this.mazeService = mazeService;
             this.dialogService = dialogService;
             _ = GetMazesAsync();
         }
-
+        /// <summary>
+        /// Represents the load status
+        /// </summary>
+        /// <returns>String value</returns>
         [ObservableProperty]
-        string loadStatus = "No mazes found";
-
+        protected string loadStatus = "No mazes found";
+        /// <summary>
+        /// Indicates whether the view is currently refreshing
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool isRefreshing;
-
+        protected bool isRefreshing;
+        /// <summary>
+        /// Loads the maze list
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         async Task GetMazesAsync()
         {
@@ -53,6 +70,11 @@ namespace Maze.Maui.App.ViewModels
             LoadStatus = MazeItems.Count == 0 ? "No mazes found" : "";
 
         }
+        /// <summary>
+        /// Activates the maze (design) page for the given maze item
+        /// </summary>
+        /// <param name="mazeItem">Maze item</param>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         async Task GoToDesignAsync(MazeItem mazeItem)
         {
@@ -72,13 +94,20 @@ namespace Maze.Maui.App.ViewModels
 
             IsBusy = false;
         }
-
+        /// <summary>
+        /// Activates the maze (design) page for a new maze item
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         async Task NewAsync()
         {
             await GoToDesignAsync(new MazeItem());
         }
-
+        /// <summary>
+        /// Handles rename of the given maze item
+        /// </summary>
+        /// <param name="mazeItem">Maze item</param>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         async Task RenameAsync(MazeItem mazeItem)
         {
@@ -106,7 +135,11 @@ namespace Maze.Maui.App.ViewModels
                     finished = true;
             }
         }
-
+        /// <summary>
+        /// Handles deletion of the given maze item
+        /// </summary>
+        /// <param name="mazeItem">Maze item</param>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         async Task DeleteAsync(MazeItem mazeItem)
         {
@@ -128,7 +161,12 @@ namespace Maze.Maui.App.ViewModels
                     RemoveItem(mazeItem);
             }
         }
-
+        /// <summary>
+        /// Renames a maze item to the given name
+        /// </summary>
+        /// <param name="mazeItem">Maze item</param>
+        /// <param name="newName">New name</param>
+        /// <returns>Task containing a boolean result</returns>
         async Task<bool> RenameMaze(MazeItem mazeItem, string newName)
         {
             if (IsBusy)
@@ -158,7 +196,11 @@ namespace Maze.Maui.App.ViewModels
             }
             return renamed;
         }
-
+        /// <summary>
+        /// Deletes the given maze item
+        /// </summary>
+        /// <param name="mazeItem">Maze item</param>
+        /// <returns>Task containing a boolean result</returns>
         async Task<bool> DeleteMaze(MazeItem mazeItem)
         {
             bool deleted = false;
@@ -181,24 +223,39 @@ namespace Maze.Maui.App.ViewModels
             }
             return deleted;
         }
-
+        /// <summary>
+        /// Adds a new maze item to the list of mazes
+        /// </summary>
+        /// <param name="item">Maze item</param>
+        /// <returns>Nothing</returns>
         public void AddNewItem(MazeItem item)
         {
             MazeItems.Add(item);
             SortItems();
         }
-
+        /// <summary>
+        /// Removes a maze item from the list of mazes
+        /// </summary>
+        /// <param name="item">Maze item</param>
+        /// <returns>Nothing</returns>
         public void RemoveItem(MazeItem item)
         {
             MazeItems.Remove(item);
         }
-
+        /// <summary>
+        /// Sorts the list of mazes into ascending name order
+        /// </summary>
+        /// <returns>Nothing</returns>
         private void SortItems()
         {
             var sortedItems = MazeItems.OrderBy(i => i.Name).ToList();
             DisplayItems(sortedItems);
         }
-
+        /// <summary>
+        /// Updates the display with the given list of maze items
+        /// </summary>
+        /// <param name="items">Maze items</param>
+        /// <returns>Nothing</returns>
         private void DisplayItems(List<MazeItem> items)
         {
             if (MazeItems.Count != 0)
@@ -209,7 +266,11 @@ namespace Maze.Maui.App.ViewModels
                 MazeItems.Add(item);
             }
         }
-
+        /// <summary>
+        /// Checks whether a given name exists (case-insensitive)
+        /// </summary>
+        /// <param name="name">Name to check</param>
+        /// <returns>Boolean</returns>
         private bool NameExists(string name)
         {
             string nameUpper = name.ToUpper();

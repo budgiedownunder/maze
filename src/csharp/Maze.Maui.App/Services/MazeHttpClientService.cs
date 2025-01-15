@@ -53,7 +53,7 @@ namespace Maze.Maui.App.Services
         }
     }
     /// <summary>
-    /// Represents a maze Http client service
+    /// Represents a Http client service for managing the load, save and deletion of mazes
     /// </summary>
     public class MazeHttpClientService : IMazeService
     {

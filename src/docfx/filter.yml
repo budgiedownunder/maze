@@ -7,3 +7,11 @@ filter:
       member: "__XamlGeneratedCode__*"
   - exclude:
       uid: "__XamlGeneratedCode__*"
+
+apiRules:
+- exclude:
+    uidRegex: ".+\\.value__"
+- exclude:
+    uidRegex: ".+\\.add_[A-Z][a-zA-Z0-9]*"
+- exclude:
+    uidRegex: ".+\\.remove_[A-Z][a-zA-Z0-9]*"

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace Maze.Maui.App.Services
 {
     /// <summary>
-    /// Represents a popup window-based dialog service
+    /// Represents a popup window dialog service
     /// </summary>
     public class DialogService : IDialogService
     {

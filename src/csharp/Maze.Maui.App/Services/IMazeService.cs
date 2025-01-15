@@ -7,7 +7,7 @@ using System.Xml.Linq;
 namespace Maze.Maui.App.Services
 {
     /// <summary>
-    /// Represents a maze service interface
+    /// Represents a service interface for managing the load, save and deletion of mazes
     /// </summary>
     public interface IMazeService
     {

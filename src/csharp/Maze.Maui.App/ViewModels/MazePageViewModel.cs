@@ -5,186 +5,353 @@ using Maze.Maui.App.Services;
 using Maze.Maui.Services;
 
 namespace Maze.Maui.App.ViewModels
-{   
+{
+    /// <summary>
+    /// Represents a maze view model
+    /// </summary>
     [QueryProperty("MazeItem", "MazeItem")]
     public partial class MazePageViewModel : BaseViewModel
     {
+        // Private definitions
         private const int COMMAND_DELAY_MS = 50;
 
-        public event EventHandler? InsertRowsRequested;
-        public event EventHandler? DeleteRowsRequested;
-        public event EventHandler? InsertColumnsRequested;
-        public event EventHandler? DeleteColumnsRequested;
-        public event EventHandler? SelectRangeRequested;
-        public event EventHandler? DoneRequested;
-        public event EventHandler? SetWallRequested;
-        public event EventHandler? SetStartRequested;
-        public event EventHandler? SetFinishRequested;
-        public event EventHandler? ClearRequested;
-        public event EventHandler? SolveRequested;
-        public event EventHandler? ClearSolutionRequested;
-        public event EventHandler? SaveRequested;
-        public event EventHandler? RefreshRequested;
-
+        // Private properties
         private readonly IDeviceTypeService _deviceTypeService;
         private readonly IMazeService _mazeService;
         private readonly IDialogService _dialogService;
-
         private readonly MazesViewModel _mazesViewModel;
 
+        /// <summary>
+        /// Represents an insert rows requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? InsertRowsRequested;
+        /// <summary>
+        /// Represents a delete rows requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? DeleteRowsRequested;
+        /// <summary>
+        /// Represents an insert columns requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? InsertColumnsRequested;
+        /// <summary>
+        /// Represents a delete columns requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? DeleteColumnsRequested;
+        /// <summary>
+        /// Represents a select range requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SelectRangeRequested;
+        /// <summary>
+        /// Represents a done requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? DoneRequested;
+        /// <summary>
+        /// Represents a set wall cell requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetWallRequested;
+        /// <summary>
+        /// Represents a set start cell requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetStartRequested;
+        /// <summary>
+        /// Represents a set finish cell requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetFinishRequested;
+        /// <summary>
+        /// Represents a clear cells requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? ClearRequested;
+        /// <summary>
+        /// Represents a solve maze requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SolveRequested;
+        /// <summary>
+        /// Represents a clear solution requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? ClearSolutionRequested;
+        /// <summary>
+        /// Represents a save maze requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SaveRequested;
+        /// <summary>
+        /// Represents a refresh maze requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? RefreshRequested;
+        /// <summary>
+        /// Indicates whether the view maze is stored
+        /// </summary>
+        /// <returns>Boolean value</returns>
         public bool IsStored { get; set; }
+        /// <summary>
+        /// Indicates whether the view maze is dirty (unsaved)
+        /// </summary>
+        /// <returns>Boolean value</returns>
         public bool IsDirty { get; set; }
-
+        /// <summary>
+        /// The maze item currently being displayed
+        /// </summary>
+        /// <returns>Maze item</returns>
         [ObservableProperty]
-        MazeItem mazeItem = new MazeItem();
-
+        protected MazeItem mazeItem = new MazeItem();
+        /// <summary>
+        /// Indicates whether rows can currently be inserted
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canInsertRows = false;
-
+        protected bool canInsertRows = false;
+        /// <summary>
+        /// Indicates whether rows can currently be deleted
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canDeleteRows = false;
-
+        protected bool canDeleteRows = false;
+        /// <summary>
+        /// Indicates whether columns can currently be inserted
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canInsertColumns = false;
-
+        protected bool canInsertColumns = false;
+        /// <summary>
+        /// Indicates whether columns can currently be inserted
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canDeleteColumns = false;
-
+        protected bool canDeleteColumns = false;
+        /// <summary>
+        /// Indicates whether the selection can currently switch to extended cell selection mode
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canSelectRange = false;
-
+        protected bool canSelectRange = false;
+        /// <summary>
+        /// Indicates whether the "done" button can be displayed
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canShowDone = false;
-
+        protected bool canShowDone = false;
+        /// <summary>
+        /// Indicates whether wall cells can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canSetWall = false;
-
+        protected bool canSetWall = false;
+        /// <summary>
+        /// Indicates whether a start cell can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canSetStart = false;
-
+        protected bool canSetStart = false;
+        /// <summary>
+        /// Indicates whether a finish cell can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canSetFinish = false;
-
+        protected bool canSetFinish = false;
+        /// <summary>
+        /// Indicates whether the currently selected cells can be cleared
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canClear = false;
-
+        protected bool canClear = false;
+        /// <summary>
+        /// Indicates whether the maze can be solved
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canSolve = false;
-
+        protected bool canSolve = false;
+        /// <summary>
+        /// Indicates whether the maze solution can be cleared
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canClearSolution = false;
-
+        protected bool canClearSolution = false;
+        /// <summary>
+        /// Indicates whether the maze can be saved
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canSave = true;
-
+        protected bool canSave = true;
+        /// <summary>
+        /// Indicates whether the maze can be refreshed
+        /// </summary>
+        /// <returns>Boolean value</returns>
         [ObservableProperty]
-        bool canRefresh = false;
-
+        protected bool canRefresh = false;
+        /// <summary>
+        /// Indicates whether the current device is touch-only
+        /// </summary>
+        /// <returns>Boolean value</returns>
         public bool IsTouchOnlyDevice
         {
             get => _deviceTypeService.IsTouchOnlyDevice();
         }
-
-        public MazePageViewModel(IDeviceTypeService deviceTypeService, IMazeService mazeService, MazesViewModel mazesViewModel, IDialogService dialogService)
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="deviceTypeService">Injected device type service</param>
+        /// <param name="dialogService">Injected dialog service</param>
+        /// <param name="mazeService">Injected maze service</param>
+        /// <param name="mazesViewModel">Injected mazes view model</param>
+        public MazePageViewModel(IDeviceTypeService deviceTypeService, IDialogService dialogService, IMazeService mazeService, MazesViewModel mazesViewModel)
         {
             this._deviceTypeService = deviceTypeService;
             this._mazeService = mazeService;
             this._mazesViewModel = mazesViewModel;
             this._dialogService = dialogService;
         }
-
+        /// <summary>
+        /// Insert rows command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task InsertRowsAsync()
         {
-            await RunCommand(InsertRowsRequested);
+            await RunRequest(InsertRowsRequested);
             UpdateCanSaveRefresh(true);
         }
-
+        /// <summary>
+        /// Delete rows command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task DeleteRowsAsync()
         {
-            await RunCommand(DeleteRowsRequested);
+            await RunRequest(DeleteRowsRequested);
             UpdateCanSaveRefresh(true);
         }
-
+        /// <summary>
+        /// Insert columns command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task InsertColumnsAsync()
         {
-            await RunCommand(InsertColumnsRequested);
+            await RunRequest(InsertColumnsRequested);
             UpdateCanSaveRefresh(true);
         }
-
+        /// <summary>
+        /// Delete columns command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task DeleteColumnsAsync()
         {
-            await RunCommand(DeleteColumnsRequested);
+            await RunRequest(DeleteColumnsRequested);
             UpdateCanSaveRefresh(true);
         }
-
+        /// <summary>
+        /// Enter extended selection mode command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task SelectRangeAsync()
         {
-            await RunCommand(SelectRangeRequested);
+            await RunRequest(SelectRangeRequested);
         }
-
+        /// <summary>
+        /// Done command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task DoneAsync()
         {
-            await RunCommand(DoneRequested);
+            await RunRequest(DoneRequested);
         }
-
+        /// <summary>
+        /// Set wall cell(s) within selection command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task SetWallAsync()
         {
-            await RunCommand(SetWallRequested);
+            await RunRequest(SetWallRequested);
             UpdateCanSaveRefresh(true);
         }
-
+        /// <summary>
+        /// Set start cell command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task SetStartAsync()
         {
-            await RunCommand(SetStartRequested);
+            await RunRequest(SetStartRequested);
             UpdateCanSaveRefresh(true);
         }
-
+        /// <summary>
+        /// Set finish cell command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task SetFinishAsync()
         {
-            await RunCommand(SetFinishRequested);
+            await RunRequest(SetFinishRequested);
             UpdateCanSaveRefresh(true);
         }
-
+        /// <summary>
+        /// Clear selected cell content command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task ClearAsync()
         {
-            await RunCommand(ClearRequested);
+            await RunRequest(ClearRequested);
             UpdateCanSaveRefresh(true);
         }
-
+        /// <summary>
+        /// Solve maze command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task SolveAsync()
         {
-            await RunCommand(SolveRequested);
+            await RunRequest(SolveRequested);
         }
-
+        /// <summary>
+        /// Clear maze solution command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task ClearSolutionAsync()
         {
-            await RunCommand(ClearSolutionRequested);
+            await RunRequest(ClearSolutionRequested);
         }
-
+        /// <summary>
+        /// Save maze command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task SaveAsync()
         {
-            await RunCommand(SaveRequested);
+            await RunRequest(SaveRequested);
         }
-
+        /// <summary>
+        /// Refresh maze command
+        /// </summary>
+        /// <returns>Task</returns>
         [RelayCommandAttribute]
         private async Task RefreshAsync()
         {
-            await RunCommand(RefreshRequested);
+            await RunRequest(RefreshRequested);
         }
-
+        /// <summary>
+        /// Saves the given maze definition
+        /// </summary>
+        /// <param name="definition">Maze definition</param>
+        /// <returns>Task containing a boolean result</returns>
         public async Task<bool> SaveMaze(Api.Maze definition)
         {
             bool saved = false;
@@ -208,7 +375,12 @@ namespace Maze.Maui.App.ViewModels
             }
             return saved;
         }
-
+        /// <summary>
+        /// Prompts the user for a maze name and then creates a new maze item with that name and 
+        /// the supplied definition
+        /// </summary>
+        /// <param name="definition">Maze definition</param>
+        /// <returns>Task containing a boolean result</returns>
         private async Task<bool> CreateMazeItem(Api.Maze definition)
         {
             bool created = false;
@@ -229,7 +401,11 @@ namespace Maze.Maui.App.ViewModels
             }
             return created;
         }
-
+        /// <summary>
+        /// Updates the current maze with the given definition
+        /// </summary>
+        /// <param name="definition">Maze definition</param>
+        /// <returns>Task</returns>
         private async Task UpdateMazeItem(Api.Maze definition)
         {
             MazeItem item = new MazeItem
@@ -241,7 +417,11 @@ namespace Maze.Maui.App.ViewModels
             await _mazeService.UpdateMazeItem(item);
             MazeItem.Definition = definition;
         }
-
+        /// <summary>
+        /// Prompts the user for a confirmation and, if confirmed, refreshes the maze definition
+        /// the supplied definition
+        /// </summary>
+        /// <returns>Task containing a boolean result</returns>
         public async Task<bool> RefreshMaze()
         {
             bool refreshed = false;
@@ -275,7 +455,10 @@ namespace Maze.Maui.App.ViewModels
             }
             return refreshed;
         }
-
+        /// <summary>
+        /// Updates the `CanSave`/`CanRefresh` property states for the given dirty state
+        /// </summary>
+        /// <returns>Nothing</returns>
         private void UpdateCanSaveRefresh(bool dirty)
         {
             IsDirty = dirty;
@@ -283,8 +466,11 @@ namespace Maze.Maui.App.ViewModels
                 CanRefresh = IsDirty && !IsBusy;
             CanSave = IsDirty && !IsBusy;
         }
-
-        private async Task RunCommand(EventHandler? eventHandler)
+        /// <summary>
+        /// Runs the given event handler request
+        /// </summary>
+        /// <returns>Task</returns>
+        private async Task RunRequest(EventHandler? eventHandler)
         {
             try
             {
