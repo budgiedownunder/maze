@@ -14,7 +14,7 @@ use std::sync::RwLock;
 pub async fn run_server() -> std::io::Result<()> {
     // TO DO - make these  environment/config settings with defaults
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    let address = "127.0.0.1:8080";
+    let address = "0.0.0.0:8080";
     let max_workers = std::thread::available_parallelism()?; // This is actix_web's default too
 
     let store: SharedStore = Arc::new(RwLock::new(get_store(storage::StoreType::File)?));
