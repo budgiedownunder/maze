@@ -72,20 +72,44 @@ jobs:
       with:
         dotnet-version: 8.0.404 # Match the version in global.json
   
-    - name: Force Clean Workload Manifests
+    # - name: Force Clean Workload Manifests
+    #   if: runner.os == 'Windows'
+    #   working-directory: ./src/csharp 
+    #   continue-on-error: true
+    #   run: |
+    #     Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
+    #     dotnet workload repair
+
+    # - name: Install Required .NET Workloads (Windows)
+    #   if: runner.os == 'Windows'
+    #   working-directory: ./src/csharp 
+    #   run: |
+    #     dotnet workload install android
+    #     dotnet workload install maui-windows        
+
+
+
+    - name: Clean Workload Manifests
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
       continue-on-error: true
       run: |
+        Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.200" -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
+        dotnet workload uninstall --all
         dotnet workload repair
 
-    - name: Install Required .NET Workloads (Windows)
+    - name: Reinstall .NET 8 Workloads
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
       run: |
-        dotnet workload install android
-        dotnet workload install maui-windows        
+        dotnet workload install android --from-rollback-file
+        dotnet workload install maui-windows --from-rollback-file
+
+    - name: Verify Installed Workloads
+      run: dotnet workload list
+
+
 
     - name: Build Rust Components
       working-directory: ./src/rust
