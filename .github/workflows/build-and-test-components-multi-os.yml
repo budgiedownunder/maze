@@ -77,7 +77,7 @@ jobs:
       working-directory: ./src/csharp 
       continue-on-error: true
       run: |
-        rd /s /q "C:\Program Files\dotnet\sdk-manifests\6.0.300" || true
+        Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
         dotnet workload repair
 
     - name: Install Required .NET Workloads (Windows)
