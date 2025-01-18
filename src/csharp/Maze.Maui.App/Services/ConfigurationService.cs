@@ -18,16 +18,21 @@ namespace Maze.Maui.App.Services
         private static string GetDefaultDevelopmentApiRootUri()
         {
 #if WINDOWS
-            string rootUri = "http://localhost:8080/api/v1/";
+            string rootUri = "https://localhost:8443/api/v1/";
 #elif ANDROID
-            string rootUri = "http://10.0.2.2:8080/api/v1/";
+            string rootUri = "https://10.0.2.2:8443/api/v1/";
 #elif IOS
-            string rootUri = "http://localhost:8080/api/v1/";
+            string rootUri = "https://localhost:8443/api/v1/";
 #else
-            string rootUri = "http://localhost:8080/api/v1/";
+            string rootUri = "https://localhost:8443/api/v1/";
 #endif
             return rootUri;
         }
+        /// <summary>
+        /// Represents whether strict server TLS certificate validation is disabled
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool DisableStrictTLSCertificateValidation { get; set; } = true;
     }
     /// <summary>
     /// Represents a service for managing configuratuon settings
@@ -42,6 +47,11 @@ namespace Maze.Maui.App.Services
         /// </summary>
         /// <returns>Root URI</returns>
         public string ApiRootUri { get => _settings.ApiRootUri; }
+        /// <summary>
+        /// Represents whether strict server TLS certificate validation is disabled
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool DisableStrictTLSCertificateValidation { get => _settings.DisableStrictTLSCertificateValidation; }
         /// <summary>
         /// Constructor
         /// </summary>

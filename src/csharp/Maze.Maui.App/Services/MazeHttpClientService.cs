@@ -93,6 +93,9 @@ namespace Maze.Maui.App.Services
                 CookieContainer = cookieContainer
             };
 
+            if (_configurationService.DisableStrictTLSCertificateValidation)
+                handler.ServerCertificateCustomValidationCallback = (message, cert, chain, sslPolicyErrors) => true;
+
             HttpClient httpClient = new HttpClient(handler)
             {
                 BaseAddress = new Uri(apiRootUri),
