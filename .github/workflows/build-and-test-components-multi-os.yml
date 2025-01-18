@@ -72,13 +72,12 @@ jobs:
       with:
         dotnet-version: 8.0.404 # Match the version in global.json
   
-    - name: Remove Corrupt .NET Workloads (if any) (Windows)
+    - name: Force Clean Workload Manifests
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
       continue-on-error: true
       run: |
-        dotnet workload uninstall android
-        dotnet workload uninstall maui
+        rd /s /q "C:\Program Files\dotnet\sdk-manifests\6.0.300" || true
         dotnet workload repair
 
     - name: Install Required .NET Workloads (Windows)
