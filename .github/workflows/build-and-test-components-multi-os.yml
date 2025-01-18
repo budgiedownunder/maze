@@ -89,26 +89,25 @@ jobs:
 
 
 
-    - name: Clean Workload Manifests
-      if: runner.os == 'Windows'
-      working-directory: ./src/csharp 
+    - name: Clean Up Existing Workloads
       continue-on-error: true
       run: |
+        dotnet workload uninstall --all
         Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.200" -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
-        dotnet workload uninstall --all
         dotnet workload repair
 
-    - name: Reinstall .NET 8 Workloads
-      if: runner.os == 'Windows'
-      working-directory: ./src/csharp 
+    - name: Restore Workload Manifests
       run: |
-        dotnet workload install android 
+        dotnet workload update
+
+    - name: Install Required Workloads
+      run: |
+        dotnet workload install android
         dotnet workload install maui-windows
 
     - name: Verify Installed Workloads
       run: dotnet workload list
-
 
 
     - name: Build Rust Components
