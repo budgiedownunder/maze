@@ -24,8 +24,8 @@ jobs:
     strategy:
       matrix:
         os: 
-          # - ubuntu-latest
-          # - macos-latest
+          - ubuntu-latest
+          - macos-latest
           - windows-latest
 
     env:
@@ -48,46 +48,30 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: echo "Running on Windows OS"
 
-    # - name: Install wasm-pack on Linux/macOS
-    #   if: runner.os != 'Windows'
-    #   run: |
-    #     curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+    - name: Install wasm-pack on Linux/macOS
+      if: runner.os != 'Windows'
+      run: |
+        curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-    # - name: Install wasm-pack on Windows
-    #   if: runner.os == 'Windows'
-    #   uses: jetli/wasm-pack-action@v0.4.0
-    #   with:
-    #     version: 'latest'
+    - name: Install wasm-pack on Windows
+      if: runner.os == 'Windows'
+      uses: jetli/wasm-pack-action@v0.4.0
+      with:
+        version: 'latest'
     
-    # - name: Install DocFX
-    #   working-directory: ./
-    #   run: dotnet tool install -g docfx
+    - name: Install DocFX
+      working-directory: ./
+      run: dotnet tool install -g docfx
   
-    # - name: Install Redocly
-    #   working-directory: ./
-    #   run: npm install -g @redocly/cli
+    - name: Install Redocly
+      working-directory: ./
+      run: npm install -g @redocly/cli
 
     - name: Setup .NET SDK
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.404 # Match the version in global.json
   
-    # - name: Force Clean Workload Manifests
-    #   if: runner.os == 'Windows'
-    #   working-directory: ./src/csharp 
-    #   continue-on-error: true
-    #   run: |
-    #     Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
-    #     dotnet workload repair
-
-    # - name: Install Required .NET Workloads (Windows)
-    #   if: runner.os == 'Windows'
-    #   working-directory: ./src/csharp 
-    #   run: |
-    #     dotnet workload install android
-    #     dotnet workload install maui-windows        
-
-
     - name: Clean Up Existing Workloads (Windows)
       if: runner.os == 'Windows'
       continue-on-error: true
