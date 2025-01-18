@@ -80,7 +80,23 @@ jobs:
         dotnet workload restore
         dotnet workload install android
         dotnet workload install maui-windows            
- 
+
+    - name: Remove Corrupt Workloads (if any) (Windows)
+      if: runner.os == 'Windows'
+      working-directory: ./src/csharp 
+      continue-on-error: true
+      run: |
+        dotnet workload uninstall android
+        dotnet workload uninstall maui
+        dotnet workload repair
+
+    - name: Install Required Workloads (Windows)
+      if: runner.os == 'Windows'
+      working-directory: ./src/csharp 
+      run: |
+        dotnet workload install android
+        dotnet workload install maui-windows        
+
     - name: Build Rust Components
       working-directory: ./src/rust
       run: |
