@@ -103,8 +103,8 @@ jobs:
       if: runner.os == 'Windows'
       working-directory: ./src/csharp 
       run: |
-        dotnet workload install android --from-rollback-file
-        dotnet workload install maui-windows --from-rollback-file
+        dotnet workload install android 
+        dotnet workload install maui-windows
 
     - name: Verify Installed Workloads
       run: dotnet workload list
