@@ -88,27 +88,30 @@ jobs:
     #     dotnet workload install maui-windows        
 
 
-
-    - name: Clean Up Existing Workloads
+    - name: Clean Up Existing Workloads (Windows)
+      if: runner.os == 'Windows'
       continue-on-error: true
       run: |
-        dotnet workload uninstall --all
+        dotnet workload uninstall android
+        dotnet workload uninstall maui-windows
         Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.200" -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
         dotnet workload repair
 
-    - name: Restore Workload Manifests
+    - name: Restore Workload Manifests (Windows)
+      if: runner.os == 'Windows'
       run: |
         dotnet workload update
 
-    - name: Install Required Workloads
+    - name: Install Required Workloads (Windows)
+      if: runner.os == 'Windows'
       run: |
         dotnet workload install android
         dotnet workload install maui-windows
 
-    - name: Verify Installed Workloads
+    - name: Verify Installed Workloads (Windows)
+      if: runner.os == 'Windows'
       run: dotnet workload list
-
 
     - name: Build Rust Components
       working-directory: ./src/rust
