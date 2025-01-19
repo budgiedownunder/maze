@@ -1,5 +1,6 @@
 pub mod api;
 pub mod config;
+pub mod middleware;
 
 use storage::SharedStore;
 use storage::get_store;
@@ -59,6 +60,8 @@ fn construct_bind_address(port: u16) -> String {
 pub async fn run_server() -> std::io::Result<()> {
     let config = AppConfig::load().expect("Failed to load configuration");
 
+    println!("auth_token = {}", config.security.auth_token);
+
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     let bind_address = construct_bind_address(config.port);
 
@@ -69,7 +72,8 @@ pub async fn run_server() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(store.clone())) // Share the store
+            .app_data(web::Data::new(store.clone()))  // Share the store
+            .app_data(web::Data::new(config.clone())) // Share the config
             .wrap(Logger::default())
             .service(api::register_api())
             .service(api::register_redoc())

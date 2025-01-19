@@ -1,18 +1,22 @@
 use config::{Config, ConfigBuilder, File,  builder::DefaultState};
 use serde::Deserialize;
 
-// / Security Configuration settings
-#[derive(Debug, Deserialize, Default)]
+// Security Configuration settings
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct SecurityConfig {
     #[serde(default = "default_security_cert_file")]
     pub cert_file: String,
 
     #[serde(default = "default_security_key_file")]
     pub key_file: String,
+
+    #[serde(default = "default_security_auth_token")]
+    pub auth_token: String,
+
 }
 
-// / Application Configuration settings
-#[derive(Debug, Deserialize, Default)]
+///  Application Configuration settings
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct AppConfig {
     #[serde(default = "default_port")]
     pub port: u16,
@@ -25,6 +29,7 @@ pub struct AppConfig {
 fn default_port() -> u16 { 8443 }
 fn default_security_cert_file() -> String { "cert.pem".to_string() }
 fn default_security_key_file() -> String { "key.pem".to_string() }
+fn default_security_auth_token() -> String { "".to_string() }
 
 /// Application Configuration
 impl AppConfig {
@@ -33,6 +38,7 @@ impl AppConfig {
             .set_default("port", 8443)?
             .set_default("security.cert_file", default_security_cert_file())?
             .set_default("security.key_file", default_security_key_file())?
+            .set_default("security.auth_token", default_security_auth_token())?
             .add_source(File::with_name("config.toml").required(false));
 
         builder = set_env_overrides(builder)?;
@@ -53,6 +59,10 @@ fn set_env_overrides(mut builder: ConfigBuilder<DefaultState>) -> Result<ConfigB
 
     if let Ok(key_file) = std::env::var(get_app_env_name("SECURITY_KEY_FILE")) {
         builder = builder.set_override("security.key_file", key_file)?;
+    }
+
+    if let Ok(auth_token) = std::env::var(get_app_env_name("SECURITY_AUTH_TOKEN")) {
+        builder = builder.set_override("security.auth_token", auth_token)?;
     }
 
     Ok(builder)

@@ -3,3 +3,4 @@ port = 8443
 [security]
 cert_file = "cert.pem"
 key_file = "key.pem"
+auth_token = "0595C1D2-6341-44BF-BB34-C2E350A8AD72"

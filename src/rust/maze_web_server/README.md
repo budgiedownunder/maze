@@ -73,12 +73,12 @@ cargo doc --open
 
 The following configuration settings exist:
 
-| Type     | Name         | Type | Default Value    | Environment Variable Override
-|:---------|:-------------|:------|:--------------|:------------
-| Global   | `port`       | Integer | `8443` | `MAZE_WEB_SERVER_PORT`
-| Security | `cert_file`  | Text | `cert.pem` |`MAZE_WEB_SERVER_SECURITY_CERT_FILE`
-|          | `key_file`   | Text | `key.pem` |  `MAZE_WEB_SERVER_SECURITY_KEY_FILE`
-
+| Type     | Name         | Type    | Default Value    | Environment Variable Override
+|:---------|:-------------|:--------|:-----------------|:------------
+| Global   | `port`       | Integer | `8443`           | `MAZE_WEB_SERVER_PORT`
+| Security | `cert_file`  | Text    | `cert.pem`       | `MAZE_WEB_SERVER_SECURITY_CERT_FILE`
+|          | `key_file`   | Text    | `key.pem`        | `MAZE_WEB_SERVER_SECURITY_KEY_FILE`
+|          | `auth_token` | Text    |  -               | `MAZE_WEB_SERVER_SECURITY_AUTH_TOKEN`
 
 These can also be set in a local configuration file called `config.toml` as follows
 
@@ -88,6 +88,7 @@ port = 8443
 [security]
 cert_file = "cert.pem"
 key_file = "key.pem"
+auth_token = "0595C1D2-6341-44BF-BB34-C2E350A8AD72"
 ```
 
 Note:

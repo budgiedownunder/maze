@@ -59,8 +59,7 @@ namespace Maze.Maui.App.Services
     public class MazeHttpClientService : IMazeService
     {
         // Private definitions
-        private const string AUTH_COOKIE_NAME = "AuthToken";
-        private const string AUTH_COOKIE_VALUE = "0595C1D2-6341-44BF-BB34-C2E350A8AD72";
+        private const string COOKIE_NAME_AUTH_TOKEN = "AuthToken";
         private const double REQUEST_TIMEOUT_SECONDS = 30.0;
 
         // Private properties
@@ -83,7 +82,8 @@ namespace Maze.Maui.App.Services
         private HttpClient CreateHttpClient()
         {
             string apiRootUri = _configurationService.ApiRootUri;
-            string cookieValue = $"{AUTH_COOKIE_NAME}={AUTH_COOKIE_VALUE}; Path=/; HttpOnly; Secure; SameSite=Lax";
+            string authAuthTokenValue = _configurationService.AuthToken;
+            string cookieValue = $"{COOKIE_NAME_AUTH_TOKEN}={authAuthTokenValue}; Path=/; HttpOnly; Secure; SameSite=Lax";
             CookieContainer cookieContainer = new CookieContainer();
 
             cookieContainer.SetCookies(new Uri(apiRootUri), cookieValue);
@@ -113,15 +113,10 @@ namespace Maze.Maui.App.Services
         {
             var uri = $"mazes?includeDefinitions={(includeDefinitions ? "true" : "false")}";
             var response = await _httpClient.GetAsync(uri);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var options = new JsonSerializerOptions();
-                options.Converters.Add(new DefinitionConverter());
-
-                _mazeItems = await response.Content.ReadFromJsonAsync<List<Models.MazeItem>>(options) ?? new();
-            }
-            
+            response.EnsureSuccessStatusCode();
+            var options = new JsonSerializerOptions();
+            options.Converters.Add(new DefinitionConverter());
+            _mazeItems = await response.Content.ReadFromJsonAsync<List<Models.MazeItem>>(options) ?? new();
             return _mazeItems;
         }
         /// <summary>

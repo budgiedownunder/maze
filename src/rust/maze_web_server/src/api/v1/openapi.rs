@@ -24,7 +24,7 @@ use utoipa::OpenApi;
     ),
     components(schemas(MazeItem, Maze)),
     servers(
-        (url = "http://localhost:8080", description = "Local development server")
+        (url = "https://localhost:8443", description = "Local development server")
     ),
     tags(
         (name = "Maze Web API v1", description = "Version 1 of the Maze Web API")
