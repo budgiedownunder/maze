@@ -17,7 +17,7 @@ namespace Maze.Maui.App
     {
         // Define whether or not to use the mock maze service
 #if IOS
-        static bool useMockMazeService = true;
+        static bool useMockMazeService = false;
 #else
         static bool useMockMazeService = false;
 #endif
@@ -41,7 +41,12 @@ namespace Maze.Maui.App
 
             InitializeMazeWasmInterop();
 
-            builder.Services.AddSingleton<IMazeService>(provider => GetMazeService(useMockMazeService));
+            builder.Services.AddSingleton<ConfigurationService>();
+            if(useMockMazeService)
+                builder.Services.AddSingleton<IMazeService, MockMazeService>();
+            else
+                builder.Services.AddSingleton<IMazeService, MazeHttpClientService>();
+
             builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());
             builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService());
 
@@ -51,32 +56,17 @@ namespace Maze.Maui.App
             builder.Services.AddSingleton<MazesPage>();
             builder.Services.AddTransient<MazePage>();
 
-
 #if DEBUG
             builder.Logging.AddDebug();
 #endif
             return builder.Build();
         }
-
-        private static IMazeService GetMazeService(bool useMock)
-        {
-            // TO DO - drive the choice of client service and endpoint(s) from
-            // configuration file settings
-#if WINDOWS
-            string rootUri = "http://localhost:8080/api/v1";
-#elif ANDROID
-        string rootUri = "http://10.0.2.2:8080/api/v1";
-#elif IOS
-        string rootUri = "http://localhost:8080/api/v1";
-#else
-        string rootUri = "http://localhost:8080/api/v1";
-#endif
-            return useMock ? new MockMazeService() : new MazeHttpClientService(rootUri);
-        }
-
-        // TO DO - move to a service
+        /// <summary>
+        /// Initializes the Maze WebAssembly interop 
+        /// </summary>
         private static async void InitializeMazeWasmInterop()
         {
+            // TO DO - move to a service
             try
             {
                 using var stream = await FileSystem.OpenAppPackageFileAsync("maze_wasm.wasm");

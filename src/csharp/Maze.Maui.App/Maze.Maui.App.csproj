@@ -98,12 +98,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Update="appsettings.json">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </None>
-	</ItemGroup>
-
-	<ItemGroup>
 	  <ProjectReference Include="..\Maze.Api\Maze.Api.csproj" />
 	  <ProjectReference Include="..\Maze.Maui.Controls\Maze.Maui.Controls.csproj" />
 	  <ProjectReference Include="..\Maze.Maui.Services\Maze.Maui.Services.csproj" />

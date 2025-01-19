@@ -27,7 +27,7 @@ Maze API OpenAPI specification sucessfully generated as file:
 ```
 
 ### Checking for Errors/Warnings in `openapi.json`
-To  check for errors or warnings in the generated `openapi.json` file, you need to ensure that the [Redocly](https://redocly.com/) CLI is installed. If it isn't, you can install it by running the following command:  
+To check for errors or warnings in the generated `openapi.json` file, you need to ensure that the [Redocly](https://redocly.com/) CLI is installed. If it isn't, you can install it by running the following command:  
 
 ```
 npm install -g @redocly/cli

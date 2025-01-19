@@ -1,4 +1,5 @@
 ﻿using Maze.Maui.App.Models;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -57,19 +58,51 @@ namespace Maze.Maui.App.Services
     /// </summary>
     public class MazeHttpClientService : IMazeService
     {
+        // Private definitions
+        private const string COOKIE_NAME_AUTH_TOKEN = "AuthToken";
+        private const double REQUEST_TIMEOUT_SECONDS = 30.0;
+
         // Private properties
-        string _rootUri;
+        ConfigurationService _configurationService;
         HttpClient _httpClient;
         List<Models.MazeItem> _mazeItems = new();
         /// <summary>
         /// Constructor
         /// </summary>
-        /// <param name="rootUri">Root URI to web service</param>
-        public MazeHttpClientService(string rootUri)
+        /// <param name="configurationService">Injected configuration service</param>
+        public MazeHttpClientService(ConfigurationService configurationService)
         {
-            _rootUri = rootUri;
-            _httpClient = new HttpClient();
-            _httpClient.Timeout = TimeSpan.FromSeconds(30);
+            _configurationService = configurationService;
+            _httpClient = CreateHttpClient();
+        }
+        /// <summary>
+        /// Creates and initializes an HTTP client
+        /// </summary>
+        /// <returns>HTTP client</returns>
+        private HttpClient CreateHttpClient()
+        {
+            string apiRootUri = _configurationService.ApiRootUri;
+            string authAuthTokenValue = _configurationService.AuthToken;
+            string cookieValue = $"{COOKIE_NAME_AUTH_TOKEN}={authAuthTokenValue}; Path=/; HttpOnly; Secure; SameSite=Lax";
+            CookieContainer cookieContainer = new CookieContainer();
+
+            cookieContainer.SetCookies(new Uri(apiRootUri), cookieValue);
+
+            HttpClientHandler handler = new HttpClientHandler
+            {
+                CookieContainer = cookieContainer
+            };
+
+            if (_configurationService.DisableStrictTLSCertificateValidation)
+                handler.ServerCertificateCustomValidationCallback = (message, cert, chain, sslPolicyErrors) => true;
+
+            HttpClient httpClient = new HttpClient(handler)
+            {
+                BaseAddress = new Uri(apiRootUri),
+                Timeout = TimeSpan.FromSeconds(REQUEST_TIMEOUT_SECONDS)
+            };
+
+            return httpClient;
         }
         /// <summary>
         /// Loads the current list of maze items
@@ -78,17 +111,12 @@ namespace Maze.Maui.App.Services
         /// <returns>A task that contains the list of maze items. Will throw an exception if the items could not be loaded.</returns>
         public async Task<List<Models.MazeItem>> GetMazeItems(bool includeDefinitions)
         {
-            var uri = $"{_rootUri}/mazes?includeDefinitions={(includeDefinitions ? "true" : "false")}";
+            var uri = $"mazes?includeDefinitions={(includeDefinitions ? "true" : "false")}";
             var response = await _httpClient.GetAsync(uri);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var options = new JsonSerializerOptions();
-                options.Converters.Add(new DefinitionConverter());
-
-                _mazeItems = await response.Content.ReadFromJsonAsync<List<Models.MazeItem>>(options) ?? new();
-            }
-
+            response.EnsureSuccessStatusCode();
+            var options = new JsonSerializerOptions();
+            options.Converters.Add(new DefinitionConverter());
+            _mazeItems = await response.Content.ReadFromJsonAsync<List<Models.MazeItem>>(options) ?? new();
             return _mazeItems;
         }
         /// <summary>
@@ -103,7 +131,7 @@ namespace Maze.Maui.App.Services
                 throw new Exception("Maze item is null");
             }
 
-            string url = $"{_rootUri}/mazes/";
+            string url = $"mazes/";
             string json = GetMazeItemJson(item);
             HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await _httpClient.PostAsync(url, content);
@@ -179,7 +207,7 @@ namespace Maze.Maui.App.Services
         private string GetIdUriPath(string id)
         {
             string idEncoded = Uri.EscapeDataString(id);
-            return $"{_rootUri}/mazes/{idEncoded}";
+            return $"mazes/{idEncoded}";
         }
         /// <summary>
         /// Converts a maze item to JSON`

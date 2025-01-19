@@ -30,6 +30,36 @@ To test the `maze_web_server` application, run the following from within the `ma
 cargo test
 ```
 
+### Running
+
+Run with:
+```
+cargo run
+```
+
+This will utilise the following self-signed certificate files:
+
+|  Name         | Description         | Format
+|:--------------|:--------------------|:------
+| `cert.pem`    | Certficate file     | `PKCS#8`
+| `key.pem`     | Private key file    | `PKCS#8`
+
+These curremtly have a 365 day expiry of `18-JAN-2025`. Hence, they will need to be renewed after this time has elapsed by using tools such as `openssl` or, for production, 
+a trusted Certificate Authority (e.g. Let's Encrypt).
+
+The following command will regenerate these files using `openssl`:
+
+```
+openssl req -x509 -nodes -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365
+```
+
+In addition, the following files are included for development/testing purposes:
+
+|  Name             | Description             | Format
+|:------------------|:------------------------|:------
+| `empty_cert.pem`  | Empty certficate file   | `Text`
+| `empty_key.pem`   | Empty private key file  | `Text`
+
 ### Benchmarking
 No benchmarking tests are currently implemented for the crate
 
@@ -38,3 +68,29 @@ To generate and view `Rust` documentation for the crate in your default browser,
 ```
 cargo doc --open
 ```
+
+### Configuration
+
+The following configuration settings exist:
+
+| Type     | Name         | Type    | Default Value    | Environment Variable Override
+|:---------|:-------------|:--------|:-----------------|:------------
+| Global   | `port`       | Integer | `8443`           | `MAZE_WEB_SERVER_PORT`
+| Security | `cert_file`  | Text    | `cert.pem`       | `MAZE_WEB_SERVER_SECURITY_CERT_FILE`
+|          | `key_file`   | Text    | `key.pem`        | `MAZE_WEB_SERVER_SECURITY_KEY_FILE`
+|          | `auth_token` | Text    |  -               | `MAZE_WEB_SERVER_SECURITY_AUTH_TOKEN`
+
+These can also be set in a local configuration file called `config.toml` as follows
+
+``` 
+port = 8443
+
+[security]
+cert_file = "cert.pem"
+key_file = "key.pem"
+auth_token = "0595C1D2-6341-44BF-BB34-C2E350A8AD72"
+```
+
+Note:
+
+Any environment variable values will take precedence over their corresponding configuration file values.
