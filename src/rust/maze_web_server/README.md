@@ -30,6 +30,25 @@ To test the `maze_web_server` application, run the following from within the `ma
 cargo test
 ```
 
+### Running
+
+Run with:
+```
+cargo run
+```
+
+This will utilise the following self-signed certificate files:
+
+- `cert.pem`
+- `key.pem`
+
+which curremtly have a 365 day expiry of `18-JAN-2025`. They will need to be renewed after this time using tools such as `openssl` or, for production, 
+a trusted Certificate Authority (e.g. Let's Encrypt)
+
+```
+openssl req -x509 -nodes -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365
+```
+
 ### Benchmarking
 No benchmarking tests are currently implemented for the crate
 
