@@ -15,6 +15,7 @@ maze = { path = "../maze" }
 storage = { path = "../storage" }
 
 actix-web = { version = "4", features = ["rustls-0_20"] }
+config = "0.13"
 env_logger = "0.10"
 lazy_static = "1.4"
 rustls = { version = "0.20"}
