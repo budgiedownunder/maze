@@ -6,8 +6,9 @@ The `Maze.Maui.App` .NET application is a work-in-progress [MAUI](https://dotnet
 
 At the moment, it allows the user to:
 
-- Design a maze containing start, finish and wall cells
-- Attempt to solve the maze solution using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly (desktop versions-only)
+- Load, edit, delete, rename and duplicate mazes
+- Construct mazes containing start, finish and wall cells
+- Attempt to solve mazes using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly
 
 It  has been tested on `Windows` desktop and `Android`/`iOS` devices. The screenshots below show it running on `Windows` desktop:  
 
