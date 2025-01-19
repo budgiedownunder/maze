@@ -39,17 +39,27 @@ cargo run
 
 This will utilise the following self-signed certificate files:
 
-- `cert.pem`
-- `key.pem`
+|  Name         | Description         | Format
+|:--------------|:--------------------|:------
+| `cert.pem`    | Certficate file     | `PKCS#8`
+| `key.pem`     | Private key file    | `PKCS#8`
 
-which curremtly have a 365 day expiry of `18-JAN-2025`. They will need to be renewed after this time using tools such as `openssl` or, for production, 
+These curremtly have a 365 day expiry of `18-JAN-2025`. Hence, they will need to be renewed after this time has elapsed by using tools such as `openssl` or, for production, 
 a trusted Certificate Authority (e.g. Let's Encrypt).
 
-The following command will regenerate them using `openssl`:
+The following command will regenerate these files using `openssl`:
 
 ```
 openssl req -x509 -nodes -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365
 ```
+
+In addition, the following files are included for development/testing purposes:
+
+|  Name             | Description             | Format
+|:------------------|:------------------------|:------
+| `empty_cert.pem`  | Empty certficate file   | `Text`
+| `empty_key.pem`   | Empty private key file  | `Text`
+
 ### Benchmarking
 No benchmarking tests are currently implemented for the crate
 
