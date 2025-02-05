@@ -9,6 +9,8 @@ pub use store::MazeItem;
 pub use store::MazeStore;
 pub use store::Store;
 pub use store::SharedStore;
+pub use store::User;
+pub use store::UserStore;
 pub use store_error::StoreError;
 
 /// Represents the supported store types

@@ -347,16 +347,16 @@ mod tests {
     use crate::api::v1::openapi::ApiDocV1;
 
     use maze::{Definition, Maze, MazeError, Solution, Path, Point};
-    use storage::{SharedStore, Store, store::MazeStore, StoreError, MazeItem};
+    use storage::{SharedStore, Store, store::MazeStore, store::UserStore, StoreError, MazeItem, User};
 
     use actix_web::{http::StatusCode, test, web, App};
+    use std::collections::HashMap;
+    use std::sync::{Arc, RwLock};
     use utoipa::OpenApi;
     use utoipa_rapidoc::RapiDoc;
     use utoipa_redoc::{Redoc, Servable};
     use utoipa_swagger_ui::SwaggerUi;
-        
-    use std::collections::HashMap;
-    use std::sync::{Arc, RwLock};
+    use uuid::Uuid;
 
     #[derive(Clone, Debug)]
     struct MazeStoreItem {
@@ -454,6 +454,34 @@ mod tests {
             let mut items: Vec<MazeItem> = maze_items_from_map(&self.items, include_definitions);
             items.sort_by_key(|item| item.name.clone());
             Ok(items)
+        }
+    }
+
+    impl UserStore for MockMazeStore {
+        /// Adds a new user to the store and sets the allocated `id` within the user object
+        fn create_user(&mut self, _user: &mut User) -> Result<(), StoreError> {
+            Err(StoreError::Other("create_user() not implemented for MockMazeStore".to_string()))
+        }
+        /// Deletes a user from the store
+        fn delete_user(&mut self, _id: Uuid) -> Result<(), StoreError> {
+            Err(StoreError::Other("deletee_user() not implemented for MockMazeStore".to_string()))
+        }
+        /// Updates a user within the store
+        fn update_user(&mut self, _user: &mut User) -> Result<(), StoreError> {
+            Err(StoreError::Other("update_user() not implemented for MockMazeStore".to_string()))
+        }
+        /// Loads a user from the store
+        fn get_user(&self, _id: Uuid) -> Result<User, StoreError> {
+            Err(StoreError::Other("get_user() not implemented for MockMazeStore".to_string()))
+        }
+        /// Locates a user by their username within the store
+        fn find_user_by_name(&self, _name: &str) -> Result<User, StoreError> {
+            Err(StoreError::Other("find_user_by_name() not implemented for FileStMockMazeStoreore".to_string()))
+        }
+        /// Returns the list of users within the store, sorted
+        /// alphabetically by username in ascending order
+        fn get_users(&self) -> Result<Vec<User>, StoreError> {
+            Err(StoreError::Other("get_users() not implemented for MockMazeStore".to_string()))
         }
     }
 

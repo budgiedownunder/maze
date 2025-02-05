@@ -3,14 +3,17 @@ use std::fs;
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::{Path as StdPath, PathBuf};
+use uuid::Uuid;
 
 use maze::Maze;
 use utils::file::delete_file;
 
 use crate::MazeItem;
 use crate::store::MazeStore;
+use crate::store::UserStore;
 use crate::Store;
 use crate::StoreError;
+use crate::User;
 
 /// A file store that implements the [`Store`] trait
 ///
@@ -479,6 +482,35 @@ impl MazeStore for FileStore {
         Ok(items)
     }
 }
+
+impl UserStore for FileStore {
+    /// Adds a new user to the store and sets the allocated `id` within the user object
+    fn create_user(&mut self, _user: &mut User) -> Result<(), StoreError> {
+        Err(StoreError::Other("create_user() not implemented for FileStore".to_string()))
+    }
+    /// Deletes a user from the store
+    fn delete_user(&mut self, _id: Uuid) -> Result<(), StoreError> {
+        Err(StoreError::Other("deletee_user() not implemented for FileStore".to_string()))
+    }
+    /// Updates a user within the store
+    fn update_user(&mut self, _user: &mut User) -> Result<(), StoreError> {
+        Err(StoreError::Other("update_user() not implemented for FileStore".to_string()))
+    }
+    /// Loads a user from the store
+    fn get_user(&self, _id: Uuid) -> Result<User, StoreError> {
+        Err(StoreError::Other("get_user() not implemented for FileStore".to_string()))
+    }
+    /// Locates a user by their username within the store
+    fn find_user_by_name(&self, _name: &str) -> Result<User, StoreError> {
+        Err(StoreError::Other("find_user_by_name() not implemented for FileStore".to_string()))
+    }
+    /// Returns the list of users within the store, sorted
+    /// alphabetically by username in ascending order
+    fn get_users(&self) -> Result<Vec<User>, StoreError> {
+        Err(StoreError::Other("get_users() not implemented for FileStore".to_string()))
+    }
+    
+}    
 
 impl Store for FileStore {}
 
