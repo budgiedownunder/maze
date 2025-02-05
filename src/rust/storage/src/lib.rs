@@ -1,11 +1,12 @@
 // Re-export modules
 mod file_store;
-mod store;
+pub mod store;
 mod store_error;
 
 // Re-export traits and structs
 pub use file_store::FileStore;
 pub use store::MazeItem;
+pub use store::MazeStore;
 pub use store::Store;
 pub use store::SharedStore;
 pub use store_error::StoreError;

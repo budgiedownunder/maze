@@ -14,7 +14,7 @@ pub struct MazeItem {
 }
 
 /// Represents a store for holding mazes and related objects
-pub trait Store: Send + Sync {
+pub trait MazeStore {
     /// Adds a new maze to the store and sets the allocated `id` within the maze object
     fn create_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError>;
     /// Deletes a maze from the store
@@ -30,5 +30,7 @@ pub trait Store: Send + Sync {
     fn get_maze_items(&self, include_definitions: bool) -> Result<Vec<MazeItem>, StoreError>;
 }
 
+/// Represents a store
+pub trait Store: MazeStore + Send + Sync {}
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;

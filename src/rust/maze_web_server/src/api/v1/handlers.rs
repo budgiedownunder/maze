@@ -347,7 +347,7 @@ mod tests {
     use crate::api::v1::openapi::ApiDocV1;
 
     use maze::{Definition, Maze, MazeError, Solution, Path, Point};
-    use storage::{SharedStore, Store, StoreError, MazeItem};
+    use storage::{SharedStore, Store, store::MazeStore, StoreError, MazeItem};
 
     use actix_web::{http::StatusCode, test, web, App};
     use utoipa::OpenApi;
@@ -396,7 +396,7 @@ mod tests {
 
     }
 
-    impl Store for MockMazeStore {
+    impl MazeStore for MockMazeStore {
 
        fn create_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError> {
             let id = MockMazeStore::create_id_from_name(&maze.name);
@@ -456,6 +456,8 @@ mod tests {
             Ok(items)
         }
     }
+
+    impl Store for MockMazeStore {}
 
     #[derive(Clone)]
     enum StoreStartupContent {

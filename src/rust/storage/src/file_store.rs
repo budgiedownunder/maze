@@ -8,6 +8,7 @@ use maze::Maze;
 use utils::file::delete_file;
 
 use crate::MazeItem;
+use crate::store::MazeStore;
 use crate::Store;
 use crate::StoreError;
 
@@ -29,6 +30,7 @@ impl FileStore {
     /// Try to create a new maze within a file store
     ///
     /// ```
+    /// use crate::storage::store::MazeStore;
     /// use crate::storage::Store;
     /// use storage::FileStore;
     /// use maze::Maze;
@@ -117,7 +119,7 @@ impl Default for FileStore {
     }
 }
 
-impl Store for FileStore {
+impl MazeStore for FileStore {
     /// Creates a new maze within the file store instance
     ///
     /// # Examples
@@ -125,6 +127,7 @@ impl Store for FileStore {
     /// Try to create a new maze within a file store
     ///
     /// ```
+    /// use crate::storage::store::MazeStore;
     /// use crate::storage::Store;
     /// use storage::FileStore;
     /// use maze::Maze;
@@ -178,6 +181,7 @@ impl Store for FileStore {
     /// Try to delete an existing maze from within a file store
     ///
     /// ```
+    /// use crate::storage::store::MazeStore;
     /// use crate::storage::Store;
     /// use storage::FileStore;
     /// use maze::Maze;
@@ -225,6 +229,7 @@ impl Store for FileStore {
     /// Try to update an existing maze within a file store with new content
     ///
     /// ```
+    /// use crate::storage::store::MazeStore;
     /// use crate::storage::Store;
     /// use storage::FileStore;
     /// use maze::Maze;
@@ -282,6 +287,7 @@ impl Store for FileStore {
     /// Try to create and then reload a maze from within a file store and, if successful, print it
     ///
     /// ```
+    /// use crate::storage::store::MazeStore;
     /// use crate::storage::Store;
     /// use storage::FileStore;
     /// use maze::StdoutLinePrinter;
@@ -354,6 +360,7 @@ impl Store for FileStore {
     /// print its details
     ///
     /// ```
+    /// use crate::storage::store::MazeStore;
     /// use crate::storage::Store;
     /// use storage::FileStore;
     ///
@@ -406,6 +413,7 @@ impl Store for FileStore {
     /// print the number of items found
     ///
     /// ```
+    /// use crate::storage::store::MazeStore;
     /// use crate::storage::Store;
     /// use storage::FileStore;
     ///
@@ -471,6 +479,8 @@ impl Store for FileStore {
         Ok(items)
     }
 }
+
+impl Store for FileStore {}
 
 #[cfg(test)]
 mod tests {
