@@ -114,7 +114,7 @@ jobs:
         enablement: true
 
     - name: Upload GitHub Pages artifact
-      uses: actions/upload-pages-artifact@v4
+      uses: actions/upload-pages-artifact@v3
       with:
         path: ./src/docfx/_site
 
