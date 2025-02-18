@@ -65,6 +65,7 @@ jobs:
       continue-on-error: true
       run: |
         dotnet workload uninstall android
+        dotnet workload uninstall maui-tizen
         dotnet workload uninstall maui-windows
         Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.200" -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
@@ -77,6 +78,7 @@ jobs:
     - name: Install Required Workloads
       run: |
         dotnet workload install android
+        dotnet workload uninstall maui-tizen
         dotnet workload install maui-windows
 
     - name: Verify Installed Workloads
