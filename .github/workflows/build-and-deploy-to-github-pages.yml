@@ -75,7 +75,11 @@ jobs:
 
     - name: Install Required Workloads
       run: |
-        dotnet workload install android
+        dotnet workload install android        
+
+    - name: Install .NET Solution Workloads
+      working-directory: ./src/csharp 
+      run: |
         dotnet workload restore
 
     - name: Verify Installed Workloads
