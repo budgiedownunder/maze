@@ -1,4 +1,5 @@
 <Project>
   <PropertyGroup>
+    <MauiVersion>8.0.100</MauiVersion>
   </PropertyGroup>
 </Project>
