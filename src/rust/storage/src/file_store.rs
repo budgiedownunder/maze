@@ -38,11 +38,6 @@ impl FileStore {
     /// use storage::FileStore;
     /// use maze::Maze;
     ///
-
-    /// # // Ensure the maze file does not exist, prior to running the doc test
-    /// # use utils::file::delete_file;
-    /// # delete_file("./maze_1.json");
-
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
@@ -135,11 +130,6 @@ impl MazeStore for FileStore {
     /// use storage::FileStore;
     /// use maze::Maze;
     ///
-
-    /// # // Ensure the maze file does not exist, prior to running the doc test
-    /// # use utils::file::delete_file;
-    /// # delete_file("./maze_1.json");
-
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
@@ -189,11 +179,6 @@ impl MazeStore for FileStore {
     /// use storage::FileStore;
     /// use maze::Maze;
     ///
-
-    /// # // Ensure the maze file exists, prior to running the doc test
-    /// # use std::fs::File;
-    /// # if let Ok(_) = File::create("maze_1.json") {}
-
     /// // Create the file store
     /// let mut store = FileStore::new();
     ///
@@ -237,11 +222,6 @@ impl MazeStore for FileStore {
     /// use storage::FileStore;
     /// use maze::Maze;
     ///
-
-    /// # // Ensure the maze file exists, prior to running the doc test
-    /// # use std::fs::File;
-    /// # if let Ok(_) = File::create("maze_1.json") {}
-
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
@@ -297,11 +277,6 @@ impl MazeStore for FileStore {
     /// use maze::Maze;
     /// use maze::Path;
     ///
-
-    /// # // Ensure the maze file does not exist, prior to running the doc test
-    /// # use utils::file::delete_file;
-    /// # delete_file("./maze_1.json");
-
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
@@ -320,6 +295,7 @@ impl MazeStore for FileStore {
     ///     );
     ///     return;
     /// }
+    /// 
     /// // Now reload the maze from the store
     /// match store.get_maze(&maze_to_create.id) {
     ///     Ok(loaded_maze) => {
