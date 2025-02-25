@@ -4,12 +4,12 @@ use std::io;
 /// Represents a store error
 #[derive(Debug)]
 pub enum StoreError {
-    IdMissing(),
-    IdNotFound(String),
-    IdAlreadyExists(String),
-    NameMissing(),
-    NameNotFound(String),
-    NameAlreadyExists(String),
+    MazeIdMissing(),
+    MazeIdNotFound(String),
+    MazeIdAlreadyExists(String),
+    MazeNameMissing(),
+    MazeNameNotFound(String),
+    MazeNameAlreadyExists(String),
     Io(std::io::Error),
     MazeError(MazeError),
     SerdeJson(serde_json::Error),
@@ -19,13 +19,13 @@ pub enum StoreError {
 impl std::fmt::Display for StoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            StoreError::IdMissing() => write!(f, "No id provided"),
-            StoreError::IdNotFound(id) => write!(f, "Item with id '{}' not found", id),
-            StoreError::IdAlreadyExists(id) => write!(f, "Item with id '{}' already exists", id),
-            StoreError::NameMissing() => write!(f, "No name provided"),
-            StoreError::NameNotFound(name) => write!(f, "Item with name '{}' not found", name),
-            StoreError::NameAlreadyExists(name) => {
-                write!(f, "An item with name '{}' already exists", name)
+            StoreError::MazeIdMissing() => write!(f, "No id provided for the maze"),
+            StoreError::MazeIdNotFound(id) => write!(f, "A maze with id '{}' was not found", id),
+            StoreError::MazeIdAlreadyExists(id) => write!(f, "A maze with id '{}' already exists", id),
+            StoreError::MazeNameMissing() => write!(f, "No name provided for the maze"),
+            StoreError::MazeNameNotFound(name) => write!(f, "A maze with the name '{}' was not found", name),
+            StoreError::MazeNameAlreadyExists(name) => {
+                write!(f, "A maze with the name '{}' already exists", name)
             }
             StoreError::Io(e) => write!(f, "I/O error: {}", e),
             StoreError::MazeError(e) => write!(f, "Maze error: {}", e),

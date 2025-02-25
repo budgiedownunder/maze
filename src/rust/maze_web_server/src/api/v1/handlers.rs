@@ -130,7 +130,7 @@ pub async fn create_maze(
                 .json(maze)),
         Err(err) => {
             match err {
-                StoreError::IdAlreadyExists(id) => Err(get_maze_exists_error(&id)),
+                StoreError::MazeIdAlreadyExists(id) => Err(get_maze_exists_error(&id)),
                 _ => Err(get_maze_create_internal_error(&err))
             }    
         }
@@ -169,7 +169,7 @@ pub async fn get_maze(
         Ok(maze) => Ok(HttpResponse::Ok().json(maze)),
         Err(err) => {
             match err {
-               StoreError::IdNotFound(id) => Err(get_maze_not_found_error(&id)),
+               StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
             }    
         }
@@ -216,7 +216,7 @@ pub async fn update_maze(
         Ok(_) => Ok(HttpResponse::Ok().json(maze)),
         Err(err) => {
             match err {
-               StoreError::IdNotFound(id) => Err(get_maze_not_found_error(&id)),
+               StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
             }    
         }
@@ -255,7 +255,7 @@ pub async fn delete_maze(
         Ok(()) => Ok(HttpResponse::Ok().body(format!("maze with id '{}' deleted", id))),
         Err(err) => {
             match err {
-                    StoreError::IdNotFound(id) => Err(get_maze_not_found_error(&id)),
+                    StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
             }
         }
@@ -300,7 +300,7 @@ pub async fn get_maze_solution(
         }    
         Err(err) => {
             match err {
-               StoreError::IdNotFound(id) => Err(get_maze_not_found_error(&id)),
+               StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
             }    
         }
@@ -403,7 +403,7 @@ mod tests {
 
             if let Some(_) = self.items.get(&id) {
                 println!("{} already exists", id);
-                return Err(StoreError::IdAlreadyExists(id.to_string()));
+                return Err(StoreError::MazeIdAlreadyExists(id.to_string()));
             }
 
             self.items.insert(
@@ -421,7 +421,7 @@ mod tests {
             if let Some(_) = self.items.remove(id) {
                 Ok(())                
             } else {
-                Err(StoreError::IdNotFound(id.to_string()))
+                Err(StoreError::MazeIdNotFound(id.to_string()))
             }
         }
 
@@ -436,14 +436,14 @@ mod tests {
                 });
                 return Ok(());
             }
-            Err(StoreError::IdNotFound(maze.id.to_string()))
+            Err(StoreError::MazeIdNotFound(maze.id.to_string()))
         }
 
         fn get_maze(&self, id: &str) -> Result<Maze, StoreError> {
             if let Some(store_item) = self.items.get(id) {
                 return Ok(store_item.maze.clone());
             }
-            Err(StoreError::IdNotFound(id.to_string()))
+            Err(StoreError::MazeIdNotFound(id.to_string()))
         }
 
         fn find_maze_by_name(&self, _name: &str) -> Result<MazeItem, StoreError> {

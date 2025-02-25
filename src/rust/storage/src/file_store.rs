@@ -72,9 +72,13 @@ impl FileStore {
         format!("{}.json", name)
     }
 
-    fn maze_exists(&self, path: &str) -> bool {
+    fn file_exists(&self, path: &str) -> bool {
         let path = PathBuf::from(path);
         StdPath::new(&path).exists()
+    }
+
+    fn maze_exists(&self, path: &str) -> bool {
+        self.file_exists(path)
     }
 
     fn save_maze_to_file(
@@ -100,7 +104,7 @@ impl FileStore {
 
         if !overwrite {
             if StdPath::new(&os_path).exists() {
-                return Err(StoreError::IdAlreadyExists(path.to_string()));
+                return Err(StoreError::MazeIdAlreadyExists(path.to_string()));
             }
         }
         
@@ -158,11 +162,11 @@ impl MazeStore for FileStore {
     /// ```
     fn create_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError> {
         if maze.name.is_empty() {
-            return Err(StoreError::NameMissing());
+            return Err(StoreError::MazeNameMissing());
         }
         let file_id = self.make_maze_id(&maze.name);
         if self.maze_exists(&file_id) {
-            return Err(StoreError::IdAlreadyExists(file_id.to_string()));
+            return Err(StoreError::MazeIdAlreadyExists(file_id.to_string()));
         }
         self.save_maze_to_file(maze, &file_id, false)?;
         Ok(())
@@ -202,10 +206,10 @@ impl MazeStore for FileStore {
     /// ```
     fn delete_maze(&mut self, id: &str) -> Result<(), StoreError> {
         if id.is_empty() {
-            return Err(StoreError::IdMissing());
+            return Err(StoreError::MazeIdMissing());
         }
         if !self.maze_exists(id) {
-            return Err(StoreError::IdNotFound(id.to_string()));
+            return Err(StoreError::MazeIdNotFound(id.to_string()));
         }
         delete_file(id);
         Ok(())
@@ -251,10 +255,10 @@ impl MazeStore for FileStore {
     /// ```
     fn update_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError> {
         if maze.id.is_empty() {
-            return Err(StoreError::IdMissing());
+            return Err(StoreError::MazeIdMissing());
         }
         if !self.maze_exists(&maze.id) {
-            return Err(StoreError::IdNotFound(maze.id.to_string()));
+            return Err(StoreError::MazeIdNotFound(maze.id.to_string()));
         }
         self.save_maze_to_file(maze, &maze.id.clone(), true)?;
         Ok(())
@@ -315,7 +319,7 @@ impl MazeStore for FileStore {
     /// ```
     fn get_maze(&self, id: &str) -> Result<Maze, StoreError> {
         if !self.maze_exists(id) {
-            return Err(StoreError::IdNotFound(id.to_string()));
+            return Err(StoreError::MazeIdNotFound(id.to_string()));
         }
         let file = File::open(id)?;
         let reader = BufReader::new(file);
@@ -376,7 +380,7 @@ impl MazeStore for FileStore {
                 definition: None
             });
         }
-        Err(StoreError::NameNotFound(name.to_string()))
+        Err(StoreError::MazeNameNotFound(name.to_string()))
     }
     /// Returns the list of maze items within the file store instance, sorted
     /// alphabetically in ascending order, optionally including the
@@ -462,11 +466,21 @@ impl MazeStore for FileStore {
 impl UserStore for FileStore {
     /// Adds a new user to the store and sets the allocated `id` within the user object
     fn create_user(&mut self, _user: &mut User) -> Result<(), StoreError> {
+        //if user.name.is_empty() {
+        //     return Err(StoreError::NameMissing());
+        // }
+        // let file_id = self.make_maze_id(&maze.name);
+        // if self.file_exists(&file_id) {
+        //     return Err(StoreError::IdAlreadyExists(file_id.to_string()));
+        // }
+        // self.save_maze_to_file(maze, &file_id, false)?;
+        // Ok(())
+
         Err(StoreError::Other("create_user() not implemented for FileStore".to_string()))
     }
     /// Deletes a user from the store
     fn delete_user(&mut self, _id: Uuid) -> Result<(), StoreError> {
-        Err(StoreError::Other("deletee_user() not implemented for FileStore".to_string()))
+        Err(StoreError::Other("delete_user() not implemented for FileStore".to_string()))
     }
     /// Updates a user within the store
     fn update_user(&mut self, _user: &mut User) -> Result<(), StoreError> {
@@ -524,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Item with id './maze.json' already exists")]
+    #[should_panic(expected = "A maze with id './maze.json' already exists")]
     fn cannot_save_maze_to_existing_file_path_if_overwrite_disabled() {
         let store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", true, true);
@@ -586,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Item with id 'maze.json' already exists")]
+    #[should_panic(expected = "A maze with id 'maze.json' already exists")]
     fn cannot_create_maze_that_exists() {
         let mut store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", false, true);
@@ -625,7 +639,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Item with id 'maze.json' not found")]
+    #[should_panic(expected = "A maze with id 'maze.json' was not found")]
     fn cannot_update_non_existant_maze() {
         let mut store = FileStore::new();
         let (path, mut maze) = init_test_maze(&store, "maze", true, true);
@@ -730,7 +744,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Item with id 'missing.json' not found")]
+    #[should_panic(expected = "A maze with id 'missing.json' was not found")]
     fn cannot_get_maze_that_does_not_exist() {
         let store = FileStore::new();
         let path = "./missing.json";

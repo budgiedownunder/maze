@@ -195,7 +195,7 @@ fn add_delete_maze_steps(
         if expect_exists {
             expected_output.push("Maze deleted".to_string());
         } else {
-            expected_output.push(format!("Failed: Item with name '{}' not found", name));
+            expected_output.push(format!("Failed: A maze with the name '{}' was not found", name));
         }
     } else {
         expected_output.push("There are no mazes available to delete".to_string());
@@ -677,7 +677,7 @@ fn should_not_be_able_to_open_non_existant_maze() -> Result<(), Box<dyn Error>> 
     mock_app.add_input_key('O', true);
     expected_output.push("Enter name of maze to open: ".to_string());
     mock_app.add_input_line("does_not_exist", false);
-    expected_output.push("Failed: Item with name 'does_not_exist' not found".to_string());
+    expected_output.push("Failed: A maze with the name 'does_not_exist' was not found".to_string());
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
