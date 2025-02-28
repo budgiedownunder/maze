@@ -34,10 +34,10 @@ namespace Maze.Maui.App.Services
         /// <returns>Boolean</returns>
         public bool DisableStrictTLSCertificateValidation { get; set; } = true;
         /// <summary>
-        /// Represents an authorization token value 
+        /// Represents an API key value 
         /// </summary>
-        /// <returns>Token value</returns>
-        public string AuthToken { get; set; } = "";
+        /// <returns>API Key value</returns>
+        public string ApiKey { get; set; } = "";
     }
     /// <summary>
     /// Represents a service for managing configuratuon settings
@@ -58,10 +58,10 @@ namespace Maze.Maui.App.Services
         /// <returns>Boolean</returns>
         public bool DisableStrictTLSCertificateValidation { get => _settings.DisableStrictTLSCertificateValidation; }
         /// <summary>
-        /// Represents an authorization token value 
+        /// Represents an API key value 
         /// </summary>
-        /// <returns>Token value</returns>
-        public string AuthToken { get => _settings.AuthToken; }
+        /// <returns>API key value</returns>
+        public string ApiKey { get => _settings.ApiKey; }
         /// <summary>
         /// Constructor
         /// </summary>

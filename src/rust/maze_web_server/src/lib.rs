@@ -67,8 +67,8 @@ pub async fn run_server() -> std::io::Result<()> {
 
     let rustls_config = load_rustls_config(&config)?;
     let max_workers = std::thread::available_parallelism()?; // This is actix_web's default too
-
-    let store: SharedStore = Arc::new(RwLock::new(get_store(storage::StoreType::File)?));
+    let file_config = storage::FileStoreConfig::default();
+    let store: SharedStore = Arc::new(RwLock::new(get_store(storage::StoreConfig::File(file_config))?));
 
     HttpServer::new(move || {
         App::new()

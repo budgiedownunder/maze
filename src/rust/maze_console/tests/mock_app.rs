@@ -87,7 +87,8 @@ impl MockApp {
 
 impl Default for MockApp {
     fn default() -> Self {
-        match get_store(storage::StoreType::File) {
+        let file_config = storage::FileStoreConfig::default();
+        match get_store(storage::StoreConfig::File(file_config)) {
             Ok(store) => {
                 Self::new(store)
             }

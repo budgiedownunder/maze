@@ -78,7 +78,7 @@ struct GetMazeListQueryParams {
         (status = 400, description = "Invalid request"),
     ),
     security(
-        ()
+        ("api_key" = [])
     ),
     tags = ["v1"]
 )]
@@ -111,7 +111,7 @@ pub async fn get_maze_list(
         (status = 409, description = "Maze with the given id already exists")
     ),
     security(
-        ()
+        ("api_key" = [])
     ),
     tags = ["v1"]
 )]
@@ -130,7 +130,7 @@ pub async fn create_maze(
                 .json(maze)),
         Err(err) => {
             match err {
-                StoreError::MazeIdAlreadyExists(id) => Err(get_maze_exists_error(&id)),
+                StoreError::MazeIdExists(id) => Err(get_maze_exists_error(&id)),
                 _ => Err(get_maze_create_internal_error(&err))
             }    
         }
@@ -153,7 +153,7 @@ pub async fn create_maze(
         (status = 404, description = "Maze not found")
     ),
     security(
-        ()
+        ("api_key" = [])
     ),
     tags = ["v1"]
 )]
@@ -194,7 +194,7 @@ pub async fn get_maze(
         (status = 404, description = "Maze not found")
     ),
     security(
-        ()
+        ("api_key" = [])
     ),
     tags = ["v1"]
 )]
@@ -239,7 +239,7 @@ pub async fn update_maze(
         (status = 404, description = "Maze not found")
     ),
     security(
-        ()
+        ("api_key" = [])
     ),
     tags = ["v1"]
 )]
@@ -279,7 +279,7 @@ pub async fn delete_maze(
         (status = 422, description = "Maze could not be solved")
     ),
     security(
-        ()
+        ("api_key" = [])
     ),
     tags = ["v1"]
 )]
@@ -322,7 +322,7 @@ pub async fn get_maze_solution(
         (status = 422, description = "Maze could not be solved")
     ),
     security(
-        ()
+        ("api_key" = [])
     ),
     tags = ["v1"]
 )]
@@ -347,7 +347,7 @@ mod tests {
     use crate::api::v1::openapi::ApiDocV1;
 
     use maze::{Definition, Maze, MazeError, Solution, Path, Point};
-    use storage::{SharedStore, Store, store::MazeStore, store::UserStore, StoreError, MazeItem, User};
+    use storage::{SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, StoreError, MazeItem, User};
 
     use actix_web::{http::StatusCode, test, web, App};
     use std::collections::HashMap;
@@ -403,7 +403,7 @@ mod tests {
 
             if let Some(_) = self.items.get(&id) {
                 println!("{} already exists", id);
-                return Err(StoreError::MazeIdAlreadyExists(id.to_string()));
+                return Err(StoreError::MazeIdExists(id.to_string()));
             }
 
             self.items.insert(
@@ -484,6 +484,13 @@ mod tests {
             Err(StoreError::Other("get_users() not implemented for MockMazeStore".to_string()))
         }
     }
+
+    impl Manage for MockMazeStore {
+        fn empty(&mut self) -> Result<(), StoreError> {
+            self.items = HashMap::new();
+            Ok(())
+        }    
+    }    
 
     impl Store for MockMazeStore {}
 

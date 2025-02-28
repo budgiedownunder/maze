@@ -59,7 +59,8 @@ namespace Maze.Maui.App.Services
     public class MazeHttpClientService : IMazeService
     {
         // Private definitions
-        private const string COOKIE_NAME_AUTH_TOKEN = "AuthToken";
+        //private const string COOKIE_NAME_SESSION_ID = "session_id";
+        private const string HEADER_NAME_API_KEY = "X-API-KEY";
         private const double REQUEST_TIMEOUT_SECONDS = 30.0;
 
         // Private properties
@@ -82,11 +83,10 @@ namespace Maze.Maui.App.Services
         private HttpClient CreateHttpClient()
         {
             string apiRootUri = _configurationService.ApiRootUri;
-            string authAuthTokenValue = _configurationService.AuthToken;
-            string cookieValue = $"{COOKIE_NAME_AUTH_TOKEN}={authAuthTokenValue}; Path=/; HttpOnly; Secure; SameSite=Lax";
+            //string sessionCookieValue = $"{COOKIE_NAME_SESSION_ID}={authAuthTokenValue}; Path=/; HttpOnly; Secure; SameSite=Lax";
             CookieContainer cookieContainer = new CookieContainer();
 
-            cookieContainer.SetCookies(new Uri(apiRootUri), cookieValue);
+            //cookieContainer.SetCookies(new Uri(apiRootUri), sessionCookieValue);
 
             HttpClientHandler handler = new HttpClientHandler
             {
@@ -101,6 +101,9 @@ namespace Maze.Maui.App.Services
                 BaseAddress = new Uri(apiRootUri),
                 Timeout = TimeSpan.FromSeconds(REQUEST_TIMEOUT_SECONDS)
             };
+
+
+            httpClient.DefaultRequestHeaders.Add(HEADER_NAME_API_KEY, _configurationService.ApiKey);
 
             return httpClient;
         }

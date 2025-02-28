@@ -4,7 +4,7 @@ pub mod store;
 mod store_error;
 
 // Re-export traits and structs
-pub use file_store::FileStore;
+pub use file_store::{FileStore, FileStoreConfig};
 pub use store::MazeItem;
 pub use store::MazeStore;
 pub use store::Store;
@@ -13,9 +13,9 @@ pub use store::User;
 pub use store::UserStore;
 pub use store_error::StoreError;
 
-/// Represents the supported store types
-pub enum StoreType {
-    File,
+/// Represents the supported store configurations
+pub enum StoreConfig {
+    File(FileStoreConfig),
 }
 
 /// Creates and returns a store of the given type
@@ -29,15 +29,15 @@ pub enum StoreType {
 /// Try to create and then reload a maze from within a file store and, if successful, print it
 ///
 /// ```
-/// use storage::{get_store, StoreType};
+/// # // Make sure the store is in a suitable state prior to running the doc test   
+/// # use storage::test_setup::setup;
+/// # setup();
+///
+/// use storage::{get_store, StoreConfig, FileStoreConfig};
 /// use maze::StdoutLinePrinter;
 /// use maze::Maze;
 /// use maze::Path;
 ///
-
-/// # // Ensure the maze file does not exist, prior to running the doc test   
-/// # use utils::file::delete_file;
-/// # delete_file("./maze_1.json");
 
 /// let grid: Vec<Vec<char>> = vec![
 ///    vec!['S', ' ', 'W'],
@@ -47,7 +47,8 @@ pub enum StoreType {
 /// maze_to_create.name = "maze_1".to_string();
 ///
 /// // Access the file store
-/// match get_store(StoreType::File) {
+/// let file_config = FileStoreConfig::default();
+/// match get_store(StoreConfig::File(file_config)) {
 ///     Ok(mut store) => {
 ///         // Create the maze within the store
 ///         if let Err(error) = store.create_maze(&mut maze_to_create) {
@@ -81,8 +82,22 @@ pub enum StoreType {
 ///     }
 /// }
 /// ```
-pub fn get_store(store_type: StoreType) -> Result<Box<dyn Store>, StoreError> {
-    match store_type {
-        StoreType::File => Ok(Box::new(file_store::FileStore::new())),
+pub fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, StoreError> {
+    match config {
+        StoreConfig::File(file_config) => Ok(Box::new(file_store::FileStore::new(&file_config))),
+    }
+}
+
+/// Hidden module that provides setup functionality for doc tests.
+#[doc(hidden)]
+pub mod test_setup {
+    use crate::{FileStore, FileStoreConfig, store::Manage};
+    /// This function runs before every documentation test
+    pub fn setup() {
+        // Make sure any existing files and directories are cleared out
+        let mut store = FileStore::new(&FileStoreConfig::default());
+        if let Err(error) = store.empty() {
+            panic!("setup() failed to empty store: {}", error);
+        }
     }
 }

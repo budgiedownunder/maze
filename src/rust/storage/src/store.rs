@@ -37,9 +37,11 @@ pub trait MazeStore {
 /// Represents a user of the system 
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
 pub struct User {
-    #[schema(value_type = String)] // Treat a string during serlialization
+    #[schema(value_type = String)] // Treat as string during serlialization
     /// User ID
     pub id: Uuid,
+    /// Is administrator?
+    pub is_admin: bool,
     /// Username
     pub name: String,
     /// Full name 
@@ -48,6 +50,15 @@ pub struct User {
     pub email: String,
     /// Password (encrypted)
     pub password: String,
+    #[schema(value_type = String)] // Treat as string during serlialization
+    /// API key
+    pub api_key: Uuid,
+}
+
+impl User {
+    pub fn to_json(&self) -> Result<String, StoreError> {
+        Ok(serde_json::to_string(&self)?)
+    }
 }
 
 /// Represents a store for holding users
@@ -67,7 +78,13 @@ pub trait UserStore {
     fn get_users(&self) -> Result<Vec<User>, StoreError>;
 }
 
+// Store management
+pub trait Manage {
+    /// Resets the store to empty
+    fn empty(&mut self) -> Result<(), StoreError>;
+}
+
 /// Represents a store
-pub trait Store: UserStore + MazeStore + Send + Sync {}
+pub trait Store: UserStore + MazeStore + Manage + Send + Sync {}
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;

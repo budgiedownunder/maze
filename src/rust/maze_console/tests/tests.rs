@@ -15,8 +15,14 @@ lazy_static::lazy_static! {
 }
 
 fn new_mock_app() -> MockApp {
-    match get_store(storage::StoreType::File) {
-        Ok(store) => MockApp::new(store),
+    let file_config = storage::FileStoreConfig::default();
+    match get_store(storage::StoreConfig::File(file_config)) {
+        Ok(mut store) => {
+            if let Err(error) = store.empty() {
+                panic!("new_mock_app() failed to empty store content: {}", error);
+            }
+            MockApp::new(store)
+        }    
         Err(error) => {
             panic!(
                 "{}",

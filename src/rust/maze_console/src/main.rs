@@ -9,7 +9,8 @@ use storage::get_store;
 //}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let store = get_store(storage::StoreType::File)?;
+    let file_config = storage::FileStoreConfig::default();
+    let store = get_store(storage::StoreConfig::File(file_config))?;
     let mut app = ConsoleApp::new(store);
     app.run()?;
     Ok(())

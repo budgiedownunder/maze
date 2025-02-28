@@ -1,6 +1,22 @@
 use maze::Maze;
 use storage::MazeItem;
-use utoipa::OpenApi;
+use utoipa::{
+    openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
+    Modify, OpenApi,
+};
+
+struct ApiKeyAuth;
+
+impl Modify for ApiKeyAuth {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "api_key",
+                SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("X-API-Key"))),
+            );
+        }
+    }
+}
 
 #[derive(OpenApi)]
 #[openapi(
@@ -28,6 +44,7 @@ use utoipa::OpenApi;
     ),
     tags(
         (name = "Maze Web API v1", description = "Version 1 of the Maze Web API")
-    )
+    ),
+    modifiers(&ApiKeyAuth)
 )]
 pub struct ApiDocV1;

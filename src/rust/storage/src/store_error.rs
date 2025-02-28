@@ -4,14 +4,18 @@ use std::io;
 /// Represents a store error
 #[derive(Debug)]
 pub enum StoreError {
+    UserEmailMissing(),
+    UserIdExists(String),
+    UserNameMissing(),
+    UserPasswordMissing(),
+    MazeError(MazeError),
     MazeIdMissing(),
     MazeIdNotFound(String),
-    MazeIdAlreadyExists(String),
+    MazeIdExists(String),
     MazeNameMissing(),
     MazeNameNotFound(String),
     MazeNameAlreadyExists(String),
     Io(std::io::Error),
-    MazeError(MazeError),
     SerdeJson(serde_json::Error),
     Other(String),
 }
@@ -19,16 +23,20 @@ pub enum StoreError {
 impl std::fmt::Display for StoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            StoreError::UserEmailMissing() => write!(f, "No email provided for the user"),
+            StoreError::UserIdExists(id) => write!(f, "A user with id '{}' already exists", id),
+            StoreError::UserNameMissing() => write!(f, "No username provided for the user"),
+            StoreError::UserPasswordMissing() => write!(f, "No password provided for the user"),
+            StoreError::MazeError(e) => write!(f, "Maze error: {}", e),
             StoreError::MazeIdMissing() => write!(f, "No id provided for the maze"),
             StoreError::MazeIdNotFound(id) => write!(f, "A maze with id '{}' was not found", id),
-            StoreError::MazeIdAlreadyExists(id) => write!(f, "A maze with id '{}' already exists", id),
+            StoreError::MazeIdExists(id) => write!(f, "A maze with id '{}' already exists", id),
             StoreError::MazeNameMissing() => write!(f, "No name provided for the maze"),
             StoreError::MazeNameNotFound(name) => write!(f, "A maze with the name '{}' was not found", name),
             StoreError::MazeNameAlreadyExists(name) => {
                 write!(f, "A maze with the name '{}' already exists", name)
             }
             StoreError::Io(e) => write!(f, "I/O error: {}", e),
-            StoreError::MazeError(e) => write!(f, "Maze error: {}", e),
             StoreError::SerdeJson(ref error) => write!(f, "{}", error),
             StoreError::Other(msg) => write!(f, "Error: {}", msg),
         }
