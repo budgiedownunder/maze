@@ -725,9 +725,9 @@ mod tests {
 
     fn new_store() -> FileStore {
         let mut store = FileStore::new(&FileStoreConfig::default());
-       if let Err(error) = store.empty() {
-           panic!("new_store() failed to empty content: {}", error);
-       }
+        if let Err(error) = store.empty() {
+            panic!("new_store() failed to empty content: {}", error);
+        }
         store
     }
 
@@ -735,50 +735,30 @@ mod tests {
     #[should_panic(expected = "No username provided for the user")]
     fn cannot_create_user_without_name() {
         let mut store = new_store();
-        let (_path, mut user) = init_test_user(&store, false, "", "", "", "");
-
-        match store.create_user(&mut user) {
-            Ok(_) => panic!("Successfully created user {:?} but did not expect to", user),
-            Err(error) => panic!("{}", error),
-        }
+        let (_path, user) = do_create_user(&mut store, false, "", "", "", "");
+        panic!("Successfully created user {:?} but did not expect to", user);
     }
 
     #[test]
     #[should_panic(expected = "No email provided for the user")]
     fn cannot_create_user_without_email() {
         let mut store = new_store();
-        let (_path, mut user) = init_test_user(&store, false, "test", "", "", "");
-
-        match store.create_user(&mut user) {
-            Ok(_) => panic!("Successfully created user {:?} but did not expect to", user),
-            Err(error) => panic!("{}", error),
-        }
+        let (_path, user) = do_create_user(&mut store, false, "test", "", "", "");
+        panic!("Successfully created user {:?} but did not expect to", user);
     }
 
     #[test]
     #[should_panic(expected = "No password provided for the user")]
     fn cannot_create_user_without_password() {
         let mut store = new_store();
-        let (_path, mut user) = init_test_user(&store, false, "test", "", "test@company.com", "");
-
-        match store.create_user(&mut user) {
-            Ok(_) => panic!("Successfully created user {:?} but did not expect to", user),
-            Err(error) => panic!("{}", error),
-        }
+        let (_path, user) = do_create_user(&mut store, false, "test", "", "test@company.com", "");
+        panic!("Successfully created user {:?} but did not expect to", user);
     }
 
     #[test]
     fn can_create_user() {
         let mut store = new_store();
-        let (path, mut user) = init_test_user(&store, false, "test", "", "test@company.com", "password");
-
-        match store.create_user(&mut user) {
-            Ok(_) => {
-                println!("User = {:?}", user);
-                delete_file(&path);
-            }
-            Err(error) => panic!("Failed to create user: {}", error),
-        }
+        let (_path, _user) = do_create_user(&mut store, false, "test", "", "test@company.com", "password");
     }
 
     #[test]
@@ -1123,6 +1103,22 @@ mod tests {
         let path = format!("./{}.json", name);
         (path, user)
     }
+
+    fn do_create_user(
+        store: &mut FileStore,
+        is_admin: bool,
+        name: &str,
+        full_name: &str,
+        email: &str,
+        password: &str,
+    ) -> (String, User) {
+        let (path, mut user) = init_test_user(&store, is_admin, name, full_name, email, password);
+
+        if let Err(error) = store.create_user(&mut user) {
+            panic!( "{}", error);
+        }
+        (path, user)
+    }    
 
     fn init_test_maze(
         store: &FileStore,
