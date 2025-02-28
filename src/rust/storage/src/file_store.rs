@@ -765,14 +765,9 @@ mod tests {
     fn can_save_maze_to_valid_file_path() {
         let store = new_store();
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
-        let path = store.maze_path(&id);
-
-        delete_file(&path);
 
         match store.write_maze_file(&mut maze, &id, true) {
-            Ok(_) => {
-                delete_file(&path);
-            }
+            Ok(_) => {},
             Err(error) => panic!("Failed to save to file: {}", error),
         }
     }
@@ -787,14 +782,12 @@ mod tests {
 
         match store.write_maze_file(&mut maze, &id, false) {
             Ok(_) => {
-                delete_file(&path);
                 panic!(
                     "Successfully saved to existing file: {} despite overwrite being false",
                     path
                 );
             }
             Err(error) => {
-                delete_file(&path);
                 panic!("{}", error);
             }
         }
@@ -807,11 +800,8 @@ mod tests {
         let mut _file = File::create(&path).expect("Failed to create file");
 
         match store.write_maze_file(&mut maze, &id, true) {
-            Ok(_) => {
-                delete_file(&path);
-            }
+            Ok(_) => {}
             Err(error) => {
-                delete_file(&path);
                 panic!("{}", error);
             }
         }
@@ -820,13 +810,10 @@ mod tests {
     #[test]
     fn can_create_maze_that_does_not_exist() {
         let mut store = new_store();
-        let (id, mut maze) = init_test_maze(&store, "maze", false, true);
-        let path = store.maze_path(&id);
-
-        delete_file(&path);
+        let (_id, mut maze) = init_test_maze(&store, "maze", false, true);
 
         match store.create_maze(&mut maze) {
-            Ok(_) => delete_file(&path),
+            Ok(_) => {},
             Err(error) => panic!("Failed to create maze: {}", error),
         }
     }
@@ -836,6 +823,7 @@ mod tests {
     fn cannot_create_maze_with_empty_name() {
         let mut store = new_store();
         let (_, mut maze) = init_test_maze(&store, "maze", false, false);
+
         match store.create_maze(&mut maze) {
             Ok(_) => panic!("Successfully saved unnamed maze but did not expect to"),
             Err(error) => panic!("{}", error),
@@ -852,14 +840,12 @@ mod tests {
 
         match store.create_maze(&mut maze) {
             Ok(_) => {
-                delete_file(&path);
                 panic!(
                     "Successfully created maze when file: {} existed, when should not have",
                     path
                 );
             }
             Err(error) => {
-                delete_file(&path);
                 panic!("{}", error);
             }
         }
@@ -873,11 +859,8 @@ mod tests {
         let mut _file = File::create(&path).expect("Failed to create file");
 
         match store.update_maze(&mut maze) {
-            Ok(_) => {
-                delete_file(&path);
-            }
+            Ok(_) => {},
             Err(error) => {
-                delete_file(&path);
                 panic!("{}", error);
             }
         }
@@ -888,13 +871,9 @@ mod tests {
     fn cannot_update_non_existant_maze() {
         let mut store = new_store();
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
-        let path = store.maze_path(&id);
-
-        delete_file(&path);
 
         match store.update_maze(&mut maze) {
             Ok(_) => {
-                delete_file(&path);
                 panic!("Successfully updated maze when file: {} did not exist", id);
             }
             Err(error) => {
@@ -961,19 +940,16 @@ mod tests {
     #[test]
     fn can_get_maze_that_exists() {
         let mut store = new_store();
-        let (id, mut maze) = init_test_maze(&store, "maze", true, true);
-        let path = store.maze_path(&id);
+        let (_id, mut maze) = init_test_maze(&store, "maze", true, true);
 
         match store.create_maze(&mut maze) {
             Ok(_) => match store.get_maze(&maze.id) {
                 Ok(maze_loaded) => {
-                    delete_file(&path);
                     if maze_loaded != maze {
                         panic!("Loaded maze content is different to maze content saved");
                     }
                 }
                 Err(error) => {
-                    delete_file(&path);
                     panic!("Failed to load saved maze: {}", error);
                 }
             },
@@ -1056,9 +1032,6 @@ mod tests {
                 panic!("{}", error);
             }
         }
-
-        delete_file(&store.maze_path(&maze_1.id));
-        delete_file(&store.maze_path(&maze_2.id));
 
         fn check_maze_item(
             items: &[MazeItem],
