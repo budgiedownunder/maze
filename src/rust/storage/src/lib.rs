@@ -34,6 +34,7 @@ pub enum StoreConfig {
 /// # setup();
 ///
 /// use storage::{get_store, StoreConfig, FileStoreConfig};
+/// use storage::{Store, StoreError, User};
 /// use maze::StdoutLinePrinter;
 /// use maze::Maze;
 /// use maze::Path;
@@ -50,15 +51,25 @@ pub enum StoreConfig {
 /// let file_config = FileStoreConfig::default();
 /// match get_store(StoreConfig::File(file_config)) {
 ///     Ok(mut store) => {
+///         // Locate the owner by username
+///         let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+///         let owner = match find_user_result {
+///             Ok(user) => user,
+///             Err(error) => {
+///                 println!("Error fetching user: {:?}", error);
+///                 return ;
+///             }
+///         };
+/// 
 ///         // Create the maze within the store
-///         if let Err(error) = store.create_maze(&mut maze_to_create) {
+///         if let Err(error) = store.create_maze(&owner, &mut maze_to_create) {
 ///             panic!(
 ///                 "failed to create maze => {}",
 ///                 error
 ///             );
 ///         }
 ///         // Now reload the maze from the store
-///         match store.get_maze(&maze_to_create.id) {
+///         match store.get_maze(&owner, &maze_to_create.id) {
 ///             Ok(loaded_maze) => {
 ///                 println!("Successfully loaded maze:");
 ///                 let mut print_target = StdoutLinePrinter::new();

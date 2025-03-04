@@ -49,7 +49,7 @@ trait FieldAccess {
     fn get_string_field(&self, field_name: &str) -> Option<String>;
 }
 
-// Private FieldAccess implementation for User  
+// Private FieldAccess implementation for User
 impl FieldAccess for User {
     fn get_string_field(&self, field_name: &str) -> Option<String> {
         match field_name {
@@ -60,7 +60,7 @@ impl FieldAccess for User {
             _ => None,
         }
     }
-}        
+}
 
 impl FileStore {
     /// Creates a new file store instance
@@ -74,12 +74,13 @@ impl FileStore {
     /// Try to create a new maze within a file store
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
     /// use crate::storage::store::MazeStore;
-    /// use crate::storage::Store;
+    /// use crate::storage::store::UserStore;
+    /// use crate::storage::{Store, StoreError, User};
     /// use storage::{FileStore, FileStoreConfig};
     /// use maze::Maze;
     ///
@@ -93,8 +94,18 @@ impl FileStore {
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    /// 
     /// // Create a maze within the file store
-    /// match store.create_maze(&mut maze_to_create) {
+    /// match store.create_maze(&owner, &mut maze_to_create) {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created maze in the file store with id = {}",
@@ -129,6 +140,22 @@ impl FileStore {
         Ok(())
     }
 
+    fn make_dir(dir: &str) -> Result<String, StoreError> {
+        let path = PathBuf::from(dir);
+        let normalized_path = path
+            .strip_prefix(r"\\?\")
+            .unwrap_or(&path)
+            .to_path_buf();
+
+        match fs::create_dir_all(normalized_path) {
+            Ok(_) => Ok(dir.to_string()),
+            Err(error) => Err(StoreError::Other(format!(
+                "Failed to create directory: {} - {}",
+                dir, error
+            ))),
+        }
+    }
+
     // Creates the data directory within the file store
     fn make_data_dir(data_dir: &str) -> Result<String, StoreError> {
         let os_path = PathBuf::from(data_dir);
@@ -148,52 +175,36 @@ impl FileStore {
             .to_string_lossy()
             .replace('/', &MAIN_SEPARATOR.to_string());
 
-        match fs::create_dir_all(normalized_path) {
-            Ok(_) => Ok(dir_path),
-            Err(error) => Err(StoreError::Other(format!(
-                "Failed to create FileStore data directory: {} - {}",
-                dir_path, error
-            ))),
-        }
+        Self::make_dir(&dir_path)
     }
 
     // Creates a data sub-directory within the file store
     fn make_data_sub_dir(&self, sub_dir: &str) -> Result<String, StoreError> {
         let path = PathBuf::from(self.data_dir.clone()).join(sub_dir);
-
-        let dir_path: String = path
-            .to_string_lossy()
-            .to_string();
-
-        match fs::create_dir_all(path) {
-            Ok(_) => Ok(dir_path),
-            Err(error) => Err(StoreError::Other(format!(
-                "Failed to create FileStore sub directory {}: - {}",
-                dir_path, error
-            ))),
-        }
-    }    
+        let dir_path: String = path.to_string_lossy().to_string();
+        Self::make_dir(&dir_path)
+    }
 
     // Creates the users directory within the file store
     fn make_users_dir(&self) -> Result<String, StoreError> {
         self.make_data_sub_dir("users")
-    }    
+    }
+
+    fn get_user_sub_dir_path(&self, id: Uuid, sub_dir: &str) -> String {
+        PathBuf::from(self.user_dir_path(id))
+            .join(sub_dir)
+            .to_string_lossy()
+            .to_string()
+    }
+
+    fn make_user_sub_dir(&self, id: Uuid, sub_dir: &str) -> Result<String, StoreError> {
+        Self::make_dir(&self.get_user_sub_dir_path(id, sub_dir))
+    }
 
     // Creates a user directory within the file store
     fn make_user_dir(&self, id:Uuid) -> Result<String, StoreError> {
-        let path = PathBuf::from(self.users_dir.clone()).join(id.to_string());
-        let dir_path: String = path
-            .to_string_lossy()
-            .to_string();
-
-        match fs::create_dir_all(path) {
-            Ok(_) => Ok(dir_path),
-            Err(error) => Err(StoreError::Other(format!(
-                "Failed to create user sub directory {}: - {}",
-                dir_path, error
-            ))),
-        }
-    }    
+        Self::make_dir(&self.user_dir_path(id))
+    }
 
     // Returns a new user id for use in the file store
     fn new_user_id(&self) -> Uuid {
@@ -205,7 +216,7 @@ impl FileStore {
         Uuid::new_v4()
     }
 
-    // Returns the directory path for a given user
+    // Returns the directory path for a given user id
     fn user_dir_path(&self, id: Uuid) -> String {
         Path::new(&self.users_dir)
             .join(id.to_string())
@@ -289,7 +300,7 @@ impl FileStore {
             Ok(user) => Ok(user),
             Err(error) => Err(StoreError::from(error)),
         }
-    }   
+    }
 
     // Locate the first user with a given string field value
     fn find_user_by_string_field(&self, field_name: &str, search_value: &str, ignore_id: Uuid) -> Result<User, StoreError> {
@@ -300,8 +311,8 @@ impl FileStore {
                 if let Some(user_value) = user.get_string_field(field_name) {
                     if user_value == search_value {
                         return Ok(user);
-                    } 
-                } 
+                    }
+                }
             }
         }
         Err(StoreError::UserNotFound())
@@ -310,12 +321,12 @@ impl FileStore {
     // Checks whether a given username exists in the file store
     fn user_name_exists(&self, name: &str, ignore_id: Uuid) -> bool {
         self.find_user_by_string_field("username", name, ignore_id).is_ok()
-    }    
+    }
 
     // Checks whether a given user email exists in the file store
     fn user_email_exists(&self, email: &str, ignore_id: Uuid) -> bool {
         self.find_user_by_string_field("email", email, ignore_id).is_ok()
-    } 
+    }
 
     // Returns the list of user ids associated with the file store
     fn get_user_ids(&self) -> Result<Vec<Uuid>, StoreError> {
@@ -341,41 +352,59 @@ impl FileStore {
         format!("{}.json", name)
     }
 
-    // Returns the mazes directory
-    pub fn get_mazes_dir(&self) -> String {
-        self.data_dir.clone()
+    // Returns the mazes directory for a given owner
+    pub fn get_mazes_dir(&self, owner: &User) -> String {
+        Path::new(&self.user_dir_path(owner.id))
+            .join("mazes")
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Creates the mazes directory within the file store for a given owner
+    fn make_user_mazes_dir(&self, owner: &User) -> Result<String, StoreError> {
+        self.make_user_sub_dir(owner.id, "mazes")
+    }
+
+    // Returns whether a given mazes directory exists
+    fn user_mazes_dir_exists(&self, owner: &User) -> bool {
+        dir_exists(&self.get_mazes_dir(owner))
     }
 
     // Returns the maze file path for a given maze id
-    fn maze_path(&self, id: &str) -> String {
-        Path::new(&self.data_dir)
+    fn maze_path(&self, owner: &User, id: &str) -> String {
+        Path::new(&self.get_mazes_dir(owner))
             .join(id)
             .to_string_lossy()
             .to_string()
     }
 
     // Checks whether a given maze file exists
-    fn maze_exists(&self, id: &str) -> bool {
-        file_exists(&self.maze_path(id))
+    fn maze_exists(&self, owner: &User, id: &str) -> bool {
+        file_exists(&self.maze_path(owner, id))
     }
 
     // Wriets a maze file
     fn write_maze_file(
         &self,
+        owner: &User,
         maze: &mut Maze,
         id: &str,
         overwrite: bool,
     ) -> Result<(), StoreError> {
         maze.id = id.to_string();
 
+        if !self.user_mazes_dir_exists(&owner) {
+            self.make_user_mazes_dir(&owner)?;
+        }
+
         if !overwrite {
-            if self.maze_exists(id) {
+            if self.maze_exists(owner, id) {
                 return Err(StoreError::MazeIdExists(id.to_string()));
             }
         }
 
         let s = maze.to_json()?;
-        let mut file = File::create(self.maze_path(id))?;
+        let mut file = File::create(self.maze_path(owner, id))?;
         file.write_all(s.as_bytes())?;
         Ok(())
     }
@@ -395,7 +424,7 @@ impl UserStore for FileStore {
     /// Try to create a new user within a file store
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
@@ -406,8 +435,8 @@ impl UserStore for FileStore {
     ///
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
-    /// 
-    /// // Create the user definition  
+    ///
+    /// // Create the user definition
     /// let mut user = User {
     ///     id: Uuid::nil(),
     ///     is_admin: false,
@@ -417,7 +446,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     /// };
-    /// 
+    ///
     /// // Create the user within the file store
     /// match store.create_user(&mut user) {
     ///     Ok(_) => {
@@ -439,6 +468,7 @@ impl UserStore for FileStore {
         user.api_key = self.new_user_api_key();
         self.validate_user(user, Uuid::nil())?;
         self.write_user_file(&user, false)?;
+        self.make_user_mazes_dir(&user)?;
         Ok(())
     }
     /// Deletes a user from the store
@@ -447,7 +477,7 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then delete a user within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
@@ -458,8 +488,8 @@ impl UserStore for FileStore {
     ///
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
-    /// 
-    /// // Create the user definition  
+    ///
+    /// // Create the user definition
     /// let mut user = User {
     ///     id: Uuid::nil(),
     ///     is_admin: false,
@@ -469,7 +499,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     /// };
-    /// 
+    ///
     /// // Create the user within the file store
     /// match store.create_user(&mut user) {
     ///     Ok(_) => {
@@ -487,7 +517,7 @@ impl UserStore for FileStore {
     ///                      error
     ///                 );
     ///             }
-    ///         } 
+    ///         }
     ///     }
     ///     Err(error) => {
     ///         println!(
@@ -510,7 +540,7 @@ impl UserStore for FileStore {
             panic!("User directory {} still exists XXX", id);
         }
 
-        Ok(())        
+        Ok(())
     }
     /// Updates a user within the store
     ///
@@ -518,7 +548,7 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then update a user within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
@@ -529,8 +559,8 @@ impl UserStore for FileStore {
     ///
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
-    /// 
-    /// // Create the user definition  
+    ///
+    /// // Create the user definition
     /// let mut user = User {
     ///     id: Uuid::nil(),
     ///     is_admin: false,
@@ -540,7 +570,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     /// };
-    /// 
+    ///
     /// // Create the user within the file store
     /// match store.create_user(&mut user) {
     ///     Ok(_) => {
@@ -560,7 +590,7 @@ impl UserStore for FileStore {
     ///                      error
     ///                 );
     ///             }
-    ///         } 
+    ///         }
     ///     }
     ///     Err(error) => {
     ///         println!(
@@ -587,7 +617,7 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then load a user from within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
@@ -598,8 +628,8 @@ impl UserStore for FileStore {
     ///
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
-    /// 
-    /// // Create the user definition  
+    ///
+    /// // Create the user definition
     /// let mut user = User {
     ///     id: Uuid::nil(),
     ///     is_admin: false,
@@ -609,7 +639,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     /// };
-    /// 
+    ///
     /// // Create the user within the file store
     /// match store.create_user(&mut user) {
     ///     Ok(_) => {
@@ -628,7 +658,7 @@ impl UserStore for FileStore {
     ///                      error
     ///                 );
     ///             }
-    ///         } 
+    ///         }
     ///     }
     ///     Err(error) => {
     ///         println!(
@@ -647,7 +677,7 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then locate a user from within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
@@ -658,8 +688,8 @@ impl UserStore for FileStore {
     ///
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
-    /// 
-    /// // Create the user definition  
+    ///
+    /// // Create the user definition
     /// let mut user = User {
     ///     id: Uuid::nil(),
     ///     is_admin: false,
@@ -669,7 +699,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     /// };
-    /// 
+    ///
     /// // Create the user within the file store
     /// match store.create_user(&mut user) {
     ///     Ok(_) => {
@@ -688,7 +718,7 @@ impl UserStore for FileStore {
     ///                      error
     ///                 );
     ///             }
-    ///         } 
+    ///         }
     ///     }
     ///     Err(error) => {
     ///         println!(
@@ -708,7 +738,7 @@ impl UserStore for FileStore {
     ///
     /// Try to create a user within a file store and then load the list of registered users and display their count
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
@@ -719,8 +749,8 @@ impl UserStore for FileStore {
     ///
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
-    /// 
-    /// // Create the user definition  
+    ///
+    /// // Create the user definition
     /// let mut user = User {
     ///     id: Uuid::nil(),
     ///     is_admin: false,
@@ -730,7 +760,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     /// };
-    /// 
+    ///
     /// // Create the user within the file store
     /// match store.create_user(&mut user) {
     ///     Ok(_) => {
@@ -749,7 +779,7 @@ impl UserStore for FileStore {
     ///                      error
     ///                 );
     ///             }
-    ///         } 
+    ///         }
     ///     }
     ///     Err(error) => {
     ///         println!(
@@ -778,14 +808,16 @@ impl MazeStore for FileStore {
     /// Try to create a new maze within a file store
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
+    /// use crate::storage::store::UserStore;
     /// use crate::storage::store::MazeStore;
-    /// use crate::storage::Store;
+    /// use crate::storage::{Store, StoreError, User};
     /// use storage::{FileStore, FileStoreConfig};
     /// use maze::Maze;
+    /// use uuid::Uuid;
     ///
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
@@ -796,9 +828,19 @@ impl MazeStore for FileStore {
     ///
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
-    ///
+    /// 
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    /// 
     /// // Create maze within the file store
-    /// match store.create_maze(&mut maze_to_create) {
+    /// match store.create_maze(&owner, &mut maze_to_create) {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created maze in the file store with id = {}",
@@ -813,12 +855,12 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn create_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError> {
+    fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
         if maze.name.is_empty() {
             return Err(StoreError::MazeNameMissing());
         }
         let id = self.make_maze_id(&maze.name);
-        self.write_maze_file(maze, &id, false)?;
+        self.write_maze_file(owner, maze, &id, false)?;
         Ok(())
     }
     /// Deletes an existing maze from within the file store instance
@@ -828,22 +870,34 @@ impl MazeStore for FileStore {
     /// Try to delete an existing maze from within a file store
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
+    /// use crate::storage::store::UserStore;
     /// use crate::storage::store::MazeStore;
-    /// use crate::storage::Store;
+    /// use crate::storage::{Store, StoreError, User};
     /// use storage::{FileStore, FileStoreConfig};
     /// use maze::Maze;
+    /// use uuid::Uuid;
     ///
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    /// 
     /// // Delete maze from within the file store
     /// let id = "maze_1.json".to_string();
     ///
-    /// match store.delete_maze(&id) {
+    /// match store.delete_maze(&owner, &id) {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully delete maze from the file store",
@@ -858,14 +912,14 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn delete_maze(&mut self, id: &str) -> Result<(), StoreError> {
+    fn delete_maze(&mut self, owner: &User, id: &str) -> Result<(), StoreError> {
         if id.is_empty() {
             return Err(StoreError::MazeIdMissing());
         }
-        if !self.maze_exists(id) {
+        if !self.maze_exists(owner, id) {
             return Err(StoreError::MazeIdNotFound(id.to_string()));
         }
-        delete_file(&self.maze_path(id));
+        delete_file(&self.maze_path(owner, id));
         Ok(())
     }
     /// Updates an existing maze within the file store instance
@@ -875,14 +929,16 @@ impl MazeStore for FileStore {
     /// Try to update an existing maze within a file store with new content
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
+    /// use crate::storage::store::UserStore;
     /// use crate::storage::store::MazeStore;
-    /// use crate::storage::Store;
+    /// use crate::storage::{Store, StoreError, User};
     /// use storage::{FileStore, FileStoreConfig};
     /// use maze::Maze;
+    /// use uuid::Uuid;
     ///
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
@@ -895,8 +951,18 @@ impl MazeStore for FileStore {
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    /// 
     /// // Update maze within the file store
-    /// match store.update_maze(&mut maze_to_update) {
+    /// match store.update_maze(&owner, &mut maze_to_update) {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully updated maze in the file store with id = {}",
@@ -911,14 +977,14 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn update_maze(&mut self, maze: &mut Maze) -> Result<(), StoreError> {
+    fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
         if maze.id.is_empty() {
             return Err(StoreError::MazeIdMissing());
         }
-        if !self.maze_exists(&maze.id) {
+        if !self.maze_exists(owner, &maze.id) {
             return Err(StoreError::MazeIdNotFound(maze.id.to_string()));
         }
-        self.write_maze_file(maze, &maze.id.clone(), true)?;
+        self.write_maze_file(owner, maze, &maze.id.clone(), true)?;
         Ok(())
     }
     /// Loads a maze from within the file store instance
@@ -932,16 +998,18 @@ impl MazeStore for FileStore {
     /// Try to create and then reload a maze from within a file store and, if successful, print it
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
+    /// use crate::storage::store::UserStore;
     /// use crate::storage::store::MazeStore;
-    /// use crate::storage::Store;
+    /// use crate::storage::{Store, StoreError, User};
     /// use storage::{FileStore, FileStoreConfig};
     /// use maze::StdoutLinePrinter;
     /// use maze::Maze;
     /// use maze::Path;
+    /// use uuid::Uuid;
     ///
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
@@ -953,8 +1021,18 @@ impl MazeStore for FileStore {
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    /// 
     /// // Create the maze within the store
-    /// if let Err(error) = store.create_maze(&mut maze_to_create) {
+    /// if let Err(error) = store.create_maze(&owner, &mut maze_to_create) {
     ///     println!(
     ///         "Failed to create maze => {}",
     ///         error
@@ -963,7 +1041,7 @@ impl MazeStore for FileStore {
     /// }
     ///
     /// // Now reload the maze from the store
-    /// match store.get_maze(&maze_to_create.id) {
+    /// match store.get_maze(&owner, &maze_to_create.id) {
     ///     Ok(loaded_maze) => {
     ///         println!("Successfully loaded maze:");
     ///         let mut print_target = StdoutLinePrinter::new();
@@ -979,11 +1057,11 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn get_maze(&self, id: &str) -> Result<Maze, StoreError> {
-        if !self.maze_exists(id) {
+    fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, StoreError> {
+        if !self.maze_exists(owner, id) {
             return Err(StoreError::MazeIdNotFound(id.to_string()));
         }
-        let path = self.maze_path(id);
+        let path = self.maze_path(owner, id);
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         match serde_json::from_reader::<BufReader<File>, Maze>(reader) {
@@ -1006,21 +1084,33 @@ impl MazeStore for FileStore {
     /// print its details
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
+    /// use crate::storage::store::UserStore;
     /// use crate::storage::store::MazeStore;
-    /// use crate::storage::Store;
+    /// use crate::storage::{Store, StoreError, User};
     /// use storage::{FileStore, FileStoreConfig};
+    /// use uuid::Uuid;
     ///
     /// // Create the file store
     /// let store = FileStore::new(&FileStoreConfig::default());
     ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    /// 
     /// let id = "my_maze".to_string();
     ///
     /// // Attempt to find the maze item
-    /// match store.find_maze_by_name(&id) {
+    /// match store.find_maze_by_name(&owner, &id) {
     ///     Ok(maze_item) => {
     ///         println!("Successfully found maze item => id = {}, name = {}",
     ///             maze_item.id,
@@ -1036,9 +1126,9 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn find_maze_by_name(&self, name: &str) -> Result<MazeItem, StoreError> {
+    fn find_maze_by_name(&self, owner: &User, name: &str) -> Result<MazeItem, StoreError> {
         let id = self.make_maze_id(name);
-        if !name.is_empty() && self.maze_exists(&id) {
+        if !name.is_empty() && self.maze_exists(owner, &id) {
             return Ok(MazeItem {
                 id: id,
                 name: name.to_string(),
@@ -1061,19 +1151,31 @@ impl MazeStore for FileStore {
     /// print the number of items found
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
+    /// use crate::storage::store::UserStore;
     /// use crate::storage::store::MazeStore;
-    /// use crate::storage::Store;
+    /// use crate::storage::{Store, StoreError, User};
     /// use storage::{FileStore, FileStoreConfig};
-    ///
+    /// use uuid::Uuid;
+    /// 
     /// // Create the file store
     /// let store = FileStore::new(&FileStoreConfig::default());
     ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    /// 
     /// // Attempt to load the maze items along with their definitions
-    /// match store.get_maze_items(true) {
+    /// match store.get_maze_items(&owner, true) {
     ///     Ok(maze_items) => {
     ///         println!("Successfully loaded {} maze items",
     ///             maze_items.len()
@@ -1087,9 +1189,9 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn get_maze_items(&self, include_definitions: bool) -> Result<Vec<MazeItem>, StoreError> {
+    fn get_maze_items(&self, owner: &User, include_definitions: bool) -> Result<Vec<MazeItem>, StoreError> {
         let mut items: Vec<MazeItem> = Vec::new();
-        let mazes_dir = self.get_mazes_dir();
+        let mazes_dir = self.get_mazes_dir(owner);
 
         let mut paths: Vec<_> = fs::read_dir(mazes_dir)?
             .map(|res| res.map(|e| e.path()))
@@ -1105,7 +1207,7 @@ impl MazeStore for FileStore {
                             if let Some(name_str) = name.to_str() {
                                 let mut name_use = name_str.to_string();
                                 let mut definition: Option<String> = None;
-                                match self.get_maze(&path_str) {
+                                match self.get_maze(owner, &path_str) {
                                     Ok(maze_loaded) => {
                                         if include_definitions {
                                             definition = Some(
@@ -1208,7 +1310,7 @@ mod tests {
             panic!( "{}", error);
         }
         user
-    }    
+    }
 
     // Initialize a Maze struct
     fn init_test_maze(
@@ -1231,7 +1333,7 @@ mod tests {
             maze.id = id.clone();
         }
         (id, maze)
-    }    
+    }
     //****************************************************************
     // User tests
     //****************************************************************
@@ -1303,7 +1405,7 @@ mod tests {
         let store = new_store();
         let id = store.new_user_id();
         match store.get_user(id) {
-            Ok(_) => { 
+            Ok(_) => {
                 panic!("Loaded user content for id '{}' when did not expected to", id);
             }
             Err(error) => {
@@ -1326,7 +1428,7 @@ mod tests {
                 if store.user_dir_exists(user.id) {
                     panic!("User directory {} still exists", user.id);
                 }
-            }, 
+            },
             Err(error) => {
                 panic!("{}", error);
             }
@@ -1346,7 +1448,7 @@ mod tests {
                 panic!("{}", error);
             }
         }
-    }    
+    }
 
     #[test]
     fn cannot_delete_user_that_does_not_exist() {
@@ -1365,7 +1467,7 @@ mod tests {
                 }
             }
         }
-    } 
+    }
 
     #[test]
     fn can_update_existing_user() {
@@ -1512,10 +1614,11 @@ mod tests {
     //****************************************************************
     #[test]
     fn can_save_maze_to_valid_file_path() {
-        let store = new_store();
+        let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
 
-        match store.write_maze_file(&mut maze, &id, true) {
+        match store.write_maze_file(&owner, &mut maze, &id, true) {
             Ok(_) => {},
             Err(error) => panic!("Failed to save to file: {}", error),
         }
@@ -1524,12 +1627,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "A maze with id 'maze.json' already exists")]
     fn cannot_save_maze_to_existing_file_path_if_overwrite_disabled() {
-        let store = new_store();
+        let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
-        let path = store.maze_path(&id);
+        let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
 
-        match store.write_maze_file(&mut maze, &id, false) {
+        match store.write_maze_file(&owner, &mut maze, &id, false) {
             Ok(_) => {
                 panic!(
                     "Successfully saved to existing file: {} despite overwrite being false",
@@ -1543,12 +1647,13 @@ mod tests {
     }
     #[test]
     fn can_save_maze_to_existing_file_path_if_overwrite_enabled() {
-        let store = new_store();
+        let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (id, mut maze) = init_test_maze(&store, "maze", false, true);
-        let path = store.maze_path(&id);
+        let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
 
-        match store.write_maze_file(&mut maze, &id, true) {
+        match store.write_maze_file(&owner, &mut maze, &id, true) {
             Ok(_) => {}
             Err(error) => {
                 panic!("{}", error);
@@ -1559,9 +1664,10 @@ mod tests {
     #[test]
     fn can_create_maze_that_does_not_exist() {
         let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (_id, mut maze) = init_test_maze(&store, "maze", false, true);
 
-        match store.create_maze(&mut maze) {
+        match store.create_maze(&owner, &mut maze) {
             Ok(_) => {},
             Err(error) => panic!("Failed to create maze: {}", error),
         }
@@ -1571,9 +1677,10 @@ mod tests {
     #[should_panic(expected = "No name provided")]
     fn cannot_create_maze_with_empty_name() {
         let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (_, mut maze) = init_test_maze(&store, "maze", false, false);
 
-        match store.create_maze(&mut maze) {
+        match store.create_maze(&owner, &mut maze) {
             Ok(_) => panic!("Successfully saved unnamed maze but did not expect to"),
             Err(error) => panic!("{}", error),
         }
@@ -1583,11 +1690,12 @@ mod tests {
     #[should_panic(expected = "A maze with id 'maze.json' already exists")]
     fn cannot_create_maze_that_exists() {
         let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (id, mut maze) = init_test_maze(&store, "maze", false, true);
-        let path = store.maze_path(&id);
+        let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
 
-        match store.create_maze(&mut maze) {
+        match store.create_maze(&owner, &mut maze) {
             Ok(_) => {
                 panic!(
                     "Successfully created maze when file: {} existed, when should not have",
@@ -1603,11 +1711,12 @@ mod tests {
     #[test]
     fn can_update_existing_maze() {
         let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
-        let path = store.maze_path(&id);
+        let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
 
-        match store.update_maze(&mut maze) {
+        match store.update_maze(&owner, &mut maze) {
             Ok(_) => {},
             Err(error) => {
                 panic!("{}", error);
@@ -1619,9 +1728,10 @@ mod tests {
     #[should_panic(expected = "A maze with id 'maze.json' was not found")]
     fn cannot_update_non_existent_maze() {
         let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
 
-        match store.update_maze(&mut maze) {
+        match store.update_maze(&owner, &mut maze) {
             Ok(_) => {
                 panic!("Successfully updated maze when file: {} did not exist", id);
             }
@@ -1635,9 +1745,10 @@ mod tests {
     #[should_panic(expected = "No id provided for the maze")]
     fn cannot_update_maze_with_no_id() {
         let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (_, mut maze) = init_test_maze(&store, "maze", false, true);
 
-        match store.update_maze(&mut maze) {
+        match store.update_maze(&owner, &mut maze) {
             Ok(_) => {
                 panic!("Successfully updated maze when maze had no id");
             }
@@ -1650,14 +1761,15 @@ mod tests {
     #[test]
     fn can_delete_maze() {
         let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
 
-        match store.write_maze_file(&mut maze, &id, true) {
+        match store.write_maze_file(&owner, &mut maze, &id, true) {
             Ok(_) => {
-                if store.maze_exists(&maze.id) {
-                    match store.delete_maze(&maze.id) {
+                if store.maze_exists(&owner, &maze.id) {
+                    match store.delete_maze(&owner, &maze.id) {
                         Ok(_) => {
-                            if store.maze_exists(&maze.id) {
+                            if store.maze_exists(&owner, &maze.id) {
                                 panic!("Maze file {} still exists after maze delete", maze.id);
                             }
                         }
@@ -1675,8 +1787,9 @@ mod tests {
     #[should_panic(expected = "No id provided for the maze")]
     fn cannot_delete_maze_with_empty_id() {
         let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
 
-        match store.delete_maze("") {
+        match store.delete_maze(&owner, "") {
             Ok(()) => {
                 panic!("delete_maze() suceeded for blank id");
             }
@@ -1689,10 +1802,11 @@ mod tests {
     #[test]
     fn can_get_maze_that_exists() {
         let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let (_id, mut maze) = init_test_maze(&store, "maze", true, true);
 
-        match store.create_maze(&mut maze) {
-            Ok(_) => match store.get_maze(&maze.id) {
+        match store.create_maze(&owner, &mut maze) {
+            Ok(_) => match store.get_maze(&owner, &maze.id) {
                 Ok(maze_loaded) => {
                     if maze_loaded != maze {
                         panic!("Loaded maze content is different to maze content saved");
@@ -1711,10 +1825,11 @@ mod tests {
     #[test]
     #[should_panic(expected = "A maze with id 'missing.json' was not found")]
     fn cannot_get_maze_that_does_not_exist() {
-        let store = new_store();
+        let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         let id = "missing.json";
 
-        match store.get_maze(id) {
+        match store.get_maze(&owner, id) {
             Ok(_) => {
                 panic!("Succesfully loaded maze content when file is missing");
             }
@@ -1726,9 +1841,10 @@ mod tests {
 
     #[test]
     fn maze_item_list_should_be_empty() {
-        let store = new_store();
+        let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
 
-        match store.get_maze_items(false) {
+        match store.get_maze_items(&owner, false) {
             Ok(items) => {
                 if !items.is_empty() {
                     panic!("Maze item list is not empty ({} items found)", items.len());
@@ -1743,20 +1859,21 @@ mod tests {
     #[test]
     fn maze_item_list_should_not_be_empty() {
         let mut store = new_store();
+        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
 
         let (_, mut maze_1) = init_test_maze(&store, "maze_1", false, true);
-        match store.create_maze(&mut maze_1) {
+        match store.create_maze(&owner, &mut maze_1) {
             Ok(_) => {}
             Err(error) => panic!("Failed to create maze {}: {}", maze_1.name, error),
         }
 
         let (_, mut maze_2) = init_test_maze(&store, "maze_2", false, true);
-        match store.create_maze(&mut maze_2) {
+        match store.create_maze(&owner, &mut maze_2) {
             Ok(_) => {}
             Err(error) => panic!("Failed to create maze {}: {}", maze_2.name, error),
         }
 
-        match store.get_maze_items(false) {
+        match store.get_maze_items(&owner, false) {
             Ok(items) => {
                 if items.len() != 2 {
                     panic!("Maze item list does not contain the expected number of items (2 expected, {} found)", items.len());
@@ -1769,7 +1886,7 @@ mod tests {
             }
         }
 
-        match store.get_maze_items(true) {
+        match store.get_maze_items(&owner, true) {
             Ok(items) => {
                 if items.len() != 2 {
                     panic!("Maze item list does not contain the expected number of items (2 expected, {} found)", items.len());
