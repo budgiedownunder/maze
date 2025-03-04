@@ -4,9 +4,14 @@ use std::io;
 /// Represents a store error
 #[derive(Debug)]
 pub enum StoreError {
+    UserEmailExists(),
     UserEmailMissing(),
     UserIdExists(String),
+    UserIdMissing(),
+    UserIdNotFound(String),
+    UserNameExists(),
     UserNameMissing(),
+    UserNotFound(),
     UserPasswordMissing(),
     MazeError(MazeError),
     MazeIdMissing(),
@@ -23,9 +28,14 @@ pub enum StoreError {
 impl std::fmt::Display for StoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            StoreError::UserEmailExists() => write!(f, "The email is already taken"),
             StoreError::UserEmailMissing() => write!(f, "No email provided for the user"),
             StoreError::UserIdExists(id) => write!(f, "A user with id '{}' already exists", id),
+            StoreError::UserIdMissing() => write!(f, "No id provided for the user"),
+            StoreError::UserIdNotFound(id) => write!(f, "A user with id '{}' was not found", id),
+            StoreError::UserNameExists() => write!(f, "The username is already taken"),
             StoreError::UserNameMissing() => write!(f, "No username provided for the user"),
+            StoreError::UserNotFound() => write!(f, "User not found"),
             StoreError::UserPasswordMissing() => write!(f, "No password provided for the user"),
             StoreError::MazeError(e) => write!(f, "Maze error: {}", e),
             StoreError::MazeIdMissing() => write!(f, "No id provided for the maze"),

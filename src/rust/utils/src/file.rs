@@ -1,6 +1,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Checks whether a file exists
+pub fn file_exists(file_path: &str) -> bool {
+    let path = PathBuf::from(file_path);
+    Path::new(&path).is_file()
+}
+
 /// Deletes a file
 pub fn delete_file(file: &str) {
     let _ = fs::remove_file(file);
@@ -29,8 +35,7 @@ pub fn dir_exists(dir_path: &str) -> bool {
     Path::new(&path).is_dir()
 }
 
-/// Checks whether a file exists
-pub fn file_exists(file_path: &str) -> bool {
-    let path = PathBuf::from(file_path);
-    Path::new(&path).is_file()
+/// Deletes a directory
+pub fn delete_dir(dir: &str) {
+    let _ = fs::remove_dir_all(dir);
 }

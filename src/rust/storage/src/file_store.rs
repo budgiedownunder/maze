@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use uuid::Uuid;
 
 use maze::Maze;
-use utils::file::{delete_file, dir_exists, file_exists};
+use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
 use crate::store::Manage;
 use crate::store::MazeStore;
@@ -30,6 +30,7 @@ impl FileStoreConfig {
         }
     }
 }
+
 /// A file store that implements the [`Store`] trait
 ///
 /// Maze objects are stored on disk as files named `<name>.json` (in the working directory), with the `id`
@@ -42,6 +43,24 @@ pub struct FileStore {
     /// Full path to the root users directory
     users_dir: String,
 }
+
+// Private trait used for accessing struct fields
+trait FieldAccess {
+    fn get_string_field(&self, field_name: &str) -> Option<String>;
+}
+
+// Private FieldAccess implementation for User  
+impl FieldAccess for User {
+    fn get_string_field(&self, field_name: &str) -> Option<String> {
+        match field_name {
+            "username" => Some(self.username.clone()),
+            "full_name" => Some(self.full_name.clone()),
+            "email" => Some(self.email.clone()),
+            "password_hash" => Some(self.password_hash.clone()),
+            _ => None,
+        }
+    }
+}        
 
 impl FileStore {
     /// Creates a new file store instance
@@ -103,12 +122,14 @@ impl FileStore {
         }
     }
 
+    // Initializes the file store
     fn init(&mut self) -> Result<(), StoreError> {
         self.data_dir = Self::make_data_dir(&self.config.data_dir)?;
         self.users_dir = self.make_users_dir()?;
         Ok(())
     }
 
+    // Creates the data directory within the file store
     fn make_data_dir(data_dir: &str) -> Result<String, StoreError> {
         let os_path = PathBuf::from(data_dir);
 
@@ -136,14 +157,13 @@ impl FileStore {
         }
     }
 
+    // Creates a data sub-directory within the file store
     fn make_data_sub_dir(&self, sub_dir: &str) -> Result<String, StoreError> {
         let path = PathBuf::from(self.data_dir.clone()).join(sub_dir);
 
         let dir_path: String = path
             .to_string_lossy()
             .to_string();
-
-        println!("Creating sub-directory: {} ...", dir_path);
 
         match fs::create_dir_all(path) {
             Ok(_) => Ok(dir_path),
@@ -154,10 +174,12 @@ impl FileStore {
         }
     }    
 
+    // Creates the users directory within the file store
     fn make_users_dir(&self) -> Result<String, StoreError> {
         self.make_data_sub_dir("users")
     }    
 
+    // Creates a user directory within the file store
     fn make_user_dir(&self, id:Uuid) -> Result<String, StoreError> {
         let path = PathBuf::from(self.users_dir.clone()).join(id.to_string());
         let dir_path: String = path
@@ -173,14 +195,17 @@ impl FileStore {
         }
     }    
 
+    // Returns a new user id for use in the file store
     fn new_user_id(&self) -> Uuid {
         Uuid::new_v4()
     }
 
+    // Returns a new user API key for use in the file store
     fn new_user_api_key(&self) -> Uuid {
         Uuid::new_v4()
     }
 
+    // Returns the directory path for a given user
     fn user_dir_path(&self, id: Uuid) -> String {
         Path::new(&self.users_dir)
             .join(id.to_string())
@@ -188,6 +213,7 @@ impl FileStore {
             .to_string()
     }
 
+    // Returns the file path for a given user
     fn user_file_path(&self, id: Uuid) -> String {
         Path::new(&self.user_dir_path(id))
             .join("user.json")
@@ -195,11 +221,17 @@ impl FileStore {
             .to_string()
     }
 
+    // Returns whether a given user exists
     fn user_exists(&self, id: Uuid) -> bool {
         file_exists(&self.user_file_path(id))
     }
 
+    // Returns whether a given user directory exists
+    fn user_dir_exists(&self, id: Uuid) -> bool {
+        dir_exists(&self.user_dir_path(id))
+    }
 
+    // Writes the file associated whether a given user
     fn write_user_file(
         &self,
         user: &User,
@@ -212,7 +244,7 @@ impl FileStore {
             }
         }
 
-        if !dir_exists(&self.user_dir_path(user.id)) {
+        if !self.user_dir_exists(user.id) {
             self.make_user_dir(user.id)?;
         }
 
@@ -222,15 +254,99 @@ impl FileStore {
         Ok(())
     }
 
+    // Validate user content
+    fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), StoreError> {
+        if user.id == Uuid::nil() {
+            return Err(StoreError::UserIdMissing());
+        }
+        if user.username.is_empty() {
+            return Err(StoreError::UserNameMissing());
+        }
+        if user.email.is_empty() {
+            return Err(StoreError::UserEmailMissing());
+        }
+        if user.password_hash.is_empty() {
+            return Err(StoreError::UserPasswordMissing());
+        }
+        if self.user_name_exists(&user.username, ignore_id) {
+            return Err(StoreError::UserNameExists());
+        }
+        if self.user_email_exists(&user.email, ignore_id) {
+            return Err(StoreError::UserEmailExists());
+        }
+        Ok(())
+    }
 
+    // Read a user definition
+    fn read_user(&self, id: Uuid) -> Result<User, StoreError> {
+        if !self.user_exists(id) {
+            return Err(StoreError::UserIdNotFound(id.to_string()));
+        }
+        let path = self.user_file_path(id);
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        match serde_json::from_reader::<BufReader<File>, User>(reader) {
+            Ok(user) => Ok(user),
+            Err(error) => Err(StoreError::from(error)),
+        }
+    }   
+
+    // Locate the first user with a given string field value
+    fn find_user_by_string_field(&self, field_name: &str, search_value: &str, ignore_id: Uuid) -> Result<User, StoreError> {
+        let ids = self.get_user_ids()?;
+        for id in ids {
+            if id != ignore_id {
+                let user = self.get_user(id)?;
+                if let Some(user_value) = user.get_string_field(field_name) {
+                    if user_value == search_value {
+                        return Ok(user);
+                    } 
+                } 
+            }
+        }
+        Err(StoreError::UserNotFound())
+    }
+
+    // Checks whether a given username exists in the file store
+    fn user_name_exists(&self, name: &str, ignore_id: Uuid) -> bool {
+        self.find_user_by_string_field("username", name, ignore_id).is_ok()
+    }    
+
+    // Checks whether a given user email exists in the file store
+    fn user_email_exists(&self, email: &str, ignore_id: Uuid) -> bool {
+        self.find_user_by_string_field("email", email, ignore_id).is_ok()
+    } 
+
+    // Returns the list of user ids associated with the file store
+    fn get_user_ids(&self) -> Result<Vec<Uuid>, StoreError> {
+        let ids: Vec<Uuid> = fs::read_dir(&self.users_dir)?
+            .filter_map(|entry| {
+                entry.ok().and_then(|e| {
+                    if e.path().is_dir() {
+                        e.file_name()
+                        .to_str()
+                        .and_then(|name| Uuid::parse_str(name).ok())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect();
+
+        Ok(ids)
+    }
+
+    // Returns the maze id for a given maze name
     fn make_maze_id(&self, name: &str) -> String {
         format!("{}.json", name)
     }
 
+    // Returns the mazes directory
     pub fn get_mazes_dir(&self) -> String {
         self.data_dir.clone()
     }
 
+    // Returns the maze file path for a given maze id
     fn maze_path(&self, id: &str) -> String {
         Path::new(&self.data_dir)
             .join(id)
@@ -238,10 +354,12 @@ impl FileStore {
             .to_string()
     }
 
+    // Checks whether a given maze file exists
     fn maze_exists(&self, id: &str) -> bool {
         file_exists(&self.maze_path(id))
     }
 
+    // Wriets a maze file
     fn write_maze_file(
         &self,
         maze: &mut Maze,
@@ -271,62 +389,384 @@ impl Default for FileStore {
 
 impl UserStore for FileStore {
     /// Adds a new user to the store and sets the allocated `id` within the user object
+    ///
+    /// # Examples
+    ///
+    /// Try to create a new user within a file store
+    ///
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use crate::storage::store::UserStore;
+    /// use crate::storage::{Store, User};
+    /// use storage::{FileStore, FileStoreConfig};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// 
+    /// // Create the user definition  
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    /// };
+    /// 
+    /// // Create the user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
     fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
-        if user.name.is_empty() {
-            return Err(StoreError::UserNameMissing());
-        }
-        if user.email.is_empty() {
-            return Err(StoreError::UserEmailMissing());
-        }
-        if user.password.is_empty() {
-            return Err(StoreError::UserPasswordMissing());
-        }
-
-        //    if self.user_name_exists(user.name) {
-        //         return Err(StoreError::UserNameExists());
-        //    }
-        //     if self.user_email_exists(user.email) {
-        //         return Err(StoreError::UserEmailExists());
-        //     }
         user.id = self.new_user_id();
         user.api_key = self.new_user_api_key();
+        self.validate_user(user, Uuid::nil())?;
         self.write_user_file(&user, false)?;
-
         Ok(())
-
-        // Err(StoreError::Other("create_user() not implemented for FileStore".to_string()))
     }
-
     /// Deletes a user from the store
-    fn delete_user(&mut self, _id: Uuid) -> Result<(), StoreError> {
-        Err(StoreError::Other(
-            "delete_user() not implemented for FileStore".to_string(),
-        ))
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then delete a user within a file store
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use crate::storage::store::UserStore;
+    /// use crate::storage::{Store, User};
+    /// use storage::{FileStore, FileStoreConfig};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// 
+    /// // Create the user definition  
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    /// };
+    /// 
+    /// // Create the user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///         match store.delete_user(user.id) {
+    ///             Ok(_) => {
+    ///                 println!("Successfully deleted user from the file store");
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to delete user => {}",
+    ///                      error
+    ///                 );
+    ///             }
+    ///         } 
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn delete_user(&mut self, id: Uuid) -> Result<(), StoreError> {
+        if id.is_nil() {
+            return Err(StoreError::UserIdMissing());
+        }
+        if !self.user_dir_exists(id) {
+            return Err(StoreError::UserIdNotFound(id.to_string()));
+        }
+        delete_dir(&self.user_dir_path(id));
+
+        if self.user_dir_exists(id) {
+            panic!("User directory {} still exists XXX", id);
+        }
+
+        Ok(())        
     }
     /// Updates a user within the store
-    fn update_user(&mut self, _user: &mut User) -> Result<(), StoreError> {
-        Err(StoreError::Other(
-            "update_user() not implemented for FileStore".to_string(),
-        ))
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then update a user within a file store
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use crate::storage::store::UserStore;
+    /// use crate::storage::{Store, User};
+    /// use storage::{FileStore, FileStoreConfig};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// 
+    /// // Create the user definition  
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    /// };
+    /// 
+    /// // Create the user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///         // Change the user full name
+    ///         user.full_name = "John Henry Smith".to_string();
+    ///         match store.update_user(&mut user) {
+    ///             Ok(_) => {
+    ///                 println!("Successfully update user within the file store");
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to update user => {}",
+    ///                      error
+    ///                 );
+    ///             }
+    ///         } 
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn update_user(&mut self, user: &mut User) -> Result<(), StoreError> {
+        if user.id == Uuid::nil() {
+            return Err(StoreError::UserIdMissing());
+        }
+        if !self.user_exists(user.id) {
+            return Err(StoreError::UserIdNotFound(user.id.to_string()));
+        }
+        self.validate_user(user, user.id)?;
+        self.write_user_file(&user, true)?;
+        Ok(())
     }
     /// Loads a user from the store
-    fn get_user(&self, _id: Uuid) -> Result<User, StoreError> {
-        Err(StoreError::Other(
-            "get_user() not implemented for FileStore".to_string(),
-        ))
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then load a user from within a file store
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use crate::storage::store::UserStore;
+    /// use crate::storage::{Store, User};
+    /// use storage::{FileStore, FileStoreConfig};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// 
+    /// // Create the user definition  
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    /// };
+    /// 
+    /// // Create the user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to load it again and display the results
+    ///         match store.get_user(user.id) {
+    ///             Ok(user_loaded) => {
+    ///                 println!("Successfully loaded user from within the file store => {:?}", user_loaded);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to load user => {}",
+    ///                      error
+    ///                 );
+    ///             }
+    ///         } 
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn get_user(&self, id: Uuid) -> Result<User, StoreError> {
+        self.read_user(id)
     }
     /// Locates a user by their username within the store
-    fn find_user_by_name(&self, _name: &str) -> Result<User, StoreError> {
-        Err(StoreError::Other(
-            "find_user_by_name() not implemented for FileStore".to_string(),
-        ))
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then locate a user from within a file store
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use crate::storage::store::UserStore;
+    /// use crate::storage::{Store, User};
+    /// use storage::{FileStore, FileStoreConfig};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// 
+    /// // Create the user definition  
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    /// };
+    /// 
+    /// // Create the user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to find it again by username and display the results
+    ///         match store.find_user_by_name(&user.username) {
+    ///             Ok(user_found) => {
+    ///                 println!("Successfully found user within the file store => {:?}", user_found);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to find user => {}",
+    ///                      error
+    ///                 );
+    ///             }
+    ///         } 
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
+        self.find_user_by_string_field("username", name, Uuid::nil())
     }
     /// Returns the list of users within the store, sorted
     /// alphabetically by username in ascending order
+    ///
+    /// # Examples
+    ///
+    /// Try to create a user within a file store and then load the list of registered users and display their count
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test   
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use crate::storage::store::UserStore;
+    /// use crate::storage::{Store, User};
+    /// use storage::{FileStore, FileStoreConfig};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// 
+    /// // Create the user definition  
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    /// };
+    /// 
+    /// // Create the user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to load the user list and display the results
+    ///         match store.get_users() {
+    ///             Ok(users_found) => {
+    ///                 println!("Successfully loaded {} users from within the file store", users_found.len());
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to load users => {}",
+    ///                      error
+    ///                 );
+    ///             }
+    ///         } 
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
     fn get_users(&self) -> Result<Vec<User>, StoreError> {
-        Err(StoreError::Other(
-            "get_users() not implemented for FileStore".to_string(),
-        ))
+        let ids = self.get_user_ids()?;
+        let mut users:Vec<User> = Vec::new();
+        for id in ids {
+            users.push(self.get_user(id)?);
+        }
+        users.sort_by(|a, b| a.username.cmp(&b.username));
+        Ok(users)
     }
 }
 
@@ -720,9 +1160,11 @@ impl Store for FileStore {}
 
 #[cfg(test)]
 mod tests {
-    //use crate::file_store::FileStore;
     use super::*;
-
+    //****************************************************************
+    // Utility functions
+    //****************************************************************
+    // Create a new, empty store
     fn new_store() -> FileStore {
         let mut store = FileStore::new(&FileStoreConfig::default());
         if let Err(error) = store.empty() {
@@ -731,11 +1173,73 @@ mod tests {
         store
     }
 
+    // Initialize a User struct
+    fn init_test_user(
+        store: &FileStore,
+        is_admin: bool,
+        username: &str,
+        full_name: &str,
+        email: &str,
+        password_hash: &str,
+    ) -> User {
+        User {
+            id: store.new_user_id(),
+            is_admin: is_admin,
+            username: username.to_string(),
+            full_name: full_name.to_string(),
+            email: email.to_string(),
+            password_hash: password_hash.to_string(),
+            api_key: store.new_user_api_key(),
+        }
+    }
+
+    // Create a user in the file store
+    fn create_user(
+        store: &mut FileStore,
+        is_admin: bool,
+        username: &str,
+        full_name: &str,
+        email: &str,
+        password_hash: &str,
+    ) -> User {
+        let mut user = init_test_user(&store, is_admin, username, full_name, email, password_hash);
+
+        if let Err(error) = store.create_user(&mut user) {
+            panic!( "{}", error);
+        }
+        user
+    }    
+
+    // Initialize a Maze struct
+    fn init_test_maze(
+        store: &FileStore,
+        name: &str,
+        set_id: bool,
+        set_name: bool,
+    ) -> (String, Maze) {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', ' ', 'W'],
+            vec!['F', ' ', 'W']
+        ];
+        let mut maze = Maze::from_vec(grid);
+        if set_name {
+            maze.name = name.to_string();
+        }
+        let id = store.make_maze_id(name);
+        if set_id {
+            maze.id = id.clone();
+        }
+        (id, maze)
+    }    
+    //****************************************************************
+    // User tests
+    //****************************************************************
     #[test]
     #[should_panic(expected = "No username provided for the user")]
     fn cannot_create_user_without_name() {
         let mut store = new_store();
-        let (_path, user) = do_create_user(&mut store, false, "", "", "", "");
+        let user = create_user(&mut store, false, "", "", "", "");
         panic!("Successfully created user {:?} but did not expect to", user);
     }
 
@@ -743,7 +1247,7 @@ mod tests {
     #[should_panic(expected = "No email provided for the user")]
     fn cannot_create_user_without_email() {
         let mut store = new_store();
-        let (_path, user) = do_create_user(&mut store, false, "test", "", "", "");
+        let user = create_user(&mut store, false, "test", "", "", "");
         panic!("Successfully created user {:?} but did not expect to", user);
     }
 
@@ -751,16 +1255,261 @@ mod tests {
     #[should_panic(expected = "No password provided for the user")]
     fn cannot_create_user_without_password() {
         let mut store = new_store();
-        let (_path, user) = do_create_user(&mut store, false, "test", "", "test@company.com", "");
+        let user = create_user(&mut store, false, "test", "", "test@company.com", "");
         panic!("Successfully created user {:?} but did not expect to", user);
     }
 
     #[test]
     fn can_create_user() {
         let mut store = new_store();
-        let (_path, _user) = do_create_user(&mut store, false, "test", "", "test@company.com", "password");
+        let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
     }
 
+    #[test]
+    #[should_panic(expected = "The username is already taken")]
+    fn cannot_create_user_with_existing_name() {
+        let mut store = new_store();
+        let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let _ = create_user(&mut store, false, "test", "", "test@company.com2", "password_hash2");
+    }
+
+    #[test]
+    #[should_panic(expected = "The email is already taken")]
+    fn cannot_create_user_with_existing_email() {
+        let mut store = new_store();
+        let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let _ = create_user(&mut store, false, "test2", "", "test@company.com", "password_hash2");
+    }
+
+    #[test]
+    fn can_get_user_that_exists() {
+        let mut store = new_store();
+        let user = create_user(&mut store, false, "test2", "", "test@company.com", "password_hash2");
+
+        match store.get_user(user.id) {
+            Ok(user_loaded) => {
+                if user_loaded != user {
+                    panic!("Loaded user content is different to user content saved");
+                }
+            }
+            Err(error) => {
+                panic!("Failed to load saved user: {}", error);
+            }
+        }
+    }
+
+    #[test]
+    fn cannot_get_user_that_does_not_exist() {
+        let store = new_store();
+        let id = store.new_user_id();
+        match store.get_user(id) {
+            Ok(_) => { 
+                panic!("Loaded user content for id '{}' when did not expected to", id);
+            }
+            Err(error) => {
+                let err_msg = error.to_string();
+                let err_msg_expected = StoreError::UserIdNotFound(id.to_string()).to_string();
+                if err_msg != err_msg_expected {
+                    panic!("Unexpected error returned: '{}', expected: '{}'", err_msg, err_msg_expected);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn can_delete_user_that_exists() {
+        let mut store = new_store();
+        let user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+
+        match store.delete_user(user.id) {
+            Ok(_) => {
+                if store.user_dir_exists(user.id) {
+                    panic!("User directory {} still exists", user.id);
+                }
+            }, 
+            Err(error) => {
+                panic!("{}", error);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "No id provided for the user")]
+    fn cannot_delete_user_with_empty_id() {
+        let mut store = new_store();
+
+        match store.delete_user(Uuid::nil()) {
+            Ok(()) => {
+                panic!("delete_user() suceeded for nil id");
+            }
+            Err(error) => {
+                panic!("{}", error);
+            }
+        }
+    }    
+
+    #[test]
+    fn cannot_delete_user_that_does_not_exist() {
+        let mut store = new_store();
+        let id = store.new_user_id();
+
+        match store.delete_user(id) {
+            Ok(()) => {
+                panic!("delete_user() suceeded for id {}", id);
+            }
+            Err(error) => {
+                let err_msg = error.to_string();
+                let err_msg_expected = StoreError::UserIdNotFound(id.to_string()).to_string();
+                if err_msg != err_msg_expected {
+                    panic!("Unexpected error returned: '{}', expected: '{}'", err_msg, err_msg_expected);
+                }
+            }
+        }
+    } 
+
+    #[test]
+    fn can_update_existing_user() {
+        let mut store = new_store();
+        let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        if let Err(error) = store.update_user(&mut user) {
+            panic!("Failed to update user: '{}'", error.to_string());
+        }
+    }
+
+    #[test]
+    fn cannot_update_user_that_does_not_exist() {
+        let mut store = new_store();
+        let mut user = init_test_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        user.id = store.new_user_id();
+        if let Err(error) = store.update_user(&mut user) {
+            let err_msg = error.to_string();
+            let err_msg_expected = StoreError::UserIdNotFound(user.id.to_string()).to_string();
+            if err_msg != err_msg_expected {
+                panic!("Unexpected error returned: '{}', expected: '{}'", err_msg, err_msg_expected);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "No id provided for the user")]
+    fn cannot_update_existing_user_without_id() {
+        let mut store = new_store();
+        let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        user.id = Uuid::nil();
+        if let Err(error) = store.update_user(&mut user) {
+            panic!("{}'", error.to_string());
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "No username provided for the user")]
+    fn cannot_update_existing_user_without_name() {
+        let mut store = new_store();
+        let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        user.username = "".to_string();
+        if let Err(error) = store.update_user(&mut user) {
+            panic!("{}", error.to_string());
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "No email provided for the user")]
+    fn cannot_update_existing_user_without_email() {
+        let mut store = new_store();
+        let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        user.email = "".to_string();
+        if let Err(error) = store.update_user(&mut user) {
+            panic!("{}", error.to_string());
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "No password provided for the user")]
+    fn cannot_update_existing_user_without_password() {
+        let mut store = new_store();
+        let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        user.password_hash = "".to_string();
+        if let Err(error) = store.update_user(&mut user) {
+            panic!("{}", error.to_string());
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "The username is already taken")]
+    fn cannot_update_user_with_existing_name() {
+        let mut store = new_store();
+        let user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let mut user2 = create_user(&mut store, false, "test2", "", "test2@company.com", "password_hash2");
+        user2.username = user.username;
+        if let Err(error) = store.update_user(&mut user2) {
+            panic!("{}", error.to_string());
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "The email is already taken")]
+    fn cannot_update_user_with_existing_email() {
+        let mut store = new_store();
+        let user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let mut user2 = create_user(&mut store, false, "test2", "", "test2@company.com", "password_hash2");
+        user2.email = user.email;
+        if let Err(error) = store.update_user(&mut user2) {
+            panic!("{}", error.to_string());
+        }
+    }
+
+    #[test]
+    fn can_find_existing_user_by_name() {
+        let mut store = new_store();
+        let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        if let Err(error) = store.find_user_by_name("test") {
+            panic!("Failed to find user by name: {}", error.to_string());
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "User not found")]
+    fn cannot_find_non_existent_user_by_name() {
+        let mut store = new_store();
+        let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        if let Err(error) = store.find_user_by_name("unknown") {
+            panic!("{}", error.to_string());
+        }
+    }
+
+    #[test]
+    fn can_get_user_list() {
+        let mut store = new_store();
+        let _ = create_user(&mut store, false, "test4", "", "test4@company.com", "password_hash");
+        let _ = create_user(&mut store, false, "test1", "", "test1@company.com", "password_hash");
+        let _ = create_user(&mut store, false, "test2", "", "test2@company.com", "password_hash");
+        let _ = create_user(&mut store, false, "test3", "", "test3@company.com", "password_hash");
+        match store.get_users() {
+            Ok(users) => {
+                let count_expected = 4;
+                if users.len() != count_expected {
+                    panic!("Expected {} users but got {}", count_expected, users.len());
+                }
+                let expected_names = vec!["test1".to_string(), "test2".to_string(), "test3".to_string(), "test4".to_string()];
+                let names: Vec<String> = users.iter().map(|p| p.username.clone()).collect();
+                if names != expected_names {
+                    panic!("Expected usernames: {:?} but got: {:?}", expected_names, names);
+                }
+            },
+            Err(error) => panic!("{}", error.to_string()),
+        }
+    }
+
+    #[test]
+    fn can_get_empty_user_list_when_there_are_no_users() {
+        let store = new_store();
+        if let Err(error) = store.get_users() {
+            panic!("{}", error.to_string());
+        }
+    }
+    //****************************************************************
+    // Maze tests
+    //****************************************************************
     #[test]
     fn can_save_maze_to_valid_file_path() {
         let store = new_store();
@@ -868,7 +1617,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "A maze with id 'maze.json' was not found")]
-    fn cannot_update_non_existant_maze() {
+    fn cannot_update_non_existent_maze() {
         let mut store = new_store();
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
 
@@ -883,7 +1632,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "No id provided")]
+    #[should_panic(expected = "No id provided for the maze")]
     fn cannot_update_maze_with_no_id() {
         let mut store = new_store();
         let (_, mut maze) = init_test_maze(&store, "maze", false, true);
@@ -923,7 +1672,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "No id provided")]
+    #[should_panic(expected = "No id provided for the maze")]
     fn cannot_delete_maze_with_empty_id() {
         let mut store = new_store();
 
@@ -1054,64 +1803,5 @@ mod tests {
                 );
             }
         }
-    }
-
-    fn init_test_user(
-        store: &FileStore,
-        is_admin: bool,
-        name: &str,
-        full_name: &str,
-        email: &str,
-        password: &str,
-    ) -> (String, User) {
-        let user = User {
-            id: store.new_user_id(),
-            is_admin: is_admin,
-            name: name.to_string(),
-            full_name: full_name.to_string(),
-            email: email.to_string(),
-            password: password.to_string(),
-            api_key: store.new_user_api_key(),
-        };
-        let path = format!("./{}.json", name);
-        (path, user)
-    }
-
-    fn do_create_user(
-        store: &mut FileStore,
-        is_admin: bool,
-        name: &str,
-        full_name: &str,
-        email: &str,
-        password: &str,
-    ) -> (String, User) {
-        let (path, mut user) = init_test_user(&store, is_admin, name, full_name, email, password);
-
-        if let Err(error) = store.create_user(&mut user) {
-            panic!( "{}", error);
-        }
-        (path, user)
-    }    
-
-    fn init_test_maze(
-        store: &FileStore,
-        name: &str,
-        set_id: bool,
-        set_name: bool,
-    ) -> (String, Maze) {
-        #[rustfmt::skip]
-        let grid: Vec<Vec<char>> = vec![
-            vec!['S', ' ', 'W'],
-            vec!['F', ' ', 'W']
-        ];
-        let mut maze = Maze::from_vec(grid);
-        if set_name {
-            maze.name = name.to_string();
-        }
-        let id = store.make_maze_id(name);
-        if set_id {
-            maze.id = id.clone();
-        }
-        (id, maze)
     }
 }

@@ -43,13 +43,13 @@ pub struct User {
     /// Is administrator?
     pub is_admin: bool,
     /// Username
-    pub name: String,
+    pub username: String,
     /// Full name 
     pub full_name: String,
     /// Email address
     pub email: String,
-    /// Password (encrypted)
-    pub password: String,
+    /// Password hash (encrypted)
+    pub password_hash: String,
     #[schema(value_type = String)] // Treat as string during serlialization
     /// API key
     pub api_key: Uuid,
