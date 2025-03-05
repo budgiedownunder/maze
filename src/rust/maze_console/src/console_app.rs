@@ -8,18 +8,20 @@ use maze::LinePrinter;
 use maze::Maze;
 use maze_console::app::App;
 
-use storage::Store;
+use storage::{Store, User};
 
 pub struct ConsoleApp {
     store: Box<dyn Store>,
+    user: User,
     current_maze: Maze,
 }
 
 impl ConsoleApp {
-    pub fn new(store: Box<dyn Store>) -> ConsoleApp {
+    pub fn new(store: Box<dyn Store>, user: &User) -> ConsoleApp {
         ConsoleApp {
             store,
             current_maze: Maze::new(Definition::new(0, 0)),
+            user: user.clone(),
         }
     }
 }
@@ -28,6 +30,10 @@ impl App for ConsoleApp {
 
     fn get_store(&mut self) -> &mut Box<dyn Store> {
         &mut self.store
+    }
+
+    fn get_user(&self) -> &User {
+        &self.user
     }
 
     fn get_maze(&self) -> &Maze {

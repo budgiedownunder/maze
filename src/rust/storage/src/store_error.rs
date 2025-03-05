@@ -5,7 +5,7 @@ use std::io;
 #[derive(Debug)]
 pub enum StoreError {
     UserEmailExists(),
-    UserEmailMissing(),
+    //UserEmailMissing(), TO DO - CHANGE TO USER EMAIL INVALID 
     UserIdExists(String),
     UserIdMissing(),
     UserIdNotFound(String),
@@ -29,7 +29,7 @@ impl std::fmt::Display for StoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             StoreError::UserEmailExists() => write!(f, "The email is already taken"),
-            StoreError::UserEmailMissing() => write!(f, "No email provided for the user"),
+           // StoreError::UserEmailMissing() => write!(f, "No email provided for the user"),
             StoreError::UserIdExists(id) => write!(f, "A user with id '{}' already exists", id),
             StoreError::UserIdMissing() => write!(f, "No id provided for the user"),
             StoreError::UserIdNotFound(id) => write!(f, "A user with id '{}' was not found", id),

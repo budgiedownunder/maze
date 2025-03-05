@@ -94,9 +94,12 @@ pub enum StoreConfig {
 /// }
 /// ```
 pub fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, StoreError> {
-    match config {
-        StoreConfig::File(file_config) => Ok(Box::new(file_store::FileStore::new(&file_config))),
-    }
+    let store = match config  
+    {
+        StoreConfig::File(file_config) => file_store::FileStore::new(&file_config),
+    };
+
+    Ok(Box::new(store))
 }
 
 /// Hidden module that provides setup functionality for doc tests.

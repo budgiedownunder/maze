@@ -273,16 +273,16 @@ impl FileStore {
         if user.username.is_empty() {
             return Err(StoreError::UserNameMissing());
         }
-        if user.email.is_empty() {
-            return Err(StoreError::UserEmailMissing());
-        }
+        // if user.email.is_empty() {
+        //     return Err(StoreError::UserEmailMissing());
+        // }
         if user.password_hash.is_empty() {
             return Err(StoreError::UserPasswordMissing());
         }
         if self.user_name_exists(&user.username, ignore_id) {
             return Err(StoreError::UserNameExists());
         }
-        if self.user_email_exists(&user.email, ignore_id) {
+        if !user.email.is_empty() && self.user_email_exists(&user.email, ignore_id) {
             return Err(StoreError::UserEmailExists());
         }
         Ok(())
@@ -417,6 +417,61 @@ impl Default for FileStore {
 }
 
 impl UserStore for FileStore {
+    /// Adds the default admin user to the store if it doesn't already exist, else returns it
+    ///
+    /// # Examples
+    ///
+    /// Try to create a new user within a file store
+    ///
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use crate::storage::store::UserStore;
+    /// use crate::storage::{Store, User};
+    /// use storage::{FileStore, FileStoreConfig};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    ///
+    /// // Create the default admin user within the file store if needed
+    /// match store.init_default_admin_user() {
+    ///     Ok(user) => {
+    ///         println!(
+    ///             "Successfully intiialized default admin user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to initialized default admin user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn init_default_admin_user(&mut self) -> Result<User, StoreError> {
+        let username = "admin".to_string();
+        let password_hash = "password_hash".to_string();
+        match self.find_user_by_name(&username) {
+            Ok(user) => Ok(user),
+            Err(error) => {
+                match error {
+                    StoreError::UserNotFound() => {
+                        let mut user = User::default();
+                        user.username = username;
+                        user.is_admin = true;
+                        user.password_hash = password_hash;
+                        self.create_user(&mut user)?;
+                        Ok(user)
+                    }
+                    _ => Err(error)
+                }
+            }
+        }    
+    }
     /// Adds a new user to the store and sets the allocated `id` within the user object
     ///
     /// # Examples
@@ -1345,13 +1400,13 @@ mod tests {
         panic!("Successfully created user {:?} but did not expect to", user);
     }
 
-    #[test]
-    #[should_panic(expected = "No email provided for the user")]
-    fn cannot_create_user_without_email() {
-        let mut store = new_store();
-        let user = create_user(&mut store, false, "test", "", "", "");
-        panic!("Successfully created user {:?} but did not expect to", user);
-    }
+    // #[test]
+    // #[should_panic(expected = "No email provided for the user")]
+    // fn cannot_create_user_without_email() {
+    //     let mut store = new_store();
+    //     let user = create_user(&mut store, false, "test", "", "", "");
+    //     panic!("Successfully created user {:?} but did not expect to", user);
+    // }
 
     #[test]
     #[should_panic(expected = "No password provided for the user")]
@@ -1514,16 +1569,16 @@ mod tests {
         }
     }
 
-    #[test]
-    #[should_panic(expected = "No email provided for the user")]
-    fn cannot_update_existing_user_without_email() {
-        let mut store = new_store();
-        let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
-        user.email = "".to_string();
-        if let Err(error) = store.update_user(&mut user) {
-            panic!("{}", error.to_string());
-        }
-    }
+    // #[test]
+    // #[should_panic(expected = "No email provided for the user")]
+    // fn cannot_update_existing_user_without_email() {
+    //     let mut store = new_store();
+    //     let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+    //     user.email = "".to_string();
+    //     if let Err(error) = store.update_user(&mut user) {
+    //         panic!("{}", error.to_string());
+    //     }
+    // }
 
     #[test]
     #[should_panic(expected = "No password provided for the user")]

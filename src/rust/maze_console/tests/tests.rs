@@ -21,7 +21,15 @@ fn new_mock_app() -> MockApp {
             if let Err(error) = store.empty() {
                 panic!("new_mock_app() failed to empty store content: {}", error);
             }
-            MockApp::new(store)
+            match store.init_default_admin_user() {
+                Ok(user) => MockApp::new(store, &user),
+                Err(error) => {
+                    panic!(
+                        "{}",
+                        format!("new_mock_app() failed to initialize default admin user: {}", error)
+                    );
+                }
+            }
         }    
         Err(error) => {
             panic!(

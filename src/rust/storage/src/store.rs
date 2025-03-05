@@ -7,6 +7,8 @@ use uuid::Uuid;
 
 /// Represents a store for holding users
 pub trait UserStore {
+    /// Adds the default admin user to the store if it doesn't already exist, else returns it 
+    fn init_default_admin_user(&mut self) -> Result<User, StoreError>;
     /// Adds a new user to the store and sets the allocated `id` within the user object
     fn create_user(&mut self, user: &mut User) -> Result<(), StoreError>;
     /// Deletes a user from the store
@@ -72,6 +74,18 @@ pub struct User {
 }
 
 impl User {
+    pub fn default() -> User {
+        User {
+            id: Uuid::nil(),
+            is_admin: false,
+            username: "".to_string(),
+            full_name: "".to_string(),
+            email: "".to_string(),
+            password_hash: "".to_string(),
+            api_key: Uuid::nil(),
+        }
+    }
+
     pub fn to_json(&self) -> Result<String, StoreError> {
         Ok(serde_json::to_string(&self)?)
     }

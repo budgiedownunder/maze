@@ -9,7 +9,7 @@ use maze::LinePrinter;
 use maze::Maze;
 use maze::Definition;
 
-use storage::{Store, get_store};
+use storage::{Store, get_store, User};
 
 struct MockInputKey {
     key: char,
@@ -26,16 +26,18 @@ pub struct MockApp {
     input_keys: VecDeque<MockInputKey>,
     input_lines: VecDeque<MockInputLine>,
     output: Vec<String>,
+    user: User,
     pub current_maze: Maze,
 }
 
 impl MockApp {
-    pub fn new(store: Box<dyn Store>) -> MockApp {
+    pub fn new(store: Box<dyn Store>, user: &User) -> MockApp {
         MockApp {
             store,
             input_keys: VecDeque::new(),
             input_lines: VecDeque::new(),
             output: Vec::new(),
+            user: user.clone(),
             current_maze: Maze::new(Definition::new(0, 0)),
         }
     }
@@ -89,8 +91,16 @@ impl Default for MockApp {
     fn default() -> Self {
         let file_config = storage::FileStoreConfig::default();
         match get_store(storage::StoreConfig::File(file_config)) {
-            Ok(store) => {
-                Self::new(store)
+            Ok(mut store) => {
+                match store.init_default_admin_user() {
+                    Ok(user) => MockApp::new(store, &user),
+                    Err(error) => {
+                        panic!(
+                            "{}",
+                            format!("Failed to initialize default admin user: {}", error)
+                        );
+                    }
+                }
             }
             Err(error) => {
                 panic!("{}", format!("Failed to initialise default mock app status: {}", error));
@@ -102,6 +112,10 @@ impl Default for MockApp {
 impl App for MockApp {
     fn get_store(&mut self) -> &mut Box<dyn Store> {
         &mut self.store
+    }
+
+    fn get_user(&self) -> &User {
+        &self.user
     }
 
     fn get_maze(&self) -> &Maze {
