@@ -437,7 +437,7 @@ impl UserStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Create the default admin user within the file store if needed
-    /// match store.init_default_admin_user() {
+    /// match store.init_default_admin_user("admin", "my_password_hash") {
     ///     Ok(user) => {
     ///         println!(
     ///             "Successfully intiialized default admin user with id {} in the file store",
@@ -452,18 +452,16 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn init_default_admin_user(&mut self) -> Result<User, StoreError> {
-        let username = "admin".to_string();
-        let password_hash = "password_hash".to_string();
+    fn init_default_admin_user(&mut self, username: &str, password_hash: &str) -> Result<User, StoreError> {
         match self.find_user_by_name(&username) {
             Ok(user) => Ok(user),
             Err(error) => {
                 match error {
                     StoreError::UserNotFound() => {
                         let mut user = User::default();
-                        user.username = username;
+                        user.username = username.to_string();
                         user.is_admin = true;
-                        user.password_hash = password_hash;
+                        user.password_hash = password_hash.to_string();
                         self.create_user(&mut user)?;
                         Ok(user)
                     }
