@@ -31,3 +31,6 @@ utoipa-rapidoc = { version = "5.0.0", features = ["actix-web"] }
 utoipa-redoc = { version = "5.0.0", features = ["actix-web"] }
 utoipa-swagger-ui = { version = "8.0.3", features = [ "actix-web"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
+
+[dev-dependencies]
+actix-http = "3.9"

@@ -784,6 +784,73 @@ impl UserStore for FileStore {
     fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
         self.find_user_by_string_field("username", name, Uuid::nil())
     }
+    /// Locates a user by their api key within the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then locate a user by its api key from within a file store
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use crate::storage::store::UserStore;
+    /// use crate::storage::{Store, User};
+    /// use storage::{FileStore, FileStoreConfig};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    /// };
+    ///
+    /// // Create the user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to find it again by username and display the results
+    ///         match store.find_user_by_api_key(user.api_key) {
+    ///             Ok(user_found) => {
+    ///                 println!("Successfully found user within the file store => {:?}", user_found);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to find user => {}",
+    ///                      error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
+        let ids = self.get_user_ids()?;
+        for id in ids {
+            let user = self.get_user(id)?;
+            if user.api_key == api_key {
+                return Ok(user);
+            }
+        }
+        Err(StoreError::UserNotFound())
+    }
     /// Returns the list of users within the store, sorted
     /// alphabetically by username in ascending order
     ///
@@ -1628,6 +1695,24 @@ mod tests {
         let mut store = new_store();
         let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         if let Err(error) = store.find_user_by_name("unknown") {
+            panic!("{}", error.to_string());
+        }
+    }
+
+    #[test]
+    fn can_find_existing_user_by_api_key() {
+        let mut store = new_store();
+        let user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        if let Err(error) = store.find_user_by_api_key(user.api_key) {
+            panic!("Failed to find user by api_key: {}", error.to_string());
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "User not found")]
+    fn cannot_find_existing_user_by_invalid_api_key() {
+        let store = new_store();
+        if let Err(error) = store.find_user_by_api_key(store.new_user_api_key()) {
             panic!("{}", error.to_string());
         }
     }

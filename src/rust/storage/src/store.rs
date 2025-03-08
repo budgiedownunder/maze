@@ -19,6 +19,8 @@ pub trait UserStore {
     fn get_user(&self, id: Uuid) -> Result<User, StoreError>;
     /// Locates a user by their username within the store
     fn find_user_by_name(&self, name: &str) -> Result<User, StoreError>;
+    /// Locates a user by their api key within the store
+    fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError>;
     /// Returns the list of users within the store, sorted
     /// alphabetically by username in ascending order
     fn get_users(&self) -> Result<Vec<User>, StoreError>;
