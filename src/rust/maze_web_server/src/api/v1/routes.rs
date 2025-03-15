@@ -1,6 +1,6 @@
 use actix_web::web; 
 use actix_web::middleware::from_fn;
-use crate::api::v1::handlers;
+use crate::api::v1::endpoints::handlers;
 use crate::middleware::auth::auth_middleware;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
