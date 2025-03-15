@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, Write};
-use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
 use uuid::Uuid;
 
 use maze::Maze;
@@ -24,6 +24,7 @@ pub struct FileStoreConfig {
 }
 
 impl FileStoreConfig {
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
         FileStoreConfig {
             data_dir: "data".to_string(),
@@ -173,7 +174,7 @@ impl FileStore {
 
         let dir_path: String = normalized_path
             .to_string_lossy()
-            .replace('/', &MAIN_SEPARATOR.to_string());
+            .replace('/', MAIN_SEPARATOR_STR);
 
         Self::make_dir(&dir_path)
     }
@@ -249,10 +250,8 @@ impl FileStore {
         overwrite: bool,
     ) -> Result<(), StoreError> {
 
-        if !overwrite {
-            if self.user_exists(user.id) {
-                return Err(StoreError::UserIdExists(user.id.to_string()));
-            }
+        if !overwrite && self.user_exists(user.id) {
+            return Err(StoreError::UserIdExists(user.id.to_string()));
         }
 
         if !self.user_dir_exists(user.id) {
@@ -260,7 +259,7 @@ impl FileStore {
         }
 
         let s = user.to_json()?;
-        let mut file = File::create(&self.user_file_path(user.id))?;
+        let mut file = File::create(self.user_file_path(user.id))?;
         file.write_all(s.as_bytes())?;
         Ok(())
     }
@@ -393,14 +392,12 @@ impl FileStore {
     ) -> Result<(), StoreError> {
         maze.id = id.to_string();
 
-        if !self.user_mazes_dir_exists(&owner) {
-            self.make_user_mazes_dir(&owner)?;
+        if !self.user_mazes_dir_exists(owner) {
+            self.make_user_mazes_dir(owner)?;
         }
 
-        if !overwrite {
-            if self.maze_exists(owner, id) {
-                return Err(StoreError::MazeIdExists(id.to_string()));
-            }
+        if !overwrite && self.maze_exists(owner, id) {
+            return Err(StoreError::MazeIdExists(id.to_string()));
         }
 
         let s = maze.to_json()?;
@@ -453,7 +450,7 @@ impl UserStore for FileStore {
     /// }
     /// ```
     fn init_default_admin_user(&mut self, username: &str, password_hash: &str) -> Result<User, StoreError> {
-        match self.find_user_by_name(&username) {
+        match self.find_user_by_name(username) {
             Ok(user) => Ok(user),
             Err(error) => {
                 match error {
@@ -520,8 +517,8 @@ impl UserStore for FileStore {
         user.id = self.new_user_id();
         user.api_key = self.new_user_api_key();
         self.validate_user(user, Uuid::nil())?;
-        self.write_user_file(&user, false)?;
-        self.make_user_mazes_dir(&user)?;
+        self.write_user_file(user, false)?;
+        self.make_user_mazes_dir(user)?;
         Ok(())
     }
     /// Deletes a user from the store
@@ -661,7 +658,7 @@ impl UserStore for FileStore {
             return Err(StoreError::UserIdNotFound(user.id.to_string()));
         }
         self.validate_user(user, user.id)?;
-        self.write_user_file(&user, true)?;
+        self.write_user_file(user, true)?;
         Ok(())
     }
     /// Loads a user from the store
@@ -1250,7 +1247,7 @@ impl MazeStore for FileStore {
         let id = self.make_maze_id(name);
         if !name.is_empty() && self.maze_exists(owner, &id) {
             return Ok(MazeItem {
-                id: id,
+                id,
                 name: name.to_string(),
                 definition: None,
             });
@@ -1327,25 +1324,22 @@ impl MazeStore for FileStore {
                             if let Some(name_str) = name.to_str() {
                                 let mut name_use = name_str.to_string();
                                 let mut definition: Option<String> = None;
-                                match self.get_maze(owner, &path_str) {
-                                    Ok(maze_loaded) => {
-                                        if include_definitions {
-                                            definition = Some(
-                                                serde_json::to_string(&maze_loaded)
-                                                    .expect("Failed to serialize"),
-                                            );
-                                        }
-                                        if maze_loaded.name != "" {
-                                            name_use = maze_loaded.name.to_string();
-                                        }
+                                if let Ok(maze_loaded) =  self.get_maze(owner, path_str) {
+                                    if include_definitions {
+                                        definition = Some(
+                                            serde_json::to_string(&maze_loaded)
+                                                .expect("Failed to serialize"),
+                                        );
                                     }
-                                    Err(_) => {}
+                                    if !maze_loaded.name.is_empty() {
+                                        name_use = maze_loaded.name.to_string();
+                                    }
                                 }
 
                                 items.push(MazeItem {
                                     id: path_str.to_string(),
                                     name: name_use,
-                                    definition: definition,
+                                    definition,
                                 });
                             }
                         }
@@ -1406,7 +1400,7 @@ mod tests {
     ) -> User {
         User {
             id: store.new_user_id(),
-            is_admin: is_admin,
+            is_admin,
             username: username.to_string(),
             full_name: full_name.to_string(),
             email: email.to_string(),
@@ -1424,7 +1418,7 @@ mod tests {
         email: &str,
         password_hash: &str,
     ) -> User {
-        let mut user = init_test_user(&store, is_admin, username, full_name, email, password_hash);
+        let mut user = init_test_user(store, is_admin, username, full_name, email, password_hash);
 
         if let Err(error) = store.create_user(&mut user) {
             panic!( "{}", error);
@@ -1594,14 +1588,14 @@ mod tests {
         let mut store = new_store();
         let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         if let Err(error) = store.update_user(&mut user) {
-            panic!("Failed to update user: '{}'", error.to_string());
+            panic!("Failed to update user: '{}'", error);
         }
     }
 
     #[test]
     fn cannot_update_user_that_does_not_exist() {
         let mut store = new_store();
-        let mut user = init_test_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let mut user = init_test_user(&store, false, "test", "", "test@company.com", "password_hash");
         user.id = store.new_user_id();
         if let Err(error) = store.update_user(&mut user) {
             let err_msg = error.to_string();
@@ -1619,7 +1613,7 @@ mod tests {
         let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         user.id = Uuid::nil();
         if let Err(error) = store.update_user(&mut user) {
-            panic!("{}'", error.to_string());
+            panic!("{}'", error);
         }
     }
 
@@ -1685,7 +1679,7 @@ mod tests {
         let mut store = new_store();
         let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         if let Err(error) = store.find_user_by_name("test") {
-            panic!("Failed to find user by name: {}", error.to_string());
+            panic!("Failed to find user by name: {}", error);
         }
     }
 
@@ -1704,7 +1698,7 @@ mod tests {
         let mut store = new_store();
         let user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
         if let Err(error) = store.find_user_by_api_key(user.api_key) {
-            panic!("Failed to find user by api_key: {}", error.to_string());
+            panic!("Failed to find user by api_key: {}", error);
         }
     }
 

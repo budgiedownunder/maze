@@ -9,10 +9,6 @@ pub struct SecurityConfig {
 
     #[serde(default = "default_security_key_file")]
     pub key_file: String,
-
-    #[serde(default = "default_security_auth_token")]
-    pub auth_token: String,
-
 }
 
 ///  Application Configuration settings
@@ -70,5 +66,5 @@ fn set_env_overrides(mut builder: ConfigBuilder<DefaultState>) -> Result<ConfigB
 
 /// Returns the applicaion environment name for a given setting 
 fn get_app_env_name(setting_name: &str) -> String {
-    return format!("MAZE_WEB_SERVER_{}", setting_name);
+    format!("MAZE_WEB_SERVER_{}", setting_name)
 }

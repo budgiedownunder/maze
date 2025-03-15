@@ -18,8 +18,8 @@ fn load_rustls_config(config: &AppConfig) -> io::Result<ServerConfig> {
     let cert_file_name = &config.security.cert_file;
     let key_file_name =  &config.security.key_file;
 
-    let mut cert_reader = BufReader::new(File::open(cert_file_name).expect(format!("Cannot open certificate file '{}'", cert_file_name).as_str()));
-    let key_reader = &mut BufReader::new(File::open(key_file_name).expect(format!("Cannot open private key file '{}'", key_file_name).as_str()));
+    let mut cert_reader = BufReader::new(File::open(cert_file_name).unwrap_or_else(|_| panic!("Cannot open private key file '{}'", key_file_name)));
+    let key_reader = &mut BufReader::new(File::open(key_file_name).unwrap_or_else(|_| panic!("Cannot open private key file '{}'", key_file_name)));
 
     let cert_chain = certs(&mut cert_reader)?
         .into_iter()
@@ -67,7 +67,7 @@ pub async fn run_server() -> std::io::Result<()> {
     let file_config = storage::FileStoreConfig::default();
     let mut store = get_store(storage::StoreConfig::File(file_config))?;
     let users = store.get_users()?;
-    if users.len() == 0 {
+    if users.is_empty() {
         store.init_default_admin_user("admin", "dummy_hash_password")?;
     }
     let shared_store: SharedStore = Arc::new(RwLock::new(store));

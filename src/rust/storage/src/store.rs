@@ -76,6 +76,7 @@ pub struct User {
 }
 
 impl User {
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> User {
         User {
             id: Uuid::nil(),
