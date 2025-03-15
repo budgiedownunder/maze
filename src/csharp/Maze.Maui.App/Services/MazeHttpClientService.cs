@@ -134,7 +134,7 @@ namespace Maze.Maui.App.Services
                 throw new Exception("Maze item is null");
             }
 
-            string url = $"mazes/";
+            string url = $"mazes";
             string json = GetMazeItemJson(item);
             HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await _httpClient.PostAsync(url, content);
