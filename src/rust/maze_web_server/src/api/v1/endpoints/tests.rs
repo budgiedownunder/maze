@@ -22,6 +22,8 @@ mod tests {
     use utoipa_redoc::{Redoc, Servable};
     use utoipa_swagger_ui::SwaggerUi;
     use uuid::Uuid;
+
+    const UNKNOWN_USER:&str = "unknown_user";
     
     #[derive(Clone, Debug)]
     struct MockMaze {
@@ -58,9 +60,9 @@ mod tests {
     }
 
     impl MockStore {
-        pub fn new(startup_content: StoreStartupContent) -> Self {
+        pub fn new(user_defs: &Vec<UserDefinition>) -> Self {
             MockStore {
-                users: new_users_map(startup_content)
+                users: new_users_map(user_defs)
             }
         }
 
@@ -78,13 +80,13 @@ mod tests {
             Err(StoreError::UserIdNotFound(id.to_string()))
         }
 
-        fn get_api_key_to_use(&self, valid: bool) -> Uuid {
-            if valid {
-                if let Some((_k, v)) = self.users.iter().next() {
-                    return v.user.api_key;
-                }                
-            }    
-            Uuid::new_v4()
+        fn get_api_key_to_use(&self, caller_username: Option<&str>) -> Uuid {
+            if let Some(username) = caller_username {
+                if let Ok(user) = self.find_user_by_name(username) {
+                    return user.api_key;
+                }
+            }
+            Uuid::new_v4() // Invalid
         }
 
     }
@@ -176,8 +178,13 @@ mod tests {
             Err(StoreError::Other("get_user() not implemented for MockStore".to_string()))
         }
         /// Locates a user by their username within the store
-        fn find_user_by_name(&self, _name: &str) -> Result<User, StoreError> {
-            Err(StoreError::Other("find_user_by_name() not implemented for MockStore".to_string()))
+        fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
+            for v in self.users.values() {
+                if v.user.username == name {
+                    return Ok(v.user.clone());
+                }
+            }            
+            Err(StoreError::UserNotFound())
         }
         /// Locates a user by their api key within the store
         fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
@@ -205,7 +212,7 @@ mod tests {
     impl Store for MockStore {}
 
     #[derive(Clone)]
-    enum StoreStartupContent {
+    enum MazeContent {
         Empty,
         OneMaze,
         TwoMazes,
@@ -305,31 +312,31 @@ mod tests {
         }
     }
 
-    fn get_startup_content(startup_content: StoreStartupContent, sort_asc: bool) -> Vec<MockMaze> {
+    fn get_maze_content(maze_content: MazeContent, sort_asc: bool) -> Vec<MockMaze> {
         let mut result: Vec<MockMaze>;
-        match startup_content {
-            StoreStartupContent::Empty => {
+        match maze_content {
+            MazeContent::Empty => {
                 result = Vec::new();
             } 
-            StoreStartupContent::OneMaze => {
+            MazeContent::OneMaze => {
                 result = vec![
                     new_solvable_maze_store_item("maze_a.json", "maze_a")
                 ]
             } 
-            StoreStartupContent::TwoMazes => {
+            MazeContent::TwoMazes => {
                 result = vec![
                     new_solvable_maze_store_item("maze_b.json", "maze_b"),
                     new_solvable_maze_store_item("maze_a.json", "maze_a"),
                 ]
             } 
-            StoreStartupContent::ThreeMazes => {
+            MazeContent::ThreeMazes => {
                 result = vec![
                     new_solvable_maze_store_item("maze_c.json", "maze_c"),
                     new_solvable_maze_store_item("maze_b.json", "maze_b"),
                     new_solvable_maze_store_item("maze_a.json", "maze_a"),
                 ]
             } 
-            StoreStartupContent::SolutionTestMazes => {
+            MazeContent::SolutionTestMazes => {
                 result = vec![
                     new_solve_test_maze_store_item("solvable.json", "solvable", true, true, false),
                     new_solve_test_maze_store_item("no_start.json", "no_start", false, true, false),
@@ -346,8 +353,8 @@ mod tests {
         result
     }
 
-    fn new_mazes_map(startup_content: StoreStartupContent) -> HashMap<String, MockMaze> {
-        mazes_to_map(&get_startup_content(startup_content, false))
+    fn new_mazes_map(maze_content: MazeContent) -> HashMap<String, MockMaze> {
+        mazes_to_map(&get_maze_content(maze_content, false))
     }
 
     fn new_user(username: &str, is_admin: bool) -> User {
@@ -358,26 +365,44 @@ mod tests {
         user
     }
 
-    fn new_mock_user(username: &str, is_admin: bool, startup_content: StoreStartupContent) -> MockUser {
-        let user =  new_user(username, is_admin);
+    #[derive(Clone)]
+    struct UserDefinition {
+        username: String,
+        is_admin: bool,
+        mazes: MazeContent,
+    }
+
+    fn create_user_defs(num_users: i32, username_prefix: &str, is_admin: bool, mazes: MazeContent) -> Vec<UserDefinition> {
+        let mut user_defs = vec![];
+        for i in 1..(num_users+1) {
+            user_defs.push( UserDefinition {
+                username: format!("{}_{}", username_prefix, i),
+                is_admin,
+                mazes: mazes.clone(),
+            });
+        }
+
+        user_defs
+    }
+
+    fn new_mock_user(user_def: &UserDefinition) -> MockUser {
+        let user =  new_user(&user_def.username, user_def.is_admin);
         MockUser {
             user,
-            mazes: new_mazes_map(startup_content),
+            mazes: new_mazes_map(user_def.mazes.clone()),
         } 
     }
 
-    fn new_shared_mock_maze_store(startup_content: StoreStartupContent) -> SharedStore {
-        Arc::new(RwLock::new(Box::new(MockStore::new(startup_content))))
-    }
-
-    fn new_shared_mock_maze_store_2(mock_store: MockStore) -> SharedStore {
+    fn new_shared_mock_maze_store(mock_store: MockStore) -> SharedStore {
         Arc::new(RwLock::new(Box::new(mock_store)))
     }
 
-    fn new_users_map(startup_content: StoreStartupContent) -> HashMap<Uuid, MockUser> {
-        let mock_user = new_mock_user("user1", false, startup_content);
+    fn new_users_map(user_defs:&Vec<UserDefinition>) -> HashMap<Uuid, MockUser> {
         let mut map: HashMap<Uuid, MockUser> = HashMap::new();
-        map.insert(mock_user.user.id, mock_user);
+        for user_def in user_defs {
+            let mock_user = new_mock_user(&user_def);
+            map.insert(mock_user.user.id, mock_user);
+        }
         map
     }
     
@@ -436,19 +461,21 @@ mod tests {
         req.to_request()
     }
 
-
-    fn create_shared_mock_store(startup_content: StoreStartupContent, get_valid_api_key: bool) -> (SharedStore, Uuid) {
-        let mock_store = MockStore::new(startup_content.clone());
-        let api_key = mock_store.get_api_key_to_use(get_valid_api_key); 
-        let shared_mock_store = new_shared_mock_maze_store_2(mock_store);
+    fn create_shared_mock_store(
+        user_defs:&Vec<UserDefinition>, 
+        caller_username: Option<&str>                 
+     ) -> (SharedStore, Uuid) {
+        let mock_store = MockStore::new(user_defs);
+        let api_key = mock_store.get_api_key_to_use(caller_username); 
+        let shared_mock_store = new_shared_mock_maze_store(mock_store);
         (shared_mock_store, api_key)
     }
 
     async fn create_test_app(
-        startup_content: &StoreStartupContent,
-        get_valid_api_key:bool                 
+        user_defs: &Vec<UserDefinition>,
+        caller_username: Option<&str>                 
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, Uuid) {
-        let (shared_mock_store, api_key) = create_shared_mock_store(startup_content.clone(), get_valid_api_key);
+        let (shared_mock_store, api_key) = create_shared_mock_store(user_defs, caller_username);
         let app = test::init_service(
             App::new().configure(|cfg| configure_mock_app(cfg, shared_mock_store)),
         )
@@ -457,8 +484,17 @@ mod tests {
         (app, api_key)
     }
 
-    async fn run_get_mazes_test(use_valid_api_key:bool, startup_content: StoreStartupContent, include_definitions: bool) {
-        let (app, api_key) = create_test_app(&startup_content, use_valid_api_key).await;
+    async fn run_get_mazes_test(
+        num_users: i32, 
+        username_prefix: &str, 
+        is_admin: bool, 
+        maze_content: MazeContent,        
+        caller_username: Option<&str>, 
+        include_definitions: bool, 
+        expected_maze_content:MazeContent
+    ) {
+        let user_defs = create_user_defs(num_users, username_prefix, is_admin, maze_content);
+        let (app, api_key) = create_test_app(&user_defs, caller_username).await;
         let path_str = format!("/api/v1/mazes?includeDefinitions={}", include_definitions);
         let req = create_test_get_request(&path_str, Some(api_key));
         let resp = test::call_service(&app, req).await;
@@ -467,16 +503,21 @@ mod tests {
         let maze_items: Vec<MazeItem> = serde_json::from_slice(&body).expect("failed to deserialize response");
         assert_eq!(
             maze_items,
-            maze_store_items_to_maze_items(get_startup_content(startup_content, true), include_definitions)
+            maze_store_items_to_maze_items(get_maze_content(expected_maze_content, true), include_definitions)
         );        
     }
 
     async fn run_create_maze_test(
-        startup_content: StoreStartupContent, 
+        num_users: i32, 
+        username_prefix: &str, 
+        is_admin: bool, 
+        maze_content: MazeContent,        
+        caller_username: Option<&str>, 
         maze: Maze,
         expected_status_code: StatusCode, 
-        ) {
-        let (app, api_key) = create_test_app(&startup_content, true).await;
+    ) {
+        let user_defs = create_user_defs(num_users, username_prefix, is_admin, maze_content);
+        let (app, api_key) = create_test_app(&user_defs, caller_username).await;
         let url = "/api/v1/mazes".to_string();
         let req = create_test_post_request(&url, Some(api_key), &maze);
         let resp = test::call_service(&app, req).await;
@@ -492,12 +533,17 @@ mod tests {
     }
 
     async fn run_get_maze_test(
-            startup_content: StoreStartupContent, 
-            id: &str, 
-            expected_status_code: StatusCode, 
-            expected_maze: Option<Maze>
-        ) {
-        let (app, api_key) = create_test_app(&startup_content, true).await;
+        num_users: i32, 
+        username_prefix: &str, 
+        is_admin: bool, 
+        maze_content: MazeContent,        
+        caller_username: Option<&str>, 
+        id: &str, 
+        expected_status_code: StatusCode, 
+        expected_maze: Option<Maze>
+    ) {
+        let user_defs = create_user_defs(num_users, username_prefix, is_admin, maze_content);
+        let (app, api_key) = create_test_app(&user_defs, caller_username).await;
         let url = format!("/api/v1/mazes/{}", id);
         let req = create_test_get_request(&url, Some(api_key));
         let resp = test::call_service(&app, req).await;
@@ -515,12 +561,17 @@ mod tests {
     }
 
     async fn run_update_maze_test(
-            startup_content: StoreStartupContent, 
-            id: &str, 
-            maze: Maze,
-            expected_status_code: StatusCode, 
-        ) {
-        let (app, api_key) = create_test_app(&startup_content, true).await;
+        num_users: i32, 
+        username_prefix: &str, 
+        is_admin: bool, 
+        maze_content: MazeContent,        
+        caller_username: Option<&str>, 
+        id: &str, 
+        maze: Maze,
+        expected_status_code: StatusCode, 
+    ) {
+        let user_defs = create_user_defs(num_users, username_prefix, is_admin, maze_content);
+        let (app, api_key) = create_test_app(&user_defs, caller_username).await;
         let url = format!("/api/v1/mazes/{}", id);
         let req = create_test_put_request(&url, Some(api_key), &maze);
         let resp = test::call_service(&app, req).await;
@@ -534,11 +585,16 @@ mod tests {
     }
 
     async fn run_delete_maze_test(
-            startup_content: StoreStartupContent, 
-            id: &str, 
-            expected_status_code: StatusCode 
-        ) {
-        let (app, api_key) = create_test_app(&startup_content, true).await;
+        num_users: i32, 
+        username_prefix: &str, 
+        is_admin: bool, 
+        maze_content: MazeContent,        
+        caller_username: Option<&str>, 
+        id: &str, 
+        expected_status_code: StatusCode 
+    ) {
+        let user_defs = create_user_defs(num_users, username_prefix, is_admin, maze_content);
+        let (app, api_key) = create_test_app(&user_defs, caller_username).await;
         let url = format!("/api/v1/mazes/{}", id);
         let req = create_test_delete_request(&url, Some(api_key));
         let resp = test::call_service(&app, req).await;
@@ -597,13 +653,18 @@ mod tests {
     }
 
     async fn run_get_maze_solution_test(
-        startup_content: StoreStartupContent, 
+        num_users: i32, 
+        username_prefix: &str, 
+        is_admin: bool, 
+        maze_content: MazeContent,        
+        caller_username: Option<&str>, 
         id: &str, 
         expected_status_code: StatusCode,
         expected_solution: Option<Solution>,
         expected_err_message: Option<String>
-        ) {
-        let (app, api_key) = create_test_app(&startup_content, true).await;
+    ) {
+        let user_defs = create_user_defs(num_users, username_prefix, is_admin, maze_content);
+        let (app, api_key) = create_test_app(&user_defs, caller_username).await;
         let url = format!("/api/v1/mazes/{}/solution", id);
         let req = create_test_get_request(&url, Some(api_key));
         let resp = test::call_service(&app, req).await;
@@ -612,12 +673,18 @@ mod tests {
     }
 
     async fn run_solve_maze_test(
+        num_users: i32, 
+        username_prefix: &str, 
+        is_admin: bool, 
+        maze_content: MazeContent,        
+        caller_username: Option<&str>, 
         maze: Maze,
         expected_status_code: StatusCode,
         expected_solution: Option<Solution>,
         expected_err_message: Option<String>
-        ) {
-        let (app, api_key) = create_test_app(&StoreStartupContent::Empty, true).await;
+    ) {
+        let user_defs = create_user_defs(num_users, username_prefix, is_admin, maze_content);
+        let (app, api_key) = create_test_app(&user_defs, caller_username).await;
         let url = "/api/v1/solve-maze".to_string();
         let req = create_test_post_request(&url, Some(api_key), &maze);
         let resp = test::call_service(&app, req).await;
@@ -629,13 +696,7 @@ mod tests {
         url: &str
         ) {
 
-        let mock_store = new_shared_mock_maze_store(StoreStartupContent::Empty);
-
-        let app = test::init_service(
-            App::new().configure(|cfg| configure_mock_app(cfg, mock_store)),
-        )
-        .await;
-
+        let (app, _) = create_test_app(&vec![], None).await;
         let req = create_test_get_request(url, None);
         let resp = test::call_service(&app, req).await;
     
@@ -644,102 +705,139 @@ mod tests {
 
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_get_mazes_with_no_mazes_and_invalid_api_key() {
-        run_get_mazes_test(false, StoreStartupContent::Empty, false).await;
+    async fn test_get_mazes_with_no_mazes_with_invalid_api_key() {
+        run_get_mazes_test(0, "", false, MazeContent::Empty, None, false, MazeContent::Empty).await;
     }
  
     #[actix_web::test]
     async fn test_get_mazes_with_no_mazes() {
-        run_get_mazes_test(true, StoreStartupContent::Empty, false).await;
+        run_get_mazes_test(1, "user", false, MazeContent::Empty, Some("user_1"), false, MazeContent::Empty).await;
     }
 
     #[actix_web::test]
     async fn test_get_mazes_with_one_maze_without_definitions() {
-        run_get_mazes_test(true, StoreStartupContent::OneMaze, false).await;
+        run_get_mazes_test(1, "user", false, MazeContent::OneMaze, Some("user_1"), false, MazeContent::OneMaze).await;
     }
 
     #[actix_web::test]
     async fn test_get_mazes_with_one_maze_with_defintions() {
-        run_get_mazes_test(true, StoreStartupContent::OneMaze, true).await;
+        run_get_mazes_test(1, "user", false, MazeContent::OneMaze, Some("user_1"), true, MazeContent::OneMaze).await;
     }
  
     #[actix_web::test]
     async fn test_get_mazes_with_two_mazes_that_require_sorting_without_definitions() {
-        run_get_mazes_test(true, StoreStartupContent::TwoMazes, false).await;
+        run_get_mazes_test(1, "user", false, MazeContent::TwoMazes, Some("user_1"), false, MazeContent::TwoMazes).await;
     }
 
     #[actix_web::test]
     async fn test_get_mazes_with_two_mazes_that_require_sorting_with_definitions() {
-        run_get_mazes_test(true, StoreStartupContent::TwoMazes, true).await;
+        run_get_mazes_test(1, "user", false, MazeContent::TwoMazes, Some("user_1"), true, MazeContent::TwoMazes).await;
     }
 
     #[actix_web::test]
     async fn test_get_mazes_with_three_mazes_that_require_sorting_without_definitions() {
-        run_get_mazes_test(true, StoreStartupContent::ThreeMazes, false).await;
+        run_get_mazes_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), false, MazeContent::ThreeMazes).await;
     }
 
     #[actix_web::test]
     async fn test_get_mazes_with_three_mazes_that_require_sorting_with_definitions() {
-        run_get_mazes_test(true, StoreStartupContent::ThreeMazes, true).await;
+        run_get_mazes_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), true, MazeContent::ThreeMazes).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn test_create_maze_that_does_not_exist_with_invalid_api_key() {
+        run_create_maze_test(1, "user", false, MazeContent::ThreeMazes, Some(UNKNOWN_USER), new_solvable_maze("", "maze_d"), StatusCode::CREATED).await;
     }
 
     #[actix_web::test]
     async fn test_create_maze_that_does_not_exist() {
-        run_create_maze_test(StoreStartupContent::ThreeMazes, new_solvable_maze("", "maze_d"), StatusCode::CREATED).await;
+        run_create_maze_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), new_solvable_maze("", "maze_d"), StatusCode::CREATED).await;
     }
 
     #[actix_web::test]
     async fn test_create_maze_that_already_exists() {
-        run_create_maze_test(StoreStartupContent::ThreeMazes, new_solvable_maze("", "maze_a"), StatusCode::CONFLICT).await;
+        run_create_maze_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), new_solvable_maze("", "maze_a"), StatusCode::CONFLICT).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn test_get_maze_that_exists_with_invalid_api_key() {
+        let id = "maze_a.json";
+        let name = "maze_a";
+        run_get_maze_test(1, "user", false, MazeContent::ThreeMazes, Some(UNKNOWN_USER), id, StatusCode::OK, Some(new_solvable_maze(id, name))).await;
     }
 
     #[actix_web::test]
     async fn test_get_maze_that_exists() {
         let id = "maze_a.json";
         let name = "maze_a";
-        run_get_maze_test(StoreStartupContent::ThreeMazes, id, StatusCode::OK, Some(new_solvable_maze(id, name))).await;
+        run_get_maze_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), id, StatusCode::OK, Some(new_solvable_maze(id, name))).await;
+    }
+
+    #[actix_web::test]
+    async fn test_get_maze_that_does_not_exist() {
+        run_get_maze_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), "does_not_exist.json", StatusCode::NOT_FOUND, None).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn test_update_maze_that_exists_with_invalid_api_key() {
+        let id = "maze_a.json";
+        let name = "maze_a";
+        run_update_maze_test(1, "user", false, MazeContent::ThreeMazes, Some(UNKNOWN_USER), id, new_solvable_maze(id, name), StatusCode::OK).await;
     }
 
     #[actix_web::test]
     async fn test_update_maze_that_exists() {
         let id = "maze_a.json";
         let name = "maze_a";
-        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze(id, name), StatusCode::OK).await;
+        run_update_maze_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), id, new_solvable_maze(id, name), StatusCode::OK).await;
     }
 
     #[actix_web::test]
     async fn test_update_maze_that_does_not_exist() {
         let id = "maze_d.json";
         let name = "maze_d";
-        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze(id, name), StatusCode::NOT_FOUND).await;
+        run_update_maze_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), id, new_solvable_maze(id, name), StatusCode::NOT_FOUND).await;
     }
 
     #[actix_web::test]
     async fn test_update_maze_with_mismatching_id() {
         let id = "maze_a.json";
         let name = "maze_a";
-        run_update_maze_test(StoreStartupContent::ThreeMazes, id, new_solvable_maze("some_other_id", name), StatusCode::BAD_REQUEST).await;
+        run_update_maze_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), id, new_solvable_maze("some_other_id", name), StatusCode::BAD_REQUEST).await;
     }
 
     #[actix_web::test]
-    async fn test_get_maze_that_does_not_exist() {
-        run_get_maze_test(StoreStartupContent::ThreeMazes, "does_not_exist.json", StatusCode::NOT_FOUND, None).await;
+    #[should_panic(expected = "Unauthorized request")]
+    async fn test_delete_maze_that_exists_with_invalid_api_key() {
+        run_delete_maze_test(1, "user", false, MazeContent::ThreeMazes, Some(UNKNOWN_USER), "maze_a.json", StatusCode::OK).await;
     }
 
     #[actix_web::test]
     async fn test_delete_maze_that_exists() {
-        run_delete_maze_test(StoreStartupContent::ThreeMazes, "maze_a.json", StatusCode::OK).await;
+        run_delete_maze_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), "maze_a.json", StatusCode::OK).await;
     }
 
     #[actix_web::test]
     async fn test_delete_maze_that_does_not_exist() {
-        run_delete_maze_test(StoreStartupContent::ThreeMazes, "does_not_exist.json", StatusCode::NOT_FOUND).await;
+        run_delete_maze_test(1, "user", false, MazeContent::ThreeMazes, Some("user_1"), "does_not_exist.json", StatusCode:: NOT_FOUND).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn test_get_maze_solution_that_should_succeed_with_invalid_api_key() {
+        run_get_maze_solution_test(
+            1, "user", false, MazeContent::SolutionTestMazes, Some(UNKNOWN_USER), "solvable.json", StatusCode::OK, 
+            Some(get_solve_test_maze_solution()), None
+        ).await;
     }
 
     #[actix_web::test]
     async fn test_get_maze_solution_that_should_succeed() {
         run_get_maze_solution_test(
-            StoreStartupContent::SolutionTestMazes, "solvable.json", StatusCode::OK, 
+            1, "user", false, MazeContent::SolutionTestMazes, Some("user_1"), "solvable.json", StatusCode::OK, 
             Some(get_solve_test_maze_solution()), None
         ).await;
     }
@@ -747,7 +845,7 @@ mod tests {
     #[actix_web::test]
     async fn test_get_maze_solution_should_fail_with_no_start() {
         run_get_maze_solution_test(
-            StoreStartupContent::SolutionTestMazes, "no_start.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
+            1, "user", false, MazeContent::SolutionTestMazes, Some("user_1"), "no_start.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_start_cell_error_str())
         ).await;
     }
@@ -755,7 +853,7 @@ mod tests {
     #[actix_web::test]
     async fn test_get_maze_solution_should_fail_with_no_finish() {
         run_get_maze_solution_test(
-            StoreStartupContent::SolutionTestMazes, "no_finish.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
+            1, "user", false, MazeContent::SolutionTestMazes, Some("user_1"), "no_finish.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_finish_cell_error_str())
         ).await;
     }
@@ -763,14 +861,27 @@ mod tests {
     #[actix_web::test]
     async fn test_get_maze_solution_should_fail_with_no_solution() {
         run_get_maze_solution_test(
-            StoreStartupContent::SolutionTestMazes, "no_solution.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
+            1, "user", false, MazeContent::SolutionTestMazes, Some("user_1"), "no_solution.json", StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_solution_error_str())
+        ).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn test_solve_maze_that_should_succeed_with_invalid_api_key() {
+        run_solve_maze_test(
+            1, "user", false, MazeContent::Empty, Some(UNKNOWN_USER),
+            new_solve_test_maze("", "", true, true, false), 
+            StatusCode::OK, 
+            Some(get_solve_test_maze_solution()), 
+            None
         ).await;
     }
 
     #[actix_web::test]
     async fn test_solve_maze_that_should_succeed() {
         run_solve_maze_test(
+            1, "user", false, MazeContent::Empty, Some("user_1"),
             new_solve_test_maze("", "", true, true, false), 
             StatusCode::OK, 
             Some(get_solve_test_maze_solution()), 
@@ -781,6 +892,7 @@ mod tests {
     #[actix_web::test]
     async fn test_solve_maze_should_fail_with_no_start() {
         run_solve_maze_test(
+            1, "user", false, MazeContent::Empty, Some("user_1"),
             new_solve_test_maze("", "", false, true, false), 
             StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_start_cell_error_str())
@@ -790,6 +902,7 @@ mod tests {
     #[actix_web::test]
     async fn test_solve_maze_should_fail_with_no_finish() {
         run_solve_maze_test(
+            1, "user", false, MazeContent::Empty, Some("user_1"),
             new_solve_test_maze("", "", true, false, false), 
             StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_finish_cell_error_str())
@@ -799,6 +912,7 @@ mod tests {
     #[actix_web::test]
     async fn test_solve_maze_should_fail_with_no_solution() {
         run_solve_maze_test(
+            1, "user", false, MazeContent::Empty, Some("user_1"),
             new_solve_test_maze("", "", true, true, true), 
             StatusCode::UNPROCESSABLE_ENTITY, None, 
             Some(get_no_solution_error_str())
