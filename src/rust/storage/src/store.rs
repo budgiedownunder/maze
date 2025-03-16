@@ -76,6 +76,17 @@ pub struct User {
 }
 
 impl User {
+    /// Creates a new user id
+    pub fn new_id() -> Uuid {
+        Uuid::new_v4()
+    }
+
+    /// Creates a new API key
+    pub fn new_api_key() -> Uuid {
+        Uuid::new_v4()
+    }
+
+    /// Returns a User instance initialized with the defautl values
     #[allow(clippy::should_implement_trait)]
     pub fn default() -> User {
         User {
@@ -89,6 +100,7 @@ impl User {
         }
     }
 
+    /// Converts the instance to a JSON string
     pub fn to_json(&self) -> Result<String, StoreError> {
         Ok(serde_json::to_string(&self)?)
     }

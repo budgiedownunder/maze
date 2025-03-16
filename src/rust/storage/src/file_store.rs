@@ -207,16 +207,6 @@ impl FileStore {
         Self::make_dir(&self.user_dir_path(id))
     }
 
-    // Returns a new user id for use in the file store
-    fn new_user_id(&self) -> Uuid {
-        Uuid::new_v4()
-    }
-
-    // Returns a new user API key for use in the file store
-    fn new_user_api_key(&self) -> Uuid {
-        Uuid::new_v4()
-    }
-
     // Returns the directory path for a given user id
     fn user_dir_path(&self, id: Uuid) -> String {
         Path::new(&self.users_dir)
@@ -514,8 +504,8 @@ impl UserStore for FileStore {
     /// }
     /// ```
     fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
-        user.id = self.new_user_id();
-        user.api_key = self.new_user_api_key();
+        user.id = User::new_id();
+        user.api_key = User::new_api_key();
         self.validate_user(user, Uuid::nil())?;
         self.write_user_file(user, false)?;
         self.make_user_mazes_dir(user)?;
@@ -1391,7 +1381,6 @@ mod tests {
 
     // Initialize a User struct
     fn init_test_user(
-        store: &FileStore,
         is_admin: bool,
         username: &str,
         full_name: &str,
@@ -1399,13 +1388,13 @@ mod tests {
         password_hash: &str,
     ) -> User {
         User {
-            id: store.new_user_id(),
+            id: User::new_id(),
             is_admin,
             username: username.to_string(),
             full_name: full_name.to_string(),
             email: email.to_string(),
             password_hash: password_hash.to_string(),
-            api_key: store.new_user_api_key(),
+            api_key: User::new_api_key(),
         }
     }
 
@@ -1418,7 +1407,7 @@ mod tests {
         email: &str,
         password_hash: &str,
     ) -> User {
-        let mut user = init_test_user(store, is_admin, username, full_name, email, password_hash);
+        let mut user = init_test_user(is_admin, username, full_name, email, password_hash);
 
         if let Err(error) = store.create_user(&mut user) {
             panic!( "{}", error);
@@ -1517,7 +1506,7 @@ mod tests {
     #[test]
     fn cannot_get_user_that_does_not_exist() {
         let store = new_store();
-        let id = store.new_user_id();
+        let id = User::new_id();
         match store.get_user(id) {
             Ok(_) => {
                 panic!("Loaded user content for id '{}' when did not expected to", id);
@@ -1567,7 +1556,7 @@ mod tests {
     #[test]
     fn cannot_delete_user_that_does_not_exist() {
         let mut store = new_store();
-        let id = store.new_user_id();
+        let id = User::new_id();
 
         match store.delete_user(id) {
             Ok(()) => {
@@ -1595,8 +1584,8 @@ mod tests {
     #[test]
     fn cannot_update_user_that_does_not_exist() {
         let mut store = new_store();
-        let mut user = init_test_user(&store, false, "test", "", "test@company.com", "password_hash");
-        user.id = store.new_user_id();
+        let mut user = init_test_user(false, "test", "", "test@company.com", "password_hash");
+        user.id = User::new_id();
         if let Err(error) = store.update_user(&mut user) {
             let err_msg = error.to_string();
             let err_msg_expected = StoreError::UserIdNotFound(user.id.to_string()).to_string();
@@ -1706,7 +1695,7 @@ mod tests {
     #[should_panic(expected = "User not found")]
     fn cannot_find_existing_user_by_invalid_api_key() {
         let store = new_store();
-        if let Err(error) = store.find_user_by_api_key(store.new_user_api_key()) {
+        if let Err(error) = store.find_user_by_api_key(User::new_api_key()) {
             panic!("{}", error.to_string());
         }
     }

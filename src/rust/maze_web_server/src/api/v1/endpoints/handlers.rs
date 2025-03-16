@@ -9,9 +9,9 @@ use uuid::Uuid;
 // **************************************************************************************************
 // Private utility functions
 // **************************************************************************************************
-fn get_authorized_user(req: HttpRequest, is_admin: bool) -> Result<User, Error> {
+fn get_authorized_user(req: HttpRequest, admin_required: bool) -> Result<User, Error> {
     if let Some(user) = req.extensions().get::<User>() {
-        if is_admin && !user.is_admin {
+        if admin_required && !user.is_admin {
             return Err(ErrorUnauthorized( "Unauthorized request"));
         }
         Ok(user.clone())
@@ -154,6 +154,7 @@ pub async fn get_users(
     let store_users = store_lock.get_users().map_err(|err| {
         get_mazes_fetch_internal_error(&err)
     })?;
+
     let user_items: Vec<UserItem> = store_users
         .iter()
         .map(UserItem::from_store_user)
