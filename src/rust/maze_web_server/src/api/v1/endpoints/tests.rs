@@ -5,7 +5,7 @@ mod test_definitions {
     // **************************************************************************************************
     use crate::api::v1::endpoints::handlers;
     use crate::api::v1::endpoints::handlers::get_maze_solve_error_string;
-    use crate::api::v1::endpoints::handlers::{CreateUserRequest, UserItem};
+    use crate::api::v1::endpoints::handlers::{CreateUserRequest, UpdateUserRequest, UserItem};
     use crate::middleware::auth::auth_middleware;
     use crate::api::v1::openapi::ApiDocV1;
     
@@ -142,9 +142,9 @@ mod test_definitions {
         }
 
         /// Locates a user in a user map by their username
-        fn find_user_by_name_in_map(user_map: &HashMap<Uuid, MockUser>, username: &str) -> Result<User, StoreError> {
+        fn find_user_by_name_in_map(user_map: &HashMap<Uuid, MockUser>, username: &str, ignore_id: Uuid) -> Result<User, StoreError> {
             for v in user_map.values() {
-                if v.user.username == username {
+                if v.user.username == username && v.user.id != ignore_id{
                     return Ok(v.user.clone());
                 }
             }
@@ -152,23 +152,63 @@ mod test_definitions {
         }    
 
         /// Locates a user id in a user map by their username
-        fn find_user_id_by_name_in_map(user_map: &HashMap<Uuid, MockUser>, username: &str) -> Uuid {
-            match MockStore::find_user_by_name_in_map(user_map, username) {
+        fn find_user_id_by_name_in_map(user_map: &HashMap<Uuid, MockUser>, username: &str, ignore_id: Uuid) -> Uuid {
+            match MockStore::find_user_by_name_in_map(user_map, username, ignore_id) {
                 Ok(user) => user.id,
                 _ => Uuid::nil(),
             }
         }
 
+        /// Locates a user id in a user map by their username - return nil if it is not found
+        fn find_user_id_by_name(&self, username: &str, ignore_id: Uuid) -> Uuid {
+            match MockStore::find_user_by_name_in_map(&self.users, username, ignore_id) {
+                Ok(user) => user.id,
+                _ => Uuid::nil(),
+            }
+        }
+
+        // Checks whether a given username exists in the file store
+        fn user_name_exists(&self, name: &str, ignore_id: Uuid) -> bool {
+            self.find_user_id_by_name(name, ignore_id) != Uuid::nil()
+        }
+
         /// Locates a user by their email within the store
-        fn find_user_by_email(&self, email: &str) -> Result<User, StoreError> {
+        fn find_user_by_email(&self, email: &str, ignore_id: Uuid) -> Result<User, StoreError> {
             for v in self.users.values() {
-                if v.user.email == email {
+                if v.user.email == email && v.user.id != ignore_id {
                     return Ok(v.user.clone());
                 }
             }
             Err(StoreError::UserNotFound())
         }
 
+        // Checks whether a given user email exists in the file store
+        fn user_email_exists(&self, email: &str, ignore_id: Uuid) -> bool {
+            self.find_user_by_email(email, ignore_id).is_ok()
+        }
+
+        // Validate user content
+        fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), StoreError> {
+            if user.id == Uuid::nil() {
+                return Err(StoreError::UserIdMissing());
+            }
+            if user.username.is_empty() {
+                return Err(StoreError::UserNameMissing());
+            }
+            // if user.email.is_empty() {
+            //     return Err(StoreError::UserEmailMissing());
+            // }
+            if user.password_hash.is_empty() {
+                return Err(StoreError::UserPasswordMissing());
+            }
+            if self.user_name_exists(&user.username, ignore_id) {
+                return Err(StoreError::UserNameExists());
+            }
+            if !user.email.is_empty() && self.user_email_exists(&user.email, ignore_id) {
+                return Err(StoreError::UserEmailExists());
+            }
+            Ok(())
+        }        
     }
 
     impl MazeStore for MockStore {
@@ -245,14 +285,9 @@ mod test_definitions {
         }
         /// Adds a new user to the store and sets the allocated `id` within the user object
         fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
-            if let Ok(_) = self.find_user_by_name(&user.username) {
-                return Err(StoreError::UserNameExists())
-            }
-            if let Ok(_) = self.find_user_by_email(&user.email) {
-                return Err(StoreError::UserEmailExists())
-            }
             let mock_user = MockUser::new_from_user(user);
             user.id = mock_user.user.id;
+            self.validate_user(user, Uuid::nil())?;
             self.users.insert(mock_user.user.id, mock_user);
             Ok(())
         }
@@ -261,8 +296,11 @@ mod test_definitions {
             Err(StoreError::Other("deletee_user() not implemented for MockStore".to_string()))
         }
         /// Updates a user within the store
-        fn update_user(&mut self, _user: &mut User) -> Result<(), StoreError> {
-            Err(StoreError::Other("update_user() not implemented for MockStore".to_string()))
+        fn update_user(&mut self, user: &mut User) -> Result<(), StoreError> {
+            self.validate_user(user, user.id)?;
+            let mock_user = self.get_mock_user_mut(user.id)?;
+            mock_user.user = user.clone();
+            Ok(())
         }
         /// Loads a user from the store
         fn get_user(&self, id: Uuid) -> Result<User, StoreError> {
@@ -273,7 +311,7 @@ mod test_definitions {
         }
         /// Locates a user by their username within the store
         fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
-            MockStore::find_user_by_name_in_map(&self.users, name)
+            MockStore::find_user_by_name_in_map(&self.users, name, Uuid::nil())
         }
         /// Locates a user by their api key within the store
         fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
@@ -461,6 +499,7 @@ mod test_definitions {
         user.is_admin = is_admin;
         user.api_key = User::new_api_key();
         user.email = new_email(username);
+        user.password_hash = "password_hash".to_string();
         user
     }
 
@@ -677,7 +716,15 @@ mod test_definitions {
 
     }    
 
-    fn new_create_user_request(is_admin: bool, username: &str, email: Option<&str>) -> CreateUserRequest {
+    fn create_password(blank: bool) -> String {
+        if blank {
+            "".to_string()
+        } else {
+            "dummy_password".to_string()
+        }
+    }
+
+    fn new_create_user_request(is_admin: bool, username: &str, email: Option<&str>, blank_password: bool) -> CreateUserRequest {
         let email_use = if let Some(s) = email {
             s
         } else {
@@ -687,7 +734,7 @@ mod test_definitions {
         CreateUserRequest::new(is_admin, username, 
             &format!("{} full name", username), 
             email_use, 
-            "password"
+            &create_password(blank_password) 
         )    
     }
 
@@ -721,7 +768,7 @@ mod test_definitions {
     ) {
         let user_defs = create_user_defs(create_users_def);
         let (app, mock_users, api_key) = create_test_app(&user_defs, caller_username).await;
-        let id = MockStore::find_user_id_by_name_in_map(&mock_users, target_username);
+        let id = MockStore::find_user_id_by_name_in_map(&mock_users, target_username, Uuid::nil());
         let url = format!("/api/v1/users/{}", id);
         let req = create_test_get_request(&url, Some(api_key));
         let resp = test::call_service(&app, req).await;
@@ -736,6 +783,70 @@ mod test_definitions {
             assert_eq!(expected_user_response, response_user);
         }
     }
+
+    impl UpdateUserRequest {
+        pub fn new(
+            is_admin: bool,
+            username: &str,
+            full_name: &str,
+            email: &str
+        ) -> UpdateUserRequest {
+            UpdateUserRequest {
+                is_admin,
+                username: username.to_string(),
+                full_name: full_name.to_string(),
+                email: email.to_string()
+            }
+        }
+
+        pub fn to_user_item(&self) -> UserItem {
+            UserItem {
+                id: Uuid::nil(),
+                is_admin: self.is_admin,
+                username: self.username.clone(),
+                full_name: self.full_name.clone(),
+                email: self.email.clone(),
+            }            
+        }
+
+    }    
+
+    fn new_update_user_request(is_admin: bool, username: &str, email: Option<&str>) -> UpdateUserRequest {
+        let email_use = if let Some(s) = email {
+            s
+        } else {
+            &new_email(username)
+        };
+
+        UpdateUserRequest::new(is_admin, username, 
+            &format!("Updated {} full name", username), 
+            email_use
+        )    
+    }    
+
+    async fn run_update_user_test(
+        create_users_def: &CreateUsersDef,
+        caller_username: Option<&str>,
+        target_username: &str,
+        update_req: &UpdateUserRequest,
+        expected_status_code: StatusCode,
+    ) {
+        let user_defs = create_user_defs(create_users_def);
+        let (app, mock_users, api_key) = create_test_app(&user_defs, caller_username).await;
+        let id = MockStore::find_user_id_by_name_in_map(&mock_users, target_username, Uuid::nil());
+        let url = format!("/api/v1/users/{}", id);
+        let req = create_test_put_request(&url, Some(api_key), &update_req);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::OK {
+            let body = test::read_body(resp).await;
+            let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize response");
+            let mut expected_response_user = update_req.to_user_item();
+            expected_response_user.id = response_user.id;
+            assert_eq!(expected_response_user, response_user);
+        }
+    }    
 
     async fn run_get_mazes_test(
         create_users_def: &CreateUsersDef,
@@ -943,126 +1054,240 @@ mod test_definitions {
     // Get users
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_get_users_with_no_users_with_invalid_api_key() {
+    async fn cannot_get_users_with_no_users_with_invalid_api_key() {
         run_get_users_test(&CreateUsersDef::new(0, 0, MazeContent::Empty), None, StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_get_users_with_one_non_admin_user_with_non_admin_caller() {
+    async fn cannot_get_users_with_one_non_admin_user_with_non_admin_caller() {
         run_get_users_test(&CreateUsersDef::new(0, 1, MazeContent::Empty), Some(VALID_USERNAME_1), StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_get_users_with_one_admin_user() {
+    async fn can_get_users_with_one_admin_user() {
         run_get_users_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), StatusCode::OK).await;
     }
 
     #[actix_web::test]
-    async fn test_get_users_with_one_admin_and_one_non_admin_user() {
+    async fn can_get_users_with_one_admin_and_one_non_admin_user() {
         run_get_users_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), StatusCode::OK).await;
     }
 
     #[actix_web::test]
-    async fn test_get_users_with_ten_admin_and_five_non_admin_users() {
+    async fn can_get_users_with_ten_admin_and_five_non_admin_users() {
         run_get_users_test(&CreateUsersDef::new(10, 5, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_2), StatusCode::OK).await;
     }
 
     // Create user
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_create_admin_user_with_invalid_api_key() {
+    async fn cannot_create_admin_user_with_invalid_api_key() {
         run_create_user_test(&CreateUsersDef::new(0, 0, MazeContent::Empty), None, 
-            &new_create_user_request(true, NEW_ADMIN_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
+            &new_create_user_request(true, NEW_ADMIN_USERNAME_1, None, false),
+            StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_create_non_existent_admin_user_with_admin_caller() {
+    async fn can_create_non_existent_admin_user_with_admin_caller() {
         run_create_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
-            &new_create_user_request(true, NEW_ADMIN_USERNAME_1, None), StatusCode::CREATED).await;
+            &new_create_user_request(true, NEW_ADMIN_USERNAME_1, None , false),
+            StatusCode::CREATED).await;
     }
 
     #[actix_web::test]
-    async fn test_create_non_existent_admin_user_with_non_admin_caller() {
+    async fn cannot_create_non_existent_admin_user_with_admin_caller_but_missing_username() {
+        run_create_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            &new_create_user_request(true, "", None , false),
+            StatusCode::BAD_REQUEST).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_create_non_existent_admin_user_with_admin_caller_but_missing_password() {
+        run_create_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            &new_create_user_request(true, NEW_ADMIN_USERNAME_1, None , true),
+            StatusCode::BAD_REQUEST).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_create_non_existent_admin_user_with_non_admin_caller() {
         run_create_user_test(&CreateUsersDef::new(0, 1, MazeContent::Empty), Some(VALID_USERNAME_1), 
-            &new_create_user_request(true, NEW_ADMIN_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
+            &new_create_user_request(true, NEW_ADMIN_USERNAME_1, None, false),
+            StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_create_non_existent_admin_user_with_admin_caller_but_existing_username() {
+    async fn cannot_create_non_existent_admin_user_with_admin_caller_but_existing_username() {
         run_create_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
-            &new_create_user_request(true, VALID_ADMIN_USERNAME_1, None), StatusCode::CONFLICT).await;
+            &new_create_user_request(true, VALID_ADMIN_USERNAME_1, None , false), 
+            StatusCode::CONFLICT).await;
     }
 
     #[actix_web::test]
-    async fn test_create_non_existent_admin_user_with_admin_caller_but_existing_email() {
+    async fn cannot_create_non_existent_admin_user_with_admin_caller_but_existing_email() {
         run_create_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
-            &new_create_user_request(true, VALID_ADMIN_USERNAME_2, Some(&new_email(VALID_ADMIN_USERNAME_1))), StatusCode::CONFLICT).await;
+            &new_create_user_request(true, VALID_ADMIN_USERNAME_2, Some(&new_email(VALID_ADMIN_USERNAME_1)), false), 
+            StatusCode::CONFLICT).await;
     }
 
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_create_non_admin_user_with_invalid_api_key() {
+    async fn cannot_create_non_admin_user_with_invalid_api_key() {
         run_create_user_test(&CreateUsersDef::new(0, 0, MazeContent::Empty), None, 
-            &new_create_user_request(false, NEW_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
+            &new_create_user_request(false, NEW_USERNAME_1, None, false), 
+            StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_create_non_existent_non_admin_user_with_admin_caller() {
+    async fn can_create_non_existent_non_admin_user_with_admin_caller() {
         run_create_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
-            &new_create_user_request(false, NEW_USERNAME_1, None), StatusCode::CREATED).await;
+            &new_create_user_request(false, NEW_USERNAME_1, None, false),
+            StatusCode::CREATED).await;
     }
  
     #[actix_web::test]
-    async fn test_create_non_existent_non_admin_user_with_non_admin_caller() {
+    async fn cannot_create_non_existent_non_admin_user_with_non_admin_caller() {
         run_create_user_test(&CreateUsersDef::new(0, 1, MazeContent::Empty), Some(VALID_USERNAME_1), 
-            &new_create_user_request(false, NEW_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
+            &new_create_user_request(false, NEW_USERNAME_1, None, false),
+            StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_create_non_existent_non_admin_user_with_admin_caller_but_existing_username() {
+    async fn cannot_create_non_existent_non_admin_user_with_admin_caller_but_existing_username() {
         run_create_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
-            &new_create_user_request(true, VALID_USERNAME_1, None), StatusCode::CONFLICT).await;
+            &new_create_user_request(true, VALID_USERNAME_1, None, false),
+            StatusCode::CONFLICT).await;
     }
 
     #[actix_web::test]
-    async fn test_create_non_existent_non_admin_user_with_admin_caller_but_existing_email() {
+    async fn cannot_create_non_existent_non_admin_user_with_admin_caller_but_existing_email() {
         run_create_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
-            &new_create_user_request(true, VALID_USERNAME_2, Some(&new_email(VALID_USERNAME_1))), StatusCode::CONFLICT).await;
+            &new_create_user_request(true, VALID_USERNAME_2, Some(&new_email(VALID_USERNAME_1)), false),
+            StatusCode::CONFLICT).await;
     }
 
     // Get user
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_get_user_that_exists_with_invalid_api_key() {
+    async fn cannot_get_user_that_exists_with_invalid_api_key() {
         run_get_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), None, 
                           VALID_USERNAME_1, StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_get_user_that_exists_with_admin_caller() {
+    async fn can_get_user_that_exists_with_admin_caller() {
         run_get_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
                           VALID_USERNAME_1, StatusCode::OK).await;
     }
 
     #[actix_web::test]
-    async fn test_get_admin_user_that_exists_with_admin_caller() {
+    async fn can_get_admin_user_that_exists_with_admin_caller() {
         run_get_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
                           VALID_ADMIN_USERNAME_1, StatusCode::OK).await;
     }
 
     #[actix_web::test]
-    async fn test_get_user_that_exists_with_non_admin_caller() {
+    async fn cannot_get_user_that_exists_with_non_admin_caller() {
         run_get_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_USERNAME_1), 
                           VALID_USERNAME_1, StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_get_user_that_does_not_exist_with_admin_caller() {
+    async fn cannot_get_user_that_does_not_exist_with_admin_caller() {
         run_get_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
                           VALID_USERNAME_2, StatusCode::NOT_FOUND).await;
     }
 
     // Update user
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn cannot_update_admin_user_with_invalid_api_key() {
+        run_update_user_test(&CreateUsersDef::new(0, 0, MazeContent::Empty), None, NEW_ADMIN_USERNAME_1,
+            &new_update_user_request(true, NEW_ADMIN_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[actix_web::test]
+    async fn can_update_admin_user_with_admin_caller() {
+        run_update_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            VALID_ADMIN_USERNAME_1, &new_update_user_request(true, NEW_ADMIN_USERNAME_1, None),
+            StatusCode::OK).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_admin_user_with_non_admin_caller() {
+        run_update_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_USERNAME_1), 
+            VALID_ADMIN_USERNAME_1, &new_update_user_request(true, NEW_ADMIN_USERNAME_1, None),
+            StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_admin_user_with_admin_caller_but_missing_username() {
+        run_update_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            VALID_ADMIN_USERNAME_1, &new_update_user_request(true, "", None),
+            StatusCode::BAD_REQUEST).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_admin_user_with_admin_caller_but_existing_username() {
+        run_update_user_test(&CreateUsersDef::new(2, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            VALID_ADMIN_USERNAME_1, &new_update_user_request(true, VALID_ADMIN_USERNAME_2, None),
+            StatusCode::CONFLICT).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_admin_user_with_admin_caller_but_existing_email() {
+        run_update_user_test(&CreateUsersDef::new(2, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            VALID_ADMIN_USERNAME_1, &new_update_user_request(true, VALID_ADMIN_USERNAME_1, Some(&new_email(VALID_ADMIN_USERNAME_2))),
+            StatusCode::CONFLICT).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn cannot_update_non_admin_user_with_invalid_api_key() {
+        run_update_user_test(&CreateUsersDef::new(0, 0, MazeContent::Empty), None, NEW_ADMIN_USERNAME_1,
+            &new_update_user_request(false, NEW_ADMIN_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[actix_web::test]
+    async fn can_update_non_admin_user_with_admin_caller() {
+        run_update_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            VALID_USERNAME_1, &new_update_user_request(false, NEW_USERNAME_1, None),
+            StatusCode::OK).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_non_admin_user_with_admin_caller_but_missing_username() {
+        run_update_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            VALID_USERNAME_1, &new_update_user_request(false, "", None),
+            StatusCode::BAD_REQUEST).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_non_admin_user_with_admin_caller_but_existing_username() {
+        run_update_user_test(&CreateUsersDef::new(1, 2, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            VALID_USERNAME_1, &new_update_user_request(false, VALID_USERNAME_2, None),
+            StatusCode::CONFLICT).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_non_admin_user_with_admin_caller_but_existing_email() {
+        run_update_user_test(&CreateUsersDef::new(1, 2, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            VALID_USERNAME_1, &new_update_user_request(false, VALID_USERNAME_1, Some(&new_email(VALID_USERNAME_2))),
+            StatusCode::CONFLICT).await;
+    }
+
+    #[actix_web::test]
+    async fn can_upgrade_non_admin_user_to_admin_with_admin_caller() {
+        run_update_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+            VALID_USERNAME_1, &new_update_user_request(true, VALID_USERNAME_1, None),
+            StatusCode::OK).await;
+    }
+
+    #[actix_web::test]
+    async fn can_downgrade_admin_user_to_non_admin_with_admin_caller() {
+        run_update_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+        VALID_ADMIN_USERNAME_1, &new_update_user_request(false, VALID_ADMIN_USERNAME_1, None),
+            StatusCode::OK).await;
+    }
 
     // Delete user
 
@@ -1073,108 +1298,108 @@ mod test_definitions {
     // Get mazes
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_get_mazes_with_no_mazes_with_invalid_api_key() {
+    async fn cannot_get_mazes_with_no_mazes_with_invalid_api_key() {
         run_get_mazes_test(&CreateUsersDef::new(0, 0, MazeContent::Empty), None, false, MazeContent::Empty).await;
     }
 
     #[actix_web::test]
-    async fn test_get_mazes_with_no_mazes() {
+    async fn can_get_mazes_with_no_mazes() {
         run_get_mazes_test(&CreateUsersDef::new(0, 1, MazeContent::Empty), Some(VALID_USERNAME_1), false, MazeContent::Empty).await;
     }
 
     #[actix_web::test]
-    async fn test_get_mazes_with_one_maze_without_definitions() {
+    async fn can_get_mazes_with_one_maze_without_definitions() {
         run_get_mazes_test(&CreateUsersDef::new(0, 1, MazeContent::OneMaze), Some(VALID_USERNAME_1), false, MazeContent::OneMaze).await;
     }
 
     #[actix_web::test]
-    async fn test_get_mazes_with_one_maze_with_defintions() {
+    async fn can_get_mazes_with_one_maze_with_defintions() {
         run_get_mazes_test(&CreateUsersDef::new(0, 1, MazeContent::OneMaze), Some(VALID_USERNAME_1), true, MazeContent::OneMaze).await;
     }
 
     #[actix_web::test]
-    async fn test_get_mazes_with_two_mazes_that_require_sorting_without_definitions() {
+    async fn can_get_mazes_with_two_mazes_that_require_sorting_without_definitions() {
         run_get_mazes_test(&CreateUsersDef::new(0, 1, MazeContent::TwoMazes), Some(VALID_USERNAME_1), false, MazeContent::TwoMazes).await;
     }
 
     #[actix_web::test]
-    async fn test_get_mazes_with_two_mazes_that_require_sorting_with_definitions() {
+    async fn can_get_mazes_with_two_mazes_that_require_sorting_with_definitions() {
         run_get_mazes_test(&CreateUsersDef::new(0, 1, MazeContent::TwoMazes), Some(VALID_USERNAME_1), true, MazeContent::TwoMazes).await;
     }
 
     #[actix_web::test]
-    async fn test_get_mazes_with_three_mazes_that_require_sorting_without_definitions() {
+    async fn can_get_mazes_with_three_mazes_that_require_sorting_without_definitions() {
         run_get_mazes_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), false, MazeContent::ThreeMazes).await;
     }
 
     #[actix_web::test]
-    async fn test_get_mazes_with_three_mazes_that_require_sorting_with_definitions() {
+    async fn can_get_mazes_with_three_mazes_that_require_sorting_with_definitions() {
         run_get_mazes_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), true, MazeContent::ThreeMazes).await;
     }
 
     // Create maze
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_create_maze_that_does_not_exist_with_invalid_api_key() {
-        run_create_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(INVALID_USERNAME), new_solvable_maze("", "maze_d"), StatusCode::CREATED).await;
+    async fn cannot_create_maze_that_does_not_exist_with_invalid_api_key() {
+        run_create_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(INVALID_USERNAME), new_solvable_maze("", "maze_d"), StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_create_maze_that_does_not_exist() {
+    async fn can_create_maze_that_does_not_exist() {
         run_create_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), new_solvable_maze("", "maze_d"), StatusCode::CREATED).await;
     }
 
     #[actix_web::test]
-    async fn test_create_maze_that_already_exists() {
+    async fn cannot_create_maze_that_already_exists() {
         run_create_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), new_solvable_maze("", "maze_a"), StatusCode::CONFLICT).await;
     }
 
     // Get maze
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_get_maze_that_exists_with_invalid_api_key() {
+    async fn cannot_get_maze_that_exists_with_invalid_api_key() {
         let id = "maze_a.json";
         let name = "maze_a";
-        run_get_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(INVALID_USERNAME), id, StatusCode::OK, Some(new_solvable_maze(id, name))).await;
+        run_get_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(INVALID_USERNAME), id, StatusCode::UNAUTHORIZED, Some(new_solvable_maze(id, name))).await;
     }
 
     #[actix_web::test]
-    async fn test_get_maze_that_exists() {
+    async fn can_get_maze_that_exists() {
         let id = "maze_a.json";
         let name = "maze_a";
         run_get_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), id, StatusCode::OK, Some(new_solvable_maze(id, name))).await;
     }
 
     #[actix_web::test]
-    async fn test_get_maze_that_does_not_exist() {
+    async fn cannot_get_maze_that_does_not_exist() {
         run_get_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), "does_not_exist.json", StatusCode::NOT_FOUND, None).await;
     }
 
     // Update maze
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_update_maze_that_exists_with_invalid_api_key() {
+    async fn cannot_update_maze_that_exists_with_invalid_api_key() {
         let id = "maze_a.json";
         let name = "maze_a";
-        run_update_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(INVALID_USERNAME), id, new_solvable_maze(id, name), StatusCode::OK).await;
+        run_update_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(INVALID_USERNAME), id, new_solvable_maze(id, name), StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_update_maze_that_exists() {
+    async fn can_update_maze_that_exists() {
         let id = "maze_a.json";
         let name = "maze_a";
         run_update_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), id, new_solvable_maze(id, name), StatusCode::OK).await;
     }
 
     #[actix_web::test]
-    async fn test_update_maze_that_does_not_exist() {
+    async fn cannot_update_maze_that_does_not_exist() {
         let id = "maze_d.json";
         let name = "maze_d";
         run_update_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), id, new_solvable_maze(id, name), StatusCode::NOT_FOUND).await;
     }
 
     #[actix_web::test]
-    async fn test_update_maze_with_mismatching_id() {
+    async fn cannot_update_maze_with_mismatching_id() {
         let id = "maze_a.json";
         let name = "maze_a";
         run_update_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), id, new_solvable_maze("some_other_id", name), StatusCode::BAD_REQUEST).await;
@@ -1183,33 +1408,33 @@ mod test_definitions {
     // Delete maze
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_delete_maze_that_exists_with_invalid_api_key() {
-        run_delete_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(INVALID_USERNAME), "maze_a.json", StatusCode::OK).await;
+    async fn cannot_delete_maze_that_exists_with_invalid_api_key() {
+        run_delete_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(INVALID_USERNAME), "maze_a.json", StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
-    async fn test_delete_maze_that_exists() {
+    async fn can_delete_maze_that_exists() {
         run_delete_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes),Some(VALID_USERNAME_1), "maze_a.json", StatusCode::OK).await;
     }
 
     #[actix_web::test]
-    async fn test_delete_maze_that_does_not_exist() {
+    async fn cannot_delete_maze_that_does_not_exist() {
         run_delete_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), "does_not_exist.json", StatusCode:: NOT_FOUND).await;
     }
 
     // Get maze solution
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_get_maze_solution_that_should_succeed_with_invalid_api_key() {
+    async fn cannot_get_maze_solution_that_should_succeed_with_invalid_api_key() {
         run_get_maze_solution_test(
             &CreateUsersDef::new(0, 1, MazeContent::SolutionTestMazes),
-            Some(INVALID_USERNAME), "solvable.json", StatusCode::OK,
+            Some(INVALID_USERNAME), "solvable.json", StatusCode::UNAUTHORIZED,
             Some(get_solve_test_maze_solution()), None
         ).await;
     }
 
     #[actix_web::test]
-    async fn test_get_maze_solution_that_should_succeed() {
+    async fn can_get_maze_solution_that_should_succeed() {
         run_get_maze_solution_test(
             &CreateUsersDef::new(0, 1, MazeContent::SolutionTestMazes),
             Some(VALID_USERNAME_1), "solvable.json", StatusCode::OK,
@@ -1218,7 +1443,7 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn test_get_maze_solution_should_fail_with_no_start() {
+    async fn cannot_get_maze_solution_that_should_fail_with_no_start() {
         run_get_maze_solution_test(
             &CreateUsersDef::new(0, 1, MazeContent::SolutionTestMazes),
             Some(VALID_USERNAME_1), "no_start.json", StatusCode::UNPROCESSABLE_ENTITY, None,
@@ -1227,7 +1452,7 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn test_get_maze_solution_should_fail_with_no_finish() {
+    async fn cannot_get_maze_solution_that_should_fail_with_no_finish() {
         run_get_maze_solution_test(
             &CreateUsersDef::new(0, 1, MazeContent::SolutionTestMazes),
             Some(VALID_USERNAME_1), "no_finish.json", StatusCode::UNPROCESSABLE_ENTITY, None,
@@ -1236,7 +1461,7 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn test_get_maze_solution_should_fail_with_no_solution() {
+    async fn cannot_get_maze_solution_that_should_fail_with_no_solution() {
         run_get_maze_solution_test(
             &CreateUsersDef::new(0, 1, MazeContent::SolutionTestMazes),
             Some(VALID_USERNAME_1), "no_solution.json", StatusCode::UNPROCESSABLE_ENTITY, None,
@@ -1247,19 +1472,19 @@ mod test_definitions {
     // Solve maze
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
-    async fn test_solve_maze_that_should_succeed_with_invalid_api_key() {
+    async fn canot_solve_maze_that_should_succeed_with_invalid_api_key() {
         run_solve_maze_test(
             &CreateUsersDef::new(0, 1, MazeContent::Empty),
             Some(INVALID_USERNAME),
             new_solve_test_maze("", "", true, true, false),
-            StatusCode::OK,
+            StatusCode::UNAUTHORIZED,
             Some(get_solve_test_maze_solution()),
             None
         ).await;
     }
 
     #[actix_web::test]
-    async fn test_solve_maze_that_should_succeed() {
+    async fn can_solve_maze_that_should_succeed() {
         run_solve_maze_test(
             &CreateUsersDef::new(0, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1),
@@ -1271,7 +1496,7 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn test_solve_maze_should_fail_with_no_start() {
+    async fn cannot_solve_maze_that_should_fail_with_no_start() {
         run_solve_maze_test(
             &CreateUsersDef::new(0, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1),
@@ -1282,7 +1507,7 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn test_solve_maze_should_fail_with_no_finish() {
+    async fn cannot_solve_maze_yhat_should_fail_with_no_finish() {
         run_solve_maze_test(
             &CreateUsersDef::new(0, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1),
@@ -1293,7 +1518,7 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn test_solve_maze_should_fail_with_no_solution() {
+    async fn cannot_solve_maze_that_should_fail_with_no_solution() {
         run_solve_maze_test(
             &CreateUsersDef::new(0, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1),
@@ -1305,22 +1530,22 @@ mod test_definitions {
 
     // API documentation page load
     #[actix_web::test]
-    async fn test_load_swagger_ui_page() {
+    async fn can_load_swagger_ui_page() {
         run_get_url_test("/api-docs/v1/swagger-ui/").await;
     }
 
     #[actix_web::test]
-    async fn test_load_openapi_json() {
+    async fn can_load_openapi_json() {
         run_get_url_test("/api-docs/v1/openapi.json").await;
     }
 
     #[actix_web::test]
-    async fn test_load_redoc_page() {
+    async fn can_load_redoc_page() {
         run_get_url_test("/api-docs/v1/redoc").await;
     }
 
     #[actix_web::test]
-    async fn test_load_rapidoc_page() {
+    async fn can_load_rapidoc_page() {
         run_get_url_test("/api-docs/v1/rapidoc").await;
     }
 }

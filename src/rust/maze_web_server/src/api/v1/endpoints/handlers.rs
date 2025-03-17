@@ -61,6 +61,18 @@ fn get_user_exists_error() -> Error {
     actix_web::error::ErrorConflict("User with the given username or email already exists".to_string())
 }
 
+fn get_invalid_request_error(reason: &str) -> Error {
+    actix_web::error::ErrorBadRequest(format!("Invalid request ({})", reason))
+}
+
+fn get_missing_username_request_error() -> Error {
+    get_invalid_request_error("missing username")
+}
+
+fn get_missing_password_request_error() -> Error {
+    get_invalid_request_error("missing password")
+}
+
 fn get_user_fetch_internal_error(id: Uuid, err: &StoreError) -> Error {
     actix_web::error::ErrorInternalServerError(format!("Error fetching user item with id '{}': {}", id, err))
 }
@@ -232,7 +244,9 @@ pub async fn create_user(
         Err(err) => {
             match err {
                 StoreError::UserEmailExists() | StoreError::UserNameExists()  => Err(get_user_exists_error()),
-                _ => Err(get_user_create_internal_error(&err))
+                StoreError::UserNameMissing() => Err(get_missing_username_request_error()),
+                StoreError::UserPasswordMissing() => Err(get_missing_password_request_error()),
+                 _ => Err(get_user_create_internal_error(&err))
             }    
         }
     }
@@ -334,7 +348,7 @@ pub async fn update_user(
     store: web::Data<SharedStore>,  
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
-    let _ = get_authorized_user(req, false)?;
+    let _ = get_authorized_user(req, true)?;
     let id = user_id_from_str(&path.into_inner())?;
     let update_req_data = update_req.into_inner();
 
@@ -346,6 +360,7 @@ pub async fn update_user(
                 Err(err) => {
                     match err {
                         StoreError::UserEmailExists() | StoreError::UserNameExists()  => Err(get_user_exists_error()),
+                        StoreError::UserNameMissing() => Err(get_missing_username_request_error()),
                         _ => Err(get_user_update_internal_error(&err))
                     }    
                 }
@@ -397,7 +412,7 @@ pub async fn delete_user(
         }    
         Err(err) => {
             match err {
-                    StoreError::UserIdNotFound(id) => Err(get_user_not_found_error(id)),
+                StoreError::UserIdNotFound(id) => Err(get_user_not_found_error(id)),
                 _ => Err(get_user_fetch_internal_error(id, &err))
             }
         }
