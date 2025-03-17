@@ -292,8 +292,12 @@ mod test_definitions {
             Ok(())
         }
         /// Deletes a user from the store
-        fn delete_user(&mut self, _id: Uuid) -> Result<(), StoreError> {
-            Err(StoreError::Other("deletee_user() not implemented for MockStore".to_string()))
+        fn delete_user(&mut self, id: Uuid) -> Result<(), StoreError> {
+            if self.users.remove(&id).is_some() {
+                Ok(())
+            } else {
+                Err(StoreError::UserIdNotFound(id.to_string()))
+            }
         }
         /// Updates a user within the store
         fn update_user(&mut self, user: &mut User) -> Result<(), StoreError> {
@@ -848,6 +852,33 @@ mod test_definitions {
         }
     }    
 
+    async fn run_delete_user_test(
+        create_users_def: &CreateUsersDef,
+        caller_username: Option<&str>,
+        target_username: &str,
+        expected_status_code: StatusCode
+    ) {
+        let user_defs = create_user_defs(create_users_def);
+        let (app, mock_users, api_key) = create_test_app(&user_defs, caller_username).await;
+        let id = MockStore::find_user_id_by_name_in_map(&mock_users, target_username, Uuid::nil());
+        let url = format!("/api/v1/users/{}", id);
+        let req = create_test_delete_request(&url, Some(api_key));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::OK {
+            if Some(target_username) == caller_username {
+                return;
+            }
+
+            // Confirm it has been deleted
+            let url2 = format!("/api/v1/users/{}", id);
+            let req2 = create_test_get_request(&url2, Some(api_key));
+            let resp2 = test::call_service(&app, req2).await;
+            assert_eq!(resp2.status(), StatusCode::NOT_FOUND);
+        }
+    }
+
     async fn run_get_mazes_test(
         create_users_def: &CreateUsersDef,
         caller_username: Option<&str>,
@@ -1285,11 +1316,59 @@ mod test_definitions {
     #[actix_web::test]
     async fn can_downgrade_admin_user_to_non_admin_with_admin_caller() {
         run_update_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
-        VALID_ADMIN_USERNAME_1, &new_update_user_request(false, VALID_ADMIN_USERNAME_1, None),
+            VALID_ADMIN_USERNAME_1, &new_update_user_request(false, VALID_ADMIN_USERNAME_1, None),
             StatusCode::OK).await;
     }
 
     // Delete user
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn cannot_delete_user_with_invalid_api_key() {
+        run_delete_user_test(&CreateUsersDef::new(0, 0, MazeContent::Empty), None,
+            NEW_ADMIN_USERNAME_1, StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[actix_web::test]
+    async fn can_delete_existing_admin_user_with_admin_caller() {
+        run_delete_user_test(&CreateUsersDef::new(2, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1),
+            VALID_ADMIN_USERNAME_2, StatusCode::OK).await;
+    }
+
+    #[actix_web::test]
+    async fn can_delete_last_admin_user_with_admin_caller() {
+        run_delete_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1),
+            VALID_ADMIN_USERNAME_1, StatusCode::OK).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_delete_non_existent_admin_user_with_admin_caller() {
+        run_delete_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1),
+            VALID_ADMIN_USERNAME_2, StatusCode::NOT_FOUND).await;
+    }
+
+    #[actix_web::test]
+    async fn can_delete_existing_non_admin_user_with_admin_caller() {
+        run_delete_user_test(&CreateUsersDef::new(2, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1),
+            VALID_USERNAME_1, StatusCode::OK).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_delete_non_existent_non_admin_user_with_admin_caller() {
+        run_delete_user_test(&CreateUsersDef::new(2, 0, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1),
+            VALID_USERNAME_1, StatusCode::NOT_FOUND).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_delete_existing_admin_user_with_non_admin_caller() {
+        run_delete_user_test(&CreateUsersDef::new(2, 1, MazeContent::Empty), Some(VALID_USERNAME_1),
+            VALID_ADMIN_USERNAME_1, StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_delete_existing_non_admin_user_with_non_admin_caller() {
+        run_delete_user_test(&CreateUsersDef::new(2, 1, MazeContent::Empty), Some(VALID_USERNAME_1),
+            VALID_USERNAME_1, StatusCode::UNAUTHORIZED).await;
+    }
 
     /**********/
     /* Mazes  */
