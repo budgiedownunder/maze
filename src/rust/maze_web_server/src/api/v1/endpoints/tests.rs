@@ -68,12 +68,19 @@ mod test_definitions {
     /* Mock user  */
     /**************/
     #[derive(Clone, Debug)]
-        struct MockUser {
+   struct MockUser {
         user: User,
         mazes: HashMap<String, MockMaze>,
     }
 
     impl MockUser {
+        fn default() -> MockUser {
+            MockUser {
+                user: User::default(),
+                mazes: HashMap::new(),
+            }
+        }
+
         fn to_user_item(&self) -> UserItem {
             UserItem {
                 id: self.user.id,
@@ -123,8 +130,8 @@ mod test_definitions {
             Err(StoreError::UserIdNotFound(id.to_string()))
         }
 
-        // Find the api key to use for a given username. If the username does not exist,
-        // return an invalid key to simulate an invalid access attempt 
+        /// Find the api key to use for a given username. If the username does not exist,
+        /// return an invalid key to simulate an invalid access attempt 
         fn get_api_key_to_use(&self, caller_username: Option<&str>) -> Uuid {
             if let Some(username) = caller_username {
                 if let Ok(user) = self.find_user_by_name(username) {
@@ -134,7 +141,25 @@ mod test_definitions {
             User::new_api_key()
         }
 
-        /// Locates a user by their username within the store
+        /// Locates a user in a user map by their username
+        fn find_user_by_name_in_map(user_map: &HashMap<Uuid, MockUser>, username: &str) -> Result<User, StoreError> {
+            for v in user_map.values() {
+                if v.user.username == username {
+                    return Ok(v.user.clone());
+                }
+            }
+            Err(StoreError::UserNotFound())
+        }    
+
+        /// Locates a user id in a user map by their username
+        fn find_user_id_by_name_in_map(user_map: &HashMap<Uuid, MockUser>, username: &str) -> Uuid {
+            match MockStore::find_user_by_name_in_map(user_map, username) {
+                Ok(user) => user.id,
+                _ => Uuid::nil(),
+            }
+        }
+
+        /// Locates a user by their email within the store
         fn find_user_by_email(&self, email: &str) -> Result<User, StoreError> {
             for v in self.users.values() {
                 if v.user.email == email {
@@ -240,17 +265,15 @@ mod test_definitions {
             Err(StoreError::Other("update_user() not implemented for MockStore".to_string()))
         }
         /// Loads a user from the store
-        fn get_user(&self, _id: Uuid) -> Result<User, StoreError> {
-            Err(StoreError::Other("get_user() not implemented for MockStore".to_string()))
+        fn get_user(&self, id: Uuid) -> Result<User, StoreError> {
+            if let Some(mock_user) = self.users.get(&id) {
+                return Ok(mock_user.user.clone());
+            }
+            Err(StoreError::UserIdNotFound(id.to_string()))
         }
         /// Locates a user by their username within the store
         fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
-            for v in self.users.values() {
-                if v.user.username == name {
-                    return Ok(v.user.clone());
-                }
-            }
-            Err(StoreError::UserNotFound())
+            MockStore::find_user_by_name_in_map(&self.users, name)
         }
         /// Locates a user by their api key within the store
         fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
@@ -690,6 +713,30 @@ mod test_definitions {
         }
     }
 
+    async fn run_get_user_test(
+        create_users_def: &CreateUsersDef,
+        caller_username: Option<&str>,
+        target_username: &str,
+        expected_status_code: StatusCode,
+    ) {
+        let user_defs = create_user_defs(create_users_def);
+        let (app, mock_users, api_key) = create_test_app(&user_defs, caller_username).await;
+        let id = MockStore::find_user_id_by_name_in_map(&mock_users, target_username);
+        let url = format!("/api/v1/users/{}", id);
+        let req = create_test_get_request(&url, Some(api_key));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::OK {
+            let body = test::read_body(resp).await;
+            let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize response");
+            let dummy_user = MockUser::default();
+            let expected_user = mock_users.get(&id).unwrap_or(&dummy_user);
+            let expected_user_response = expected_user.to_user_item();
+            assert_eq!(expected_user_response, response_user);
+        }
+    }
+
     async fn run_get_mazes_test(
         create_users_def: &CreateUsersDef,
         caller_username: Option<&str>,
@@ -937,7 +984,7 @@ mod test_definitions {
     #[actix_web::test]
     async fn test_create_non_existent_admin_user_with_non_admin_caller() {
         run_create_user_test(&CreateUsersDef::new(0, 1, MazeContent::Empty), Some(VALID_USERNAME_1), 
-        &new_create_user_request(true, NEW_ADMIN_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
+            &new_create_user_request(true, NEW_ADMIN_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
@@ -956,7 +1003,7 @@ mod test_definitions {
     #[should_panic(expected = "Unauthorized request")]
     async fn test_create_non_admin_user_with_invalid_api_key() {
         run_create_user_test(&CreateUsersDef::new(0, 0, MazeContent::Empty), None, 
-            &&new_create_user_request(false, NEW_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
+            &new_create_user_request(false, NEW_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
@@ -968,7 +1015,7 @@ mod test_definitions {
     #[actix_web::test]
     async fn test_create_non_existent_non_admin_user_with_non_admin_caller() {
         run_create_user_test(&CreateUsersDef::new(0, 1, MazeContent::Empty), Some(VALID_USERNAME_1), 
-        &new_create_user_request(false, NEW_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
+            &new_create_user_request(false, NEW_USERNAME_1, None), StatusCode::UNAUTHORIZED).await;
     }
 
     #[actix_web::test]
@@ -983,10 +1030,41 @@ mod test_definitions {
             &new_create_user_request(true, VALID_USERNAME_2, Some(&new_email(VALID_USERNAME_1))), StatusCode::CONFLICT).await;
     }
 
+    // Get user
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn test_get_user_that_exists_with_invalid_api_key() {
+        run_get_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), None, 
+                          VALID_USERNAME_1, StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[actix_web::test]
+    async fn test_get_user_that_exists_with_admin_caller() {
+        run_get_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+                          VALID_USERNAME_1, StatusCode::OK).await;
+    }
+
+    #[actix_web::test]
+    async fn test_get_admin_user_that_exists_with_admin_caller() {
+        run_get_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+                          VALID_ADMIN_USERNAME_1, StatusCode::OK).await;
+    }
+
+    #[actix_web::test]
+    async fn test_get_user_that_exists_with_non_admin_caller() {
+        run_get_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_USERNAME_1), 
+                          VALID_USERNAME_1, StatusCode::UNAUTHORIZED).await;
+    }
+
+    #[actix_web::test]
+    async fn test_get_user_that_does_not_exist_with_admin_caller() {
+        run_get_user_test(&CreateUsersDef::new(1, 1, MazeContent::Empty), Some(VALID_ADMIN_USERNAME_1), 
+                          VALID_USERNAME_2, StatusCode::NOT_FOUND).await;
+    }
+
+    // Update user
 
     // Delete user
-    // Get user
-    // Update user
 
     /**********/
     /* Mazes  */
@@ -1051,7 +1129,7 @@ mod test_definitions {
         run_create_maze_test(&CreateUsersDef::new(0, 1, MazeContent::ThreeMazes), Some(VALID_USERNAME_1), new_solvable_maze("", "maze_a"), StatusCode::CONFLICT).await;
     }
 
-    // GET maze
+    // Get maze
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
     async fn test_get_maze_that_exists_with_invalid_api_key() {
