@@ -4,7 +4,7 @@
 /// - `Down`: Down
 /// - `Left` - Left
 /// - `Right` - Right
-pub enum Direction {
+pub enum MazePathDirection {
     Up,
     Down,
     Left,
@@ -12,18 +12,18 @@ pub enum Direction {
     None,
 }
 
-impl Direction {
+impl MazePathDirection {
     /// Returns the unicode character associated with the given direction instance
     /// # Returns
     ///
     /// Unicode character
     pub fn unicode_char(&self) -> char {
         match self {
-            Direction::Up => '\u{2191}',
-            Direction::Down => '\u{2193}',
-            Direction::Left => '\u{2190}',
-            Direction::Right => '\u{2192}',
-            Direction::None => '.',
+            MazePathDirection::Up => '\u{2191}',
+            MazePathDirection::Down => '\u{2193}',
+            MazePathDirection::Left => '\u{2190}',
+            MazePathDirection::Right => '\u{2192}',
+            MazePathDirection::None => '.',
         }
     }
 }

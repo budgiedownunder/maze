@@ -1,5 +1,6 @@
 use crate::wasm_common::{new_maze, to_cell_type_enum, MazeWasm};
-use maze::{Point, Solution};
+use data_model::MazePoint;
+use maze::{MazeSolver, MazeSolution};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ptr;
 /// Creates a new, empty `MazeWasm`
@@ -92,7 +93,7 @@ pub extern "C" fn maze_wasm_set_start_cell(
 ) -> u32 {
     let maze_wasm = unsafe { &mut *maze_wasm };
     let mut error_ptr: u32 = 0;
-    if let Err(error) = maze_wasm.maze.definition.set_start(Some(Point {
+    if let Err(error) = maze_wasm.maze.definition.set_start(Some(MazePoint {
         row: start_row as usize,
         col: start_col as usize,
     })) {
@@ -130,7 +131,7 @@ pub extern "C" fn maze_wasm_set_finish_cell(
 ) -> u32 {
     let maze_wasm = unsafe { &mut *maze_wasm };
     let mut error_ptr: u32 = 0;
-    if let Err(error) = maze_wasm.maze.definition.set_finish(Some(Point {
+    if let Err(error) = maze_wasm.maze.definition.set_finish(Some(MazePoint {
         row: finish_row as usize,
         col: finish_col as usize,
     })) {
@@ -171,11 +172,11 @@ fn set_cell_values(
     let maze_wasm = unsafe { &mut *maze_wasm };
     let mut error_ptr: u32 = 0;
     if let Err(error) = maze_wasm.maze.definition.set_value(
-        Point {
+        MazePoint {
             row: start_row as usize,
             col: start_col as usize,
         },
-        Point {
+        MazePoint {
             row: end_row as usize,
             col: end_col as usize,
         },
@@ -474,7 +475,7 @@ fn create_maze_wasm_enum_result(value: u32) -> u32 {
 ///
 /// `MazeWasmResult` with the `value_ptr` set to the allocated point value
 ///
-fn create_maze_wasm_point_result(point: &Point) -> u32 {
+fn create_maze_wasm_point_result(point: &MazePoint) -> u32 {
     to_maze_wasm_result_ptr(
         MazeWasmResultValueType::Point as u8,
         to_point_ptr(point),
@@ -487,7 +488,7 @@ fn create_maze_wasm_point_result(point: &Point) -> u32 {
 ///
 /// `MazeWasmResult` with the `value_ptr` set to the solution pointer
 ///
-fn create_maze_wasm_solution_result(solution: Solution) -> u32 {
+fn create_maze_wasm_solution_result(solution: MazeSolution) -> u32 {
     to_maze_wasm_result_ptr(
         MazeWasmResultValueType::Solution as u8,
         to_solution_ptr(solution),
@@ -520,7 +521,7 @@ pub extern "C" fn free_maze_wasm_result(result_ptr: u32, free_value_ptr: bool) {
                         free_sized_memory((*result_ptr).value_ptr as *mut u8);
                     }
                     MazeWasmResultValueType::Solution => {
-                        free_maze_wasm_solution((*result_ptr).value_ptr as *mut Solution);
+                        free_maze_wasm_solution((*result_ptr).value_ptr as *mut MazeSolution);
                     }
                     _ => {}
                 }
@@ -583,7 +584,7 @@ pub extern "C" fn maze_wasm_solve(maze_wasm: *mut MazeWasm) -> u32 {
 ///     columns (u32) = 4 bytes
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
-pub extern "C" fn maze_wasm_solution_get_path_points(solution: *mut Solution) -> u32 {
+pub extern "C" fn maze_wasm_solution_get_path_points(solution: *mut MazeSolution) -> u32 {
     let solution = unsafe { &mut *solution };
     let num_points = solution.path.points.len();
     let length = 4 + num_points * 8;
@@ -630,7 +631,7 @@ fn to_string_ptr(str: &str) -> u32 {
 /// # Returns
 ///
 /// Pointer to point
-fn to_point_ptr(point: &Point) -> u32 {
+fn to_point_ptr(point: &MazePoint) -> u32 {
     let point_ptr = allocate_sized_memory(8);
     unsafe {
         let point_data_ptr = point_ptr.add(4);
@@ -643,7 +644,7 @@ fn to_point_ptr(point: &Point) -> u32 {
 /// # Returns
 ///
 /// Pointer to memory directly after the written point
-fn write_point(ptr: *mut u8, point: &Point) -> *mut u8 {
+fn write_point(ptr: *mut u8, point: &MazePoint) -> *mut u8 {
     unsafe {
         ptr::write(ptr as *mut u32, point.row as u32);
         let ptr = ptr.add(4);
@@ -656,7 +657,7 @@ fn write_point(ptr: *mut u8, point: &Point) -> *mut u8 {
 /// # Returns
 ///
 /// Pointer to boxed solution pointer
-fn to_solution_ptr(solution: Solution) -> u32 {
+fn to_solution_ptr(solution: MazeSolution) -> u32 {
     let boxed_solution = Box::new(solution);
     increment_num_objects_allocated();
     Box::into_raw(boxed_solution) as u32
@@ -669,7 +670,7 @@ fn to_solution_ptr(solution: Solution) -> u32 {
 ///
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
-pub extern "C" fn free_maze_wasm_solution(solution_ptr: *mut Solution) {
+pub extern "C" fn free_maze_wasm_solution(solution_ptr: *mut MazeSolution) {
     if !solution_ptr.is_null() {
         unsafe {
             let _ = Box::from_raw(solution_ptr);

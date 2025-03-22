@@ -5,16 +5,15 @@ use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
 use uuid::Uuid;
 
-use maze::Maze;
+use data_model::{Maze, User};
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
+use crate::Error;
 use crate::store::Manage;
 use crate::store::MazeStore;
 use crate::store::UserStore;
 use crate::MazeItem;
 use crate::Store;
-use crate::StoreError;
-use crate::User;
 
 /// File store configuration settings
 #[derive(Debug, Clone)]
@@ -79,11 +78,8 @@ impl FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::MazeStore;
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::{Store, StoreError, User};
-    /// use storage::{FileStore, FileStoreConfig};
-    /// use maze::Maze;
+    /// use data_model::{Maze, User};
+    /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
     ///
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
@@ -96,7 +92,7 @@ impl FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -135,13 +131,13 @@ impl FileStore {
     }
 
     // Initializes the file store
-    fn init(&mut self) -> Result<(), StoreError> {
+    fn init(&mut self) -> Result<(), Error> {
         self.data_dir = Self::make_data_dir(&self.config.data_dir)?;
         self.users_dir = self.make_users_dir()?;
         Ok(())
     }
 
-    fn make_dir(dir: &str) -> Result<String, StoreError> {
+    fn make_dir(dir: &str) -> Result<String, Error> {
         let path = PathBuf::from(dir);
         let normalized_path = path
             .strip_prefix(r"\\?\")
@@ -150,7 +146,7 @@ impl FileStore {
 
         match fs::create_dir_all(normalized_path) {
             Ok(_) => Ok(dir.to_string()),
-            Err(error) => Err(StoreError::Other(format!(
+            Err(error) => Err(Error::Other(format!(
                 "Failed to create directory: {} - {}",
                 dir, error
             ))),
@@ -158,7 +154,7 @@ impl FileStore {
     }
 
     // Creates the data directory within the file store
-    fn make_data_dir(data_dir: &str) -> Result<String, StoreError> {
+    fn make_data_dir(data_dir: &str) -> Result<String, Error> {
         let os_path = PathBuf::from(data_dir);
 
         let path = if os_path.is_absolute() {
@@ -180,14 +176,14 @@ impl FileStore {
     }
 
     // Creates a data sub-directory within the file store
-    fn make_data_sub_dir(&self, sub_dir: &str) -> Result<String, StoreError> {
+    fn make_data_sub_dir(&self, sub_dir: &str) -> Result<String, Error> {
         let path = PathBuf::from(self.data_dir.clone()).join(sub_dir);
         let dir_path: String = path.to_string_lossy().to_string();
         Self::make_dir(&dir_path)
     }
 
     // Creates the users directory within the file store
-    fn make_users_dir(&self) -> Result<String, StoreError> {
+    fn make_users_dir(&self) -> Result<String, Error> {
         self.make_data_sub_dir("users")
     }
 
@@ -198,12 +194,12 @@ impl FileStore {
             .to_string()
     }
 
-    fn make_user_sub_dir(&self, id: Uuid, sub_dir: &str) -> Result<String, StoreError> {
+    fn make_user_sub_dir(&self, id: Uuid, sub_dir: &str) -> Result<String, Error> {
         Self::make_dir(&self.get_user_sub_dir_path(id, sub_dir))
     }
 
     // Creates a user directory within the file store
-    fn make_user_dir(&self, id:Uuid) -> Result<String, StoreError> {
+    fn make_user_dir(&self, id:Uuid) -> Result<String, Error> {
         Self::make_dir(&self.user_dir_path(id))
     }
 
@@ -238,10 +234,10 @@ impl FileStore {
         &self,
         user: &User,
         overwrite: bool,
-    ) -> Result<(), StoreError> {
+    ) -> Result<(), Error> {
 
         if !overwrite && self.user_exists(user.id) {
-            return Err(StoreError::UserIdExists(user.id.to_string()));
+            return Err(Error::UserIdExists(user.id.to_string()));
         }
 
         if !self.user_dir_exists(user.id) {
@@ -255,44 +251,44 @@ impl FileStore {
     }
 
     // Validate user content
-    fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), StoreError> {
+    fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), Error> {
         if user.id == Uuid::nil() {
-            return Err(StoreError::UserIdMissing());
+            return Err(Error::UserIdMissing());
         }
         if user.username.is_empty() {
-            return Err(StoreError::UserNameMissing());
+            return Err(Error::UserNameMissing());
         }
         // if user.email.is_empty() {
-        //     return Err(StoreError::UserEmailMissing());
+        //     return Err(Error::UserEmailMissing());
         // }
         if user.password_hash.is_empty() {
-            return Err(StoreError::UserPasswordMissing());
+            return Err(Error::UserPasswordMissing());
         }
         if self.user_name_exists(&user.username, ignore_id) {
-            return Err(StoreError::UserNameExists());
+            return Err(Error::UserNameExists());
         }
         if !user.email.is_empty() && self.user_email_exists(&user.email, ignore_id) {
-            return Err(StoreError::UserEmailExists());
+            return Err(Error::UserEmailExists());
         }
         Ok(())
     }
 
     // Read a user definition
-    fn read_user(&self, id: Uuid) -> Result<User, StoreError> {
+    fn read_user(&self, id: Uuid) -> Result<User, Error> {
         if !self.user_exists(id) {
-            return Err(StoreError::UserIdNotFound(id.to_string()));
+            return Err(Error::UserIdNotFound(id.to_string()));
         }
         let path = self.user_file_path(id);
         let file = File::open(path)?;
         let reader = BufReader::new(file);
         match serde_json::from_reader::<BufReader<File>, User>(reader) {
             Ok(user) => Ok(user),
-            Err(error) => Err(StoreError::from(error)),
+            Err(error) => Err(Error::from(error)),
         }
     }
 
     // Locate the first user with a given string field value
-    fn find_user_by_string_field(&self, field_name: &str, search_value: &str, ignore_id: Uuid) -> Result<User, StoreError> {
+    fn find_user_by_string_field(&self, field_name: &str, search_value: &str, ignore_id: Uuid) -> Result<User, Error> {
         let ids = self.get_user_ids()?;
         for id in ids {
             if id != ignore_id {
@@ -304,7 +300,7 @@ impl FileStore {
                 }
             }
         }
-        Err(StoreError::UserNotFound())
+        Err(Error::UserNotFound())
     }
 
     // Checks whether a given username exists in the file store
@@ -318,7 +314,7 @@ impl FileStore {
     }
 
     // Returns the list of user ids associated with the file store
-    fn get_user_ids(&self) -> Result<Vec<Uuid>, StoreError> {
+    fn get_user_ids(&self) -> Result<Vec<Uuid>, Error> {
         let ids: Vec<Uuid> = fs::read_dir(&self.users_dir)?
             .filter_map(|entry| {
                 entry.ok().and_then(|e| {
@@ -350,7 +346,7 @@ impl FileStore {
     }
 
     // Creates the mazes directory within the file store for a given owner
-    fn make_user_mazes_dir(&self, owner: &User) -> Result<String, StoreError> {
+    fn make_user_mazes_dir(&self, owner: &User) -> Result<String, Error> {
         self.make_user_sub_dir(owner.id, "mazes")
     }
 
@@ -379,7 +375,7 @@ impl FileStore {
         maze: &mut Maze,
         id: &str,
         overwrite: bool,
-    ) -> Result<(), StoreError> {
+    ) -> Result<(), Error> {
         maze.id = id.to_string();
 
         if !self.user_mazes_dir_exists(owner) {
@@ -387,7 +383,7 @@ impl FileStore {
         }
 
         if !overwrite && self.maze_exists(owner, id) {
-            return Err(StoreError::MazeIdExists(id.to_string()));
+            return Err(Error::MazeIdExists(id.to_string()));
         }
 
         let s = maze.to_json()?;
@@ -415,9 +411,8 @@ impl UserStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::{Store, User};
-    /// use storage::{FileStore, FileStoreConfig};
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
     /// // Create the file store
@@ -439,12 +434,12 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn init_default_admin_user(&mut self, username: &str, password_hash: &str) -> Result<User, StoreError> {
+    fn init_default_admin_user(&mut self, username: &str, password_hash: &str) -> Result<User, Error> {
         match self.find_user_by_name(username) {
             Ok(user) => Ok(user),
             Err(error) => {
                 match error {
-                    StoreError::UserNotFound() => {
+                    Error::UserNotFound() => {
                         let mut user = User::default();
                         user.username = username.to_string();
                         user.is_admin = true;
@@ -468,9 +463,8 @@ impl UserStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::{Store, User};
-    /// use storage::{FileStore, FileStoreConfig};
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
     /// // Create the file store
@@ -503,7 +497,7 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
+    fn create_user(&mut self, user: &mut User) -> Result<(), Error> {
         user.id = User::new_id();
         user.api_key = User::new_api_key();
         self.validate_user(user, Uuid::nil())?;
@@ -521,9 +515,8 @@ impl UserStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::{Store, User};
-    /// use storage::{FileStore, FileStoreConfig};
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
     /// // Create the file store
@@ -567,12 +560,12 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn delete_user(&mut self, id: Uuid) -> Result<(), StoreError> {
+    fn delete_user(&mut self, id: Uuid) -> Result<(), Error> {
         if id.is_nil() {
-            return Err(StoreError::UserIdMissing());
+            return Err(Error::UserIdMissing());
         }
         if !self.user_dir_exists(id) {
-            return Err(StoreError::UserIdNotFound(id.to_string()));
+            return Err(Error::UserIdNotFound(id.to_string()));
         }
         delete_dir(&self.user_dir_path(id));
 
@@ -592,9 +585,8 @@ impl UserStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::{Store, User};
-    /// use storage::{FileStore, FileStoreConfig};
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
     /// // Create the file store
@@ -640,12 +632,12 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn update_user(&mut self, user: &mut User) -> Result<(), StoreError> {
+    fn update_user(&mut self, user: &mut User) -> Result<(), Error> {
         if user.id == Uuid::nil() {
-            return Err(StoreError::UserIdMissing());
+            return Err(Error::UserIdMissing());
         }
         if !self.user_exists(user.id) {
-            return Err(StoreError::UserIdNotFound(user.id.to_string()));
+            return Err(Error::UserIdNotFound(user.id.to_string()));
         }
         self.validate_user(user, user.id)?;
         self.write_user_file(user, true)?;
@@ -661,9 +653,8 @@ impl UserStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::{Store, User};
-    /// use storage::{FileStore, FileStoreConfig};
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
     /// // Create the file store
@@ -708,7 +699,7 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn get_user(&self, id: Uuid) -> Result<User, StoreError> {
+    fn get_user(&self, id: Uuid) -> Result<User, Error> {
         self.read_user(id)
     }
     /// Locates a user by their username within the store
@@ -721,9 +712,8 @@ impl UserStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::{Store, User};
-    /// use storage::{FileStore, FileStoreConfig};
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
     /// // Create the file store
@@ -768,7 +758,7 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
+    fn find_user_by_name(&self, name: &str) -> Result<User, Error> {
         self.find_user_by_string_field("username", name, Uuid::nil())
     }
     /// Locates a user by their api key within the store
@@ -781,9 +771,8 @@ impl UserStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::{Store, User};
-    /// use storage::{FileStore, FileStoreConfig};
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
     /// // Create the file store
@@ -828,7 +817,7 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
+    fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error> {
         let ids = self.get_user_ids()?;
         for id in ids {
             let user = self.get_user(id)?;
@@ -836,7 +825,7 @@ impl UserStore for FileStore {
                 return Ok(user);
             }
         }
-        Err(StoreError::UserNotFound())
+        Err(Error::UserNotFound())
     }
     /// Returns the list of users within the store, sorted
     /// alphabetically by username in ascending order
@@ -849,9 +838,8 @@ impl UserStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::{Store, User};
-    /// use storage::{FileStore, FileStoreConfig};
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
     /// // Create the file store
@@ -896,7 +884,7 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn get_users(&self) -> Result<Vec<User>, StoreError> {
+    fn get_users(&self) -> Result<Vec<User>, Error> {
         let ids = self.get_user_ids()?;
         let mut users:Vec<User> = Vec::new();
         for id in ids {
@@ -919,11 +907,8 @@ impl MazeStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::store::MazeStore;
-    /// use crate::storage::{Store, StoreError, User};
-    /// use storage::{FileStore, FileStoreConfig};
-    /// use maze::Maze;
+    /// use data_model::{Maze, User};
+    /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
     /// use uuid::Uuid;
     ///
     /// let grid: Vec<Vec<char>> = vec![
@@ -937,7 +922,7 @@ impl MazeStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     /// 
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -962,9 +947,9 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
+    fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error> {
         if maze.name.is_empty() {
-            return Err(StoreError::MazeNameMissing());
+            return Err(Error::MazeNameMissing());
         }
         let id = self.make_maze_id(&maze.name);
         self.write_maze_file(owner, maze, &id, false)?;
@@ -981,18 +966,15 @@ impl MazeStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::store::MazeStore;
-    /// use crate::storage::{Store, StoreError, User};
-    /// use storage::{FileStore, FileStoreConfig};
-    /// use maze::Maze;
+    /// use data_model::{Maze, User};
+    /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
     /// use uuid::Uuid;
     ///
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1019,12 +1001,12 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn delete_maze(&mut self, owner: &User, id: &str) -> Result<(), StoreError> {
+    fn delete_maze(&mut self, owner: &User, id: &str) -> Result<(), Error> {
         if id.is_empty() {
-            return Err(StoreError::MazeIdMissing());
+            return Err(Error::MazeIdMissing());
         }
         if !self.maze_exists(owner, id) {
-            return Err(StoreError::MazeIdNotFound(id.to_string()));
+            return Err(Error::MazeIdNotFound(id.to_string()));
         }
         delete_file(&self.maze_path(owner, id));
         Ok(())
@@ -1040,11 +1022,8 @@ impl MazeStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::store::MazeStore;
-    /// use crate::storage::{Store, StoreError, User};
-    /// use storage::{FileStore, FileStoreConfig};
-    /// use maze::Maze;
+    /// use data_model::{Maze, User};
+    /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
     /// use uuid::Uuid;
     ///
     /// let grid: Vec<Vec<char>> = vec![
@@ -1059,7 +1038,7 @@ impl MazeStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1084,12 +1063,12 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
+    fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error> {
         if maze.id.is_empty() {
-            return Err(StoreError::MazeIdMissing());
+            return Err(Error::MazeIdMissing());
         }
         if !self.maze_exists(owner, &maze.id) {
-            return Err(StoreError::MazeIdNotFound(maze.id.to_string()));
+            return Err(Error::MazeIdNotFound(maze.id.to_string()));
         }
         self.write_maze_file(owner, maze, &maze.id.clone(), true)?;
         Ok(())
@@ -1109,13 +1088,10 @@ impl MazeStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::store::MazeStore;
-    /// use crate::storage::{Store, StoreError, User};
-    /// use storage::{FileStore, FileStoreConfig};
-    /// use maze::StdoutLinePrinter;
-    /// use maze::Maze;
-    /// use maze::Path;
+    /// use data_model::{Maze, User};
+    /// use maze::{MazePath, MazePrinter};
+    /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error,  UserStore};
+    /// use utils::StdoutLinePrinter;
     /// use uuid::Uuid;
     ///
     /// let grid: Vec<Vec<char>> = vec![
@@ -1129,7 +1105,7 @@ impl MazeStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1152,7 +1128,7 @@ impl MazeStore for FileStore {
     ///     Ok(loaded_maze) => {
     ///         println!("Successfully loaded maze:");
     ///         let mut print_target = StdoutLinePrinter::new();
-    ///         let empty_path = Path { points: vec![] };
+    ///         let empty_path = MazePath { points: vec![] };
     ///         loaded_maze.print(&mut print_target, empty_path);
     ///     }
     ///     Err(error) => {
@@ -1164,9 +1140,9 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, StoreError> {
+    fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, Error> {
         if !self.maze_exists(owner, id) {
-            return Err(StoreError::MazeIdNotFound(id.to_string()));
+            return Err(Error::MazeIdNotFound(id.to_string()));
         }
         let path = self.maze_path(owner, id);
         let file = File::open(path)?;
@@ -1176,7 +1152,7 @@ impl MazeStore for FileStore {
                 maze.id = id.to_string();
                 Ok(maze)
             }
-            Err(error) => Err(StoreError::from(error)),
+            Err(error) => Err(Error::from(error)),
         }
     }
     /// Locates a maze item by name from within the file store instance
@@ -1195,17 +1171,15 @@ impl MazeStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::store::MazeStore;
-    /// use crate::storage::{Store, StoreError, User};
-    /// use storage::{FileStore, FileStoreConfig};
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
     /// use uuid::Uuid;
     ///
     /// // Create the file store
     /// let store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1233,7 +1207,7 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn find_maze_by_name(&self, owner: &User, name: &str) -> Result<MazeItem, StoreError> {
+    fn find_maze_by_name(&self, owner: &User, name: &str) -> Result<MazeItem, Error> {
         let id = self.make_maze_id(name);
         if !name.is_empty() && self.maze_exists(owner, &id) {
             return Ok(MazeItem {
@@ -1242,7 +1216,7 @@ impl MazeStore for FileStore {
                 definition: None,
             });
         }
-        Err(StoreError::MazeNameNotFound(name.to_string()))
+        Err(Error::MazeNameNotFound(name.to_string()))
     }
     /// Returns the list of maze items within the file store instance, sorted
     /// alphabetically in ascending order, optionally including the
@@ -1262,17 +1236,15 @@ impl MazeStore for FileStore {
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use crate::storage::store::UserStore;
-    /// use crate::storage::store::MazeStore;
-    /// use crate::storage::{Store, StoreError, User};
-    /// use storage::{FileStore, FileStoreConfig};
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
     /// use uuid::Uuid;
     /// 
     /// // Create the file store
     /// let store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1296,7 +1268,7 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn get_maze_items(&self, owner: &User, include_definitions: bool) -> Result<Vec<MazeItem>, StoreError> {
+    fn get_maze_items(&self, owner: &User, include_definitions: bool) -> Result<Vec<MazeItem>, Error> {
         let mut items: Vec<MazeItem> = Vec::new();
         let mazes_dir = self.get_mazes_dir(owner);
 
@@ -1342,18 +1314,18 @@ impl MazeStore for FileStore {
 }
 
 impl Manage for FileStore {
-    fn empty(&mut self) -> Result<(), StoreError> {
+    fn empty(&mut self) -> Result<(), Error> {
         let root_path = Path::new(&self.data_dir);
         if root_path.is_dir() {
             if let Err(error) = fs::remove_dir_all(root_path) {
-                return Err(StoreError::Other(format!(
+                return Err(Error::Other(format!(
                     "Failed to delete root data directory: {} - {}",
                     self.data_dir, error
                 )));
             }
         }
         if let Err(error) = self.init() {
-            return Err(StoreError::Other(format!(
+            return Err(Error::Other(format!(
                 "Failed to reinitialize FileStore: {}",
                 error
             )));
@@ -1513,7 +1485,7 @@ mod tests {
             }
             Err(error) => {
                 let err_msg = error.to_string();
-                let err_msg_expected = StoreError::UserIdNotFound(id.to_string()).to_string();
+                let err_msg_expected = Error::UserIdNotFound(id.to_string()).to_string();
                 if err_msg != err_msg_expected {
                     panic!("Unexpected error returned: '{}', expected: '{}'", err_msg, err_msg_expected);
                 }
@@ -1564,7 +1536,7 @@ mod tests {
             }
             Err(error) => {
                 let err_msg = error.to_string();
-                let err_msg_expected = StoreError::UserIdNotFound(id.to_string()).to_string();
+                let err_msg_expected = Error::UserIdNotFound(id.to_string()).to_string();
                 if err_msg != err_msg_expected {
                     panic!("Unexpected error returned: '{}', expected: '{}'", err_msg, err_msg_expected);
                 }
@@ -1588,7 +1560,7 @@ mod tests {
         user.id = User::new_id();
         if let Err(error) = store.update_user(&mut user) {
             let err_msg = error.to_string();
-            let err_msg_expected = StoreError::UserIdNotFound(user.id.to_string()).to_string();
+            let err_msg_expected = Error::UserIdNotFound(user.id.to_string()).to_string();
             if err_msg != err_msg_expected {
                 panic!("Unexpected error returned: '{}', expected: '{}'", err_msg, err_msg_expected);
             }

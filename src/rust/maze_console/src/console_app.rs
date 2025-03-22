@@ -3,12 +3,10 @@ use std::io::{self};
 use std::thread;
 use std::time::Duration;
 
-use maze::Definition;
-use maze::LinePrinter;
-use maze::Maze;
+use data_model::{Maze, MazeDefinition, User};
 use maze_console::app::App;
-
-use storage::{Store, User};
+use storage::Store;
+use utils::LinePrinter;
 
 pub struct ConsoleApp {
     store: Box<dyn Store>,
@@ -20,7 +18,7 @@ impl ConsoleApp {
     pub fn new(store: Box<dyn Store>, user: &User) -> ConsoleApp {
         ConsoleApp {
             store,
-            current_maze: Maze::new(Definition::new(0, 0)),
+            current_maze: Maze::new(MazeDefinition::new(0, 0)),
             user: user.clone(),
         }
     }

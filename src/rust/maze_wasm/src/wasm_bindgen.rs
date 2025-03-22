@@ -1,13 +1,14 @@
 use crate::wasm_common::{
     new_maze, to_cell_type_enum, MazeWasm, MazeCellTypeWasm,
 };
+use data_model::MazePoint;
 use js_sys::{Array, Object, Reflect};
-use maze::{Point, Solution};
+use maze::{MazeSolution, MazeSolver};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 
 /// Converts a Rust Point to a JavaScript object
-fn to_js_point_obj(point: &Point) -> Object {
+fn to_js_point_obj(point: &MazePoint) -> Object {
     let obj = Object::new();
     Reflect::set(
         &obj,
@@ -41,7 +42,7 @@ fn to_js_cell_info_obj(cell_type: char) -> Object {
 pub struct MazeSolutionWasm {
     //#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen(skip))] - does not work
     #[wasm_bindgen(skip)]
-    pub solution: Solution,
+    pub solution: MazeSolution,
 }
 
 
@@ -612,7 +613,7 @@ impl MazeWasm {
         let col = Self::arg_to_usize("start_col", start_col)?;
         self.maze
             .definition
-            .set_start(Some(Point { row, col }))
+            .set_start(Some(MazePoint { row, col }))
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(())
     }
@@ -710,7 +711,7 @@ impl MazeWasm {
         let col = Self::arg_to_usize("finish_col", finish_col)?;
         self.maze
             .definition
-            .set_finish(Some(Point { row, col }))
+            .set_finish(Some(MazePoint { row, col }))
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(())
     }
@@ -1104,11 +1105,11 @@ impl MazeWasm {
         self.maze
             .definition
             .set_value(
-                Point {
+                MazePoint {
                     row: start_row,
                     col: start_col,
                 },
-                Point {
+                MazePoint {
                     row: end_row,
                     col: end_col,
                 },

@@ -1,11 +1,9 @@
 extern crate criterion;
 use criterion::{criterion_group, Criterion};
-use maze::Definition;
-use maze::Maze;
-use maze::MazeError;
-use maze::Solution;
+use data_model::{Maze, MazeDefinition};
+use maze::{Error as MazeError, MazeSolver, MazeSolution};
 
-fn solve() -> Result<Solution, MazeError> {
+fn solve() -> Result<MazeSolution, MazeError> {
     #[rustfmt::skip]
     let grid: Vec<Vec<char>> = vec![
         vec![' ', 'S', 'W', ' ', 'W', 'W', 'W'],
@@ -26,7 +24,7 @@ fn solve() -> Result<Solution, MazeError> {
         vec!['W', 'W', ' ', 'W', ' ', 'W', 'W'],
         vec![' ', ' ', ' ', ' ', ' ', ' ', 'W'],
     ];
-    let maze = Maze::new(Definition::from_vec(grid));
+    let maze = Maze::new(MazeDefinition::from_vec(grid));
     maze.solve()
 }
 

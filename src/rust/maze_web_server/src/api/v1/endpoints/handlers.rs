@@ -1,5 +1,6 @@
-use maze::{Maze, MazeError, Solution};
-use storage::{MazeItem, Store, SharedStore, StoreError, User};
+use data_model::{Maze, User};
+use maze::{Error as MazeError, MazeSolution, MazeSolver};
+use storage::{Error as StoreError, MazeItem, Store, SharedStore};
 use actix_web::{delete, get, post, put, web, web::Query, HttpMessage, HttpRequest, HttpResponse, Error, error::ErrorUnauthorized};
 use serde::{Deserialize, Serialize};
 use std::sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, Arc};
@@ -652,7 +653,7 @@ pub async fn delete_maze(
         ("id" = String, Path, description = "Unique ID of the maze to solve")
     ),
     responses(
-        (status = 200, description = "Maze solved successfully", body = Solution),
+        (status = 200, description = "Maze solved successfully", body = MazeSolution),
         (status = 401, description = "Unauthorized request"),
         (status = 404, description = "Maze not found"),
         (status = 422, description = "Maze could not be solved")    ),
@@ -697,7 +698,7 @@ pub async fn get_maze_solution(
     path = "/api/v1/solve-maze",
     request_body = Maze,
     responses(
-        (status = 200, description = "Maze solved successfully", body = Solution),
+        (status = 200, description = "Maze solved successfully", body = MazeSolution),
         (status = 400, description = "Invalid request"),
         (status = 401, description = "Unauthorized request"),
         (status = 422, description = "Maze could not be solved")

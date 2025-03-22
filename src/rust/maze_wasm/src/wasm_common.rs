@@ -1,4 +1,4 @@
-use maze::{Maze, Definition};
+use data_model::{Maze, MazeDefinition};
 #[cfg(feature = "wasm-bindgen")]
 use wasm_bindgen::prelude::*;
 
@@ -63,7 +63,7 @@ pub fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
 /// `Maze`
 ///
 pub fn new_maze() -> Maze {
-    let def = Definition::new(0, 0);
+    let def = MazeDefinition::new(0, 0);
     Maze::new(def)
 }
 

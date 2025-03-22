@@ -3,12 +3,10 @@ use std::io::{self};
 use std::thread::sleep;
 use std::time::Duration;
 
-use maze::LinePrinter;
-use maze::Maze;
-use maze::Path;
-use maze::Point;
-
-use storage::{Store, User};
+use data_model::{Maze, MazePoint, User};
+use maze::{MazePath, MazePrinter, MazeSolver};
+use storage::Store;
+use utils::LinePrinter;
 
 static WELCOME_BANNER: &str = r#"*********************************************
        *       Welcome to the Maze Console !!      *
@@ -325,11 +323,11 @@ pub trait App: LinePrinter {
         if start {
             self.get_maze_mut()
                 .definition
-                .set_start(Some(Point { row, col }))?;
+                .set_start(Some(MazePoint { row, col }))?;
         } else {
             self.get_maze_mut()
                 .definition
-                .set_finish(Some(Point { row, col }))?;
+                .set_finish(Some(MazePoint { row, col }))?;
         }
         Ok(())
     }
@@ -359,11 +357,11 @@ pub trait App: LinePrinter {
         let end_row = self.prompt_number("End row:", Some(1), Some(num_rows))?;
         let end_col = self.prompt_number("End column:", Some(1), Some(num_cols))?;
         self.get_maze_mut().definition.set_value(
-            Point {
+            MazePoint {
                 row: start_row - 1,
                 col: start_col - 1,
             },
-            Point {
+            MazePoint {
                 row: end_row - 1,
                 col: end_col - 1,
             },
@@ -418,7 +416,7 @@ pub trait App: LinePrinter {
         self.print_maze_dimensions("Current")?;
         self.print_line("\nDefinition:\n")?;
         let maze = self.get_maze().clone();
-        let path = Path { points: vec![] };
+        let path = MazePath { points: vec![] };
         let print_target = self.get_line_printer();
         if maze.definition.is_empty() {
             print_target.print_line("Maze is empty")?;

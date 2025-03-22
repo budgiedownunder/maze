@@ -5,11 +5,9 @@ extern crate maze;
 extern crate maze_console;
 
 use maze_console::app::App;
-use maze::LinePrinter;
-use maze::Maze;
-use maze::Definition;
-
-use storage::{Store, get_store, User};
+use data_model::{Maze, MazeDefinition, User};
+use storage::{Store, get_store};
+use utils::LinePrinter;
 
 struct MockInputKey {
     key: char,
@@ -38,7 +36,7 @@ impl MockApp {
             input_lines: VecDeque::new(),
             output: Vec::new(),
             user: user.clone(),
-            current_maze: Maze::new(Definition::new(0, 0)),
+            current_maze: Maze::new(MazeDefinition::new(0, 0)),
         }
     }
 

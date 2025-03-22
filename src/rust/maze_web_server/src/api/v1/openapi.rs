@@ -1,4 +1,4 @@
-use maze::Maze;
+use data_model::Maze;
 use storage::MazeItem;
 use utoipa::{
     openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},

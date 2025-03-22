@@ -9,8 +9,9 @@ mod test_definitions {
     use crate::middleware::auth::auth_middleware;
     use crate::api::v1::openapi::ApiDocV1;
     
-    use maze::{Definition, Maze, MazeError, Solution, Path, Point};
-    use storage::{SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, StoreError, MazeItem, User};
+    use data_model::{Maze, MazeDefinition, MazePoint, User};
+    use maze::{Error as MazeError, MazePath, MazeSolution};
+    use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem};
 
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, App, middleware::from_fn, Error};
 
@@ -398,7 +399,7 @@ mod test_definitions {
             vec!['W', 'W', ' ', ' ', ' '],
             vec!['W', 'W', ' ', 'W', ' '],
         ];
-        let mut maze:Maze = Maze::new(Definition::from_vec(grid));
+        let mut maze:Maze = Maze::new(MazeDefinition::from_vec(grid));
         maze.id = id.to_string();
         maze.name = name.to_string();
         maze
@@ -423,23 +424,23 @@ mod test_definitions {
             vec![' ', 'W', ' '],
             vec![' ', block_char, finish_char],
         ];
-        let mut maze:Maze = Maze::new(Definition::from_vec(grid));
+        let mut maze:Maze = Maze::new(MazeDefinition::from_vec(grid));
         maze.id = id.to_string();
         maze.name = name.to_string();
         maze
     }
 
-    fn get_solve_test_maze_solution() -> Solution {
-        let path = Path {
+    fn get_solve_test_maze_solution() -> MazeSolution {
+        let path = MazePath {
             points: vec![
-                Point { row: 0, col: 0 },
-                Point { row: 1, col: 0 },
-                Point { row: 2, col: 0 },
-                Point { row: 2, col: 1 },
-                Point { row: 2, col: 2 },
+                MazePoint { row: 0, col: 0 },
+                MazePoint { row: 1, col: 0 },
+                MazePoint { row: 2, col: 0 },
+                MazePoint { row: 2, col: 1 },
+                MazePoint { row: 2, col: 2 },
             ],
         };
-        Solution::new(path)
+        MazeSolution::new(path)
     }
 
 
@@ -993,7 +994,7 @@ mod test_definitions {
         context: &str,
         resp: actix_web::dev::ServiceResponse,
         expected_status_code: StatusCode,
-        expected_solution: Option<Solution>,
+        expected_solution: Option<MazeSolution>,
         expected_err_message: Option<String>
     ) {
         assert_eq!(resp.status(), expected_status_code);
@@ -1001,7 +1002,7 @@ mod test_definitions {
         if expected_status_code == StatusCode::OK {
             // Confirm and validate solution response
             let body = test::read_body(resp).await;
-            let solution: Solution = serde_json::from_slice(&body).expect("failed to deserialize response");
+            let solution: MazeSolution = serde_json::from_slice(&body).expect("failed to deserialize response");
              match expected_solution {
                 Some(value) => { assert_eq!(solution, value);}
                 None => { panic!("{}", format!("No maze solution comparison value provided for {} test!", context)); }
@@ -1021,15 +1022,15 @@ mod test_definitions {
     }
 
     fn get_no_start_cell_error_str() -> String {
-        get_maze_solve_error_string(&MazeError::new("no start cell found within maze".to_string()))
+        get_maze_solve_error_string(&MazeError::Solve("no start cell found within maze".to_string()))
     }
 
     fn get_no_finish_cell_error_str() -> String {
-        get_maze_solve_error_string(&MazeError::new("no finish cell found within maze".to_string()))
+        get_maze_solve_error_string(&MazeError::Solve("no finish cell found within maze".to_string()))
     }
 
     fn get_no_solution_error_str() -> String {
-        get_maze_solve_error_string(&MazeError::new("no solution found".to_string()))
+        get_maze_solve_error_string(&MazeError::Solve("no solution found".to_string()))
     }
 
     async fn run_get_maze_solution_test(
@@ -1037,7 +1038,7 @@ mod test_definitions {
         caller_username: Option<&str>,
         id: &str,
         expected_status_code: StatusCode,
-        expected_solution: Option<Solution>,
+        expected_solution: Option<MazeSolution>,
         expected_err_message: Option<String>
     ) {
         let user_defs = create_user_defs(create_users_def);
@@ -1054,7 +1055,7 @@ mod test_definitions {
         caller_username: Option<&str>,
         maze: Maze,
         expected_status_code: StatusCode,
-        expected_solution: Option<Solution>,
+        expected_solution: Option<MazeSolution>,
         expected_err_message: Option<String>
     ) {
         let user_defs = create_user_defs(create_users_def);

@@ -1,15 +1,15 @@
-use crate::Path;
+use crate::MazePath;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 /// Represents a maze solution
 #[derive(Debug, PartialEq, Serialize, Deserialize, ToSchema)]
-pub struct Solution {
+pub struct MazeSolution {
     /// Solution path
-    pub path: Path,
+    pub path: MazePath,
 }
 
-impl Solution {
+impl MazeSolution {
     /// Creates a maze solution instance with the given solution path
     /// # Arguments
     /// * `path` - Solution path
@@ -21,20 +21,19 @@ impl Solution {
     /// # Examples
     ///
     /// ```
-    /// use maze::Path;
-    /// use maze::Point;
-    /// use maze::Solution;
-    /// let path = Path {
+    /// use data_model::MazePoint;
+    /// use maze::{MazePath, MazeSolution};
+    /// let path = MazePath {
     ///   points: vec![
-    ///     Point { row: 0, col: 1 },
-    ///     Point { row: 0, col: 0 },
-    ///     Point { row: 1, col: 0 },
+    ///     MazePoint { row: 0, col: 1 },
+    ///     MazePoint { row: 0, col: 0 },
+    ///     MazePoint { row: 1, col: 0 },
     ///   ],
     /// };
-    /// let s = Solution::new(path);
+    /// let s = MazeSolution::new(path);
     /// assert_eq!(s.path.points.len(), 3);
     /// ```
-    pub fn new(path: Path) -> Solution {
-        Solution { path }
+    pub fn new(path: MazePath) -> MazeSolution {
+        MazeSolution { path }
     }
 }

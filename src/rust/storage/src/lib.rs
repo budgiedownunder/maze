@@ -1,17 +1,16 @@
 // Re-export modules
+mod error;
 mod file_store;
 pub mod store;
-mod store_error;
 
 // Re-export traits and structs
+pub use error::Error;
 pub use file_store::{FileStore, FileStoreConfig};
 pub use store::MazeItem;
 pub use store::MazeStore;
 pub use store::Store;
 pub use store::SharedStore;
-pub use store::User;
 pub use store::UserStore;
-pub use store_error::StoreError;
 
 /// Represents the supported store configurations
 pub enum StoreConfig {
@@ -33,11 +32,10 @@ pub enum StoreConfig {
 /// # use storage::test_setup::setup;
 /// # setup();
 ///
-/// use storage::{get_store, StoreConfig, FileStoreConfig};
-/// use storage::{Store, StoreError, User};
-/// use maze::StdoutLinePrinter;
-/// use maze::Maze;
-/// use maze::Path;
+/// use data_model::{Maze, User};
+/// use maze::{MazePath, MazePrinter};
+/// use storage::{FileStoreConfig, get_store, Store,  StoreConfig, Error};
+/// use utils::StdoutLinePrinter;
 ///
 
 /// let grid: Vec<Vec<char>> = vec![
@@ -52,7 +50,7 @@ pub enum StoreConfig {
 /// match get_store(StoreConfig::File(file_config)) {
 ///     Ok(mut store) => {
 ///         // Locate the owner by username
-///         let find_user_result: Result<User, StoreError> = store.find_user_by_name("a_username");
+///         let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
 ///         let owner = match find_user_result {
 ///             Ok(user) => user,
 ///             Err(error) => {
@@ -73,7 +71,7 @@ pub enum StoreConfig {
 ///             Ok(loaded_maze) => {
 ///                 println!("Successfully loaded maze:");
 ///                 let mut print_target = StdoutLinePrinter::new();
-///                 let empty_path = Path { points: vec![] };
+///                 let empty_path = MazePath { points: vec![] };
 ///                 loaded_maze.print(&mut print_target, empty_path);
 ///             }
 ///             Err(error) => {
@@ -93,7 +91,7 @@ pub enum StoreConfig {
 ///     }
 /// }
 /// ```
-pub fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, StoreError> {
+pub fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, Error> {
     let store = match config  
     {
         StoreConfig::File(file_config) => file_store::FileStore::new(&file_config),

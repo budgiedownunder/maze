@@ -3,8 +3,7 @@ use std::sync::Mutex;
 
 mod mock_app;
 use crate::mock_app::MockApp;
-use maze::Definition;
-use maze::Maze;
+use data_model::{Maze, MazeDefinition};
 use maze_console::app::App;
 use storage::get_store;
 
@@ -260,7 +259,7 @@ fn should_prevent_insert_invalid_rows_into_empty_maze() -> Result<(), Box<dyn Er
 #[test]
 fn should_prevent_insert_invalid_rows_into_non_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(10, 5));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('I', true);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
@@ -295,7 +294,7 @@ fn should_not_be_able_to_delete_rows_from_empty_maze() -> Result<(), Box<dyn Err
 #[test]
 fn should_not_be_able_to_delete_invalid_rows_from_non_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(10, 5));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('D', true);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
@@ -331,7 +330,7 @@ fn should_not_be_able_to_insert_cols_into_empty_maze() -> Result<(), Box<dyn Err
 #[test]
 fn should_prevent_insert_invalid_cols_into_non_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(10, 5));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('N', true);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
@@ -366,7 +365,7 @@ fn should_not_be_able_to_delete_cols_from_empty_maze() -> Result<(), Box<dyn Err
 #[test]
 fn should_not_be_able_to_delete_invalid_cols_from_non_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(10, 5));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('L', true);
     expected_output.push("Current dimensions: 10 row(s), 5 column(s)".to_string());
@@ -424,7 +423,7 @@ fn run_modify_endpoint_test(
     endpoint_char: char,
 ) -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(3, 5));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(3, 5));
     let modified_row = format!("░░{}░░", endpoint_char);
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key(operation_key, true);
@@ -480,7 +479,7 @@ fn run_modify_walls_test(
     change_char: char,
 ) -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(10, 5));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let modified_row = format!("░{}{}{}░", change_char, change_char, change_char);
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key(operation_key, true);
@@ -567,7 +566,7 @@ fn should_be_able_to_resize_maze() -> Result<(), Box<dyn Error>> {
 #[test]
 fn should_be_able_to_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(10, 5));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('E', true);
     expected_output
@@ -658,7 +657,7 @@ fn should_not_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
 #[test]
 fn should_be_able_to_print_empty_maze() -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('P', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
@@ -671,7 +670,7 @@ fn should_be_able_to_print_empty_maze() -> Result<(), Box<dyn Error>> {
 #[test]
 fn should_be_able_to_print_maze_with_content() -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(2, 3));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(2, 3));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('P', true);
     expected_output.push("Current dimensions: 2 row(s), 3 column(s)".to_string());
@@ -686,7 +685,7 @@ fn should_not_be_able_to_open_non_existant_maze() -> Result<(), Box<dyn Error>> 
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_file("does_not_exist.json");
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('O', true);
     expected_output.push("Enter name of maze to open: ".to_string());
@@ -701,7 +700,7 @@ fn should_be_no_mazes_listed() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('U', true);
     expected_output.push("Available mazes = 0\n".to_string());
@@ -714,7 +713,7 @@ fn should_be_mazes_listed_after_save() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_save_maze_as_steps(&mut mock_app, &mut expected_output,
@@ -733,7 +732,7 @@ fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_save_maze_as_steps(&mut mock_app, &mut expected_output,
@@ -754,7 +753,7 @@ fn should_be_able_to_save_maze() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_save_maze_as_steps(&mut mock_app, &mut expected_output,
@@ -768,7 +767,7 @@ fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Erro
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_save_maze_as_steps(&mut mock_app, &mut expected_output,
@@ -793,7 +792,7 @@ fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_save_maze_as_steps(&mut mock_app, &mut expected_output,
@@ -812,7 +811,7 @@ fn should_be_unable_delete_when_no_mazes() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_delete_maze_steps(&mut mock_app, &mut expected_output, true, "", [].to_vec(), false);
@@ -825,7 +824,7 @@ fn should_be_only_able_to_delete_maze_after_save() -> Result<(), Box<dyn Error>>
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_save_maze_as_steps(&mut mock_app, &mut expected_output,
@@ -844,7 +843,7 @@ fn should_not_be_able_to_delete_invalid_maze_after_save() -> Result<(), Box<dyn 
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
     let mut mock_app = new_mock_app();
-    mock_app.current_maze = Maze::new(Definition::new(0, 0));
+    mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_save_maze_as_steps(&mut mock_app, &mut expected_output,
