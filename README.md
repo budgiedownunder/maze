@@ -65,7 +65,8 @@ The following components are present:
 |                                | [`Maze.Maui.Services`](./src/csharp/Maze.Maui.Services/README.md)             | Custom [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) services
 |                                | [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)               | .NET interop to `maze_wasm` web assembly
 |                                | [`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop/README.md)         | .NET test library for [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)
-| `src/rust`                     | [`maze`](./src/rust/maze/README.md)                                           | Maze definition and calculation library
+| `src/rust`                     | [`maze`](./src/rust/data_model/README.md)                                     | Data model library
+|                                | [`maze`](./src/rust/maze/README.md)                                           | Maze calculation library
 |                                | [`maze_console`](./src/rust/maze_console/README.md)                           | Maze console application
 |                                | [`maze_openapi_generator`](./src/rust/maze_openapi_generator/README.md)       | Maze OpenAPI generator console application
 |                                | [`maze_wasm`](./src/rust/maze_wasm/README.md)                                 | Maze WebAssembly API library
