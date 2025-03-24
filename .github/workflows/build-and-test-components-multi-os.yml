@@ -73,6 +73,7 @@ jobs:
         dotnet-version: 8.0.404 # Match the version in global.json
 
     - name: Display active NET SDK version (Windows)
+      working-directory: ./src/csharp
       if: runner.os == 'Windows'
       continue-on-error: true
       run: |
