@@ -10,7 +10,7 @@ utoipa = { version = "5.2" }
 uuid = { version = "1.7", features = ["serde"], default-features = false }
 
 [features]
-default = [] 
+default = ["uuid-random"]
 uuid-disable-random = []
 uuid-random = ["uuid/v4"]
 wasm-bindgen = ["uuid/js", "uuid-disable-random"]

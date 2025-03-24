@@ -39,7 +39,7 @@ This will generate the release package for `maze_wasm.wasm` in the following dir
 ### Testing
 To test the `maze_wasm` crate and the JavaScript API wrapper, run the following from within the `maze_wasm` directory:
 ```
-cargo test --features "uuid-disable-random"
+cargo test
 cd tests/js
 npm run test_api
 npm run test_help_examples
