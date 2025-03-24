@@ -85,10 +85,10 @@ jobs:
     - name: Build Rust Components
       working-directory: ./src/rust
       run: |
-        cargo build --verbose
+        cargo build --locked --verbose
         cd maze_wasm
         wasm-pack build --target web --features "wasm-bindgen"
-        cargo build --target wasm32-unknown-unknown --release --no-default-features --features "uuid-disable-random"
+        cargo build --locked --target wasm32-unknown-unknown --release --no-default-features --features "uuid-disable-random"
         pwd
 
     - name: Restore .NET dependencies
