@@ -125,13 +125,13 @@ jobs:
     #   run: |
     #     echo "MAZE_WASM_PATH=$(pwd)/target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
   
-    # - name: Set environment variables (Windows)
-    #   working-directory: ./src/rust
-    #   if: runner.os == 'Windows'
-    #   shell: powershell
-    #   run: |
-    #     $fullPath = "$($pwd.Path)/target/wasm32-unknown-unknown/release/maze_wasm.wasm"
-    #     "MAZE_WASM_PATH=$fullPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+    - name: Set environment variables (Windows)
+      working-directory: ./src/rust
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        $fullPath = "$($pwd.Path)/target/wasm32-unknown-unknown/release/maze_wasm.wasm"
+        "MAZE_WASM_PATH=$fullPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
     # - name: Run Rust Component Tests
     #   working-directory: ./src/rust 
@@ -156,10 +156,10 @@ jobs:
     #   run: |
     #     cargo bench -p maze
 
-    # - name: Restore .NET dependencies
-    #   working-directory: ./src/csharp 
-    #   run: |
-    #     dotnet restore ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }} 
+    - name: Restore .NET dependencies
+      working-directory: ./src/csharp 
+      run: |
+        dotnet restore ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }} 
   
     # - name: Build .NET components
     #   working-directory: ./src/csharp 
