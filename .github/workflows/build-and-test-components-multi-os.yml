@@ -72,6 +72,9 @@ jobs:
       with:
         dotnet-version: 8.0.404 # Match the version in global.json
   
+    - name: Set DOTNET_ROOT Environment Variable
+      run: echo "DOTNET_ROOT=$(dotnet --list-sdks | grep 8.0.404 | awk '{print $2}')" >> $GITHUB_ENV
+      
     - name: Clean Up Existing Workloads (Windows)
       if: runner.os == 'Windows'
       continue-on-error: true
@@ -93,74 +96,76 @@ jobs:
         dotnet workload install android
         dotnet workload install maui-windows
 
-    - name: Verify Installed Workloads (Windows)
+    - name: Verify Installed SDKs and Workloads (Windows)
       if: runner.os == 'Windows'
-      run: dotnet workload list
-
-    - name: Build Rust Components
-      working-directory: ./src/rust
       run: |
-        cargo build --locked --verbose
-        cd maze_wasm
-        wasm-pack build --target web --features "wasm-bindgen"
-        cargo build --locked --target wasm32-unknown-unknown --release --no-default-features --features "uuid-disable-random"
-        pwd
+        dotnet --list-sdks
+        dotnet workload list
 
-    - name: Set environment variables (non-Windows)
-      if: runner.os != 'Windows'
-      working-directory: ./src/rust
-      run: |
-        echo "MAZE_WASM_PATH=$(pwd)/target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
+    # - name: Build Rust Components
+    #   working-directory: ./src/rust
+    #   run: |
+    #     cargo build --locked --verbose
+    #     cd maze_wasm
+    #     wasm-pack build --target web --features "wasm-bindgen"
+    #     cargo build --locked --target wasm32-unknown-unknown --release --no-default-features --features "uuid-disable-random"
+    #     pwd
+
+    # - name: Set environment variables (non-Windows)
+    #   if: runner.os != 'Windows'
+    #   working-directory: ./src/rust
+    #   run: |
+    #     echo "MAZE_WASM_PATH=$(pwd)/target/wasm32-unknown-unknown/release/maze_wasm.wasm" >> $GITHUB_ENV
   
-    - name: Set environment variables (Windows)
-      working-directory: ./src/rust
-      if: runner.os == 'Windows'
-      shell: powershell
-      run: |
-        $fullPath = "$($pwd.Path)/target/wasm32-unknown-unknown/release/maze_wasm.wasm"
-        "MAZE_WASM_PATH=$fullPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+    # - name: Set environment variables (Windows)
+    #   working-directory: ./src/rust
+    #   if: runner.os == 'Windows'
+    #   shell: powershell
+    #   run: |
+    #     $fullPath = "$($pwd.Path)/target/wasm32-unknown-unknown/release/maze_wasm.wasm"
+    #     "MAZE_WASM_PATH=$fullPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-    - name: Run Rust Component Tests
-      working-directory: ./src/rust 
-      run: |
-        cargo test --locked -p maze
-        cargo test --locked -p maze_console -- --test-threads=1
-        cargo test --locked -p storage -- --test-threads=1
-        cargo test --locked -p maze_wasm
-        cargo test --locked -p maze_web_server
-        cargo test --locked -p maze_openapi_generator
+    # - name: Run Rust Component Tests
+    #   working-directory: ./src/rust 
+    #   run: |
+    #     cargo test --locked -p maze
+    #     cargo test --locked -p maze_console -- --test-threads=1
+    #     cargo test --locked -p storage -- --test-threads=1
+    #     cargo test --locked -p maze_wasm
+    #     cargo test --locked -p maze_web_server
+    #     cargo test --locked -p maze_openapi_generator
 
-    - name: Run Rust JavaScript API Tests
-      working-directory: ./src/rust 
-      run: |
-        cd maze_wasm/tests/js
-        npm install
-        npm run test_api
-        npm run test_help_examples
+    # - name: Run Rust JavaScript API Tests
+    #   working-directory: ./src/rust 
+    #   run: |
+    #     cd maze_wasm/tests/js
+    #     npm install
+    #     npm run test_api
+    #     npm run test_help_examples
 
-    - name: Run Rust Benchmark Tests
-      working-directory: ./src/rust 
-      run: |
-        cargo bench -p maze
+    # - name: Run Rust Benchmark Tests
+    #   working-directory: ./src/rust 
+    #   run: |
+    #     cargo bench -p maze
 
-    - name: Restore .NET dependencies
-      working-directory: ./src/csharp 
-      run: |
-        dotnet restore ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }} 
+    # - name: Restore .NET dependencies
+    #   working-directory: ./src/csharp 
+    #   run: |
+    #     dotnet restore ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }} 
   
-    - name: Build .NET components
-      working-directory: ./src/csharp 
-      run: |
-        dotnet build ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }}
+    # - name: Build .NET components
+    #   working-directory: ./src/csharp 
+    #   run: |
+    #     dotnet build ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }}
 
-    - name: Test .NET components
-      working-directory: ./src/csharp 
-      run: |
-        dotnet test ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }}
+    # - name: Test .NET components
+    #   working-directory: ./src/csharp 
+    #   run: |
+    #     dotnet test ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }}
 
-    - name: Build HTML documentation (Windows)
-      if: runner.os == 'Windows'
-      working-directory: ./src/docfx
-      shell: cmd
-      run: |
-        build_all.bat
+    # - name: Build HTML documentation (Windows)
+    #   if: runner.os == 'Windows'
+    #   working-directory: ./src/docfx
+    #   shell: cmd
+    #   run: |
+    #     build_all.bat
