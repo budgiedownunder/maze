@@ -73,8 +73,8 @@ jobs:
         dotnet-version: 8.0.404 # Match the version in global.json
 
     - name: Display active NET SDK version (Windows)
-      working-directory: ./src/csharp
       if: runner.os == 'Windows'
+      working-directory: ./src/csharp
       continue-on-error: true
       run: |
         dotnet --version
@@ -90,8 +90,8 @@ jobs:
     #     dotnet workload repair
 
     - name: Install Required Workloads (Windows)
-      working-directory: ./src/csharp
       if: runner.os == 'Windows'
+      working-directory: ./src/csharp
       run: |
         dotnet workload install maui
         dotnet workload install android
@@ -105,6 +105,7 @@ jobs:
   
     - name: Verify Installed SDKs and Workloads (Windows)
       if: runner.os == 'Windows'
+      working-directory: ./src/csharp
       run: |
         dotnet --list-sdks
         dotnet workload list
