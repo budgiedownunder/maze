@@ -19,7 +19,5 @@ wasm-bindgen = { version = "0.2", optional = true, features = ["serde"] }
 
 [features]
 default = []
-wasm-bindgen = ["dep:wasm-bindgen"]
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["js"] }
+wasm-bindgen = ["dep:wasm-bindgen", "data_model/wasm-bindgen"]
+uuid-disable-random = ["data_model/uuid-disable-random"]

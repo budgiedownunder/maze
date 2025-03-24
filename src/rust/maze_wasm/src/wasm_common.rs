@@ -9,19 +9,14 @@ use wasm_bindgen::prelude::*;
 //************************************************************************************************************/
 
 #[cfg(feature = "wasm-bindgen")]
-#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
-/// Web assembly representation of a maze
+#[wasm_bindgen]
 pub struct MazeWasm {
-    //#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen(skip))] - does not work
     #[wasm_bindgen(skip)]
     pub maze: Maze,
 }
-
 #[cfg(not(feature = "wasm-bindgen"))]
-#[cfg_attr(not(feature = "wasm-bindgen"), repr(C))]
-/// Web assembly representation of a maze
+#[repr(C)]
 pub struct MazeWasm {
-    //#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen(skip))] - does not work
     pub maze: Maze,
 }
 
@@ -33,15 +28,24 @@ impl Clone for MazeWasm {
     }
 }
 
-#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
-#[cfg_attr(not(feature = "wasm-bindgen"), repr(C))]
-/// Web assembly enum for a maze cell type
+#[cfg(feature = "wasm-bindgen")]
+#[wasm_bindgen]
 pub enum MazeCellTypeWasm {
     Empty,
     Start,
     Finish,
     Wall,
 }
+
+#[cfg(not(feature = "wasm-bindgen"))]
+#[repr(C)]
+pub enum MazeCellTypeWasm {
+    Empty,
+    Start,
+    Finish,
+    Wall,
+}
+
 /// Converts a cell type character to a MazeCellTypeWasm value
 ///
 /// # Returns

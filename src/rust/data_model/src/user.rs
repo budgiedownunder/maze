@@ -25,14 +25,27 @@ pub struct User {
 }
 
 impl User {
+
+    /// Generates a new Uuid
+    fn generate_uuid() -> uuid::Uuid {
+        #[cfg(not(feature = "uuid-disable-random"))]
+        {
+            uuid::Uuid::new_v4()
+        }
+    
+        #[cfg(feature = "uuid-disable-random")]
+        {
+            uuid::Uuid::nil()
+        }
+    }
     /// Creates a new user id
     pub fn new_id() -> Uuid {
-        Uuid::new_v4()
+        Self::generate_uuid()
     }
 
     /// Creates a new API key
     pub fn new_api_key() -> Uuid {
-        Uuid::new_v4()
+        Self::generate_uuid()
     }
 
     /// Returns a User instance initialized with the defautl values

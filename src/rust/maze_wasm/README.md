@@ -4,7 +4,7 @@
 
 The `maze_wasm` crate is written in `Rust` and defines the Web Assembly library for defining and solving mazes in consumer applications that support Web Assembly (WASM).
 
-The crate uses `wasm-pack` to generate a JavaScript API wrapper `maze_wasm.js` to the WASM, and uses `cargo` to build the general Web Assembly `maze_wasm.wasm` for use outside of JavaScript. 
+The crate uses `wasm-pack` to generate a JavaScript API wrapper `maze_wasm.js` to the WASM, and uses `cargo` to build the general Web Assembly `maze_wasm.wasm` for use outside of JavaScript.
 
 ## Getting Started
 
@@ -29,7 +29,7 @@ wasm-pack build --target web --features "wasm-bindgen"
 To build the general Web Assembly `maze_wasm.wasm` (for use outside of JavaScript), run:
 
 ```
-cargo build --target wasm32-unknown-unknown --release
+cargo build --target wasm32-unknown-unknown --release --no-default-features --features "uuid-disable-random"
 ```
 
 This will generate the release package for `maze_wasm.wasm` in the following directory:
@@ -39,7 +39,7 @@ This will generate the release package for `maze_wasm.wasm` in the following dir
 ### Testing
 To test the `maze_wasm` crate and the JavaScript API wrapper, run the following from within the `maze_wasm` directory:
 ```
-cargo test
+cargo test --features "uuid-disable-random"
 cd tests/js
 npm run test_api
 npm run test_help_examples
@@ -60,3 +60,7 @@ To generate documentation for the generalised Web Assembly API:
 ```
 cargo doc --open
 ```
+
+## WebAssembly Target Compatibility
+
+This crate supports both **JavaScript/WebAssembly** builds and **general-purpose WebAssembly** builds for use in non-JS environments such as Wasmtime, .NET, or other native hosts, with the `uuid-disable-random` feature flag used to disable randomness in those environments that do not support it.
