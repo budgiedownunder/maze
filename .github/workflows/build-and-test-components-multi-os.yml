@@ -59,48 +59,51 @@ jobs:
       with:
         version: 'latest'
     
-    - name: Install DocFX
-      working-directory: ./
-      run: dotnet tool install -g docfx
+    # - name: Install DocFX
+    #   working-directory: ./
+    #   run: dotnet tool install -g docfx
   
-    - name: Install Redocly
-      working-directory: ./
-      run: npm install -g @redocly/cli
+    # - name: Install Redocly
+    #   working-directory: ./
+    #   run: npm install -g @redocly/cli
 
     - name: Setup .NET SDK
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.404 # Match the version in global.json
-  
-    - name: Set DOTNET_ROOT Environment Variable
-      run: echo "DOTNET_ROOT=$(dotnet --list-sdks | grep 8.0.404 | awk '{print $2}')" >> $GITHUB_ENV
-      
-    - name: Clean Up Existing Workloads (Windows)
+
+    - name: Display active NET SDK version (Windows)
       if: runner.os == 'Windows'
       continue-on-error: true
       run: |
-        dotnet workload uninstall android
-        dotnet workload uninstall maui-windows
-        Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.200" -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
-        dotnet workload repair
+        dotnet --version
+          
+    # - name: Clean Up Existing Workloads (Windows)
+    #   if: runner.os == 'Windows'
+    #   continue-on-error: true
+    #   run: |
+    #     dotnet workload uninstall android
+    #     dotnet workload uninstall maui-windows
+    #     Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.200" -ErrorAction SilentlyContinue
+    #     Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
+    #     dotnet workload repair
 
-    - name: Restore Workload Manifests (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        dotnet workload update
+    # - name: Restore Workload Manifests (Windows)
+    #   if: runner.os == 'Windows'
+    #   run: |
+    #     dotnet workload update
 
-    - name: Install Required Workloads (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        dotnet workload install android
-        dotnet workload install maui-windows
+    # - name: Install Required Workloads (Windows)
+    #   if: runner.os == 'Windows'
+    #   run: |
+    #     dotnet workload install android
+    #     dotnet workload install maui-windows
 
-    - name: Verify Installed SDKs and Workloads (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        dotnet --list-sdks
-        dotnet workload list
+    # - name: Verify Installed SDKs and Workloads (Windows)
+    #   if: runner.os == 'Windows'
+    #   run: |
+    #     dotnet --list-sdks
+    #     dotnet workload list
 
     # - name: Build Rust Components
     #   working-directory: ./src/rust
