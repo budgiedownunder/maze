@@ -1,7 +1,7 @@
 use std::error::Error as StdError;
 
 #[derive(Debug)]
-/// Represents a maze error
+/// Represents a data model error
 pub enum Error {
     Serialization(serde_json::Error),
     Validation(String),
