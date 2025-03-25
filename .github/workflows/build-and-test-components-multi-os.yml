@@ -161,10 +161,10 @@ jobs:
       run: |
         dotnet restore ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }} 
   
-    # - name: Build .NET components
-    #   working-directory: ./src/csharp 
-    #   run: |
-    #     dotnet build ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }}
+    - name: Build .NET components
+      working-directory: ./src/csharp 
+      run: |
+        dotnet build ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }}
 
     # - name: Test .NET components
     #   working-directory: ./src/csharp 
