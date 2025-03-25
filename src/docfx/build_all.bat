@@ -9,24 +9,24 @@ docfx metadata docfx.json
 
 @REM type api\net\toc.yml
 
-@REM powershell -ExecutionPolicy Bypass -File cleanup_tocs.ps1
+powershell -ExecutionPolicy Bypass -File cleanup_tocs.ps1
 
 docfx build docfx.json
 
 cd ../rust
-cargo doc --no-deps --target-dir ../docfx/rust-doc-tmp
+cargo doc --locked --no-deps --target-dir ../docfx/rust-doc-tmp
 
 cd ../docfx
 xcopy "rust-doc-tmp\doc\*" "_site\api\rust" /s /e /y
 
 cd ../rust/maze_wasm
-cargo doc --no-deps --features "wasm-bindgen" --target-dir ../../docfx/js-doc-tmp
+cargo doc --locked --no-deps --features "wasm-bindgen" --target-dir ../../docfx/js-doc-tmp
 
 cd ../../docfx
 xcopy "js-doc-tmp\doc\*" "_site\api\js" /s /e /y
 
 cd ../rust/maze_openapi_generator
-cargo run
+cargo run --locked
 
 call redocly build-docs openapi.json -o ../../docfx/web-doc-tmp/doc/maze_rest/index.html --config ../../docfx/redocly.yaml
 
