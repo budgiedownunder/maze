@@ -7,8 +7,7 @@ rmdir /s /q web-doc-tmp
 call copy_files.bat
 docfx metadata docfx.json
 
-type api\net\toc.yml
-
+@REM Comment these out to remove wanted topics from api\net\toc.yml
 @REM powershell -ExecutionPolicy Bypass -File cleanup_tocs.ps1
 
 docfx build docfx.json
