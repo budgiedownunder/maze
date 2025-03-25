@@ -61,7 +61,7 @@ jobs:
     
     - name: Install DocFX
       working-directory: ./
-      run: dotnet tool install -g docfx
+      run: dotnet tool install -g docfx --version 2.59.4
   
     - name: Install Redocly
       working-directory: ./
