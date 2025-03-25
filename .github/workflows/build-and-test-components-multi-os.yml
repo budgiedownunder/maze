@@ -24,8 +24,8 @@ jobs:
     strategy:
       matrix:
         os: 
-          # - ubuntu-latest
-          # - macos-latest
+          - ubuntu-latest
+          - macos-latest
           - windows-latest
 
     env:
@@ -79,16 +79,6 @@ jobs:
       run: |
         dotnet --version
           
-    # - name: Clean Up Existing Workloads (Windows)
-    #   if: runner.os == 'Windows'
-    #   continue-on-error: true
-    #   run: |
-    #     dotnet workload uninstall android
-    #     dotnet workload uninstall maui-windows
-    #     Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.200" -ErrorAction SilentlyContinue
-    #     Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
-    #     dotnet workload repair
-
     - name: Install Required Workloads (Windows)
       if: runner.os == 'Windows'
       working-directory: ./src/csharp
