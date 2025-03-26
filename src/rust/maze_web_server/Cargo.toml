@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 actix-web = { version = "4", features = ["rustls-0_20"] }
+auth = { path = "../auth" }
 config = "0.13"
 data_model = { path = "../data_model" }
 env_logger = "0.10"
