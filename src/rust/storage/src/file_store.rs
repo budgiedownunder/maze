@@ -241,17 +241,15 @@ impl FileStore {
 
     // Validate user content
     fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), Error> {
-        if let Err(error) = user.validate() {
+        if let Err(DataModelError::UserValidation(error)) = user.validate() {
             match error {
-                DataModelError::UserValidation(error) => match error {
-                    UserValidationError::EmailInvalid => return Err(Error::UserEmailInvalid()),
-                    UserValidationError::IdMissing => return Err(Error::UserIdMissing()),
-                    UserValidationError::PasswordMissing => return Err(Error::UserPasswordMissing()),
-                    UserValidationError::UsernameMissing => return Err(Error::UserNameMissing()),
-                },
-                _ => {}
+                UserValidationError::EmailInvalid => return Err(Error::UserEmailInvalid()),
+                UserValidationError::IdMissing => return Err(Error::UserIdMissing()),
+                UserValidationError::PasswordMissing => return Err(Error::UserPasswordMissing()),
+                UserValidationError::UsernameMissing => return Err(Error::UserNameMissing()),
             }
         }
+         
         if self.user_name_exists(&user.username, ignore_id) {
             return Err(Error::UserNameExists());
         }

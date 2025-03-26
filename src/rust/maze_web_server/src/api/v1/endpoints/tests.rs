@@ -190,15 +190,12 @@ mod test_definitions {
 
         // Validate user content
         fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), StoreError> {
-            if let Err(error) = user.validate() {
+            if let Err(DataModelError::UserValidation(error)) = user.validate() {
                 match error {
-                    DataModelError::UserValidation(error) => match error {
-                        UserValidationError::EmailInvalid => return Err(StoreError::UserEmailInvalid()),
-                        UserValidationError::IdMissing => return Err(StoreError::UserIdMissing()),
-                        UserValidationError::PasswordMissing => return Err(StoreError::UserPasswordMissing()),
-                        UserValidationError::UsernameMissing => return Err(StoreError::UserNameMissing()),
-                    },
-                    _ => {}
+                    UserValidationError::EmailInvalid => return Err(StoreError::UserEmailInvalid()),
+                    UserValidationError::IdMissing => return Err(StoreError::UserIdMissing()),
+                    UserValidationError::PasswordMissing => return Err(StoreError::UserPasswordMissing()),
+                    UserValidationError::UsernameMissing => return Err(StoreError::UserNameMissing()),
                 }
             }
             if user.password_hash.is_empty() {
