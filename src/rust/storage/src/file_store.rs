@@ -5,13 +5,13 @@ use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
 use uuid::Uuid;
 
-use data_model::{Maze, User};
+use data_model::{Error as DataModelError, Maze, User, UserValidationError};
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
-use crate::Error;
 use crate::store::Manage;
 use crate::store::MazeStore;
 use crate::store::UserStore;
+use crate::Error;
 use crate::MazeItem;
 use crate::Store;
 
@@ -100,7 +100,7 @@ impl FileStore {
     ///        return ;
     ///    }
     /// };
-    /// 
+    ///
     /// // Create a maze within the file store
     /// match store.create_maze(&owner, &mut maze_to_create) {
     ///     Ok(_) => {
@@ -139,10 +139,7 @@ impl FileStore {
 
     fn make_dir(dir: &str) -> Result<String, Error> {
         let path = PathBuf::from(dir);
-        let normalized_path = path
-            .strip_prefix(r"\\?\")
-            .unwrap_or(&path)
-            .to_path_buf();
+        let normalized_path = path.strip_prefix(r"\\?\").unwrap_or(&path).to_path_buf();
 
         match fs::create_dir_all(normalized_path) {
             Ok(_) => Ok(dir.to_string()),
@@ -163,10 +160,7 @@ impl FileStore {
             env::current_dir()?.join(&os_path)
         };
 
-        let normalized_path = path
-            .strip_prefix(r"\\?\")
-            .unwrap_or(&path)
-            .to_path_buf();
+        let normalized_path = path.strip_prefix(r"\\?\").unwrap_or(&path).to_path_buf();
 
         let dir_path: String = normalized_path
             .to_string_lossy()
@@ -199,7 +193,7 @@ impl FileStore {
     }
 
     // Creates a user directory within the file store
-    fn make_user_dir(&self, id:Uuid) -> Result<String, Error> {
+    fn make_user_dir(&self, id: Uuid) -> Result<String, Error> {
         Self::make_dir(&self.user_dir_path(id))
     }
 
@@ -230,12 +224,7 @@ impl FileStore {
     }
 
     // Writes the file associated whether a given user
-    fn write_user_file(
-        &self,
-        user: &User,
-        overwrite: bool,
-    ) -> Result<(), Error> {
-
+    fn write_user_file(&self, user: &User, overwrite: bool) -> Result<(), Error> {
         if !overwrite && self.user_exists(user.id) {
             return Err(Error::UserIdExists(user.id.to_string()));
         }
@@ -252,17 +241,16 @@ impl FileStore {
 
     // Validate user content
     fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), Error> {
-        if user.id == Uuid::nil() {
-            return Err(Error::UserIdMissing());
-        }
-        if user.username.is_empty() {
-            return Err(Error::UserNameMissing());
-        }
-        // if user.email.is_empty() {
-        //     return Err(Error::UserEmailMissing());
-        // }
-        if user.password_hash.is_empty() {
-            return Err(Error::UserPasswordMissing());
+        if let Err(error) = user.validate() {
+            match error {
+                DataModelError::UserValidation(error) => match error {
+                    UserValidationError::EmailInvalid => return Err(Error::UserEmailInvalid()),
+                    UserValidationError::IdMissing => return Err(Error::UserIdMissing()),
+                    UserValidationError::PasswordMissing => return Err(Error::UserPasswordMissing()),
+                    UserValidationError::UsernameMissing => return Err(Error::UserNameMissing()),
+                },
+                _ => {}
+            }
         }
         if self.user_name_exists(&user.username, ignore_id) {
             return Err(Error::UserNameExists());
@@ -288,7 +276,12 @@ impl FileStore {
     }
 
     // Locate the first user with a given string field value
-    fn find_user_by_string_field(&self, field_name: &str, search_value: &str, ignore_id: Uuid) -> Result<User, Error> {
+    fn find_user_by_string_field(
+        &self,
+        field_name: &str,
+        search_value: &str,
+        ignore_id: Uuid,
+    ) -> Result<User, Error> {
         let ids = self.get_user_ids()?;
         for id in ids {
             if id != ignore_id {
@@ -305,12 +298,14 @@ impl FileStore {
 
     // Checks whether a given username exists in the file store
     fn user_name_exists(&self, name: &str, ignore_id: Uuid) -> bool {
-        self.find_user_by_string_field("username", name, ignore_id).is_ok()
+        self.find_user_by_string_field("username", name, ignore_id)
+            .is_ok()
     }
 
     // Checks whether a given user email exists in the file store
     fn user_email_exists(&self, email: &str, ignore_id: Uuid) -> bool {
-        self.find_user_by_string_field("email", email, ignore_id).is_ok()
+        self.find_user_by_string_field("email", email, ignore_id)
+            .is_ok()
     }
 
     // Returns the list of user ids associated with the file store
@@ -320,8 +315,8 @@ impl FileStore {
                 entry.ok().and_then(|e| {
                     if e.path().is_dir() {
                         e.file_name()
-                        .to_str()
-                        .and_then(|name| Uuid::parse_str(name).ok())
+                            .to_str()
+                            .and_then(|name| Uuid::parse_str(name).ok())
                     } else {
                         None
                     }
@@ -434,23 +429,25 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn init_default_admin_user(&mut self, username: &str, password_hash: &str) -> Result<User, Error> {
+    fn init_default_admin_user(
+        &mut self,
+        username: &str,
+        password_hash: &str,
+    ) -> Result<User, Error> {
         match self.find_user_by_name(username) {
             Ok(user) => Ok(user),
-            Err(error) => {
-                match error {
-                    Error::UserNotFound() => {
-                        let mut user = User::default();
-                        user.username = username.to_string();
-                        user.is_admin = true;
-                        user.password_hash = password_hash.to_string();
-                        self.create_user(&mut user)?;
-                        Ok(user)
-                    }
-                    _ => Err(error)
+            Err(error) => match error {
+                Error::UserNotFound() => {
+                    let mut user = User::default();
+                    user.username = username.to_string();
+                    user.is_admin = true;
+                    user.password_hash = password_hash.to_string();
+                    self.create_user(&mut user)?;
+                    Ok(user)
                 }
-            }
-        }    
+                _ => Err(error),
+            },
+        }
     }
     /// Adds a new user to the store and sets the allocated `id` within the user object
     ///
@@ -886,7 +883,7 @@ impl UserStore for FileStore {
     /// ```
     fn get_users(&self) -> Result<Vec<User>, Error> {
         let ids = self.get_user_ids()?;
-        let mut users:Vec<User> = Vec::new();
+        let mut users: Vec<User> = Vec::new();
         for id in ids {
             users.push(self.get_user(id)?);
         }
@@ -920,7 +917,7 @@ impl MazeStore for FileStore {
     ///
     /// // Create the file store
     /// let mut store = FileStore::new(&FileStoreConfig::default());
-    /// 
+    ///
     /// // Locate the owner by username
     /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
     /// let owner = match find_user_result {
@@ -930,7 +927,7 @@ impl MazeStore for FileStore {
     ///        return ;
     ///    }
     /// };
-    /// 
+    ///
     /// // Create maze within the file store
     /// match store.create_maze(&owner, &mut maze_to_create) {
     ///     Ok(_) => {
@@ -982,7 +979,7 @@ impl MazeStore for FileStore {
     ///        return ;
     ///    }
     /// };
-    /// 
+    ///
     /// // Delete maze from within the file store
     /// let id = "maze_1.json".to_string();
     ///
@@ -1046,7 +1043,7 @@ impl MazeStore for FileStore {
     ///        return ;
     ///    }
     /// };
-    /// 
+    ///
     /// // Update maze within the file store
     /// match store.update_maze(&owner, &mut maze_to_update) {
     ///     Ok(_) => {
@@ -1113,7 +1110,7 @@ impl MazeStore for FileStore {
     ///        return ;
     ///    }
     /// };
-    /// 
+    ///
     /// // Create the maze within the store
     /// if let Err(error) = store.create_maze(&owner, &mut maze_to_create) {
     ///     println!(
@@ -1187,7 +1184,7 @@ impl MazeStore for FileStore {
     ///        return ;
     ///    }
     /// };
-    /// 
+    ///
     /// let id = "my_maze".to_string();
     ///
     /// // Attempt to find the maze item
@@ -1239,7 +1236,7 @@ impl MazeStore for FileStore {
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
     /// use uuid::Uuid;
-    /// 
+    ///
     /// // Create the file store
     /// let store = FileStore::new(&FileStoreConfig::default());
     ///
@@ -1252,7 +1249,7 @@ impl MazeStore for FileStore {
     ///        return ;
     ///    }
     /// };
-    /// 
+    ///
     /// // Attempt to load the maze items along with their definitions
     /// match store.get_maze_items(&owner, true) {
     ///     Ok(maze_items) => {
@@ -1268,7 +1265,11 @@ impl MazeStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn get_maze_items(&self, owner: &User, include_definitions: bool) -> Result<Vec<MazeItem>, Error> {
+    fn get_maze_items(
+        &self,
+        owner: &User,
+        include_definitions: bool,
+    ) -> Result<Vec<MazeItem>, Error> {
         let mut items: Vec<MazeItem> = Vec::new();
         let mazes_dir = self.get_mazes_dir(owner);
 
@@ -1286,7 +1287,7 @@ impl MazeStore for FileStore {
                             if let Some(name_str) = name.to_str() {
                                 let mut name_use = name_str.to_string();
                                 let mut definition: Option<String> = None;
-                                if let Ok(maze_loaded) =  self.get_maze(owner, path_str) {
+                                if let Ok(maze_loaded) = self.get_maze(owner, path_str) {
                                     if include_definitions {
                                         definition = Some(
                                             serde_json::to_string(&maze_loaded)
@@ -1382,7 +1383,7 @@ mod tests {
         let mut user = init_test_user(is_admin, username, full_name, email, password_hash);
 
         if let Err(error) = store.create_user(&mut user) {
-            panic!( "{}", error);
+            panic!("{}", error);
         }
         user
     }
@@ -1439,29 +1440,71 @@ mod tests {
     #[test]
     fn can_create_user() {
         let mut store = new_store();
-        let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let _ = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
     }
 
     #[test]
     #[should_panic(expected = "The username is already taken")]
     fn cannot_create_user_with_existing_name() {
         let mut store = new_store();
-        let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
-        let _ = create_user(&mut store, false, "test", "", "test@company.com2", "password_hash2");
+        let _ = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
+        let _ = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com2",
+            "password_hash2",
+        );
     }
 
     #[test]
     #[should_panic(expected = "The email is already taken")]
     fn cannot_create_user_with_existing_email() {
         let mut store = new_store();
-        let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
-        let _ = create_user(&mut store, false, "test2", "", "test@company.com", "password_hash2");
+        let _ = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
+        let _ = create_user(
+            &mut store,
+            false,
+            "test2",
+            "",
+            "test@company.com",
+            "password_hash2",
+        );
     }
 
     #[test]
     fn can_get_user_that_exists() {
         let mut store = new_store();
-        let user = create_user(&mut store, false, "test2", "", "test@company.com", "password_hash2");
+        let user = create_user(
+            &mut store,
+            false,
+            "test2",
+            "",
+            "test@company.com",
+            "password_hash2",
+        );
 
         match store.get_user(user.id) {
             Ok(user_loaded) => {
@@ -1481,13 +1524,19 @@ mod tests {
         let id = User::new_id();
         match store.get_user(id) {
             Ok(_) => {
-                panic!("Loaded user content for id '{}' when did not expected to", id);
+                panic!(
+                    "Loaded user content for id '{}' when did not expected to",
+                    id
+                );
             }
             Err(error) => {
                 let err_msg = error.to_string();
                 let err_msg_expected = Error::UserIdNotFound(id.to_string()).to_string();
                 if err_msg != err_msg_expected {
-                    panic!("Unexpected error returned: '{}', expected: '{}'", err_msg, err_msg_expected);
+                    panic!(
+                        "Unexpected error returned: '{}', expected: '{}'",
+                        err_msg, err_msg_expected
+                    );
                 }
             }
         }
@@ -1496,14 +1545,21 @@ mod tests {
     #[test]
     fn can_delete_user_that_exists() {
         let mut store = new_store();
-        let user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
 
         match store.delete_user(user.id) {
             Ok(_) => {
                 if store.user_dir_exists(user.id) {
                     panic!("User directory {} still exists", user.id);
                 }
-            },
+            }
             Err(error) => {
                 panic!("{}", error);
             }
@@ -1538,7 +1594,10 @@ mod tests {
                 let err_msg = error.to_string();
                 let err_msg_expected = Error::UserIdNotFound(id.to_string()).to_string();
                 if err_msg != err_msg_expected {
-                    panic!("Unexpected error returned: '{}', expected: '{}'", err_msg, err_msg_expected);
+                    panic!(
+                        "Unexpected error returned: '{}', expected: '{}'",
+                        err_msg, err_msg_expected
+                    );
                 }
             }
         }
@@ -1547,7 +1606,14 @@ mod tests {
     #[test]
     fn can_update_existing_user() {
         let mut store = new_store();
-        let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let mut user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         if let Err(error) = store.update_user(&mut user) {
             panic!("Failed to update user: '{}'", error);
         }
@@ -1562,7 +1628,10 @@ mod tests {
             let err_msg = error.to_string();
             let err_msg_expected = Error::UserIdNotFound(user.id.to_string()).to_string();
             if err_msg != err_msg_expected {
-                panic!("Unexpected error returned: '{}', expected: '{}'", err_msg, err_msg_expected);
+                panic!(
+                    "Unexpected error returned: '{}', expected: '{}'",
+                    err_msg, err_msg_expected
+                );
             }
         }
     }
@@ -1571,7 +1640,14 @@ mod tests {
     #[should_panic(expected = "No id provided for the user")]
     fn cannot_update_existing_user_without_id() {
         let mut store = new_store();
-        let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let mut user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         user.id = Uuid::nil();
         if let Err(error) = store.update_user(&mut user) {
             panic!("{}'", error);
@@ -1582,7 +1658,14 @@ mod tests {
     #[should_panic(expected = "No username provided for the user")]
     fn cannot_update_existing_user_without_name() {
         let mut store = new_store();
-        let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let mut user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         user.username = "".to_string();
         if let Err(error) = store.update_user(&mut user) {
             panic!("{}", error.to_string());
@@ -1604,7 +1687,14 @@ mod tests {
     #[should_panic(expected = "No password provided for the user")]
     fn cannot_update_existing_user_without_password() {
         let mut store = new_store();
-        let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let mut user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         user.password_hash = "".to_string();
         if let Err(error) = store.update_user(&mut user) {
             panic!("{}", error.to_string());
@@ -1615,8 +1705,22 @@ mod tests {
     #[should_panic(expected = "The username is already taken")]
     fn cannot_update_user_with_existing_name() {
         let mut store = new_store();
-        let user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
-        let mut user2 = create_user(&mut store, false, "test2", "", "test2@company.com", "password_hash2");
+        let user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
+        let mut user2 = create_user(
+            &mut store,
+            false,
+            "test2",
+            "",
+            "test2@company.com",
+            "password_hash2",
+        );
         user2.username = user.username;
         if let Err(error) = store.update_user(&mut user2) {
             panic!("{}", error.to_string());
@@ -1627,8 +1731,22 @@ mod tests {
     #[should_panic(expected = "The email is already taken")]
     fn cannot_update_user_with_existing_email() {
         let mut store = new_store();
-        let user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
-        let mut user2 = create_user(&mut store, false, "test2", "", "test2@company.com", "password_hash2");
+        let user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
+        let mut user2 = create_user(
+            &mut store,
+            false,
+            "test2",
+            "",
+            "test2@company.com",
+            "password_hash2",
+        );
         user2.email = user.email;
         if let Err(error) = store.update_user(&mut user2) {
             panic!("{}", error.to_string());
@@ -1638,7 +1756,14 @@ mod tests {
     #[test]
     fn can_find_existing_user_by_name() {
         let mut store = new_store();
-        let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let _ = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         if let Err(error) = store.find_user_by_name("test") {
             panic!("Failed to find user by name: {}", error);
         }
@@ -1648,7 +1773,14 @@ mod tests {
     #[should_panic(expected = "User not found")]
     fn cannot_find_non_existent_user_by_name() {
         let mut store = new_store();
-        let _ = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let _ = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         if let Err(error) = store.find_user_by_name("unknown") {
             panic!("{}", error.to_string());
         }
@@ -1657,7 +1789,14 @@ mod tests {
     #[test]
     fn can_find_existing_user_by_api_key() {
         let mut store = new_store();
-        let user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         if let Err(error) = store.find_user_by_api_key(user.api_key) {
             panic!("Failed to find user by api_key: {}", error);
         }
@@ -1675,22 +1814,58 @@ mod tests {
     #[test]
     fn can_get_user_list() {
         let mut store = new_store();
-        let _ = create_user(&mut store, false, "test4", "", "test4@company.com", "password_hash");
-        let _ = create_user(&mut store, false, "test1", "", "test1@company.com", "password_hash");
-        let _ = create_user(&mut store, false, "test2", "", "test2@company.com", "password_hash");
-        let _ = create_user(&mut store, false, "test3", "", "test3@company.com", "password_hash");
+        let _ = create_user(
+            &mut store,
+            false,
+            "test4",
+            "",
+            "test4@company.com",
+            "password_hash",
+        );
+        let _ = create_user(
+            &mut store,
+            false,
+            "test1",
+            "",
+            "test1@company.com",
+            "password_hash",
+        );
+        let _ = create_user(
+            &mut store,
+            false,
+            "test2",
+            "",
+            "test2@company.com",
+            "password_hash",
+        );
+        let _ = create_user(
+            &mut store,
+            false,
+            "test3",
+            "",
+            "test3@company.com",
+            "password_hash",
+        );
         match store.get_users() {
             Ok(users) => {
                 let count_expected = 4;
                 if users.len() != count_expected {
                     panic!("Expected {} users but got {}", count_expected, users.len());
                 }
-                let expected_names = vec!["test1".to_string(), "test2".to_string(), "test3".to_string(), "test4".to_string()];
+                let expected_names = vec![
+                    "test1".to_string(),
+                    "test2".to_string(),
+                    "test3".to_string(),
+                    "test4".to_string(),
+                ];
                 let names: Vec<String> = users.iter().map(|p| p.username.clone()).collect();
                 if names != expected_names {
-                    panic!("Expected usernames: {:?} but got: {:?}", expected_names, names);
+                    panic!(
+                        "Expected usernames: {:?} but got: {:?}",
+                        expected_names, names
+                    );
                 }
-            },
+            }
             Err(error) => panic!("{}", error.to_string()),
         }
     }
@@ -1708,11 +1883,18 @@ mod tests {
     #[test]
     fn can_save_maze_to_valid_file_path() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
 
         match store.write_maze_file(&owner, &mut maze, &id, true) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(error) => panic!("Failed to save to file: {}", error),
         }
     }
@@ -1721,7 +1903,14 @@ mod tests {
     #[should_panic(expected = "A maze with id 'maze.json' already exists")]
     fn cannot_save_maze_to_existing_file_path_if_overwrite_disabled() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
         let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
@@ -1741,7 +1930,14 @@ mod tests {
     #[test]
     fn can_save_maze_to_existing_file_path_if_overwrite_enabled() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (id, mut maze) = init_test_maze(&store, "maze", false, true);
         let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
@@ -1757,11 +1953,18 @@ mod tests {
     #[test]
     fn can_create_maze_that_does_not_exist() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (_id, mut maze) = init_test_maze(&store, "maze", false, true);
 
         match store.create_maze(&owner, &mut maze) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(error) => panic!("Failed to create maze: {}", error),
         }
     }
@@ -1770,7 +1973,14 @@ mod tests {
     #[should_panic(expected = "No name provided")]
     fn cannot_create_maze_with_empty_name() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (_, mut maze) = init_test_maze(&store, "maze", false, false);
 
         match store.create_maze(&owner, &mut maze) {
@@ -1783,7 +1993,14 @@ mod tests {
     #[should_panic(expected = "A maze with id 'maze.json' already exists")]
     fn cannot_create_maze_that_exists() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (id, mut maze) = init_test_maze(&store, "maze", false, true);
         let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
@@ -1804,13 +2021,20 @@ mod tests {
     #[test]
     fn can_update_existing_maze() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
         let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
 
         match store.update_maze(&owner, &mut maze) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(error) => {
                 panic!("{}", error);
             }
@@ -1821,7 +2045,14 @@ mod tests {
     #[should_panic(expected = "A maze with id 'maze.json' was not found")]
     fn cannot_update_non_existent_maze() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
 
         match store.update_maze(&owner, &mut maze) {
@@ -1838,7 +2069,14 @@ mod tests {
     #[should_panic(expected = "No id provided for the maze")]
     fn cannot_update_maze_with_no_id() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (_, mut maze) = init_test_maze(&store, "maze", false, true);
 
         match store.update_maze(&owner, &mut maze) {
@@ -1854,7 +2092,14 @@ mod tests {
     #[test]
     fn can_delete_maze() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
 
         match store.write_maze_file(&owner, &mut maze, &id, true) {
@@ -1880,7 +2125,14 @@ mod tests {
     #[should_panic(expected = "No id provided for the maze")]
     fn cannot_delete_maze_with_empty_id() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
 
         match store.delete_maze(&owner, "") {
             Ok(()) => {
@@ -1895,7 +2147,14 @@ mod tests {
     #[test]
     fn can_get_maze_that_exists() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let (_id, mut maze) = init_test_maze(&store, "maze", true, true);
 
         match store.create_maze(&owner, &mut maze) {
@@ -1919,7 +2178,14 @@ mod tests {
     #[should_panic(expected = "A maze with id 'missing.json' was not found")]
     fn cannot_get_maze_that_does_not_exist() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
         let id = "missing.json";
 
         match store.get_maze(&owner, id) {
@@ -1935,7 +2201,14 @@ mod tests {
     #[test]
     fn maze_item_list_should_be_empty() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
 
         match store.get_maze_items(&owner, false) {
             Ok(items) => {
@@ -1952,7 +2225,14 @@ mod tests {
     #[test]
     fn maze_item_list_should_not_be_empty() {
         let mut store = new_store();
-        let owner = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
+        let owner = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
 
         let (_, mut maze_1) = init_test_maze(&store, "maze_1", false, true);
         match store.create_maze(&owner, &mut maze_1) {

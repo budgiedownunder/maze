@@ -1,4 +1,4 @@
-use crate::Error;
+use crate::{Error, UserValidationError};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -177,6 +177,53 @@ impl User {
         *self = temp;
         Ok(())
     }
+    /// Validates the content of a user object
+    ///
+    /// # Returns
+    ///
+    /// JSON string representing the user
+    ///
+    ///
+    /// # Examples
+    ///
+    /// Initialize a user with an invalid email address (missing @) and validate it
+    /// ```
+    /// use data_model::User;
+    /// let user = User {
+    ///     id: User::new_id(),
+    ///     is_admin: false,
+    ///     username: "john_smith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "bad_email".to_string(),
+    ///     password_hash: "encrypted_hash".to_string(),
+    ///     api_key: User::new_api_key(),
+    /// };
+    /// match user.validate() {
+    ///     Ok(_) => {
+    ///         println!("Validation passed");
+    ///     }
+    ///     Err(error) => {
+    ///        println!(
+    ///            "Validation failed => {}",
+    ///           error
+    ///        );
+    ///     }
+    /// }
+    pub fn validate(&self) -> Result<(), Error> {
+        if self.id == Uuid::nil() {
+            return Err(Error::UserValidation(UserValidationError::IdMissing));
+        }
+        if self.username.is_empty() {
+            return Err(Error::UserValidation(UserValidationError::UsernameMissing));
+        }
+        if !self.email.is_empty() && !self.email.contains("@") {
+            return Err(Error::UserValidation(UserValidationError::EmailInvalid));
+        }
+        if self.password_hash.is_empty() {
+            return Err(Error::UserValidation(UserValidationError::PasswordMissing));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -220,7 +267,7 @@ mod tests {
     #[should_panic(
         expected = "Failed to deserialize: Serialization(Error(\"missing field `id`\", line: 1, column: 126))"
     )]    
-    fn cannot_deserialize_missing_id() {
+    fn cannot_deserialize_with_missing_id() {
         let compare = User::default();
         let mut loaded = User::default();
         let s = r#"{"is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
@@ -232,7 +279,7 @@ mod tests {
     #[should_panic(
         expected = "Failed to deserialize: Serialization(Error(\"missing field `is_admin`\", line: 1, column: 153))"
     )]    
-    fn cannot_deserialize_missing_is_admin() {
+    fn cannot_deserialize_with_missing_is_admin() {
         let compare = User::default();
         let mut loaded = User::default();
         let s = r#"{"id":"00000000-0000-0000-0000-000000000000","username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
@@ -244,7 +291,7 @@ mod tests {
     #[should_panic(
         expected = "Failed to deserialize: Serialization(Error(\"missing field `username`\", line: 1, column: 156))"
     )]    
-    fn cannot_deserialize_missing_username() {
+    fn cannot_deserialize_with_missing_username() {
         let compare = User::default();
         let mut loaded = User::default();
         let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
@@ -256,7 +303,7 @@ mod tests {
     #[should_panic(
         expected = "Failed to deserialize: Serialization(Error(\"missing field `full_name`\", line: 1, column: 155))"
     )]    
-    fn cannot_deserialize_missing_full_name() {
+    fn cannot_deserialize_with_missing_full_name() {
         let compare = User::default();
         let mut loaded = User::default();
         let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
@@ -268,7 +315,7 @@ mod tests {
     #[should_panic(
         expected = "Failed to deserialize: Serialization(Error(\"missing field `email`\", line: 1, column: 159))"
     )]    
-    fn cannot_deserialize_missing_email() {
+    fn cannot_deserialize_with_missing_email() {
         let compare = User::default();
         let mut loaded = User::default();
         let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
@@ -280,7 +327,7 @@ mod tests {
     #[should_panic(
         expected = "Failed to deserialize: Serialization(Error(\"missing field `password_hash`\", line: 1, column: 151))"
     )]    
-    fn cannot_deserialize_missing_password_hash() {
+    fn cannot_deserialize_with_missing_password_hash() {
         let compare = User::default();
         let mut loaded = User::default();
         let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
@@ -292,7 +339,7 @@ mod tests {
     #[should_panic(
         expected = "Failed to deserialize: Serialization(Error(\"missing field `api_key`\", line: 1, column: 121))"
     )]    
-    fn cannot_deserialize_missing_api_key() {
+    fn cannot_deserialize_with_missing_api_key() {
         let compare = User::default();
         let mut loaded = User::default();
         let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":""}"#;
@@ -300,4 +347,68 @@ mod tests {
         assert_eq!(loaded, compare);
     }
 
+    fn create_valid_user() -> User {
+        User {
+            id: User::new_id(),
+            is_admin: false,
+            username: "john_smith".to_string(),
+            full_name: "John Smith".to_string(),
+            email: "john_smith@company.com".to_string(),
+            password_hash: "encrypted_hash".to_string(),
+            api_key: User::new_api_key(),
+        }
+    }
+
+    fn validate_user(user: &User) {
+        match user.validate() {
+            Ok(_) => {},
+            Err(error) => panic!("{}", error)
+        }
+    }
+
+   #[test]
+    fn user_validation_should_pass() {
+        let user = create_valid_user();
+        validate_user(&user);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "No id provided for the user"
+    )]    
+    fn user_validation_should_fail_with_missing_ids() {
+        let mut user = create_valid_user();
+        user.id = Uuid::nil();
+        validate_user(&user);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "No username provided for the user"
+    )]    
+    fn user_validation_should_fail_with_missing_username() {
+        let mut user = create_valid_user();
+        user.username = "".to_string();
+        validate_user(&user);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Invalid email address"
+    )]    
+    fn user_validation_should_fail_with_bad_email() {
+        let mut user = create_valid_user();
+        user.email = "bad_email".to_string();
+        validate_user(&user);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "No password provided for the user"
+    )]    
+    fn user_validation_should_fail_with_missing_password_hash() {
+        let mut user = create_valid_user();
+        user.password_hash = "".to_string();
+        validate_user(&user);
+    }
 }

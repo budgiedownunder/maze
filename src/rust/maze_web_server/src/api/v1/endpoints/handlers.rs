@@ -74,6 +74,10 @@ fn get_missing_password_request_error() -> Error {
     get_invalid_request_error("missing password")
 }
 
+fn get_invalid_email_request_error() -> Error {
+    get_invalid_request_error("invalid email")
+}
+
 fn get_user_fetch_internal_error(id: Uuid, err: &StoreError) -> Error {
     actix_web::error::ErrorInternalServerError(format!("Error fetching user item with id '{}': {}", id, err))
 }
@@ -362,6 +366,7 @@ pub async fn update_user(
                     match err {
                         StoreError::UserEmailExists() | StoreError::UserNameExists()  => Err(get_user_exists_error()),
                         StoreError::UserNameMissing() => Err(get_missing_username_request_error()),
+                        StoreError::UserEmailInvalid() => Err(get_invalid_email_request_error()),
                         _ => Err(get_user_update_internal_error(&err))
                     }    
                 }

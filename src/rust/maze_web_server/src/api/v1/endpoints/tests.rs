@@ -9,7 +9,7 @@ mod test_definitions {
     use crate::middleware::auth::auth_middleware;
     use crate::api::v1::openapi::ApiDocV1;
     
-    use data_model::{Maze, MazeDefinition, MazePoint, User};
+    use data_model::{Error as DataModelError, Maze, MazeDefinition, MazePoint, User, UserValidationError};
     use maze::{Error as MazeError, MazePath, MazeSolution};
     use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem};
 
@@ -190,15 +190,17 @@ mod test_definitions {
 
         // Validate user content
         fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), StoreError> {
-            if user.id == Uuid::nil() {
-                return Err(StoreError::UserIdMissing());
+            if let Err(error) = user.validate() {
+                match error {
+                    DataModelError::UserValidation(error) => match error {
+                        UserValidationError::EmailInvalid => return Err(StoreError::UserEmailInvalid()),
+                        UserValidationError::IdMissing => return Err(StoreError::UserIdMissing()),
+                        UserValidationError::PasswordMissing => return Err(StoreError::UserPasswordMissing()),
+                        UserValidationError::UsernameMissing => return Err(StoreError::UserNameMissing()),
+                    },
+                    _ => {}
+                }
             }
-            if user.username.is_empty() {
-                return Err(StoreError::UserNameMissing());
-            }
-            // if user.email.is_empty() {
-            //     return Err(StoreError::UserEmailMissing());
-            // }
             if user.password_hash.is_empty() {
                 return Err(StoreError::UserPasswordMissing());
             }

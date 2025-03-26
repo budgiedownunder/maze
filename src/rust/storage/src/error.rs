@@ -6,7 +6,7 @@ use std::{error::Error as StdError, io};
 #[derive(Debug)]
 pub enum Error {
     UserEmailExists(),
-    //UserEmailMissing(), TO DO - CHANGE TO USER EMAIL INVALID 
+    UserEmailInvalid(), 
     UserIdExists(String),
     UserIdMissing(),
     UserIdNotFound(String),
@@ -31,7 +31,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Error::UserEmailExists() => write!(f, "The email is already taken"),
-           // Error::UserEmailMissing() => write!(f, "No email provided for the user"),
+            Error::UserEmailInvalid() => write!(f, "The email address is invalid"),
             Error::UserIdExists(id) => write!(f, "A user with id '{}' already exists", id),
             Error::UserIdMissing() => write!(f, "No id provided for the user"),
             Error::UserIdNotFound(id) => write!(f, "A user with id '{}' was not found", id),

@@ -7,7 +7,7 @@ mod maze_point;
 mod user;
 
 // Re-export traits and structs
-pub use error::Error;
+pub use error::{Error, UserValidationError};
 pub use maze_definition::MazeDefinition;
 pub use maze::Maze;
 pub use maze_cell_state::MazeCellState;
