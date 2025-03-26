@@ -5,15 +5,11 @@ use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
 use uuid::Uuid;
 
-use data_model::{Error as DataModelError, Maze, User, UserValidationError};
+use data_model::{Maze, User};
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
-use crate::store::Manage;
-use crate::store::MazeStore;
-use crate::store::UserStore;
-use crate::Error;
-use crate::MazeItem;
-use crate::Store;
+use crate::store::{Manage, MazeStore, UserStore};
+use crate::{validation::validate_user_fields, Error, MazeItem, Store};
 
 /// File store configuration settings
 #[derive(Debug, Clone)]
@@ -239,22 +235,9 @@ impl FileStore {
         Ok(())
     }
 
-    // Validate the fields associated with a user object
-    fn validate_user_fields(user: &User) -> Result<(), Error> {
-        if let Err(DataModelError::UserValidation(error)) = user.validate() {
-            match error {
-                UserValidationError::EmailInvalid => return Err(Error::UserEmailInvalid()),
-                UserValidationError::IdMissing => return Err(Error::UserIdMissing()),
-                UserValidationError::PasswordMissing => return Err(Error::UserPasswordMissing()),
-                UserValidationError::UsernameMissing => return Err(Error::UserNameMissing()),
-            }
-        }
-        Ok(())
-    }
-
     // Validate user content
     fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), Error> {
-        Self::validate_user_fields(user)?;
+        validate_user_fields(user)?;
         if self.user_name_exists(&user.username, ignore_id) {
             return Err(Error::UserNameExists());
         }
@@ -1417,31 +1400,7 @@ mod tests {
     // User tests
     //****************************************************************
     #[test]
-    #[should_panic(expected = "No username provided for the user")]
-    fn cannot_create_user_without_name() {
-        let mut store = new_store();
-        let user = create_user(&mut store, false, "", "", "", "");
-        panic!("Successfully created user {:?} but did not expect to", user);
-    }
-
-    // #[test]
-    // #[should_panic(expected = "No email provided for the user")]
-    // fn cannot_create_user_without_email() {
-    //     let mut store = new_store();
-    //     let user = create_user(&mut store, false, "test", "", "", "");
-    //     panic!("Successfully created user {:?} but did not expect to", user);
-    // }
-
-    #[test]
-    #[should_panic(expected = "No password provided for the user")]
-    fn cannot_create_user_without_password() {
-        let mut store = new_store();
-        let user = create_user(&mut store, false, "test", "", "test@company.com", "");
-        panic!("Successfully created user {:?} but did not expect to", user);
-    }
-
-    #[test]
-    fn can_create_user() {
+    fn can_create_valid_user() {
         let mut store = new_store();
         let _ = create_user(
             &mut store,
@@ -1451,6 +1410,30 @@ mod tests {
             "test@company.com",
             "password_hash",
         );
+    }
+
+    #[test]
+    #[should_panic(expected = "No username provided for the user")]
+    fn cannot_create_user_without_name() {
+        let mut store = new_store();
+        let user = create_user(&mut store, false, "", "", "", "");
+        panic!("Successfully created user {:?} but did not expect to", user);
+    }
+
+    #[test]
+    #[should_panic(expected = "The email address is invalid")]
+    fn cannot_create_user_with_invalid_email() {
+        let mut store = new_store();
+        let user = create_user(&mut store, false, "test", "", "bad_email_address", "");
+        panic!("Successfully created user {:?} but did not expect to", user);
+    }
+
+    #[test]
+    #[should_panic(expected = "No password provided for the user")]
+    fn cannot_create_user_without_password() {
+        let mut store = new_store();
+        let user = create_user(&mut store, false, "test", "", "test@company.com", "");
+        panic!("Successfully created user {:?} but did not expect to", user);
     }
 
     #[test]
@@ -1675,16 +1658,23 @@ mod tests {
         }
     }
 
-    // #[test]
-    // #[should_panic(expected = "No email provided for the user")]
-    // fn cannot_update_existing_user_without_email() {
-    //     let mut store = new_store();
-    //     let mut user = create_user(&mut store, false, "test", "", "test@company.com", "password_hash");
-    //     user.email = "".to_string();
-    //     if let Err(error) = store.update_user(&mut user) {
-    //         panic!("{}", error.to_string());
-    //     }
-    // }
+    #[test]
+    #[should_panic(expected = "The email address is invalid")]
+    fn cannot_update_existing_user_with_invalid_email() {
+        let mut store = new_store();
+        let mut user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "bad_email_address",
+            "password_hash",
+        );
+        user.email = "".to_string();
+        if let Err(error) = store.update_user(&mut user) {
+            panic!("{}", error.to_string());
+        }
+    }
 
     #[test]
     #[should_panic(expected = "No password provided for the user")]

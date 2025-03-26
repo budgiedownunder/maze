@@ -9,9 +9,9 @@ mod test_definitions {
     use crate::middleware::auth::auth_middleware;
     use crate::api::v1::openapi::ApiDocV1;
     
-    use data_model::{Error as DataModelError, Maze, MazeDefinition, MazePoint, User, UserValidationError};
+    use data_model::{Maze, MazeDefinition, MazePoint, User};
     use maze::{Error as MazeError, MazePath, MazeSolution};
-    use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem};
+    use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
 
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, App, middleware::from_fn, Error};
 
@@ -190,14 +190,7 @@ mod test_definitions {
 
         // Validate user content
         fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), StoreError> {
-            if let Err(DataModelError::UserValidation(error)) = user.validate() {
-                match error {
-                    UserValidationError::EmailInvalid => return Err(StoreError::UserEmailInvalid()),
-                    UserValidationError::IdMissing => return Err(StoreError::UserIdMissing()),
-                    UserValidationError::PasswordMissing => return Err(StoreError::UserPasswordMissing()),
-                    UserValidationError::UsernameMissing => return Err(StoreError::UserNameMissing()),
-                }
-            }
+            validate_user_fields(user)?;
             if user.password_hash.is_empty() {
                 return Err(StoreError::UserPasswordMissing());
             }

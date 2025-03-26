@@ -2,6 +2,7 @@
 mod error;
 mod file_store;
 pub mod store;
+pub mod validation;
 
 // Re-export traits and structs
 pub use error::Error;
