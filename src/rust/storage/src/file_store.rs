@@ -239,8 +239,8 @@ impl FileStore {
         Ok(())
     }
 
-    // Validate user content
-    fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), Error> {
+    // Validate the fields associated with a user object
+    fn validate_user_fields(user: &User) -> Result<(), Error> {
         if let Err(DataModelError::UserValidation(error)) = user.validate() {
             match error {
                 UserValidationError::EmailInvalid => return Err(Error::UserEmailInvalid()),
@@ -249,7 +249,12 @@ impl FileStore {
                 UserValidationError::UsernameMissing => return Err(Error::UserNameMissing()),
             }
         }
-         
+        Ok(())
+    }
+
+    // Validate user content
+    fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), Error> {
+        Self::validate_user_fields(user)?;
         if self.user_name_exists(&user.username, ignore_id) {
             return Err(Error::UserNameExists());
         }
