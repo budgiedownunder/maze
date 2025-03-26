@@ -28,7 +28,7 @@ pub enum StoreConfig {
 /// Try to create and then reload a maze from within a file store and, if successful, print it
 ///
 /// ```
-/// # // Make sure the store is in a suitable state prior to running the doc test   
+/// # // Make sure the store is in a suitable state prior to running the doc test
 /// # use storage::test_setup::setup;
 /// # setup();
 ///
@@ -37,7 +37,6 @@ pub enum StoreConfig {
 /// use storage::{FileStoreConfig, get_store, Store,  StoreConfig, Error};
 /// use utils::StdoutLinePrinter;
 ///
-
 /// let grid: Vec<Vec<char>> = vec![
 ///    vec!['S', ' ', 'W'],
 ///    vec![' ', 'F', 'W']
@@ -58,7 +57,7 @@ pub enum StoreConfig {
 ///                 return ;
 ///             }
 ///         };
-/// 
+///
 ///         // Create the maze within the store
 ///         if let Err(error) = store.create_maze(&owner, &mut maze_to_create) {
 ///             panic!(
@@ -92,7 +91,7 @@ pub enum StoreConfig {
 /// }
 /// ```
 pub fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, Error> {
-    let store = match config  
+    let store = match config
     {
         StoreConfig::File(file_config) => file_store::FileStore::new(&file_config),
     };

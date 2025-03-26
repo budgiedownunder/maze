@@ -63,3 +63,4 @@ pub trait Manage {
 pub trait Store: UserStore + MazeStore + Manage + Send + Sync {}
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;
+

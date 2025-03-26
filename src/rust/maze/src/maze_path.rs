@@ -8,7 +8,7 @@ use data_model::MazePoint;
 #[derive(Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 /// Represents a maze path composed of a sequence of maze points
 pub struct MazePath {
-    /// Vector of successive points within the path 
+    /// Vector of successive points within the path
     pub points: Vec<MazePoint>,
 }
 
@@ -26,11 +26,11 @@ impl MazePath {
     /// Creates a new path instance for the given set of points
     /// # Arguments
     /// * `points` - Sequence of points defining the path
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A new path
-    /// 
+    ///
     /// # Examples
     ///
     /// ```
@@ -41,10 +41,9 @@ impl MazePath {
     ///   MazePoint { row: 0, col: 0 },
     ///   MazePoint { row: 1, col: 0 },
     /// ];
-
     /// let p = MazePath::new(points);
     /// assert_eq!(p.points.len(), 3);
-    /// ``` 
+    /// ```
     pub fn new(points: Vec<MazePoint>) -> MazePath {
         MazePath { points }
     }

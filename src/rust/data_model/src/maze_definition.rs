@@ -279,8 +279,7 @@ impl MazeDefinition {
     /// assert_eq!(state.len(), 3);
     /// ```
     pub fn to_state(&self) -> Vec<Vec<MazeCellState>> {
-        return self
-            .grid
+        self.grid
             .iter()
             .map(|inner_vec| {
                 inner_vec
@@ -295,7 +294,7 @@ impl MazeDefinition {
                     })
                     .collect::<Vec<MazeCellState>>()
             })
-            .collect();
+            .collect()
     }
     /// Checks that a point is valid for the definition instance
     ///
@@ -340,8 +339,7 @@ impl MazeDefinition {
     /// println!("{:?}", definition.to_display_chars());
     /// ```
     pub fn to_display_chars(&self) -> Vec<Vec<char>> {
-        return self
-            .grid
+        self.grid
             .iter()
             .map(|inner_vec| {
                 inner_vec
@@ -355,7 +353,7 @@ impl MazeDefinition {
                     })
                     .collect::<Vec<char>>()
             })
-            .collect();
+            .collect()
     }
     /// Deletes one or more consecutive columns from the definition instance
     ///
