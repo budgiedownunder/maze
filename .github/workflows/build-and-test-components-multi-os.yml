@@ -126,6 +126,7 @@ jobs:
     - name: Run Rust Component Tests
       working-directory: ./src/rust 
       run: |
+        cargo test --locked -p auth
         cargo test --locked -p data_model
         cargo test --locked -p maze
         cargo test --locked -p maze_console -- --test-threads=1
