@@ -1,9 +1,12 @@
-use data_model::Maze;
+use data_model::{Maze, MazeDefinition};
+use maze::{MazePath, MazeSolution};
 use storage::MazeItem;
 use utoipa::{
     openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
     Modify, OpenApi,
 };
+
+use crate::api::v1::endpoints::handlers::{UserItem, UpdateUserRequest};
 
 struct ApiKeyAuth;
 
@@ -46,7 +49,8 @@ impl Modify for ApiKeyAuth {
         crate::api::v1::endpoints::handlers::delete_user,
 
     ),
-    components(schemas(MazeItem, Maze)),
+    components(schemas(Maze, MazeDefinition, MazeItem, MazePath, MazeSolution, 
+        UpdateUserRequest, UserItem)),
     servers(
         (url = "https://localhost:8443", description = "Local development server")
     ),
