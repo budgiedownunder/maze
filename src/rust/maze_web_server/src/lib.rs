@@ -2,8 +2,7 @@ pub mod api;
 pub mod config;
 pub mod middleware;
 
-use storage::SharedStore;
-use storage::get_store;
+use storage::{get_store, SharedStore};
 
 use actix_web::{ App, middleware::Logger, HttpServer, web};
 use config::app::AppConfig;
@@ -19,8 +18,8 @@ fn load_rustls_config(config: &AppConfig) -> io::Result<ServerConfig> {
     let cert_file_name = &config.security.cert_file;
     let key_file_name =  &config.security.key_file;
 
-    let mut cert_reader = BufReader::new(File::open(cert_file_name).expect(format!("Cannot open certificate file '{}'", cert_file_name).as_str()));
-    let key_reader = &mut BufReader::new(File::open(key_file_name).expect(format!("Cannot open private key file '{}'", key_file_name).as_str()));
+    let mut cert_reader = BufReader::new(File::open(cert_file_name).unwrap_or_else(|_| panic!("Cannot open private key file '{}'", key_file_name)));
+    let key_reader = &mut BufReader::new(File::open(key_file_name).unwrap_or_else(|_| panic!("Cannot open private key file '{}'", key_file_name)));
 
     let cert_chain = certs(&mut cert_reader)?
         .into_iter()
@@ -59,20 +58,23 @@ fn construct_bind_address(port: u16) -> String {
 /// Swagger-related endpoints that can be used to manually test the API in user-friendly web pages (e.g. `/api-docs/v1/swagger-ui/`). 
 pub async fn run_server() -> std::io::Result<()> {
     let config = AppConfig::load().expect("Failed to load configuration");
-
-    println!("auth_token = {}", config.security.auth_token);
-
+  
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     let bind_address = construct_bind_address(config.port);
 
     let rustls_config = load_rustls_config(&config)?;
     let max_workers = std::thread::available_parallelism()?; // This is actix_web's default too
-
-    let store: SharedStore = Arc::new(RwLock::new(get_store(storage::StoreType::File)?));
+    let file_config = storage::FileStoreConfig::default();
+    let mut store = get_store(storage::StoreConfig::File(file_config))?;
+    let users = store.get_users()?;
+    if users.is_empty() {
+        store.init_default_admin_user("admin", "dummy_hash_password")?;
+    }
+    let shared_store: SharedStore = Arc::new(RwLock::new(store));
 
     HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(store.clone()))  // Share the store
+            .app_data(web::Data::new(shared_store.clone()))  // Share the store
             .app_data(web::Data::new(config.clone())) // Share the config
             .wrap(Logger::default())
             .service(api::register_api())

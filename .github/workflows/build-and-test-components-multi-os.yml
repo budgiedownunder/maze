@@ -71,39 +71,42 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 8.0.404 # Match the version in global.json
-  
-    - name: Clean Up Existing Workloads (Windows)
+
+    - name: Display active NET SDK version (Windows)
       if: runner.os == 'Windows'
+      working-directory: ./src/csharp
       continue-on-error: true
       run: |
-        dotnet workload uninstall android
-        dotnet workload uninstall maui-windows
-        Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.200" -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force "C:\Program Files\dotnet\sdk-manifests\6.0.300" -ErrorAction SilentlyContinue
-        dotnet workload repair
-
-    - name: Restore Workload Manifests (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        dotnet workload update
-
+        dotnet --version
+          
     - name: Install Required Workloads (Windows)
       if: runner.os == 'Windows'
+      working-directory: ./src/csharp
       run: |
+        dotnet workload install maui
         dotnet workload install android
         dotnet workload install maui-windows
 
-    - name: Verify Installed Workloads (Windows)
+    - name: Update Workloads (Windows)
       if: runner.os == 'Windows'
-      run: dotnet workload list
+      working-directory: ./src/csharp
+      run: |
+        dotnet workload update
+  
+    - name: Verify Installed SDKs and Workloads (Windows)
+      if: runner.os == 'Windows'
+      working-directory: ./src/csharp
+      run: |
+        dotnet --list-sdks
+        dotnet workload list
 
     - name: Build Rust Components
       working-directory: ./src/rust
       run: |
-        cargo build --verbose
+        cargo build --locked --verbose
         cd maze_wasm
         wasm-pack build --target web --features "wasm-bindgen"
-        cargo build --target wasm32-unknown-unknown --release
+        cargo build --locked --target wasm32-unknown-unknown --release --no-default-features --features "uuid-disable-random"
         pwd
 
     - name: Set environment variables (non-Windows)
@@ -123,12 +126,15 @@ jobs:
     - name: Run Rust Component Tests
       working-directory: ./src/rust 
       run: |
-        cargo test -p maze
-        cargo test -p maze_console -- --test-threads=1
-        cargo test -p storage -- --test-threads=1
-        cargo test -p maze_wasm
-        cargo test -p maze_web_server
-        cargo test -p maze_openapi_generator
+        cargo test --locked -p auth
+        cargo test --locked -p data_model
+        cargo test --locked -p maze
+        cargo test --locked -p maze_console -- --test-threads=1
+        cargo test --locked -p storage -- --test-threads=1
+        cargo test --locked -p maze_wasm
+        cargo test --locked -p maze_web_server
+        cargo test --locked -p maze_openapi_generator
+        cargo test --locked -p utils
 
     - name: Run Rust JavaScript API Tests
       working-directory: ./src/rust 
@@ -141,7 +147,7 @@ jobs:
     - name: Run Rust Benchmark Tests
       working-directory: ./src/rust 
       run: |
-        cargo bench -p maze
+        cargo bench --locked -p maze
 
     - name: Restore .NET dependencies
       working-directory: ./src/csharp 

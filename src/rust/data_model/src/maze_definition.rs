@@ -2,13 +2,13 @@ use serde::{de, Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use utoipa::ToSchema;
 
-use crate::CellState;
-use crate::MazeError;
-use crate::Point;
-#[allow(dead_code)]
+use crate::Error;
+use crate::MazeCellState;
+use crate::MazePoint;
+
 #[derive(Serialize, Clone, Debug, ToSchema)]
 /// Represents a maze definition
-pub struct Definition {
+pub struct MazeDefinition {
     // 2-d grid (rows x columns) of characters describing the maze layout, where
     // - `'S'`:  Represents the starting cell (limited to one).
     // - `'F'`:  Represents the finishing cell (limited to one).
@@ -17,7 +17,7 @@ pub struct Definition {
     pub grid: Vec<Vec<char>>,
 }
 
-impl<'de> Deserialize<'de> for Definition {
+impl<'de> Deserialize<'de> for MazeDefinition {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -52,11 +52,11 @@ impl<'de> Deserialize<'de> for Definition {
             return Err(de::Error::custom(error.to_string()));
         }
 
-        Ok(Definition { grid })
+        Ok(MazeDefinition { grid })
     }
 }
 
-impl Definition {
+impl MazeDefinition {
     // Public interface functions
 
     /// Creates a maze definition instance with the given number of rows x columns empty cells
@@ -73,13 +73,13 @@ impl Definition {
     ///
     /// Create a definition with 3 rows and 4 columns and then verify its dimensions
     /// ```
-    /// use maze::Definition;
-    /// let definition = Definition::new(3, 4);
+    /// use data_model::MazeDefinition;
+    /// let definition = MazeDefinition::new(3, 4);
     /// assert_eq!(definition.row_count(), 3);
     /// assert_eq!(definition.col_count(), 4);
     /// ```
     pub fn new(row_count: usize, col_count: usize) -> Self {
-        Definition {
+        MazeDefinition {
             grid: Self::alloc_empty_rows(row_count, col_count),
         }
     }
@@ -94,8 +94,8 @@ impl Definition {
     /// Create a definition with 3 rows and 4 columns, verify its dimensions, reset it and
     /// then confirm it is empty
     /// ```
-    /// use maze::Definition;
-    /// let mut definition = Definition::new(3, 4);
+    /// use data_model::MazeDefinition;
+    /// let mut definition = MazeDefinition::new(3, 4);
     /// assert_eq!(definition.row_count(), 3);
     /// assert_eq!(definition.col_count(), 4);
     /// assert_eq!(definition.reset().is_empty(), true);
@@ -118,8 +118,8 @@ impl Definition {
     ///
     /// Create an empty maze definition, resize it to 3 rows and 4 columns and then verify its dimensions
     /// ```
-    /// use maze::Definition;
-    /// let mut definition = Definition::new(0, 0);
+    /// use data_model::MazeDefinition;
+    /// let mut definition = MazeDefinition::new(0, 0);
     /// assert_eq!(definition.row_count(), 0);
     /// assert_eq!(definition.col_count(), 0);
     /// definition.resize(3, 4);
@@ -144,8 +144,8 @@ impl Definition {
     /// # Examples
     ///
     /// ```
-    /// use maze::Definition;
-    /// let definition = Definition::new(3, 4);
+    /// use data_model::MazeDefinition;
+    /// let definition = MazeDefinition::new(3, 4);
     /// assert_eq!(definition.row_count(), 3);
     /// ```
     pub fn row_count(&self) -> usize {
@@ -160,8 +160,8 @@ impl Definition {
     /// # Examples
     ///
     /// ```
-    /// use maze::Definition;
-    /// let definition = Definition::new(3, 4);
+    /// use data_model::MazeDefinition;
+    /// let definition = MazeDefinition::new(3, 4);
     /// assert_eq!(definition.col_count(), 4);
     /// ```
     pub fn col_count(&self) -> usize {
@@ -176,8 +176,8 @@ impl Definition {
     /// # Examples
     ///
     /// ```
-    /// use maze::Definition;
-    /// let definition = Definition::new(3, 4);
+    /// use data_model::MazeDefinition;
+    /// let definition = MazeDefinition::new(3, 4);
     /// assert_eq!(definition.is_empty(), false);
     /// ```
     pub fn is_empty(&self) -> bool {
@@ -193,10 +193,10 @@ impl Definition {
     ///
     /// Print whether 'X' (`false`) and 'S' (`true`) are valid characters
     /// ```
-    /// use maze::Definition;
-    /// let x_is_valid = Definition::is_valid_char('X');
+    /// use data_model::MazeDefinition;
+    /// let x_is_valid = MazeDefinition::is_valid_char('X');
     /// println!("Character 'X' is valid => {}", x_is_valid);
-    /// let s_is_valid = Definition::is_valid_char('S');
+    /// let s_is_valid = MazeDefinition::is_valid_char('S');
     /// println!("Character 'S' is valid => {}", s_is_valid);
     /// ```
     pub fn is_valid_char(ch: char) -> bool {
@@ -213,16 +213,16 @@ impl Definition {
     /// Create an empty maze definition and then verify it
     ///
     /// ```
-    /// use maze::Definition;
-    /// let definition = Definition::new(0, 0);
+    /// use data_model::MazeDefinition;
+    /// let definition = MazeDefinition::new(0, 0);
     /// match definition.verify_not_empty() {
     ///     Err(e) => println!("Verification failed: {}", e.to_string()),
-    ///     Ok(()) => println!("Definition is not empty"),
+    ///     Ok(()) => println!("MazeDefinition is not empty"),
     /// }
     /// ```
-    pub fn verify_not_empty(&self) -> Result<(), MazeError> {
+    pub fn verify_not_empty(&self) -> Result<(), Error> {
         if self.is_empty() {
-            return Err(MazeError::new("definition is empty".to_string()));
+            return Err(Error::MazeValidation("definition is empty".to_string()));
         }
         Ok(())
     }
@@ -245,12 +245,12 @@ impl Definition {
     /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column
     ///
     /// ```
-    /// use maze::Definition;
+    /// use data_model::MazeDefinition;
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let definition = Definition::from_vec(grid);
+    /// let definition = MazeDefinition::from_vec(grid);
     /// assert_eq!(definition.row_count(), 2);
     /// assert_eq!(definition.col_count(), 3);
     /// ```
@@ -258,7 +258,7 @@ impl Definition {
         if let Some(error) = Self::validate_grid(&grid) {
             panic!("{}", error.to_string());
         }
-        Definition { grid }
+        MazeDefinition { grid }
     }
     /// Converts the definition instance to a vector of row cell states
     ///
@@ -272,36 +272,35 @@ impl Definition {
     /// the number of rows in the state vector is the same as the number of rows in the definition (3).
     ///
     /// ```
-    /// use maze::Definition;
-    /// let definition = Definition::new(3, 4);
+    /// use data_model::MazeDefinition;
+    /// let definition = MazeDefinition::new(3, 4);
     /// let state = definition.to_state();
     /// assert_eq!(state.len(), definition.row_count());
     /// assert_eq!(state.len(), 3);
     /// ```
-    pub fn to_state(&self) -> Vec<Vec<CellState>> {
-        return self
-            .grid
+    pub fn to_state(&self) -> Vec<Vec<MazeCellState>> {
+        self.grid
             .iter()
             .map(|inner_vec| {
                 inner_vec
                     .iter()
                     .map(|value| match value {
-                        'W' => CellState::Wall,
-                        'S' | 'F' | ' ' => CellState::Empty,
+                        'W' => MazeCellState::Wall,
+                        'S' | 'F' | ' ' => MazeCellState::Empty,
                         _ => panic!(
                             "internal error - grid contains unsupported cell character: {}",
                             value
                         ),
                     })
-                    .collect::<Vec<CellState>>()
+                    .collect::<Vec<MazeCellState>>()
             })
-            .collect();
+            .collect()
     }
     /// Checks that a point is valid for the definition instance
     ///
     /// # Arguments
     ///
-    /// * `pt` - Point to validate
+    /// * `pt` - MazePoint to validate
     ///
     /// # Returns
     ///
@@ -312,13 +311,13 @@ impl Definition {
     /// Create a maze definition with 3 rows and 4 columns and confirm that `[2,1]` is valid, but that `[3,1]` is not
     ///
     /// ```
-    /// use maze::Definition;
-    /// use maze::Point;
-    /// let definition = Definition::new(3, 4);
-    /// assert_eq!(definition.is_valid( &Point {row: 2, col: 1}), true);
-    /// assert_eq!(definition.is_valid( &Point {row: 3, col: 1}), false);
+    /// use data_model::MazeDefinition;
+    /// use data_model::MazePoint;
+    /// let definition = MazeDefinition::new(3, 4);
+    /// assert_eq!(definition.is_valid( &MazePoint {row: 2, col: 1}), true);
+    /// assert_eq!(definition.is_valid( &MazePoint {row: 3, col: 1}), false);
     /// ```
-    pub fn is_valid(&self, pt: &Point) -> bool {
+    pub fn is_valid(&self, pt: &MazePoint) -> bool {
         if pt.row >= self.row_count() || pt.col >= self.col_count() {
             return false;
         }
@@ -335,13 +334,12 @@ impl Definition {
     /// Create a maze definition with 3 rows and 4 columns and print it
     ///
     /// ```
-    /// use maze::Definition;
-    /// let definition = Definition::new(3, 4);
+    /// use data_model::MazeDefinition;
+    /// let definition = MazeDefinition::new(3, 4);
     /// println!("{:?}", definition.to_display_chars());
     /// ```
     pub fn to_display_chars(&self) -> Vec<Vec<char>> {
-        return self
-            .grid
+        self.grid
             .iter()
             .map(|inner_vec| {
                 inner_vec
@@ -355,7 +353,7 @@ impl Definition {
                     })
                     .collect::<Vec<char>>()
             })
-            .collect();
+            .collect()
     }
     /// Deletes one or more consecutive columns from the definition instance
     ///
@@ -376,25 +374,25 @@ impl Definition {
     /// delete the second and third columns and print the result
     ///
     /// ```
-    /// use maze::Definition;
+    /// use data_model::MazeDefinition;
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', ' ', 'W'],
     ///    vec![' ', 'F', ' ', 'W']
     /// ];
-    /// let mut definition = Definition::from_vec(grid);
+    /// let mut definition = MazeDefinition::from_vec(grid);
     /// definition.delete_cols(1,2).expect("delete_cols() failed");
     /// println!("{:?}", definition.to_display_chars());
     /// ```
-    pub fn delete_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
+    pub fn delete_cols(&mut self, start_col: usize, count: usize) -> Result<(), Error> {
         self.verify_not_empty()?;
         if start_col >= self.col_count() {
-            return Err(MazeError::new(format!(
+            return Err(Error::MazeValidation(format!(
                 "invalid 'start_col' index ({})",
                 start_col
             )));
         }
         if start_col + count > self.col_count() {
-            return Err(MazeError::new(format!(
+            return Err(Error::MazeValidation(format!(
                 "invalid 'count' ({}) - too large",
                 count
             )));
@@ -423,19 +421,19 @@ impl Definition {
     /// the end of each row, insert 2 columns at the start of each row and print the result
     ///
     /// ```
-    /// use maze::Definition;
+    /// use data_model::MazeDefinition;
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', ' ', 'W'],
     ///    vec![' ', 'F', ' ', 'W']
     /// ];
-    /// let mut definition = Definition::from_vec(grid);
+    /// let mut definition = MazeDefinition::from_vec(grid);
     /// definition.insert_cols(0,2).expect("insert_cols() failed");
     /// println!("{:?}", definition.to_display_chars());
     /// ```
-    pub fn insert_cols(&mut self, start_col: usize, count: usize) -> Result<(), MazeError> {
+    pub fn insert_cols(&mut self, start_col: usize, count: usize) -> Result<(), Error> {
         self.verify_not_empty()?;
         if start_col > self.col_count() {
-            return Err(MazeError::new(format!(
+            return Err(Error::MazeValidation(format!(
                 "invalid 'start_col' index ({})",
                 start_col
             )));
@@ -463,7 +461,7 @@ impl Definition {
     /// Create a maze definition with 5 rows and 4 columns, delete the first and and second rows and print the result
     ///
     /// ```
-    /// use maze::Definition;
+    /// use data_model::MazeDefinition;
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W'],
@@ -471,20 +469,20 @@ impl Definition {
     ///    vec!['W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W']
     /// ];
-    /// let mut definition = Definition::from_vec(grid);
+    /// let mut definition = MazeDefinition::from_vec(grid);
     /// definition.delete_rows(1,2).expect("delete_rows() failed");
     /// println!("{:?}", definition.to_display_chars());
     /// ```
-    pub fn delete_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
+    pub fn delete_rows(&mut self, start_row: usize, count: usize) -> Result<(), Error> {
         self.verify_not_empty()?;
         if start_row >= self.row_count() {
-            return Err(MazeError::new(format!(
+            return Err(Error::MazeValidation(format!(
                 "invalid 'start_row' index ({})",
                 start_row
             )));
         }
         if start_row + count > self.row_count() {
-            return Err(MazeError::new(format!(
+            return Err(Error::MazeValidation(format!(
                 "invalid 'count' ({}) - too large",
                 count
             )));
@@ -509,7 +507,7 @@ impl Definition {
     /// Create a maze definition with 5 rows and 4 columns, insert 2 rows after the fourth row and print the result
     ///
     /// ```
-    /// use maze::Definition;
+    /// use data_model::MazeDefinition;
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W'],
@@ -517,13 +515,13 @@ impl Definition {
     ///    vec!['W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W']
     /// ];
-    /// let mut definition = Definition::from_vec(grid);
+    /// let mut definition = MazeDefinition::from_vec(grid);
     /// definition.insert_rows(3,2).expect("insert_rows() failed");
     /// println!("{:?}", definition.to_display_chars());
     /// ```
-    pub fn insert_rows(&mut self, start_row: usize, count: usize) -> Result<(), MazeError> {
+    pub fn insert_rows(&mut self, start_row: usize, count: usize) -> Result<(), Error> {
         if start_row > self.row_count() {
-            return Err(MazeError::new(format!(
+            return Err(Error::MazeValidation(format!(
                 "invalid 'start_row' index ({})",
                 start_row
             )));
@@ -545,12 +543,12 @@ impl Definition {
     /// Locate the starting position in a 2 row x 3 column definition
     ///
     /// ```
-    /// use maze::Definition;
+    /// use data_model::MazeDefinition;
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let definition = Definition::from_vec(grid);
+    /// let definition = MazeDefinition::from_vec(grid);
     /// match definition.get_start() {
     ///     Some(start) => {
     ///         println!("Start found at point {}", start);
@@ -560,7 +558,7 @@ impl Definition {
     ///     }
     /// };
     /// ```
-    pub fn get_start(&self) -> Option<Point> {
+    pub fn get_start(&self) -> Option<MazePoint> {
         self.find_first_char('S')
     }
     /// Sets the starting position within the maze definition (if any)
@@ -575,17 +573,17 @@ impl Definition {
     /// Reset the starting position in a 2 row x 3 column definition
     ///
     /// ```
-    /// use maze::Definition;
-    /// use maze::Point;
+    /// use data_model::MazeDefinition;
+    /// use data_model::MazePoint;
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let mut definition = Definition::from_vec(grid);
-    /// let new_start = Point {row: 1, col: 2};
+    /// let mut definition = MazeDefinition::from_vec(grid);
+    /// let new_start = MazePoint {row: 1, col: 2};
     /// definition.set_start(Some(new_start)).expect("set_start() failed");
     /// ```
-    pub fn set_start(&mut self, new_start: Option<Point>) -> Result<(), MazeError> {
+    pub fn set_start(&mut self, new_start: Option<MazePoint>) -> Result<(), Error> {
         self.reset_point("start", self.get_start(), new_start, 'S')
     }
     /// Locates the finishing position within the maze definition (if any)
@@ -599,12 +597,12 @@ impl Definition {
     /// Locate the finishing position in a 2 row x 3 column definition
     ///
     /// ```
-    /// use maze::Definition;
+    /// use data_model::MazeDefinition;
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let definition = Definition::from_vec(grid);
+    /// let definition = MazeDefinition::from_vec(grid);
     /// match definition.get_finish() {
     ///     Some(finish) => {
     ///         println!("Finish found at point {}", finish);
@@ -614,7 +612,7 @@ impl Definition {
     ///     }
     /// };
     /// ```
-    pub fn get_finish(&self) -> Option<Point> {
+    pub fn get_finish(&self) -> Option<MazePoint> {
         self.find_first_char('F')
     }
     /// Sets the finishing position within the maze definition (if any)
@@ -629,17 +627,17 @@ impl Definition {
     /// Reset the finishing position in a 2 row x 3 column definition
     ///
     /// ```
-    /// use maze::Definition;
-    /// use maze::Point;
+    /// use data_model::MazeDefinition;
+    /// use data_model::MazePoint;
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', ' ', 'W'],
     ///    vec![' ', 'F', 'W']
     /// ];
-    /// let mut definition = Definition::from_vec(grid);
-    /// let new_finish = Point {row: 0, col: 2};
+    /// let mut definition = MazeDefinition::from_vec(grid);
+    /// let new_finish = MazePoint {row: 0, col: 2};
     /// definition.set_start(Some(new_finish)).expect("new_finish() failed");
     /// ```
-    pub fn set_finish(&mut self, new_finish: Option<Point>) -> Result<(), MazeError> {
+    pub fn set_finish(&mut self, new_finish: Option<MazePoint>) -> Result<(), Error> {
         self.reset_point("finish", self.get_finish(), new_finish, 'F')
     }
     /// Modify the value of each cell in a given region of the definition instance
@@ -661,21 +659,21 @@ impl Definition {
     ///
     ///
     /// ```
-    /// use maze::CellState;
-    /// use maze::Definition;
-    /// use maze::Point;
-    /// let mut definition = Definition::new(5, 4);
-    /// let from = Point { row: 1, col: 1, };
-    /// let to = Point { row: 3, col: 2, };
+    /// use data_model::MazeCellState;
+    /// use data_model::MazeDefinition;
+    /// use data_model::MazePoint;
+    /// let mut definition = MazeDefinition::new(5, 4);
+    /// let from = MazePoint { row: 1, col: 1, };
+    /// let to = MazePoint { row: 3, col: 2, };
     /// definition.set_value( from, to, 'W').expect("set_value() failed");
     /// println!("{:?}", definition.to_display_chars());
     /// ```
-    pub fn set_value(&mut self, from: Point, to: Point, value: char) -> Result<(), MazeError> {
+    pub fn set_value(&mut self, from: MazePoint, to: MazePoint, value: char) -> Result<(), Error> {
         if !self.is_valid(&from) {
-            return Err(MazeError::new(format!("invalid 'from' point {}", from)));
+            return Err(Error::MazeValidation(format!("invalid 'from' point {}", from)));
         }
         if !self.is_valid(&to) {
-            return Err(MazeError::new(format!("invalid 'to' point {}", to)));
+            return Err(Error::MazeValidation(format!("invalid 'to' point {}", to)));
         }
         match value {
             'W' | ' ' => {
@@ -689,7 +687,7 @@ impl Definition {
                     }
                 }
             }
-            _ => return Err(MazeError::new(format!("invalid 'value' ('{}')", value))),
+            _ => return Err(Error::MazeValidation(format!("invalid 'value' ('{}')", value))),
         }
         Ok(())
     }
@@ -700,14 +698,14 @@ impl Definition {
         grid.first().map_or(0, |inner_vec| inner_vec.len())
     }
 
-    fn validate_grid(grid: &[Vec<char>]) -> Option<MazeError> {
+    fn validate_grid(grid: &[Vec<char>]) -> Option<Error> {
         let first_row_col_count = Self::first_row_col_count(grid);
         let same_col_counts = grid
             .iter()
             .all(|inner_vec| inner_vec.len() == first_row_col_count);
         if !same_col_counts {
             let msg = format!("grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_col_count).clone();
-            return Some(MazeError::new(msg));
+            return Some(Error::MazeValidation(msg));
         }
         let mut num_starts = 0;
         let mut num_finishes = 0;
@@ -717,21 +715,21 @@ impl Definition {
                     let msg = format!(
                         "grid vector contains an invalid character '{}' at location {}",
                         item,
-                        Point {
+                        MazePoint {
                             row: row_idx,
                             col: col_idx
                         }
                     );
-                    return Some(MazeError::new(msg));
+                    return Some(Error::MazeValidation(msg));
                 } else if item == 'S' {
                     num_starts += 1;
                     if num_starts > 1 {
-                        return Some(MazeError::new("too many start characters `S`".to_string()));
+                        return Some(Error::MazeValidation("too many start characters `S`".to_string()));
                     }
                 } else if item == 'F' {
                     num_finishes += 1;
                     if num_finishes > 1 {
-                        return Some(MazeError::new("too many finish characters `F`".to_string()));
+                        return Some(Error::MazeValidation("too many finish characters `F`".to_string()));
                     }
                 }
             }
@@ -743,11 +741,11 @@ impl Definition {
         vec![vec![' '; col_count]; row_count]
     }
 
-    fn find_first_char(&self, target: char) -> Option<Point> {
+    fn find_first_char(&self, target: char) -> Option<MazePoint> {
         for (i, row) in self.grid.iter().enumerate() {
             for (j, &ch) in row.iter().enumerate() {
                 if ch == target {
-                    return Some(Point { row: i, col: j });
+                    return Some(MazePoint { row: i, col: j });
                 }
             }
         }
@@ -757,13 +755,13 @@ impl Definition {
     fn reset_point(
         &mut self,
         name: &str,
-        current: Option<Point>,
-        new: Option<Point>,
+        current: Option<MazePoint>,
+        new: Option<MazePoint>,
         ch: char,
-    ) -> Result<(), MazeError> {
+    ) -> Result<(), Error> {
         if let Some(new_pt) = new {
             if !self.is_valid(&new_pt) {
-                return Err(MazeError::new(format!(
+                return Err(Error::MazeValidation(format!(
                     "invalid '{}' point {}",
                     name, new_pt
                 )));
@@ -785,21 +783,21 @@ mod tests {
 
     #[test]
     fn can_create_empty_from_dimensions() {
-        let definition = Definition::new(0, 0);
+        let definition = MazeDefinition::new(0, 0);
         assert_eq!(definition.row_count(), 0);
         assert_eq!(definition.col_count(), 0);
     }
 
     #[test]
     fn can_create_new_from_dimensions() {
-        let definition = Definition::new(2, 3);
+        let definition = MazeDefinition::new(2, 3);
         assert_eq!(definition.row_count(), 2);
         assert_eq!(definition.col_count(), 3);
     }
 
     #[test]
     fn can_reset_to_empty() {
-        let mut definition = Definition::new(2, 3);
+        let mut definition = MazeDefinition::new(2, 3);
         assert_eq!(definition.row_count(), 2);
         assert_eq!(definition.col_count(), 3);
         assert!(!definition.is_empty());
@@ -809,7 +807,7 @@ mod tests {
     #[test]
     fn can_create_empty_from_vector() {
         let grid: Vec<Vec<char>> = vec![];
-        let definition = Definition::from_vec(grid);
+        let definition = MazeDefinition::from_vec(grid);
         assert_eq!(definition.row_count(), 0);
         assert_eq!(definition.col_count(), 0);
     }
@@ -821,7 +819,7 @@ mod tests {
             vec![' ', ' ', ' '],
             vec![' ', ' ', ' ']
         ];
-        let definition = Definition::from_vec(grid);
+        let definition = MazeDefinition::from_vec(grid);
         assert_eq!(definition.row_count(), 2);
         assert_eq!(definition.col_count(), 3);
     }
@@ -834,7 +832,7 @@ mod tests {
             vec![' ', ' ', ' '],
             vec![' ', ' ', 'X']
         ];
-        let _definition = Definition::from_vec(grid);
+        let _definition = MazeDefinition::from_vec(grid);
     }
 
     #[test]
@@ -845,7 +843,7 @@ mod tests {
             vec!['S', ' ', ' '],
             vec!['S', ' ', ' ']
         ];
-        let _definition = Definition::from_vec(grid);
+        let _definition = MazeDefinition::from_vec(grid);
     }
 
     #[test]
@@ -856,7 +854,7 @@ mod tests {
             vec!['S', ' ', 'F'],
             vec!['F', ' ', ' ']
         ];
-        let _definition = Definition::from_vec(grid);
+        let _definition = MazeDefinition::from_vec(grid);
     }
 
     #[test]
@@ -869,25 +867,25 @@ mod tests {
             vec![' ', ' ', ' '],
             vec![' ', ' ', ' ', ' ']
         ];
-        let _definition = Definition::from_vec(grid);
+        let _definition = MazeDefinition::from_vec(grid);
     }
 
     #[test]
     fn can_confirm_empty() {
-        let definition = Definition::new(0, 0);
+        let definition = MazeDefinition::new(0, 0);
         assert!(definition.is_empty());
     }
 
     #[test]
     fn can_confirm_not_empty() {
-        let definition = Definition::new(1, 1);
+        let definition = MazeDefinition::new(1, 1);
         assert!(!definition.is_empty());
     }
 
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn confirm_verify_not_empty_detects_empty() {
-        let definition = Definition::new(0, 0);
+        let definition = MazeDefinition::new(0, 0);
         if let Err(error) = definition.verify_not_empty() {
             panic!("{}", error.to_string());
         }
@@ -896,7 +894,7 @@ mod tests {
 
     #[test]
     fn confirm_verify_not_empty_ignores_non_empty() {
-        let definition = Definition::new(1, 1);
+        let definition = MazeDefinition::new(1, 1);
         if let Err(error) = definition.verify_not_empty() {
             panic!("{}", error.to_string());
         }
@@ -904,7 +902,7 @@ mod tests {
 
     #[test]
     fn can_resize_empty_to_empty() {
-        let mut definition = Definition::new(0, 0);
+        let mut definition = MazeDefinition::new(0, 0);
         definition.resize(0, 0);
         assert_eq!(definition.row_count(), 0);
         assert_eq!(definition.col_count(), 0);
@@ -912,7 +910,7 @@ mod tests {
 
     #[test]
     fn can_resize_to_empty() {
-        let mut definition = Definition::new(10, 5);
+        let mut definition = MazeDefinition::new(10, 5);
         definition.resize(0, 0);
         assert_eq!(definition.row_count(), 0);
         assert_eq!(definition.col_count(), 0);
@@ -925,7 +923,7 @@ mod tests {
             vec!['W', ' ', ' '],
             vec![' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         assert_eq!(definition.row_count(), 2);
         assert_eq!(definition.col_count(), 3);
         definition.resize(3, 5);
@@ -947,7 +945,7 @@ mod tests {
             vec!['W', ' ', ' '],
             vec![' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         assert_eq!(definition.row_count(), 2);
         assert_eq!(definition.col_count(), 3);
         definition.resize(2, 1);
@@ -968,7 +966,7 @@ mod tests {
             vec!['W', ' ', ' '],
             vec![' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         assert_eq!(definition.row_count(), 2);
         assert_eq!(definition.col_count(), 3);
         definition.resize(1, 2);
@@ -983,7 +981,7 @@ mod tests {
 
     #[test]
     fn can_serialize_empty_1() {
-        let definition = Definition::new(0, 0);
+        let definition = MazeDefinition::new(0, 0);
         let s = serde_json::to_string(&definition).expect("Failed to serialize");
         assert_eq!(s, r#"{"grid":[]}"#);
     }
@@ -991,7 +989,7 @@ mod tests {
     #[test]
     fn can_serialize_empty_2() {
         let grid: Vec<Vec<char>> = vec![];
-        let definition = Definition::from_vec(grid);
+        let definition = MazeDefinition::from_vec(grid);
         let s = serde_json::to_string(&definition).expect("Failed to serialize");
         assert_eq!(s, r#"{"grid":[]}"#);
     }
@@ -1003,7 +1001,7 @@ mod tests {
             vec![' ', ' ', ' '],
             vec![' ', ' ', ' ']
         ];
-        let definition = Definition::from_vec(grid);
+        let definition = MazeDefinition::from_vec(grid);
         let s = serde_json::to_string(&definition).expect("Failed to serialize");
         assert_eq!(s, r#"{"grid":[[" "," "," "],[" "," "," "]]}"#);
     }
@@ -1015,7 +1013,7 @@ mod tests {
             vec![' ', 'W', ' '],
             vec![' ', ' ', 'W']
         ];
-        let definition = Definition::from_vec(grid);
+        let definition = MazeDefinition::from_vec(grid);
         let s = serde_json::to_string(&definition).expect("Failed to serialize");
         assert_eq!(s, r#"{"grid":[[" ","W"," "],[" "," ","W"]]}"#);
     }
@@ -1027,7 +1025,7 @@ mod tests {
             vec!['S', 'W', ' '],
             vec![' ', 'F', 'W']
         ];
-        let definition = Definition::from_vec(grid);
+        let definition = MazeDefinition::from_vec(grid);
         let s = serde_json::to_string(&definition).expect("Failed to serialize");
         assert_eq!(s, r#"{"grid":[["S","W"," "],[" ","F","W"]]}"#);
     }
@@ -1035,7 +1033,7 @@ mod tests {
     #[test]
     fn can_deserialize_empty() {
         let s = r#"{"grid":[]}"#;
-        let d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
         assert_eq!(d.row_count(), 0);
         assert_eq!(d.col_count(), 0);
     }
@@ -1043,7 +1041,7 @@ mod tests {
     #[test]
     fn can_deserialize_non_empty() {
         let s = r#"{"grid":[["S","W"," "],["F"," ","W"]]}"#;
-        let d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
         assert_eq!(d.row_count(), 2);
         assert_eq!(d.col_count(), 3);
         let grid: Vec<Vec<char>> = vec![vec!['S', 'W', ' '], vec!['F', ' ', 'W']];
@@ -1054,56 +1052,56 @@ mod tests {
     #[should_panic(expected = "EOF while parsing an object")]
     fn cannot_deserialize_bad_json_format_incomplete_object() {
         let s = "{";
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "expected value")]
     fn cannot_deserialize_bad_json_format_no_open_object() {
         let s = "}";
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "expected value")]
     fn cannot_deserialize_bad_json_format_missing_field_value() {
         let s = r#"{"grid":}"#;
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "EOF while parsing a string")]
     fn cannot_deserialize_bad_json_format_field_name_not_closed() {
         let s = r#"{"grid:}"#;
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "key must be a string")]
     fn cannot_deserialize_bad_json_format_field_name_not_quoted() {
         let s = "{grid:}";
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = r#"invalid type: string \"a\", expected a sequence"#)]
     fn cannot_deserialize_json_with_non_vec_grid_value() {
         let s = r#"{"grid":"a"}"#;
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "missing field `grid`")]
     fn cannot_deserialize_json_missing_grid_field() {
         let s = "{}";
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "unknown field `grid2`")]
     fn cannot_deserialize_json_with_invalid_field_name() {
         let s = r#"{"grid2":[[" ","W"," "],[" "," ","W"]]}"#;
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
@@ -1112,28 +1110,28 @@ mod tests {
     )]
     fn cannot_deserialize_bad_json_invalid_char_1() {
         let s = r#"{"grid":[["S","X"," "],["F"," ","W"]]}"#;
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = r#"invalid value: string \"XX\", expected a character"#)]
     fn cannot_deserialize_bad_json_invalid_char_2() {
         let s = r#"{"grid":[["S","XX"," "],["F"," ","W"]]}"#;
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "too many start characters `S`")]
     fn cannot_deserialize_bad_json_more_than_one_start_char() {
         let s = r#"{"grid":[["S"," "," "],["F","S","W"]]}"#;
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "too many finish characters `F`")]
     fn cannot_deserialize_bad_json_more_than_one_finish_char() {
         let s = r#"{"grid":[["S"," "," "],["F","F","W"]]}"#;
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
@@ -1142,13 +1140,13 @@ mod tests {
     )]
     fn cannot_deserialize_bad_json_with_different_col_counts() {
         let s = r#"{"grid":[[" "," "," "],[" "," "]]}"#;
-        let _d: Definition = serde_json::from_str(s).expect("Failed to deserialize");
+        let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn cannot_delete_cols_if_empty() {
-        let mut definition = Definition::new(0, 0);
+        let mut definition = MazeDefinition::new(0, 0);
         definition.delete_cols(0, 1).expect("delete_cols() failed");
     }
 
@@ -1159,7 +1157,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.delete_cols(1, 2).expect("delete_cols() failed");
         assert_eq!(definition.col_count(), 2);
     }
@@ -1172,7 +1170,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.delete_cols(4, 2).expect("delete_cols() failed");
     }
 
@@ -1184,14 +1182,14 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.delete_cols(2, 3).expect("delete_cols() failed");
     }
 
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn cannot_insert_cols_if_empty() {
-        let mut definition = Definition::new(0, 0);
+        let mut definition = MazeDefinition::new(0, 0);
         definition.insert_cols(0, 1).expect("insert_cols() failed");
         assert_empty_cols(&definition, 0, 1);
     }
@@ -1203,7 +1201,7 @@ mod tests {
             vec![' ', 'W', ' ', 'W'],
             vec![' ', 'W', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.insert_cols(1, 2).expect("insert_cols() failed");
         assert_eq!(definition.col_count(), 6);
         assert_empty_cols(&definition, 1, 2);
@@ -1216,7 +1214,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.insert_cols(1, 0).expect("insert_cols() failed");
         assert_eq!(definition.col_count(), 4);
     }
@@ -1229,7 +1227,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.insert_cols(5, 2).expect("insert_cols() failed");
     }
 
@@ -1240,7 +1238,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.insert_cols(4, 2).expect("insert_cols() failed");
         assert_eq!(definition.col_count(), 6);
         assert_empty_cols(&definition, 4, 5);
@@ -1249,7 +1247,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "definition is empty")]
     fn cannot_delete_rows_if_empty() {
-        let mut definition = Definition::new(0, 0);
+        let mut definition = MazeDefinition::new(0, 0);
         definition.delete_rows(0, 1).expect("delete_rows() failed");
     }
 
@@ -1261,7 +1259,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.delete_rows(0, 2).expect("delete_rows() failed");
         assert_eq!(definition.row_count(), 1);
         assert_eq!(definition.col_count(), 4);
@@ -1275,7 +1273,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.delete_rows(0, 3).expect("delete_rows() failed");
         assert_eq!(definition.row_count(), 0);
         assert_eq!(definition.col_count(), 0);
@@ -1289,7 +1287,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.delete_rows(2, 1).expect("delete_rows() failed");
     }
 
@@ -1301,7 +1299,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.delete_rows(1, 2).expect("delete_rows() failed");
     }
 
@@ -1312,7 +1310,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.insert_rows(1, 3).expect("insert_rows() failed");
         assert_eq!(definition.row_count(), 5);
         assert_empty_rows(&definition, 1, 3);
@@ -1325,7 +1323,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.insert_rows(1, 0).expect("insert_rows() failed");
         assert_eq!(definition.row_count(), 2);
     }
@@ -1338,7 +1336,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.insert_rows(3, 2).expect("insert_rows() failed");
     }
 
@@ -1349,7 +1347,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition.insert_rows(2, 2).expect("insert_rows() failed");
         assert_eq!(definition.row_count(), 4);
         assert_empty_rows(&definition, 2, 3);
@@ -1362,10 +1360,10 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', 'S', 'W']
         ];
-        let definition = Definition::from_vec(grid);
+        let definition = MazeDefinition::from_vec(grid);
         match definition.get_start() {
             Some(start) => {
-                assert_eq!(start, Point { row: 1, col: 2 });
+                assert_eq!(start, MazePoint { row: 1, col: 2 });
             }
             None => {
                 panic!("Failed to find start")
@@ -1380,7 +1378,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let definition = Definition::from_vec(grid);
+        let definition = MazeDefinition::from_vec(grid);
         if let Some(start) = definition.get_start() {
             panic!("Unexpectedly found start at {}", start);
         };
@@ -1393,14 +1391,14 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', 'S', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
-        match definition.set_start(Some(Point { row: 1, col: 0 })) {
+        let mut definition = MazeDefinition::from_vec(grid);
+        match definition.set_start(Some(MazePoint { row: 1, col: 0 })) {
             Err(error) => {
                 panic!("Failed to reset start: {}", error);
             }
             _ => {
                 let new_start = definition.get_start().unwrap();
-                assert_eq!(new_start, Point { row: 1, col: 0 });
+                assert_eq!(new_start, MazePoint { row: 1, col: 0 });
             }
         }
     }
@@ -1413,9 +1411,9 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', 'S', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition
-            .set_start(Some(Point { row: 1, col: 8 }))
+            .set_start(Some(MazePoint { row: 1, col: 8 }))
             .expect("set_start() failed");
     }
 
@@ -1426,10 +1424,10 @@ mod tests {
             vec![' ', ' ', 'F', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let definition = Definition::from_vec(grid);
+        let definition = MazeDefinition::from_vec(grid);
         match definition.get_finish() {
             Some(finish) => {
-                assert_eq!(finish, Point { row: 0, col: 2 });
+                assert_eq!(finish, MazePoint { row: 0, col: 2 });
             }
             None => {
                 panic!("Failed to find finish")
@@ -1444,7 +1442,7 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', ' ', 'W']
         ];
-        let definition = Definition::from_vec(grid);
+        let definition = MazeDefinition::from_vec(grid);
         if let Some(finish) = definition.get_finish() {
             panic!("Unexpectedly found finish at {}", finish);
         };
@@ -1457,14 +1455,14 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', 'F', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
-        match definition.set_finish(Some(Point { row: 0, col: 1 })) {
+        let mut definition = MazeDefinition::from_vec(grid);
+        match definition.set_finish(Some(MazePoint { row: 0, col: 1 })) {
             Err(error) => {
                 panic!("Failed to reset finish: {}", error);
             }
             _ => {
                 let new_finish = definition.get_finish().unwrap();
-                assert_eq!(new_finish, Point { row: 0, col: 1 });
+                assert_eq!(new_finish, MazePoint { row: 0, col: 1 });
             }
         }
     }
@@ -1477,17 +1475,17 @@ mod tests {
             vec![' ', ' ', ' ', 'W'],
             vec![' ', ' ', 'F', 'W']
         ];
-        let mut definition = Definition::from_vec(grid);
+        let mut definition = MazeDefinition::from_vec(grid);
         definition
-            .set_finish(Some(Point { row: 1, col: 8 }))
+            .set_finish(Some(MazePoint { row: 1, col: 8 }))
             .expect("set_finish() failed");
     }
 
     #[test]
     fn can_set_value_valid_range() {
-        let mut definition = Definition::new(5, 4);
-        let from = Point { row: 1, col: 1 };
-        let to = Point { row: 3, col: 2 };
+        let mut definition = MazeDefinition::new(5, 4);
+        let from = MazePoint { row: 1, col: 1 };
+        let to = MazePoint { row: 3, col: 2 };
         definition
             .set_value(from.clone(), to.clone(), 'W')
             .expect("set_value() failed");
@@ -1497,9 +1495,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "invalid 'from' point [6, 1]")]
     fn cannot_set_value_invalid_from() {
-        let mut definition = Definition::new(5, 4);
-        let from = Point { row: 6, col: 1 };
-        let to = Point { row: 2, col: 2 };
+        let mut definition = MazeDefinition::new(5, 4);
+        let from = MazePoint { row: 6, col: 1 };
+        let to = MazePoint { row: 2, col: 2 };
         definition
             .set_value(from, to, 'W')
             .expect("set_value() failed");
@@ -1508,9 +1506,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "invalid 'to' point [6, 2]")]
     fn cannot_set_value_invalid_to() {
-        let mut definition = Definition::new(5, 4);
-        let from = Point { row: 1, col: 1 };
-        let to = Point { row: 6, col: 2 };
+        let mut definition = MazeDefinition::new(5, 4);
+        let from = MazePoint { row: 1, col: 1 };
+        let to = MazePoint { row: 6, col: 2 };
         definition
             .set_value(from, to, 'W')
             .expect("set_value() failed");
@@ -1519,16 +1517,16 @@ mod tests {
     #[test]
     #[should_panic(expected = "invalid 'value' ('X')")]
     fn cannot_set_value_invalid_value() {
-        let mut definition = Definition::new(5, 4);
-        let from = Point { row: 1, col: 1 };
-        let to = Point { row: 3, col: 2 };
+        let mut definition = MazeDefinition::new(5, 4);
+        let from = MazePoint { row: 1, col: 1 };
+        let to = MazePoint { row: 3, col: 2 };
         definition
             .set_value(from, to, 'X')
             .expect("set_value() failed");
     }
 
     // Private test helper functions
-    fn assert_empty_cols(d: &Definition, start_col: usize, end_col: usize) {
+    fn assert_empty_cols(d: &MazeDefinition, start_col: usize, end_col: usize) {
         let row_count = d.row_count();
         for row_idx in 0..row_count {
             for col_idx in start_col..(end_col + 1) {
@@ -1537,7 +1535,7 @@ mod tests {
         }
     }
 
-    fn assert_empty_rows(d: &Definition, start_row: usize, end_row: usize) {
+    fn assert_empty_rows(d: &MazeDefinition, start_row: usize, end_row: usize) {
         let col_count = d.col_count();
         for row_idx in start_row..(end_row + 1) {
             for col_idx in 0..col_count {
@@ -1546,7 +1544,7 @@ mod tests {
         }
     }
 
-    fn assert_cell_value(d: &Definition, from: Point, to: Point, expected: char) {
+    fn assert_cell_value(d: &MazeDefinition, from: MazePoint, to: MazePoint, expected: char) {
         let top_row = from.row.min(to.row);
         let bottom_row = from.row.max(to.row);
         let left_col = from.col.min(to.col);

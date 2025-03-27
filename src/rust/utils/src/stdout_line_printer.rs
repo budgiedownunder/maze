@@ -33,8 +33,7 @@ impl LinePrinter for StdoutLinePrinter {
     /// # Examples
     ///
     /// ```
-    /// use maze::LinePrinter;
-    /// use maze::StdoutLinePrinter;
+    /// use utils::{LinePrinter, StdoutLinePrinter};
     /// let mut print_target = StdoutLinePrinter::new();
     /// print_target.print_line("First line of text");
     /// print_target.print_line("Second line of text");

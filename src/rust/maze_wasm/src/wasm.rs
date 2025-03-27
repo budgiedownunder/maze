@@ -1,5 +1,6 @@
 use crate::wasm_common::{new_maze, to_cell_type_enum, MazeWasm};
-use maze::{Point, Solution};
+use data_model::MazePoint;
+use maze::{MazeSolver, MazeSolution};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ptr;
 /// Creates a new, empty `MazeWasm`
@@ -20,6 +21,7 @@ pub extern "C" fn new_maze_wasm() -> *mut MazeWasm {
 ///
 /// Nothing
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn free_maze_wasm(maze_wasm: *mut MazeWasm) {
     if !maze_wasm.is_null() {
@@ -35,6 +37,7 @@ pub extern "C" fn free_maze_wasm(maze_wasm: *mut MazeWasm) {
 ///
 /// Row count
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_row_count(maze_wasm: *mut MazeWasm) -> u32 {
     let maze_wasm = unsafe { &*maze_wasm };
@@ -46,6 +49,7 @@ pub extern "C" fn maze_wasm_get_row_count(maze_wasm: *mut MazeWasm) -> u32 {
 ///
 /// Column count
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_col_count(maze_wasm: *mut MazeWasm) -> u32 {
     let maze_wasm = unsafe { &*maze_wasm };
@@ -57,6 +61,7 @@ pub extern "C" fn maze_wasm_get_col_count(maze_wasm: *mut MazeWasm) -> u32 {
 ///
 /// A `MazeWasmResult` containing either the cell type (as the `value_ptr`) if successful, or an `error_ptr`
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_cell_type(maze_wasm: *mut MazeWasm, row: u32, col: u32) -> u32 {
     let maze_wasm = unsafe { &*maze_wasm };
@@ -79,6 +84,7 @@ pub extern "C" fn maze_wasm_get_cell_type(maze_wasm: *mut MazeWasm, row: u32, co
 ///
 /// Zero if successful, else an error pointer
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_set_start_cell(
     maze_wasm: *mut MazeWasm,
@@ -87,7 +93,7 @@ pub extern "C" fn maze_wasm_set_start_cell(
 ) -> u32 {
     let maze_wasm = unsafe { &mut *maze_wasm };
     let mut error_ptr: u32 = 0;
-    if let Err(error) = maze_wasm.maze.definition.set_start(Some(Point {
+    if let Err(error) = maze_wasm.maze.definition.set_start(Some(MazePoint {
         row: start_row as usize,
         col: start_col as usize,
     })) {
@@ -101,7 +107,7 @@ pub extern "C" fn maze_wasm_set_start_cell(
 ///
 /// A `MazeWasmResult` containing either the start cell point (as the `value_ptr`) if successful, 
 /// or an `error_ptr``
-///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_start_cell(maze_wasm: *mut MazeWasm) -> u32 {
     let maze_wasm = unsafe { &*maze_wasm };
@@ -116,6 +122,7 @@ pub extern "C" fn maze_wasm_get_start_cell(maze_wasm: *mut MazeWasm) -> u32 {
 ///
 /// Zero if successful, else an error pointer
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_set_finish_cell(
     maze_wasm: *mut MazeWasm,
@@ -124,7 +131,7 @@ pub extern "C" fn maze_wasm_set_finish_cell(
 ) -> u32 {
     let maze_wasm = unsafe { &mut *maze_wasm };
     let mut error_ptr: u32 = 0;
-    if let Err(error) = maze_wasm.maze.definition.set_finish(Some(Point {
+    if let Err(error) = maze_wasm.maze.definition.set_finish(Some(MazePoint {
         row: finish_row as usize,
         col: finish_col as usize,
     })) {
@@ -139,6 +146,7 @@ pub extern "C" fn maze_wasm_set_finish_cell(
 /// A `MazeWasmResult` containing either the finish cell point (as the `value_ptr`) if successful, 
 /// or an `error_ptr``
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_get_finish_cell(maze_wasm: *mut MazeWasm) -> u32 {
     let maze_wasm = unsafe { &*maze_wasm };
@@ -164,11 +172,11 @@ fn set_cell_values(
     let maze_wasm = unsafe { &mut *maze_wasm };
     let mut error_ptr: u32 = 0;
     if let Err(error) = maze_wasm.maze.definition.set_value(
-        Point {
+        MazePoint {
             row: start_row as usize,
             col: start_col as usize,
         },
-        Point {
+        MazePoint {
             row: end_row as usize,
             col: end_col as usize,
         },
@@ -217,6 +225,7 @@ pub extern "C" fn maze_wasm_clear_cells(
 ///
 /// Zero if successful, else an error pointer
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)] 
 #[no_mangle]
 pub extern "C" fn maze_wasm_resize(
     maze_wasm: *mut MazeWasm,
@@ -235,6 +244,7 @@ pub extern "C" fn maze_wasm_resize(
 ///
 /// Zero if successful, else an error pointer
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_reset(maze_wasm: *mut MazeWasm) {
     let maze_wasm = unsafe { &mut *maze_wasm };
@@ -272,6 +282,7 @@ pub extern "C" fn free_maze_wasm_error(error_ptr: u32) {
 ///
 /// Zero if successful, else an error pointer
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_insert_rows(
     maze_wasm: *mut MazeWasm,
@@ -295,6 +306,7 @@ pub extern "C" fn maze_wasm_insert_rows(
 ///
 /// Zero if successful, else an error pointer
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_delete_rows(
     maze_wasm: *mut MazeWasm,
@@ -318,6 +330,7 @@ pub extern "C" fn maze_wasm_delete_rows(
 ///
 /// Zero if successful, else an error pointer
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub fn maze_wasm_insert_cols(maze_wasm: *mut MazeWasm, start_col: u32, count: u32) -> u32 {
     let mut error_ptr: u32 = 0;
@@ -337,6 +350,7 @@ pub fn maze_wasm_insert_cols(maze_wasm: *mut MazeWasm, start_col: u32, count: u3
 ///
 /// Zero if successful, else an error pointer
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub fn maze_wasm_delete_cols(maze_wasm: *mut MazeWasm, start_col: u32, count: u32) -> u32 {
     let mut error_ptr: u32 = 0;
@@ -356,6 +370,7 @@ pub fn maze_wasm_delete_cols(maze_wasm: *mut MazeWasm, start_col: u32, count: u3
 ///
 /// Boolean
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub fn maze_wasm_is_empty(maze_wasm: *mut MazeWasm) -> bool {
     let maze_wasm = unsafe { &mut *maze_wasm };
@@ -367,6 +382,7 @@ pub fn maze_wasm_is_empty(maze_wasm: *mut MazeWasm) -> bool {
 ///
 /// Zero if successful, else an error pointer
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub fn maze_wasm_from_json(maze_wasm: *mut MazeWasm, json_string_ptr: *mut u8) -> u32 {
     let mut error_ptr: u32 = 0;
@@ -459,7 +475,7 @@ fn create_maze_wasm_enum_result(value: u32) -> u32 {
 ///
 /// `MazeWasmResult` with the `value_ptr` set to the allocated point value
 ///
-fn create_maze_wasm_point_result(point: &Point) -> u32 {
+fn create_maze_wasm_point_result(point: &MazePoint) -> u32 {
     to_maze_wasm_result_ptr(
         MazeWasmResultValueType::Point as u8,
         to_point_ptr(point),
@@ -472,7 +488,7 @@ fn create_maze_wasm_point_result(point: &Point) -> u32 {
 ///
 /// `MazeWasmResult` with the `value_ptr` set to the solution pointer
 ///
-fn create_maze_wasm_solution_result(solution: Solution) -> u32 {
+fn create_maze_wasm_solution_result(solution: MazeSolution) -> u32 {
     to_maze_wasm_result_ptr(
         MazeWasmResultValueType::Solution as u8,
         to_solution_ptr(solution),
@@ -505,7 +521,7 @@ pub extern "C" fn free_maze_wasm_result(result_ptr: u32, free_value_ptr: bool) {
                         free_sized_memory((*result_ptr).value_ptr as *mut u8);
                     }
                     MazeWasmResultValueType::Solution => {
-                        free_maze_wasm_solution((*result_ptr).value_ptr as *mut Solution);
+                        free_maze_wasm_solution((*result_ptr).value_ptr as *mut MazeSolution);
                     }
                     _ => {}
                 }
@@ -529,6 +545,7 @@ pub extern "C" fn free_maze_wasm_result(result_ptr: u32, free_value_ptr: bool) {
 /// `MazeWasmResult` with the `value_ptr` set to the JSON string pointer,
 /// else the `error_ptr` set to non-zero if the function fails
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_to_json(maze_wasm: *mut MazeWasm) -> u32 {
     let maze_wasm = unsafe { &mut *maze_wasm };
@@ -545,6 +562,7 @@ pub extern "C" fn maze_wasm_to_json(maze_wasm: *mut MazeWasm) -> u32 {
 /// `MazeWasmResult` with the `value_ptr` set to the solution pointer,
 /// else the `error_ptr` set to non-zero if the function fails
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_wasm_solve(maze_wasm: *mut MazeWasm) -> u32 {
     let maze_wasm = unsafe { &mut *maze_wasm };
@@ -564,8 +582,9 @@ pub extern "C" fn maze_wasm_solve(maze_wasm: *mut MazeWasm) -> u32 {
 /// num_points * 8 bytes containing:
 ///     row (u32)     = 4 bytes
 ///     columns (u32) = 4 bytes
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
-pub extern "C" fn maze_wasm_solution_get_path_points(solution: *mut Solution) -> u32 {
+pub extern "C" fn maze_wasm_solution_get_path_points(solution: *mut MazeSolution) -> u32 {
     let solution = unsafe { &mut *solution };
     let num_points = solution.path.points.len();
     let length = 4 + num_points * 8;
@@ -575,9 +594,9 @@ pub extern "C" fn maze_wasm_solution_get_path_points(solution: *mut Solution) ->
         ptr::write(points_data_ptr as *mut u32, num_points as u32);
         points_data_ptr = points_data_ptr.add(4);
         for point in &solution.path.points {
-            points_data_ptr = write_point(points_data_ptr, &point);
+            points_data_ptr = write_point(points_data_ptr, point);
         }
-        return mem_ptr as u32;
+        mem_ptr as u32
     }
 }
 /// Allocates a `MazeWasmError`
@@ -605,27 +624,27 @@ fn to_string_ptr(str: &str) -> u32 {
         let string_data_ptr = string_ptr.add(4);
         ptr::copy_nonoverlapping(str.as_ptr(), string_data_ptr, length);
     }
-    return string_ptr as u32;
+    string_ptr as u32
 }
 /// Converts a point to a point pointer in sized memory
 ///
 /// # Returns
 ///
 /// Pointer to point
-fn to_point_ptr(point: &Point) -> u32 {
+fn to_point_ptr(point: &MazePoint) -> u32 {
     let point_ptr = allocate_sized_memory(8);
     unsafe {
         let point_data_ptr = point_ptr.add(4);
         let _ = write_point(point_data_ptr, point);
     }
-    return point_ptr as u32;
+    point_ptr as u32
 }
 /// Writes a point to a memory pointer
 ///
 /// # Returns
 ///
 /// Pointer to memory directly after the written point
-fn write_point(ptr: *mut u8, point: &Point) -> *mut u8 {
+fn write_point(ptr: *mut u8, point: &MazePoint) -> *mut u8 {
     unsafe {
         ptr::write(ptr as *mut u32, point.row as u32);
         let ptr = ptr.add(4);
@@ -638,10 +657,10 @@ fn write_point(ptr: *mut u8, point: &Point) -> *mut u8 {
 /// # Returns
 ///
 /// Pointer to boxed solution pointer
-fn to_solution_ptr(solution: Solution) -> u32 {
+fn to_solution_ptr(solution: MazeSolution) -> u32 {
     let boxed_solution = Box::new(solution);
     increment_num_objects_allocated();
-    return Box::into_raw(boxed_solution) as u32;
+    Box::into_raw(boxed_solution) as u32
 }
 /// Frees a maze solution pointer
 ///
@@ -649,8 +668,9 @@ fn to_solution_ptr(solution: Solution) -> u32 {
 ///
 /// Nothing
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
-pub extern "C" fn free_maze_wasm_solution(solution_ptr: *mut Solution) {
+pub extern "C" fn free_maze_wasm_solution(solution_ptr: *mut MazeSolution) {
     if !solution_ptr.is_null() {
         unsafe {
             let _ = Box::from_raw(solution_ptr);
@@ -720,7 +740,7 @@ pub extern "C" fn allocate_sized_memory(size: usize) -> *mut u8 {
         return std::ptr::null_mut();
     }
     unsafe {
-        TOTAL_SIZED_MEM_USED = TOTAL_SIZED_MEM_USED + total_size as i64;
+        TOTAL_SIZED_MEM_USED += total_size as i64;
     }
     unsafe {
         ptr::write(ptr as *mut u32, size as u32);
@@ -733,6 +753,7 @@ pub extern "C" fn allocate_sized_memory(size: usize) -> *mut u8 {
 ///
 /// Nothing
 ///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn free_sized_memory(ptr: *mut u8) {
     if !ptr.is_null() {
@@ -741,7 +762,7 @@ pub extern "C" fn free_sized_memory(ptr: *mut u8) {
             let total_size = size + 4;
             let layout = Layout::from_size_align(total_size, 1).unwrap();
             dealloc(ptr, layout);
-            TOTAL_SIZED_MEM_USED = TOTAL_SIZED_MEM_USED - total_size as i64;
+            TOTAL_SIZED_MEM_USED -= total_size as i64;
         }
     }
 }
@@ -767,7 +788,7 @@ pub extern "C" fn get_num_objects_allocated() -> i64 {
 ///
 fn increment_num_objects_allocated() {
     unsafe {
-        TOTAL_NUM_OBJECTS_ALLOCATED = TOTAL_NUM_OBJECTS_ALLOCATED + 1;
+        TOTAL_NUM_OBJECTS_ALLOCATED += 1;
     }
 }
 /// Decrements the total amount of objects currently allocated by 1 
@@ -778,6 +799,6 @@ fn increment_num_objects_allocated() {
 ///
 fn decrement_num_objects_allocated() {
     unsafe {
-        TOTAL_NUM_OBJECTS_ALLOCATED = TOTAL_NUM_OBJECTS_ALLOCATED - 1;
+        TOTAL_NUM_OBJECTS_ALLOCATED -= 1;
     }
 }

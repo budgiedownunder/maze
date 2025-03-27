@@ -1,27 +1,18 @@
 use std::fs;
-use std::path::Path;
-use std::thread::sleep;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
 
-/// Deletes a file and waits to ensure it is no longer visible in the operating system (in case there is any lag)
-pub fn delete_file(file: &str) {
-    let _ = fs::remove_file(file);
-    let mut count = 0;
-    loop {
-        // Secondary check, in case there is lag in the operating system
-        if !Path::new(file).exists() {
-            break;
-        }
-        count += 1;
-        if count == 10 {
-            break;
-        }
-        sleep(Duration::from_millis(10));
-    }
+/// Checks whether a file exists
+pub fn file_exists(file_path: &str) -> bool {
+    let path = PathBuf::from(file_path);
+    Path::new(&path).is_file()
 }
 
-/// Deletes all files in a given directory with a given extension, waiting to ensure 
-/// they are no longer visible in the operating system (in case there is any lag)
+/// Deletes a file
+pub fn delete_file(file: &str) {
+    let _ = fs::remove_file(file);
+}
+
+/// Deletes all files in a given directory with a given extension
 pub fn delete_files_with_ext(dir: &str, extension: &str) -> std::io::Result<()> {
     let files = fs::read_dir(dir)?;
     for file in files {
@@ -30,13 +21,21 @@ pub fn delete_files_with_ext(dir: &str, extension: &str) -> std::io::Result<()> 
         if path.is_file() {
             if let Some(ext) = path.extension() {
                 if ext == extension {
-                    if let Some(file_name) = path.file_name() {
-                        let file_name_str = file_name.to_string_lossy();
-                        delete_file(&file_name_str);
-                    }
+                    delete_file(&path.to_string_lossy());
                 }
             }
         }
     }
     Ok(())
+}
+
+/// Checks whether a directory exists
+pub fn dir_exists(dir_path: &str) -> bool {
+    let path = PathBuf::from(dir_path);
+    Path::new(&path).is_dir()
+}
+
+/// Deletes a directory
+pub fn delete_dir(dir: &str) {
+    let _ = fs::remove_dir_all(dir);
 }

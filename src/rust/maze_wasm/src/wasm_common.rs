@@ -1,4 +1,4 @@
-use maze::{Maze, Definition};
+use data_model::{Maze, MazeDefinition};
 #[cfg(feature = "wasm-bindgen")]
 use wasm_bindgen::prelude::*;
 
@@ -9,19 +9,14 @@ use wasm_bindgen::prelude::*;
 //************************************************************************************************************/
 
 #[cfg(feature = "wasm-bindgen")]
-#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
-/// Web assembly representation of a maze
+#[wasm_bindgen]
 pub struct MazeWasm {
-    //#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen(skip))] - does not work
     #[wasm_bindgen(skip)]
     pub maze: Maze,
 }
-
 #[cfg(not(feature = "wasm-bindgen"))]
-#[cfg_attr(not(feature = "wasm-bindgen"), repr(C))]
-/// Web assembly representation of a maze
+#[repr(C)]
 pub struct MazeWasm {
-    //#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen(skip))] - does not work
     pub maze: Maze,
 }
 
@@ -33,15 +28,24 @@ impl Clone for MazeWasm {
     }
 }
 
-#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
-#[cfg_attr(not(feature = "wasm-bindgen"), repr(C))]
-/// Web assembly enum for a maze cell type
+#[cfg(feature = "wasm-bindgen")]
+#[wasm_bindgen]
 pub enum MazeCellTypeWasm {
     Empty,
     Start,
     Finish,
     Wall,
 }
+
+#[cfg(not(feature = "wasm-bindgen"))]
+#[repr(C)]
+pub enum MazeCellTypeWasm {
+    Empty,
+    Start,
+    Finish,
+    Wall,
+}
+
 /// Converts a cell type character to a MazeCellTypeWasm value
 ///
 /// # Returns
@@ -63,7 +67,7 @@ pub fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
 /// `Maze`
 ///
 pub fn new_maze() -> Maze {
-    let def = Definition::new(0, 0);
+    let def = MazeDefinition::new(0, 0);
     Maze::new(def)
 }
 

@@ -1,18 +1,21 @@
 // Re-export modules
+mod error;
 mod file_store;
-mod store;
-mod store_error;
+pub mod store;
+pub mod validation;
 
 // Re-export traits and structs
-pub use file_store::FileStore;
+pub use error::Error;
+pub use file_store::{FileStore, FileStoreConfig};
 pub use store::MazeItem;
+pub use store::MazeStore;
 pub use store::Store;
 pub use store::SharedStore;
-pub use store_error::StoreError;
+pub use store::UserStore;
 
-/// Represents the supported store types
-pub enum StoreType {
-    File,
+/// Represents the supported store configurations
+pub enum StoreConfig {
+    File(FileStoreConfig),
 }
 
 /// Creates and returns a store of the given type
@@ -26,16 +29,15 @@ pub enum StoreType {
 /// Try to create and then reload a maze from within a file store and, if successful, print it
 ///
 /// ```
-/// use storage::{get_store, StoreType};
-/// use maze::StdoutLinePrinter;
-/// use maze::Maze;
-/// use maze::Path;
+/// # // Make sure the store is in a suitable state prior to running the doc test
+/// # use storage::test_setup::setup;
+/// # setup();
 ///
-
-/// # // Ensure the maze file does not exist, prior to running the doc test   
-/// # use utils::file::delete_file;
-/// # delete_file("./maze_1.json");
-
+/// use data_model::{Maze, User};
+/// use maze::{MazePath, MazePrinter};
+/// use storage::{FileStoreConfig, get_store, Store,  StoreConfig, Error};
+/// use utils::StdoutLinePrinter;
+///
 /// let grid: Vec<Vec<char>> = vec![
 ///    vec!['S', ' ', 'W'],
 ///    vec![' ', 'F', 'W']
@@ -44,21 +46,32 @@ pub enum StoreType {
 /// maze_to_create.name = "maze_1".to_string();
 ///
 /// // Access the file store
-/// match get_store(StoreType::File) {
+/// let file_config = FileStoreConfig::default();
+/// match get_store(StoreConfig::File(file_config)) {
 ///     Ok(mut store) => {
+///         // Locate the owner by username
+///         let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
+///         let owner = match find_user_result {
+///             Ok(user) => user,
+///             Err(error) => {
+///                 println!("Error fetching user: {:?}", error);
+///                 return ;
+///             }
+///         };
+///
 ///         // Create the maze within the store
-///         if let Err(error) = store.create_maze(&mut maze_to_create) {
+///         if let Err(error) = store.create_maze(&owner, &mut maze_to_create) {
 ///             panic!(
 ///                 "failed to create maze => {}",
 ///                 error
 ///             );
 ///         }
 ///         // Now reload the maze from the store
-///         match store.get_maze(&maze_to_create.id) {
+///         match store.get_maze(&owner, &maze_to_create.id) {
 ///             Ok(loaded_maze) => {
 ///                 println!("Successfully loaded maze:");
 ///                 let mut print_target = StdoutLinePrinter::new();
-///                 let empty_path = Path { points: vec![] };
+///                 let empty_path = MazePath { points: vec![] };
 ///                 loaded_maze.print(&mut print_target, empty_path);
 ///             }
 ///             Err(error) => {
@@ -78,8 +91,25 @@ pub enum StoreType {
 ///     }
 /// }
 /// ```
-pub fn get_store(store_type: StoreType) -> Result<Box<dyn Store>, StoreError> {
-    match store_type {
-        StoreType::File => Ok(Box::new(file_store::FileStore::new())),
+pub fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, Error> {
+    let store = match config
+    {
+        StoreConfig::File(file_config) => file_store::FileStore::new(&file_config),
+    };
+
+    Ok(Box::new(store))
+}
+
+/// Hidden module that provides setup functionality for doc tests.
+#[doc(hidden)]
+pub mod test_setup {
+    use crate::{FileStore, FileStoreConfig, store::Manage};
+    /// This function runs before every documentation test
+    pub fn setup() {
+        // Make sure any existing files and directories are cleared out
+        let mut store = FileStore::new(&FileStoreConfig::default());
+        if let Err(error) = store.empty() {
+            panic!("setup() failed to empty store: {}", error);
+        }
     }
 }

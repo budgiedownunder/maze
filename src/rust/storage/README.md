@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The `storage` crate is written in `Rust` and exposes structs, traits and functions for storing mazes and related objects.
+The `storage` crate is written in `Rust` and exposes structs, traits and functions for storing data objects.
 
 ## Getting Started
 

@@ -3,12 +3,10 @@ use std::io::{self};
 use std::thread::sleep;
 use std::time::Duration;
 
-use maze::LinePrinter;
-use maze::Maze;
-use maze::Path;
-use maze::Point;
-
+use data_model::{Maze, MazePoint, User};
+use maze::{MazePath, MazePrinter, MazeSolver};
 use storage::Store;
+use utils::LinePrinter;
 
 static WELCOME_BANNER: &str = r#"*********************************************
        *       Welcome to the Maze Console !!      *
@@ -39,6 +37,7 @@ static MENU: &str = r#"*********************************************
 static PRESS_ANY_KEY_TEXT: &str = "\n[** Press any key **]\n";
 pub trait App: LinePrinter {
     fn get_store(&mut self) -> &mut Box<dyn Store>;
+    fn get_user(&self) -> &User;
     fn get_maze(&self) -> &Maze;
     fn get_maze_mut(&mut self) -> &mut Maze;
     fn read_key(&mut self) -> Result<Option<char>, io::Error>;
@@ -49,7 +48,8 @@ pub trait App: LinePrinter {
     }
 
     fn maze_name_exists(&mut self, name: &str) -> bool {
-        if let Ok(_details) = self.get_store().find_maze_by_name(name) {
+        let owner = self.get_user().clone();
+        if let Ok(_details) = self.get_store().find_maze_by_name(&owner, name) {
             return true;
         }
         false
@@ -323,11 +323,11 @@ pub trait App: LinePrinter {
         if start {
             self.get_maze_mut()
                 .definition
-                .set_start(Some(Point { row, col }))?;
+                .set_start(Some(MazePoint { row, col }))?;
         } else {
             self.get_maze_mut()
                 .definition
-                .set_finish(Some(Point { row, col }))?;
+                .set_finish(Some(MazePoint { row, col }))?;
         }
         Ok(())
     }
@@ -357,11 +357,11 @@ pub trait App: LinePrinter {
         let end_row = self.prompt_number("End row:", Some(1), Some(num_rows))?;
         let end_col = self.prompt_number("End column:", Some(1), Some(num_cols))?;
         self.get_maze_mut().definition.set_value(
-            Point {
+            MazePoint {
                 row: start_row - 1,
                 col: start_col - 1,
             },
-            Point {
+            MazePoint {
                 row: end_row - 1,
                 col: end_col - 1,
             },
@@ -416,7 +416,7 @@ pub trait App: LinePrinter {
         self.print_maze_dimensions("Current")?;
         self.print_line("\nDefinition:\n")?;
         let maze = self.get_maze().clone();
-        let path = Path { points: vec![] };
+        let path = MazePath { points: vec![] };
         let print_target = self.get_line_printer();
         if maze.definition.is_empty() {
             print_target.print_line("Maze is empty")?;
@@ -450,8 +450,9 @@ pub trait App: LinePrinter {
 
     fn do_open(&mut self) -> Result<(), Box<dyn Error>> {
         let name = self.prompt_text("Enter name of maze to open: ")?;
-        let item = self.get_store().find_maze_by_name(&name)?;
-        let maze = self.get_store().get_maze(&item.id)?;
+        let owner = self.get_user().clone();
+        let item = self.get_store().find_maze_by_name(&owner, &name)?;
+        let maze = self.get_store().get_maze(&owner, &item.id)?;
         let id = maze.id.clone();
         *self.get_maze_mut() = maze;
         self.print_line(&format!(
@@ -462,7 +463,8 @@ pub trait App: LinePrinter {
     }
 
     fn get_maze_names(&mut self) -> Result<Vec<String>, Box<dyn Error>> {
-        let items = self.get_store().get_maze_items(false)?;
+        let owner = self.get_user().clone();
+        let items = self.get_store().get_maze_items(&owner, false)?;
         let mut names: Vec<String> = Vec::new();
         for item in items {
             names.push(item.name);
@@ -501,10 +503,11 @@ pub trait App: LinePrinter {
             maze.name = name.to_string();
         }
         let mut maze = self.get_maze().clone();
+        let owner = self.get_user().clone();
         if !name_exists {
-            self.get_store().create_maze(&mut maze)?;
+            self.get_store().create_maze(&owner, &mut maze)?;
         } else {
-            self.get_store().update_maze(&mut maze)?;
+            self.get_store().update_maze(&owner, &mut maze)?;
         }
         *self.get_maze_mut() = maze.clone();
         self.print_line(&format!("Saved as '{}'", name))?;
@@ -529,8 +532,9 @@ pub trait App: LinePrinter {
     }
 
     fn delete_maze(&mut self, name: &str) -> Result<(), Box<dyn Error>> {
-        let item = self.get_store().find_maze_by_name(name)?;
-        self.get_store().delete_maze(&item.id)?;
+        let owner = self.get_user().clone();
+        let item = self.get_store().find_maze_by_name(&owner, name)?;
+        self.get_store().delete_maze(&owner, &item.id)?;
         Ok(())
     }
 

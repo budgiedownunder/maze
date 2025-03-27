@@ -193,7 +193,7 @@
             string wasmExecutionFile = Path.Combine(executionPath, WASM_FILE_NAME);
             if (!File.Exists(wasmExecutionFile))
             {
-                throw new InvalidOperationException($"Web assembly file '{WASM_FILE_NAME}' not found at path ${wasmExecutionFile}");
+                throw new InvalidOperationException($"Web assembly file '{WASM_FILE_NAME}' not found at default path ${wasmExecutionFile}");
             }
 
             return wasmExecutionFile;

@@ -71,13 +71,6 @@ build_all.bat
 serve.bat
 ```
 
-Linux/macOS:
-
-```
-sh build_all.sh
-sh serve.sh
-```
-
 #### Combined (`.NET` and `Rust`)
 To generate and view combined documentation for the project's `.NET` (`C#`) assemblies and `Rust` crates, refer to the [README](../docfx/README.md) in the `docfx` project.
 

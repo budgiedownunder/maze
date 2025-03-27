@@ -3,14 +3,11 @@ use crate::console_app::ConsoleApp;
 use maze_console::app::App;
 use storage::get_store;
 
-// Helper functions
-//fn app_name() -> &'static str {
-//  env!("CARGO_PKG_NAME")
-//}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let store = get_store(storage::StoreType::File)?;
-    let mut app = ConsoleApp::new(store);
+    let file_config = storage::FileStoreConfig::default();
+    let mut store = get_store(storage::StoreConfig::File(file_config))?;
+    let user = store.init_default_admin_user("admin", "dummy_password_hash")?;
+    let mut app = ConsoleApp::new(store, &user);
     app.run()?;
     Ok(())
 }

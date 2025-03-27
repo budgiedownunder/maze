@@ -1,213 +1,28 @@
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::io::{self};
-use utoipa::ToSchema;
 
-use crate::solution::Solution;
-use crate::Definition;
-use crate::Direction;
-use crate::LinePrinter;
-use crate::MazeError;
-use crate::Path;
-use crate::Solver;
+use data_model::Maze;
+use utils::LinePrinter;
 
-#[allow(dead_code)]
-#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
-/// Represents a maze
-pub struct Maze {
-    pub id: String,
-    pub name: String,
-    /// Definition, containing the layout of the maze
-    pub definition: Definition,
-}
+use crate::Error;
+use crate::maze_solution::MazeSolution;
+use crate::MazePathDirection;
+use crate::MazePath;
+use crate::solver::Solver;
 
-impl PartialEq for Maze {
-    fn eq(&self, other: &Self) -> bool {
-        if self.id != other.id {
-            return false;
-        }
-
-        if let (Ok(self_json), Ok(other_json)) = (self.to_json(), other.to_json()) {
-            return self_json == other_json;
-        }
-
-        false
-    }
-}
-
-impl Maze {
-    /// Creates a new maze instance with the given definition
-    /// # Arguments
-    ///
-    /// * `definition` - Maze definition
-    ///
-    /// # Returns
-    ///
-    /// A new maze instance
-    ///
-    /// # Examples
-    ///
-    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column
-    ///
-    /// ```
-    /// use maze::Definition;
-    /// use maze::Maze;
-    /// let grid: Vec<Vec<char>> = vec![
-    ///    vec!['S', ' ', 'W'],
-    ///    vec![' ', 'F', 'W']
-    /// ];
-    /// let def = Definition::from_vec(grid);
-    /// let maze = Maze::new(def);
-    /// assert_eq!(maze.definition.row_count(), 2);
-    /// assert_eq!(maze.definition.col_count(), 3);
-    pub fn new(definition: Definition) -> Maze {
-        Maze {
-            id: "".to_string(),
-            name: "".to_string(),
-            definition,
-        }
-    }
-    /// Resets a maze definition instance to empty
-    ///
-    /// # Returns
-    ///
-    /// The maze definition instance
-    ///
-    /// # Examples
-    ///
-    /// Create a definition with 2 rows and 3 columns, verify its dimensions, reset it and
-    /// then confirm it is empty
-    /// ```
-    /// use maze::Maze;
-    /// let grid: Vec<Vec<char>> = vec![
-    ///    vec!['S', ' ', 'W'],
-    ///    vec![' ', 'F', 'W']
-    /// ];
-    /// let mut maze = Maze::from_vec(grid);
-    /// assert_eq!(maze.definition.row_count(), 2);
-    /// assert_eq!(maze.definition.col_count(), 3);
-    /// maze.reset();
-    /// assert_eq!(maze.definition.is_empty(), true);
-    /// ```
-    pub fn reset(&mut self) -> &mut Self {
-        self.definition.reset();
-        self
-    }
-    /// Creates a new maze definition for the given vector of cell definition character rows, where:
-    /// - `'S'`:  Represents the starting cell (limited to one).
-    /// - `'F'`:  Represents the finishing cell (limited to one).
-    /// - `'W'`:  Represents a wall.
-    /// - `' '`:  Represents an empty cell.
-    ///
-    /// # Arguments
-    ///
-    /// * `grid` - Vector of row-column cell states
-    ///
-    /// # Returns
-    ///
-    /// A new maze instance
-    ///
-    ///
-    /// # Examples
-    ///
-    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column
-    ///
-    /// ```
-    /// use maze::Maze;
-    /// let grid: Vec<Vec<char>> = vec![
-    ///    vec!['S', ' ', 'W'],
-    ///    vec![' ', 'F', 'W']
-    /// ];
-    /// let maze = Maze::from_vec(grid);
-    /// assert_eq!(maze.definition.row_count(), 2);
-    /// assert_eq!(maze.definition.col_count(), 3);
-    pub fn from_vec(grid: Vec<Vec<char>>) -> Self {
-        Maze {
-            id: "".to_string(),
-            name: "".to_string(),
-            definition: Definition::from_vec(grid),
-        }
-    }
-    /// Generates the JSON string representation for the maze
-    ///
-    /// # Returns
-    ///
-    /// JSON string representing the maze definition
-    ///
-    ///
-    /// # Examples
-    ///
-    /// Create a 2 row x 3 column definition with a start, finish and a wall in the last column
-    /// and then convert it to JSON and print it
-    /// ```
-    /// use maze::Maze;
-    /// let grid: Vec<Vec<char>> = vec![
-    ///    vec!['S', ' ', 'W'],
-    ///    vec![' ', 'F', 'W']
-    /// ];
-    /// let maze = Maze::from_vec(grid);
-    /// assert_eq!(maze.definition.row_count(), 2);
-    /// assert_eq!(maze.definition.col_count(), 3);
-    /// match maze.to_json() {
-    ///     Ok(json) => {
-    ///         println!("JSON: {}", json);
-    ///     }
-    ///     Err(error) => {
-    ///        panic!(
-    ///            "failed to convert maze to JSON => {}",
-    ///           error
-    ///        );
-    ///     }
-    /// }
-    pub fn to_json(&self) -> Result<String, MazeError> {
-        Ok(serde_json::to_string(&self)?)
-    }
-    /// Initializes a maze instance by reading the JSON string content provided
-    ///
-    /// # Returns
-    ///
-    /// This function will return an error if the JSON could not be read
-    ///
-    /// # Examples
-    ///
-    /// Create an empty maze and then reinitialize it from a JSON string definition
-    /// containing 2 rows and 3 columns  
-    /// ```
-    /// use maze::Definition;
-    /// use maze::Maze;
-    /// let mut maze = Maze::new(Definition::new(0, 0));
-    /// let json = r#"{"id":"maze_id","name":"maze_name", "definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#;
-    /// match maze.from_json(json) {
-    ///     Ok(()) => {
-    ///         println!(
-    ///             "JSON successfully read into Maze => new rows = {}, new columns = {}",
-    ///             maze.definition.row_count(),
-    ///             maze.definition.col_count()
-    ///         );
-    ///     }
-    ///     Err(error) => {
-    ///        panic!(
-    ///            "failed to read JSON into maze => {}",
-    ///           error
-    ///        );
-    ///     }
-    /// }
-    pub fn from_json(&mut self, json: &str) -> Result<(), MazeError> {
-        let temp: Maze = serde_json::from_str(json)?;
-        *self = temp;
-        Ok(())
-    }
+/// Represents a maze solver interface
+pub trait MazeSolver {
     /// Attempts to solve the path between the start and end points defined within the maze instance
     ///
     /// # Returns
     ///
-    /// A `Result` containing either the solution if successful, or a `MazeError` if an error occurs
+    /// A `Result` containing either the solution if successful, or an `Error` if an error occurs
     ///
     /// # Examples
     ///
     /// ```
-    /// use maze::Maze;
-    /// use maze::Point;
+    /// use data_model::{Maze, MazePoint};
+    /// use maze::MazeSolver;
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', 'W', ' ', ' ', 'W'],
     ///    vec![' ', 'W', ' ', 'W', ' '],
@@ -231,10 +46,10 @@ impl Maze {
     ///    }
     /// }
     /// ```
-    pub fn solve(&self) -> Result<Solution, MazeError> {
-        let s = Solver { maze: self };
-        s.solve()
-    }
+    fn solve(&self) -> Result<MazeSolution, Error>;
+}
+/// Represents a maze printer interface
+pub trait MazePrinter {
     /// Print a maze instance to the given print target with the given start point, end point and solution path
     /// # Arguments
     /// * `print_target` - Print target
@@ -249,8 +64,9 @@ impl Maze {
     /// # Examples
     ///
     /// ```
-    /// use maze::StdoutLinePrinter;
-    /// use maze::Maze;
+    /// use data_model::Maze;
+    /// use maze::{MazePrinter, MazeSolver};
+    /// use utils::StdoutLinePrinter;
     ///
     /// let grid: Vec<Vec<char>> = vec![
     ///    vec!['S', 'W', ' ', ' ', 'W'],
@@ -277,7 +93,17 @@ impl Maze {
     ///    }
     /// }
     /// ```
-    pub fn print(&self, print_target: &mut dyn LinePrinter, path: Path) -> Result<(), io::Error> {
+    fn print(&self, print_target: &mut dyn LinePrinter, path: MazePath) -> Result<(), io::Error>;
+}
+
+impl MazeSolver for Maze {
+    fn solve(&self) -> Result<MazeSolution, Error> {
+        let s = Solver { maze: self };
+        s.solve()
+    }
+}
+impl MazePrinter for Maze {        
+    fn print(&self, print_target: &mut dyn LinePrinter, path: MazePath) -> Result<(), io::Error> {
         if self.definition.row_count() == 0 || self.definition.col_count() == 0 {
             return Ok(());
         }
@@ -290,20 +116,20 @@ impl Maze {
                 && (start.is_none() || *pt != *(start.as_ref().unwrap()))
                 && (finish.is_none() || *pt != *(finish.as_ref().unwrap()))
             {
-                let mut direction = Direction::None;
+                let mut direction = MazePathDirection::None;
                 if (path_idx + 1) < path.points.len() {
                     let next_pt = &path.points[path_idx + 1];
                     if next_pt.row == pt.row {
                         direction = match pt.col.cmp(&next_pt.col) {
-                            Ordering::Less => Direction::Right,
-                            Ordering::Greater => Direction::Left,
-                            Ordering::Equal => Direction::None,
+                            Ordering::Less => MazePathDirection::Right,
+                            Ordering::Greater => MazePathDirection::Left,
+                            Ordering::Equal => MazePathDirection::None,
                         };
                     } else if next_pt.col == pt.col {
                         direction = match pt.row.cmp(&next_pt.row) {
-                            Ordering::Less => Direction::Down,
-                            Ordering::Greater => Direction::Up,
-                            Ordering::Equal => Direction::None,
+                            Ordering::Less => MazePathDirection::Down,
+                            Ordering::Greater => MazePathDirection::Up,
+                            Ordering::Equal => MazePathDirection::None,
                         };
                     }
                 }
@@ -322,88 +148,8 @@ impl Maze {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Point;
-    use crate::StdoutLinePrinter;
-
-    #[test]
-    fn can_create_new_maze_from_vector() {
-        #[rustfmt::skip]
-        let grid: Vec<Vec<char>> = vec![
-            vec![' ', ' ', ' '],
-            vec![' ', ' ', ' ']
-        ];
-        let maze = Maze::from_vec(grid);
-        assert_eq!(maze.definition.row_count(), 2);
-        assert_eq!(maze.definition.col_count(), 3);
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "grid vector contains rows with different numbers of columns (expected 3 for all rows)"
-    )]
-    fn cannot_create_new_from_vector_with_diff_row_counts() {
-        #[rustfmt::skip]
-        let grid: Vec<Vec<char>> = vec![
-            vec![' ', ' ', ' '],
-            vec![' ', ' ', ' ', ' ']
-        ];
-        let _d = Definition::from_vec(grid);
-    }
-
-    #[test]
-    fn can_create_new_from_definition() {
-        let maze = Maze::new(Definition::new(2, 3));
-        assert_eq!(maze.definition.row_count(), 2);
-        assert_eq!(maze.definition.col_count(), 3);
-    }
-
-    #[test]
-    fn can_reset_to_empty() {
-        let mut maze = Maze::new(Definition::new(2, 3));
-        assert_eq!(maze.definition.row_count(), 2);
-        assert_eq!(maze.definition.col_count(), 3);
-        assert!(!maze.definition.is_empty());
-        assert!(maze.reset().definition.is_empty())
-    }
-
-    #[test]
-    fn can_serialize_empty() {
-        let maze = Maze::new(Definition::new(0, 0));
-        let s = maze.to_json().expect("Failed to serialize");
-        assert_eq!(s, r#"{"id":"","name":"","definition":{"grid":[]}}"#);
-    }
-
-    #[test]
-    fn can_serialize_non_empty() {
-        #[rustfmt::skip]
-        let grid: Vec<Vec<char>> = vec![
-            vec![' ', 'W', ' '],
-            vec![' ', ' ', 'W']
-        ];
-        let maze = Maze::new(Definition::from_vec(grid));
-        let s = maze.to_json().expect("Failed to serialize");
-        assert_eq!(
-            s,
-            r#"{"id":"","name":"","definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#
-        );
-    }
-
-    #[test]
-    fn can_deserialize_empty() {
-        let mut maze = Maze::new(Definition::new(10, 10));
-        let s = r#"{"id":"maze_id", "name":"maze_name","definition":{"grid":[]}}"#;
-        maze.from_json(s).expect("Failed to deserialize");
-        assert!(maze.definition.is_empty());
-    }
-
-    #[test]
-    fn can_deserialize_non_empty() {
-        let mut maze = Maze::new(Definition::new(10, 10));
-        let s = r#"{"id":"maze_id", "name":"maze_name","definition":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#;
-        maze.from_json(s).expect("Failed to deserialize");
-        assert_eq!(maze.definition.row_count(), 2);
-        assert_eq!(maze.definition.col_count(), 3);
-    }
+    use data_model::{Maze, MazeDefinition, MazePoint};
+    use utils::StdoutLinePrinter;
 
     #[test]
     fn can_print_maze_with_empty_solution_path() {
@@ -417,8 +163,8 @@ mod tests {
             vec![' ', 'W', 'W', 'W', ' '],
             vec![' ', ' ', ' ', ' ', ' '],
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
-        let path = Path { points: vec![] };
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
+        let path = MazePath { points: vec![] };
         let mut print_target = StdoutLinePrinter::new();
         if let Err(error) = maze.print(&mut print_target, path) {
             panic!("Unexpected print() error: {}", error);
@@ -437,29 +183,29 @@ mod tests {
             vec![' ', 'W', 'W', 'W', ' '],
             vec![' ', ' ', ' ', ' ', ' '],
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
-        let path = Path {
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
+        let path = MazePath {
             points: vec![
-                Point { row: 0, col: 1 },
-                Point { row: 0, col: 0 },
-                Point { row: 1, col: 0 },
-                Point { row: 2, col: 0 },
-                Point { row: 2, col: 1 },
-                Point { row: 2, col: 2 },
-                Point { row: 3, col: 2 },
-                Point { row: 4, col: 2 },
-                Point { row: 4, col: 1 },
-                Point { row: 4, col: 0 },
-                Point { row: 5, col: 0 },
-                Point { row: 6, col: 0 },
-                Point { row: 6, col: 1 },
-                Point { row: 6, col: 2 },
-                Point { row: 6, col: 3 },
-                Point { row: 6, col: 4 },
-                Point { row: 5, col: 4 },
-                Point { row: 4, col: 4 },
-                Point { row: 3, col: 4 },
-                Point { row: 2, col: 4 },
+                MazePoint { row: 0, col: 1 },
+                MazePoint { row: 0, col: 0 },
+                MazePoint { row: 1, col: 0 },
+                MazePoint { row: 2, col: 0 },
+                MazePoint { row: 2, col: 1 },
+                MazePoint { row: 2, col: 2 },
+                MazePoint { row: 3, col: 2 },
+                MazePoint { row: 4, col: 2 },
+                MazePoint { row: 4, col: 1 },
+                MazePoint { row: 4, col: 0 },
+                MazePoint { row: 5, col: 0 },
+                MazePoint { row: 6, col: 0 },
+                MazePoint { row: 6, col: 1 },
+                MazePoint { row: 6, col: 2 },
+                MazePoint { row: 6, col: 3 },
+                MazePoint { row: 6, col: 4 },
+                MazePoint { row: 5, col: 4 },
+                MazePoint { row: 4, col: 4 },
+                MazePoint { row: 3, col: 4 },
+                MazePoint { row: 2, col: 4 },
             ],
         };
         let mut print_target = StdoutLinePrinter::new();
@@ -470,60 +216,6 @@ mod tests {
     }
 
     #[test]
-    fn cannot_load_json_with_invalid_content_eof() {
-        run_from_json_test_with_invalid_content("{", ExpectedSerdeErrorKind::UnexpectedEof);
-    }
-
-    #[test]
-    fn cannot_load_json_with_invalid_content_syntax_1() {
-        run_from_json_test_with_invalid_content("{x", ExpectedSerdeErrorKind::Syntax);
-    }
-
-    #[test]
-    fn cannot_load_json_with_invalid_content_syntax_2() {
-        run_from_json_test_with_invalid_content(r#"{"x"}"#, ExpectedSerdeErrorKind::Syntax);
-    }
-
-    #[test]
-    fn cannot_load_json_with_invalid_content_syntax_3() {
-        run_from_json_test_with_invalid_content(r#"{"x":}"#, ExpectedSerdeErrorKind::Syntax);
-    }
-
-    #[test]
-    fn cannot_load_json_with_invalid_content_syntax_4() {
-        run_from_json_test_with_invalid_content("}", ExpectedSerdeErrorKind::Syntax);
-    }
-
-    #[test]
-    fn cannot_load_json_with_invalid_content_syntax_5() {
-        run_from_json_test_with_invalid_content("{{}", ExpectedSerdeErrorKind::Syntax);
-    }
-
-    #[test]
-    fn cannot_load_json_with_invalid_content_data_1() {
-        run_from_json_test_with_invalid_content(
-            r#"{"definition1":{"grid":[[" ","W"," "],[" "," ","W"]]}}"#,
-            ExpectedSerdeErrorKind::Data,
-        );
-    }
-
-    #[test]
-    fn cannot_load_json_with_invalid_content_data_2() {
-        run_from_json_test_with_invalid_content(
-            r#"{"definition":{"grid2":[[" ","W"," "],[" "," ","W"]]}}"#,
-            ExpectedSerdeErrorKind::Data,
-        );
-    }
-
-    #[test]
-    fn cannot_load_json_with_invalid_content_data_3() {
-        run_from_json_test_with_invalid_content(
-            r#"{"definition":{"grid":"invalid data"}}"#,
-            ExpectedSerdeErrorKind::Data,
-        );
-    }
-
-    #[test]
     fn solve_should_fail_with_missing_start_cell() {
         #[rustfmt::skip]
         let grid: Vec<Vec<char>> = vec![
@@ -531,7 +223,7 @@ mod tests {
             vec![' ', ' ', 'W', ' '],
             vec![' ', 'F', 'W', ' '],
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
         let result = maze.solve();
         match result {
             Ok(_) => panic_unexpected_solve_success(),
@@ -547,7 +239,7 @@ mod tests {
             vec![' ', ' ', 'W', ' '],
             vec![' ', ' ', 'W', ' '],
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
         let result = maze.solve();
         match result {
             Ok(_) => panic_unexpected_solve_success(),
@@ -562,16 +254,16 @@ mod tests {
             vec![' ', ' ', 'F'],
             vec!['S', ' ', ' ']
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
         let result = maze.solve();
         match result {
             Ok(solution) => {
-                let expected_solution_path = Path {
+                let expected_solution_path = MazePath {
                     points: vec![
-                        Point { row: 1, col: 0 },
-                        Point { row: 0, col: 0 },
-                        Point { row: 0, col: 1 },
-                        Point { row: 0, col: 2 },
+                        MazePoint { row: 1, col: 0 },
+                        MazePoint { row: 0, col: 0 },
+                        MazePoint { row: 0, col: 1 },
+                        MazePoint { row: 0, col: 2 },
                     ],
                 };
                 assert_eq!(solution.path.points.len(), 4);
@@ -588,17 +280,17 @@ mod tests {
             vec![' ', ' ', ' ', 'F'],
             vec!['S', ' ', ' ', ' ']
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
         let result = maze.solve();
         match result {
             Ok(solution) => {
-                let expected_solution_path = Path {
+                let expected_solution_path = MazePath {
                     points: vec![
-                        Point { row: 1, col: 0 },
-                        Point { row: 0, col: 0 },
-                        Point { row: 0, col: 1 },
-                        Point { row: 0, col: 2 },
-                        Point { row: 0, col: 3 },
+                        MazePoint { row: 1, col: 0 },
+                        MazePoint { row: 0, col: 0 },
+                        MazePoint { row: 0, col: 1 },
+                        MazePoint { row: 0, col: 2 },
+                        MazePoint { row: 0, col: 3 },
                     ],
                 };
                 assert_eq!(solution.path.points.len(), 5);
@@ -616,15 +308,15 @@ mod tests {
             vec![' ', 'S', ' ', ' '],
             vec![' ', ' ', 'F', ' '],
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
         let result = maze.solve();
         match result {
             Ok(solution) => {
-                let expected_solution_path = Path {
+                let expected_solution_path = MazePath {
                     points: vec![
-                        Point { row: 1, col: 1 },
-                        Point { row: 1, col: 2 },
-                        Point { row: 2, col: 2 },
+                        MazePoint { row: 1, col: 1 },
+                        MazePoint { row: 1, col: 2 },
+                        MazePoint { row: 2, col: 2 },
                     ],
                 };
                 assert_eq!(solution.path.points.len(), 3);
@@ -642,7 +334,7 @@ mod tests {
             vec!['S', ' ', 'W', ' '],
             vec![' ', ' ', 'W', ' '],
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
         let result = maze.solve();
         match result {
             Ok(_) => panic_unexpected_solve_success(),
@@ -664,25 +356,25 @@ mod tests {
             vec!['W', 'W', ' ', ' ', ' '],
             vec!['W', 'W', ' ', 'W', ' '],
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
         let result = maze.solve();
         match result {
             Ok(solution) => {
-                let expected_solution_path = Path {
+                let expected_solution_path = MazePath {
                     points: vec![
-                        Point { row: 0, col: 0 },
-                        Point { row: 1, col: 0 },
-                        Point { row: 2, col: 0 },
-                        Point { row: 2, col: 1 },
-                        Point { row: 3, col: 1 },
-                        Point { row: 4, col: 1 },
-                        Point { row: 4, col: 2 },
-                        Point { row: 5, col: 2 },
-                        Point { row: 5, col: 3 },
-                        Point { row: 5, col: 4 },
-                        Point { row: 4, col: 4 },
-                        Point { row: 3, col: 4 },
-                        Point { row: 2, col: 4 },
+                        MazePoint { row: 0, col: 0 },
+                        MazePoint { row: 1, col: 0 },
+                        MazePoint { row: 2, col: 0 },
+                        MazePoint { row: 2, col: 1 },
+                        MazePoint { row: 3, col: 1 },
+                        MazePoint { row: 4, col: 1 },
+                        MazePoint { row: 4, col: 2 },
+                        MazePoint { row: 5, col: 2 },
+                        MazePoint { row: 5, col: 3 },
+                        MazePoint { row: 5, col: 4 },
+                        MazePoint { row: 4, col: 4 },
+                        MazePoint { row: 3, col: 4 },
+                        MazePoint { row: 2, col: 4 },
                     ],
                 };
                 assert_eq!(solution.path.points.len(), 13);
@@ -704,32 +396,32 @@ mod tests {
             vec![' ', 'W', 'W', 'W', ' '],
             vec![' ', ' ', ' ', ' ', ' '],
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
         let result = maze.solve();
         match result {
             Ok(solution) => {
-                let expected_solution_path = Path {
+                let expected_solution_path = MazePath {
                     points: vec![
-                        Point { row: 0, col: 1 },
-                        Point { row: 0, col: 0 },
-                        Point { row: 1, col: 0 },
-                        Point { row: 2, col: 0 },
-                        Point { row: 2, col: 1 },
-                        Point { row: 2, col: 2 },
-                        Point { row: 3, col: 2 },
-                        Point { row: 4, col: 2 },
-                        Point { row: 4, col: 1 },
-                        Point { row: 4, col: 0 },
-                        Point { row: 5, col: 0 },
-                        Point { row: 6, col: 0 },
-                        Point { row: 6, col: 1 },
-                        Point { row: 6, col: 2 },
-                        Point { row: 6, col: 3 },
-                        Point { row: 6, col: 4 },
-                        Point { row: 5, col: 4 },
-                        Point { row: 4, col: 4 },
-                        Point { row: 3, col: 4 },
-                        Point { row: 2, col: 4 },
+                        MazePoint { row: 0, col: 1 },
+                        MazePoint { row: 0, col: 0 },
+                        MazePoint { row: 1, col: 0 },
+                        MazePoint { row: 2, col: 0 },
+                        MazePoint { row: 2, col: 1 },
+                        MazePoint { row: 2, col: 2 },
+                        MazePoint { row: 3, col: 2 },
+                        MazePoint { row: 4, col: 2 },
+                        MazePoint { row: 4, col: 1 },
+                        MazePoint { row: 4, col: 0 },
+                        MazePoint { row: 5, col: 0 },
+                        MazePoint { row: 6, col: 0 },
+                        MazePoint { row: 6, col: 1 },
+                        MazePoint { row: 6, col: 2 },
+                        MazePoint { row: 6, col: 3 },
+                        MazePoint { row: 6, col: 4 },
+                        MazePoint { row: 5, col: 4 },
+                        MazePoint { row: 4, col: 4 },
+                        MazePoint { row: 3, col: 4 },
+                        MazePoint { row: 2, col: 4 },
                     ],
                 };
                 assert_eq!(solution.path.points.len(), 20);
@@ -751,21 +443,21 @@ mod tests {
             vec![' ', 'W', 'W', 'W', ' '],
             vec![' ', ' ', ' ', ' ', ' '],
         ];
-        let maze = Maze::new(Definition::from_vec(grid));
+        let maze = Maze::new(MazeDefinition::from_vec(grid));
         let result = maze.solve();
         match result {
             Ok(solution) => {
-                let expected_solution_path = Path {
+                let expected_solution_path = MazePath {
                     points: vec![
-                        Point { row: 0, col: 1 },
-                        Point { row: 0, col: 0 },
-                        Point { row: 1, col: 0 },
-                        Point { row: 2, col: 0 },
-                        Point { row: 2, col: 1 },
-                        Point { row: 2, col: 2 },
-                        Point { row: 2, col: 3 },
-                        Point { row: 2, col: 4 },
-                        Point { row: 1, col: 4 },
+                        MazePoint { row: 0, col: 1 },
+                        MazePoint { row: 0, col: 0 },
+                        MazePoint { row: 1, col: 0 },
+                        MazePoint { row: 2, col: 0 },
+                        MazePoint { row: 2, col: 1 },
+                        MazePoint { row: 2, col: 2 },
+                        MazePoint { row: 2, col: 3 },
+                        MazePoint { row: 2, col: 4 },
+                        MazePoint { row: 1, col: 4 },
                     ],
                 };
                 assert_eq!(solution.path.points.len(), 9);
@@ -775,66 +467,18 @@ mod tests {
         }
     }
 
-    // Helper functions and definitions
-    enum ExpectedSerdeErrorKind {
-        Data,
-        Syntax,
-        UnexpectedEof,
-    }
-
-    fn run_from_json_test_with_invalid_content(
-        content: &str,
-        expected_error_kind: ExpectedSerdeErrorKind,
-    ) {
-        let mut maze = Maze::new(Definition::new(0, 0));
-        match maze.from_json(content) {
-            Ok(_) => {
-                panic!("Unexpectedly loaded json despite having invalid content");
-            }
-            Err(error) => match error {
-                MazeError::SerdeJson(ref serdejson_error) => match expected_error_kind {
-                    ExpectedSerdeErrorKind::Data => {
-                        if !serdejson_error.is_data() {
-                            panic!(
-                                "Serde data error expected (got SerdeJson error: {})",
-                                serdejson_error
-                            );
-                        }
-                    }
-                    ExpectedSerdeErrorKind::Syntax => {
-                        if !serdejson_error.is_syntax() {
-                            panic!(
-                                "Serde syntax error expected (got SerdeJson error: {})",
-                                serdejson_error
-                            );
-                        }
-                    }
-                    ExpectedSerdeErrorKind::UnexpectedEof => {
-                        if !serdejson_error.is_eof() {
-                            panic!(
-                                "Serde unexpected EOF error expected (got SerdeJson error: {})",
-                                serdejson_error
-                            );
-                        }
-                    }
-                },
-                _ => panic!("Unxpected error encountered (got error: {})", error),
-            },
-        }
-    }
-
     fn panic_unexpected_solve_success() {
         panic!("expected solve() to return Err, but it returned Ok");
     }
 
-    fn panic_unexpected_solve_error(error: MazeError) {
+    fn panic_unexpected_solve_error(error: Error) {
         panic!(
             "expected solve() to succeed but it returned the error {}",
             error
         );
     }
 
-    fn assert_error_msg_eq(err: MazeError, msg: &str) {
+    fn assert_error_msg_eq(err: Error, msg: &str) {
         assert_eq!(format!("{}", err), msg);
     }
 }

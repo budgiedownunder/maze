@@ -1,0 +1,1 @@
+Placeholder page for `auth` crate documentation
