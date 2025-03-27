@@ -4,7 +4,7 @@ The high-level architecture of the system is summarised below and illustrates ho
 
 ![Diagram](architecture.png)
 
-# Components 
+## Components 
 
 The various system components, together with their relationships, are:
 
