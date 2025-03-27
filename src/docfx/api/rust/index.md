@@ -4,6 +4,7 @@ The `maze-project` contains the following `Rust` crates:
 
 | Name                                                               | Description
 |--------------------------------------------------------------------|------------
+| [`auth`](auth/view_content.md)                                     | Authentication library
 | [`data_model`](data_model/view_content.md)                         | Data model library
 | [`maze`](maze/view_content.md)                                     | Maze definition and calculation library
 | [`maze_console`](maze_console/view_content.md)                     | Maze console application

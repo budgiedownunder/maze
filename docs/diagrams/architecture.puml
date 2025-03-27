@@ -13,9 +13,10 @@ System_Boundary(c1, "Browser") {
 
 System_Boundary(c2, "Maze Project") {
     Container(html_help, "", "", "HTML help pages")
+    Container(auth, "auth", "Rust", "Authentication library")
     Container(data_model, "data_model", "Rust", "Data model")
     Container(docfx, "docfx", "", "HTML help generation")
-    Container(maze, "maze", "Rust", "maze solver library")
+    Container(maze, "maze", "Rust", "Maze solver library")
     Container(maze_maui_app_net, "Maze.Maui.App", "C#", ".NET Maze Application (MAUI)")
     Container(maze_maui_controls_net, "Maze.Maui.Controls", "C#", ".NET Custom Controls and Definitions (MAUI)")
     Container(maze_maui_services_net, "Maze.Maui.Services", "C#", ".NET Custom Servuces (MAUI)")
@@ -30,7 +31,7 @@ System_Boundary(c2, "Maze Project") {
     Container(maze_web_server, "maze_web_server", "Rust", "Console application")
     Container(maze_openapi_generator, "maze_openapi_generator", "Rust", "Console application")
     Container(openapi_json, "openapi.json", "", "JSON file")
-    Container(storage, "storage", "Rust", "maze storage")
+    Container(storage, "storage", "Rust", "Maze storage")
     Container(utils, "utils", "Rust", "Utility functions")
 }
 

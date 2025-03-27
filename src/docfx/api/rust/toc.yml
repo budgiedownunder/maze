@@ -1,5 +1,7 @@
 - name: All crates
   href: index.md
+- name: auth
+  href: auth/view_content.md
 - name: data_model
   href: data_model/view_content.md
 - name: maze

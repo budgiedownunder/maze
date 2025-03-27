@@ -16,7 +16,8 @@ The following components are present:
 |              |                                                                                |
 | `JavaScript` | [`maze_wasm.js`](../api/js/maze_wasm/view_content.md)                          | JavaScript API (wrapping `Rust`-generated [`maze_wasm`](../api/rust/maze_wasm/view_content.md) Web Assembly)
 |              |                                                                                |
-| `Rust`       | [`data_model`](../api/rust/data_model/view_content.md)                         | Data model library
+| `Rust`       | [`auth`](../api/rust/auth/view_content.md)                                     | Authentication library
+|              | [`data_model`](../api/rust/data_model/view_content.md)                         | Data model library
 |              | [`maze`](../api/rust/maze/view_content.md)                                     | Maze definition and calculation library
 |              | [`maze_console`](../api/rust/maze_console/view_content.md)                     | Maze console application
 |              | [`maze_openapi_generator`](../api/rust/maze_openapi_generator/view_content.md) | Maze OpenAPI generator console application
