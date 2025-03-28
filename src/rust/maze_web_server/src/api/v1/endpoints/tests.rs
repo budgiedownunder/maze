@@ -6,9 +6,11 @@ mod test_definitions {
     use crate::api::v1::endpoints::handlers;
     use crate::api::v1::endpoints::handlers::get_maze_solve_error_string;
     use crate::api::v1::endpoints::handlers::{CreateUserRequest, UpdateUserRequest, UserItem};
-    use crate::middleware::auth::auth_middleware;
     use crate::api::v1::openapi::ApiDocV1;
+    use crate::middleware::auth::auth_middleware;
+    use crate::service::auth::AuthService;
     
+    use auth::config::PasswordHashConfig;    
     use data_model::{Maze, MazeDefinition, MazePoint, User};
     use maze::{Error as MazeError, MazePath, MazeSolution};
     use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
@@ -656,9 +658,20 @@ mod test_definitions {
         user_defs: &Vec<UserDefinition>,
         caller_username: Option<&str>
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, HashMap<Uuid, MockUser>, Uuid) {
+
+        let hash_config = PasswordHashConfig {
+            mem_cost: 65536,
+            time_cost: 3,
+            lanes: 4,
+            hash_length: 32,
+        };    
+    
+        let auth_service = web::Data::new(AuthService::new(hash_config));
         let (shared_mock_store, mock_users, api_key) = create_shared_mock_store(user_defs, caller_username);
         let app = test::init_service(
-            App::new().configure(|cfg| configure_mock_app(cfg, shared_mock_store.clone())),
+            App::new()
+            .app_data(auth_service.clone())
+            .configure(|cfg| configure_mock_app(cfg, shared_mock_store.clone())),
         )
         .await;
 

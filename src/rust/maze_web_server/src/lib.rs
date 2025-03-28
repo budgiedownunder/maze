@@ -1,13 +1,16 @@
 pub mod api;
 pub mod config;
 pub mod middleware;
+pub mod service;
 
 use storage::{get_store, SharedStore};
 
 use actix_web::{ App, middleware::Logger, HttpServer, web};
+use auth::config::PasswordHashConfig;
 use config::app::AppConfig;
 use rustls::{ServerConfig, Certificate, PrivateKey};
 use rustls_pemfile::{certs, pkcs8_private_keys};
+use service::auth::AuthService;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::{fs::File, io::{self, BufReader}};
@@ -58,11 +61,19 @@ fn construct_bind_address(port: u16) -> String {
 /// Swagger-related endpoints that can be used to manually test the API in user-friendly web pages (e.g. `/api-docs/v1/swagger-ui/`). 
 pub async fn run_server() -> std::io::Result<()> {
     let config = AppConfig::load().expect("Failed to load configuration");
+
+    let hash_config = PasswordHashConfig {
+        mem_cost: 65536,
+        time_cost: 3,
+        lanes: 4,
+        hash_length: 32,
+    };    
   
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     let bind_address = construct_bind_address(config.port);
 
     let rustls_config = load_rustls_config(&config)?;
+    let auth_service = web::Data::new(AuthService::new(hash_config));
     let max_workers = std::thread::available_parallelism()?; // This is actix_web's default too
     let file_config = storage::FileStoreConfig::default();
     let mut store = get_store(storage::StoreConfig::File(file_config))?;
@@ -74,6 +85,7 @@ pub async fn run_server() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
+            .app_data(auth_service.clone())
             .app_data(web::Data::new(shared_store.clone()))  // Share the store
             .app_data(web::Data::new(config.clone())) // Share the config
             .wrap(Logger::default())

@@ -1,3 +1,5 @@
+use crate::service::auth::AuthService;
+
 use data_model::{Maze, User};
 use maze::{Error as MazeError, MazeSolution, MazeSolver};
 use storage::{Error as StoreError, MazeItem, Store, SharedStore};
@@ -43,6 +45,11 @@ fn user_id_from_str(value: &str) -> Result<Uuid, Error> {
         Ok(id) => Ok(id),
         Err(_) => Err(get_user_not_found_error(value.to_string())),
     }
+}
+
+// Password-related errors
+fn get_hash_password_internal_error(err: &argon2::password_hash::Error) -> Error {
+    actix_web::error::ErrorInternalServerError(format!("Error hashing password: {}", err))
 }
 
 // User-related errors
@@ -199,16 +206,25 @@ pub struct CreateUserRequest {
 }
 
 impl CreateUserRequest {
-    pub fn to_store_user(&self) -> User {
-        User {
-            id: Uuid::nil(),
-            is_admin: self.is_admin,
-            username: self.username.clone(),
-            full_name: self.full_name.clone(),
-            email: self.email.clone(),
-            password_hash: self.password.clone(), // TO DO => HASH
-            api_key: Uuid::nil(),
-        }
+    pub fn into_user(&self, auth_service: &AuthService) -> Result<User, Error> {
+        let password_hash = if self.password.is_empty() {
+            "".to_string()
+        } else {
+            auth_service
+                .hash_password(&self.password)
+                .map_err(|err| get_hash_password_internal_error(&err))?
+        };
+        Ok(
+            User {
+                id: Uuid::nil(),
+                is_admin: self.is_admin,
+                username: self.username.clone(),
+                full_name: self.full_name.clone(),
+                email: self.email.clone(),
+                password_hash,
+                api_key: Uuid::nil(),
+            }
+        )  
     }
 }
 
@@ -231,14 +247,15 @@ impl CreateUserRequest {
 )]
 #[post("/users")]
 pub async fn create_user(
-    req: HttpRequest,
     create_req: web::Json<CreateUserRequest>,
+    auth_service: web::Data<AuthService>,
     store: web::Data<SharedStore>,  
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
     let _ = get_authorized_user(req, true)?;
     let create_req_data: CreateUserRequest = create_req.into_inner();
-    let mut store_user = create_req_data.to_store_user();
+    let mut store_user = create_req_data.into_user(&auth_service)?;
 
     match store_lock.create_user(&mut store_user) {
         Ok(()) => Ok(
@@ -280,10 +297,12 @@ pub async fn create_user(
 )]
 #[get("/users/{id}")]
 pub async fn get_user(
-    req: HttpRequest,
     path: web::Path<String>, 
     store: web::Data<SharedStore>,  
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
+    println!("*** get_user() called ****");
+
     let store_lock = get_store_read_lock(&store)?;
     let _ = get_authorized_user(req, true)?;
     let id = user_id_from_str(&path.into_inner())?;
@@ -347,10 +366,10 @@ impl UpdateUserRequest {
 )]
 #[put("/users/{id}")]
 pub async fn update_user(
-    req: HttpRequest,
-    path: web::Path<String>, 
     update_req: web::Json<UpdateUserRequest>,
+    path: web::Path<String>, 
     store: web::Data<SharedStore>,  
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
     let _ = get_authorized_user(req, true)?;
@@ -404,9 +423,9 @@ pub async fn update_user(
 )]
 #[delete("/users/{id}")]
 pub async fn delete_user(
-    req: HttpRequest,
     path: web::Path<String>, 
     store: web::Data<SharedStore>,  
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
     let _ = get_authorized_user(req, true)?;
@@ -453,9 +472,9 @@ struct GetMazeListQueryParams {
 )]
 #[get("/mazes")]
 pub async fn get_mazes(
-    req: HttpRequest,
+    query: Query<GetMazeListQueryParams>,
     store: web::Data<SharedStore>,
-    query: Query<GetMazeListQueryParams>
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let include_definitions = query.include_definitions.unwrap_or(false); 
     let store_lock = get_store_read_lock(&store)?;
@@ -488,9 +507,9 @@ pub async fn get_mazes(
 )]
 #[post("/mazes")]
 pub async fn create_maze(
-    req: HttpRequest,
     req_maze: web::Json<Maze>,
     store: web::Data<SharedStore>,  
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
     let user = get_authorized_user(req, false)?;
@@ -533,9 +552,9 @@ pub async fn create_maze(
 )]
 #[get("/mazes/{id}")]
 pub async fn get_maze(
-    req: HttpRequest,
     path: web::Path<String>, 
     store: web::Data<SharedStore>,  
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let store_lock = get_store_read_lock(&store)?;
     let user = get_authorized_user(req, false)?;
@@ -577,10 +596,10 @@ pub async fn get_maze(
 )]
 #[put("/mazes/{id}")]
 pub async fn update_maze(
-    req: HttpRequest,
-    path: web::Path<String>, 
     req_maze: web::Json<Maze>,
+    path: web::Path<String>, 
     store: web::Data<SharedStore>,  
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
     let user = get_authorized_user(req, false)?;
@@ -625,9 +644,9 @@ pub async fn update_maze(
 )]
 #[delete("/mazes/{id}")]
 pub async fn delete_maze(
-    req: HttpRequest,
     path: web::Path<String>, 
     store: web::Data<SharedStore>,  
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
     let user = get_authorized_user(req, false)?;
@@ -669,9 +688,9 @@ pub async fn delete_maze(
 )]
 #[get("/mazes/{id}/solution")]
 pub async fn get_maze_solution(
-    req: HttpRequest,
     path: web::Path<String>, 
     store: web::Data<SharedStore>,  
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let store_lock = get_store_read_lock(&store)?;
     let user = get_authorized_user(req, false)?;
@@ -715,8 +734,8 @@ pub async fn get_maze_solution(
 )]
 #[post("/solve-maze")]
 pub async fn solve_maze(
-    req: HttpRequest,
     req_maze: web::Json<Maze>,  
+    req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let _ = get_authorized_user(req, false)?;
     let maze: Maze = req_maze.into_inner();

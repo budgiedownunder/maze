@@ -1297,6 +1297,7 @@ version = "0.1.0"
 dependencies = [
  "actix-http",
  "actix-web",
+ "argon2",
  "auth",
  "config",
  "data_model",
