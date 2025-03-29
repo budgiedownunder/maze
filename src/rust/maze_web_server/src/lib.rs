@@ -55,6 +55,30 @@ fn construct_bind_address(port: u16) -> String {
     format!("0.0.0.0:{}", port)
 }
 
+/// Creates a configured Actix App instance with all routes, middleware, and shared state.
+/// Can be reused in both production (`main.rs`) and tests.
+pub fn create_app(
+    hash_config: &PasswordHashConfig,
+    store: web::Data<SharedStore>,
+) -> App<impl actix_service::ServiceFactory<
+    actix_web::dev::ServiceRequest,
+    Config = (),
+    Response = actix_web::dev::ServiceResponse<actix_web::body::BoxBody>,
+    Error = actix_web::Error,
+    InitError = (),
+>> {
+    let auth_service = web::Data::new(AuthService::new(hash_config.clone()));
+  
+    App::new()
+        .app_data(auth_service)
+        .app_data(store)
+        .service(api::register_api())
+        .service(api::register_redoc())
+        .service(api::register_rapidoc())
+        .service(api::register_swagger_ui())
+}
+
+
 /// Runs the Maze Web Server, which hosts the Maze Web API. This uses [`actix`](https://actix.rs/) to serve the API and 
 /// [`utoipa`](https://docs.rs/utoipa/latest/utoipa/) to publish it as an `OpenAPI`-compliant interface
 /// for use in third party products such as `Swagger`. In addition, the server also publishes its own 
@@ -73,10 +97,10 @@ pub async fn run_server() -> std::io::Result<()> {
     let bind_address = construct_bind_address(config.port);
 
     let rustls_config = load_rustls_config(&config)?;
-    let auth_service = web::Data::new(AuthService::new(hash_config));
-    let max_workers = std::thread::available_parallelism()?; // This is actix_web's default too
     let file_config = storage::FileStoreConfig::default();
     let mut store = get_store(storage::StoreConfig::File(file_config))?;
+
+    let max_workers = std::thread::available_parallelism()?; // This is actix_web's default too
     let users = store.get_users()?;
     if users.is_empty() {
         store.init_default_admin_user("admin", "dummy_hash_password")?;
@@ -84,15 +108,9 @@ pub async fn run_server() -> std::io::Result<()> {
     let shared_store: SharedStore = Arc::new(RwLock::new(store));
 
     HttpServer::new(move || {
-        App::new()
-            .app_data(auth_service.clone())
-            .app_data(web::Data::new(shared_store.clone()))  // Share the store
-            .app_data(web::Data::new(config.clone())) // Share the config
-            .wrap(Logger::default())
-            .service(api::register_api())
-            .service(api::register_redoc())
-            .service(api::register_rapidoc())
-            .service(api::register_swagger_ui())
+        create_app(&hash_config, web::Data::new(shared_store.clone()))
+        .app_data(web::Data::new(config.clone()))
+        .wrap(Logger::default())
     })
     .bind_rustls(bind_address, rustls_config)?
     .workers(usize::from(max_workers))

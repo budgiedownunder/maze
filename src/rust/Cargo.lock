@@ -1296,6 +1296,7 @@ name = "maze_web_server"
 version = "0.1.0"
 dependencies = [
  "actix-http",
+ "actix-service",
  "actix-web",
  "argon2",
  "auth",

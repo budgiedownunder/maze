@@ -3,28 +3,18 @@ mod test_definitions {
     // **************************************************************************************************
     // Unit tests for API and documentation endpoints, via injection of MockStore
     // **************************************************************************************************
-    use crate::api::v1::endpoints::handlers;
     use crate::api::v1::endpoints::handlers::get_maze_solve_error_string;
     use crate::api::v1::endpoints::handlers::{CreateUserRequest, UpdateUserRequest, UserItem};
-    use crate::api::v1::openapi::ApiDocV1;
-    use crate::middleware::auth::auth_middleware;
-    use crate::service::auth::AuthService;
+    use crate::create_app;
     
+    use actix_http;
+    use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error};
     use auth::config::PasswordHashConfig;    
     use data_model::{Maze, MazeDefinition, MazePoint, User};
     use maze::{Error as MazeError, MazePath, MazeSolution};
-    use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
-
-    use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, App, middleware::from_fn, Error};
-
-    use actix_http;
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
-
-    use utoipa::OpenApi;
-    use utoipa_rapidoc::RapiDoc;
-    use utoipa_redoc::{Redoc, Servable};
-    use utoipa_swagger_ui::SwaggerUi;
+    use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
     use uuid::Uuid;
 
     const ADMIN_USERNAME_PREFIX:&str = "admin_";
@@ -581,32 +571,6 @@ mod test_definitions {
        users
     }
 
-    fn configure_mock_app(app: &mut web::ServiceConfig, mock_store: SharedStore)  {
-
-        app.app_data(web::Data::new(mock_store.clone()))
-            .service(
-                web::scope("/api/v1")
-                    .wrap(from_fn(auth_middleware))
-                    // Mazes
-                    .service(handlers::get_mazes)
-                    .service(handlers::create_maze)
-                    .service(handlers::delete_maze)
-                    .service(handlers::get_maze)
-                    .service(handlers::get_maze_solution)
-                    .service(handlers::solve_maze)
-                    .service(handlers::update_maze)
-                    // Users
-                    .service(handlers::get_users)
-                    .service(handlers::create_user)
-                    .service(handlers::delete_user)
-                    .service(handlers::get_user)
-                    .service(handlers::update_user)
-                )
-                .service(SwaggerUi::new("api-docs/v1/swagger-ui/{_:.*}").url("/api-docs/v1/openapi.json", ApiDocV1::openapi()))
-                .service(Redoc::with_url("/api-docs/v1/redoc", ApiDocV1::openapi()))
-                .service(RapiDoc::new("/api-docs/v1/openapi.json").path("/api-docs/v1/rapidoc"));
-    }
-
     fn create_test_get_request(url: &str, api_key: Option<Uuid>) -> actix_http::Request {
         let mut req = test::TestRequest::get().uri(url);
 
@@ -654,7 +618,7 @@ mod test_definitions {
         (shared_mock_store, mock_users, api_key)
     }
 
-    async fn create_test_app(
+      async fn create_test_app(
         user_defs: &Vec<UserDefinition>,
         caller_username: Option<&str>
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, HashMap<Uuid, MockUser>, Uuid) {
@@ -666,12 +630,9 @@ mod test_definitions {
             hash_length: 32,
         };    
     
-        let auth_service = web::Data::new(AuthService::new(hash_config));
         let (shared_mock_store, mock_users, api_key) = create_shared_mock_store(user_defs, caller_username);
         let app = test::init_service(
-            App::new()
-            .app_data(auth_service.clone())
-            .configure(|cfg| configure_mock_app(cfg, shared_mock_store.clone())),
+            create_app(&hash_config, web::Data::new(shared_mock_store.clone()))
         )
         .await;
 
