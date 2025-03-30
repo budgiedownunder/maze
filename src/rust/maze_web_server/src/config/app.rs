@@ -1,22 +1,36 @@
+use auth::config::PasswordHashConfig;
 use config::{Config, ConfigBuilder, File,  builder::DefaultState};
-use serde::Deserialize;
+use log::info;
+use serde::{Deserialize, Serialize};
 
-// Security Configuration settings
-#[derive(Debug, Deserialize, Default, Clone)]
+/// Security configuration including TLS certificate paths and password hashing parameters.
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct SecurityConfig {
+    /// Path to the TLS certificate file.
+    /// Can be overridden with `MAZE_WEB_SERVER_SECURITY_CERT_FILE`.
     #[serde(default = "default_security_cert_file")]
     pub cert_file: String,
 
+    /// Path to the TLS private key file.
+    /// Can be overridden with `MAZE_WEB_SERVER_SECURITY_KEY_FILE`.
     #[serde(default = "default_security_key_file")]
     pub key_file: String,
+
+    /// Password hashing configuration (algorithm, iterations, etc).
+    /// Typically defined only in the config file and not overridden via env.
+    #[serde(default)]
+    pub password_hash: PasswordHashConfig,    
 }
 
-///  Application Configuration settings
-#[derive(Debug, Deserialize, Default, Clone)]
+/// Application configuration settings loaded from config.toml or environment variables.
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct AppConfig {
+    /// Port to bind the server to (e.g., 8443 for HTTPS).  
+    /// Can be overridden with `MAZE_WEB_SERVER_PORT`.
     #[serde(default = "default_port")]
     pub port: u16,
 
+    /// Security-related configuration such as TLS cert paths and password hashing policy.
     #[serde(default)]
     pub security: SecurityConfig,
 }
@@ -41,7 +55,18 @@ impl AppConfig {
         let settings = builder.build()?;
         settings.try_deserialize().or_else(|_| Ok(AppConfig::default()))
     }
-}
+
+    /// Logs the configuration using the `log` crate at `info` level.
+    pub fn log_config(&self) {
+        match serde_json::to_string_pretty(self) {
+            Ok(json) => {
+                info!("Loaded AppConfig:\n{}", json);
+            }
+            Err(err) => {
+                log::error!("Failed to serialize AppConfig: {}", err);
+            }
+        }
+    }}
 
 /// Moves environment variable overrides into a separate function
 fn set_env_overrides(mut builder: ConfigBuilder<DefaultState>) -> Result<ConfigBuilder<DefaultState>, config::ConfigError> {

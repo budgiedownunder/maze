@@ -102,12 +102,7 @@ mod tests {
     use super::*;
     
     fn get_hash_config() -> PasswordHashConfig {
-        PasswordHashConfig {
-            mem_cost: 65536,
-            time_cost: 3,
-            lanes: 4,
-            hash_length: 32,
-        }
+        PasswordHashConfig::default()
     }    
 
     #[test]

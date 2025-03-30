@@ -84,18 +84,12 @@ pub fn create_app(
 /// for use in third party products such as `Swagger`. In addition, the server also publishes its own 
 /// Swagger-related endpoints that can be used to manually test the API in user-friendly web pages (e.g. `/api-docs/v1/swagger-ui/`). 
 pub async fn run_server() -> std::io::Result<()> {
-    let config = AppConfig::load().expect("Failed to load configuration");
-
-    let hash_config = PasswordHashConfig {
-        mem_cost: 65536,
-        time_cost: 3,
-        lanes: 4,
-        hash_length: 32,
-    };    
-  
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    let bind_address = construct_bind_address(config.port);
 
+    let config = AppConfig::load().expect("Failed to load configuration settings");
+    config.log_config();
+  
+    let bind_address = construct_bind_address(config.port);
     let rustls_config = load_rustls_config(&config)?;
     let file_config = storage::FileStoreConfig::default();
     let mut store = get_store(storage::StoreConfig::File(file_config))?;
@@ -108,7 +102,7 @@ pub async fn run_server() -> std::io::Result<()> {
     let shared_store: SharedStore = Arc::new(RwLock::new(store));
 
     HttpServer::new(move || {
-        create_app(&hash_config, web::Data::new(shared_store.clone()))
+        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()))
         .app_data(web::Data::new(config.clone()))
         .wrap(Logger::default())
     })

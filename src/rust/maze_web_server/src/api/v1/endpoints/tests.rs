@@ -623,13 +623,7 @@ mod test_definitions {
         caller_username: Option<&str>
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, HashMap<Uuid, MockUser>, Uuid) {
 
-        let hash_config = PasswordHashConfig {
-            mem_cost: 65536,
-            time_cost: 3,
-            lanes: 4,
-            hash_length: 32,
-        };    
-    
+        let hash_config = PasswordHashConfig::default();    
         let (shared_mock_store, mock_users, api_key) = create_shared_mock_store(user_defs, caller_username);
         let app = test::init_service(
             create_app(&hash_config, web::Data::new(shared_mock_store.clone()))
