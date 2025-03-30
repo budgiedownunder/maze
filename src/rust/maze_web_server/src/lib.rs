@@ -3,10 +3,8 @@ pub mod config;
 pub mod middleware;
 pub mod service;
 
-use storage::{get_store, SharedStore};
-
 use actix_web::{ App, middleware::Logger, HttpServer, web};
-use auth::config::PasswordHashConfig;
+use auth::{config::PasswordHashConfig, hashing::hash_password};
 use config::app::AppConfig;
 use rustls::{ServerConfig, Certificate, PrivateKey};
 use rustls_pemfile::{certs, pkcs8_private_keys};
@@ -14,6 +12,10 @@ use service::auth::AuthService;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::{fs::File, io::{self, BufReader}};
+use storage::{get_store, SharedStore, Store, Error as StoreError};
+
+const DEFAULT_ADMIN_ACCOUNT_USERNAME:&str = "admin";
+const DEFAULT_ADMIN_ACCOUNT_PASSWORD:&str = "admin!";
 
 /// Loads the rust_ls configuration for the server session (see: https://docs.rs/rustls/latest/rustls/server/struct.ServerConfig.html)
 fn load_rustls_config(config: &AppConfig) -> io::Result<ServerConfig> {
@@ -55,6 +57,19 @@ fn construct_bind_address(port: u16) -> String {
     format!("0.0.0.0:{}", port)
 }
 
+/// Adds the default admin account to the store if no users are registered
+fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Store>) -> Result<(), StoreError> {
+    let users = store.get_users()?;
+    if users.is_empty() {
+        let password_hash = match hash_password(DEFAULT_ADMIN_ACCOUNT_PASSWORD, hash_config) {
+            Ok(hash) => hash,
+            Err(error) => return Err(StoreError::Other(format!("{}", error))),
+        };
+        store.init_default_admin_user(DEFAULT_ADMIN_ACCOUNT_USERNAME, &password_hash)?;
+    }
+    Ok(())    
+}
+
 /// Creates a configured Actix App instance with all routes, middleware, and shared state.
 /// Can be reused in both production (`main.rs`) and tests.
 pub fn create_app(
@@ -94,11 +109,9 @@ pub async fn run_server() -> std::io::Result<()> {
     let file_config = storage::FileStoreConfig::default();
     let mut store = get_store(storage::StoreConfig::File(file_config))?;
 
-    let max_workers = std::thread::available_parallelism()?; // This is actix_web's default too
-    let users = store.get_users()?;
-    if users.is_empty() {
-        store.init_default_admin_user("admin", "dummy_hash_password")?;
-    }
+    init_user_accounts(&config.security.password_hash, &mut store)?;
+
+    let max_workers = std::thread::available_parallelism()?;
     let shared_store: SharedStore = Arc::new(RwLock::new(store));
 
     HttpServer::new(move || {
