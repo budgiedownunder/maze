@@ -818,7 +818,7 @@ impl UserStore for FileStore {
         }
         Err(Error::UserNotFound())
     }
-    /// Locates a user by a login token id within the store
+    /// Locates a user by their login token within the store
     ///
     /// # Examples
     ///
