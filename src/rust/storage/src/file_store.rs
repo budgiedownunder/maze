@@ -464,6 +464,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
+    ///     login_tokens: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -516,6 +517,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
+    ///     login_tokens: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -586,6 +588,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
+    ///     login_tokens: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -654,6 +657,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
+    ///     login_tokens: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -713,6 +717,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
+    ///     login_tokens: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -772,6 +777,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
+    ///     login_tokens: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -839,6 +845,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
+    ///     login_tokens: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1356,6 +1363,7 @@ mod tests {
             email: email.to_string(),
             password_hash: password_hash.to_string(),
             api_key: User::new_api_key(),
+            login_tokens: None,
         }
     }
 

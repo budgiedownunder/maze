@@ -1,4 +1,4 @@
-use crate::{Error, UserValidationError};
+use crate::{Error, UserLoginToken, UserValidationError};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -22,6 +22,8 @@ pub struct User {
     #[schema(value_type = String)] // Treat as string during serlialization
     /// API key
     pub api_key: Uuid,
+    // Login tokens
+    pub login_tokens: Option<Vec<UserLoginToken>>,
 }
 
 impl User {
@@ -56,6 +58,7 @@ impl User {
     ///     email: "john_smith@company.com".to_string(),
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
+    ///     login_tokens: None,
     /// };
     /// println!("User: {:?}", user);
     pub fn new_id() -> Uuid {
@@ -80,6 +83,7 @@ impl User {
     ///     email: "john_smith@company.com".to_string(),
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
+    ///     login_tokens: None,
     /// };
     /// println!("User: {:?}", user);
     pub fn new_api_key() -> Uuid {
@@ -108,6 +112,7 @@ impl User {
             email: "".to_string(),
             password_hash: "".to_string(),
             api_key: Uuid::nil(),
+            login_tokens: None,
         }
     }
     /// Generates the JSON string representation for the user
@@ -130,6 +135,7 @@ impl User {
     ///     email: "john_smith@company.com".to_string(),
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
+    ///     login_tokens: None,
     /// };
     /// match user.to_json() {
     ///     Ok(json) => {
@@ -157,7 +163,7 @@ impl User {
     /// ```
     /// use data_model::User;
     /// let mut user = User::default();
-    /// let json = r#"{"id":"02345678-1234-5678-1234-567890123456","is_admin":false,"username":"john_smith","full_name":"John Smith","email":"john_smith@company.com","password_hash":"some_password_hash","api_key":"12345678-1234-5678-1234-567890123456"}"#;
+    /// let json = r#"{"id":"02345678-1234-5678-1234-567890123456","is_admin":false,"username":"john_smith","full_name":"John Smith","email":"john_smith@company.com","password_hash":"some_password_hash","api_key":"12345678-1234-5678-1234-567890123456","login_tokens":null}"#;
     /// match user.from_json(json) {
     ///     Ok(()) => {
     ///         println!(
@@ -197,6 +203,7 @@ impl User {
     ///     email: "bad_email".to_string(),
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
+    ///     login_tokens: None,
     /// };
     /// match user.validate() {
     ///     Ok(_) => {
@@ -251,11 +258,20 @@ mod tests {
     fn can_serialize() {
         let user = User::default();
         let s = user.to_json().expect("Failed to serialize");
-        assert_eq!(s, r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#);
+        assert_eq!(s, r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#);
     }
 
     #[test]
     fn can_deserialize() {
+        let compare = User::default();
+        let mut loaded = User::default();
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
+        loaded.from_json(s).expect("Failed to deserialize");
+        assert_eq!(loaded, compare);
+    }
+
+    #[test]
+    fn can_deserialize_with_missing_login_tokens() {
         let compare = User::default();
         let mut loaded = User::default();
         let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
@@ -265,84 +281,84 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `id`\", line: 1, column: 126))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `id`\", line: 1, column: 146))"
     )]    
     fn cannot_deserialize_with_missing_id() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
+        let s = r#"{"is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `is_admin`\", line: 1, column: 153))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `is_admin`\", line: 1, column: 173))"
     )]    
     fn cannot_deserialize_with_missing_is_admin() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `username`\", line: 1, column: 156))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `username`\", line: 1, column: 176))"
     )]    
     fn cannot_deserialize_with_missing_username() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `full_name`\", line: 1, column: 155))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `full_name`\", line: 1, column: 175))"
     )]    
     fn cannot_deserialize_with_missing_full_name() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `email`\", line: 1, column: 159))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `email`\", line: 1, column: 179))"
     )]    
     fn cannot_deserialize_with_missing_email() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `password_hash`\", line: 1, column: 151))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `password_hash`\", line: 1, column: 171))"
     )]    
     fn cannot_deserialize_with_missing_password_hash() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `api_key`\", line: 1, column: 121))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `api_key`\", line: 1, column: 141))"
     )]    
     fn cannot_deserialize_with_missing_api_key() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":""}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","login_tokens":null}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
@@ -356,6 +372,7 @@ mod tests {
             email: "john_smith@company.com".to_string(),
             password_hash: "encrypted_hash".to_string(),
             api_key: User::new_api_key(),
+            login_tokens: None,
         }
     }
 

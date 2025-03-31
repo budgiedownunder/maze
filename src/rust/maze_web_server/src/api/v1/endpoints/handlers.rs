@@ -223,6 +223,7 @@ impl CreateUserRequest {
                 email: self.email.clone(),
                 password_hash,
                 api_key: Uuid::nil(),
+                login_tokens: None,
             }
         )  
     }
