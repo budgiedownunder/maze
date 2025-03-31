@@ -2027,6 +2027,7 @@ dependencies = [
  "maze",
  "serde",
  "serde_json",
+ "unicase",
  "utils",
  "utoipa",
  "uuid",

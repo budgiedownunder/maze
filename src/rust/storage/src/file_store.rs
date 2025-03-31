@@ -3,6 +3,7 @@ use std::fs;
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
+use unicase::UniCase;
 use uuid::Uuid;
 
 use data_model::{Maze, User};
@@ -269,11 +270,12 @@ impl FileStore {
         ignore_id: Uuid,
     ) -> Result<User, Error> {
         let ids = self.get_user_ids()?;
+        let search = UniCase::new(search_value);
         for id in ids {
             if id != ignore_id {
                 let user = self.get_user(id)?;
                 if let Some(user_value) = user.get_string_field(field_name) {
-                    if user_value == search_value {
+                    if UniCase::new(user_value) == search {
                         return Ok(user);
                     }
                 }
