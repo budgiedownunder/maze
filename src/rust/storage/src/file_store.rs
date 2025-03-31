@@ -818,6 +818,78 @@ impl UserStore for FileStore {
         }
         Err(Error::UserNotFound())
     }
+    /// Locates a user by a login token id within the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then locate a user by its api key from within a file store
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use data_model::{User, UserLoginToken};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// 
+    /// // Create the login tokens
+    /// let login_token = UserLoginToken::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
+    /// let search_token_id = login_token.id; 
+    /// let login_tokens = Some(vec![login_token]);
+    /// 
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     login_tokens,
+    /// };
+    ///
+    /// // Create the user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to find it again using the login token id and display the results
+    ///         match store.find_user_by_login_token(search_token_id) {
+    ///             Ok(user_found) => {
+    ///                 println!("Successfully found user within the file store => {:?}", user_found);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to find user => {}",
+    ///                      error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn find_user_by_login_token(&self, token_id: Uuid) -> Result<User, Error>{
+        let ids = self.get_user_ids()?;
+        for id in ids {
+            let user = self.get_user(id)?;
+            if user.contains_login_token(token_id) {
+                return Ok(user);
+            }
+        }
+        Err(Error::UserNotFound())
+    }
     /// Returns the list of users within the store, sorted
     /// alphabetically by username in ascending order
     ///

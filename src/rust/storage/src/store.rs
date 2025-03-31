@@ -21,10 +21,13 @@ pub trait UserStore {
     fn find_user_by_name(&self, name: &str) -> Result<User, Error>;
     /// Locates a user by their api key within the store
     fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error>;
+    /// Locates a user by their api key within the store
+    fn find_user_by_login_token(&self, token_id: Uuid) -> Result<User, Error>;
     /// Returns the list of users within the store, sorted
     /// alphabetically by username in ascending order
     fn get_users(&self) -> Result<Vec<User>, Error>;
 }
+
 /// Contains the identifying details for a maze item and (optionally)
 /// the definition JSON
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]

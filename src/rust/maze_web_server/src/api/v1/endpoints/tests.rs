@@ -311,6 +311,14 @@ mod test_definitions {
             }
             Err(StoreError::UserNotFound())
         }
+        fn find_user_by_login_token(&self, token_id: Uuid) -> Result<User, StoreError>{
+            for v in self.users.values() {
+                if v.user.contains_login_token(token_id) {
+                    return Ok(v.user.clone());
+                }
+            }
+            Err(StoreError::UserNotFound())
+        }
         /// Returns the list of users within the store, sorted
         /// alphabetically by username in ascending order
         fn get_users(&self) -> Result<Vec<User>, StoreError> {

@@ -1,4 +1,4 @@
-use crate::{Error, UserLoginToken, UserValidationError};
+use crate::{Error, wrappers::generate_uuid, UserLoginToken, UserValidationError};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -27,18 +27,6 @@ pub struct User {
 }
 
 impl User {
-    /// Generate a new Uuid
-    fn generate_uuid() -> uuid::Uuid {
-        #[cfg(not(feature = "uuid-disable-random"))]
-        {
-            uuid::Uuid::new_v4()
-        }
-    
-        #[cfg(feature = "uuid-disable-random")]
-        {
-            uuid::Uuid::nil()
-        }
-    }
     /// Generates a new user id
     ///
     /// # Returns
@@ -62,7 +50,7 @@ impl User {
     /// };
     /// println!("User: {:?}", user);
     pub fn new_id() -> Uuid {
-        Self::generate_uuid()
+        generate_uuid()
     }
     /// Generates a new API key
     ///
@@ -87,7 +75,7 @@ impl User {
     /// };
     /// println!("User: {:?}", user);
     pub fn new_api_key() -> Uuid {
-        Self::generate_uuid()
+        generate_uuid()
     }
     /// Creates a new user with default content
     ///
@@ -120,7 +108,6 @@ impl User {
     /// # Returns
     ///
     /// JSON string representing the user
-    ///
     ///
     /// # Examples
     ///
@@ -189,7 +176,6 @@ impl User {
     ///
     /// JSON string representing the user
     ///
-    ///
     /// # Examples
     ///
     /// Initialize a user with an invalid email address (missing @) and validate it
@@ -230,6 +216,50 @@ impl User {
             return Err(Error::UserValidation(UserValidationError::PasswordMissing));
         }
         Ok(())
+    }
+    /// Checks whether a user object contains the given login token id
+    ///
+    /// # Returns
+    ///
+    /// Boolean
+    ///
+    /// # Examples
+    ///
+    /// Initialize a user with valid details and login token and then verify that the token can be found
+    /// ```
+    /// use data_model::{User, UserLoginToken};
+    /// use uuid::Uuid;
+    ///  
+    /// // Create the login tokens
+    /// let login_token = UserLoginToken::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
+    /// let search_token_id = login_token.id; 
+    /// let login_tokens = Some(vec![login_token]);
+    /// 
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     login_tokens,
+    /// };
+    ///
+    /// // Verify that the login token can be found
+    /// if user.contains_login_token(search_token_id) {
+    ///     println!("User login token found");
+    /// }
+    /// else {
+    ///     println!("User login token not found");
+    /// }
+    /// ```
+    pub fn contains_login_token(&self, id: Uuid) -> bool {
+        self.login_tokens
+            .as_ref().is_some_and(|tokens| {
+                tokens.iter().any(|t| t.id == id)
+            })
     }
 }
 
@@ -428,4 +458,26 @@ mod tests {
         user.password_hash = "".to_string();
         validate_user(&user);
     }
+
+    fn create_valid_user_with_login_token() -> (User, Uuid) {
+        let login_token = UserLoginToken::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
+        let token_id = login_token.id;
+        let mut user = create_valid_user();
+        user.login_tokens = Some(vec![login_token]);
+        (user, token_id)
+    }
+
+    #[test]
+    fn user_login_token_should_be_found() {
+        let (user, token_id) = create_valid_user_with_login_token();
+        assert!(user.contains_login_token(token_id));
+    }
+
+    #[test]
+    fn user_login_token_should_not_be_found() {
+        let (user, _) = create_valid_user_with_login_token();
+        let bad_token_id = generate_uuid();
+        assert!(!user.contains_login_token(bad_token_id));
+    }
+
 }

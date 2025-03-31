@@ -6,6 +6,7 @@ mod maze_definition;
 mod maze_point;
 mod user;
 mod user_login_token;
+mod wrappers;
 
 // Re-export traits and structs
 pub use error::{Error, UserValidationError};
