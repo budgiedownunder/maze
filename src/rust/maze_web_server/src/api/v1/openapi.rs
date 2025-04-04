@@ -6,7 +6,9 @@ use utoipa::{
     Modify, OpenApi,
 };
 
-use crate::api::v1::endpoints::handlers::{UserItem, UpdateUserRequest};
+use crate::api::v1::endpoints::handlers::{
+    LoginRequest, LoginResponse, 
+    UserItem, UpdateUserRequest};
 
 struct ApiKeyAuth;
 
@@ -21,6 +23,27 @@ impl Modify for ApiKeyAuth {
     }
 }
 
+struct LoginTokenAuth;
+
+impl utoipa::Modify for LoginTokenAuth {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "login_token",
+                utoipa::openapi::security::SecurityScheme::ApiKey(
+                    utoipa::openapi::security::ApiKey::Header(
+                        utoipa::openapi::security::ApiKeyValue::with_description(
+                            "Authorization",
+                            "Bearer <login_token_id>",
+                        ),
+                    ),
+                ),
+            );
+        }
+    }
+}
+
+
 #[derive(OpenApi)]
 #[openapi(
     info (
@@ -33,6 +56,9 @@ impl Modify for ApiKeyAuth {
         )
     ),
     paths(
+        // Login, logout
+        crate::api::v1::endpoints::handlers::login,
+        crate::api::v1::endpoints::handlers::logout,
         // Mazes
         crate::api::v1::endpoints::handlers::get_mazes,
         crate::api::v1::endpoints::handlers::create_maze,
@@ -49,14 +75,19 @@ impl Modify for ApiKeyAuth {
         crate::api::v1::endpoints::handlers::delete_user,
 
     ),
-    components(schemas(Maze, MazeDefinition, MazeItem, MazePath, MazeSolution, 
-        UpdateUserRequest, UserItem)),
+    components(
+        schemas(
+            LoginRequest, LoginResponse, 
+            Maze, MazeDefinition, MazeItem, MazePath, MazeSolution, 
+            UpdateUserRequest, UserItem),
+            
+    ),
     servers(
         (url = "https://localhost:8443", description = "Local development server")
     ),
     tags(
         (name = "Maze Web API v1", description = "Version 1 of the Maze Web API")
     ),
-    modifiers(&ApiKeyAuth)
+    modifiers(&ApiKeyAuth, &LoginTokenAuth)
 )]
 pub struct ApiDocV1;

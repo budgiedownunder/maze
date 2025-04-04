@@ -150,6 +150,84 @@ impl UserItem {
     }    
 }
 // **************************************************************************************************
+// Endpoint: GET /api/v1/login
+// Handler:  login()
+// **************************************************************************************************
+/// Login request
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
+pub struct LoginRequest {
+    /// Username
+    pub username: String,
+    /// Full name 
+    pub password: String,
+}
+/// Login response
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
+pub struct LoginResponse {
+    #[schema(value_type = String)] // Treat as string during serlialization
+    /// Login token id
+    pub login_token_id: Uuid,
+}
+#[utoipa::path(
+    summary = "Login",
+    description = "This endpoint attempts to login a user by username + password",
+    post,
+    path = "/api/v1/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login sucessful", body=[LoginResponse]),
+        (status = 401, description = "Unauthorized request"),
+        (status = 422, description = "Login could not be processed"),
+    ),
+    tags = ["v1"]
+)]
+#[post("/login")]
+pub async fn login(
+    login_req: web::Json<LoginRequest>,
+    auth_service: web::Data<AuthService>,
+    store: web::Data<SharedStore>,  
+    req: HttpRequest
+) -> Result<HttpResponse, Error> {
+    // TO DO - validate username/password and generate/store login token  
+    let store_lock = get_store_write_lock(&store)?;
+    let login_token_id = Uuid::new_v4();    
+
+    Ok(HttpResponse::Ok().json(LoginResponse {
+        login_token_id: login_token_id,
+    }))
+}
+// **************************************************************************************************
+// Endpoint: GET /api/v1/logout
+// Handler:  logout()
+// **************************************************************************************************
+#[utoipa::path(
+    summary = "Logout",
+    description = "This endpoint attempts to logout a user baed on the login bearer token provided in the header",
+    post,
+    path = "/api/v1/logout",
+    responses(
+        (status = 204, description = "Logout sucessful"),
+        (status = 401, description = "Unauthorized request"),
+    ),
+    security(
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[post("/logout")]
+pub async fn logout(
+    auth_service: web::Data<AuthService>,
+    store: web::Data<SharedStore>,  
+    req: HttpRequest
+) -> Result<HttpResponse, Error> {
+    
+    // TO DO - return 204 if API key provided but no login token 
+    let _ = get_authorized_user(req, true)?;
+
+    // TO DO- implement logout
+    Ok(HttpResponse::NoContent().finish())
+}
+// **************************************************************************************************
 // Endpoint: GET /api/v1/users
 // Handler:  get_users()
 // **************************************************************************************************
@@ -164,7 +242,8 @@ impl UserItem {
         (status = 401, description = "Unauthorized request")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -242,7 +321,8 @@ impl CreateUserRequest {
         (status = 409, description = "User with the given username or email already exists")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -292,7 +372,8 @@ pub async fn create_user(
         (status = 404, description = "User not found")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -361,7 +442,8 @@ impl UpdateUserRequest {
         (status = 409, description = "User with the given username or email already exists")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -418,7 +500,8 @@ pub async fn update_user(
         (status = 404, description = "User not found")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -467,7 +550,8 @@ struct GetMazeListQueryParams {
         (status = 401, description = "Unauthorized request")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -502,7 +586,8 @@ pub async fn get_mazes(
         (status = 409, description = "Maze with the given id already exists")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -547,7 +632,8 @@ pub async fn create_maze(
         (status = 404, description = "Maze not found")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -591,7 +677,8 @@ pub async fn get_maze(
         (status = 404, description = "Maze not found")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -639,7 +726,8 @@ pub async fn update_maze(
         (status = 404, description = "Maze not found")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -683,7 +771,8 @@ pub async fn delete_maze(
         (status = 404, description = "Maze not found"),
         (status = 422, description = "Maze could not be solved")    ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
@@ -729,7 +818,8 @@ pub async fn get_maze_solution(
         (status = 422, description = "Maze could not be solved")
     ),
     security(
-        ("api_key" = [])
+        ("api_key" = []),
+        ("login_token" = [])
     ),
     tags = ["v1"]
 )]
