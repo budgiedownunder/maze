@@ -222,7 +222,7 @@ pub async fn logout(
 ) -> Result<HttpResponse, Error> {
     
     // TO DO - return 204 if API key provided but no login token 
-    let _ = get_authorized_user(req, true)?;
+    let _ = get_authorized_user(req, false)?;
 
     // TO DO- implement logout
     Ok(HttpResponse::NoContent().finish())
