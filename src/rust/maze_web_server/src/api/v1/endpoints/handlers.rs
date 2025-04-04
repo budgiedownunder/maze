@@ -202,7 +202,7 @@ pub async fn login(
 // **************************************************************************************************
 #[utoipa::path(
     summary = "Logout",
-    description = "This endpoint attempts to logout a user baed on the login bearer token provided in the header",
+    description = "This endpoint attempts to logout a user based on the login bearer token provided in the header",
     post,
     path = "/api/v1/logout",
     responses(
