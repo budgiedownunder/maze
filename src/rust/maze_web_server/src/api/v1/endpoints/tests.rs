@@ -8,11 +8,12 @@ mod test_definitions {
     use crate::create_app;
     
     use actix_http;
-    use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error};
+    use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
     use auth::config::PasswordHashConfig;    
     use data_model::{Maze, MazeDefinition, MazePoint, User};
     use maze::{Error as MazeError, MazePath, MazeSolution};
-    use pretty_assertions::assert_eq;    
+    use pretty_assertions::assert_eq;
+    use serde::Serialize;
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
@@ -580,40 +581,41 @@ mod test_definitions {
        users
     }
 
-    fn create_test_get_request(url: &str, api_key: Option<Uuid>) -> actix_http::Request {
-        let mut req = test::TestRequest::get().uri(url);
+    fn create_test_request<T: Serialize>(
+        method: Method,
+        url: &str,
+        api_key: Option<Uuid>,
+        json_body: Option<&T>,
+    ) -> actix_http::Request {
+        let mut req = test::TestRequest::default()
+            .method(method)
+            .uri(url);
 
         if let Some(api_key) = api_key {
             req = req.insert_header(("X-API-KEY", api_key.to_string()));
         }
+
+        if let Some(body) = json_body {
+            req = req.set_json(body);
+        }
+
         req.to_request()
+    }    
+
+    fn create_test_get_request(url: &str, api_key: Option<Uuid>) -> actix_http::Request {
+        create_test_request(Method::GET, url, api_key, None::<&()>)
     }
 
     fn create_test_post_request<T: serde::Serialize>(url: &str, api_key: Option<Uuid>, body_obj: &T) -> actix_http::Request {
-        let mut req = test::TestRequest::post().uri(url);
-
-        if let Some(api_key) = api_key {
-            req = req.insert_header(("X-API-KEY", api_key.to_string()));
-        }
-        req.set_json(body_obj).to_request()
+        create_test_request(Method::POST, url, api_key, Some(body_obj))
     }
 
     fn create_test_put_request<T: serde::Serialize>(url: &str, api_key: Option<Uuid>, body_obj: &T) -> actix_http::Request {
-        let mut req = test::TestRequest::put().uri(url);
-
-        if let Some(api_key) = api_key {
-            req = req.insert_header(("X-API-KEY", api_key.to_string()));
-        }
-        req.set_json(body_obj).to_request()
+        create_test_request(Method::PUT, url, api_key, Some(body_obj))
     }
 
     fn create_test_delete_request(url: &str, api_key: Option<Uuid>) -> actix_http::Request {
-        let mut req = test::TestRequest::delete().uri(url);
-
-        if let Some(api_key) = api_key {
-            req = req.insert_header(("X-API-KEY", api_key.to_string()));
-        }
-        req.to_request()
+        create_test_request(Method::DELETE, url, api_key, None::<&()>)
     }
 
     fn create_shared_mock_store(
