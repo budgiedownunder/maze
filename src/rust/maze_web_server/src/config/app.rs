@@ -20,6 +20,12 @@ pub struct SecurityConfig {
     /// Typically defined only in the config file and not overridden via env.
     #[serde(default)]
     pub password_hash: PasswordHashConfig,    
+
+    /// Login token expiry in hours.
+    /// Typically defined only in the config file and not overridden via env.
+    #[serde(default = "default_security_login_expiry_hours")]
+    pub login_expiry_hours: u32,
+
 }
 
 /// Application configuration settings loaded from config.toml or environment variables.
@@ -40,6 +46,7 @@ fn default_port() -> u16 { 8443 }
 fn default_security_cert_file() -> String { "cert.pem".to_string() }
 fn default_security_key_file() -> String { "key.pem".to_string() }
 fn default_security_auth_token() -> String { "".to_string() }
+fn default_security_login_expiry_hours() -> u32 { 24 }
 
 /// Application Configuration
 impl AppConfig {

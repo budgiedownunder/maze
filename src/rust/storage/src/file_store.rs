@@ -464,7 +464,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -517,7 +517,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -588,7 +588,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -657,7 +657,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -717,7 +717,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -777,7 +777,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -818,17 +818,17 @@ impl UserStore for FileStore {
         }
         Err(Error::UserNotFound())
     }
-    /// Locates a user by their login token within the store
+    /// Locates a user by their login id within the store
     ///
     /// # Examples
     ///
-    /// Try to create and then locate a user by its api key from within a file store
+    /// Try to create and then locate a user by its login id within a file store
     /// ```
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
     ///
-    /// use data_model::{User, UserLoginToken};
+    /// use data_model::{User, UserLogin};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -836,9 +836,9 @@ impl UserStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     /// 
     /// // Create the login tokens
-    /// let login_token = UserLoginToken::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
-    /// let search_token_id = login_token.id; 
-    /// let login_tokens = Some(vec![login_token]);
+    /// let login = UserLogin::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
+    /// let search_login_id = login.id; 
+    /// let logins = vec![login];
     /// 
     /// // Create the user definition
     /// let mut user = User {
@@ -849,7 +849,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
-    ///     login_tokens,
+    ///     logins,
     /// };
     ///
     /// // Create the user within the file store
@@ -859,8 +859,8 @@ impl UserStore for FileStore {
     ///             "Successfully created user with id {} in the file store",
     ///             user.id
     ///         );
-    ///         // Now attempt to find it again using the login token id and display the results
-    ///         match store.find_user_by_login_token(search_token_id) {
+    ///         // Now attempt to find it again using the login id and display the results
+    ///         match store.find_user_by_login_id(search_login_id) {
     ///             Ok(user_found) => {
     ///                 println!("Successfully found user within the file store => {:?}", user_found);
     ///             }
@@ -880,11 +880,11 @@ impl UserStore for FileStore {
     ///     }
     /// }
     /// ```
-    fn find_user_by_login_token(&self, token_id: Uuid) -> Result<User, Error>{
+    fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, Error>{
         let ids = self.get_user_ids()?;
         for id in ids {
             let user = self.get_user(id)?;
-            if user.contains_login_token(token_id) {
+            if user.contains_valid_login(login_id) {
                 return Ok(user);
             }
         }
@@ -917,7 +917,7 @@ impl UserStore for FileStore {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -1435,7 +1435,7 @@ mod tests {
             email: email.to_string(),
             password_hash: password_hash.to_string(),
             api_key: User::new_api_key(),
-            login_tokens: None,
+            logins: vec![],
         }
     }
 

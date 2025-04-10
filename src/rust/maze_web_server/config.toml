@@ -10,20 +10,23 @@ cert_file = "cert.pem"
 # Path to TLS private key file (default: "key.pem")
 key_file = "key.pem"
 
-  [security.password_hash]
-  # Argon2 memory cost in KiB (default: 65536 = 64 MiB)
-  # Higher values increase protection against brute-force attacks
-  #mem_cost = 65536
+# Login token expiry in hours (integer).
+login_expiry_hours = 24
 
-  # Argon2 time cost (iterations) (default: 3)
-  # Higher values increase CPU usage
-  time_cost = 3
+[security.password_hash]
+# Argon2 memory cost in KiB (default: 65536 = 64 MiB)
+# Higher values increase protection against brute-force attacks
+#mem_cost = 65536
 
-  # Argon2 degree of parallelism (default: 4)
-  # Should match the number of CPU cores
-  lanes = 4
+# Argon2 time cost (iterations) (default: 3)
+# Higher values increase CPU usage
+time_cost = 3
 
-  # Desired length of password hash output in bytes (default: 32)
-  # Common values: 32 (256-bit), 64 (512-bit)
-  hash_length = 32
+# Argon2 degree of parallelism (default: 4)
+# Should match the number of CPU cores
+lanes = 4
+
+# Desired length of password hash output in bytes (default: 32)
+# Common values: 32 (256-bit), 64 (512-bit)
+hash_length = 32
 

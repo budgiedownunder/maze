@@ -17,6 +17,7 @@ data_model = { path = "../data_model", default-features = false, features = ["uu
 
 [dev-dependencies]
 criterion = "0.5"
+pretty_assertions = "1"
 
 [[bench]]
 name = "bench_main"

@@ -53,7 +53,7 @@ mod tests {
             email: "john_smith@company.com".to_string(),
             password_hash: "a_password_hash".to_string(),
             api_key: User::new_api_key(),
-            login_tokens: None,
+            logins: vec![],
         }
     }
 

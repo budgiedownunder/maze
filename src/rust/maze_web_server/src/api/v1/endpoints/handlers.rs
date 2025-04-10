@@ -1,9 +1,16 @@
+use crate::config::app::AppConfig;
+use crate::middleware::auth::{ApiKey, LoginId};
 use crate::service::auth::AuthService;
+
 
 use data_model::{Maze, User};
 use maze::{Error as MazeError, MazeSolution, MazeSolver};
 use storage::{Error as StoreError, MazeItem, Store, SharedStore};
-use actix_web::{delete, get, post, put, web, web::Query, HttpMessage, HttpRequest, HttpResponse, Error, error::ErrorUnauthorized};
+
+use actix_web::{delete, get, post, put, web, web::Query, HttpMessage, HttpRequest, HttpResponse, Error, 
+    error::{ErrorBadRequest, ErrorConflict, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized, ErrorUnprocessableEntity, InternalError}
+};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, Arc};
 use urlencoding::encode;
@@ -12,7 +19,25 @@ use uuid::Uuid;
 // **************************************************************************************************
 // Private utility functions
 // **************************************************************************************************
-fn get_authorized_user(req: HttpRequest, admin_required: bool) -> Result<User, Error> {
+
+fn get_caller_ip_address(req: &HttpRequest) -> Option<String> {
+    req
+    .headers()
+    .get("X-Forwarded-For")
+    .and_then(|hdr| hdr.to_str().ok())
+    .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
+    .or_else(|| req.peer_addr().map(|addr| addr.ip().to_string()))
+}
+
+fn get_caller_device_info(req: &HttpRequest) -> Option<String> {
+    req
+    .headers()
+    .get("User-Agent")
+    .and_then(|ua| ua.to_str().ok())
+    .map(|s| s.to_string())   
+}
+
+fn get_authorized_user(req: &HttpRequest, admin_required: bool) -> Result<User, Error> {
     if let Some(user) = req.extensions().get::<User>() {
         if admin_required && !user.is_admin {
             return Err(ErrorUnauthorized( "Unauthorized request"));
@@ -23,11 +48,61 @@ fn get_authorized_user(req: HttpRequest, admin_required: bool) -> Result<User, E
     }
 }
 
+fn get_logout_details(req: &HttpRequest) -> Result<(User, uuid::Uuid), Error> {
+    let has_api_key = req.extensions().get::<ApiKey>().is_some();
+    let login_id = req.extensions()
+        .get::<LoginId>()
+        .copied()
+        .ok_or_else(|| {
+            if has_api_key { 
+                println!("\nReturning logout complete\n");
+                InternalError::from_response("Logout complete", HttpResponse::NoContent().finish()).into()
+            } else {
+                println!("\nReturning unauthorizes (missing login id token)\n");
+                ErrorUnauthorized("Missing login id token")
+            }
+        })?
+        .0;
+
+
+    let user = get_authorized_user(req, false)?;
+
+    Ok((user, login_id))
+}
+
+fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &AuthService,
+    username: &str, password: &str) -> Result<User, Error> {
+
+    if username.trim().is_empty() || password.trim().is_empty() {
+        return Err(ErrorUnprocessableEntity("Username and password must be provided"));
+    }
+
+    let store_lock = get_store_read_lock(store)?;
+
+    let user = store_lock.find_user_by_name(username).map_err(|err| {
+        match err {
+            StoreError::UserNotFound() => ErrorUnauthorized( "Invalid username or password"),
+            _ => ErrorInternalServerError("Failed to process login request"),
+        }
+    })?;
+
+    let password_matches = auth_service.verify_password(&user.password_hash, &password).map_err(|err| {
+        log::error!("Password verification failed: {:?}", err);
+        ErrorInternalServerError("Internal authentication error")
+    })?;
+
+    if !password_matches {
+        return Err(ErrorUnauthorized( "Invalid username or password"));
+    }
+
+    Ok(user)
+}
+
 fn get_store_read_lock(
     store: &web::Data<Arc<RwLock<Box<dyn Store>>>>,
 ) -> Result<RwLockReadGuard<'_, Box<dyn Store>>, Error> {
     store.read().map_err(|_| {
-        actix_web::error::ErrorInternalServerError("Failed to acquire store read lock")
+        ErrorInternalServerError("Failed to acquire store read lock")
     })
 }
 
@@ -35,7 +110,7 @@ fn get_store_write_lock(
     store: &web::Data<Arc<RwLock<Box<dyn Store>>>>,
 ) -> Result<RwLockWriteGuard<'_, Box<dyn Store>>, Error> {
     store.write().map_err(|_| {
-        actix_web::error::ErrorInternalServerError("Failed to acquire store write lock")
+        ErrorInternalServerError("Failed to acquire store write lock")
     })
 }
 
@@ -49,28 +124,31 @@ fn user_id_from_str(value: &str) -> Result<Uuid, Error> {
 
 // Password-related errors
 fn get_hash_password_internal_error(err: &argon2::password_hash::Error) -> Error {
-    actix_web::error::ErrorInternalServerError(format!("Error hashing password: {}", err))
+    ErrorInternalServerError(format!("Error hashing password: {}", err))
 }
 
 // User-related errors
+fn get_users_fetch_internal_error(err: &StoreError) -> Error {
+    ErrorInternalServerError(format!("Error fetching users: {}", err))
+}
 fn get_user_create_internal_error(err: &StoreError) -> Error {
-    actix_web::error::ErrorInternalServerError(format!("Error creating user: {}", err))
+    ErrorInternalServerError(format!("Error creating user: {}", err))
 }
 
 fn get_user_update_internal_error(err: &StoreError) -> Error {
-    actix_web::error::ErrorInternalServerError(format!("Error updating user: {}", err))
+    ErrorInternalServerError(format!("Error updating user: {}", err))
 }
 
 fn get_user_not_found_error(id: String) -> Error {
-    actix_web::error::ErrorNotFound(format!("User with id '{}' not found", id))
+    ErrorNotFound(format!("User with id '{}' not found", id))
 }
 
 fn get_user_exists_error() -> Error {
-    actix_web::error::ErrorConflict("User with the given username or email already exists".to_string())
+    ErrorConflict("User with the given username or email already exists".to_string())
 }
 
 fn get_invalid_request_error(reason: &str) -> Error {
-    actix_web::error::ErrorBadRequest(format!("Invalid request ({})", reason))
+    ErrorBadRequest(format!("Invalid request ({})", reason))
 }
 
 fn get_missing_username_request_error() -> Error {
@@ -86,32 +164,32 @@ fn get_invalid_email_request_error() -> Error {
 }
 
 fn get_user_fetch_internal_error(id: Uuid, err: &StoreError) -> Error {
-    actix_web::error::ErrorInternalServerError(format!("Error fetching user item with id '{}': {}", id, err))
+    ErrorInternalServerError(format!("Error fetching user item with id '{}': {}", id, err))
 }
 
 // Maze-related errors
 fn get_mazes_fetch_internal_error(err: &StoreError) -> Error {
-    actix_web::error::ErrorInternalServerError(format!("Error fetching maze items: {}", err))
+    ErrorInternalServerError(format!("Error fetching maze items: {}", err))
 }
 
 fn get_maze_create_internal_error(err: &StoreError) -> Error {
-    actix_web::error::ErrorInternalServerError(format!("Error creating maze: {}", err))
+    ErrorInternalServerError(format!("Error creating maze: {}", err))
 }
 
 fn get_maze_not_found_error(id: &str) -> Error {
-    actix_web::error::ErrorNotFound(format!("Maze with id '{}' not found", id))
+    ErrorNotFound(format!("Maze with id '{}' not found", id))
 }
 
 fn get_maze_exists_error(id: &str) -> Error {
-    actix_web::error::ErrorConflict(format!("Maze with id '{}' already exists", id))
+    ErrorConflict(format!("Maze with id '{}' already exists", id))
 }
 
 fn get_maze_fetch_internal_error(id: &str, err: &StoreError) -> Error {
-    actix_web::error::ErrorInternalServerError(format!("Error fetching maze item with id '{}': {}", id, err))
+    ErrorInternalServerError(format!("Error fetching maze item with id '{}': {}", id, err))
 }
 
 fn get_maze_id_mismatch_error(url_id: &str, maze_id: &str) -> Error {
-    actix_web::error::ErrorBadRequest(format!("URL ID '{}' and body maze ID '{}' do not match", url_id, maze_id))
+    ErrorBadRequest(format!("URL ID '{}' and body maze ID '{}' do not match", url_id, maze_id))
 }
 
 pub (crate) fn get_maze_solve_error_string(err: &MazeError) -> String {
@@ -119,7 +197,28 @@ pub (crate) fn get_maze_solve_error_string(err: &MazeError) -> String {
 }
 
 fn get_maze_solve_error(err: &MazeError) -> Error {
-    actix_web::error::ErrorUnprocessableEntity(get_maze_solve_error_string(err))
+    ErrorUnprocessableEntity(get_maze_solve_error_string(err))
+}
+
+fn update_store_user<F>(
+    mut store_lock: RwLockWriteGuard<'_, Box<dyn Store>>, 
+    user: &mut User,
+    handle_internal_error: F,
+) -> Result<HttpResponse, Error> 
+where
+    F: Fn(&StoreError) -> Error,
+{
+    match store_lock.update_user(user) {
+        Ok(_) =>  Ok(HttpResponse::Ok().json(UserItem::from_store_user(&user))),
+        Err(err) => {
+            match err {
+                StoreError::UserEmailExists() | StoreError::UserNameExists()  => Err(get_user_exists_error()),
+                StoreError::UserNameMissing() => Err(get_missing_username_request_error()),
+                StoreError::UserEmailInvalid() => Err(get_invalid_email_request_error()),
+                _ => Err(handle_internal_error(&err))
+            }    
+        }
+    } 
 }
 
 /// Contains the summary details for a user
@@ -164,9 +263,13 @@ pub struct LoginRequest {
 /// Login response
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
 pub struct LoginResponse {
-    #[schema(value_type = String)] // Treat as string during serlialization
+    #[schema(value_type = String,  example = "550e8400-e29b-41d4-a716-446655440000")]
     /// Login token id
     pub login_token_id: Uuid,
+
+    #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
+    /// Expiry timestamp of the login token
+    pub login_token_expires_at: DateTime<Utc>,
 }
 #[utoipa::path(
     summary = "Login",
@@ -184,17 +287,24 @@ pub struct LoginResponse {
 #[post("/login")]
 pub async fn login(
     login_req: web::Json<LoginRequest>,
+    config: web::Data<AppConfig>,
     auth_service: web::Data<AuthService>,
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    // TO DO - validate username/password and generate/store login token  
+    let mut user = verify_user_credentials(&store, &auth_service, &login_req.username, &login_req.password)?;
+    let login_expiry_hours = config.security.login_expiry_hours;
+    let login = user.create_login(login_expiry_hours, get_caller_ip_address(&req), get_caller_device_info(&req));
     let store_lock = get_store_write_lock(&store)?;
-    let login_token_id = Uuid::new_v4();    
+
+    update_store_user(store_lock, &mut user, |err| {
+        get_user_update_internal_error(&err)
+    })?;
 
     Ok(HttpResponse::Ok().json(LoginResponse {
-        login_token_id: login_token_id,
-    }))
+        login_token_id: login.id,
+        login_token_expires_at: login.expires_at, 
+    }))           
 }
 // **************************************************************************************************
 // Endpoint: GET /api/v1/logout
@@ -216,15 +326,20 @@ pub async fn login(
 )]
 #[post("/logout")]
 pub async fn logout(
-    auth_service: web::Data<AuthService>,
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    
-    // TO DO - return 204 if API key provided but no login token 
-    let _ = get_authorized_user(req, false)?;
+    let (mut user, login_id) = get_logout_details(&req)?;
+    let store_lock = get_store_write_lock(&store)?;
 
-    // TO DO- implement logout
+    // - EXTRACT IP ADDRESS FROM REQUEST - presumably we only want to allwo logout from the IP address associated with login?
+    
+    user.remove_login(login_id);
+
+    update_store_user(store_lock, &mut user, |err| {
+        get_user_update_internal_error(&err)
+    })?;         
+
     Ok(HttpResponse::NoContent().finish())
 }
 // **************************************************************************************************
@@ -253,9 +368,9 @@ pub async fn get_users(
     store: web::Data<SharedStore>
 ) -> Result<HttpResponse, Error> {
     let store_lock = get_store_read_lock(&store)?;
-    let _ = get_authorized_user(req, true)?;
+    let _ = get_authorized_user(&req, true)?;
     let store_users = store_lock.get_users().map_err(|err| {
-        get_mazes_fetch_internal_error(&err)
+        get_users_fetch_internal_error(&err)
     })?;
 
     let user_items: Vec<UserItem> = store_users
@@ -302,7 +417,7 @@ impl CreateUserRequest {
                 email: self.email.clone(),
                 password_hash,
                 api_key: Uuid::nil(),
-                login_tokens: None,
+                logins: vec![],
             }
         )  
     }
@@ -334,7 +449,7 @@ pub async fn create_user(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
-    let _ = get_authorized_user(req, true)?;
+    let _ = get_authorized_user(&req, true)?;
     let create_req_data: CreateUserRequest = create_req.into_inner();
     let mut store_user = create_req_data.into_user(&auth_service)?;
 
@@ -386,7 +501,7 @@ pub async fn get_user(
     println!("*** get_user() called ****");
 
     let store_lock = get_store_read_lock(&store)?;
-    let _ = get_authorized_user(req, true)?;
+    let _ = get_authorized_user(&req, true)?;
     let id = user_id_from_str(&path.into_inner())?;
 
     match store_lock.get_user(id) {
@@ -454,25 +569,17 @@ pub async fn update_user(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let mut store_lock = get_store_write_lock(&store)?;
-    let _ = get_authorized_user(req, true)?;
+    let store_lock = get_store_write_lock(&store)?;
+    let _ = get_authorized_user(&req, true)?;
     let id = user_id_from_str(&path.into_inner())?;
     let update_req_data = update_req.into_inner();
 
     match store_lock.get_user(id) {
         Ok(mut user) => {
             update_req_data.apply_to_store_user(&mut user);
-            match store_lock.update_user(&mut user) {
-                Ok(_) =>  Ok(HttpResponse::Ok().json(UserItem::from_store_user(&user))),
-                Err(err) => {
-                    match err {
-                        StoreError::UserEmailExists() | StoreError::UserNameExists()  => Err(get_user_exists_error()),
-                        StoreError::UserNameMissing() => Err(get_missing_username_request_error()),
-                        StoreError::UserEmailInvalid() => Err(get_invalid_email_request_error()),
-                        _ => Err(get_user_update_internal_error(&err))
-                    }    
-                }
-            } 
+            update_store_user(store_lock, &mut user, |err| {
+                get_user_update_internal_error(&err)
+            })            
         },
         Err(err) => {
             match err {
@@ -512,7 +619,7 @@ pub async fn delete_user(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
-    let _ = get_authorized_user(req, true)?;
+    let _ = get_authorized_user(&req, true)?;
     let id = user_id_from_str(&path.into_inner())?;
 
     match store_lock.delete_user(id) {
@@ -563,7 +670,7 @@ pub async fn get_mazes(
 ) -> Result<HttpResponse, Error> {
     let include_definitions = query.include_definitions.unwrap_or(false); 
     let store_lock = get_store_read_lock(&store)?;
-    let user = get_authorized_user(req, false)?;
+    let user = get_authorized_user(&req, false)?;
     let stored_items = store_lock.get_maze_items(&user, include_definitions).map_err(|err| {
         get_mazes_fetch_internal_error(&err)
     })?;
@@ -598,7 +705,7 @@ pub async fn create_maze(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
-    let user = get_authorized_user(req, false)?;
+    let user = get_authorized_user(&req, false)?;
     let mut maze: Maze = req_maze.into_inner();
 
     match store_lock.create_maze(&user, &mut maze) {
@@ -644,7 +751,7 @@ pub async fn get_maze(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let store_lock = get_store_read_lock(&store)?;
-    let user = get_authorized_user(req, false)?;
+    let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
 
     match store_lock.get_maze(&user, &id) {
@@ -690,7 +797,7 @@ pub async fn update_maze(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
-    let user = get_authorized_user(req, false)?;
+    let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
     let mut maze = req_maze.into_inner();
 
@@ -738,7 +845,7 @@ pub async fn delete_maze(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
-    let user = get_authorized_user(req, false)?;
+    let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
 
     match store_lock.delete_maze(&user, &id) {
@@ -783,7 +890,7 @@ pub async fn get_maze_solution(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let store_lock = get_store_read_lock(&store)?;
-    let user = get_authorized_user(req, false)?;
+    let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
 
     match store_lock.get_maze(&user, &id) {
@@ -828,7 +935,7 @@ pub async fn solve_maze(
     req_maze: web::Json<Maze>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let _ = get_authorized_user(req, false)?;
+    let _ = get_authorized_user(&req, false)?;
     let maze: Maze = req_maze.into_inner();
     match maze.solve() {
         Ok(solution) => Ok(HttpResponse::Ok().json(solution)),

@@ -1,4 +1,5 @@
-use crate::{Error, wrappers::generate_uuid, UserLoginToken, UserValidationError};
+use crate::{Error, wrappers::generate_uuid, UserLogin, UserValidationError};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -22,8 +23,8 @@ pub struct User {
     #[schema(value_type = String)] // Treat as string during serlialization
     /// API key
     pub api_key: Uuid,
-    // Login tokens
-    pub login_tokens: Option<Vec<UserLoginToken>>,
+    // Logins
+    pub logins: Vec<UserLogin>,
 }
 
 impl User {
@@ -46,7 +47,7 @@ impl User {
     ///     email: "john_smith@company.com".to_string(),
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     /// println!("User: {:?}", user);
     pub fn new_id() -> Uuid {
@@ -71,7 +72,7 @@ impl User {
     ///     email: "john_smith@company.com".to_string(),
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     /// println!("User: {:?}", user);
     pub fn new_api_key() -> Uuid {
@@ -100,7 +101,7 @@ impl User {
             email: "".to_string(),
             password_hash: "".to_string(),
             api_key: Uuid::nil(),
-            login_tokens: None,
+            logins: vec![],
         }
     }
     /// Generates the JSON string representation for the user
@@ -122,7 +123,7 @@ impl User {
     ///     email: "john_smith@company.com".to_string(),
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     /// match user.to_json() {
     ///     Ok(json) => {
@@ -150,7 +151,7 @@ impl User {
     /// ```
     /// use data_model::User;
     /// let mut user = User::default();
-    /// let json = r#"{"id":"02345678-1234-5678-1234-567890123456","is_admin":false,"username":"john_smith","full_name":"John Smith","email":"john_smith@company.com","password_hash":"some_password_hash","api_key":"12345678-1234-5678-1234-567890123456","login_tokens":null}"#;
+    /// let json = r#"{"id":"02345678-1234-5678-1234-567890123456","is_admin":false,"username":"john_smith","full_name":"John Smith","email":"john_smith@company.com","password_hash":"some_password_hash","api_key":"12345678-1234-5678-1234-567890123456","logins":[]}"#;
     /// match user.from_json(json) {
     ///     Ok(()) => {
     ///         println!(
@@ -189,7 +190,7 @@ impl User {
     ///     email: "bad_email".to_string(),
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
-    ///     login_tokens: None,
+    ///     logins: vec![],
     /// };
     /// match user.validate() {
     ///     Ok(_) => {
@@ -217,7 +218,7 @@ impl User {
         }
         Ok(())
     }
-    /// Checks whether a user object contains the given login token id
+    /// Creates a user and then performs a login
     ///
     /// # Returns
     ///
@@ -225,15 +226,91 @@ impl User {
     ///
     /// # Examples
     ///
-    /// Initialize a user with valid details and login token and then verify that the token can be found
+    /// Initialize a user with valid details, create a login and then print the login id
     /// ```
-    /// use data_model::{User, UserLoginToken};
+    /// use data_model::{User};
     /// use uuid::Uuid;
     ///  
-    /// // Create the login tokens
-    /// let login_token = UserLoginToken::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
-    /// let search_token_id = login_token.id; 
-    /// let login_tokens = Some(vec![login_token]);
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    /// };
+    ///
+    /// // Peform a login
+    /// let expiry_hours = 24;
+    /// let ip_address = Some("123.456.789.012".to_string());
+    /// let device_info = Some("Device info string".to_string());
+    /// 
+    /// let login = user.create_login(expiry_hours, ip_address, device_info);
+    /// println!("Created login with id = {}", login.id);
+    /// ```
+    pub fn create_login(&mut self, expiry_hours: u32, ip_address: Option<String>, device_info: Option<String>) -> UserLogin {
+        let login = UserLogin::new(expiry_hours, ip_address, device_info);
+        self.logins.push(login.clone());
+        login
+    }
+    /// Creates a user and then performs a login
+    ///
+    /// # Returns
+    ///
+    /// Boolean
+    ///
+    /// # Examples
+    ///
+    /// Initialize a user with valid details, create a login and then remove it - printing the login details and status along the way
+    /// ```
+    /// use data_model::{User};
+    /// use uuid::Uuid;
+    ///  
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    /// };
+    ///
+    /// // Peform a login
+    /// let expiry_hours = 24;
+    /// let ip_address = Some("123.456.789.012".to_string());
+    /// let device_info = Some("Device info string".to_string());
+    /// 
+    /// let login = user.create_login(expiry_hours, ip_address, device_info);
+    /// println!("Created login with id = {}, user now contains login = {}", login.id, user.contains_valid_login(login.id));
+    /// user.remove_login(login.id);
+    /// println!("Removed login with id = {}, user now contains login = {}", login.id, user.contains_valid_login(login.id));
+    /// ```
+    pub fn remove_login(&mut self, login_id: Uuid)  {
+        self.logins.retain(|login| login.id != login_id);
+    }
+    /// Checks whether a user object contains the given login token id and, if so, that it has not expired 
+    ///
+    /// # Returns
+    ///
+    /// Boolean
+    ///
+    /// # Examples
+    ///
+    /// Initialize a user with valid details and login token and then verify that the token is valid
+    /// ```
+    /// use data_model::{User, UserLogin};
+    /// use uuid::Uuid;
+    ///  
+    /// // Create the login
+    /// let login = UserLogin::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
+    /// let search_login_id = login.id; 
+    /// let logins = vec![login];
     /// 
     /// // Create the user definition
     /// let mut user = User {
@@ -244,28 +321,28 @@ impl User {
     ///     email: "jsmith@company.com".to_string(),
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
-    ///     login_tokens,
+    ///     logins,
     /// };
     ///
-    /// // Verify that the login token can be found
-    /// if user.contains_login_token(search_token_id) {
-    ///     println!("User login token found");
+    /// // Verify that the login is valid
+    /// if user.contains_valid_login(search_login_id) {
+    ///     println!("User login found");
     /// }
     /// else {
-    ///     println!("User login token not found");
+    ///     println!("User login not found");
     /// }
     /// ```
-    pub fn contains_login_token(&self, id: Uuid) -> bool {
-        self.login_tokens
-            .as_ref().is_some_and(|tokens| {
-                tokens.iter().any(|t| t.id == id)
-            })
+    pub fn contains_valid_login(&self, id: Uuid) -> bool {
+        let now = Utc::now();
+        self.logins.iter().any(|t| t.id == id && t.expires_at > now)
+
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::{assert_eq, assert_ne};    
 
     #[test]
     fn can_create_user_id() {
@@ -288,107 +365,108 @@ mod tests {
     fn can_serialize() {
         let user = User::default();
         let s = user.to_json().expect("Failed to serialize");
-        assert_eq!(s, r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#);
+        assert_eq!(s, r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#);
     }
 
     #[test]
     fn can_deserialize() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
-        loaded.from_json(s).expect("Failed to deserialize");
-        assert_eq!(loaded, compare);
-    }
-
-    #[test]
-    fn can_deserialize_with_missing_login_tokens() {
-        let compare = User::default();
-        let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `id`\", line: 1, column: 146))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `logins`\", line: 1, column: 170))"
+    )]    
+    fn cannot_deserialize_with_missing_logins() {
+        let mut loaded = User::default();
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
+        loaded.from_json(s).expect("Failed to deserialize");
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `id`\", line: 1, column: 138))"
     )]    
     fn cannot_deserialize_with_missing_id() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
+        let s = r#"{"is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `is_admin`\", line: 1, column: 173))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `is_admin`\", line: 1, column: 165))"
     )]    
     fn cannot_deserialize_with_missing_is_admin() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `username`\", line: 1, column: 176))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `username`\", line: 1, column: 168))"
     )]    
     fn cannot_deserialize_with_missing_username() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `full_name`\", line: 1, column: 175))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `full_name`\", line: 1, column: 167))"
     )]    
     fn cannot_deserialize_with_missing_full_name() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `email`\", line: 1, column: 179))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `email`\", line: 1, column: 171))"
     )]    
     fn cannot_deserialize_with_missing_email() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `password_hash`\", line: 1, column: 171))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `password_hash`\", line: 1, column: 163))"
     )]    
     fn cannot_deserialize_with_missing_password_hash() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","api_key":"00000000-0000-0000-0000-000000000000","login_tokens":null}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `api_key`\", line: 1, column: 141))"
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `api_key`\", line: 1, column: 133))"
     )]    
     fn cannot_deserialize_with_missing_api_key() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","login_tokens":null}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
@@ -402,7 +480,7 @@ mod tests {
             email: "john_smith@company.com".to_string(),
             password_hash: "encrypted_hash".to_string(),
             api_key: User::new_api_key(),
-            login_tokens: None,
+            logins: vec![],
         }
     }
 
@@ -459,25 +537,48 @@ mod tests {
         validate_user(&user);
     }
 
-    fn create_valid_user_with_login_token() -> (User, Uuid) {
-        let login_token = UserLoginToken::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
-        let token_id = login_token.id;
+    fn create_valid_user_with_login() -> (User, Uuid) {
         let mut user = create_valid_user();
-        user.login_tokens = Some(vec![login_token]);
-        (user, token_id)
+        let login = user.create_login(1, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
+        (user, login.id)
     }
 
     #[test]
     fn user_login_token_should_be_found() {
-        let (user, token_id) = create_valid_user_with_login_token();
-        assert!(user.contains_login_token(token_id));
+        let (user, login_id) = create_valid_user_with_login();
+        assert!(user.contains_valid_login(login_id));
     }
 
     #[test]
     fn user_login_token_should_not_be_found() {
-        let (user, _) = create_valid_user_with_login_token();
-        let bad_token_id = generate_uuid();
-        assert!(!user.contains_login_token(bad_token_id));
+        let (user, _) = create_valid_user_with_login();
+        let bad_login_id = generate_uuid();
+        assert!(!user.contains_valid_login(bad_login_id));
+    }
+
+    #[test]
+    fn user_should_be_able_to_login() {
+        let (user, login_id) = create_valid_user_with_login();
+        assert!(user.contains_valid_login(login_id));
+    }
+
+    #[test]
+    fn user_should_be_able_to_logout() {
+        let (mut user, login_id) = create_valid_user_with_login();
+        assert!(user.contains_valid_login(login_id));
+        user.remove_login(login_id);
+        assert!(!user.contains_valid_login(login_id));
+    }
+
+    #[test]
+    fn user_ignore_bad_login_id_on_logout() {
+        let (mut user, _) = create_valid_user_with_login();
+        let login_count_before = user.logins.len();
+        assert_ne!(login_count_before, 0);
+        let bad_login_id = generate_uuid();
+        user.remove_login(bad_login_id);
+        let login_count_after = user.logins.len();
+        assert_eq!(login_count_after, login_count_before);
     }
 
 }

@@ -10,6 +10,7 @@ The `data_model` crate is written in `Rust` and defines the following data model
 - `MazeDefinition` - represents a maze definition
 - `MazePoint` - represents a point within a maze
 - `User` - represents a user
+- `UserLogin` - represents a user login
 
 ## Getting Started
 

@@ -12,6 +12,7 @@ mod test_definitions {
     use auth::config::PasswordHashConfig;    
     use data_model::{Maze, MazeDefinition, MazePoint, User};
     use maze::{Error as MazeError, MazePath, MazeSolution};
+    use pretty_assertions::assert_eq;    
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
@@ -311,9 +312,9 @@ mod test_definitions {
             }
             Err(StoreError::UserNotFound())
         }
-        fn find_user_by_login_token(&self, token_id: Uuid) -> Result<User, StoreError>{
+        fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, StoreError>{
             for v in self.users.values() {
-                if v.user.contains_login_token(token_id) {
+                if v.user.contains_valid_login(login_id) {
                     return Ok(v.user.clone());
                 }
             }
