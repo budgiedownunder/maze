@@ -86,7 +86,7 @@ fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &AuthSe
         }
     })?;
 
-    let password_matches = auth_service.verify_password(&user.password_hash, &password).map_err(|err| {
+    let password_matches = auth_service.verify_password(&user.password_hash, password).map_err(|err| {
         log::error!("Password verification failed: {:?}", err);
         ErrorInternalServerError("Internal authentication error")
     })?;
@@ -209,7 +209,7 @@ where
     F: Fn(&StoreError) -> Error,
 {
     match store_lock.update_user(user) {
-        Ok(_) =>  Ok(HttpResponse::Ok().json(UserItem::from_store_user(&user))),
+        Ok(_) =>  Ok(HttpResponse::Ok().json(UserItem::from_store_user(user))),
         Err(err) => {
             match err {
                 StoreError::UserEmailExists() | StoreError::UserNameExists()  => Err(get_user_exists_error()),
@@ -296,9 +296,8 @@ pub async fn login(
     let login_expiry_hours = config.security.login_expiry_hours;
     let login = user.create_login(login_expiry_hours, get_caller_ip_address(&req), get_caller_device_info(&req));
     let store_lock = get_store_write_lock(&store)?;
-
     update_store_user(store_lock, &mut user, |err| {
-        get_user_update_internal_error(&err)
+        get_user_update_internal_error(err)
     })?;
 
     Ok(HttpResponse::Ok().json(LoginResponse {
@@ -332,12 +331,10 @@ pub async fn logout(
     let (mut user, login_id) = get_logout_details(&req)?;
     let store_lock = get_store_write_lock(&store)?;
 
-    // - EXTRACT IP ADDRESS FROM REQUEST - presumably we only want to allwo logout from the IP address associated with login?
-    
     user.remove_login(login_id);
 
     update_store_user(store_lock, &mut user, |err| {
-        get_user_update_internal_error(&err)
+        get_user_update_internal_error(err)
     })?;         
 
     Ok(HttpResponse::NoContent().finish())
@@ -498,8 +495,6 @@ pub async fn get_user(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    println!("*** get_user() called ****");
-
     let store_lock = get_store_read_lock(&store)?;
     let _ = get_authorized_user(&req, true)?;
     let id = user_id_from_str(&path.into_inner())?;
@@ -578,7 +573,7 @@ pub async fn update_user(
         Ok(mut user) => {
             update_req_data.apply_to_store_user(&mut user);
             update_store_user(store_lock, &mut user, |err| {
-                get_user_update_internal_error(&err)
+                get_user_update_internal_error(err)
             })            
         },
         Err(err) => {

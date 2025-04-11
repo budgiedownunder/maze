@@ -37,6 +37,7 @@ pub async fn auth_middleware(
         .expect("Store is missing from app_data")
         .clone();
 
+     // Check for Authorization bearer (login) token 
      if let Some(auth_header) = req.headers().get("Authorization") {
         let raw = auth_header.to_str().map_err(|_| reject_unauthorized(&req, "Invalid header"))?;
         if let Some(token_str) = raw.strip_prefix("Bearer ") {
@@ -52,7 +53,8 @@ pub async fn auth_middleware(
         }        
     }
 
-    if let Some(api_key) = req.headers().get("X-API-KEY") {
+     // Check for API Key 
+     if let Some(api_key) = req.headers().get("X-API-KEY") {
         if let Ok(api_key_str) = api_key.to_str() {
             if let Ok(api_key) = Uuid::parse_str(api_key_str) {
                 if let Some(user) = {

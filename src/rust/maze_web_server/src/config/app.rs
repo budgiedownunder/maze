@@ -4,7 +4,7 @@ use log::info;
 use serde::{Deserialize, Serialize};
 
 /// Security configuration including TLS certificate paths and password hashing parameters.
-#[derive(Debug, Deserialize, Serialize, Default, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SecurityConfig {
     /// Path to the TLS certificate file.
     /// Can be overridden with `MAZE_WEB_SERVER_SECURITY_CERT_FILE`.
@@ -28,8 +28,19 @@ pub struct SecurityConfig {
 
 }
 
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            cert_file: default_security_cert_file(),
+            key_file: default_security_key_file(),
+            password_hash: PasswordHashConfig::default(),
+            login_expiry_hours: default_security_login_expiry_hours(),
+        }
+    }
+}
+
 /// Application configuration settings loaded from config.toml or environment variables.
-#[derive(Debug, Deserialize, Serialize, Default, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AppConfig {
     /// Port to bind the server to (e.g., 8443 for HTTPS).  
     /// Can be overridden with `MAZE_WEB_SERVER_PORT`.
@@ -40,6 +51,16 @@ pub struct AppConfig {
     #[serde(default)]
     pub security: SecurityConfig,
 }
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            port: default_port(),
+            security: SecurityConfig::default(),
+        }
+    }
+}
+
 
 // Default values
 fn default_port() -> u16 { 8443 }
