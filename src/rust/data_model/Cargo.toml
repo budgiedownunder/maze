@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4", default_features = false,features = ["serde", "alloc"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 utoipa = { version = "5.2", features = ["chrono"] }
@@ -16,6 +16,6 @@ uuid = { version = "1.7", features = ["serde"], default-features = false }
 
 [features]
 default = ["uuid-random"]
-uuid-disable-random = []
+wasm-lite = []
 uuid-random = ["uuid/v4"]
-wasm-bindgen = ["uuid/js", "uuid-disable-random"]
+wasm-bindgen = ["uuid/js", "wasm-lite"]

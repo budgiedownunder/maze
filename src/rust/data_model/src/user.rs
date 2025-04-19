@@ -1,5 +1,4 @@
-use crate::{Error, wrappers::generate_uuid, UserLogin, UserValidationError};
-use chrono::Utc;
+use crate::{Error, wrappers::{generate_now, generate_uuid}, UserLogin, UserValidationError};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -333,7 +332,7 @@ impl User {
     /// }
     /// ```
     pub fn contains_valid_login(&self, id: Uuid) -> bool {
-        let now = Utc::now();
+        let now = generate_now();
         self.logins.iter().any(|t| t.id == id && t.expires_at > now)
 
     }

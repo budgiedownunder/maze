@@ -13,7 +13,7 @@ utoipa = { version = "5.2" }
 data_model = { path = "../data_model" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-data_model = { path = "../data_model", default-features = false, features = ["uuid-disable-random"] }
+data_model = { path = "../data_model", default-features = false, features = ["wasm-lite"] }
 
 [dev-dependencies]
 criterion = "0.5"

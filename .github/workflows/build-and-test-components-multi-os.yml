@@ -106,7 +106,7 @@ jobs:
         cargo build --locked --verbose
         cd maze_wasm
         wasm-pack build --target web --features "wasm-bindgen"
-        cargo build --locked --target wasm32-unknown-unknown --release --no-default-features --features "uuid-disable-random"
+        cargo build --locked --target wasm32-unknown-unknown --release --no-default-features --features "wasm-lite"
         pwd
 
     - name: Set environment variables (non-Windows)

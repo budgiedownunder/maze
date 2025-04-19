@@ -1,4 +1,4 @@
-use crate::{Error, wrappers::generate_uuid};
+use crate::{Error, wrappers::{generate_now, generate_uuid}};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -51,7 +51,7 @@ impl UserLogin {
     ///     }
     /// }
     pub fn new(expiry_hours: u32, ip_address: Option<String>, device_info: Option<String>) -> UserLogin {
-        let now = Utc::now();
+        let now = generate_now();
         UserLogin {
             id: generate_uuid(),
             created_at: now,
