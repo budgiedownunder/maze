@@ -780,6 +780,7 @@ impl MazeDefinition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;    
 
     #[test]
     fn can_create_empty_from_dimensions() {

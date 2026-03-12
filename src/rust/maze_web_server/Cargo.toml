@@ -12,7 +12,10 @@ path = "src/main.rs"
 
 [dependencies]
 actix-web = { version = "4", features = ["rustls-0_20"] }
+actix-service = "2" 
+argon2 = "0.5"
 auth = { path = "../auth" }
+chrono = { version = "0.4", features = ["serde"] }
 config = "0.13"
 data_model = { path = "../data_model" }
 env_logger = "0.10"
@@ -35,3 +38,4 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 
 [dev-dependencies]
 actix-http = "3.9"
+pretty_assertions = "1"

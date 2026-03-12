@@ -10,6 +10,7 @@ The `data_model` crate is written in `Rust` and defines the following data model
 - `MazeDefinition` - represents a maze definition
 - `MazePoint` - represents a point within a maze
 - `User` - represents a user
+- `UserLogin` - represents a user login
 
 ## Getting Started
 
@@ -38,18 +39,18 @@ cargo doc --open
 
 The crate uses [`uuid::Uuid::new_v4()`](https://docs.rs/uuid/latest/uuid/struct.Uuid.html#method.new_v4) to generate unique IDs where needed. This requires access to secure randomness via the [`getrandom`](https://docs.rs/getrandom) crate.
 
-However, some WebAssembly targets (like `wasm32-unknown-unknown` used by Wasmtime or .NET) do not support randomness by default. To handle this cleanly, this crate supports a feature flag `uuid-disable-random` to conditionally disable UUID generation.
+However, some WebAssembly targets (like `wasm32-unknown-unknown` used by Wasmtime or .NET) do not support randomness or `Utc::now()` by default. To handle this cleanly, this crate supports a feature flag `wasm-lite` to conditionally disable that functionality and return a `nil` value instead.
 
 Internally, UUIDs are generated like this:
 
 ```rust
 fn generate_uuid() -> uuid::Uuid {
-    #[cfg(not(feature = "uuid-disable-random"))]
+    #[cfg(not(feature = "wasm-lite"))]
     {
         uuid::Uuid::new_v4()
     }
 
-    #[cfg(feature = "uuid-disable-random")]
+    #[cfg(feature = "wasm-lite")]
     {
         uuid::Uuid::nil()
     }

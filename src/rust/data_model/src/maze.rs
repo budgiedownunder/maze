@@ -195,6 +195,7 @@ impl Maze {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;    
 
     #[test]
     fn can_create_new_maze_from_vector() {

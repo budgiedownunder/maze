@@ -41,6 +41,14 @@ Non-Windows:
 dotnet build Build-Non-Windows.sln
 ```
 
+Before testing, you must also ensure that the Rust WebAssembly file `maze_wasm.wasm` has been built for the `wasm32-unknown-unknown` target. This is required for it to be used outside of JavaScript, as described in the `maze_wasm` [README](../rust/maze_wasm/README.md).
+
+If this is not done, the WebAssembly will fail to load in `.NET` via `Wasmtime` and errors such as:
+```
+Error while importing "__wbindgen_placeholder__"."__wbindgen_describe": unknown import
+```
+will be thrown.
+
 ### Testing
 To test all components, run the following from the `csharp` directory:
 

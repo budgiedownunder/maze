@@ -1,16 +1,21 @@
 pub mod api;
 pub mod config;
 pub mod middleware;
-
-use storage::{get_store, SharedStore};
+pub mod service;
 
 use actix_web::{ App, middleware::Logger, HttpServer, web};
+use auth::{config::PasswordHashConfig, hashing::hash_password};
 use config::app::AppConfig;
 use rustls::{ServerConfig, Certificate, PrivateKey};
 use rustls_pemfile::{certs, pkcs8_private_keys};
+use service::auth::AuthService;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::{fs::File, io::{self, BufReader}};
+use storage::{get_store, SharedStore, Store, Error as StoreError};
+
+const DEFAULT_ADMIN_ACCOUNT_USERNAME:&str = "admin";
+const DEFAULT_ADMIN_ACCOUNT_PASSWORD:&str = "admin!";
 
 /// Loads the rust_ls configuration for the server session (see: https://docs.rs/rustls/latest/rustls/server/struct.ServerConfig.html)
 fn load_rustls_config(config: &AppConfig) -> io::Result<ServerConfig> {
@@ -52,35 +57,67 @@ fn construct_bind_address(port: u16) -> String {
     format!("0.0.0.0:{}", port)
 }
 
+/// Adds the default admin account to the store if no users are registered
+fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Store>) -> Result<(), StoreError> {
+    let users = store.get_users()?;
+    if users.is_empty() {
+        let password_hash = match hash_password(DEFAULT_ADMIN_ACCOUNT_PASSWORD, hash_config) {
+            Ok(hash) => hash,
+            Err(error) => return Err(StoreError::Other(format!("{}", error))),
+        };
+        store.init_default_admin_user(DEFAULT_ADMIN_ACCOUNT_USERNAME, &password_hash)?;
+    }
+    Ok(())    
+}
+
+/// Creates a configured Actix App instance with all routes, middleware, and shared state.
+/// Can be reused in both production (`main.rs`) and tests.
+pub fn create_app(
+    hash_config: &PasswordHashConfig,
+    store: web::Data<SharedStore>,
+) -> App<impl actix_service::ServiceFactory<
+    actix_web::dev::ServiceRequest,
+    Config = (),
+    Response = actix_web::dev::ServiceResponse<actix_web::body::BoxBody>,
+    Error = actix_web::Error,
+    InitError = (),
+>> {
+    let auth_service = web::Data::new(AuthService::new(hash_config.clone()));
+  
+    App::new()
+        .app_data(auth_service)
+        .app_data(store)
+        .service(api::register_api())
+        .service(api::register_redoc())
+        .service(api::register_rapidoc())
+        .service(api::register_swagger_ui())
+}
+
+
 /// Runs the Maze Web Server, which hosts the Maze Web API. This uses [`actix`](https://actix.rs/) to serve the API and 
 /// [`utoipa`](https://docs.rs/utoipa/latest/utoipa/) to publish it as an `OpenAPI`-compliant interface
 /// for use in third party products such as `Swagger`. In addition, the server also publishes its own 
 /// Swagger-related endpoints that can be used to manually test the API in user-friendly web pages (e.g. `/api-docs/v1/swagger-ui/`). 
 pub async fn run_server() -> std::io::Result<()> {
-    let config = AppConfig::load().expect("Failed to load configuration");
-  
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    let bind_address = construct_bind_address(config.port);
 
+    let config = AppConfig::load().expect("Failed to load configuration settings");
+    config.log_config();
+  
+    let bind_address = construct_bind_address(config.port);
     let rustls_config = load_rustls_config(&config)?;
-    let max_workers = std::thread::available_parallelism()?; // This is actix_web's default too
     let file_config = storage::FileStoreConfig::default();
     let mut store = get_store(storage::StoreConfig::File(file_config))?;
-    let users = store.get_users()?;
-    if users.is_empty() {
-        store.init_default_admin_user("admin", "dummy_hash_password")?;
-    }
+
+    init_user_accounts(&config.security.password_hash, &mut store)?;
+
+    let max_workers = std::thread::available_parallelism()?;
     let shared_store: SharedStore = Arc::new(RwLock::new(store));
 
     HttpServer::new(move || {
-        App::new()
-            .app_data(web::Data::new(shared_store.clone()))  // Share the store
-            .app_data(web::Data::new(config.clone())) // Share the config
-            .wrap(Logger::default())
-            .service(api::register_api())
-            .service(api::register_redoc())
-            .service(api::register_rapidoc())
-            .service(api::register_swagger_ui())
+        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()))
+        .app_data(web::Data::new(config.clone()))
+        .wrap(Logger::default())
     })
     .bind_rustls(bind_address, rustls_config)?
     .workers(usize::from(max_workers))

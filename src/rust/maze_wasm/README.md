@@ -29,7 +29,7 @@ wasm-pack build --target web --features "wasm-bindgen"
 To build the general Web Assembly `maze_wasm.wasm` (for use outside of JavaScript), run:
 
 ```
-cargo build --target wasm32-unknown-unknown --release --no-default-features --features "uuid-disable-random"
+cargo build --target wasm32-unknown-unknown --release --no-default-features --features "wasm-lite"
 ```
 
 This will generate the release package for `maze_wasm.wasm` in the following directory:
@@ -63,4 +63,4 @@ cargo doc --open
 
 ## WebAssembly Target Compatibility
 
-This crate supports both **JavaScript/WebAssembly** builds and **general-purpose WebAssembly** builds for use in non-JS environments such as Wasmtime, .NET, or other native hosts, with the `uuid-disable-random` feature flag used to disable randomness in those environments that do not support it.
+This crate supports both **JavaScript/WebAssembly** builds and **general-purpose WebAssembly** builds for use in non-JS environments such as Wasmtime, .NET, or other native hosts, with the `wasm-lite` feature flag used to disable randomness and `Utc::now()` in those environments that do not support them.

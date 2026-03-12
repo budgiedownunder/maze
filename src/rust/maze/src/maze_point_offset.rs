@@ -16,9 +16,15 @@ impl fmt::Display for MazePointOffset {
     }
 }
 
-#[test]
-fn should_have_expected_display_format() {
-    let o = MazePointOffset { row: -1, col: 0 };
-    let s = format!("{}", o);
-    assert_eq!(s, "[-1, 0]");
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;    
+
+    #[test]
+    fn should_have_expected_display_format() {
+        let o = MazePointOffset { row: -1, col: 0 };
+        let s = format!("{}", o);
+        assert_eq!(s, "[-1, 0]");
+    }
 }

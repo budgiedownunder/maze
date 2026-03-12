@@ -1,5 +1,32 @@
+# Application Configuration File
+
+# Server port to listen on (default: 8443)
 port = 8443
 
 [security]
+# Path to TLS certificate file (default: "cert.pem")
 cert_file = "cert.pem"
+
+# Path to TLS private key file (default: "key.pem")
 key_file = "key.pem"
+
+# Login token expiry in hours (integer).
+login_expiry_hours = 24
+
+[security.password_hash]
+# Argon2 memory cost in KiB (default: 65536 = 64 MiB)
+# Higher values increase protection against brute-force attacks
+#mem_cost = 65536
+
+# Argon2 time cost (iterations) (default: 3)
+# Higher values increase CPU usage
+time_cost = 3
+
+# Argon2 degree of parallelism (default: 4)
+# Should match the number of CPU cores
+lanes = 4
+
+# Desired length of password hash output in bytes (default: 32)
+# Common values: 32 (256-bit), 64 (512-bit)
+hash_length = 32
+

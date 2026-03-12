@@ -28,6 +28,7 @@ impl StdError for Error {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;    
 
     #[test]
     fn can_create_new_solve_error() {

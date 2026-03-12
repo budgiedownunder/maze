@@ -20,9 +20,9 @@ wasm-bindgen = { version = "0.2", optional = true, features = ["serde"] }
 data_model = { path = "../data_model" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-data_model = { path = "../data_model", default-features = false, features = ["uuid-disable-random"] }
+data_model = { path = "../data_model", default-features = false, features = ["wasm-lite"] }
 
 [features]
 default = []
 wasm-bindgen = ["dep:wasm-bindgen", "data_model/wasm-bindgen"]
-uuid-disable-random = ["data_model/uuid-disable-random"]
+wasm-lite = ["data_model/wasm-lite"]

@@ -148,6 +148,7 @@ impl MazePrinter for Maze {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;    
     use data_model::{Maze, MazeDefinition, MazePoint};
     use utils::StdoutLinePrinter;
 
