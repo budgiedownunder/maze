@@ -5,14 +5,14 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsBuildingHelp)' != 'true'">
-    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net8.0-windows10.0.19041.0;</TargetFrameworks>
-    <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">$(TargetFrameworks);net8.0-android;net8.0-ios;</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net10.0-windows10.0.19041.0;</TargetFrameworks>
+    <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">$(TargetFrameworks);net10.0-android;net10.0-ios;</TargetFrameworks>
     <!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
-		<!-- <TargetFrameworks>$(TargetFrameworks);net8.0-tizen</TargetFrameworks> -->
+		<!-- <TargetFrameworks>$(TargetFrameworks);net10.0-tizen</TargetFrameworks> -->
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsBuildingHelp)' == 'true'">
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
@@ -33,22 +33,21 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-		<PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
 	</ItemGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
     <RuntimeIdentifier>android-x64</RuntimeIdentifier>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
     <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-maccatalyst'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-maccatalyst'">
     <RuntimeIdentifier>maccatalyst-x64</RuntimeIdentifier>
   </PropertyGroup>
 
