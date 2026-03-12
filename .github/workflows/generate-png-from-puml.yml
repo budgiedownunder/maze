@@ -2,11 +2,12 @@ name: generate-png-from-puml
 run-name: ${{ github.actor }} is running the generate diagram PNG files from PlantUML within the branch ${{  github.ref }}
 
 on:
-  workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - '**/*.puml'
   pull_request:
+    branches: [main]
     paths:
       - '**/*.puml'
 
@@ -39,6 +40,7 @@ jobs:
         done
 
     - name: Commit PNG files
+      if: github.event_name == 'push'
       run: |
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@github.com"
