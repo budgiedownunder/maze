@@ -3,16 +3,23 @@ run-name: ${{ github.actor }} is running the build and test workflow for all com
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-
+  pull_request:
+    branches-ignore:
+      - main
     paths:
       - '**.cs'
       - '**.csproj'
-      - '**.mjs'
+      - '**.sln'
+      - '**.props'
+      - '**.xaml'
       - '**.rs'
       - '**.toml'
-      - '**.sln'
+      - '**.js'
+      - '**.mjs'
+      - '**.ts'
+      - '**.tsx'
+      - '**.html'
+      - '**.css'
 
 defaults:
   run:
