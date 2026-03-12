@@ -99,7 +99,7 @@ The Maze MAUI application running on Windows, iOS, and Android, showing a solved
 
 | Windows | iOS | Android |
 |---------|-----|---------|
-| ![Windows](./src/csharp/Maze.Maui.App/Screenshots/windows-solved.png) | ![iOS](./src/csharp/Maze.Maui.App/Screenshots/ios-solved.png) | ![Android](./src/csharp/Maze.Maui.App/Screenshots/android-solved.png) |
+| <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-solved.png" width="250"> |
 
 ## Getting Started
 
