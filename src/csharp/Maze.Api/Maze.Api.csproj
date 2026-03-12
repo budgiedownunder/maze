@@ -18,28 +18,28 @@
 
   <!-- Define target frameworks -->
   <PropertyGroup Condition="'$(IsBuildingHelp)' != 'true'">
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">
-      net8.0;net8.0-android;net8.0-ios;net8.0-windows10.0.19041.0
+      net10.0;net10.0-android;net10.0-ios;net10.0-windows10.0.19041.0
     </TargetFrameworks>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsBuildingHelp)' == 'true'">
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <!-- Define runtime identifiers for specific frameworks -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
     <RuntimeIdentifier>android-x64</RuntimeIdentifier>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
     <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-maccatalyst'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-maccatalyst'">
     <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 

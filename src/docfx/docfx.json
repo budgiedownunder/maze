@@ -4,13 +4,13 @@
       "src": [
         {
           "files": [
-            "**/Maze.Api/bin/Debug/net8.0/Maze.Api.dll",
-            "**/Maze.Api.Tests/bin/Debug/net8.0/win-x64/Maze.Api.Tests.dll",
-            "**/Maze.Maui.App/bin/Debug/net8.0-windows10.0.19041.0/win-x64/Maze.Maui.App.dll",
-            "**/Maze.Maui.Controls/bin/Debug/net8.0-windows10.0.19041.0/win-x64/Maze.Maui.Controls.dll",
-            "**/Maze.Maui.Services/bin/Debug/net8.0-windows10.0.19041.0/win-x64/Maze.Maui.Services.dll",
-            "**/Maze.Wasm.Interop/bin/Debug/net8.0/win-x64/Maze.Wasm.Interop.dll",
-            "**/Maze.Wasm.Interop.Tests/bin/Debug/net8.0/win-x64/Maze.Wasm.Interop.Tests.dll"
+            "**/Maze.Api/bin/Debug/net10.0/Maze.Api.dll",
+            "**/Maze.Api.Tests/bin/Debug/net10.0/win-x64/Maze.Api.Tests.dll",
+            "**/Maze.Maui.App/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Maze.Maui.App.dll",
+            "**/Maze.Maui.Controls/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Maze.Maui.Controls.dll",
+            "**/Maze.Maui.Services/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Maze.Maui.Services.dll",
+            "**/Maze.Wasm.Interop/bin/Debug/net10.0/win-x64/Maze.Wasm.Interop.dll",
+            "**/Maze.Wasm.Interop.Tests/bin/Debug/net10.0/win-x64/Maze.Wasm.Interop.Tests.dll"
           ],  
           "exclude": [ 
             "bin/**/*", 
@@ -29,7 +29,7 @@
         "ExcludeMobileFrameworks": "true",
         "IsBuildingHelp": "true",
         "Configuration": "Debug",
-        "TargetFramework": "net8.0-windows10.0.19041.0"
+        "TargetFramework": "net10.0-windows10.0.19041.0"
       },
       "filter": "filter.yml"
     }  

@@ -1,5 +1,4 @@
 ﻿using CommunityToolkit.Maui;
-using MauiGestures;
 //using Maze.Maui.App.Services;
 using Microsoft.Extensions.Logging;
 using Maze.Wasm.Interop;
@@ -32,7 +31,6 @@ namespace Maze.Maui.App
             builder
                 .UseMauiApp<App>()
                 .UseMauiCommunityToolkit()
-                .UseAdvancedGestures()
                 .ConfigureFonts(fonts =>
                 {
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
