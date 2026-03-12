@@ -1,13 +1,24 @@
 # maze-project
 
+[![Build & Test](https://github.com/budgiedownunder/maze-project/actions/workflows/build-and-test-components-multi-os.yml/badge.svg)](https://github.com/budgiedownunder/maze-project/actions/workflows/build-and-test-components-multi-os.yml)
+[![Deploy Docs](https://github.com/budgiedownunder/maze-project/actions/workflows/build-and-deploy-to-github-pages.yml/badge.svg)](https://github.com/budgiedownunder/maze-project/actions/workflows/build-and-deploy-to-github-pages.yml)
+[![Generate Diagrams](https://github.com/budgiedownunder/maze-project/actions/workflows/generate-png-from-puml.yml/badge.svg)](https://github.com/budgiedownunder/maze-project/actions/workflows/generate-png-from-puml.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://budgiedownunder.github.io/maze-project/)
+
+A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, and **WebAssembly** interoperability. Built around a maze generation and solving domain, it demonstrates library crates, REST APIs, WASM bindings, a cross-platform MAUI app, and automated CI/CD across Windows, macOS, and Linux.
+
 ## Table of Contents
 - [Introduction](#introduction)
+- [Architecture](#architecture)
 - [Getting Started](#getting-started)
-- [Documentation](docs/README.md)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Introduction
+
+> **Status:** Experimental — this project exists to explore language interoperability and is actively maintained but not intended for production use.
+
 This is an experimental project that has been created for exploring various programming languages, technologies and language-to-language integration. At its core, it contains a set of tools and libraries for managing and solving mazes that are then utilised in various application scenarios.
 
 At this stage, the following areas are covered:
@@ -75,12 +86,18 @@ The following components are present:
 |                                | [`storage`](./src/rust/storage/README.md)                                     | Maze storage library
 |                                | [`utils`](./src/rust/utils/README.md)                                         | Utilities library
 
+## Architecture
+
+![Architecture Diagram](./docs/diagrams/architecture.png)
+
+> See [`docs/diagrams/architecture.puml`](./docs/diagrams/architecture.puml) for the PlantUML source.
+
 ## Getting Started
 
 ### Setup
 To setup the build and test environment, you first need to install:
 
-- [`.NET 8.0+`](https://dotnet.microsoft.com/en-us/download)
+- [`.NET 10.0+`](https://dotnet.microsoft.com/en-us/download)
 - [`Rust`](https://www.rust-lang.org/tools/install)
 - [`Node.js`](https://nodejs.org/en/learn/getting-started/how-to-install-nodejs) 
 
@@ -100,6 +117,8 @@ To setup the `Rust` build environment, refer to the [README](src/rust/README.md)
 - To generate documentation just for the `.NET` APIs, refer to the [README](src/csharp/README.md) in the `csharp` directory.
 
 - To generate documentation just for the `Rust` crates, refer to the [README](src/rust/README.md) in the `rust` directory.
+
+The combined output is deployed automatically to [GitHub Pages](https://budgiedownunder.github.io/maze-project/) on every push to `main`.
 
 ## Contributing
 At this stage, this project is not accepting contributions.
