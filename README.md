@@ -11,6 +11,7 @@ A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, and 
 ## Table of Contents
 - [Introduction](#introduction)
 - [Architecture](#architecture)
+- [Screenshots](#screenshots)
 - [Getting Started](#getting-started)
 - [Contributing](#contributing)
 - [License](#license)
@@ -67,7 +68,7 @@ The following components are present:
 |--------------------------------|-------------------------------------------------------------------------------|---------------
 | `.github/workflows`            | `*.yml`                                                                       | GitHub Action workflow files
 | `docs`                         | [`README.md`](./docs/README.md)                                               | Project overview documentation
-| `research/alorithms/excel`     | `maze-algorithms.xls`                                                         | Excel workbook containing maze algorithms
+| `research/algorithms/excel`     | `maze-algorithms.xls`                                                         | Excel workbook containing maze algorithms
 | `src`                          | [`docfx`](./src/docfx/README.md)                                              | HTML help generation
 | `src/csharp`                   | [`Maze.Api`](./src/csharp/Maze.Api/README.md)                                 | .NET API that sits above  [`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)
 |                                | [`Maze.Api.Tests`](./src/csharp/Maze.Api.Tests/README.md)                     | Unit tests for [`Maze.Api`](./src/csharp/Maze.Api/README.md)
@@ -92,14 +93,22 @@ The following components are present:
 
 > See [`docs/diagrams/architecture.puml`](./docs/diagrams/architecture.puml) for the PlantUML source.
 
+## Screenshots
+
+The Maze MAUI application running on Windows, iOS, and Android, showing a solved maze.
+
+| Windows | iOS | Android |
+|---------|-----|---------|
+| ![Windows](./src/csharp/Maze.Maui.App/Screenshots/windows-solved.png) | ![iOS](./src/csharp/Maze.Maui.App/Screenshots/ios-solved.png) | ![Android](./src/csharp/Maze.Maui.App/Screenshots/android-solved.png) |
+
 ## Getting Started
 
 ### Setup
 To setup the build and test environment, you first need to install:
 
 - [`.NET 10.0+`](https://dotnet.microsoft.com/en-us/download)
-- [`Rust`](https://www.rust-lang.org/tools/install)
-- [`Node.js`](https://nodejs.org/en/learn/getting-started/how-to-install-nodejs) 
+- [`Rust`](https://www.rust-lang.org/tools/install) (latest stable)
+- [`Node.js 18+`](https://nodejs.org/en/learn/getting-started/how-to-install-nodejs)
 
 To setup the `C#` build environment, refer to the [README](src/csharp/README.md) in the `csharp` directory.
 
