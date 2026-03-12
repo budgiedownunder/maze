@@ -11,8 +11,13 @@
         public App()
         {
             InitializeComponent();
-
-            MainPage = new AppShell();
         }
+
+        /// <summary>
+        /// Creates the application window
+        /// </summary>
+        /// <param name="activationState">Activation state</param>
+        /// <returns>Window</returns>
+        protected override Window CreateWindow(IActivationState? activationState) => new Window(new AppShell());
     }
 }

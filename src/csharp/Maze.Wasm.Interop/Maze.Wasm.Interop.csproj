@@ -13,33 +13,33 @@
 
   <!-- Define target frameworks -->
   <PropertyGroup Condition="'$(IsBuildingHelp)' != 'true'">
-    <TargetFrameworks>net8.0</TargetFrameworks>
+    <TargetFrameworks>net10.0</TargetFrameworks>
     <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">
-      $(TargetFrameworks);net8.0-android;net8.0-ios;net8.0-windows10.0.19041.0
+      $(TargetFrameworks);net10.0-android;net10.0-ios;net10.0-windows10.0.19041.0
     </TargetFrameworks>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsBuildingHelp)' == 'true'">
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <!-- Define runtime identifiers for specific frameworks -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('windows'))">win-x64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('osx'))">osx-arm64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="$([MSBuild]::IsOSPlatform('linux'))">linux-x64</RuntimeIdentifier>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
     <RuntimeIdentifier>android-x64</RuntimeIdentifier>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
     <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-maccatalyst'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-maccatalyst'">
     <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
@@ -49,9 +49,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
     <PackageReference Include="Wasmtime" Version="22.0.0" />
   </ItemGroup>
 
@@ -65,19 +65,19 @@
     <NativeLibrary Include="runtimes/win-x64/native/wasmer.dll" Condition="'$(RuntimeIdentifier)' == 'win-x64'" />
   </ItemGroup>
 
-  <!-- <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+  <!-- <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
     <Content Include="runtimes/ios-arm64/native/libwasmer.a">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup> -->
 
-<ItemGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+<ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
     <Content Include="runtimes/ios-sim-arm64/native/libwasmer.a">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-ios'">
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
     <AdditionalMtouchArguments>--gcc_flags "-framework CoreFoundation"</AdditionalMtouchArguments>
   </PropertyGroup>
   

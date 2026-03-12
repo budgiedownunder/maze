@@ -5,12 +5,12 @@
  	 </PropertyGroup>
 
 	<PropertyGroup Condition="'$(IsBuildingHelp)' != 'true'">
-  		<!-- <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net8.0-windows10.0.19041.0;net8.0-maccatalyst;</TargetFrameworks> -->
-		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net8.0-windows10.0.19041.0;</TargetFrameworks>
-		<TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">$(TargetFrameworks);net8.0-android;net8.0-ios;</TargetFrameworks>
+  		<!-- <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net10.0-windows10.0.19041.0;net10.0-maccatalyst;</TargetFrameworks> -->
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net10.0-windows10.0.19041.0;</TargetFrameworks>
+		<TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">$(TargetFrameworks);net10.0-android;net10.0-ios;</TargetFrameworks>
 
     <!-- Uncomment to also build the tizen app. You will need to install tizen by following this: https://github.com/Samsung/Tizen.NET -->
-		<!-- <TargetFrameworks>$(TargetFrameworks);net8.0-tizen</TargetFrameworks> -->
+		<!-- <TargetFrameworks>$(TargetFrameworks);net10.0-tizen</TargetFrameworks> -->
 
 		<!-- Note for MacCatalyst:
 		The default runtime is maccatalyst-x64, except in Release config, in which case the default is maccatalyst-x64;maccatalyst-arm64.
@@ -20,13 +20,8 @@
 		<!-- For example: <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers> -->
 	</PropertyGroup>
 
-  <PropertyGroup>
-    <!--Required for [ObservableProperty] code generation-->
-    <LangVersion>preview</LangVersion>
-  </PropertyGroup>
-  
 	<PropertyGroup Condition="'$(IsBuildingHelp)' == 'true'">
-    	<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    	<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     	<RuntimeIdentifier>win-x64</RuntimeIdentifier>
  	 </PropertyGroup>
 
@@ -61,7 +56,7 @@
 		<Description>BudgieDownUnder's Maze Application (MAUI)</Description>
 	</PropertyGroup>
 
-	<PropertyGroup Condition="'$(TargetFramework)'=='net8.0-ios'">
+	<PropertyGroup Condition="'$(TargetFramework)'=='net10.0-ios'">
 	  <CodesignKey>Apple Development: Created via API (C8RQ5QK2RZ)</CodesignKey>
 	  <CodesignProvision>VS: WildCard Development</CodesignProvision>
 	</PropertyGroup>
@@ -84,13 +79,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="CommunityToolkit.Maui" Version="9.1.0" />
+		<PackageReference Include="CommunityToolkit.Maui" Version="13.0.0" />
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
-		<PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-		<PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.0" />
-		<PackageReference Include="Vapolia.MauiGesture" Version="1.0.7" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -105,9 +98,9 @@
 	</ItemGroup>
 
   <PropertyGroup>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-android'">android-x64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-ios'">ios-arm64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net8.0-windows10.0.19041.0'">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net10.0-android'">android-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net10.0-ios'">ios-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <Target Name="DebugRuntimeIdentifier" AfterTargets="Build">
@@ -133,17 +126,17 @@
   <Target Name="CopyNativeLibrariesToOutput" AfterTargets="Build">
     <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)" />
     <!--<Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(AppxPackageDir)"/>-->
-    <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)/AppX" Condition="'$(TargetFramework)' == 'net8.0-windows10.0.19041.0'" />
+    <Copy SourceFiles="@(NativeLibrary)" DestinationFolder="$(OutDir)/AppX" Condition="'$(TargetFramework)' == 'net10.0-windows10.0.19041.0'" />
   </Target>
 
   <ItemGroup>
-    <Content Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm" Condition="'$(TargetFramework)' != 'net8.0-android'">
+    <Content Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm" Condition="'$(TargetFramework)' != 'net10.0-android'">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <Link>maze_wasm.wasm</Link>
     </Content>
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
     <AndroidAsset Include="../../rust/target/wasm32-unknown-unknown/release/maze_wasm.wasm" />
     <AndroidResource Include="Platforms\Android\res\xml\network_security_config.xml" />
   </ItemGroup>
@@ -169,7 +162,7 @@
   </PropertyGroup>
   
   <PropertyGroup>
-	<NoWarn>$(NoWarn);1591</NoWarn>
+	<NoWarn>$(NoWarn);1591;MVVMTK0045</NoWarn>
   </PropertyGroup>
   
 </Project>

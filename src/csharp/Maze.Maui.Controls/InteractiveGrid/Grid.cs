@@ -1,5 +1,4 @@
-﻿using MauiGestures;
-using Microsoft.Maui.Controls.Shapes;
+﻿using Microsoft.Maui.Controls.Shapes;
 
 namespace Maze.Maui.Controls.InteractiveGrid
 {

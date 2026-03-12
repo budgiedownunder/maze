@@ -18,7 +18,7 @@ The following `C#` (`.NET`) components are present:
 ### Setup
 To setup the build and test environment for `.NET`, you first need to install:
 
-- [`.NET 8.0+`](https://dotnet.microsoft.com/en-us/download)
+- [`.NET 10.0+`](https://dotnet.microsoft.com/en-us/download)
 
 and then run the following from the `csharp` directory:
 

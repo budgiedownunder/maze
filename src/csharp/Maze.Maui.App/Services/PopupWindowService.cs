@@ -14,7 +14,7 @@
         /// <returns>A task that contains the alert</returns>
         public async Task ShowAlert(string title, string message, string cancel)
         {
-            await Shell.Current.DisplayAlert(title, message, cancel);
+            await Shell.Current.DisplayAlertAsync(title, message, cancel);
         }
         /// <summary>
         /// Displays a confirmation message to the user as a popup window with `accept` and `cancel` buttons
@@ -26,7 +26,7 @@
         /// <returns>A task that contains the user's choice as a boolean value, where `true` indicates that the user chose to accept and `false` indicates that they chose to cancel</returns>
         public async Task<bool> ShowConfirmation(string title, string message, string accept, string cancel)
         {
-            return await Shell.Current.DisplayAlert(title, message, accept, cancel);
+            return await Shell.Current.DisplayAlertAsync(title, message, accept, cancel);
         }
         /// <summary>
         /// Displays a prompt to the user as a popup window with the intent to capture a single string value, together with `accept` and `cancel` buttons
