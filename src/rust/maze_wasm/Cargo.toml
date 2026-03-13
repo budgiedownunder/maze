@@ -3,7 +3,7 @@ name = "maze_wasm"
 version = "0.1.0"
 edition = "2021"
 description = "maze_wasm web assembly package"
-repository = "https://github.com/budgiedownunder/maze-project"
+repository = "https://github.com/budgiedownunder/maze"
 license = "MIT" 
 
 [lib]

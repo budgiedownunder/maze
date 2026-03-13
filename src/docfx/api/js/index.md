@@ -1,6 +1,6 @@
 # JavaScript APIs
 
-The `maze-project` contains the following `JavaScript` APIs:
+The `maze` project contains the following `JavaScript` APIs:
 
 | Name                                         | Description
 |----------------------------------------------|------------

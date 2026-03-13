@@ -1,6 +1,6 @@
 # Web APIs
 
-The `maze-project` contains the following `WebAssembly` APIs:
+The `maze` project contains the following `WebAssembly` APIs:
 
 | Name                                     | Description                                 
 |:-----------------------------------------|:-------------------------------------------

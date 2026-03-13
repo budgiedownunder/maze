@@ -1,10 +1,10 @@
-# maze-project
+# maze
 
-[![Build & Test](https://github.com/budgiedownunder/maze-project/actions/workflows/build-and-test-components-multi-os.yml/badge.svg)](https://github.com/budgiedownunder/maze-project/actions/workflows/build-and-test-components-multi-os.yml)
-[![Deploy Docs](https://github.com/budgiedownunder/maze-project/actions/workflows/build-and-deploy-to-github-pages.yml/badge.svg)](https://github.com/budgiedownunder/maze-project/actions/workflows/build-and-deploy-to-github-pages.yml)
-[![Generate Diagrams](https://github.com/budgiedownunder/maze-project/actions/workflows/generate-png-from-puml.yml/badge.svg)](https://github.com/budgiedownunder/maze-project/actions/workflows/generate-png-from-puml.yml)
+[![Build & Test](https://github.com/budgiedownunder/maze/actions/workflows/build-and-test-components-multi-os.yml/badge.svg)](https://github.com/budgiedownunder/maze/actions/workflows/build-and-test-components-multi-os.yml)
+[![Deploy Docs](https://github.com/budgiedownunder/maze/actions/workflows/build-and-deploy-to-github-pages.yml/badge.svg)](https://github.com/budgiedownunder/maze/actions/workflows/build-and-deploy-to-github-pages.yml)
+[![Generate Diagrams](https://github.com/budgiedownunder/maze/actions/workflows/generate-png-from-puml.yml/badge.svg)](https://github.com/budgiedownunder/maze/actions/workflows/generate-png-from-puml.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://budgiedownunder.github.io/maze-project/)
+[![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://budgiedownunder.github.io/maze/)
 
 A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, and **WebAssembly** interoperability. Built around a maze generation and solving domain, it demonstrates library crates, REST APIs, WASM bindings, OpenAPI, a cross-platform MAUI app, Node.js-based API testing, architecture diagramming with PlantUML, documentation generation with DocFX, and automated CI/CD across Windows, macOS, and Linux.
 
@@ -127,7 +127,7 @@ To setup the `Rust` build environment, refer to the [README](src/rust/README.md)
 
 - To generate documentation just for the `Rust` crates, refer to the [README](src/rust/README.md) in the `rust` directory.
 
-The combined output is deployed automatically to [GitHub Pages](https://budgiedownunder.github.io/maze-project/) on every push to `main`.
+The combined output is deployed automatically to [GitHub Pages](https://budgiedownunder.github.io/maze/) on every push to `main`.
 
 ## Contributing
 At this stage, this project is not accepting contributions.

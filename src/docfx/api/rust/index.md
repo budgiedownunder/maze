@@ -1,6 +1,6 @@
 # Rust APIs
 
-The `maze-project` contains the following `Rust` crates:
+The `maze` project contains the following `Rust` crates:
 
 | Name                                                               | Description
 |--------------------------------------------------------------------|------------
