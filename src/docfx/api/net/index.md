@@ -1,6 +1,6 @@
 # Welcome to the .NET API Documentation
 
-This section contains the auto-generated .NET API reference documentation for `maze-project`.
+This section contains the auto-generated .NET API reference documentation for `maze`.
 
 ## Key Components
 

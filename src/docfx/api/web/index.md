@@ -1,6 +1,6 @@
 # Web APIs
 
-The `maze-project` contains the following `Web` APIs:
+The `maze` project contains the following `Web` APIs:
 
 | Name                                         | Description                                     | Views
 |:---------------------------------------------|:------------------------------------------------|:------------
