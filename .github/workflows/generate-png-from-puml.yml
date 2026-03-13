@@ -2,6 +2,7 @@ name: generate-png-from-puml
 run-name: ${{ github.actor }} is running the generate diagram PNG files from PlantUML within the branch ${{  github.ref }}
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -20,7 +21,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Install Java and PlantUML
       run: |
