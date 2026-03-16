@@ -93,3 +93,26 @@ key_file = "key.pem"
 Note:
 
 Any environment variable values will take precedence over their corresponding configuration file values.
+
+> `auth_token` is a static API key used for privileged (admin) or service-to-service access via the `X-API-Key` request header. Regular users authenticate via the `POST /api/v1/login` endpoint, which returns a short-lived bearer token.
+
+## Authentication
+
+The server supports two authentication mechanisms:
+
+| Mechanism | Header | Usage |
+|:----------|:-------|:------|
+| Static API key | `X-API-Key: <auth_token>` | Admin / service access; configured via `auth_token` |
+| Bearer token | `Authorization: Bearer <token>` | Per-user login; token obtained via `POST /api/v1/login` |
+
+The following endpoints manage user identity:
+
+| Method | Path | Auth required | Description |
+|:-------|:-----|:--------------|:------------|
+| `POST` | `/api/v1/signup` | None | Register a new (non-admin) user account |
+| `POST` | `/api/v1/login` | None | Sign in; returns a bearer token |
+| `POST` | `/api/v1/logout` | Bearer | Invalidate the current bearer token |
+| `GET` | `/api/v1/users/me` | Either | Return the signed-in user's profile |
+| `DELETE` | `/api/v1/users/me` | Either | Delete the signed-in user's account and all their mazes |
+
+The full API reference (including maze and admin-user endpoints) is available interactively via the documentation endpoints listed above.

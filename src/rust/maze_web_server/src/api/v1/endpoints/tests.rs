@@ -4,7 +4,7 @@ mod test_definitions {
     // Unit tests for API and documentation endpoints, via injection of MockStore
     // **************************************************************************************************
     use crate::api::v1::endpoints::handlers::get_maze_solve_error_string;
-    use crate::api::v1::endpoints::handlers::{CreateUserRequest, LoginRequest, LoginResponse, UserItem, UpdateUserRequest};
+    use crate::api::v1::endpoints::handlers::{CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UserItem, UpdateUserRequest};
     use crate::{create_app, config::app::AppConfig};
     
     use actix_http;
@@ -2390,6 +2390,248 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_solve_maze_that_should_fail_with_no_solution_with_login() {
         run_cannot_solve_maze_that_should_fail_with_no_solution(true).await;
+    }
+
+    // **************************************************************************************************
+    // signup / get_me / delete_me helpers
+    // **************************************************************************************************
+
+    impl SignupRequest {
+        pub fn new(username: &str, full_name: &str, email: &str, password: &str) -> SignupRequest {
+            SignupRequest {
+                username: username.to_string(),
+                full_name: full_name.to_string(),
+                email: email.to_string(),
+                password: password.to_string(),
+            }
+        }
+    }
+
+    fn new_signup_request(username: &str, email: Option<&str>, blank_password: bool) -> SignupRequest {
+        let email_use = email.unwrap_or(&new_email(username)).to_string();
+        SignupRequest::new(
+            username,
+            &format!("{} full name", username),
+            &email_use,
+            &create_password(blank_password),
+        )
+    }
+
+    async fn run_signup_test(
+        create_users_def: &CreateUsersDef,
+        signup_req: &SignupRequest,
+        expected_status_code: StatusCode,
+    ) {
+        let mut user_defs = create_user_defs(create_users_def);
+        // No caller — signup is an unguarded endpoint
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let url = "/api/v1/signup".to_string();
+        let req = create_test_post_request(&url, None, None, Some(signup_req));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::CREATED {
+            let body = test::read_body(resp).await;
+            let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize signup response");
+            // is_admin must always be false regardless of what the caller sends
+            assert!(!response_user.is_admin, "signup must never create an admin user");
+            assert_eq!(response_user.username, signup_req.username);
+            assert_eq!(response_user.full_name, signup_req.full_name);
+            assert_eq!(response_user.email, signup_req.email);
+            assert_ne!(response_user.id, Uuid::nil());
+        }
+    }
+
+    async fn run_get_me_test(
+        create_users_def: &CreateUsersDef,
+        caller_username: Option<&str>,
+        use_login: bool,
+        expected_status_code: StatusCode,
+    ) {
+        let mut user_defs = create_user_defs(create_users_def);
+        let (app, _, mock_users, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
+        let url = "/api/v1/users/me".to_string();
+        let req = create_test_get_request(&url, api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::OK {
+            let body = test::read_body(resp).await;
+            let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize get_me response");
+            // Verify the returned profile matches the caller's own data
+            if let Some(username) = caller_username {
+                let caller_id = MockStore::find_user_id_by_name_in_map(&mock_users, username, Uuid::nil());
+                let dummy_user = MockUser::default();
+                let expected_user = mock_users.get(&caller_id).unwrap_or(&dummy_user);
+                assert_eq!(response_user, expected_user.to_user_item());
+            }
+        }
+    }
+
+    async fn run_delete_me_test(
+        create_users_def: &CreateUsersDef,
+        caller_username: Option<&str>,
+        use_login: bool,
+        expected_status_code: StatusCode,
+    ) {
+        let mut user_defs = create_user_defs(create_users_def);
+        let (app, shared_store, _, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
+        let url = "/api/v1/users/me".to_string();
+        let req = create_test_delete_request(&url, api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::NO_CONTENT {
+            // Verify the caller's account is gone from the store
+            if let Some(username) = caller_username {
+                let store_lock = get_store_read_lock(&shared_store);
+                assert!(
+                    store_lock.find_user_by_name(username).is_err(),
+                    "user '{}' should have been deleted but was still found", username
+                );
+            }
+        }
+    }
+
+    // **************************************************************************************************
+    // Tests: POST /api/v1/signup
+    // **************************************************************************************************
+
+    #[actix_web::test]
+    async fn signup_with_valid_details_succeeds() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &new_signup_request(NEW_USERNAME_1, None, false),
+            StatusCode::CREATED,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_always_creates_non_admin_user() {
+        // Even if an attacker crafts a request with is_admin, SignupRequest has no such field
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "password"),
+            StatusCode::CREATED,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_duplicate_username_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &new_signup_request(VALID_USERNAME_1, None, false),
+            StatusCode::CONFLICT,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_duplicate_email_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &new_signup_request(NEW_USERNAME_1, Some(&new_email(VALID_USERNAME_1)), false),
+            StatusCode::CONFLICT,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_blank_password_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &new_signup_request(NEW_USERNAME_1, None, true),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    // **************************************************************************************************
+    // Tests: GET /api/v1/users/me
+    // **************************************************************************************************
+
+    #[actix_web::test]
+    async fn get_me_as_regular_user_with_api_key_succeeds() {
+        run_get_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            false,
+            StatusCode::OK,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn get_me_as_regular_user_with_login_succeeds() {
+        run_get_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            StatusCode::OK,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn get_me_as_admin_with_login_succeeds() {
+        run_get_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_ADMIN_USERNAME_1),
+            true,
+            StatusCode::OK,
+        ).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic]
+    async fn get_me_unauthenticated_fails() {
+        run_get_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            None,
+            false,
+            StatusCode::UNAUTHORIZED,
+        ).await;
+    }
+
+    // **************************************************************************************************
+    // Tests: DELETE /api/v1/users/me
+    // **************************************************************************************************
+
+    #[actix_web::test]
+    async fn delete_me_with_api_key_succeeds() {
+        run_delete_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            false,
+            StatusCode::NO_CONTENT,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn delete_me_with_login_succeeds() {
+        run_delete_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            StatusCode::NO_CONTENT,
+        ).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic]
+    async fn delete_me_unauthenticated_fails() {
+        run_delete_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            None,
+            false,
+            StatusCode::UNAUTHORIZED,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn delete_me_removes_user_from_store() {
+        // Verifies the user is gone and subsequent auth with deleted credentials returns 401
+        run_delete_me_test(
+            &CreateUsersDef::new(1, 2, MazeContent::OneMaze),
+            Some(VALID_USERNAME_1),
+            false,
+            StatusCode::NO_CONTENT,
+        ).await;
     }
 
     // API documentation page load

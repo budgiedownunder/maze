@@ -7,8 +7,8 @@ use utoipa::{
 };
 
 use crate::api::v1::endpoints::handlers::{
-    LoginRequest, LoginResponse, 
-    UserItem, UpdateUserRequest};
+    LoginRequest, LoginResponse,
+    SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest};
 
 struct ApiKeyAuth;
 
@@ -56,9 +56,13 @@ impl utoipa::Modify for LoginTokenAuth {
         )
     ),
     paths(
-        // Login, logout
+        // Login, logout, signup
         crate::api::v1::endpoints::handlers::login,
         crate::api::v1::endpoints::handlers::logout,
+        crate::api::v1::endpoints::handlers::signup,
+        // Self-service account
+        crate::api::v1::endpoints::handlers::get_me,
+        crate::api::v1::endpoints::handlers::delete_me,
         // Mazes
         crate::api::v1::endpoints::handlers::get_mazes,
         crate::api::v1::endpoints::handlers::create_maze,
@@ -67,7 +71,7 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::handlers::delete_maze,
         crate::api::v1::endpoints::handlers::get_maze_solution,
         crate::api::v1::endpoints::handlers::solve_maze,
-        // Users
+        // Users (admin)
         crate::api::v1::endpoints::handlers::get_users,
         crate::api::v1::endpoints::handlers::create_user,
         crate::api::v1::endpoints::handlers::get_user,
@@ -77,10 +81,10 @@ impl utoipa::Modify for LoginTokenAuth {
     ),
     components(
         schemas(
-            LoginRequest, LoginResponse, 
-            Maze, MazeDefinition, MazeItem, MazePath, MazeSolution, 
-            UpdateUserRequest, UserItem),
-            
+            LoginRequest, LoginResponse,
+            SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
+            Maze, MazeDefinition, MazeItem, MazePath, MazeSolution),
+
     ),
     servers(
         (url = "https://localhost:8443", description = "Local development server")

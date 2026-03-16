@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             x:DataType="viewmodel:SignUpViewModel"
+             x:Class="Maze.Maui.App.Views.SignUpPage"
+             Title="{Binding Title}">
+
+    <ContentPage.Resources>
+        <toolkit:IsStringNotNullOrEmptyConverter x:Key="StringNotEmptyConverter" />
+    </ContentPage.Resources>
+
+    <Grid VerticalOptions="FillAndExpand"
+          HorizontalOptions="FillAndExpand">
+
+        <ScrollView VerticalOptions="FillAndExpand">
+            <VerticalStackLayout Padding="30"
+                                 Spacing="16"
+                                 MaximumWidthRequest="400"
+                                 HorizontalOptions="Center">
+
+                <Entry Placeholder="Username"
+                       Text="{Binding Username}"
+                       ReturnType="Next"
+                       Keyboard="Text" />
+
+                <Entry Placeholder="Full Name"
+                       Text="{Binding FullName}"
+                       ReturnType="Next"
+                       Keyboard="Text" />
+
+                <Entry Placeholder="Email"
+                       Text="{Binding Email}"
+                       ReturnType="Next"
+                       Keyboard="Email" />
+
+                <Entry Placeholder="Password"
+                       Text="{Binding Password}"
+                       IsPassword="True"
+                       ReturnType="Next" />
+
+                <Entry Placeholder="Confirm Password"
+                       Text="{Binding ConfirmPassword}"
+                       IsPassword="True"
+                       ReturnType="Go"
+                       ReturnCommand="{Binding SignUpCommand}" />
+
+                <Label Text="{Binding ErrorMessage}"
+                       TextColor="Red"
+                       IsVisible="{Binding ErrorMessage, Converter={StaticResource StringNotEmptyConverter}}"
+                       HorizontalOptions="Center" />
+
+                <Button Text="Create Account"
+                        Command="{Binding SignUpCommand}"
+                        HorizontalOptions="FillAndExpand" />
+
+                <Button Text="Back"
+                        Command="{Binding GoBackCommand}"
+                        HorizontalOptions="FillAndExpand"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <ActivityIndicator IsVisible="{Binding IsBusy}"
+                           IsRunning="{Binding IsBusy}"
+                           HorizontalOptions="FillAndExpand"
+                           VerticalOptions="CenterAndExpand" />
+
+    </Grid>
+
+</ContentPage>

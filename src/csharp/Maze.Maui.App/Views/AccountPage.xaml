@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             x:DataType="viewmodel:AccountViewModel"
+             x:Class="Maze.Maui.App.Views.AccountPage"
+             Title="{Binding Title}">
+
+    <ContentPage.Resources>
+        <toolkit:IsStringNotNullOrEmptyConverter x:Key="StringNotEmptyConverter" />
+    </ContentPage.Resources>
+
+    <Grid VerticalOptions="FillAndExpand"
+          HorizontalOptions="FillAndExpand">
+
+        <ScrollView VerticalOptions="FillAndExpand">
+            <VerticalStackLayout Padding="30"
+                                 Spacing="16"
+                                 MaximumWidthRequest="400"
+                                 HorizontalOptions="Center">
+
+                <Border Padding="16"
+                        Margin="0,0,0,8">
+                    <VerticalStackLayout Spacing="12">
+
+                        <Grid ColumnDefinitions="Auto,*"
+                              ColumnSpacing="12">
+                            <Label Grid.Column="0"
+                                   Text="Username"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center" />
+                            <Label Grid.Column="1"
+                                   Text="{Binding Username}"
+                                   VerticalOptions="Center" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="Auto,*"
+                              ColumnSpacing="12">
+                            <Label Grid.Column="0"
+                                   Text="Full Name"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center" />
+                            <Label Grid.Column="1"
+                                   Text="{Binding FullName}"
+                                   VerticalOptions="Center" />
+                        </Grid>
+
+                        <Grid ColumnDefinitions="Auto,*"
+                              ColumnSpacing="12">
+                            <Label Grid.Column="0"
+                                   Text="Email"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center" />
+                            <Label Grid.Column="1"
+                                   Text="{Binding Email}"
+                                   VerticalOptions="Center" />
+                        </Grid>
+
+                        <Label Text="Administrator"
+                               IsVisible="{Binding IsAdmin}"
+                               TextColor="White"
+                               BackgroundColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                               Padding="8,4"
+                               HorizontalOptions="Start" />
+
+                    </VerticalStackLayout>
+                </Border>
+
+                <Label Text="{Binding ErrorMessage}"
+                       TextColor="Red"
+                       IsVisible="{Binding ErrorMessage, Converter={StaticResource StringNotEmptyConverter}}"
+                       HorizontalOptions="Center" />
+
+                <Button Text="Sign Out"
+                        Command="{Binding SignOutCommand}"
+                        HorizontalOptions="FillAndExpand" />
+
+                <Button Text="Delete Account"
+                        Command="{Binding DeleteAccountCommand}"
+                        HorizontalOptions="FillAndExpand"
+                        BackgroundColor="Red"
+                        TextColor="White" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <ActivityIndicator IsVisible="{Binding IsBusy}"
+                           IsRunning="{Binding IsBusy}"
+                           HorizontalOptions="FillAndExpand"
+                           VerticalOptions="CenterAndExpand" />
+
+    </Grid>
+
+</ContentPage>

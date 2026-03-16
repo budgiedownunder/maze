@@ -249,6 +249,150 @@ impl UserItem {
     }    
 }
 // **************************************************************************************************
+// Endpoint: POST /api/v1/signup
+// Handler:  signup()
+// **************************************************************************************************
+/// Signup request
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
+pub struct SignupRequest {
+    /// Username
+    pub username: String,
+    /// Full name
+    pub full_name: String,
+    /// Email address
+    pub email: String,
+    /// Password
+    pub password: String,
+}
+
+impl SignupRequest {
+    pub fn into_user(&self, auth_service: &AuthService) -> Result<User, Error> {
+        let password_hash = if self.password.is_empty() {
+            "".to_string()
+        } else {
+            auth_service
+                .hash_password(&self.password)
+                .map_err(|err| get_hash_password_internal_error(&err))?
+        };
+        Ok(
+            User {
+                id: Uuid::nil(),
+                is_admin: false,
+                username: self.username.clone(),
+                full_name: self.full_name.clone(),
+                email: self.email.clone(),
+                password_hash,
+                api_key: Uuid::nil(),
+                logins: vec![],
+            }
+        )
+    }
+}
+
+#[utoipa::path(
+    summary = "Sign up as a new user",
+    description = "This endpoint registers a new (non-admin) user account",
+    post,
+    path = "/api/v1/signup",
+    request_body = SignupRequest,
+    responses(
+        (status = 201, description = "User created successfully", body = UserItem),
+        (status = 400, description = "Invalid request"),
+        (status = 409, description = "User with the given username or email already exists")
+    ),
+    tags = ["v1"]
+)]
+#[post("/signup")]
+pub async fn signup(
+    signup_req: web::Json<SignupRequest>,
+    auth_service: web::Data<AuthService>,
+    store: web::Data<SharedStore>,
+) -> Result<HttpResponse, Error> {
+    let mut store_lock = get_store_write_lock(&store)?;
+    let signup_req_data: SignupRequest = signup_req.into_inner();
+    let mut store_user = signup_req_data.into_user(&auth_service)?;
+
+    match store_lock.create_user(&mut store_user) {
+        Ok(()) => Ok(
+            HttpResponse::Created()
+            .insert_header(("Location", "/api/v1/users/me"))
+            .json(UserItem::from_store_user(&store_user))
+        ),
+        Err(err) => {
+            match err {
+                StoreError::UserEmailExists() | StoreError::UserNameExists() => Err(get_user_exists_error()),
+                StoreError::UserNameMissing() => Err(get_missing_username_request_error()),
+                StoreError::UserPasswordMissing() => Err(get_missing_password_request_error()),
+                _ => Err(get_user_create_internal_error(&err))
+            }
+        }
+    }
+}
+// **************************************************************************************************
+// Endpoint: GET /api/v1/users/me
+// Handler:  get_me()
+// **************************************************************************************************
+#[utoipa::path(
+    summary = "Returns the profile of the currently authenticated user",
+    description = "This endpoint returns the profile of the currently authenticated user",
+    get,
+    path = "/api/v1/users/me",
+    responses(
+        (status = 200, description = "User profile retrieved successfully", body = UserItem),
+        (status = 401, description = "Unauthorized request")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[get("/users/me")]
+pub async fn get_me(
+    req: HttpRequest
+) -> Result<HttpResponse, Error> {
+    let user = get_authorized_user(&req, false)?;
+    Ok(HttpResponse::Ok().json(UserItem::from_store_user(&user)))
+}
+// **************************************************************************************************
+// Endpoint: DELETE /api/v1/users/me
+// Handler:  delete_me()
+// **************************************************************************************************
+#[utoipa::path(
+    summary = "Deletes the currently authenticated user's account",
+    description = "This endpoint deletes the currently authenticated user's account and all their associated mazes",
+    delete,
+    path = "/api/v1/users/me",
+    responses(
+        (status = 204, description = "Account deleted successfully"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 404, description = "User not found")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[delete("/users/me")]
+pub async fn delete_me(
+    store: web::Data<SharedStore>,
+    req: HttpRequest
+) -> Result<HttpResponse, Error> {
+    let mut store_lock = get_store_write_lock(&store)?;
+    let user = get_authorized_user(&req, false)?;
+
+    match store_lock.delete_user(user.id) {
+        Ok(()) => Ok(HttpResponse::NoContent().finish()),
+        Err(err) => {
+            match err {
+                StoreError::UserIdNotFound(id) => Err(get_user_not_found_error(id)),
+                _ => Err(get_user_fetch_internal_error(user.id, &err))
+            }
+        }
+    }
+}
+// **************************************************************************************************
 // Endpoint: GET /api/v1/login
 // Handler:  login()
 // **************************************************************************************************
