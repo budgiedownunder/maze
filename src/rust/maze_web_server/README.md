@@ -116,3 +116,32 @@ The following endpoints manage user identity:
 | `DELETE` | `/api/v1/users/me` | Either | Delete the signed-in user's account and all their mazes |
 
 The full API reference (including maze and admin-user endpoints) is available interactively via the documentation endpoints listed above.
+
+### Password Requirements
+
+The following password complexity rules apply to all accounts created via `POST /api/v1/signup`:
+
+| Rule | Requirement |
+|:-----|:------------|
+| Minimum length | 8 characters |
+| Uppercase letter | At least one (`A`–`Z`) |
+| Lowercase letter | At least one (`a`–`z`) |
+| Digit | At least one (`0`–`9`) |
+| Special character | At least one non-alphanumeric character (e.g. `!`, `@`, `#`) |
+
+A password such as `Password1!` satisfies all rules.
+
+> **Note:** These rules are enforced server-side. The MAUI client also validates them locally before submitting the request.
+
+### Default Admin Account
+
+On first run, if no admin user exists in the data store, the server automatically creates one with the following credentials:
+
+| Field | Value |
+|:------|:------|
+| Username | `admin` |
+| Password | `Admin1!` |
+
+> **Important:** The default password is intentionally simple. **Change it immediately after first login** using the admin user-management API (`PUT /api/v1/users/{id}`).
+
+The admin account is used with the bearer token mechanism (`POST /api/v1/login`) or, for service access, via the static API key configured in `auth_token`.

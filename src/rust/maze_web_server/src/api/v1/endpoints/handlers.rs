@@ -159,6 +159,25 @@ fn get_missing_password_request_error() -> Error {
     get_invalid_request_error("missing password")
 }
 
+fn validate_password_complexity(password: &str) -> Result<(), Error> {
+    if password.len() < 8 {
+        return Err(get_invalid_request_error("password must be at least 8 characters"));
+    }
+    if !password.chars().any(|c| c.is_uppercase()) {
+        return Err(get_invalid_request_error("password must contain at least one uppercase letter"));
+    }
+    if !password.chars().any(|c| c.is_lowercase()) {
+        return Err(get_invalid_request_error("password must contain at least one lowercase letter"));
+    }
+    if !password.chars().any(|c| c.is_ascii_digit()) {
+        return Err(get_invalid_request_error("password must contain at least one digit"));
+    }
+    if !password.chars().any(|c| !c.is_alphanumeric()) {
+        return Err(get_invalid_request_error("password must contain at least one special character"));
+    }
+    Ok(())
+}
+
 fn get_invalid_email_request_error() -> Error {
     get_invalid_request_error("invalid email")
 }
@@ -267,6 +286,7 @@ pub struct SignupRequest {
 
 impl SignupRequest {
     pub fn into_user(&self, auth_service: &AuthService) -> Result<User, Error> {
+        validate_password_complexity(&self.password)?;
         let password_hash = if self.password.is_empty() {
             "".to_string()
         } else {

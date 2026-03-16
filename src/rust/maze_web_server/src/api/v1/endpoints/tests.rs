@@ -22,7 +22,7 @@ mod test_definitions {
 
     const ADMIN_USERNAME_PREFIX:&str = "admin_";
     const USERNAME_PREFIX:&str = "user_";
-    const VALID_USER_PASSWORD: &str = "password!";
+    const VALID_USER_PASSWORD: &str = "Password1!";
     const INVALID_USERNAME:&str = "INVALID_USERNAME";
     const INVALID_USER_PASSWORD:&str = "BAD PASSWORD";
 
@@ -838,7 +838,7 @@ mod test_definitions {
         if blank {
             "".to_string()
         } else {
-            "dummy_password".to_string()
+            "Password1!".to_string()
         }
     }
 
@@ -2511,7 +2511,7 @@ mod test_definitions {
         // Even if an attacker crafts a request with is_admin, SignupRequest has no such field
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "password"),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password1!"),
             StatusCode::CREATED,
         ).await;
     }
@@ -2539,6 +2539,51 @@ mod test_definitions {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
             &new_signup_request(NEW_USERNAME_1, None, true),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_short_password_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Abc1!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_no_uppercase_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "password1!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_no_lowercase_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "PASSWORD1!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_no_digit_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_no_special_character_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password1"),
             StatusCode::BAD_REQUEST,
         ).await;
     }

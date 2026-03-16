@@ -59,6 +59,16 @@ namespace Maze.Maui.App.ViewModels
                 return;
             }
 
+            if (Password.Length < 8 ||
+                !Password.Any(char.IsUpper) ||
+                !Password.Any(char.IsLower) ||
+                !Password.Any(char.IsDigit) ||
+                !Password.Any(c => !char.IsLetterOrDigit(c)))
+            {
+                ErrorMessage = "Password must be at least 8 characters and contain uppercase, lowercase, digit and symbol";
+                return;
+            }
+
             IsBusy = true;
             ErrorMessage = "";
             try
