@@ -68,4 +68,11 @@ public partial class MazesPage : ContentPage
         InitializeComponent();
         BindingContext = this.viewModel = viewModel;
     }
+
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+        if (!viewModel.IsDataLoaded)
+            viewModel.GetMazesCommand.Execute(null);
+    }
 }

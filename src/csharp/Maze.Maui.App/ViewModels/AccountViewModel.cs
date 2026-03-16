@@ -13,6 +13,7 @@ namespace Maze.Maui.App.ViewModels
     {
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
+        private readonly MazesViewModel _mazesViewModel;
 
         private string _loadedUsername = "";
         private string _loadedFullName = "";
@@ -41,11 +42,12 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         /// <param name="authService">Injected auth service</param>
         /// <param name="dialogService">Injected dialog service</param>
-        public AccountViewModel(IAuthService authService, IDialogService dialogService)
+        public AccountViewModel(IAuthService authService, IDialogService dialogService, MazesViewModel mazesViewModel)
         {
             Title = "Account";
             _authService = authService;
             _dialogService = dialogService;
+            _mazesViewModel = mazesViewModel;
         }
 
         /// <summary>
@@ -131,6 +133,7 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 await _authService.SignOutAsync();
+                _mazesViewModel.InvalidateData();
                 await Shell.Current.GoToAsync("//LoginPage");
             }
             finally
@@ -159,6 +162,7 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 await _authService.DeleteMyAccountAsync();
+                _mazesViewModel.InvalidateData();
                 await Shell.Current.GoToAsync("//LoginPage");
             }
             catch (Exception ex)
