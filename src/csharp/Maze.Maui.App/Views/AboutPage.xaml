@@ -24,7 +24,7 @@
                        HorizontalOptions="Start" />
                 <Label FontSize="14"
                        FontAttributes="None"
-                       Text="© BudgieDownUnder, 2025"
+                       Text="© BudgieDownUnder, 2026"
                        VerticalOptions="End"
                        HorizontalOptions="Start" />
             </VerticalStackLayout>
