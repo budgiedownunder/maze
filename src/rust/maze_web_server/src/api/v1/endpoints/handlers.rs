@@ -413,6 +413,127 @@ pub async fn delete_me(
     }
 }
 // **************************************************************************************************
+// Endpoint: PUT /api/v1/users/me/password
+// Handler:  change_password_me()
+// **************************************************************************************************
+/// Change password request
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
+pub struct ChangePasswordRequest {
+    /// Current password
+    pub current_password: String,
+    /// New password
+    pub new_password: String,
+}
+
+#[utoipa::path(
+    summary = "Changes the authenticated user's password",
+    description = "This endpoint allows the currently authenticated user to change their password by providing their current password and a new password",
+    put,
+    path = "/api/v1/users/me/password",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 204, description = "Password changed successfully"),
+        (status = 400, description = "Invalid request (e.g. weak new password or empty current password)"),
+        (status = 401, description = "Unauthorized request or incorrect current password")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[put("/users/me/password")]
+pub async fn change_password_me(
+    change_req: web::Json<ChangePasswordRequest>,
+    auth_service: web::Data<AuthService>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let mut user = get_authorized_user(&req, false)?;
+    let change_req_data = change_req.into_inner();
+
+    if change_req_data.current_password.is_empty() {
+        return Err(get_invalid_request_error("current password must be provided"));
+    }
+
+    let password_matches = auth_service
+        .verify_password(&user.password_hash, &change_req_data.current_password)
+        .map_err(|err| {
+            log::error!("Password verification failed: {:?}", err);
+            ErrorInternalServerError("Internal authentication error")
+        })?;
+
+    if !password_matches {
+        return Err(ErrorUnauthorized("Current password is incorrect"));
+    }
+
+    validate_password_complexity(&change_req_data.new_password)?;
+
+    let new_hash = auth_service
+        .hash_password(&change_req_data.new_password)
+        .map_err(|err| get_hash_password_internal_error(&err))?;
+
+    let mut store_lock = get_store_write_lock(&store)?;
+    user.password_hash = new_hash;
+
+    match store_lock.update_user(&mut user) {
+        Ok(_) => Ok(HttpResponse::NoContent().finish()),
+        Err(err) => Err(get_user_update_internal_error(&err)),
+    }
+}
+// **************************************************************************************************
+// Endpoint: PUT /api/v1/users/me/profile
+// Handler:  update_profile_me()
+// **************************************************************************************************
+/// Update profile request
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
+pub struct UpdateProfileRequest {
+    /// Username
+    pub username: String,
+    /// Full name
+    pub full_name: String,
+    /// Email address
+    pub email: String,
+}
+
+impl UpdateProfileRequest {
+    pub fn apply_to_store_user(&self, user: &mut User) {
+        user.username = self.username.clone();
+        user.full_name = self.full_name.clone();
+        user.email = self.email.clone();
+    }
+}
+
+#[utoipa::path(
+    summary = "Updates the authenticated user's profile",
+    description = "This endpoint allows the currently authenticated user to update their username, full name, and email address",
+    put,
+    path = "/api/v1/users/me/profile",
+    request_body = UpdateProfileRequest,
+    responses(
+        (status = 200, description = "Profile updated successfully", body = UserItem),
+        (status = 400, description = "Invalid request (e.g. empty username or invalid email)"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 409, description = "Username or email already in use by another user")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[put("/users/me/profile")]
+pub async fn update_profile_me(
+    update_req: web::Json<UpdateProfileRequest>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let mut user = get_authorized_user(&req, false)?;
+    let store_lock = get_store_write_lock(&store)?;
+    update_req.into_inner().apply_to_store_user(&mut user);
+    update_store_user(store_lock, &mut user, |err| get_user_update_internal_error(err))
+}
+// **************************************************************************************************
 // Endpoint: GET /api/v1/login
 // Handler:  login()
 // **************************************************************************************************

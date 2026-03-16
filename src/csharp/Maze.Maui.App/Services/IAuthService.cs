@@ -48,5 +48,11 @@ namespace Maze.Maui.App.Services
 
         /// <summary>Deletes the currently authenticated user's account and clears the stored token.</summary>
         Task DeleteMyAccountAsync();
+
+        /// <summary>Changes the current user's password. Throws HttpRequestException on failure.</summary>
+        Task ChangePasswordAsync(string currentPassword, string newPassword);
+
+        /// <summary>Updates the current user's profile (username, full name, email). Returns the updated profile.</summary>
+        Task<UserProfile> UpdateProfileAsync(string username, string fullName, string email);
     }
 }

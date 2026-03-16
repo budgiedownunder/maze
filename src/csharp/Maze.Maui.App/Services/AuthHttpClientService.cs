@@ -28,6 +28,33 @@ namespace Maze.Maui.App.Services
     }
 
     /// <summary>
+    /// Change password request body
+    /// </summary>
+    internal class ChangePasswordRequest
+    {
+        [JsonPropertyName("current_password")]
+        public string CurrentPassword { get; set; } = "";
+
+        [JsonPropertyName("new_password")]
+        public string NewPassword { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Update profile request body
+    /// </summary>
+    internal class UpdateProfileRequest
+    {
+        [JsonPropertyName("username")]
+        public string Username { get; set; } = "";
+
+        [JsonPropertyName("full_name")]
+        public string FullName { get; set; } = "";
+
+        [JsonPropertyName("email")]
+        public string Email { get; set; } = "";
+    }
+
+    /// <summary>
     /// Signup request body
     /// </summary>
     internal class SignupRequest
@@ -177,6 +204,41 @@ namespace Maze.Maui.App.Services
             {
                 SecureStorage.Default.Remove(TOKEN_STORAGE_KEY);
             }
+        }
+
+        /// <inheritdoc/>
+        public async Task ChangePasswordAsync(string currentPassword, string newPassword)
+        {
+            var body = JsonSerializer.Serialize(new ChangePasswordRequest
+            {
+                CurrentPassword = currentPassword,
+                NewPassword = newPassword
+            });
+            using var request = new HttpRequestMessage(HttpMethod.Put, "users/me/password");
+            await AddBearerHeaderAsync(request);
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+            var response = await _httpClient.SendAsync(request);
+            await EnsureSuccessAsync(response, "Change password failed");
+        }
+
+        /// <inheritdoc/>
+        public async Task<UserProfile> UpdateProfileAsync(string username, string fullName, string email)
+        {
+            var body = JsonSerializer.Serialize(new UpdateProfileRequest
+            {
+                Username = username,
+                FullName = fullName,
+                Email = email
+            });
+            using var request = new HttpRequestMessage(HttpMethod.Put, "users/me/profile");
+            await AddBearerHeaderAsync(request);
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+            var response = await _httpClient.SendAsync(request);
+            await EnsureSuccessAsync(response, "Update profile failed");
+
+            string json = await response.Content.ReadAsStringAsync();
+            return JsonSerializer.Deserialize<UserProfile>(json)
+                ?? throw new Exception("Invalid profile response from server");
         }
 
         private async Task AddBearerHeaderAsync(HttpRequestMessage request)

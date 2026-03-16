@@ -8,7 +8,7 @@ At the moment, it allows the user to:
 
 - Sign up for a new account
 - Sign in and out of their account
-- View their account profile and delete their account
+- View and edit their account profile (username, full name, email), change their password, or delete their account
 - Load, edit, delete, rename and duplicate mazes
 - Construct mazes containing start, finish and wall cells
 - Attempt to solve mazes using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly
@@ -40,7 +40,7 @@ The app uses a two-area navigation model:
 - **Login area** (tab bar hidden): shown on first launch and after sign-out. Provides Sign In and Create Account actions.
 - **Main area** (three tabs): shown after a successful sign-in.
   - **Mazes** — load, edit, delete, rename, duplicate and solve mazes
-  - **Account** — view your profile, sign out, or delete your account
+  - **Account** — edit your profile, change your password, sign out, or delete your account
   - **About** — app information
 
 If a bearer token from a previous session is stored, the app skips the Login page automatically on restart.

@@ -113,13 +113,15 @@ The following endpoints manage user identity:
 | `POST` | `/api/v1/login` | None | Sign in; returns a bearer token |
 | `POST` | `/api/v1/logout` | Bearer | Invalidate the current bearer token |
 | `GET` | `/api/v1/users/me` | Either | Return the signed-in user's profile |
+| `PUT` | `/api/v1/users/me/profile` | Either | Update the signed-in user's profile (username, full name, email) |
+| `PUT` | `/api/v1/users/me/password` | Either | Change the signed-in user's password |
 | `DELETE` | `/api/v1/users/me` | Either | Delete the signed-in user's account and all their mazes |
 
 The full API reference (including maze and admin-user endpoints) is available interactively via the documentation endpoints listed above.
 
 ### Password Requirements
 
-The following password complexity rules apply to all accounts created via `POST /api/v1/signup`:
+The following password complexity rules apply when creating an account (`POST /api/v1/signup`) or changing a password (`PUT /api/v1/users/me/password`):
 
 | Rule | Requirement |
 |:-----|:------------|
@@ -142,6 +144,6 @@ On first run, if no admin user exists in the data store, the server automaticall
 | Username | `admin` |
 | Password | `Admin1!` |
 
-> **Important:** The default password is intentionally simple. **Change it immediately after first login** using the admin user-management API (`PUT /api/v1/users/{id}`).
+> **Important:** The default password is intentionally simple. **Change it immediately after first login** using the self-service endpoint (`PUT /api/v1/users/me/password`) or the admin user-management API (`PUT /api/v1/users/{id}`).
 
 The admin account is used with the bearer token mechanism (`POST /api/v1/login`) or, for service access, via the static API key configured in `auth_token`.

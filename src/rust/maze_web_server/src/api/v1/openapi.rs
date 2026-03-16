@@ -8,7 +8,8 @@ use utoipa::{
 
 use crate::api::v1::endpoints::handlers::{
     LoginRequest, LoginResponse,
-    SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest};
+    SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
+    ChangePasswordRequest, UpdateProfileRequest};
 
 struct ApiKeyAuth;
 
@@ -61,6 +62,8 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::handlers::logout,
         crate::api::v1::endpoints::handlers::signup,
         // Self-service account
+        crate::api::v1::endpoints::handlers::change_password_me,
+        crate::api::v1::endpoints::handlers::update_profile_me,
         crate::api::v1::endpoints::handlers::get_me,
         crate::api::v1::endpoints::handlers::delete_me,
         // Mazes
@@ -83,6 +86,7 @@ impl utoipa::Modify for LoginTokenAuth {
         schemas(
             LoginRequest, LoginResponse,
             SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
+            ChangePasswordRequest, UpdateProfileRequest,
             Maze, MazeDefinition, MazeItem, MazePath, MazeSolution),
 
     ),

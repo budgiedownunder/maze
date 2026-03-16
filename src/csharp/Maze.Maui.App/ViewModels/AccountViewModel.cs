@@ -1,6 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Maze.Maui.App.Services;
+using Maze.Maui.App.Views;
+using System.Net;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -12,13 +14,20 @@ namespace Maze.Maui.App.ViewModels
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
 
+        private string _loadedUsername = "";
+        private string _loadedFullName = "";
+        private string _loadedEmail = "";
+
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(SaveProfileCommand))]
         private string username = "";
 
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(SaveProfileCommand))]
         private string fullName = "";
 
         [ObservableProperty]
+        [NotifyCanExecuteChangedFor(nameof(SaveProfileCommand))]
         private string email = "";
 
         [ObservableProperty]
@@ -53,9 +62,9 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 var profile = await _authService.GetMyProfileAsync();
-                Username = profile.Username;
-                FullName = profile.FullName;
-                Email = profile.Email;
+                Username = _loadedUsername = profile.Username;
+                FullName = _loadedFullName = profile.FullName;
+                Email = _loadedEmail = profile.Email;
                 IsAdmin = profile.IsAdmin;
             }
             catch (Exception ex)
@@ -66,6 +75,50 @@ namespace Maze.Maui.App.ViewModels
             {
                 IsBusy = false;
             }
+        }
+
+        private bool CanSaveProfile() =>
+            !IsBusy &&
+            !string.IsNullOrWhiteSpace(Username) &&
+            (Username != _loadedUsername || FullName != _loadedFullName || Email != _loadedEmail);
+
+        /// <summary>
+        /// Saves the user's updated profile to the server
+        /// </summary>
+        [RelayCommand(CanExecute = nameof(CanSaveProfile))]
+        private async Task SaveProfile()
+        {
+            IsBusy = true;
+            ErrorMessage = "";
+            try
+            {
+                var profile = await _authService.UpdateProfileAsync(Username, FullName, Email);
+                Username = _loadedUsername = profile.Username;
+                FullName = _loadedFullName = profile.FullName;
+                Email = _loadedEmail = profile.Email;
+                IsAdmin = profile.IsAdmin;
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+            {
+                ErrorMessage = "Username or email is already in use by another account";
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = ex.Message;
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
+        /// <summary>
+        /// Navigates to the change password page
+        /// </summary>
+        [RelayCommand]
+        private async Task ChangePassword()
+        {
+            await Shell.Current.GoToAsync(nameof(ChangePasswordPage));
         }
 
         /// <summary>
