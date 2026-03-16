@@ -1,0 +1,58 @@
+using System.Text.Json.Serialization;
+
+namespace Maze.Maui.App.Services
+{
+    /// <summary>
+    /// Represents a user profile returned by the server
+    /// </summary>
+    public class UserProfile
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; set; } = "";
+
+        [JsonPropertyName("is_admin")]
+        public bool IsAdmin { get; set; }
+
+        [JsonPropertyName("username")]
+        public string Username { get; set; } = "";
+
+        [JsonPropertyName("full_name")]
+        public string FullName { get; set; } = "";
+
+        [JsonPropertyName("email")]
+        public string Email { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Represents a service for managing user authentication
+    /// </summary>
+    public interface IAuthService
+    {
+        /// <summary>Returns true if a bearer token is currently stored.</summary>
+        Task<bool> IsAuthenticatedAsync();
+
+        /// <summary>Returns the stored bearer token, or null if not authenticated.</summary>
+        Task<string?> GetBearerTokenAsync();
+
+        /// <summary>Signs in with username and password. Stores the returned bearer token. Returns the user profile.</summary>
+        Task<UserProfile> SignInAsync(string username, string password);
+
+        /// <summary>Signs out, removing the stored bearer token.</summary>
+        Task SignOutAsync();
+
+        /// <summary>Registers a new account. Does not auto sign-in.</summary>
+        Task<UserProfile> SignUpAsync(string username, string fullName, string email, string password);
+
+        /// <summary>Returns the profile for the currently authenticated user.</summary>
+        Task<UserProfile> GetMyProfileAsync();
+
+        /// <summary>Deletes the currently authenticated user's account and clears the stored token.</summary>
+        Task DeleteMyAccountAsync();
+
+        /// <summary>Changes the current user's password. Throws HttpRequestException on failure.</summary>
+        Task ChangePasswordAsync(string currentPassword, string newPassword);
+
+        /// <summary>Updates the current user's profile (username, full name, email). Returns the updated profile.</summary>
+        Task<UserProfile> UpdateProfileAsync(string username, string fullName, string email);
+    }
+}

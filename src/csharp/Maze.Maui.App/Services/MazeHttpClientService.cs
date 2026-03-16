@@ -1,5 +1,4 @@
 ﻿using Maze.Maui.App.Models;
-using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -54,13 +53,37 @@ namespace Maze.Maui.App.Services
         }
     }
     /// <summary>
+    /// Delegating handler that injects a Bearer token into every outgoing request
+    /// </summary>
+    public class BearerTokenHandler : DelegatingHandler
+    {
+        private readonly IAuthService _authService;
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="authService">Injected auth service</param>
+        /// <param name="innerHandler">Inner HTTP message handler</param>
+        public BearerTokenHandler(IAuthService authService, HttpMessageHandler innerHandler) : base(innerHandler)
+        {
+            _authService = authService;
+        }
+
+        /// <inheritdoc/>
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            string? token = await _authService.GetBearerTokenAsync();
+            if (!string.IsNullOrEmpty(token))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            return await base.SendAsync(request, cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// Represents a Http client service for managing the load, save and deletion of mazes
     /// </summary>
     public class MazeHttpClientService : IMazeService
     {
-        // Private definitions
-        //private const string COOKIE_NAME_SESSION_ID = "session_id";
-        private const string HEADER_NAME_API_KEY = "X-API-KEY";
         private const double REQUEST_TIMEOUT_SECONDS = 30.0;
 
         // Private properties
@@ -71,41 +94,33 @@ namespace Maze.Maui.App.Services
         /// Constructor
         /// </summary>
         /// <param name="configurationService">Injected configuration service</param>
-        public MazeHttpClientService(ConfigurationService configurationService)
+        /// <param name="authService">Injected auth service</param>
+        public MazeHttpClientService(ConfigurationService configurationService, IAuthService authService)
         {
             _configurationService = configurationService;
-            _httpClient = CreateHttpClient();
+            _httpClient = CreateHttpClient(authService);
         }
         /// <summary>
-        /// Creates and initializes an HTTP client
+        /// Creates and initializes an HTTP client with Bearer token injection
         /// </summary>
+        /// <param name="authService">Auth service used to retrieve the bearer token per-request</param>
         /// <returns>HTTP client</returns>
-        private HttpClient CreateHttpClient()
+        private HttpClient CreateHttpClient(IAuthService authService)
         {
             string apiRootUri = _configurationService.ApiRootUri;
-            //string sessionCookieValue = $"{COOKIE_NAME_SESSION_ID}={authAuthTokenValue}; Path=/; HttpOnly; Secure; SameSite=Lax";
-            CookieContainer cookieContainer = new CookieContainer();
 
-            //cookieContainer.SetCookies(new Uri(apiRootUri), sessionCookieValue);
-
-            HttpClientHandler handler = new HttpClientHandler
-            {
-                CookieContainer = cookieContainer
-            };
+            HttpClientHandler innerHandler = new HttpClientHandler();
 
             if (_configurationService.DisableStrictTLSCertificateValidation)
-                handler.ServerCertificateCustomValidationCallback = (message, cert, chain, sslPolicyErrors) => true;
+                innerHandler.ServerCertificateCustomValidationCallback = (message, cert, chain, sslPolicyErrors) => true;
 
-            HttpClient httpClient = new HttpClient(handler)
+            BearerTokenHandler handler = new BearerTokenHandler(authService, innerHandler);
+
+            return new HttpClient(handler)
             {
                 BaseAddress = new Uri(apiRootUri),
                 Timeout = TimeSpan.FromSeconds(REQUEST_TIMEOUT_SECONDS)
             };
-
-
-            httpClient.DefaultRequestHeaders.Add(HEADER_NAME_API_KEY, _configurationService.ApiKey);
-
-            return httpClient;
         }
         /// <summary>
         /// Loads the current list of maze items

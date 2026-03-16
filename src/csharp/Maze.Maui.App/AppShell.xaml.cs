@@ -14,6 +14,8 @@ namespace Maze.Maui.App
         {
             InitializeComponent();
             Routing.RegisterRoute(nameof(MazePage), typeof(MazePage));
+            Routing.RegisterRoute(nameof(SignUpPage), typeof(SignUpPage));
+            Routing.RegisterRoute(nameof(ChangePasswordPage), typeof(ChangePasswordPage));
         }
     }
 }

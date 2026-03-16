@@ -6,17 +6,32 @@
     xmlns:views="clr-namespace:Maze.Maui.App.Views"
     Shell.FlyoutBehavior="Disabled">
 
-    <TabBar>
+    <!-- Unauthenticated: Login page, tab bar and nav bar hidden -->
+    <TabBar x:Name="LoginTabBar">
+        <ShellContent
+            Route="LoginPage"
+            Shell.TabBarIsVisible="False"
+            Shell.NavBarIsVisible="False"
+            ContentTemplate="{DataTemplate views:LoginPage}" />
+    </TabBar>
+
+    <!-- Authenticated: main app tabs -->
+    <TabBar x:Name="MainTabBar">
         <ShellContent
             Title="Mazes"
-            ContentTemplate="{DataTemplate views:MazesPage}" 
+            Route="MainPage"
             Icon="{OnPlatform 'icon_mazes.png', iOS='icon_mazes_ios.png', MacCatalyst='icon_mazes_ios.png'}"
-            Route="MainPage" />
+            ContentTemplate="{DataTemplate views:MazesPage}" />
+        <ShellContent
+            Title="Account"
+            Route="AccountPage"
+            Icon="icon_account.svg"
+            ContentTemplate="{DataTemplate views:AccountPage}" />
         <ShellContent
             Title="About"
-            ContentTemplate="{DataTemplate views:AboutPage}"
+            Route="AboutPage"
             Icon="{OnPlatform 'icon_about.png', iOS='icon_about_ios.png', MacCatalyst='icon_about_ios.png'}"
-            Route="AboutPage" />
+            ContentTemplate="{DataTemplate views:AboutPage}" />
     </TabBar>
 
 </Shell>

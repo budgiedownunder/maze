@@ -4,7 +4,7 @@ mod test_definitions {
     // Unit tests for API and documentation endpoints, via injection of MockStore
     // **************************************************************************************************
     use crate::api::v1::endpoints::handlers::get_maze_solve_error_string;
-    use crate::api::v1::endpoints::handlers::{CreateUserRequest, LoginRequest, LoginResponse, UserItem, UpdateUserRequest};
+    use crate::api::v1::endpoints::handlers::{ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
     use crate::{create_app, config::app::AppConfig};
     
     use actix_http;
@@ -22,7 +22,7 @@ mod test_definitions {
 
     const ADMIN_USERNAME_PREFIX:&str = "admin_";
     const USERNAME_PREFIX:&str = "user_";
-    const VALID_USER_PASSWORD: &str = "password!";
+    const VALID_USER_PASSWORD: &str = "Password1!";
     const INVALID_USERNAME:&str = "INVALID_USERNAME";
     const INVALID_USER_PASSWORD:&str = "BAD PASSWORD";
 
@@ -838,7 +838,7 @@ mod test_definitions {
         if blank {
             "".to_string()
         } else {
-            "dummy_password".to_string()
+            "Password1!".to_string()
         }
     }
 
@@ -2390,6 +2390,671 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_solve_maze_that_should_fail_with_no_solution_with_login() {
         run_cannot_solve_maze_that_should_fail_with_no_solution(true).await;
+    }
+
+    // **************************************************************************************************
+    // signup / get_me / delete_me helpers
+    // **************************************************************************************************
+
+    impl SignupRequest {
+        pub fn new(username: &str, full_name: &str, email: &str, password: &str) -> SignupRequest {
+            SignupRequest {
+                username: username.to_string(),
+                full_name: full_name.to_string(),
+                email: email.to_string(),
+                password: password.to_string(),
+            }
+        }
+    }
+
+    fn new_signup_request(username: &str, email: Option<&str>, blank_password: bool) -> SignupRequest {
+        let email_use = email.unwrap_or(&new_email(username)).to_string();
+        SignupRequest::new(
+            username,
+            &format!("{} full name", username),
+            &email_use,
+            &create_password(blank_password),
+        )
+    }
+
+    async fn run_signup_test(
+        create_users_def: &CreateUsersDef,
+        signup_req: &SignupRequest,
+        expected_status_code: StatusCode,
+    ) {
+        let mut user_defs = create_user_defs(create_users_def);
+        // No caller — signup is an unguarded endpoint
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let url = "/api/v1/signup".to_string();
+        let req = create_test_post_request(&url, None, None, Some(signup_req));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::CREATED {
+            let body = test::read_body(resp).await;
+            let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize signup response");
+            // is_admin must always be false regardless of what the caller sends
+            assert!(!response_user.is_admin, "signup must never create an admin user");
+            assert_eq!(response_user.username, signup_req.username);
+            assert_eq!(response_user.full_name, signup_req.full_name);
+            assert_eq!(response_user.email, signup_req.email);
+            assert_ne!(response_user.id, Uuid::nil());
+        }
+    }
+
+    async fn run_get_me_test(
+        create_users_def: &CreateUsersDef,
+        caller_username: Option<&str>,
+        use_login: bool,
+        expected_status_code: StatusCode,
+    ) {
+        let mut user_defs = create_user_defs(create_users_def);
+        let (app, _, mock_users, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
+        let url = "/api/v1/users/me".to_string();
+        let req = create_test_get_request(&url, api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::OK {
+            let body = test::read_body(resp).await;
+            let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize get_me response");
+            // Verify the returned profile matches the caller's own data
+            if let Some(username) = caller_username {
+                let caller_id = MockStore::find_user_id_by_name_in_map(&mock_users, username, Uuid::nil());
+                let dummy_user = MockUser::default();
+                let expected_user = mock_users.get(&caller_id).unwrap_or(&dummy_user);
+                assert_eq!(response_user, expected_user.to_user_item());
+            }
+        }
+    }
+
+    async fn run_delete_me_test(
+        create_users_def: &CreateUsersDef,
+        caller_username: Option<&str>,
+        use_login: bool,
+        expected_status_code: StatusCode,
+    ) {
+        let mut user_defs = create_user_defs(create_users_def);
+        let (app, shared_store, _, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
+        let url = "/api/v1/users/me".to_string();
+        let req = create_test_delete_request(&url, api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::NO_CONTENT {
+            // Verify the caller's account is gone from the store
+            if let Some(username) = caller_username {
+                let store_lock = get_store_read_lock(&shared_store);
+                assert!(
+                    store_lock.find_user_by_name(username).is_err(),
+                    "user '{}' should have been deleted but was still found", username
+                );
+            }
+        }
+    }
+
+    // **************************************************************************************************
+    // Tests: POST /api/v1/signup
+    // **************************************************************************************************
+
+    #[actix_web::test]
+    async fn signup_with_valid_details_succeeds() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &new_signup_request(NEW_USERNAME_1, None, false),
+            StatusCode::CREATED,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_always_creates_non_admin_user() {
+        // Even if an attacker crafts a request with is_admin, SignupRequest has no such field
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password1!"),
+            StatusCode::CREATED,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_duplicate_username_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &new_signup_request(VALID_USERNAME_1, None, false),
+            StatusCode::CONFLICT,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_duplicate_email_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &new_signup_request(NEW_USERNAME_1, Some(&new_email(VALID_USERNAME_1)), false),
+            StatusCode::CONFLICT,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_blank_password_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &new_signup_request(NEW_USERNAME_1, None, true),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_short_password_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Abc1!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_no_uppercase_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "password1!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_no_lowercase_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "PASSWORD1!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_no_digit_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn signup_with_no_special_character_fails() {
+        run_signup_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password1"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    // **************************************************************************************************
+    // Tests: GET /api/v1/users/me
+    // **************************************************************************************************
+
+    #[actix_web::test]
+    async fn get_me_as_regular_user_with_api_key_succeeds() {
+        run_get_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            false,
+            StatusCode::OK,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn get_me_as_regular_user_with_login_succeeds() {
+        run_get_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            StatusCode::OK,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn get_me_as_admin_with_login_succeeds() {
+        run_get_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_ADMIN_USERNAME_1),
+            true,
+            StatusCode::OK,
+        ).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic]
+    async fn get_me_unauthenticated_fails() {
+        run_get_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            None,
+            false,
+            StatusCode::UNAUTHORIZED,
+        ).await;
+    }
+
+    // **************************************************************************************************
+    // Tests: DELETE /api/v1/users/me
+    // **************************************************************************************************
+
+    #[actix_web::test]
+    async fn delete_me_with_api_key_succeeds() {
+        run_delete_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            false,
+            StatusCode::NO_CONTENT,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn delete_me_with_login_succeeds() {
+        run_delete_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            StatusCode::NO_CONTENT,
+        ).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic]
+    async fn delete_me_unauthenticated_fails() {
+        run_delete_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            None,
+            false,
+            StatusCode::UNAUTHORIZED,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn delete_me_removes_user_from_store() {
+        // Verifies the user is gone and subsequent auth with deleted credentials returns 401
+        run_delete_me_test(
+            &CreateUsersDef::new(1, 2, MazeContent::OneMaze),
+            Some(VALID_USERNAME_1),
+            false,
+            StatusCode::NO_CONTENT,
+        ).await;
+    }
+
+    // **************************************************************************************************
+    // change_password_me / update_profile_me helpers
+    // **************************************************************************************************
+
+    impl ChangePasswordRequest {
+        pub fn new(current_password: &str, new_password: &str) -> ChangePasswordRequest {
+            ChangePasswordRequest {
+                current_password: current_password.to_string(),
+                new_password: new_password.to_string(),
+            }
+        }
+    }
+
+    impl UpdateProfileRequest {
+        pub fn new(username: &str, full_name: &str, email: &str) -> UpdateProfileRequest {
+            UpdateProfileRequest {
+                username: username.to_string(),
+                full_name: full_name.to_string(),
+                email: email.to_string(),
+            }
+        }
+
+        pub fn to_user_item(&self) -> UserItem {
+            UserItem {
+                id: Uuid::nil(),
+                is_admin: false,
+                username: self.username.clone(),
+                full_name: self.full_name.clone(),
+                email: self.email.clone(),
+            }
+        }
+    }
+
+    fn new_update_profile_request(username: &str, email: Option<&str>) -> UpdateProfileRequest {
+        let email_use = email.unwrap_or(&new_email(username)).to_string();
+        UpdateProfileRequest::new(username, &format!("Updated {} full name", username), &email_use)
+    }
+
+    async fn run_change_password_me_test(
+        create_users_def: &CreateUsersDef,
+        caller_username: Option<&str>,
+        use_login: bool,
+        change_req: &ChangePasswordRequest,
+        expected_status_code: StatusCode,
+    ) {
+        let mut user_defs = create_user_defs(create_users_def);
+        let (app, _, _, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
+        let url = "/api/v1/users/me/password".to_string();
+        let req = create_test_put_request(&url, api_key, login_id, change_req);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+    }
+
+    async fn run_update_profile_me_test(
+        create_users_def: &CreateUsersDef,
+        caller_username: Option<&str>,
+        use_login: bool,
+        update_req: &UpdateProfileRequest,
+        expected_status_code: StatusCode,
+    ) {
+        let mut user_defs = create_user_defs(create_users_def);
+        let (app, _, mock_users, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
+        let url = "/api/v1/users/me/profile".to_string();
+        let req = create_test_put_request(&url, api_key, login_id, update_req);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), expected_status_code);
+
+        if expected_status_code == StatusCode::OK {
+            let body = test::read_body(resp).await;
+            let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize update_profile_me response");
+            // id and is_admin come from the authenticated caller, not the request
+            let caller_id = MockStore::find_user_id_by_name_in_map(&mock_users, caller_username.unwrap_or(""), Uuid::nil());
+            let dummy_user = MockUser::default();
+            let original_user = mock_users.get(&caller_id).unwrap_or(&dummy_user);
+            assert_eq!(response_user.id, original_user.user.id);
+            assert_eq!(response_user.is_admin, original_user.user.is_admin);
+            assert_eq!(response_user.username, update_req.username);
+            assert_eq!(response_user.full_name, update_req.full_name);
+            assert_eq!(response_user.email, update_req.email);
+        }
+    }
+
+    // change_password_me scenario helpers
+    async fn run_can_change_password_with_valid_current_password(use_login: bool) {
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &ChangePasswordRequest::new(VALID_USER_PASSWORD, "NewPassword1!"),
+            StatusCode::NO_CONTENT,
+        ).await;
+    }
+
+    async fn run_cannot_change_password_with_wrong_current_password(use_login: bool) {
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &ChangePasswordRequest::new(INVALID_USER_PASSWORD, "NewPassword1!"),
+            StatusCode::UNAUTHORIZED,
+        ).await;
+    }
+
+    async fn run_cannot_change_password_with_empty_current_password(use_login: bool) {
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &ChangePasswordRequest::new("", "NewPassword1!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    async fn run_cannot_change_password_with_new_password_too_short(use_login: bool) {
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &ChangePasswordRequest::new(VALID_USER_PASSWORD, "Sh0rt!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    async fn run_cannot_change_password_with_new_password_no_uppercase(use_login: bool) {
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &ChangePasswordRequest::new(VALID_USER_PASSWORD, "nouppercase1!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    async fn run_cannot_change_password_with_new_password_no_lowercase(use_login: bool) {
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &ChangePasswordRequest::new(VALID_USER_PASSWORD, "NOLOWERCASE1!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    async fn run_cannot_change_password_with_new_password_no_digit(use_login: bool) {
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &ChangePasswordRequest::new(VALID_USER_PASSWORD, "NoDigitHere!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    async fn run_cannot_change_password_with_new_password_no_special_char(use_login: bool) {
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &ChangePasswordRequest::new(VALID_USER_PASSWORD, "NoSpecial1"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    // update_profile_me scenario helpers
+    async fn run_can_update_profile_with_new_username_and_email(use_login: bool) {
+        run_update_profile_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &new_update_profile_request("updated_username_1", None),
+            StatusCode::OK,
+        ).await;
+    }
+
+    async fn run_can_update_profile_keeping_same_username_and_email(use_login: bool) {
+        run_update_profile_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &new_update_profile_request(VALID_USERNAME_1, None),
+            StatusCode::OK,
+        ).await;
+    }
+
+    async fn run_cannot_update_profile_with_existing_username(use_login: bool) {
+        // user_2 tries to take user_1's username
+        run_update_profile_me_test(
+            &CreateUsersDef::new(1, 2, MazeContent::Empty),
+            Some(VALID_USERNAME_2),
+            use_login,
+            &new_update_profile_request(VALID_USERNAME_1, None),
+            StatusCode::CONFLICT,
+        ).await;
+    }
+
+    async fn run_cannot_update_profile_with_existing_email(use_login: bool) {
+        // user_2 tries to take user_1's email
+        run_update_profile_me_test(
+            &CreateUsersDef::new(1, 2, MazeContent::Empty),
+            Some(VALID_USERNAME_2),
+            use_login,
+            &new_update_profile_request(VALID_USERNAME_2, Some(&new_email(VALID_USERNAME_1))),
+            StatusCode::CONFLICT,
+        ).await;
+    }
+
+    async fn run_cannot_update_profile_with_empty_username(use_login: bool) {
+        run_update_profile_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &UpdateProfileRequest::new("", "Some Full Name", &new_email(VALID_USERNAME_1)),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    async fn run_cannot_update_profile_with_invalid_email(use_login: bool) {
+        run_update_profile_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            use_login,
+            &UpdateProfileRequest::new(VALID_USERNAME_1, "Some Full Name", "not-a-valid-email"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    // change_password_me tests
+    #[actix_web::test]
+    async fn can_change_password_with_valid_current_password_with_api_key() {
+        run_can_change_password_with_valid_current_password(false).await;
+    }
+    #[actix_web::test]
+    async fn can_change_password_with_valid_current_password_with_login() {
+        run_can_change_password_with_valid_current_password(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_change_password_with_wrong_current_password_with_api_key() {
+        run_cannot_change_password_with_wrong_current_password(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_change_password_with_wrong_current_password_with_login() {
+        run_cannot_change_password_with_wrong_current_password(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_change_password_with_empty_current_password_with_api_key() {
+        run_cannot_change_password_with_empty_current_password(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_change_password_with_empty_current_password_with_login() {
+        run_cannot_change_password_with_empty_current_password(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_change_password_with_new_password_too_short_with_api_key() {
+        run_cannot_change_password_with_new_password_too_short(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_change_password_with_new_password_too_short_with_login() {
+        run_cannot_change_password_with_new_password_too_short(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_change_password_with_new_password_no_uppercase_with_api_key() {
+        run_cannot_change_password_with_new_password_no_uppercase(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_change_password_with_new_password_no_uppercase_with_login() {
+        run_cannot_change_password_with_new_password_no_uppercase(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_change_password_with_new_password_no_lowercase_with_api_key() {
+        run_cannot_change_password_with_new_password_no_lowercase(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_change_password_with_new_password_no_lowercase_with_login() {
+        run_cannot_change_password_with_new_password_no_lowercase(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_change_password_with_new_password_no_digit_with_api_key() {
+        run_cannot_change_password_with_new_password_no_digit(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_change_password_with_new_password_no_digit_with_login() {
+        run_cannot_change_password_with_new_password_no_digit(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_change_password_with_new_password_no_special_char_with_api_key() {
+        run_cannot_change_password_with_new_password_no_special_char(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_change_password_with_new_password_no_special_char_with_login() {
+        run_cannot_change_password_with_new_password_no_special_char(true).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic]
+    async fn cannot_change_password_unauthenticated() {
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            None,
+            false,
+            &ChangePasswordRequest::new(VALID_USER_PASSWORD, "NewPassword1!"),
+            StatusCode::UNAUTHORIZED,
+        ).await;
+    }
+
+    // update_profile_me tests
+    #[actix_web::test]
+    async fn can_update_profile_with_new_username_and_email_with_api_key() {
+        run_can_update_profile_with_new_username_and_email(false).await;
+    }
+    #[actix_web::test]
+    async fn can_update_profile_with_new_username_and_email_with_login() {
+        run_can_update_profile_with_new_username_and_email(true).await;
+    }
+
+    #[actix_web::test]
+    async fn can_update_profile_keeping_same_username_and_email_with_api_key() {
+        run_can_update_profile_keeping_same_username_and_email(false).await;
+    }
+    #[actix_web::test]
+    async fn can_update_profile_keeping_same_username_and_email_with_login() {
+        run_can_update_profile_keeping_same_username_and_email(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_profile_with_existing_username_with_api_key() {
+        run_cannot_update_profile_with_existing_username(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_update_profile_with_existing_username_with_login() {
+        run_cannot_update_profile_with_existing_username(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_profile_with_existing_email_with_api_key() {
+        run_cannot_update_profile_with_existing_email(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_update_profile_with_existing_email_with_login() {
+        run_cannot_update_profile_with_existing_email(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_profile_with_empty_username_with_api_key() {
+        run_cannot_update_profile_with_empty_username(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_update_profile_with_empty_username_with_login() {
+        run_cannot_update_profile_with_empty_username(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_profile_with_invalid_email_with_api_key() {
+        run_cannot_update_profile_with_invalid_email(false).await;
+    }
+    #[actix_web::test]
+    async fn cannot_update_profile_with_invalid_email_with_login() {
+        run_cannot_update_profile_with_invalid_email(true).await;
+    }
+
+    #[actix_web::test]
+    #[should_panic]
+    async fn cannot_update_profile_unauthenticated() {
+        run_update_profile_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            None,
+            false,
+            &new_update_profile_request(VALID_USERNAME_1, None),
+            StatusCode::UNAUTHORIZED,
+        ).await;
     }
 
     // API documentation page load

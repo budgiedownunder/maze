@@ -21,6 +21,10 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         /// <param name="dialogService">Injected dialog service</param>
         /// <param name="mazeService">Injected maze service</param>
+        private bool _dataLoaded = false;
+        public bool IsDataLoaded => _dataLoaded;
+        public void InvalidateData() => _dataLoaded = false;
+
         public MazesViewModel(IDialogService dialogService, IMazeService mazeService)
         {
             Title = "Mazes";
@@ -57,6 +61,7 @@ namespace Maze.Maui.App.ViewModels
                 IsBusy = true;
                 List<MazeItem> items = await _mazeService.GetMazeItems(true);
                 DisplayItems(items.OrderBy(i => i.Name).ToList());
+                _dataLoaded = true;
             }
             catch (Exception ex)
             {

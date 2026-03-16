@@ -6,7 +6,8 @@ use crate::middleware::auth::auth_middleware;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg
         // Unguarded routes
-        .service(handlers::login)        
+        .service(handlers::login)
+        .service(handlers::signup)
         // Guarded routes
         .service(
             web::scope("")
@@ -19,8 +20,13 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(handlers::get_maze_solution)
                 .service(handlers::solve_maze)
                 .service(handlers::update_maze)
-                // Users
-                .service(handlers::logout)        
+                // Users (self-service) - must come BEFORE /users/{id}
+                .service(handlers::change_password_me)
+                .service(handlers::update_profile_me)
+                .service(handlers::get_me)
+                .service(handlers::delete_me)
+                // Users (admin)
+                .service(handlers::logout)
                 .service(handlers::get_users)
                 .service(handlers::create_user)
                 .service(handlers::delete_user)

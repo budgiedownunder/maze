@@ -93,3 +93,57 @@ key_file = "key.pem"
 Note:
 
 Any environment variable values will take precedence over their corresponding configuration file values.
+
+> `auth_token` is a static API key used for privileged (admin) or service-to-service access via the `X-API-Key` request header. Regular users authenticate via the `POST /api/v1/login` endpoint, which returns a short-lived bearer token.
+
+## Authentication
+
+The server supports two authentication mechanisms:
+
+| Mechanism | Header | Usage |
+|:----------|:-------|:------|
+| Static API key | `X-API-Key: <auth_token>` | Admin / service access; configured via `auth_token` |
+| Bearer token | `Authorization: Bearer <token>` | Per-user login; token obtained via `POST /api/v1/login` |
+
+The following endpoints manage user identity:
+
+| Method | Path | Auth required | Description |
+|:-------|:-----|:--------------|:------------|
+| `POST` | `/api/v1/signup` | None | Register a new (non-admin) user account |
+| `POST` | `/api/v1/login` | None | Sign in; returns a bearer token |
+| `POST` | `/api/v1/logout` | Bearer | Invalidate the current bearer token |
+| `GET` | `/api/v1/users/me` | Either | Return the signed-in user's profile |
+| `PUT` | `/api/v1/users/me/profile` | Either | Update the signed-in user's profile (username, full name, email) |
+| `PUT` | `/api/v1/users/me/password` | Either | Change the signed-in user's password |
+| `DELETE` | `/api/v1/users/me` | Either | Delete the signed-in user's account and all their mazes |
+
+The full API reference (including maze and admin-user endpoints) is available interactively via the documentation endpoints listed above.
+
+### Password Requirements
+
+The following password complexity rules apply when creating an account (`POST /api/v1/signup`) or changing a password (`PUT /api/v1/users/me/password`):
+
+| Rule | Requirement |
+|:-----|:------------|
+| Minimum length | 8 characters |
+| Uppercase letter | At least one (`A`–`Z`) |
+| Lowercase letter | At least one (`a`–`z`) |
+| Digit | At least one (`0`–`9`) |
+| Special character | At least one non-alphanumeric character (e.g. `!`, `@`, `#`) |
+
+A password such as `Password1!` satisfies all rules.
+
+> **Note:** These rules are enforced server-side. The MAUI client also validates them locally before submitting the request.
+
+### Default Admin Account
+
+On first run, if no admin user exists in the data store, the server automatically creates one with the following credentials:
+
+| Field | Value |
+|:------|:------|
+| Username | `admin` |
+| Password | `Admin1!` |
+
+> **Important:** The default password is intentionally simple. **Change it immediately after first login** using the self-service endpoint (`PUT /api/v1/users/me/password`) or the admin user-management API (`PUT /api/v1/users/{id}`).
+
+The admin account is used with the bearer token mechanism (`POST /api/v1/login`) or, for service access, via the static API key configured in `auth_token`.

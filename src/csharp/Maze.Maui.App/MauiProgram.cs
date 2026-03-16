@@ -40,6 +40,7 @@ namespace Maze.Maui.App
             InitializeMazeWasmInterop();
 
             builder.Services.AddSingleton<ConfigurationService>();
+            builder.Services.AddSingleton<IAuthService, AuthHttpClientService>();
             if(useMockMazeService)
                 builder.Services.AddSingleton<IMazeService, MockMazeService>();
             else
@@ -48,11 +49,19 @@ namespace Maze.Maui.App
             builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());
             builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService());
 
+            builder.Services.AddTransient<LoginViewModel>();
+            builder.Services.AddTransient<SignUpViewModel>();
+            builder.Services.AddTransient<ChangePasswordViewModel>();
             builder.Services.AddSingleton<MazesViewModel>();
             builder.Services.AddTransient<MazeViewModel>();
+            builder.Services.AddSingleton<AccountViewModel>();
 
+            builder.Services.AddTransient<LoginPage>();
+            builder.Services.AddTransient<SignUpPage>();
+            builder.Services.AddTransient<ChangePasswordPage>();
             builder.Services.AddSingleton<MazesPage>();
             builder.Services.AddTransient<MazePage>();
+            builder.Services.AddSingleton<AccountPage>();
 
 #if DEBUG
             builder.Logging.AddDebug();

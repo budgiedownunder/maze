@@ -15,7 +15,7 @@ use std::{fs::File, io::{self, BufReader}};
 use storage::{get_store, SharedStore, Store, Error as StoreError};
 
 const DEFAULT_ADMIN_ACCOUNT_USERNAME:&str = "admin";
-const DEFAULT_ADMIN_ACCOUNT_PASSWORD:&str = "admin!";
+const DEFAULT_ADMIN_ACCOUNT_PASSWORD:&str = "Admin1!";
 
 /// Loads the rust_ls configuration for the server session (see: https://docs.rs/rustls/latest/rustls/server/struct.ServerConfig.html)
 fn load_rustls_config(config: &AppConfig) -> io::Result<ServerConfig> {
