@@ -51,7 +51,7 @@
                        IsVisible="{Binding ErrorMessage, Converter={StaticResource StringNotEmptyConverter}}"
                        HorizontalOptions="Center" />
 
-                <Button Text="Create Account"
+                <Button Text="Sign Up"
                         Command="{Binding SignUpCommand}"
                         HorizontalOptions="FillAndExpand" />
 

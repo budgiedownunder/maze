@@ -52,7 +52,7 @@
                         Command="{Binding SignInCommand}"
                         HorizontalOptions="FillAndExpand" />
 
-                <Button Text="Create Account"
+                <Button Text="Sign Up"
                         Command="{Binding GoToSignUpCommand}"
                         HorizontalOptions="FillAndExpand"
                         BackgroundColor="Transparent"

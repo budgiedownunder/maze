@@ -40,7 +40,7 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="authService">Injected auth service</param>
         public SignUpViewModel(IAuthService authService)
         {
-            Title = "Create Account";
+            Title = "Sign Up";
             _authService = authService;
         }
 
