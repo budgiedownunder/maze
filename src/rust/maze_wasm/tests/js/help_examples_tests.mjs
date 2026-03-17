@@ -1,7 +1,7 @@
 // This file exports a single function run_tests() which runs the tests for each
 // JavaScript example confirming that they work
 import { readFile } from 'fs/promises';
-import init, { MazeWasm, MazeCellTypeWasm } from '../../pkg/maze_wasm.js';
+import init, { MazeWasm, MazeCellTypeWasm, GenerationAlgorithmWasm } from '../../pkg/maze_wasm.js';
 import util from 'util';
 
 // Custom function to handle loading WASM in Node.js
@@ -528,6 +528,37 @@ function testMazeSolveExpectedOutput() {
     ];
 }
 
+// Test MazeWasm::generate() example
+function testMazeGenerate() {
+    try {
+        let maze = new MazeWasm();
+        maze.generate(
+            7,
+            5,
+            GenerationAlgorithmWasm.RecursiveBacktracking,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined
+        );
+        let json = maze.to_json();
+        console.log("Maze generate() succeeded. Dimensions: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+        return json.length > 0;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    }
+}
+
+function testMazeGenerateExpectedOutput() {
+    return [
+        "Maze generate() succeeded. Dimensions:  7 row(s) x  5  column(s)"
+    ];
+}
+
 // Test MazeSolutionWasm::get_path_points() example
 function testMazeSolutionGetPathPoints() {
     try {
@@ -598,6 +629,7 @@ const tests = [
     { name: "MazeWasm:to_json() example", testFunction: testMazeToJSON, expectedOutput: testMazeToJSONExpectedOutput },
     { name: "MazeWasm:from_json() example", testFunction: testMazeFromJSON, expectedOutput: testMazeFromJSONExpectedOutput },
     { name: "MazeWasm:solve() example", testFunction: testMazeSolve, expectedOutput: testMazeSolveExpectedOutput },
+    { name: "MazeWasm:generate() example", testFunction: testMazeGenerate, expectedOutput: testMazeGenerateExpectedOutput },
     { name: "MazeSolutionWasm:get_path_points() example", testFunction: testMazeSolutionGetPathPoints, expectedOutput: testMazeSolutionGetPathPointsExpectedOutput },
 ];
 

@@ -1042,6 +1042,42 @@ impl MazeWasm {
     /// # Returns
     ///
     /// This function will return an error if the maze could not be generated
+    ///
+    /// # Examples
+    ///
+    /// Generate a 7×5 maze using the recursive backtracking algorithm with default options,
+    /// then print the resulting maze as a JSON string
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeWasm, GenerationAlgorithmWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     try {
+    ///         let maze = new MazeWasm();
+    ///         maze.generate(
+    ///             7,
+    ///             5,
+    ///             GenerationAlgorithmWasm.RecursiveBacktracking,
+    ///             undefined,
+    ///             undefined,
+    ///             undefined,
+    ///             undefined,
+    ///             undefined,
+    ///             undefined,
+    ///             undefined
+    ///         );
+    ///         let json = maze.to_json();
+    ///         console.log("Maze generate() succeeded. Maze JSON is: ", json);
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     }
+    /// }
+    /// run();
+    /// ```
     pub fn generate(
         &mut self,
         row_count: JsValue,
