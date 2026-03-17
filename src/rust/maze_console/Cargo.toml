@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 data_model = { path = "../data_model" }
-maze = { path = "../maze" }
+maze = { path = "../maze", features = ["generation"] }
 storage = { path = "../storage" }
 utils = { path = "../utils" }
 crossterm = "*"
