@@ -4,7 +4,7 @@ use crate::service::auth::AuthService;
 
 
 use data_model::{Maze, User};
-use maze::{Error as MazeError, MazeSolution, MazeSolver};
+use maze::{Error as MazeError, Generator, GeneratorOptions, MazeSolution, MazeSolver};
 use storage::{Error as StoreError, MazeItem, Store, SharedStore};
 
 use actix_web::{delete, get, post, put, web, web::Query, HttpMessage, HttpRequest, HttpResponse, Error, 
@@ -217,6 +217,14 @@ pub (crate) fn get_maze_solve_error_string(err: &MazeError) -> String {
 
 fn get_maze_solve_error(err: &MazeError) -> Error {
     ErrorUnprocessableEntity(get_maze_solve_error_string(err))
+}
+
+pub (crate) fn get_maze_generate_error_string(err: &MazeError) -> String {
+    format!("The maze could not be generated: {}", err)
+}
+
+fn get_maze_generate_error(err: &MazeError) -> Error {
+    ErrorUnprocessableEntity(get_maze_generate_error_string(err))
 }
 
 fn update_store_user<F>(
@@ -1212,7 +1220,7 @@ pub async fn get_maze_solution(
 )]
 #[post("/solve-maze")]
 pub async fn solve_maze(
-    req_maze: web::Json<Maze>,  
+    req_maze: web::Json<Maze>,
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let _ = get_authorized_user(&req, false)?;
@@ -1220,5 +1228,39 @@ pub async fn solve_maze(
     match maze.solve() {
         Ok(solution) => Ok(HttpResponse::Ok().json(solution)),
         Err(err) => Err(get_maze_solve_error(&err))
+    }
+}
+// **************************************************************************************************
+// Endpoint: POST /api/v1/mazes/generate
+// Handler:  generate_maze()
+// **************************************************************************************************
+#[utoipa::path(
+    summary = "Generates a new maze from the provided options",
+    description = "This endpoint generates a new maze using the supplied generator options and, if successful, returns the generated maze definition. The returned maze will have empty id and name fields; use POST /api/v1/mazes to persist it.",
+    post,
+    path = "/api/v1/mazes/generate",
+    request_body = GeneratorOptions,
+    responses(
+        (status = 200, description = "Maze generated successfully", body = Maze),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized request"),
+        (status = 422, description = "Maze could not be generated")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[post("/mazes/generate")]
+pub async fn generate_maze(
+    options: web::Json<GeneratorOptions>,
+    req: HttpRequest
+) -> Result<HttpResponse, Error> {
+    let _ = get_authorized_user(&req, false)?;
+    let generator = Generator { options: options.into_inner() };
+    match generator.generate() {
+        Ok(maze) => Ok(HttpResponse::Ok().json(maze)),
+        Err(err) => Err(get_maze_generate_error(&err))
     }
 }

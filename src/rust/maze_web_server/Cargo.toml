@@ -21,7 +21,7 @@ data_model = { path = "../data_model" }
 env_logger = "0.10"
 lazy_static = "1.4"
 log = "0.4"
-maze = { path = "../maze" }
+maze = { path = "../maze", features = ["generation"] }
 rustls = { version = "0.20"}
 rustls-pemfile = "1.0"
 serde = { version = "1.0", features = ["derive"] }

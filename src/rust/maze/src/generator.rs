@@ -9,6 +9,7 @@ use crate::{Error, GenerationAlgorithm};
 /// Options that control how a maze is generated.
 ///
 /// All `Option` fields fall back to a documented default when `None`.
+#[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct GeneratorOptions {
     /// Number of rows in the generated maze. Must be ≥ 3.
     pub row_count: usize,
@@ -20,12 +21,11 @@ pub struct GeneratorOptions {
     pub start: Option<MazePoint>,
     /// Finish cell. Defaults to `(row_count - 1, col_count - 1)`.
     pub finish: Option<MazePoint>,
-    /// Minimum number of cells on the spine (the direct S→F path).
+    /// Minimum number of cells on the spine (the direct start to finish path).
     /// Attempts that produce a shorter spine are discarded and retried.
     /// Defaults to `(row_count + col_count) / 2`.
     pub min_spine_length: Option<usize>,
-    /// Maximum number of generation attempts before returning `Error::Generate`.
-    /// `Some(0)` returns an error immediately without making any attempt.
+    /// Maximum number of generation attempts before returning an error
     /// Defaults to `100`.
     pub max_retries: Option<usize>,
     /// Whether branches may grow out of the finish cell.

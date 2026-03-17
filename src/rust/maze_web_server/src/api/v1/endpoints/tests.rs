@@ -3,7 +3,7 @@ mod test_definitions {
     // **************************************************************************************************
     // Unit tests for API and documentation endpoints, via injection of MockStore
     // **************************************************************************************************
-    use crate::api::v1::endpoints::handlers::get_maze_solve_error_string;
+    use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
     use crate::{create_app, config::app::AppConfig};
     
@@ -12,7 +12,7 @@ mod test_definitions {
     use auth::{config::PasswordHashConfig, hashing::hash_password};  
     use chrono::{DateTime, Utc};
     use data_model::{Maze, MazeDefinition, MazePoint, User, UserLogin};
-    use maze::{Error as MazeError, MazePath, MazeSolution};
+    use maze::{Error as MazeError, GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution, MazeSolver};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use std::collections::HashMap;
@@ -2390,6 +2390,350 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_solve_maze_that_should_fail_with_no_solution_with_login() {
         run_cannot_solve_maze_that_should_fail_with_no_solution(true).await;
+    }
+
+    // **************************************************************************************************
+    // Generate maze helpers
+    // **************************************************************************************************
+
+    fn new_generate_options(
+        row_count: usize,
+        col_count: usize,
+        start: Option<MazePoint>,
+        finish: Option<MazePoint>,
+        min_spine_length: Option<usize>,
+        max_retries: Option<usize>,
+    ) -> GeneratorOptions {
+        GeneratorOptions {
+            row_count,
+            col_count,
+            algorithm: GenerationAlgorithm::RecursiveBacktracking,
+            start,
+            finish,
+            min_spine_length,
+            max_retries,
+            branch_from_finish: None,
+        }
+    }
+
+    async fn validate_generate_response(
+        context: &str,
+        resp: actix_web::dev::ServiceResponse,
+        expected_status_code: StatusCode,
+        expected_rows: Option<usize>,
+        expected_cols: Option<usize>,
+        expected_err_message: Option<String>,
+    ) {
+        assert_eq!(resp.status(), expected_status_code);
+        if expected_status_code == StatusCode::OK {
+            let body = test::read_body(resp).await;
+            let maze: Maze = serde_json::from_slice(&body).expect("failed to deserialize response");
+            match (expected_rows, expected_cols) {
+                (Some(rows), Some(cols)) => {
+                    assert_eq!(maze.definition.row_count(), rows);
+                    assert_eq!(maze.definition.col_count(), cols);
+                }
+                _ => panic!("{}", format!("No maze dimension comparison values provided for {} test!", context)),
+            }
+            assert_eq!(maze.id, "", "{}: expected empty id", context);
+            assert_eq!(maze.name, "", "{}: expected empty name", context);
+            maze.solve().expect(&format!("{}: generated maze must be solvable", context));
+        } else {
+            if let Some(value) = expected_err_message {
+                let body = test::read_body(resp).await;
+                let error_message = String::from_utf8(body.to_vec()).expect("Failed to parse body as UTF-8");
+                assert_eq!(error_message, value);
+            }
+        }
+    }
+
+    async fn run_generate_maze_test(
+        create_users_def: &CreateUsersDef,
+        caller_username: Option<&str>,
+        use_login: bool,
+        options: GeneratorOptions,
+        expected_status_code: StatusCode,
+        expected_rows: Option<usize>,
+        expected_cols: Option<usize>,
+        expected_err_message: Option<String>,
+    ) {
+        let mut user_defs = create_user_defs(create_users_def);
+        let (app, _, _, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
+        let url = "/api/v1/mazes/generate".to_string();
+        let req = create_test_post_request(&url, api_key, login_id, Some(&options));
+        let resp = test::call_service(&app, req).await;
+        validate_generate_response("generate_maze()", resp, expected_status_code, expected_rows, expected_cols, expected_err_message).await;
+    }
+
+    fn get_generate_row_count_error_str() -> String {
+        get_maze_generate_error_string(&MazeError::Generate("row_count must be at least 3".to_string()))
+    }
+
+    fn get_generate_col_count_error_str() -> String {
+        get_maze_generate_error_string(&MazeError::Generate("col_count must be at least 3".to_string()))
+    }
+
+    fn get_generate_start_out_of_bounds_error_str() -> String {
+        get_maze_generate_error_string(&MazeError::Generate("start is out of bounds".to_string()))
+    }
+
+    fn get_generate_finish_out_of_bounds_error_str() -> String {
+        get_maze_generate_error_string(&MazeError::Generate("finish is out of bounds".to_string()))
+    }
+
+    fn get_generate_start_equals_finish_error_str() -> String {
+        get_maze_generate_error_string(&MazeError::Generate("start and finish must be different cells".to_string()))
+    }
+
+    fn get_generate_max_retries_zero_error_str() -> String {
+        get_maze_generate_error_string(&MazeError::Generate("max_retries is 0, no attempts made".to_string()))
+    }
+
+    async fn run_can_generate_maze_that_should_succeed(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(5, 5, None, None, None, None),
+            StatusCode::OK, Some(5), Some(5), None,
+        ).await;
+    }
+
+    async fn run_can_generate_maze_with_minimum_row_count(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(3, 5, None, None, None, None),
+            StatusCode::OK, Some(3), Some(5), None,
+        ).await;
+    }
+
+    async fn run_cannot_generate_maze_with_row_count_too_small(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(2, 5, None, None, None, None),
+            StatusCode::UNPROCESSABLE_ENTITY, None, None,
+            Some(get_generate_row_count_error_str()),
+        ).await;
+    }
+
+    async fn run_can_generate_maze_with_minimum_col_count(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(5, 3, None, None, None, None),
+            StatusCode::OK, Some(5), Some(3), None,
+        ).await;
+    }
+
+    async fn run_cannot_generate_maze_with_col_count_too_small(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(5, 2, None, None, None, None),
+            StatusCode::UNPROCESSABLE_ENTITY, None, None,
+            Some(get_generate_col_count_error_str()),
+        ).await;
+    }
+
+    async fn run_can_generate_maze_with_explicit_start_and_finish(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(5, 5, Some(MazePoint { row: 0, col: 0 }), Some(MazePoint { row: 4, col: 4 }), None, None),
+            StatusCode::OK, Some(5), Some(5), None,
+        ).await;
+    }
+
+    async fn run_cannot_generate_maze_with_start_out_of_bounds(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(5, 5, Some(MazePoint { row: 10, col: 10 }), None, None, None),
+            StatusCode::UNPROCESSABLE_ENTITY, None, None,
+            Some(get_generate_start_out_of_bounds_error_str()),
+        ).await;
+    }
+
+    async fn run_cannot_generate_maze_with_finish_out_of_bounds(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(5, 5, None, Some(MazePoint { row: 10, col: 10 }), None, None),
+            StatusCode::UNPROCESSABLE_ENTITY, None, None,
+            Some(get_generate_finish_out_of_bounds_error_str()),
+        ).await;
+    }
+
+    async fn run_cannot_generate_maze_with_start_equals_finish(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(5, 5, Some(MazePoint { row: 0, col: 0 }), Some(MazePoint { row: 0, col: 0 }), None, None),
+            StatusCode::UNPROCESSABLE_ENTITY, None, None,
+            Some(get_generate_start_equals_finish_error_str()),
+        ).await;
+    }
+
+    async fn run_can_generate_maze_with_valid_min_spine_length(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(5, 5, None, None, Some(3), None),
+            StatusCode::OK, Some(5), Some(5), None,
+        ).await;
+    }
+
+    async fn run_cannot_generate_maze_with_impossible_min_spine_length(use_login: bool) {
+        // min_spine_length=1000 is impossible for a 5×5 maze; max_retries=1 keeps the test fast
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(5, 5, None, None, Some(1000), Some(1)),
+            StatusCode::UNPROCESSABLE_ENTITY, None, None, None,
+        ).await;
+    }
+
+    async fn run_cannot_generate_maze_with_max_retries_zero(use_login: bool) {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1), use_login,
+            new_generate_options(5, 5, None, None, None, Some(0)),
+            StatusCode::UNPROCESSABLE_ENTITY, None, None,
+            Some(get_generate_max_retries_zero_error_str()),
+        ).await;
+    }
+
+    // Generate maze tests
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn cannot_generate_maze_with_invalid_api_key() {
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(INVALID_USERNAME), false,
+            new_generate_options(5, 5, None, None, None, None),
+            StatusCode::UNAUTHORIZED, None, None, None,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn can_generate_maze_that_should_succeed_with_api_key() {
+        run_can_generate_maze_that_should_succeed(false).await;
+    }
+
+    #[actix_web::test]
+    async fn can_generate_maze_that_should_succeed_with_login() {
+        run_can_generate_maze_that_should_succeed(true).await;
+    }
+
+    #[actix_web::test]
+    async fn can_generate_maze_with_minimum_row_count_with_api_key() {
+        run_can_generate_maze_with_minimum_row_count(false).await;
+    }
+
+    #[actix_web::test]
+    async fn can_generate_maze_with_minimum_row_count_with_login() {
+        run_can_generate_maze_with_minimum_row_count(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_row_count_too_small_with_api_key() {
+        run_cannot_generate_maze_with_row_count_too_small(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_row_count_too_small_with_login() {
+        run_cannot_generate_maze_with_row_count_too_small(true).await;
+    }
+
+    #[actix_web::test]
+    async fn can_generate_maze_with_minimum_col_count_with_api_key() {
+        run_can_generate_maze_with_minimum_col_count(false).await;
+    }
+
+    #[actix_web::test]
+    async fn can_generate_maze_with_minimum_col_count_with_login() {
+        run_can_generate_maze_with_minimum_col_count(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_col_count_too_small_with_api_key() {
+        run_cannot_generate_maze_with_col_count_too_small(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_col_count_too_small_with_login() {
+        run_cannot_generate_maze_with_col_count_too_small(true).await;
+    }
+
+    #[actix_web::test]
+    async fn can_generate_maze_with_explicit_start_and_finish_with_api_key() {
+        run_can_generate_maze_with_explicit_start_and_finish(false).await;
+    }
+
+    #[actix_web::test]
+    async fn can_generate_maze_with_explicit_start_and_finish_with_login() {
+        run_can_generate_maze_with_explicit_start_and_finish(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_start_out_of_bounds_with_api_key() {
+        run_cannot_generate_maze_with_start_out_of_bounds(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_start_out_of_bounds_with_login() {
+        run_cannot_generate_maze_with_start_out_of_bounds(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_finish_out_of_bounds_with_api_key() {
+        run_cannot_generate_maze_with_finish_out_of_bounds(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_finish_out_of_bounds_with_login() {
+        run_cannot_generate_maze_with_finish_out_of_bounds(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_start_equals_finish_with_api_key() {
+        run_cannot_generate_maze_with_start_equals_finish(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_start_equals_finish_with_login() {
+        run_cannot_generate_maze_with_start_equals_finish(true).await;
+    }
+
+    #[actix_web::test]
+    async fn can_generate_maze_with_valid_min_spine_length_with_api_key() {
+        run_can_generate_maze_with_valid_min_spine_length(false).await;
+    }
+
+    #[actix_web::test]
+    async fn can_generate_maze_with_valid_min_spine_length_with_login() {
+        run_can_generate_maze_with_valid_min_spine_length(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_impossible_min_spine_length_with_api_key() {
+        run_cannot_generate_maze_with_impossible_min_spine_length(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_impossible_min_spine_length_with_login() {
+        run_cannot_generate_maze_with_impossible_min_spine_length(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_max_retries_zero_with_api_key() {
+        run_cannot_generate_maze_with_max_retries_zero(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_with_max_retries_zero_with_login() {
+        run_cannot_generate_maze_with_max_retries_zero(true).await;
     }
 
     // **************************************************************************************************

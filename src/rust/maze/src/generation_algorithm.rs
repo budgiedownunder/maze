@@ -3,7 +3,7 @@
 /// Marked `#[non_exhaustive]` so that adding future variants (e.g. Prim's, Kruskal's)
 /// does not break existing `match` arms in downstream crates.
 #[non_exhaustive]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub enum GenerationAlgorithm {
     /// Two-phase recursive backtracking:
     /// Phase 1 performs a random walk from start to finish (the spine);

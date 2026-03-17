@@ -19,6 +19,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(handlers::get_maze)
                 .service(handlers::get_maze_solution)
                 .service(handlers::solve_maze)
+                .service(handlers::generate_maze)
                 .service(handlers::update_maze)
                 // Users (self-service) - must come BEFORE /users/{id}
                 .service(handlers::change_password_me)
