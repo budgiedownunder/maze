@@ -6,6 +6,7 @@ use utils::error::io_error_kind_to_string;
 pub enum Error {
     Io(std::io::Error),
     Solve(String),
+    Generate(String),
 }
 
 impl From<io::Error> for Error {
@@ -19,6 +20,7 @@ impl std::fmt::Display for Error {
         match *self {
             Error::Io(ref error) => write!(f, "{}", io_error_kind_to_string(error.kind())),
             Error::Solve(ref message) => write!(f, "{}", message),
+            Error::Generate(ref message) => write!(f, "{}", message),
         }
     }
 }

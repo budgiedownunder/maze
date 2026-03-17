@@ -1323,6 +1323,7 @@ dependencies = [
  "criterion",
  "data_model",
  "pretty_assertions",
+ "rand",
  "serde",
  "serde_json",
  "utils",
@@ -1353,6 +1354,7 @@ name = "maze_wasm"
 version = "0.1.0"
 dependencies = [
  "data_model",
+ "getrandom",
  "js-sys",
  "maze",
  "serde",

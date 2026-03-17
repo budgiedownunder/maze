@@ -21,8 +21,9 @@ data_model = { path = "../data_model" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 data_model = { path = "../data_model", default-features = false, features = ["wasm-lite"] }
+getrandom = { version = "0.2", optional = true, features = ["js"] }
 
 [features]
 default = []
-wasm-bindgen = ["dep:wasm-bindgen", "data_model/wasm-bindgen"]
+wasm-bindgen = ["dep:wasm-bindgen", "data_model/wasm-bindgen", "maze/generation", "dep:getrandom"]
 wasm-lite = ["data_model/wasm-lite"]

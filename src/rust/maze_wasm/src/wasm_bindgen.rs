@@ -1,9 +1,11 @@
+#[allow(unused_imports)] // MazeCellTypeWasm is referenced in doc comments as an intra-doc link
 use crate::wasm_common::{
-    new_maze, to_cell_type_enum, MazeWasm, MazeCellTypeWasm,
+    new_maze, to_cell_type_enum, to_generation_algorithm, GenerationAlgorithmWasm, MazeCellTypeWasm,
+    MazeWasm,
 };
 use data_model::MazePoint;
 use js_sys::{Array, Object, Reflect};
-use maze::{MazeSolution, MazeSolver};
+use maze::{Generator, GeneratorOptions, MazeSolution, MazeSolver};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 
@@ -1021,6 +1023,83 @@ impl MazeWasm {
         Ok(MazeSolutionWasm { solution })
     }
 
+    #[wasm_bindgen]
+    /// Generates a new maze and replaces the current maze instance with it
+    ///
+    /// # Arguments
+    ///
+    /// * `row_count` - Number of rows (must be >= 3)
+    /// * `col_count` - Number of columns (must be >= 3)
+    /// * `algorithm` - Generation algorithm to use ([`GenerationAlgorithmWasm`])
+    /// * `start_row` - Start cell row index (undefined = default 0)
+    /// * `start_col` - Start cell column index (undefined = default 0)
+    /// * `finish_row` - Finish cell row index (undefined = default row_count-1)
+    /// * `finish_col` - Finish cell column index (undefined = default col_count-1)
+    /// * `min_spine_length` - Minimum solution path length (undefined = default (row_count+col_count)/2)
+    /// * `max_retries` - Maximum generation attempts (undefined = default 100)
+    /// * `branch_from_finish` - Whether to branch from the finish cell (undefined = default false)
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error if the maze could not be generated
+    pub fn generate(
+        &mut self,
+        row_count: JsValue,
+        col_count: JsValue,
+        algorithm: GenerationAlgorithmWasm,
+        start_row: JsValue,
+        start_col: JsValue,
+        finish_row: JsValue,
+        finish_col: JsValue,
+        min_spine_length: JsValue,
+        max_retries: JsValue,
+        branch_from_finish: JsValue,
+    ) -> Result<(), JsValue> {
+        let row_count = Self::arg_to_usize("row_count", row_count)?;
+        let col_count = Self::arg_to_usize("col_count", col_count)?;
+
+        let start_row = Self::opt_arg_to_usize("start_row", start_row)?;
+        let start_col = Self::opt_arg_to_usize("start_col", start_col)?;
+        let finish_row = Self::opt_arg_to_usize("finish_row", finish_row)?;
+        let finish_col = Self::opt_arg_to_usize("finish_col", finish_col)?;
+
+        let start = match (start_row, start_col) {
+            (Some(r), Some(c)) => Some(MazePoint { row: r, col: c }),
+            _ => None,
+        };
+        let finish = match (finish_row, finish_col) {
+            (Some(r), Some(c)) => Some(MazePoint { row: r, col: c }),
+            _ => None,
+        };
+
+        let min_spine_length = Self::opt_arg_to_usize("min_spine_length", min_spine_length)?;
+        let max_retries = Self::opt_arg_to_usize("max_retries", max_retries)?;
+
+        let branch_from_finish = if branch_from_finish.is_null() || branch_from_finish.is_undefined() {
+            None
+        } else {
+            branch_from_finish.as_bool()
+        };
+
+        let options = GeneratorOptions {
+            row_count,
+            col_count,
+            algorithm: to_generation_algorithm(algorithm),
+            start,
+            finish,
+            min_spine_length,
+            max_retries,
+            branch_from_finish,
+        };
+
+        let maze = Generator { options }
+            .generate()
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        self.maze = maze;
+        Ok(())
+    }
+
     // Private helper functions and methods
     fn js_value_type_str(val: JsValue) -> String {
         if val.is_string() {
@@ -1067,6 +1146,13 @@ impl MazeWasm {
             Some(s) => Ok(s),
             None => Err(Self::js_arg_error_str(name, "string", value, "")),
         }
+    }
+
+    fn opt_arg_to_usize(name: &str, value: JsValue) -> Result<Option<usize>, JsValue> {
+        if value.is_null() || value.is_undefined() {
+            return Ok(None);
+        }
+        Self::arg_to_usize(name, value).map(Some)
     }
 
     fn arg_to_usize(name: &str, value: JsValue) -> Result<usize, JsValue> {
