@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The `maze_wasm` crate is written in `Rust` and defines the Web Assembly library for defining and solving mazes in consumer applications that support Web Assembly (WASM).
+The `maze_wasm` crate is written in `Rust` and defines the Web Assembly library for defining, generating and solving mazes in consumer applications that support Web Assembly (WASM).
 
 The crate uses `wasm-pack` to generate a JavaScript API wrapper `maze_wasm.js` to the WASM, and uses `cargo` to build the general Web Assembly `maze_wasm.wasm` for use outside of JavaScript.
 

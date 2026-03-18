@@ -94,6 +94,9 @@ namespace Maze.Maui.App
             this.mazeItem = mazeItem;
             RowCount = (int)(mazeItem?.Definition?.RowCount ?? DEFAULT_ROW_COUNT);
             ColumnCount = (int)(mazeItem?.Definition?.ColCount ?? DEFAULT_COLUMN_COUNT);
+            startCell = null;
+            finishCell = null;
+            haveSolutionCells = false;
             InitializeContent();
         }
         /// <summary>

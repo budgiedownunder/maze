@@ -927,6 +927,105 @@ namespace Maze.Wasm.Interop.Tests
             var numObjectsExpected = 1;
             Assert.True(numObjects == numObjectsExpected, $"Expected {numObjectsExpected} but got '{numObjects}'");
         }
+
+        // --- Generation tests ---
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.NewGeneratorOptionsWasm"/> succeeds and returns the expected dimensions when provided with valid parameters
+        /// </summary>
+        [Fact]
+        public void MazeWasmGenerate_ShouldSucceedAndReturnCorrectDimensions()
+        {
+            MazeWasmInterop interop = GetInterop();
+            UInt32 mazeWasmPtr = interop.NewMazeWasm();
+            UInt32 optionsPtr = interop.NewGeneratorOptionsWasm(7, 5, MazeWasmGenerationAlgorithm.RecursiveBacktracking, 42);
+            try
+            {
+                interop.MazeWasmGenerate(mazeWasmPtr, optionsPtr);
+                AssertRowCount(interop.MazeWasmGetRowCount(mazeWasmPtr), 7);
+                AssertColCount(interop.MazeWasmGetColCount(mazeWasmPtr), 5);
+            }
+            finally
+            {
+                interop.FreeGeneratorOptionsWasm(optionsPtr);
+                interop.FreeMazeWasm(mazeWasmPtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.NewGeneratorOptionsWasm"/> succeeds and returns the expected output when provided with a specific seed
+        /// </summary>
+        [Fact]
+        public void MazeWasmGenerate_SameSeedProducesDeterministicOutput()
+        {
+            MazeWasmInterop interop = GetInterop();
+            UInt32 maze1Ptr = interop.NewMazeWasm();
+            UInt32 maze2Ptr = interop.NewMazeWasm();
+            UInt32 opts1Ptr = interop.NewGeneratorOptionsWasm(11, 11, MazeWasmGenerationAlgorithm.RecursiveBacktracking, 999);
+            UInt32 opts2Ptr = interop.NewGeneratorOptionsWasm(11, 11, MazeWasmGenerationAlgorithm.RecursiveBacktracking, 999);
+            try
+            {
+                interop.MazeWasmGenerate(maze1Ptr, opts1Ptr);
+                interop.MazeWasmGenerate(maze2Ptr, opts2Ptr);
+                string json1 = interop.MazeWasmToJson(maze1Ptr);
+                string json2 = interop.MazeWasmToJson(maze2Ptr);
+                Assert.Equal(json1, json2);
+            }
+            finally
+            {
+                interop.FreeGeneratorOptionsWasm(opts1Ptr);
+                interop.FreeGeneratorOptionsWasm(opts2Ptr);
+                interop.FreeMazeWasm(maze1Ptr);
+                interop.FreeMazeWasm(maze2Ptr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.NewGeneratorOptionsWasm"/> succeeds and returns the expected dimensions
+        /// </summary>
+        [Fact]
+        public void MazeWasmGenerate_WithExplicitStartFinishAndSpine_ShouldSucceedAndReturnCorrectDimensions()
+        {
+            MazeWasmInterop interop = GetInterop();
+            UInt32 mazeWasmPtr = interop.NewMazeWasm();
+            UInt32 optionsPtr = interop.NewGeneratorOptionsWasm(9, 7, MazeWasmGenerationAlgorithm.RecursiveBacktracking, 1);
+            try
+            {
+                interop.GeneratorOptionsSetStart(optionsPtr, 0, 0);
+                interop.GeneratorOptionsSetFinish(optionsPtr, 8, 6);
+                interop.GeneratorOptionsSetMinSpineLength(optionsPtr, 5);
+                interop.GeneratorOptionsSetMaxRetries(optionsPtr, 50);
+                interop.MazeWasmGenerate(mazeWasmPtr, optionsPtr);
+                AssertRowCount(interop.MazeWasmGetRowCount(mazeWasmPtr), 9);
+                AssertColCount(interop.MazeWasmGetColCount(mazeWasmPtr), 7);
+            }
+            finally
+            {
+                interop.FreeGeneratorOptionsWasm(optionsPtr);
+                interop.FreeMazeWasm(mazeWasmPtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.NewGeneratorOptionsWasm"/> fails if an invalid row count is specified
+        /// </summary>
+        [Fact]
+        public void MazeWasmGenerate_WithInvalidRowCount_ShouldThrow()
+        {
+            MazeWasmInterop interop = GetInterop();
+            UInt32 mazeWasmPtr = interop.NewMazeWasm();
+            UInt32 optionsPtr = interop.NewGeneratorOptionsWasm(2, 5, MazeWasmGenerationAlgorithm.RecursiveBacktracking, 1);
+            try
+            {
+                var ex = Assert.Throws<Exception>(() => interop.MazeWasmGenerate(mazeWasmPtr, optionsPtr));
+                Assert.Contains("row_count", ex.Message);
+            }
+            finally
+            {
+                interop.FreeGeneratorOptionsWasm(optionsPtr);
+                interop.FreeMazeWasm(mazeWasmPtr);
+            }
+        }
     }
     /// <summary>
     ///  This class contains the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Maze.Wasm.Interop.MazeWasmInterop.ConnectionType"/> [`xUnit`](https://xunit.net/) unit 

@@ -136,13 +136,13 @@
                     result = intValue;
                     break;
                 case uint uintValue:
-                    result = uintValue;
+                    result = (long)uintValue;
                     break;
                 case long longValue:
                     result = longValue;
                     break;
                 case ulong ulongValue:
-                    result = ulongValue;
+                    result = (long)ulongValue;
                     break;
                 case float floatValue:
                     result = floatValue;
@@ -162,7 +162,8 @@
     ///  
     /// Developers can use <see cref="MazeWasmConnectorBase.NewMazeWasm()">NewMazeWasm()</see> to create
     /// a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see> and 
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see>, 
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmGenerate(UInt32,UInt32)">MazeWasmGenerate()</see>, and 
     ///  <see cref="MazeWasmConnectorBase.MazeWasmSolve(UInt32)">MazeWasmSolve()</see>, to interact with the maze.
     ///  
     /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UInt32)">FreeMazeWasm()</see>
@@ -295,6 +296,14 @@
             freeSizedMemory = ResolveFunction("free_sized_memory");
             getSizedMemoryUsed = ResolveFunction("get_sized_memory_used");
             getNumObjectsAllocated = ResolveFunction("get_num_objects_allocated");
+            newGeneratorOptionsWasm = ResolveFunction("new_generator_options_wasm");
+            generatorOptionsSetStart = ResolveFunction("generator_options_set_start");
+            generatorOptionsSetFinish = ResolveFunction("generator_options_set_finish");
+            generatorOptionsSetMinSpineLength = ResolveFunction("generator_options_set_min_spine_length");
+            generatorOptionsSetMaxRetries = ResolveFunction("generator_options_set_max_retries");
+            generatorOptionsSetBranchFromFinish = ResolveFunction("generator_options_set_branch_from_finish");
+            mazeWasmGenerate = ResolveFunction("maze_wasm_generate");
+            freeGeneratorOptionsWasm = ResolveFunction("free_generator_options_wasm");
         }
         /// <summary>
         /// Locates a WebAssembly function. Will throw an exception if the function is not found.

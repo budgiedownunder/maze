@@ -72,6 +72,44 @@ namespace Maze.Api
             public UInt32 Column;
         }
         /// <summary>
+        /// Identifies the maze generation algorithm to use
+        /// </summary>
+        public enum GenerationAlgorithm
+        {
+            /// <summary>
+            /// Two-phase recursive backtracking
+            /// </summary>
+            RecursiveBacktracking = 0,
+        }
+        /// <summary>
+        /// Options that control maze generation
+        /// </summary>
+        public class GenerationOptions
+        {
+            /// <summary>Number of rows in the generated maze. Must be >= 3.</summary>
+            public UInt32 RowCount { get; set; }
+            /// <summary>Number of columns in the generated maze. Must be >= 3.</summary>
+            public UInt32 ColCount { get; set; }
+            /// <summary>Generation algorithm to use</summary>
+            public GenerationAlgorithm Algorithm { get; set; } = GenerationAlgorithm.RecursiveBacktracking;
+            /// <summary>Random number generator seed for deterministic generation</summary>
+            public UInt64 Seed { get; set; }
+            /// <summary>Start cell row. When null, defaults to row 0.</summary>
+            public UInt32? StartRow { get; set; }
+            /// <summary>Start cell column. When null, defaults to column 0.</summary>
+            public UInt32? StartCol { get; set; }
+            /// <summary>Finish cell row. When null, defaults to the last row.</summary>
+            public UInt32? FinishRow { get; set; }
+            /// <summary>Finish cell column. When null, defaults to the last column.</summary>
+            public UInt32? FinishCol { get; set; }
+            /// <summary>Minimum spine path length. When null, defaults to (RowCount + ColCount) / 2.</summary>
+            public UInt32? MinSpineLength { get; set; }
+            /// <summary>Maximum generation attempts before throwing. When null, defaults to 100.</summary>
+            public UInt32? MaxRetries { get; set; }
+            /// <summary>Whether branches may grow out of the finish cell. Defaults to false.</summary>
+            public bool? BranchFromFinish { get; set; }
+        }
+        /// <summary>
         /// Converts a [MazeWasmPoint](xref:Maze.Wasm.Interop.MazeWasmInterop.MazeWasmPoint) to a [Maze.Point](xref:Maze.Api.Maze.Point)
         /// </summary>
         /// <param name="wasmPoint">Point to be converted</param>
@@ -118,6 +156,40 @@ namespace Maze.Api
                 throw new Exception("interop.NewMazeWasm() failed to create maze (zero returned)");
             }
             Interop.MazeWasmResize(_mazeWasmPtr, rowCount, colCount);
+        }
+        /// <summary>
+        /// Generates a new maze from the given options, or will throw an exception if the operation fails
+        /// </summary>
+        /// <param name="options">Generation options</param>
+        /// <returns>New maze instance containing the generated maze</returns>
+        public static Maze Generate(GenerationOptions options)
+        {
+            Maze maze = new Maze(0, 0);
+            MazeWasmGenerationAlgorithm wasmAlgorithm = (MazeWasmGenerationAlgorithm)(byte)options.Algorithm;
+            UInt32 optionsPtr = maze.Interop.NewGeneratorOptionsWasm(
+                options.RowCount,
+                options.ColCount,
+                wasmAlgorithm,
+                options.Seed);
+            try
+            {
+                if (options.StartRow.HasValue && options.StartCol.HasValue)
+                    maze.Interop.GeneratorOptionsSetStart(optionsPtr, options.StartRow.Value, options.StartCol.Value);
+                if (options.FinishRow.HasValue && options.FinishCol.HasValue)
+                    maze.Interop.GeneratorOptionsSetFinish(optionsPtr, options.FinishRow.Value, options.FinishCol.Value);
+                if (options.MinSpineLength.HasValue)
+                    maze.Interop.GeneratorOptionsSetMinSpineLength(optionsPtr, options.MinSpineLength.Value);
+                if (options.MaxRetries.HasValue)
+                    maze.Interop.GeneratorOptionsSetMaxRetries(optionsPtr, options.MaxRetries.Value);
+                if (options.BranchFromFinish.HasValue)
+                    maze.Interop.GeneratorOptionsSetBranchFromFinish(optionsPtr, options.BranchFromFinish.Value ? (byte)1 : (byte)0);
+                maze.Interop.MazeWasmGenerate(maze._mazeWasmPtr, optionsPtr);
+            }
+            finally
+            {
+                maze.Interop.FreeGeneratorOptionsWasm(optionsPtr);
+            }
+            return maze;
         }
         /// <summary>
         /// Handles object disposal, releasing managed and unmanaged [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) resources and marking
@@ -231,6 +303,14 @@ namespace Maze.Api
             Interop.MazeWasmSetStartCell(_mazeWasmPtr, startRow, startCol);
         }
         /// <summary>
+        /// Indicates whether the maze has a start cell defined
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        public bool HasStartCell
+        {
+            get { try { GetStartCell(); return true; } catch { return false; } }
+        }
+        /// <summary>
         /// Gets the start cell associated with the maze, or will throw an exception
         /// if the start cell cannot be retrieved
         /// </summary>
@@ -249,6 +329,14 @@ namespace Maze.Api
         public void SetFinishCell(UInt32 finishRow, UInt32 finishCol)
         {
             Interop.MazeWasmSetFinishCell(_mazeWasmPtr, finishRow, finishCol);
+        }
+        /// <summary>
+        /// Indicates whether the maze has a finish cell defined
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        public bool HasFinishCell
+        {
+            get { try { GetFinishCell(); return true; } catch { return false; } }
         }
         /// <summary>
         /// Gets the finish cell associated with the maze, or will throw an exception

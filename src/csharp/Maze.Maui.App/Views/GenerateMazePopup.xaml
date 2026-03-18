@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<toolkit:Popup xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+               xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+               xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+               x:Class="Maze.Maui.App.Views.GenerateMazePopup"
+               CanBeDismissedByTappingOutsideOfPopup="False">
+
+    <Border Padding="20"
+            StrokeShape="RoundRectangle 8"
+            Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+
+        <VerticalStackLayout Spacing="12" MinimumWidthRequest="280">
+
+            <!-- Title -->
+            <Label Text="Generate Maze"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center"
+                   Margin="0,0,0,4"/>
+
+            <!-- Fields -->
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+
+                <Label Grid.Row="0" Grid.Column="0" Text="Rows" VerticalOptions="Center"/>
+                <Entry Grid.Row="0" Grid.Column="1" x:Name="RowsEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="1" Grid.Column="0" Text="Columns" VerticalOptions="Center"/>
+                <Entry Grid.Row="1" Grid.Column="1" x:Name="ColsEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="2" Grid.Column="0" Text="Start Row" VerticalOptions="Center"/>
+                <Entry Grid.Row="2" Grid.Column="1" x:Name="StartRowEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="3" Grid.Column="0" Text="Start Column" VerticalOptions="Center"/>
+                <Entry Grid.Row="3" Grid.Column="1" x:Name="StartColEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="4" Grid.Column="0" Text="Finish Row" VerticalOptions="Center"/>
+                <Entry Grid.Row="4" Grid.Column="1" x:Name="FinishRowEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="5" Grid.Column="0" Text="Finish Column" VerticalOptions="Center"/>
+                <Entry Grid.Row="5" Grid.Column="1" x:Name="FinishColEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="6" Grid.Column="0" Text="Min Spine Length" VerticalOptions="Center"/>
+                <Entry Grid.Row="6" Grid.Column="1" x:Name="MinSpineLengthEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+            </Grid>
+
+            <!-- Validation error -->
+            <Label x:Name="ErrorLabel"
+                   TextColor="Red"
+                   FontSize="12"
+                   IsVisible="False"
+                   HorizontalOptions="Center"/>
+
+            <!-- Buttons -->
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,4,0,0">
+                <Button Grid.Column="0" Text="Cancel" Clicked="OnCancelClicked"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+                <Button Grid.Column="1" Text="Generate" Clicked="OnGenerateClicked"/>
+            </Grid>
+
+        </VerticalStackLayout>
+    </Border>
+
+</toolkit:Popup>

@@ -4,7 +4,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use data_model::{Maze, MazePoint, User};
-use maze::{MazePath, MazePrinter, MazeSolver};
+use maze::{GenerationAlgorithm, Generator, GeneratorOptions, MazePath, MazePrinter, MazeSolver};
 use storage::Store;
 use utils::LinePrinter;
 
@@ -24,7 +24,8 @@ static MENU: &str = r#"*********************************************
         -------------------------------------------
         R -> Resize         | E -> Empty
         -------------------------------------------
-        S -> Solve          | P -> Print
+        G -> Generate       | S -> Solve
+        P -> Print
         -------------------------------------------
         O -> Open maze      | U -> List mazes
         V -> Save maze      | Z -> Save maze as
@@ -556,6 +557,73 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
+    fn do_generate(&mut self) -> Result<(), Box<dyn Error>> {
+        let rows = self.prompt_number("Number of rows: ", Some(3), None)?;
+        let cols = self.prompt_number("Number of columns: ", Some(3), None)?;
+
+        let start = if self.prompt_yes_no("Specify start point [default: row 1, column 1]?")? {
+            let row = self.prompt_number("Start row:", Some(1), Some(rows))? - 1;
+            let col = self.prompt_number("Start column:", Some(1), Some(cols))? - 1;
+            Some(MazePoint { row, col })
+        } else {
+            None
+        };
+
+        let finish = if self.prompt_yes_no(&format!(
+            "Specify finish point [default: row {}, column {}]?",
+            rows, cols
+        ))? {
+            let row = self.prompt_number("Finish row:", Some(1), Some(rows))? - 1;
+            let col = self.prompt_number("Finish column:", Some(1), Some(cols))? - 1;
+            Some(MazePoint { row, col })
+        } else {
+            None
+        };
+
+        let min_spine_length = if self.prompt_yes_no(&format!(
+            "Specify minimum solution path length [default: {}]?",
+            (rows + cols) / 2
+        ))? {
+            Some(self.prompt_number("Minimum solution path length:", Some(1), None)?)
+        } else {
+            None
+        };
+
+        let max_retries = if self.prompt_yes_no("Specify maximum retries [default: 100]?")? {
+            Some(self.prompt_number("Maximum retries:", Some(1), None)?)
+        } else {
+            None
+        };
+
+        let gen = Generator {
+            options: GeneratorOptions {
+                row_count: rows,
+                col_count: cols,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start,
+                finish,
+                min_spine_length,
+                max_retries,
+                branch_from_finish: None,
+                seed: None,
+            },
+        };
+        match gen.generate() {
+            Ok(maze) => {
+                *self.get_maze_mut() = maze;
+                self.print_line("Generation successful!")?;
+                let print_it = self.prompt_yes_no("Do you want to print it?")?;
+                if print_it {
+                    self.print_maze()?;
+                }
+            }
+            Err(error) => {
+                self.print_line(&format!("Failed to generate maze: {}", error))?;
+            }
+        }
+        Ok(())
+    }
+
     fn process_keys(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
             if let Some(ch) = self.read_key()? {
@@ -570,6 +638,7 @@ pub trait App: LinePrinter {
                     'C' => self.do_clear_walls(),
                     'R' => self.do_resize(),
                     'E' => self.do_empty(),
+                    'G' => self.do_generate(),
                     'S' => self.do_solve(),
                     'P' => self.do_print(),
                     'O' => self.do_open(),

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The `maze_console` crate is written in `Rust` and represents a simple console application for managing and solving mazes. 
+The `maze_console` crate is written in `Rust` and represents a simple console application for managing, generating and solving mazes. 
 
 Internally, the application logic is defined by the `ConsoleApp` type (`console_app.rs`) which implements the public `App` trait defined in `app.rs`.
 

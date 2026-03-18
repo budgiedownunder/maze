@@ -12,19 +12,23 @@ namespace Maze.Maui.App.ViewModels
     /// </summary>
     public partial class MazesViewModel : BaseViewModel
     {
+        public ObservableCollection<MazeItem> MazeItems { get; } = new();
         // Private properties
         IMazeService _mazeService;
         IDialogService _dialogService;
-        public ObservableCollection<MazeItem> MazeItems { get; } = new();
+        private bool _dataLoaded = false;
+        public bool IsDataLoaded => _dataLoaded;
+        public void InvalidateData()
+        {
+            _dataLoaded = false;
+            MazeItems.Clear();
+            LoadStatus = "No mazes found";
+        }
         /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="dialogService">Injected dialog service</param>
         /// <param name="mazeService">Injected maze service</param>
-        private bool _dataLoaded = false;
-        public bool IsDataLoaded => _dataLoaded;
-        public void InvalidateData() => _dataLoaded = false;
-
         public MazesViewModel(IDialogService dialogService, IMazeService mazeService)
         {
             Title = "Mazes";

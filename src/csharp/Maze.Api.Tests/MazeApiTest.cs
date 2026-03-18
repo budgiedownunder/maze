@@ -397,6 +397,40 @@ namespace Maze.Api.Tests
             }
         }
         /// <summary>
+        /// Confirms that <see cref="Maze.HasStartCell"/> returns false for an empty maze
+        /// </summary>
+        [Fact]
+        public void MazeHasStartCell_ReturnsFalseForEmptyMaze()
+        {
+            using (Maze maze = new Maze(0, 0))
+            {
+                Assert.False(maze.HasStartCell);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.HasStartCell"/> returns false if a start cell is not defined
+        /// </summary>
+        [Fact]
+        public void MazeHasStartCell_ReturnsFalseIfNotDefined()
+        {
+            using (Maze maze = new Maze(5, 5))
+            {
+                Assert.False(maze.HasStartCell);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.HasStartCell"/> returns true if a start cell is defined
+        /// </summary>
+        [Fact]
+        public void MazeHasStartCell_ReturnsTrueIfDefined()
+        {
+            using (Maze maze = new Maze(5, 5))
+            {
+                maze.SetStartCell(1, 2);
+                Assert.True(maze.HasStartCell);
+            }
+        }
+        /// <summary>
         /// Confirms that <see cref="Maze.GetFinishCell"/> fails for an empty maze
         /// </summary>
         [Fact]
@@ -440,6 +474,40 @@ namespace Maze.Api.Tests
                 maze.SetFinishCell(3, 4);
                 finish = maze.GetFinishCell();
                 AssertFinishCell(finish, new Maze.Point() { Row = 3, Column = 4 });
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.HasFinishCell"/> returns false for an empty maze
+        /// </summary>
+        [Fact]
+        public void MazeHasFinishCell_ReturnsFalseForEmptyMaze()
+        {
+            using (Maze maze = new Maze(0, 0))
+            {
+                Assert.False(maze.HasFinishCell);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.HasFinishCell"/> returns false if a finish cell is not defined
+        /// </summary>
+        [Fact]
+        public void MazeHasFinishCell_ReturnsFalseIfNotDefined()
+        {
+            using (Maze maze = new Maze(5, 5))
+            {
+                Assert.False(maze.HasFinishCell);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.HasFinishCell"/> returns true if a finish cell is defined
+        /// </summary>
+        [Fact]
+        public void MazeHasFinishCell_ReturnsTrueIfDefined()
+        {
+            using (Maze maze = new Maze(5, 5))
+            {
+                maze.SetFinishCell(3, 4);
+                Assert.True(maze.HasFinishCell);
             }
         }
         /// <summary>
@@ -680,9 +748,290 @@ namespace Maze.Api.Tests
 
             }
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> succeeds with only the required parameters
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithMinimalOptions_ShouldSucceed()
+        {
+            using (Maze maze = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 7,
+                ColCount = 5,
+                Seed = 42,
+            }))
+            {
+                AssertRowCount(maze.RowCount, 7);
+                AssertColCount(maze.ColCount, 5);
+                Assert.False(maze.IsEmpty);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> produces the same maze for the same seed
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_SameSeedProducesDeterministicOutput()
+        {
+            var options = new Maze.GenerationOptions
+            {
+                RowCount = 11,
+                ColCount = 11,
+                Seed = 999,
+            };
+            using (Maze maze1 = Maze.Generate(options))
+            using (Maze maze2 = Maze.Generate(options))
+            {
+                Assert.Equal(maze1.ToJson(), maze2.ToJson());
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> places start and finish cells at the specified positions
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithExplicitStartAndFinish_ShouldPlaceCellsCorrectly()
+        {
+            using (Maze maze = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 9,
+                ColCount = 9,
+                Seed = 1,
+                StartRow = 0,
+                StartCol = 0,
+                FinishRow = 8,
+                FinishCol = 8,
+            }))
+            {
+                AssertRowCount(maze.RowCount, 9);
+                AssertColCount(maze.ColCount, 9);
+                AssertStartCell(maze.GetStartCell(), new Maze.Point { Row = 0, Column = 0 });
+                AssertFinishCell(maze.GetFinishCell(), new Maze.Point { Row = 8, Column = 8 });
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> succeeds when all options are provided
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithAllOptions_ShouldSucceed()
+        {
+            using (Maze maze = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 11,
+                ColCount = 11,
+                Seed = 7,
+                StartRow = 0,
+                StartCol = 0,
+                FinishRow = 10,
+                FinishCol = 10,
+                MinSpineLength = 5,
+                MaxRetries = 50,
+                BranchFromFinish = false,
+            }))
+            {
+                AssertRowCount(maze.RowCount, 11);
+                AssertColCount(maze.ColCount, 11);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> fails with the expected message when row count is less than 3
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithRowCountLessThan3_ShouldFail()
+        {
+            var exception = Assert.ThrowsAny<Exception>(() =>
+            {
+                Maze.Generate(new Maze.GenerationOptions
+                {
+                    RowCount = 2,
+                    ColCount = 5,
+                    Seed = 1,
+                });
+            });
+            Assert.Equal("row_count must be at least 3", exception.Message);
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> fails with the expected message when column count is less than 3
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithColCountLessThan3_ShouldFail()
+        {
+            var exception = Assert.ThrowsAny<Exception>(() =>
+            {
+                Maze.Generate(new Maze.GenerationOptions
+                {
+                    RowCount = 5,
+                    ColCount = 2,
+                    Seed = 1,
+                });
+            });
+            Assert.Equal("col_count must be at least 3", exception.Message);
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> fails with the expected message when the start cell is out of bounds
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithStartOutOfBounds_ShouldFail()
+        {
+            var exception = Assert.ThrowsAny<Exception>(() =>
+            {
+                Maze.Generate(new Maze.GenerationOptions
+                {
+                    RowCount = 5,
+                    ColCount = 5,
+                    Seed = 1,
+                    StartRow = 10,
+                    StartCol = 0,
+                });
+            });
+            Assert.Equal("start is out of bounds", exception.Message);
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> fails with the expected message when the finish cell is out of bounds
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithFinishOutOfBounds_ShouldFail()
+        {
+            var exception = Assert.ThrowsAny<Exception>(() =>
+            {
+                Maze.Generate(new Maze.GenerationOptions
+                {
+                    RowCount = 5,
+                    ColCount = 5,
+                    Seed = 1,
+                    FinishRow = 0,
+                    FinishCol = 10,
+                });
+            });
+            Assert.Equal("finish is out of bounds", exception.Message);
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> fails with the expected message when start and finish are the same cell
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithStartEqualToFinish_ShouldFail()
+        {
+            var exception = Assert.ThrowsAny<Exception>(() =>
+            {
+                Maze.Generate(new Maze.GenerationOptions
+                {
+                    RowCount = 5,
+                    ColCount = 5,
+                    Seed = 1,
+                    StartRow = 2,
+                    StartCol = 2,
+                    FinishRow = 2,
+                    FinishCol = 2,
+                });
+            });
+            Assert.Equal("start and finish must be different cells", exception.Message);
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> succeeds when a valid MinSpineLength is provided
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithValidMinSpineLength_ShouldSucceed()
+        {
+            using (Maze maze = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 9,
+                ColCount = 9,
+                Seed = 42,
+                MinSpineLength = 3,
+            }))
+            {
+                AssertRowCount(maze.RowCount, 9);
+                AssertColCount(maze.ColCount, 9);
+                Assert.False(maze.IsEmpty);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> fails when MinSpineLength is impossible to satisfy within MaxRetries attempts
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithImpossibleMinSpineLength_ShouldFail()
+        {
+            Assert.ThrowsAny<Exception>(() =>
+            {
+                Maze.Generate(new Maze.GenerationOptions
+                {
+                    RowCount = 5,
+                    ColCount = 5,
+                    Seed = 1,
+                    MinSpineLength = 1000,
+                    MaxRetries = 2,
+                });
+            });
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> produces different mazes for different seeds on a
+        /// 5x5 grid with corner-to-corner start/finish (the smallest realistic user configuration).
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_DifferentSeedsProduce_DifferentMazes_5x5_CornerToCorner()
+        {
+            int differentCount = 0;
+            string? firstJson = null;
+            for (ulong seed = 1; seed <= 20; seed++)
+            {
+                using Maze maze = Maze.Generate(new Maze.GenerationOptions
+                {
+                    RowCount = 5,
+                    ColCount = 5,
+                    StartRow = 0,
+                    StartCol = 0,
+                    FinishRow = 4,
+                    FinishCol = 4,
+                    MinSpineLength = 5,
+                    Seed = seed,
+                });
+                string json = maze.ToJson();
+                if (firstJson is null)
+                    firstJson = json;
+                else if (json != firstJson)
+                    differentCount++;
+            }
+            Assert.True(differentCount > 0, "All 20 seeds produced identical 5x5 mazes — seed is not affecting generation");
+        }
+        /// <summary>
+        /// Regression test: consecutive large seed values (~1.77×10^12) must produce different mazes.
+        /// These values are identical when truncated to float32 (precision ~131,072 at this scale),
+        /// so this would have caught the ulong→float precision loss bug in MazeWasmtimeConnector.ToValueBox.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_DifferentSeedsProduce_DifferentMazes_LargeSeeds()
+        {
+            // Two consecutive seeds at ~1.77×10^12 scale — identical as float32, distinct as int64
+            const ulong seedA = 1_768_464_000_000UL;
+            const ulong seedB = 1_768_464_000_001UL;
+
+            using Maze mazeA = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 5,
+                ColCount = 5,
+                StartRow = 0,
+                StartCol = 0,
+                FinishRow = 4,
+                FinishCol = 4,
+                MinSpineLength = 5,
+                Seed = seedA,
+            });
+            using Maze mazeB = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 5,
+                ColCount = 5,
+                StartRow = 0,
+                StartCol = 0,
+                FinishRow = 4,
+                FinishCol = 4,
+                MinSpineLength = 5,
+                Seed = seedB,
+            });
+
+            Assert.True(mazeA.ToJson() != mazeB.ToJson(),
+                $"Seeds {seedA} and {seedB} produced identical mazes — seed precision may be lost (ulong→float truncation)");
+        }
     }
     /// <summary>
-    ///  This class defines the [Wasmtime](https://docs.wasmtime.dev/) text fixture used by the [Maze.Api.Tests.MazeApiWasmtimeTest_Static](xref:Maze.Api.Tests.MazeApiWasmtimeTest_Static) and 
+    ///  This class defines the [Wasmtime](https://docs.wasmtime.dev/) text fixture used by the [Maze.Api.Tests.MazeApiWasmtimeTest_Static](xref:Maze.Api.Tests.MazeApiWasmtimeTest_Static) and
     ///  [Maze.Api.Tests.MazeApiWasmtimeTest_NonStatic](xref:Maze.Api.Tests.MazeApiWasmtimeTest_NonStatic) classes
     /// </summary>
     public class WasmtimeTestFixture

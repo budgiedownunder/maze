@@ -3,6 +3,10 @@ use data_model::MazePoint;
 use maze::{MazeSolver, MazeSolution};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ptr;
+#[cfg(feature = "wasm-lite")]
+use crate::wasm_common::{to_generation_algorithm, GenerationAlgorithmWasm};
+#[cfg(feature = "wasm-lite")]
+use maze::{Generator, GeneratorOptions};
 /// Creates a new, empty `MazeWasm`
 ///
 /// # Returns
@@ -709,6 +713,165 @@ fn ptr_to_string(ptr: *const u8) -> String {
         std::str::from_utf8(slice).unwrap()
     };
     string_slice.to_string()
+}
+
+/// Options controlling maze generation.
+///
+/// Created via `new_generator_options_wasm`, mutated via setter functions,
+/// passed to `maze_wasm_generate`, freed via `free_generator_options_wasm`.
+///
+/// Sentinel values for optional fields:
+/// - start/finish row/col: `u32::MAX` = use default
+/// - min_spine_length:     `0`        = use default ((row_count + col_count) / 2)
+/// - max_retries:          `0`        = use default (100)
+/// - branch_from_finish:   `0` = false (default), `1` = true
+#[cfg(feature = "wasm-lite")]
+#[repr(C)]
+pub struct GeneratorOptionsWasm {
+    pub row_count:          u32,
+    pub col_count:          u32,
+    pub algorithm:          GenerationAlgorithmWasm,
+    pub seed:               u64,
+    pub start_row:          u32,
+    pub start_col:          u32,
+    pub finish_row:         u32,
+    pub finish_col:         u32,
+    pub min_spine_length:   u32,
+    pub max_retries:        u32,
+    pub branch_from_finish: u8,
+}
+/// Creates a new `GeneratorOptionsWasm` with the given required fields and default optional fields.
+///
+/// # Returns
+///
+/// Pointer to `GeneratorOptionsWasm`
+#[cfg(feature = "wasm-lite")]
+#[no_mangle]
+pub extern "C" fn new_generator_options_wasm(
+    row_count: u32,
+    col_count: u32,
+    algorithm: GenerationAlgorithmWasm,
+    seed: u64,
+) -> *mut GeneratorOptionsWasm {
+    let opts = Box::new(GeneratorOptionsWasm {
+        row_count,
+        col_count,
+        algorithm,
+        seed,
+        start_row:          u32::MAX,
+        start_col:          u32::MAX,
+        finish_row:         u32::MAX,
+        finish_col:         u32::MAX,
+        min_spine_length:   0,
+        max_retries:        0,
+        branch_from_finish: 0,
+    });
+    increment_num_objects_allocated();
+    Box::into_raw(opts)
+}
+/// Sets the start cell in a `GeneratorOptionsWasm`
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_start(ptr: *mut GeneratorOptionsWasm, row: u32, col: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.start_row = row;
+    opts.start_col = col;
+}
+/// Sets the finish cell in a `GeneratorOptionsWasm`
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_finish(ptr: *mut GeneratorOptionsWasm, row: u32, col: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.finish_row = row;
+    opts.finish_col = col;
+}
+/// Sets the minimum spine length in a `GeneratorOptionsWasm`
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_min_spine_length(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.min_spine_length = value;
+}
+/// Sets the maximum retries in a `GeneratorOptionsWasm`
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_max_retries(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.max_retries = value;
+}
+/// Sets the branch_from_finish flag in a `GeneratorOptionsWasm` (`0` = false, `1` = true)
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_branch_from_finish(ptr: *mut GeneratorOptionsWasm, value: u8) {
+    let opts = unsafe { &mut *ptr };
+    opts.branch_from_finish = value;
+}
+/// Generates a maze, populating the given `MazeWasm`.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_wasm_generate(
+    maze_wasm: *mut MazeWasm,
+    options: *mut GeneratorOptionsWasm,
+) -> u32 {
+    let maze_wasm = unsafe { &mut *maze_wasm };
+    let opts = unsafe { &*options };
+
+    let start = if opts.start_row == u32::MAX || opts.start_col == u32::MAX {
+        None
+    } else {
+        Some(data_model::MazePoint { row: opts.start_row as usize, col: opts.start_col as usize })
+    };
+    let finish = if opts.finish_row == u32::MAX || opts.finish_col == u32::MAX {
+        None
+    } else {
+        Some(data_model::MazePoint { row: opts.finish_row as usize, col: opts.finish_col as usize })
+    };
+    let min_spine_length = if opts.min_spine_length == 0 { None } else { Some(opts.min_spine_length as usize) };
+    let max_retries = if opts.max_retries == 0 { None } else { Some(opts.max_retries as usize) };
+    let branch_from_finish = if opts.branch_from_finish == 0 { Some(false) } else { Some(true) };
+
+    let generator_options = GeneratorOptions {
+        row_count: opts.row_count as usize,
+        col_count: opts.col_count as usize,
+        algorithm: to_generation_algorithm(opts.algorithm),
+        start,
+        finish,
+        min_spine_length,
+        max_retries,
+        branch_from_finish,
+        seed: Some(opts.seed),
+    };
+
+    let generator = Generator { options: generator_options };
+    match generator.generate() {
+        Ok(maze) => {
+            maze_wasm.maze = maze;
+            0
+        }
+        Err(e) => create_maze_wasm_error_ptr(e.to_string().as_str()),
+    }
+}
+/// Frees a `GeneratorOptionsWasm` pointer
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn free_generator_options_wasm(ptr: *mut GeneratorOptionsWasm) {
+    if !ptr.is_null() {
+        unsafe {
+            let _ = Box::from_raw(ptr);
+            decrement_num_objects_allocated();
+        }
+    }
 }
 
 /// Total sized memory currently allocated

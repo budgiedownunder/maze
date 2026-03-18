@@ -1,4 +1,6 @@
 use data_model::{Maze, MazeDefinition};
+#[cfg(any(feature = "wasm-bindgen", feature = "wasm-lite"))]
+use maze::GenerationAlgorithm;
 #[cfg(feature = "wasm-bindgen")]
 use wasm_bindgen::prelude::*;
 
@@ -44,6 +46,35 @@ pub enum MazeCellTypeWasm {
     Start,
     Finish,
     Wall,
+}
+
+/// Identifies the maze generation algorithm to use.
+///
+/// Passed as an argument to [`MazeWasm::generate`].
+#[cfg(feature = "wasm-bindgen")]
+#[wasm_bindgen]
+pub enum GenerationAlgorithmWasm {
+    /// Two-phase recursive backtracking — see [`maze::GenerationAlgorithm::RecursiveBacktracking`].
+    RecursiveBacktracking = 0,
+}
+
+/// Identifies the maze generation algorithm to use.
+///
+/// Passed as an argument to `MazeWasm::generate`.
+#[cfg(not(feature = "wasm-bindgen"))]
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub enum GenerationAlgorithmWasm {
+    /// Two-phase recursive backtracking — see `maze::GenerationAlgorithm::RecursiveBacktracking`.
+    RecursiveBacktracking = 0,
+}
+
+/// Converts a [`GenerationAlgorithmWasm`] value to the corresponding [`maze::GenerationAlgorithm`].
+#[cfg(any(feature = "wasm-bindgen", feature = "wasm-lite"))]
+pub fn to_generation_algorithm(alg: GenerationAlgorithmWasm) -> GenerationAlgorithm {
+    match alg {
+        GenerationAlgorithmWasm::RecursiveBacktracking => GenerationAlgorithm::RecursiveBacktracking,
+    }
 }
 
 /// Converts a cell type character to a MazeCellTypeWasm value

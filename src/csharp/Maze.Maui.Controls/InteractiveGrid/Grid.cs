@@ -351,6 +351,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             IsVisible = false;
             ClearContent();
+            activeCell = null;
+            activeCellPoint.Clear();
+            anchorCell = null;
+            anchorCellPoint.Clear();
+            selectedCells = null;
             AddContent();
             IsVisible = true;
             ReinitializeSelectionFrame();
@@ -837,7 +842,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         public bool ActivateCell(int displayRow, int displayColumn, bool maintainSelection)
         {
             bool activated = false;
-            if (displayColumn > 0 && displayColumn <= RowCount && displayColumn > 0 && displayColumn <= ColumnCount)
+            if (displayRow > 0 && displayRow <= RowCount && displayColumn > 0 && displayColumn <= ColumnCount)
             {
                 CellFrame? cellFrame = GetCell(displayRow, displayColumn) as CellFrame;
                 if (cellFrame is not null)

@@ -11,6 +11,7 @@ At the moment, it allows the user to:
 - View and edit their account profile (username, full name, email), change their password, or delete their account
 - Load, edit, delete, rename and duplicate mazes
 - Construct mazes containing start, finish and wall cells
+- Generate mazes automatically using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly, with configurable dimensions, start/finish positions and minimum spine length
 - Attempt to solve mazes using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly
 
 It  has been tested on `Windows` desktop and `Android`/`iOS` devices. The screenshots below show it running on `Windows` desktop:  

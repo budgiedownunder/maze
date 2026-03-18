@@ -856,3 +856,324 @@ fn should_not_be_able_to_delete_invalid_maze_after_save() -> Result<(), Box<dyn 
     do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
     Ok(())
 }
+
+struct GeneratePointConfig {
+    specify: bool,
+    row_config: Option<EnterNumberConfig>,
+    col_config: Option<EnterNumberConfig>,
+}
+
+impl GeneratePointConfig {
+    fn default_point() -> Self {
+        GeneratePointConfig { specify: false, row_config: None, col_config: None }
+    }
+    fn custom_point(row_config: EnterNumberConfig, col_config: EnterNumberConfig) -> Self {
+        GeneratePointConfig {
+            specify: true,
+            row_config: Some(row_config),
+            col_config: Some(col_config),
+        }
+    }
+}
+
+fn add_generate_point_steps(
+    app: &mut MockApp,
+    expected_output: &mut Vec<String>,
+    prompt_message: &str,
+    config: &GeneratePointConfig,
+) {
+    expected_output.push(format!("{} (Y/N)", prompt_message));
+    if config.specify {
+        app.add_input_key('Y', false);
+        add_enter_number_steps(app, expected_output, config.row_config.as_ref().unwrap());
+        add_enter_number_steps(app, expected_output, config.col_config.as_ref().unwrap());
+    } else {
+        app.add_input_key('N', false);
+    }
+}
+
+fn add_generate_optional_number_steps(
+    app: &mut MockApp,
+    expected_output: &mut Vec<String>,
+    yes_no_line: &str,
+    config: Option<&EnterNumberConfig>,
+) {
+    expected_output.push(yes_no_line.to_string());
+    if let Some(number_config) = config {
+        app.add_input_key('Y', false);
+        add_enter_number_steps(app, expected_output, number_config);
+    } else {
+        app.add_input_key('N', false);
+    }
+}
+
+fn add_generate_maze_steps(
+    app: &mut MockApp,
+    expected_output: &mut Vec<String>,
+    reset_output: bool,
+    rows_val: usize,
+    cols_val: usize,
+    rows_config: &EnterNumberConfig,
+    cols_config: &EnterNumberConfig,
+    start_config: &GeneratePointConfig,
+    finish_config: &GeneratePointConfig,
+    min_spine_config: Option<&EnterNumberConfig>,
+    max_retries_config: Option<&EnterNumberConfig>,
+) {
+    app.add_input_key('G', reset_output);
+    add_enter_number_steps(app, expected_output, rows_config);
+    add_enter_number_steps(app, expected_output, cols_config);
+    add_generate_point_steps(app, expected_output,
+        "Specify start point [default: row 1, column 1]?", start_config);
+    add_generate_point_steps(app, expected_output,
+        &format!("Specify finish point [default: row {}, column {}]?", rows_val, cols_val),
+        finish_config);
+    add_generate_optional_number_steps(app, expected_output,
+        &format!("Specify minimum solution path length [default: {}]? (Y/N)", (rows_val + cols_val) / 2),
+        min_spine_config);
+    add_generate_optional_number_steps(app, expected_output,
+        "Specify maximum retries [default: 100]? (Y/N)",
+        max_retries_config);
+    expected_output.push("Generation successful!".to_string());
+    expected_output.push("Do you want to print it? (Y/N)".to_string());
+    app.add_input_key('N', false);
+}
+
+fn default_rows() -> EnterNumberConfig {
+    EnterNumberConfig::new("Number of rows: ", false, "3", "", &[], "5")
+}
+
+fn default_cols() -> EnterNumberConfig {
+    EnterNumberConfig::new("Number of columns: ", false, "3", "", &[], "5")
+}
+
+fn default_start() -> GeneratePointConfig {
+    GeneratePointConfig::default_point()
+}
+
+fn default_finish() -> GeneratePointConfig {
+    GeneratePointConfig::default_point()
+}
+
+#[test]
+fn should_be_able_to_generate_maze_without_printing() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(), &default_cols(), &default_start(), &default_finish(), None, None,
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_generate_maze_and_print_it() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    // Press G, enter rows/cols, answer N to all optional prompts, then Y to print.
+    // The maze grid output is non-deterministic, so reset output on the
+    // press-any-key spacebar to discard it, then verify only what follows.
+    mock_app.add_input_key('G', true);
+    mock_app.add_input_line("5", false);
+    mock_app.add_input_line("5", false);
+    mock_app.add_input_key('N', false); // start point
+    mock_app.add_input_key('N', false); // finish point
+    mock_app.add_input_key('N', false); // min spine length
+    mock_app.add_input_key('N', false); // max retries
+    mock_app.add_input_key('Y', false); // print it
+    mock_app.add_input_key(' ', true);  // press any key — resets non-deterministic output
+    let mut expected_output: Vec<String> = vec![];
+    expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
+    mock_app.add_input_key('Q', false);
+    expected_output.push("Exiting...".to_string());
+    mock_app.run()?;
+    mock_app.verify_output(&expected_output)?;
+    assert_eq!(mock_app.current_maze.definition.row_count(), 5);
+    assert_eq!(mock_app.current_maze.definition.col_count(), 5);
+    Ok(())
+}
+
+#[test]
+fn should_prevent_generate_maze_with_invalid_rows() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &EnterNumberConfig::new("Number of rows: ", false, "3", "", &["1", "2"], "5"),
+        &default_cols(), &default_start(), &default_finish(), None, None,
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_prevent_generate_maze_with_invalid_cols() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(),
+        &EnterNumberConfig::new("Number of columns: ", false, "3", "", &["1", "2"], "5"),
+        &default_start(), &default_finish(), None, None,
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_generate_maze_with_custom_start() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(), &default_cols(),
+        &GeneratePointConfig::custom_point(
+            EnterNumberConfig::new("Start row:", true, "1", "5", &[], "1"),
+            EnterNumberConfig::new("Start column:", true, "1", "5", &[], "1"),
+        ),
+        &default_finish(), None, None,
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_generate_maze_with_custom_finish() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(), &default_cols(),
+        &default_start(),
+        &GeneratePointConfig::custom_point(
+            EnterNumberConfig::new("Finish row:", true, "1", "5", &[], "5"),
+            EnterNumberConfig::new("Finish column:", true, "1", "5", &[], "5"),
+        ),
+        None, None,
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_generate_maze_with_custom_start_and_finish() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(), &default_cols(),
+        &GeneratePointConfig::custom_point(
+            EnterNumberConfig::new("Start row:", true, "1", "5", &[], "1"),
+            EnterNumberConfig::new("Start column:", true, "1", "5", &[], "1"),
+        ),
+        &GeneratePointConfig::custom_point(
+            EnterNumberConfig::new("Finish row:", true, "1", "5", &[], "5"),
+            EnterNumberConfig::new("Finish column:", true, "1", "5", &[], "5"),
+        ),
+        None, None,
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_prevent_generate_maze_with_invalid_start_row() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(), &default_cols(),
+        &GeneratePointConfig::custom_point(
+            EnterNumberConfig::new("Start row:", true, "1", "5", &["A"], "1"),
+            EnterNumberConfig::new("Start column:", true, "1", "5", &[], "1"),
+        ),
+        &default_finish(), None, None,
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_prevent_generate_maze_with_invalid_start_col() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(), &default_cols(),
+        &GeneratePointConfig::custom_point(
+            EnterNumberConfig::new("Start row:", true, "1", "5", &[], "1"),
+            EnterNumberConfig::new("Start column:", true, "1", "5", &["6"], "1"),
+        ),
+        &default_finish(), None, None,
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_generate_maze_with_custom_min_spine_length() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(), &default_cols(), &default_start(), &default_finish(),
+        Some(&EnterNumberConfig::new("Minimum solution path length:", false, "1", "", &[], "3")),
+        None,
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_be_able_to_generate_maze_with_custom_max_retries() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(), &default_cols(), &default_start(), &default_finish(),
+        None,
+        Some(&EnterNumberConfig::new("Maximum retries:", false, "1", "", &[], "50")),
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_prevent_generate_maze_with_invalid_min_spine_length() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(), &default_cols(), &default_start(), &default_finish(),
+        Some(&EnterNumberConfig::new("Minimum solution path length:", false, "1", "", &["A"], "3")),
+        None,
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
+
+#[test]
+fn should_prevent_generate_maze_with_invalid_max_retries() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app();
+    let mut expected_output: Vec<String> = vec![];
+    #[rustfmt::skip]
+    add_generate_maze_steps(
+        &mut mock_app, &mut expected_output, true, 5, 5,
+        &default_rows(), &default_cols(), &default_start(), &default_finish(),
+        None,
+        Some(&EnterNumberConfig::new("Maximum retries:", false, "1", "", &["A"], "50")),
+    );
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    Ok(())
+}
