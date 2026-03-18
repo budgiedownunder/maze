@@ -17,7 +17,7 @@
         <ScrollView VerticalOptions="FillAndExpand">
             <VerticalStackLayout Padding="30"
                                  Spacing="16"
-                                 MaximumWidthRequest="400"
+                                 MinimumWidthRequest="280"
                                  HorizontalOptions="Center">
 
                 <Label Text="{Binding LoadStatus}"
@@ -31,38 +31,37 @@
                     <VerticalStackLayout Spacing="12">
 
                         <Grid ColumnDefinitions="Auto,*"
-                              ColumnSpacing="12">
-                            <Label Grid.Column="0"
+                              RowDefinitions="Auto,Auto,Auto"
+                              ColumnSpacing="12"
+                              RowSpacing="12">
+                            <Label Grid.Row="0" Grid.Column="0"
                                    Text="Username"
                                    FontAttributes="Bold"
                                    VerticalOptions="Center" />
-                            <Entry Grid.Column="1"
+                            <Entry Grid.Row="0" Grid.Column="1"
                                    Text="{Binding Username}"
                                    Keyboard="Text"
+                                   HorizontalOptions="Fill"
                                    VerticalOptions="Center" />
-                        </Grid>
 
-                        <Grid ColumnDefinitions="Auto,*"
-                              ColumnSpacing="12">
-                            <Label Grid.Column="0"
+                            <Label Grid.Row="1" Grid.Column="0"
                                    Text="Full Name"
                                    FontAttributes="Bold"
                                    VerticalOptions="Center" />
-                            <Entry Grid.Column="1"
+                            <Entry Grid.Row="1" Grid.Column="1"
                                    Text="{Binding FullName}"
                                    Keyboard="Text"
+                                   HorizontalOptions="Fill"
                                    VerticalOptions="Center" />
-                        </Grid>
 
-                        <Grid ColumnDefinitions="Auto,*"
-                              ColumnSpacing="12">
-                            <Label Grid.Column="0"
+                            <Label Grid.Row="2" Grid.Column="0"
                                    Text="Email"
                                    FontAttributes="Bold"
                                    VerticalOptions="Center" />
-                            <Entry Grid.Column="1"
+                            <Entry Grid.Row="2" Grid.Column="1"
                                    Text="{Binding Email}"
                                    Keyboard="Email"
+                                   HorizontalOptions="Fill"
                                    VerticalOptions="Center" />
                         </Grid>
 
