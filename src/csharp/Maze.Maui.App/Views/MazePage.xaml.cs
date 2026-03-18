@@ -513,12 +513,7 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private void ShowGenerateButton()
         {
-            bool show = IsGenerationSupported && !IsSolutionDisplayed;
-            bool isShowing = ToolbarItems.Contains(GenerateToolbarItem);
-            if (show && !isShowing)
-                ToolbarItems.Insert(0, GenerateToolbarItem);
-            else if (!show && isShowing)
-                ToolbarItems.Remove(GenerateToolbarItem);
+            _viewModel.CanGenerate = IsGenerationSupported && !IsSolutionDisplayed;
         }
         /// <summary>
         /// Handles the maze cell selection changed event
@@ -544,8 +539,8 @@ namespace Maze.Maui.App.Views
                 ShowEditRowColumnButtons();
                 ShowSelectRangeButtons(!MazeGrid.IsExtendedSelectionMode);
                 ShowSolveButtons();
+                ShowGenerateButton();
             }
-            ShowGenerateButton();
         }
         /// <summary>
         /// Shows/hides a given grid row

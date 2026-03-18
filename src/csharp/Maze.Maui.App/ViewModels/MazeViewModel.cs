@@ -185,6 +185,12 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         protected bool canClearSolution = false;
         /// <summary>
+        /// Indicates whether a maze can be generated
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool canGenerate = false;
+        /// <summary>
         /// Indicates whether the maze can be saved
         /// </summary>
         /// <returns>Boolean value</returns>

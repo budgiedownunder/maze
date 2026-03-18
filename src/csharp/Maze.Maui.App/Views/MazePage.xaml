@@ -9,10 +9,6 @@
              Title="{Binding MazeItem.Name}">
 
     <ContentPage.ToolbarItems>
-        <ToolbarItem x:Name="GenerateToolbarItem"
-                     Text="Generate"
-                     Command="{Binding GenerateCommand}"
-                     IconImageSource="{OnPlatform 'icon_generate.png', Android={x:Null}, iOS='icon_generate_ios.png'}" />
         <ToolbarItem Text="Refresh"
                      IsEnabled="{Binding CanRefresh}"
                      Command="{Binding RefreshCommand}"
@@ -55,6 +51,9 @@
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
                 <ImageButton x:Name="DeleteColumnsBtn" IsVisible="{Binding CanDeleteColumns}" Command="{Binding DeleteColumnsCommand}" Source="delete_columns_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="GenerateBtn" IsVisible="{Binding CanGenerate}" Command="{Binding GenerateCommand}" Source="generate_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
                 <ImageButton x:Name="SolveBtn" IsVisible="{Binding CanSolve}" Command="{Binding SolveCommand}" Source="solve_button.png"
