@@ -930,6 +930,9 @@ namespace Maze.Wasm.Interop.Tests
 
         // --- Generation tests ---
 
+        /// <summary>
+        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.NewGeneratorOptionsWasm"/> succeeds and returns the expected dimensions when provided with valid parameters
+        /// </summary>
         [Fact]
         public void MazeWasmGenerate_ShouldSucceedAndReturnCorrectDimensions()
         {
@@ -949,6 +952,9 @@ namespace Maze.Wasm.Interop.Tests
             }
         }
 
+        /// <summary>
+        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.NewGeneratorOptionsWasm"/> succeeds and returns the expected output when provided with a specific seed
+        /// </summary>
         [Fact]
         public void MazeWasmGenerate_SameSeedProducesDeterministicOutput()
         {
@@ -974,6 +980,9 @@ namespace Maze.Wasm.Interop.Tests
             }
         }
 
+        /// <summary>
+        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.NewGeneratorOptionsWasm"/> succeeds and returns the expected dimensions
+        /// </summary>
         [Fact]
         public void MazeWasmGenerate_WithExplicitStartFinishAndSpine_ShouldSucceedAndReturnCorrectDimensions()
         {
@@ -997,6 +1006,9 @@ namespace Maze.Wasm.Interop.Tests
             }
         }
 
+        /// <summary>
+        /// Confirms that <see cref="Maze.Wasm.Interop.MazeWasmInterop.NewGeneratorOptionsWasm"/> fails if an invalid row count is specified
+        /// </summary>
         [Fact]
         public void MazeWasmGenerate_WithInvalidRowCount_ShouldThrow()
         {

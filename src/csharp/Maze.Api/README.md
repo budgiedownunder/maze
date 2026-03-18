@@ -2,11 +2,22 @@
 
 ## Introduction
 
-The `Maze.Api` .NET assembly is written in `C#` and provides clean .NET classes for use by client applications. It wraps the Web Assembly interop functionality provided by [`Maze.Wasm.Interop`](../Maze.Wasm.Interop/README.md), allowing developers to be able to work with `Maze` objects without needing to be aware of the interop occuring beneath.   
+The `Maze.Api` .NET assembly is written in `C#` and provides clean .NET classes for use by client applications. It wraps the Web Assembly interop functionality provided by [`Maze.Wasm.Interop`](../Maze.Wasm.Interop/README.md), allowing developers to be able to work with `Maze` objects without needing to be aware of the interop occuring beneath.
+
+The assembly supports:
+
+- Creating and editing mazes (cells, walls, start/finish positions, row/column insertion and deletion)
+- Generating mazes automatically via `Maze.Generate()` with configurable dimensions, seed, start/finish positions, minimum spine length, and generation algorithm
+- Solving mazes via `Maze.Solve()`
+- Serialising and deserialising mazes to/from JSON
 
 ```csharp
 using (Maze maze = new Maze(10, 5)) {
     Console.WriteLine($"Maze contains: {maze.RowCount} row(s) x {maze.ColCount} column(s)");
+}
+
+using (Maze maze = Maze.Generate(new Maze.GenerationOptions { RowCount = 11, ColCount = 11, Seed = 42 })) {
+    Console.WriteLine($"Generated: {maze.RowCount} row(s) x {maze.ColCount} column(s)");
 }
 ```
 

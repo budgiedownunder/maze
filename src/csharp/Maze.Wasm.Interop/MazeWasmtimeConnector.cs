@@ -136,13 +136,13 @@
                     result = intValue;
                     break;
                 case uint uintValue:
-                    result = uintValue;
+                    result = (long)uintValue;
                     break;
                 case long longValue:
                     result = longValue;
                     break;
                 case ulong ulongValue:
-                    result = ulongValue;
+                    result = (long)ulongValue;
                     break;
                 case float floatValue:
                     result = floatValue;

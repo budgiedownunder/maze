@@ -303,6 +303,14 @@ namespace Maze.Api
             Interop.MazeWasmSetStartCell(_mazeWasmPtr, startRow, startCol);
         }
         /// <summary>
+        /// Indicates whether the maze has a start cell defined
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        public bool HasStartCell
+        {
+            get { try { GetStartCell(); return true; } catch { return false; } }
+        }
+        /// <summary>
         /// Gets the start cell associated with the maze, or will throw an exception
         /// if the start cell cannot be retrieved
         /// </summary>
@@ -321,6 +329,14 @@ namespace Maze.Api
         public void SetFinishCell(UInt32 finishRow, UInt32 finishCol)
         {
             Interop.MazeWasmSetFinishCell(_mazeWasmPtr, finishRow, finishCol);
+        }
+        /// <summary>
+        /// Indicates whether the maze has a finish cell defined
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        public bool HasFinishCell
+        {
+            get { try { GetFinishCell(); return true; } catch { return false; } }
         }
         /// <summary>
         /// Gets the finish cell associated with the maze, or will throw an exception

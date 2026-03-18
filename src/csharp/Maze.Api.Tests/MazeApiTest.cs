@@ -397,6 +397,40 @@ namespace Maze.Api.Tests
             }
         }
         /// <summary>
+        /// Confirms that <see cref="Maze.HasStartCell"/> returns false for an empty maze
+        /// </summary>
+        [Fact]
+        public void MazeHasStartCell_ReturnsFalseForEmptyMaze()
+        {
+            using (Maze maze = new Maze(0, 0))
+            {
+                Assert.False(maze.HasStartCell);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.HasStartCell"/> returns false if a start cell is not defined
+        /// </summary>
+        [Fact]
+        public void MazeHasStartCell_ReturnsFalseIfNotDefined()
+        {
+            using (Maze maze = new Maze(5, 5))
+            {
+                Assert.False(maze.HasStartCell);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.HasStartCell"/> returns true if a start cell is defined
+        /// </summary>
+        [Fact]
+        public void MazeHasStartCell_ReturnsTrueIfDefined()
+        {
+            using (Maze maze = new Maze(5, 5))
+            {
+                maze.SetStartCell(1, 2);
+                Assert.True(maze.HasStartCell);
+            }
+        }
+        /// <summary>
         /// Confirms that <see cref="Maze.GetFinishCell"/> fails for an empty maze
         /// </summary>
         [Fact]
@@ -440,6 +474,40 @@ namespace Maze.Api.Tests
                 maze.SetFinishCell(3, 4);
                 finish = maze.GetFinishCell();
                 AssertFinishCell(finish, new Maze.Point() { Row = 3, Column = 4 });
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.HasFinishCell"/> returns false for an empty maze
+        /// </summary>
+        [Fact]
+        public void MazeHasFinishCell_ReturnsFalseForEmptyMaze()
+        {
+            using (Maze maze = new Maze(0, 0))
+            {
+                Assert.False(maze.HasFinishCell);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.HasFinishCell"/> returns false if a finish cell is not defined
+        /// </summary>
+        [Fact]
+        public void MazeHasFinishCell_ReturnsFalseIfNotDefined()
+        {
+            using (Maze maze = new Maze(5, 5))
+            {
+                Assert.False(maze.HasFinishCell);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.HasFinishCell"/> returns true if a finish cell is defined
+        /// </summary>
+        [Fact]
+        public void MazeHasFinishCell_ReturnsTrueIfDefined()
+        {
+            using (Maze maze = new Maze(5, 5))
+            {
+                maze.SetFinishCell(3, 4);
+                Assert.True(maze.HasFinishCell);
             }
         }
         /// <summary>
@@ -893,9 +961,77 @@ namespace Maze.Api.Tests
                 });
             });
         }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> produces different mazes for different seeds on a
+        /// 5x5 grid with corner-to-corner start/finish (the smallest realistic user configuration).
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_DifferentSeedsProduce_DifferentMazes_5x5_CornerToCorner()
+        {
+            int differentCount = 0;
+            string? firstJson = null;
+            for (ulong seed = 1; seed <= 20; seed++)
+            {
+                using Maze maze = Maze.Generate(new Maze.GenerationOptions
+                {
+                    RowCount = 5,
+                    ColCount = 5,
+                    StartRow = 0,
+                    StartCol = 0,
+                    FinishRow = 4,
+                    FinishCol = 4,
+                    MinSpineLength = 5,
+                    Seed = seed,
+                });
+                string json = maze.ToJson();
+                if (firstJson is null)
+                    firstJson = json;
+                else if (json != firstJson)
+                    differentCount++;
+            }
+            Assert.True(differentCount > 0, "All 20 seeds produced identical 5x5 mazes — seed is not affecting generation");
+        }
+        /// <summary>
+        /// Regression test: consecutive large seed values (~1.77×10^12) must produce different mazes.
+        /// These values are identical when truncated to float32 (precision ~131,072 at this scale),
+        /// so this would have caught the ulong→float precision loss bug in MazeWasmtimeConnector.ToValueBox.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_DifferentSeedsProduce_DifferentMazes_LargeSeeds()
+        {
+            // Two consecutive seeds at ~1.77×10^12 scale — identical as float32, distinct as int64
+            const ulong seedA = 1_768_464_000_000UL;
+            const ulong seedB = 1_768_464_000_001UL;
+
+            using Maze mazeA = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 5,
+                ColCount = 5,
+                StartRow = 0,
+                StartCol = 0,
+                FinishRow = 4,
+                FinishCol = 4,
+                MinSpineLength = 5,
+                Seed = seedA,
+            });
+            using Maze mazeB = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 5,
+                ColCount = 5,
+                StartRow = 0,
+                StartCol = 0,
+                FinishRow = 4,
+                FinishCol = 4,
+                MinSpineLength = 5,
+                Seed = seedB,
+            });
+
+            Assert.True(mazeA.ToJson() != mazeB.ToJson(),
+                $"Seeds {seedA} and {seedB} produced identical mazes — seed precision may be lost (ulong→float truncation)");
+        }
     }
     /// <summary>
-    ///  This class defines the [Wasmtime](https://docs.wasmtime.dev/) text fixture used by the [Maze.Api.Tests.MazeApiWasmtimeTest_Static](xref:Maze.Api.Tests.MazeApiWasmtimeTest_Static) and 
+    ///  This class defines the [Wasmtime](https://docs.wasmtime.dev/) text fixture used by the [Maze.Api.Tests.MazeApiWasmtimeTest_Static](xref:Maze.Api.Tests.MazeApiWasmtimeTest_Static) and
     ///  [Maze.Api.Tests.MazeApiWasmtimeTest_NonStatic](xref:Maze.Api.Tests.MazeApiWasmtimeTest_NonStatic) classes
     /// </summary>
     public class WasmtimeTestFixture

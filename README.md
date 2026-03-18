@@ -47,8 +47,7 @@ At this stage, the following areas are covered:
 
 - Implementing automated `.NET` API testing with `xUnit` ([`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop.Tests/README.md))
 
-- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, change password, delete account)
-
+- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, change password, delete account) and maze management (create, save, delete, rename, edit, solve, generate)
 - Automating `C#` API documentation generation with `DocFX`
 
 - Combining `C#` and `Rust` documentation into a single HTML help system with use of `iFrame` containers

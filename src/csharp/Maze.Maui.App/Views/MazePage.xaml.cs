@@ -8,6 +8,8 @@ namespace Maze.Maui.App.Views
     using Maze.Maui.Services;
     using Maze.Maui.App.Models;
     using Maze.Maui.App.Services;
+    using CommunityToolkit.Maui.Extensions;
+    using CommunityToolkit.Maui.Core;
 
     /// <summary>
     /// This class represents the maze page within the application. It provides
@@ -57,6 +59,7 @@ namespace Maze.Maui.App.Views
         MazesViewModel _mazesViewModel;
         IDialogService _dialogService;
         IDeviceTypeService _deviceTypeService;
+        uint? _lastMinSpineLength;
 
         /// <summary>
         /// Indicates whether the page is initlialized
@@ -78,6 +81,11 @@ namespace Maze.Maui.App.Views
         /// </summary>
         /// <returns>Boolean value</returns>
         private bool IsSolveSupported { get => OperatingSystem.IsWindows() || OperatingSystem.IsAndroid() || OperatingSystem.IsIOS(); }
+        /// <summary>
+        /// Indicates whether maze generation is supported
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        private bool IsGenerationSupported { get => OperatingSystem.IsWindows() || OperatingSystem.IsAndroid() || OperatingSystem.IsIOS(); }
         /// <summary>
         /// Indicates whether the maze solution is currently displayed
         /// </summary>
@@ -121,6 +129,7 @@ namespace Maze.Maui.App.Views
             _viewModel.ClearSolutionRequested += (s, e) => { ClearSolution(); };
             _viewModel.SaveRequested += async (s, e) => { await Save(); };
             _viewModel.RefreshRequested += async (s, e) => { await Refresh(); };
+            _viewModel.GenerateRequested += async (s, e) => { await Generate(); };
         }
         /// <summary>
         /// Intializes the page 
@@ -153,6 +162,7 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private void ResetDisplay()
         {
+            IsSolutionDisplayed = false;
             MazeGrid.Initialize(IsPanSupported, MazeItem);
             MazeGrid.ActivateCell(1, 1, false);
             UpdateControls();
@@ -326,6 +336,94 @@ namespace Maze.Maui.App.Views
             return refreshed;
         }
         /// <summary>
+        /// Triggers the generate maze process. Prompts the user for generation options and, if confirmed,
+        /// generates a new maze and updates the display.
+        /// </summary>
+        private async Task Generate()
+        {
+            try
+            {
+                Maze current = MazeGrid.ToMaze();
+                uint rows = current.IsEmpty ? 7 : current.RowCount;
+                uint cols = current.IsEmpty ? 7 : current.ColCount;
+                uint startRow = 0, startCol = 0;
+                uint finishRow = rows > 0 ? rows - 1 : 0;
+                uint finishCol = cols > 0 ? cols - 1 : 0;
+
+                if (!current.IsEmpty)
+                {
+                    if (current.HasStartCell)
+                    {
+                        var start = current.GetStartCell();
+                        startRow = start.Row;
+                        startCol = start.Column;
+                    }
+                    if (current.HasFinishCell)
+                    {
+                        var finish = current.GetFinishCell();
+                        finishRow = finish.Row;
+                        finishCol = finish.Column;
+                    }
+                    // If either is missing, leave the fallback defaults (top-left / bottom-right)
+                }
+
+                uint defaultMinSpineLength = (rows + cols) / 2;
+                uint minSpineLength = _lastMinSpineLength is uint last && last <= rows * cols
+                    ? last
+                    : defaultMinSpineLength;
+                string? generationError = null;
+
+                while (true)
+                {
+                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSpineLength, generationError);
+                    IPopupResult<Maze.GenerationOptions?> result = await this.ShowPopupAsync<Maze.GenerationOptions?>(popup);
+
+                    if (result.WasDismissedByTappingOutsideOfPopup || result.Result is not Maze.GenerationOptions popupOptions)
+                        break;
+
+                    var options = new Maze.GenerationOptions
+                    {
+                        RowCount = popupOptions.RowCount,
+                        ColCount = popupOptions.ColCount,
+                        Seed = (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        StartRow = popupOptions.StartRow,
+                        StartCol = popupOptions.StartCol,
+                        FinishRow = popupOptions.FinishRow,
+                        FinishCol = popupOptions.FinishCol,
+                        MinSpineLength = popupOptions.MinSpineLength,
+                    };
+
+                    try
+                    {
+                        Maze generated = Maze.Generate(options);
+                        _lastMinSpineLength = options.MinSpineLength;
+                        await MainThread.InvokeOnMainThreadAsync(() =>
+                        {
+                            MazeItem!.Definition = generated;
+                            ResetDisplay();
+                            _viewModel.NotifyMazeChanged();
+                        });
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        generationError = ex.Message;
+                        rows = popupOptions.RowCount;
+                        cols = popupOptions.ColCount;
+                        startRow = popupOptions.StartRow ?? startRow;
+                        startCol = popupOptions.StartCol ?? startCol;
+                        finishRow = popupOptions.FinishRow ?? finishRow;
+                        finishCol = popupOptions.FinishCol ?? finishCol;
+                        minSpineLength = popupOptions.MinSpineLength ?? minSpineLength;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                await _dialogService.ShowAlert(APP_TITLE, $"Failed to generate maze\n\nReason: {ex.Message}", "OK");
+            }
+        }
+        /// <summary>
         /// Clears the maze solution that is displayed (if any) and resets toolbar/buttons states appropriately
         /// </summary>
         private void ClearSolution()
@@ -411,6 +509,18 @@ namespace Maze.Maui.App.Views
             _viewModel.CanClearSolution = IsSolveSupported && IsSolutionDisplayed;
         }
         /// <summary>
+        /// Adjusts the generate button visibility based on whether generation is supported and a solution is displayed
+        /// </summary>
+        private void ShowGenerateButton()
+        {
+            bool show = IsGenerationSupported && !IsSolutionDisplayed;
+            bool isShowing = ToolbarItems.Contains(GenerateToolbarItem);
+            if (show && !isShowing)
+                ToolbarItems.Insert(0, GenerateToolbarItem);
+            else if (!show && isShowing)
+                ToolbarItems.Remove(GenerateToolbarItem);
+        }
+        /// <summary>
         /// Handles the maze cell selection changed event
         /// </summary>
         /// <param name="sender">Sender</param>
@@ -435,6 +545,7 @@ namespace Maze.Maui.App.Views
                 ShowSelectRangeButtons(!MazeGrid.IsExtendedSelectionMode);
                 ShowSolveButtons();
             }
+            ShowGenerateButton();
         }
         /// <summary>
         /// Shows/hides a given grid row

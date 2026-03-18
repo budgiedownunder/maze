@@ -42,6 +42,7 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         /// <param name="authService">Injected auth service</param>
         /// <param name="dialogService">Injected dialog service</param>
+        /// <param name="mazesViewModel">Injected view model</param>
         public AccountViewModel(IAuthService authService, IDialogService dialogService, MazesViewModel mazesViewModel)
         {
             Title = "Account";

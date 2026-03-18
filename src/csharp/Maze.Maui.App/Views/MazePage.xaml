@@ -9,6 +9,10 @@
              Title="{Binding MazeItem.Name}">
 
     <ContentPage.ToolbarItems>
+        <ToolbarItem x:Name="GenerateToolbarItem"
+                     Text="Generate"
+                     Command="{Binding GenerateCommand}"
+                     IconImageSource="{OnPlatform 'icon_generate.png', Android={x:Null}, iOS='icon_generate_ios.png'}" />
         <ToolbarItem Text="Refresh"
                      IsEnabled="{Binding CanRefresh}"
                      Command="{Binding RefreshCommand}"

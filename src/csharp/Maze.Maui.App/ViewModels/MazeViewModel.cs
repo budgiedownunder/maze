@@ -92,6 +92,11 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Event handler</returns>
         public event EventHandler? RefreshRequested;
         /// <summary>
+        /// Represents a generate maze requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? GenerateRequested;
+        /// <summary>
         /// Indicates whether the view maze is stored
         /// </summary>
         /// <returns>Boolean value</returns>
@@ -348,6 +353,15 @@ namespace Maze.Maui.App.ViewModels
             await RunRequest(RefreshRequested);
         }
         /// <summary>
+        /// Generate maze command
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        private async Task GenerateAsync()
+        {
+            await RunRequest(GenerateRequested);
+        }
+        /// <summary>
         /// Saves the given maze definition
         /// </summary>
         /// <param name="definition">Maze definition</param>
@@ -455,6 +469,10 @@ namespace Maze.Maui.App.ViewModels
             }
             return refreshed;
         }
+        /// <summary>
+        /// Notifies the view model that the maze has been changed (e.g. after generation)
+        /// </summary>
+        public void NotifyMazeChanged() => UpdateCanSaveRefresh(true);
         /// <summary>
         /// Updates the `CanSave`/`CanRefresh` property states for the given dirty state
         /// </summary>
