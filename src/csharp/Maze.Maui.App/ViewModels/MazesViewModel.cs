@@ -18,7 +18,12 @@ namespace Maze.Maui.App.ViewModels
         IDialogService _dialogService;
         private bool _dataLoaded = false;
         public bool IsDataLoaded => _dataLoaded;
-        public void InvalidateData() => _dataLoaded = false;
+        public void InvalidateData()
+        {
+            _dataLoaded = false;
+            MazeItems.Clear();
+            LoadStatus = "No mazes found";
+        }
         /// <summary>
         /// Constructor
         /// </summary>
