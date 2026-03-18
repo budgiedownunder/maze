@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rand = { version = "0.8", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 utils = { path = "../utils" }
@@ -12,9 +11,13 @@ utoipa = { version = "5.2" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 data_model = { path = "../data_model" }
+# On native / non-wasm targets, use full rand (includes thread_rng for unseeded generation)
+rand = { version = "0.8", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 data_model = { path = "../data_model", default-features = false, features = ["wasm-lite"] }
+# On wasm32, use only std_rng (no getrandom / no thread_rng — seed must be provided by host)
+rand = { version = "0.8", optional = true, default-features = false, features = ["std_rng"] }
 
 [features]
 default = []

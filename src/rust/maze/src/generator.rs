@@ -1,6 +1,7 @@
 use rand::seq::SliceRandom;
-use rand::thread_rng;
 use rand::Rng;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 use data_model::{Maze, MazeDefinition, MazePoint};
 
@@ -32,6 +33,12 @@ pub struct GeneratorOptions {
     /// When `false` (the default) the finish cell is excluded from branching,
     /// keeping it as an unambiguous dead end with exactly one passage leading to it.
     pub branch_from_finish: Option<bool>,
+    /// Optional random number generator seed for deterministic generation.
+    /// When `Some(seed)`, a seeded pseudo-random number generator is used — repeated calls with the same seed
+    /// produce identical mazes. When `None` (the default), the OS-seeded thread random number generator
+    /// is used as before.
+    #[serde(default)]
+    pub seed: Option<u64>,
 }
 
 /// Generates a maze from a set of [`GeneratorOptions`].
@@ -52,6 +59,7 @@ pub struct GeneratorOptions {
 ///         min_spine_length: None,
 ///         max_retries: None,
 ///         branch_from_finish: None,
+///         seed: None,
 ///     },
 /// };
 /// let maze = gen.generate().expect("generation should succeed");
@@ -123,7 +131,21 @@ impl Generator {
         let max_retries = opts.max_retries.unwrap_or(100);
         let branch_from_finish = opts.branch_from_finish.unwrap_or(false);
 
-        let mut rng = thread_rng();
+        let seed_val: u64 = match opts.seed {
+            Some(s) => s,
+            None => {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    use rand::RngCore;
+                    let mut buf = [0u8; 8];
+                    rand::thread_rng().fill_bytes(&mut buf);
+                    u64::from_le_bytes(buf)
+                }
+                #[cfg(target_arch = "wasm32")]
+                { unreachable!("seed must be provided on wasm32") }
+            }
+        };
+        let mut rng = StdRng::seed_from_u64(seed_val);
 
         const OFFSETS: [(i64, i64); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
 
@@ -323,6 +345,7 @@ mod tests {
                 min_spine_length: None,
                 max_retries: None,
                 branch_from_finish: None,
+                seed: None,
             },
         }
     }
@@ -353,6 +376,7 @@ mod tests {
                 min_spine_length: None,
                 max_retries: None,
                 branch_from_finish: None,
+                seed: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -370,6 +394,7 @@ mod tests {
                 min_spine_length: None,
                 max_retries: None,
                 branch_from_finish: None,
+                seed: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -387,6 +412,7 @@ mod tests {
                 min_spine_length: None,
                 max_retries: None,
                 branch_from_finish: None,
+                seed: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -499,6 +525,7 @@ mod tests {
                 min_spine_length: None,
                 max_retries: None,
                 branch_from_finish: None,
+                seed: None,
             },
         };
         let maze = gen.generate().expect("should succeed");
@@ -521,6 +548,7 @@ mod tests {
                 min_spine_length: Some(min_spine),
                 max_retries: None,
                 branch_from_finish: None,
+                seed: None,
             },
         };
         let maze = gen.generate().expect("should succeed");
@@ -547,6 +575,7 @@ mod tests {
                 min_spine_length: Some(1000),
                 max_retries: Some(5),
                 branch_from_finish: None,
+                seed: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -564,8 +593,51 @@ mod tests {
                 min_spine_length: None,
                 max_retries: Some(0),
                 branch_from_finish: None,
+                seed: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
+    }
+
+    // --- Seeded generation ---
+
+    #[test]
+    fn seeded_generation_is_deterministic() {
+        let make = || Generator {
+            options: GeneratorOptions {
+                row_count: 11,
+                col_count: 11,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start: None,
+                finish: None,
+                min_spine_length: None,
+                max_retries: None,
+                branch_from_finish: None,
+                seed: Some(42),
+            },
+        };
+        let maze1 = make().generate().expect("should succeed");
+        let maze2 = make().generate().expect("should succeed");
+        assert_eq!(maze1.definition.grid, maze2.definition.grid);
+    }
+
+    #[test]
+    fn different_seeds_produce_different_mazes() {
+        let make = |seed: u64| Generator {
+            options: GeneratorOptions {
+                row_count: 11,
+                col_count: 11,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start: None,
+                finish: None,
+                min_spine_length: None,
+                max_retries: None,
+                branch_from_finish: None,
+                seed: Some(seed),
+            },
+        };
+        let maze1 = make(1).generate().expect("should succeed");
+        let maze2 = make(2).generate().expect("should succeed");
+        assert_ne!(maze1.definition.grid, maze2.definition.grid);
     }
 }

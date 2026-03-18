@@ -2413,6 +2413,7 @@ mod test_definitions {
             min_spine_length,
             max_retries,
             branch_from_finish: None,
+            seed: None,
         }
     }
 

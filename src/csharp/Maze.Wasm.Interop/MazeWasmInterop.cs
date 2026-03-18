@@ -11,7 +11,8 @@
     ///  
     /// Developers can use <see cref="NewMazeWasm()">NewMazeWasm()</see> to create
     ///  a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 
-    ///  <see cref="MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see> and 
+    ///  <see cref="MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see>, 
+    ///  <see cref="MazeWasmGenerate(UInt32,UInt32)">MazeWasmGenerate()</see>, and 
     ///  <see cref="MazeWasmSolve(UInt32)">MazeWasmSolve()</see>, to interact with the maze.
     ///  
     /// Once finished with, a maze should be destroyed using <see cref="FreeMazeWasm(UInt32)">FreeMazeWasm()</see>
@@ -80,6 +81,15 @@
             /// </summary>
             /// <returns>Column index (zero-based)</returns>
             public UInt32 col;
+        }
+        /// <summary>
+        /// Identifies the maze generation algorithm to use.
+        /// Mirrors the Rust <c>GenerationAlgorithmWasm</c> repr(C) enum.
+        /// </summary>
+        public enum MazeWasmGenerationAlgorithm : byte
+        {
+            /// <summary>Two-phase recursive backtracking.</summary>
+            RecursiveBacktracking = 0
         }
         /// <summary>
         /// Defines the type of a maze cell
@@ -531,6 +541,70 @@
         public Int64 GetNumObjectsAllocated()
         {
             return connector.GetNumObjectsAllocated();
+        }
+        /// <summary>
+        /// Creates a new <c>GeneratorOptionsWasm</c>, or will throw an exception if the operation fails
+        /// </summary>
+        /// <param name="rowCount">Number of rows to generate</param>
+        /// <param name="colCount">Number of columns to generate</param>
+        /// <param name="algorithm">Generation algorithm</param>
+        /// <param name="seed">Random number generator seed for deterministic generation</param>
+        /// <returns>Pointer to the <c>GeneratorOptionsWasm</c>, which should later be freed by calling <see cref="FreeGeneratorOptionsWasm(UInt32)">FreeGeneratorOptionsWasm()</see></returns>
+        public UInt32 NewGeneratorOptionsWasm(UInt32 rowCount, UInt32 colCount, MazeWasmGenerationAlgorithm algorithm, UInt64 seed)
+        {
+            return connector.NewGeneratorOptionsWasm(rowCount, colCount, algorithm, seed);
+        }
+        /// <summary>
+        /// Sets the start cell on a <c>GeneratorOptionsWasm</c>
+        /// </summary>
+        public void GeneratorOptionsSetStart(UInt32 optionsPtr, UInt32 row, UInt32 col)
+        {
+            connector.GeneratorOptionsSetStart(optionsPtr, row, col);
+        }
+        /// <summary>
+        /// Sets the finish cell on a <c>GeneratorOptionsWasm</c>
+        /// </summary>
+        public void GeneratorOptionsSetFinish(UInt32 optionsPtr, UInt32 row, UInt32 col)
+        {
+            connector.GeneratorOptionsSetFinish(optionsPtr, row, col);
+        }
+        /// <summary>
+        /// Sets the minimum spine length on a <c>GeneratorOptionsWasm</c>
+        /// </summary>
+        public void GeneratorOptionsSetMinSpineLength(UInt32 optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetMinSpineLength(optionsPtr, value);
+        }
+        /// <summary>
+        /// Sets the maximum retries on a <c>GeneratorOptionsWasm</c>
+        /// </summary>
+        public void GeneratorOptionsSetMaxRetries(UInt32 optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetMaxRetries(optionsPtr, value);
+        }
+        /// <summary>
+        /// Sets the branch_from_finish flag on a <c>GeneratorOptionsWasm</c> (0 = false, 1 = true)
+        /// </summary>
+        public void GeneratorOptionsSetBranchFromFinish(UInt32 optionsPtr, byte value)
+        {
+            connector.GeneratorOptionsSetBranchFromFinish(optionsPtr, value);
+        }
+        /// <summary>
+        /// Generates a maze, populating the given <c>MazeWasm</c>, or will throw an exception if the operation fails
+        /// </summary>
+        /// <param name="mazeWasmPtr">Pointer to <c>MazeWasm</c></param>
+        /// <param name="optionsPtr">Pointer to <c>GeneratorOptionsWasm</c></param>
+        public void MazeWasmGenerate(UInt32 mazeWasmPtr, UInt32 optionsPtr)
+        {
+            connector.MazeWasmGenerate(mazeWasmPtr, optionsPtr);
+        }
+        /// <summary>
+        /// Frees a <c>GeneratorOptionsWasm</c> pointer
+        /// </summary>
+        /// <param name="optionsPtr">Pointer to <c>GeneratorOptionsWasm</c></param>
+        public void FreeGeneratorOptionsWasm(UInt32 optionsPtr)
+        {
+            connector.FreeGeneratorOptionsWasm(optionsPtr);
         }
     }
 }

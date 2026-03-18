@@ -26,4 +26,4 @@ getrandom = { version = "0.2", optional = true, features = ["js"] }
 [features]
 default = []
 wasm-bindgen = ["dep:wasm-bindgen", "data_model/wasm-bindgen", "maze/generation", "dep:getrandom"]
-wasm-lite = ["data_model/wasm-lite"]
+wasm-lite = ["data_model/wasm-lite", "maze/generation"]

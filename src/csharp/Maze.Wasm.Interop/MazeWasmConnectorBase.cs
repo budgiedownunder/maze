@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using static Maze.Wasm.Interop.MazeWasmInterop;
 
 namespace Maze.Wasm.Interop
 {
@@ -97,6 +98,14 @@ namespace Maze.Wasm.Interop
         protected IFunction? freeSizedMemory;
         protected IFunction? getSizedMemoryUsed;
         protected IFunction? getNumObjectsAllocated;
+        protected IFunction? newGeneratorOptionsWasm;
+        protected IFunction? generatorOptionsSetStart;
+        protected IFunction? generatorOptionsSetFinish;
+        protected IFunction? generatorOptionsSetMinSpineLength;
+        protected IFunction? generatorOptionsSetMaxRetries;
+        protected IFunction? generatorOptionsSetBranchFromFinish;
+        protected IFunction? mazeWasmGenerate;
+        protected IFunction? freeGeneratorOptionsWasm;
         /// <summary>
         /// Creates a new, empty `MazeWasm`, or will throw an exception if the operation fails
         /// </summary>
@@ -506,6 +515,55 @@ namespace Maze.Wasm.Interop
             return (Int64)(getNumObjectsAllocated?.Invoke() ?? 0);
         }
 
+        /// <summary>
+        /// Creates a new <c>GeneratorOptionsWasm</c>, or will throw an exception if the operation fails
+        /// </summary>
+        public UInt32 NewGeneratorOptionsWasm(UInt32 rowCount, UInt32 colCount, MazeWasmGenerationAlgorithm algorithm, UInt64 seed)
+        {
+            UInt32 optionsPtr = (UInt32)(Int32)(newGeneratorOptionsWasm?.Invoke(rowCount, colCount, (int)algorithm, seed) ?? 0);
+            if (optionsPtr == 0)
+                throw new Exception("new_generator_options_wasm() failed (returned zero), possibly due to low memory");
+            return optionsPtr;
+        }
+        /// <summary>Sets the start cell on a <c>GeneratorOptionsWasm</c></summary>
+        public void GeneratorOptionsSetStart(UInt32 optionsPtr, UInt32 row, UInt32 col)
+        {
+            generatorOptionsSetStart?.Invoke(optionsPtr, row, col);
+        }
+        /// <summary>Sets the finish cell on a <c>GeneratorOptionsWasm</c></summary>
+        public void GeneratorOptionsSetFinish(UInt32 optionsPtr, UInt32 row, UInt32 col)
+        {
+            generatorOptionsSetFinish?.Invoke(optionsPtr, row, col);
+        }
+        /// <summary>Sets the minimum spine length on a <c>GeneratorOptionsWasm</c></summary>
+        public void GeneratorOptionsSetMinSpineLength(UInt32 optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetMinSpineLength?.Invoke(optionsPtr, value);
+        }
+        /// <summary>Sets the maximum retries on a <c>GeneratorOptionsWasm</c></summary>
+        public void GeneratorOptionsSetMaxRetries(UInt32 optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetMaxRetries?.Invoke(optionsPtr, value);
+        }
+        /// <summary>Sets the branch_from_finish flag on a <c>GeneratorOptionsWasm</c></summary>
+        public void GeneratorOptionsSetBranchFromFinish(UInt32 optionsPtr, byte value)
+        {
+            generatorOptionsSetBranchFromFinish?.Invoke(optionsPtr, (int)value);
+        }
+        /// <summary>
+        /// Generates a maze, populating the given <c>MazeWasm</c>, or will throw an exception if the operation fails
+        /// </summary>
+        public void MazeWasmGenerate(UInt32 mazeWasmPtr, UInt32 optionsPtr)
+        {
+            UInt32 errorPtr = (UInt32)(Int32)(mazeWasmGenerate?.Invoke(mazeWasmPtr, optionsPtr) ?? 0);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>Frees a <c>GeneratorOptionsWasm</c> pointer</summary>
+        public void FreeGeneratorOptionsWasm(UInt32 optionsPtr)
+        {
+            freeGeneratorOptionsWasm?.Invoke(optionsPtr);
+        }
         /// <summary>
         /// Tides an error pointer and then throws an exception containing the error message associated with that pointer
         /// </summary>

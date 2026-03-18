@@ -201,5 +201,25 @@ namespace Maze.Wasm.Interop
         /// </summary>
         /// <returns>Object count</returns>
         public Int64 GetNumObjectsAllocated();
+        /// <summary>
+        /// Creates a new <c>GeneratorOptionsWasm</c>, or will throw an exception if the operation fails
+        /// </summary>
+        public UInt32 NewGeneratorOptionsWasm(UInt32 rowCount, UInt32 colCount, MazeWasmGenerationAlgorithm algorithm, UInt64 seed);
+        /// <summary>Sets the start cell on a <c>GeneratorOptionsWasm</c></summary>
+        public void GeneratorOptionsSetStart(UInt32 optionsPtr, UInt32 row, UInt32 col);
+        /// <summary>Sets the finish cell on a <c>GeneratorOptionsWasm</c></summary>
+        public void GeneratorOptionsSetFinish(UInt32 optionsPtr, UInt32 row, UInt32 col);
+        /// <summary>Sets the minimum spine length on a <c>GeneratorOptionsWasm</c></summary>
+        public void GeneratorOptionsSetMinSpineLength(UInt32 optionsPtr, UInt32 value);
+        /// <summary>Sets the maximum retries on a <c>GeneratorOptionsWasm</c></summary>
+        public void GeneratorOptionsSetMaxRetries(UInt32 optionsPtr, UInt32 value);
+        /// <summary>Sets the branch_from_finish flag on a <c>GeneratorOptionsWasm</c></summary>
+        public void GeneratorOptionsSetBranchFromFinish(UInt32 optionsPtr, byte value);
+        /// <summary>
+        /// Generates a maze, populating the given <c>MazeWasm</c>, or will throw an exception if the operation fails
+        /// </summary>
+        public void MazeWasmGenerate(UInt32 mazeWasmPtr, UInt32 optionsPtr);
+        /// <summary>Frees a <c>GeneratorOptionsWasm</c> pointer</summary>
+        public void FreeGeneratorOptionsWasm(UInt32 optionsPtr);
     }
 }

@@ -623,49 +623,49 @@ function registerMazeTests() {
         runBadArgTests(function (argTest) {
             it(`should expect generate() to fail when passed an invalid 'row_count' argument (${argTest.desc})`, function () {
                 expect(() => new MazeWasm().generate(argTest.value, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                    undefined, undefined, undefined, undefined, undefined, undefined, undefined))
+                    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined))
                     .to.throw(invalidArgumentError("row_count", "unsigned integer", argTest.desc));
             });
         });
 
         it('should expect generate() to fail when row_count is less than 3', function () {
             expect(() => new MazeWasm().generate(2, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                undefined, undefined, undefined, undefined, undefined, undefined, undefined))
+                undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined))
                 .to.throw(generateRowCountError());
         });
 
         runBadArgTests(function (argTest) {
             it(`should expect generate() to fail when passed an invalid 'col_count' argument (${argTest.desc})`, function () {
                 expect(() => new MazeWasm().generate(7, argTest.value, GenerationAlgorithmWasm.RecursiveBacktracking,
-                    undefined, undefined, undefined, undefined, undefined, undefined, undefined))
+                    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined))
                     .to.throw(invalidArgumentError("col_count", "unsigned integer", argTest.desc));
             });
         });
 
         it('should expect generate() to fail when col_count is less than 3', function () {
             expect(() => new MazeWasm().generate(7, 2, GenerationAlgorithmWasm.RecursiveBacktracking,
-                undefined, undefined, undefined, undefined, undefined, undefined, undefined))
+                undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined))
                 .to.throw(generateColCountError());
         });
 
         runBadOptArgTests(function (argTest) {
             it(`should expect generate() to fail when passed an invalid 'start_row' argument (${argTest.desc})`, function () {
                 expect(() => new MazeWasm().generate(7, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                    argTest.value, undefined, undefined, undefined, undefined, undefined, undefined))
+                    argTest.value, undefined, undefined, undefined, undefined, undefined, undefined, undefined))
                     .to.throw(invalidArgumentError("start_row", "unsigned integer", argTest.desc));
             });
         });
 
         it('should expect generate() to fail when start point is out of bounds', function () {
             expect(() => new MazeWasm().generate(7, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                10, 0, undefined, undefined, undefined, undefined, undefined))
+                10, 0, undefined, undefined, undefined, undefined, undefined, undefined))
                 .to.throw(generateStartOutOfBoundsError());
         });
 
         it('should expect generate() to succeed with a valid explicit start point', function () {
             let maze = new MazeWasm();
             expect(() => maze.generate(7, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                0, 0, undefined, undefined, undefined, undefined, undefined))
+                0, 0, undefined, undefined, undefined, undefined, undefined, undefined))
                 .to.not.throw();
             expect(maze.get_start_cell()).to.deep.equal({ row: 0, col: 0 });
         });
@@ -673,21 +673,21 @@ function registerMazeTests() {
         runBadOptArgTests(function (argTest) {
             it(`should expect generate() to fail when passed an invalid 'finish_row' argument (${argTest.desc})`, function () {
                 expect(() => new MazeWasm().generate(7, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                    undefined, undefined, argTest.value, undefined, undefined, undefined, undefined))
+                    undefined, undefined, argTest.value, undefined, undefined, undefined, undefined, undefined))
                     .to.throw(invalidArgumentError("finish_row", "unsigned integer", argTest.desc));
             });
         });
 
         it('should expect generate() to fail when finish point is out of bounds', function () {
             expect(() => new MazeWasm().generate(7, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                undefined, undefined, 10, 0, undefined, undefined, undefined))
+                undefined, undefined, 10, 0, undefined, undefined, undefined, undefined))
                 .to.throw(generateFinishOutOfBoundsError());
         });
 
         it('should expect generate() to succeed with a valid explicit finish point', function () {
             let maze = new MazeWasm();
             expect(() => maze.generate(7, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                undefined, undefined, 6, 4, undefined, undefined, undefined))
+                undefined, undefined, 6, 4, undefined, undefined, undefined, undefined))
                 .to.not.throw();
             expect(maze.get_finish_cell()).to.deep.equal({ row: 6, col: 4 });
         });
@@ -695,21 +695,21 @@ function registerMazeTests() {
         runBadOptArgTests(function (argTest) {
             it(`should expect generate() to fail when passed an invalid 'min_spine_length' argument (${argTest.desc})`, function () {
                 expect(() => new MazeWasm().generate(7, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                    undefined, undefined, undefined, undefined, argTest.value, undefined, undefined))
+                    undefined, undefined, undefined, undefined, argTest.value, undefined, undefined, undefined))
                     .to.throw(invalidArgumentError("min_spine_length", "unsigned integer", argTest.desc));
             });
         });
 
         it('should expect generate() to fail when min_spine_length is impossible to satisfy', function () {
             expect(() => new MazeWasm().generate(3, 3, GenerationAlgorithmWasm.RecursiveBacktracking,
-                undefined, undefined, undefined, undefined, 1000, 1, undefined))
+                undefined, undefined, undefined, undefined, 1000, 1, undefined, undefined))
                 .to.throw();
         });
 
         it('should expect generate() to succeed with a valid min_spine_length', function () {
             let maze = new MazeWasm();
             expect(() => maze.generate(7, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                undefined, undefined, undefined, undefined, 3, undefined, undefined))
+                undefined, undefined, undefined, undefined, 3, undefined, undefined, undefined))
                 .to.not.throw();
             expect(maze.get_row_count()).to.equal(7);
             expect(maze.get_col_count()).to.equal(5);
@@ -718,7 +718,7 @@ function registerMazeTests() {
         it('should expect generate() to succeed with valid row_count and col_count and return a maze of the correct dimensions', function () {
             let maze = new MazeWasm();
             expect(() => maze.generate(7, 5, GenerationAlgorithmWasm.RecursiveBacktracking,
-                undefined, undefined, undefined, undefined, undefined, undefined, undefined))
+                undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined))
                 .to.not.throw();
             expect(maze.get_row_count()).to.equal(7);
             expect(maze.get_col_count()).to.equal(5);

@@ -1068,6 +1068,7 @@ impl MazeWasm {
     ///             undefined,
     ///             undefined,
     ///             undefined,
+    ///             undefined,
     ///             undefined
     ///         );
     ///         let json = maze.to_json();
@@ -1090,6 +1091,7 @@ impl MazeWasm {
         min_spine_length: JsValue,
         max_retries: JsValue,
         branch_from_finish: JsValue,
+        seed: JsValue,
     ) -> Result<(), JsValue> {
         let row_count = Self::arg_to_usize("row_count", row_count)?;
         let col_count = Self::arg_to_usize("col_count", col_count)?;
@@ -1117,6 +1119,15 @@ impl MazeWasm {
             branch_from_finish.as_bool()
         };
 
+        let seed: Option<u64> = if seed.is_null() || seed.is_undefined() {
+            // On wasm32, thread_rng() is unavailable; derive entropy from JS Math.random()
+            let hi = js_sys::Math::random().to_bits();
+            let lo = js_sys::Math::random().to_bits();
+            Some((hi << 32) | (lo & 0xFFFF_FFFF))
+        } else {
+            seed.as_f64().map(|v| v as u64)
+        };
+
         let options = GeneratorOptions {
             row_count,
             col_count,
@@ -1126,6 +1137,7 @@ impl MazeWasm {
             min_spine_length,
             max_retries,
             branch_from_finish,
+            seed,
         };
 
         let maze = Generator { options }

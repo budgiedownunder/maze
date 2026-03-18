@@ -1,5 +1,5 @@
 use data_model::{Maze, MazeDefinition};
-#[cfg(feature = "wasm-bindgen")]
+#[cfg(any(feature = "wasm-bindgen", feature = "wasm-lite"))]
 use maze::GenerationAlgorithm;
 #[cfg(feature = "wasm-bindgen")]
 use wasm_bindgen::prelude::*;
@@ -63,13 +63,14 @@ pub enum GenerationAlgorithmWasm {
 /// Passed as an argument to `MazeWasm::generate`.
 #[cfg(not(feature = "wasm-bindgen"))]
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub enum GenerationAlgorithmWasm {
     /// Two-phase recursive backtracking — see `maze::GenerationAlgorithm::RecursiveBacktracking`.
     RecursiveBacktracking = 0,
 }
 
 /// Converts a [`GenerationAlgorithmWasm`] value to the corresponding [`maze::GenerationAlgorithm`].
-#[cfg(feature = "wasm-bindgen")]
+#[cfg(any(feature = "wasm-bindgen", feature = "wasm-lite"))]
 pub fn to_generation_algorithm(alg: GenerationAlgorithmWasm) -> GenerationAlgorithm {
     match alg {
         GenerationAlgorithmWasm::RecursiveBacktracking => GenerationAlgorithm::RecursiveBacktracking,

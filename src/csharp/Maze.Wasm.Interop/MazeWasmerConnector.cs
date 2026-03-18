@@ -677,7 +677,8 @@
     ///  
     /// Developers can use <see cref="MazeWasmConnectorBase.NewMazeWasm()">NewMazeWasm()</see> to create
     /// a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see> and 
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see>, 
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmGenerate(UInt32,UInt32)">MazeWasmGenerate()</see>, and 
     ///  <see cref="MazeWasmConnectorBase.MazeWasmSolve(UInt32)">MazeWasmSolve()</see>, to interact with the maze.
     ///  
     /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UInt32)">FreeMazeWasm()</see>
@@ -902,7 +903,15 @@
                 { "allocate_sized_memory", () => ref this.allocateSizedMemory },
                 { "free_sized_memory", () => ref this.freeSizedMemory },
                 { "get_sized_memory_used", () => ref this.getSizedMemoryUsed },
-                { "get_num_objects_allocated", () => ref this.getNumObjectsAllocated }
+                { "get_num_objects_allocated", () => ref this.getNumObjectsAllocated },
+                { "new_generator_options_wasm", () => ref this.newGeneratorOptionsWasm },
+                { "generator_options_set_start", () => ref this.generatorOptionsSetStart },
+                { "generator_options_set_finish", () => ref this.generatorOptionsSetFinish },
+                { "generator_options_set_min_spine_length", () => ref this.generatorOptionsSetMinSpineLength },
+                { "generator_options_set_max_retries", () => ref this.generatorOptionsSetMaxRetries },
+                { "generator_options_set_branch_from_finish", () => ref this.generatorOptionsSetBranchFromFinish },
+                { "maze_wasm_generate", () => ref this.mazeWasmGenerate },
+                { "free_generator_options_wasm", () => ref this.freeGeneratorOptionsWasm }
             };
         }
         /// <summary>

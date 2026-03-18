@@ -605,6 +605,7 @@ pub trait App: LinePrinter {
                 min_spine_length,
                 max_retries,
                 branch_from_finish: None,
+                seed: None,
             },
         };
         match gen.generate() {

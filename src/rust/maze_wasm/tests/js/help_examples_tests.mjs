@@ -542,6 +542,7 @@ function testMazeGenerate() {
             undefined,
             undefined,
             undefined,
+            undefined,
             undefined
         );
         let json = maze.to_json();
@@ -556,6 +557,37 @@ function testMazeGenerate() {
 function testMazeGenerateExpectedOutput() {
     return [
         "Maze generate() succeeded. Dimensions:  7 row(s) x  5  column(s)"
+    ];
+}
+
+// Test MazeWasm::generate() example with explicit seed
+function testMazeGenerateSeeded() {
+    try {
+        let maze = new MazeWasm();
+        maze.generate(
+            9,
+            7,
+            GenerationAlgorithmWasm.RecursiveBacktracking,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            12345
+        );
+        console.log("Maze generate() with seed succeeded. Dimensions: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
+        return maze.get_row_count() === 9 && maze.get_col_count() === 7;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    }
+}
+
+function testMazeGenerateSeededExpectedOutput() {
+    return [
+        "Maze generate() with seed succeeded. Dimensions:  9 row(s) x  7  column(s)"
     ];
 }
 
@@ -630,6 +662,7 @@ const tests = [
     { name: "MazeWasm:from_json() example", testFunction: testMazeFromJSON, expectedOutput: testMazeFromJSONExpectedOutput },
     { name: "MazeWasm:solve() example", testFunction: testMazeSolve, expectedOutput: testMazeSolveExpectedOutput },
     { name: "MazeWasm:generate() example", testFunction: testMazeGenerate, expectedOutput: testMazeGenerateExpectedOutput },
+    { name: "MazeWasm:generate() example (seeded)", testFunction: testMazeGenerateSeeded, expectedOutput: testMazeGenerateSeededExpectedOutput },
     { name: "MazeSolutionWasm:get_path_points() example", testFunction: testMazeSolutionGetPathPoints, expectedOutput: testMazeSolutionGetPathPointsExpectedOutput },
 ];
 
