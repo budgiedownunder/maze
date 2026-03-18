@@ -37,6 +37,9 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private string errorMessage = "";
 
+        [ObservableProperty]
+        private string loadStatus = "";
+
         /// <summary>
         /// Constructor
         /// </summary>
@@ -60,8 +63,8 @@ namespace Maze.Maui.App.ViewModels
             if (IsBusy)
                 return;
 
+            ClearProfile();
             IsBusy = true;
-            ErrorMessage = "";
             try
             {
                 var profile = await _authService.GetMyProfileAsync();
@@ -69,6 +72,7 @@ namespace Maze.Maui.App.ViewModels
                 FullName = _loadedFullName = profile.FullName;
                 Email = _loadedEmail = profile.Email;
                 IsAdmin = profile.IsAdmin;
+                LoadStatus = "";
             }
             catch (Exception ex)
             {
@@ -78,6 +82,19 @@ namespace Maze.Maui.App.ViewModels
             {
                 IsBusy = false;
             }
+        }
+
+        /// <summary>
+        /// Clears all profile fields and sets the load status message
+        /// </summary>
+        public void ClearProfile()
+        {
+            Username = _loadedUsername = "";
+            FullName = _loadedFullName = "";
+            Email = _loadedEmail = "";
+            IsAdmin = false;
+            ErrorMessage = "";
+            LoadStatus = "Loading profile...";
         }
 
         private bool CanSaveProfile() =>
@@ -135,6 +152,7 @@ namespace Maze.Maui.App.ViewModels
             {
                 await _authService.SignOutAsync();
                 _mazesViewModel.InvalidateData();
+                ClearProfile();
                 await Shell.Current.GoToAsync("//LoginPage");
             }
             finally
@@ -164,6 +182,7 @@ namespace Maze.Maui.App.ViewModels
             {
                 await _authService.DeleteMyAccountAsync();
                 _mazesViewModel.InvalidateData();
+                ClearProfile();
                 await Shell.Current.GoToAsync("//LoginPage");
             }
             catch (Exception ex)

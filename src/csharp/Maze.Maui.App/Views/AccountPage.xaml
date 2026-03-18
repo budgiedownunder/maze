@@ -20,8 +20,14 @@
                                  MaximumWidthRequest="400"
                                  HorizontalOptions="Center">
 
+                <Label Text="{Binding LoadStatus}"
+                       IsVisible="{Binding IsBusy}"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center" />
+
                 <Border Padding="16"
-                        Margin="0,0,0,8">
+                        Margin="0,0,0,8"
+                        IsVisible="{Binding IsNotBusy}">
                     <VerticalStackLayout Spacing="12">
 
                         <Grid ColumnDefinitions="Auto,*"
@@ -77,20 +83,24 @@
 
                 <Button Text="Save Profile"
                         Command="{Binding SaveProfileCommand}"
+                        IsVisible="{Binding IsNotBusy}"
                         HorizontalOptions="FillAndExpand" />
 
                 <Button Text="Change Password"
                         Command="{Binding ChangePasswordCommand}"
+                        IsVisible="{Binding IsNotBusy}"
                         HorizontalOptions="FillAndExpand"
                         BackgroundColor="Transparent"
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
 
                 <Button Text="Sign Out"
                         Command="{Binding SignOutCommand}"
+                        IsVisible="{Binding IsNotBusy}"
                         HorizontalOptions="FillAndExpand" />
 
                 <Button Text="Delete Account"
                         Command="{Binding DeleteAccountCommand}"
+                        IsVisible="{Binding IsNotBusy}"
                         HorizontalOptions="FillAndExpand"
                         BackgroundColor="Red"
                         TextColor="White" />
