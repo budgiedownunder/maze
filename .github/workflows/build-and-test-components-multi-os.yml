@@ -151,7 +151,7 @@ jobs:
       run: |
         cargo test --locked -p auth
         cargo test --locked -p data_model
-        cargo test --locked -p maze
+        cargo test --locked -p maze --features generation
         cargo test --locked -p maze_console -- --test-threads=1
         cargo test --locked -p storage -- --test-threads=1
         cargo test --locked -p maze_wasm

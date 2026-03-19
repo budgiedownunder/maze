@@ -4,10 +4,10 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:views="clr-namespace:Maze.Maui.App.Views"
-    Shell.FlyoutBehavior="Disabled">
+    FlyoutBehavior="Flyout">
 
-    <!-- Unauthenticated: Login page, tab bar and nav bar hidden -->
-    <TabBar x:Name="LoginTabBar">
+    <!-- Unauthenticated: Login page, tab bar, nav bar, and flyout all hidden -->
+    <TabBar x:Name="LoginTabBar" Shell.FlyoutBehavior="Disabled">
         <ShellContent
             Route="LoginPage"
             Shell.TabBarIsVisible="False"
@@ -15,23 +15,23 @@
             ContentTemplate="{DataTemplate views:LoginPage}" />
     </TabBar>
 
-    <!-- Authenticated: main app tabs -->
+    <!-- Authenticated: Mazes page only (single tab, tab bar hidden) -->
     <TabBar x:Name="MainTabBar">
         <ShellContent
             Title="Mazes"
             Route="MainPage"
-            Icon="{OnPlatform 'icon_mazes.png', iOS='icon_mazes_ios.png', MacCatalyst='icon_mazes_ios.png'}"
+            Shell.TabBarIsVisible="False"
             ContentTemplate="{DataTemplate views:MazesPage}" />
-        <ShellContent
-            Title="Account"
-            Route="AccountPage"
-            Icon="icon_account.svg"
-            ContentTemplate="{DataTemplate views:AccountPage}" />
-        <ShellContent
-            Title="About"
-            Route="AboutPage"
-            Icon="{OnPlatform 'icon_about.png', iOS='icon_about_ios.png', MacCatalyst='icon_about_ios.png'}"
-            ContentTemplate="{DataTemplate views:AboutPage}" />
     </TabBar>
+
+    <!-- Flyout menu items -->
+    <MenuItem Text="My Account..."
+              IconImageSource="icon_account.svg"
+              Clicked="OnAccountMenuItemClicked" />
+    <MenuItem Text="Sign Out"
+              Clicked="OnSignOutMenuItemClicked" />
+    <MenuItem Text="About"
+              IconImageSource="{OnPlatform 'icon_about.png', iOS='icon_about_ios.png', MacCatalyst='icon_about_ios.png'}"
+              Clicked="OnAboutMenuItemClicked" />
 
 </Shell>

@@ -142,26 +142,6 @@ namespace Maze.Maui.App.ViewModels
         }
 
         /// <summary>
-        /// Signs the user out and navigates to the login page
-        /// </summary>
-        [RelayCommand]
-        private async Task SignOut()
-        {
-            IsBusy = true;
-            try
-            {
-                await _authService.SignOutAsync();
-                _mazesViewModel.InvalidateData();
-                ClearProfile();
-                await Shell.Current.GoToAsync("//LoginPage");
-            }
-            finally
-            {
-                IsBusy = false;
-            }
-        }
-
-        /// <summary>
         /// Confirms and deletes the user's account, then navigates to the login page
         /// </summary>
         [RelayCommand]
@@ -171,7 +151,8 @@ namespace Maze.Maui.App.ViewModels
                 "Delete Account",
                 "Are you sure you want to permanently delete your account? This will also delete all your mazes and cannot be undone.",
                 "Delete",
-                "Cancel");
+                "Cancel",
+                isDestructive: true);
 
             if (!confirmed)
                 return;

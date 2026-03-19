@@ -34,7 +34,6 @@ namespace Maze.Maui.App.ViewModels
             Title = "Mazes";
             _mazeService = mazeService;
             _dialogService = dialogService;
-            _ = GetMazesAsync();
         }
         /// <summary>
         /// Represents the load status
@@ -198,8 +197,8 @@ namespace Maze.Maui.App.ViewModels
                 "Delete Maze",
                 $"Are you sure you want to delete '{item.Name}'?",
                 "Yes",
-                "No"
-                ))
+                "No",
+                isDestructive: true))
             {
                 bool deleted = await DeleteMaze(item);
                 if (deleted)

@@ -22,11 +22,11 @@ namespace Maze.Maui.App.Views
         /// <param name="startCol">Default start cell column (0-based)</param>
         /// <param name="finishRow">Default finish cell row (0-based)</param>
         /// <param name="finishCol">Default finish cell column (0-based)</param>
-        /// <param name="minSpineLength">Default minimum spine length</param>
+        /// <param name="minSolutionLength">Default minimum solution length</param>
         /// <param name="generationError">Optional error message from a previous generation attempt, displayed inline</param>
         public GenerateMazePopup(uint rows, uint cols,
             uint startRow, uint startCol, uint finishRow, uint finishCol,
-            uint minSpineLength, string? generationError = null)
+            uint minSolutionLength, string? generationError = null)
         {
             InitializeComponent();
 
@@ -39,7 +39,7 @@ namespace Maze.Maui.App.Views
             FinishRowEntry.Text = (finishRow + 1).ToString();
             FinishColEntry.Text = (finishCol + 1).ToString();
 
-            MinSpineLengthEntry.Text = minSpineLength.ToString();
+            MinSolutionLengthEntry.Text = minSolutionLength.ToString();
 
             if (generationError is not null)
             {
@@ -111,8 +111,8 @@ namespace Maze.Maui.App.Views
             if (startRow == finishRow && startCol == finishCol)
             { error = "Start and Finish cells must be different."; return false; }
 
-            if (!uint.TryParse(MinSpineLengthEntry.Text?.Trim(), out uint minSpineLength) || minSpineLength < 1)
-            { error = "Min Spine Length must be a whole number of 1 or more."; return false; }
+            if (!uint.TryParse(MinSolutionLengthEntry.Text?.Trim(), out uint minSolutionLength) || minSolutionLength < 1)
+            { error = "Min Solution Length must be a whole number of 1 or more."; return false; }
 
             error = string.Empty;
             options = new Maze.GenerationOptions
@@ -124,7 +124,7 @@ namespace Maze.Maui.App.Views
                 StartCol = startCol,
                 FinishRow = finishRow,
                 FinishCol = finishCol,
-                MinSpineLength = minSpineLength,
+                MinSpineLength = minSolutionLength,
             };
             return true;
         }
