@@ -5,12 +5,12 @@
                x:Class="Maze.Maui.App.Views.AboutPopup"
                CanBeDismissedByTappingOutsideOfPopup="True">
 
-    <Border Padding="20"
+    <Border Padding="16"
             StrokeShape="RoundRectangle 8"
             Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
 
-        <VerticalStackLayout Spacing="20" MinimumWidthRequest="280">
+        <VerticalStackLayout Spacing="12" HorizontalOptions="Fill">
 
             <!-- Title -->
             <Label Text="About"
@@ -31,10 +31,11 @@
                            HorizontalOptions="Center"
                            VerticalOptions="Center" />
                 </Border>
-                <VerticalStackLayout Spacing="10">
-                    <Label FontSize="20"
+                <VerticalStackLayout Spacing="10" HorizontalOptions="Fill">
+                    <Label FontSize="16"
                            FontAttributes="Bold"
                            Text="Maze Application v1.0"
+                           LineBreakMode="WordWrap"
                            VerticalOptions="Start"
                            HorizontalOptions="Start" />
                     <Label FontSize="14"

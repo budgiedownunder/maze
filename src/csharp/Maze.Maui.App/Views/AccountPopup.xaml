@@ -11,7 +11,7 @@
         <toolkit:IsStringNotNullOrEmptyConverter x:Key="StringNotEmptyConverter" />
     </toolkit:Popup.Resources>
 
-    <Border Padding="20"
+    <Border Padding="16"
             StrokeShape="RoundRectangle 8"
             Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
@@ -21,8 +21,7 @@
 
             <ScrollView VerticalOptions="FillAndExpand">
                 <VerticalStackLayout Spacing="16"
-                                     MinimumWidthRequest="280"
-                                     HorizontalOptions="Center">
+                                     HorizontalOptions="Fill">
 
                     <!-- Title -->
                     <Label Text="My Account"

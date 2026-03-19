@@ -13,6 +13,9 @@ namespace Maze.Maui.App.Views
         public AboutPopup()
         {
             InitializeComponent();
+            double screenWidth = DeviceDisplay.Current.MainDisplayInfo.Width
+                / DeviceDisplay.Current.MainDisplayInfo.Density;
+            WidthRequest = Math.Min(screenWidth * 0.85, 400);
         }
 
         /// <summary>

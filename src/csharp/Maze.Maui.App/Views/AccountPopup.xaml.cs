@@ -20,6 +20,9 @@ namespace Maze.Maui.App.Views
             _viewModel = viewModel;
             BindingContext = viewModel;
             InitializeComponent();
+            double screenWidth = DeviceDisplay.Current.MainDisplayInfo.Width
+                / DeviceDisplay.Current.MainDisplayInfo.Density;
+            WidthRequest = Math.Min(screenWidth * 0.85, 400);
             viewModel.LoadProfileCommand.Execute(null);
         }
 
