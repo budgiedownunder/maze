@@ -22,6 +22,17 @@
                                  HorizontalOptions="Center"
                                  VerticalOptions="CenterAndExpand">
 
+                <Border HeightRequest="100"
+                        WidthRequest="100"
+                        StrokeShape="Ellipse"
+                        Padding="0"
+                        HorizontalOptions="Center">
+                    <Image Source="app.png"
+                           Aspect="AspectFill"
+                           HeightRequest="100"
+                           WidthRequest="100" />
+                </Border>
+
                 <Label Text="Maze"
                        FontSize="36"
                        FontAttributes="Bold"

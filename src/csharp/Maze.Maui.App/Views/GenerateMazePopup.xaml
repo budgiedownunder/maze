@@ -40,8 +40,8 @@
                 <Label Grid.Row="5" Grid.Column="0" Text="Finish Column" VerticalOptions="Center"/>
                 <Entry Grid.Row="5" Grid.Column="1" x:Name="FinishColEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
 
-                <Label Grid.Row="6" Grid.Column="0" Text="Min Spine Length" VerticalOptions="Center"/>
-                <Entry Grid.Row="6" Grid.Column="1" x:Name="MinSpineLengthEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+                <Label Grid.Row="6" Grid.Column="0" Text="Min Solution Length" VerticalOptions="Center"/>
+                <Entry Grid.Row="6" Grid.Column="1" x:Name="MinSolutionLengthEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
 
             </Grid>
 

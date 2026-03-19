@@ -20,8 +20,19 @@
         /// <param name="message">Message</param>
         /// <param name="accept">Text to display for `accept`</param>
         /// <param name="cancel">Text to display for `cancel`</param>
+        /// <param name="isDestructive">If true, styles the accept button to indicate a destructive action</param>
         /// <returns>A task that contains the user's choice as a boolean value, where `true` indicates that the user chose to accept and `false` indicates that they chose to cancel</returns>
-        public Task<bool> ShowConfirmation(string title, string message, string accept, string cancel);
+        public Task<bool> ShowConfirmation(string title, string message, string accept, string cancel, bool isDestructive = false);
+        /// <summary>
+        /// Displays a confirmation message to the user with `accept`, `cancel`, and `dismiss` choices
+        /// </summary>
+        /// <param name="title">Title</param>
+        /// <param name="message">Message</param>
+        /// <param name="accept">Text to display for `accept`</param>
+        /// <param name="cancel">Text to display for `cancel`</param>
+        /// <param name="dismiss">Text to display for `dismiss`</param>
+        /// <returns>A task that contains the user's choice: <c>true</c> = accept, <c>false</c> = cancel, <c>null</c> = dismiss</returns>
+        public Task<bool?> ShowConfirmation(string title, string message, string accept, string cancel, string dismiss);
         /// <summary>
         /// Displays a prompt to the user with the intent to capture a single string value, together with `accept` and `cancel` choices
         /// </summary>

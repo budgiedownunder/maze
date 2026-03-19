@@ -225,7 +225,7 @@ impl Generator {
 
             if spine.len() < min_spine {
                 last_err = format!(
-                    "spine length {} is less than min_spine_length {}",
+                    "solution length {} is less than minimum solution length {}",
                     spine.len(),
                     min_spine
                 );

@@ -38,11 +38,11 @@ and this one shows the design and solve processes being performed on an `iOS` de
 
 The app uses a two-area navigation model:
 
-- **Login area** (tab bar hidden): shown on first launch and after sign-out. Provides Sign In and Create Account actions.
-- **Main area** (three tabs): shown after a successful sign-in.
-  - **Mazes** — load, edit, delete, rename, duplicate and solve mazes
-  - **Account** — edit your profile, change your password, sign out, or delete your account
-  - **About** — app information
+- **Login area** (hamburger menu hidden): shown on first launch and after sign-out. Provides Sign In and Create Account actions.
+- **Main area**: shown after a successful sign-in. The **Mazes** tab is the primary view (tab bar hidden). A hamburger flyout menu provides access to:
+  - **My Account…** — opens a popup to view and edit your profile, change your password, or delete your account
+  - **Sign Out** — signs out, prompting to save any unsaved maze changes first
+  - **About** — opens a popup with app information
 
 If a bearer token from a previous session is stored, the app skips the Login page automatically on restart.
 

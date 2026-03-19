@@ -445,9 +445,10 @@ namespace Maze.Maui.App.ViewModels
         public async Task<bool> RefreshMaze()
         {
             bool refreshed = false;
-            if (await _dialogService.ShowConfirmation("Refresh Maze", 
-                "Are you sure you want to refresh the maze?\n\nNote: any changes you have made will be lost", 
-                "Yes", "No")) {
+            if (await _dialogService.ShowConfirmation("Refresh Maze",
+                "Are you sure you want to refresh the maze?\n\nNote: any changes you have made will be lost",
+                "Yes", "No",
+                isDestructive: true)) {
 
                 if (CanClearSolution)
                     await ClearSolutionAsync();

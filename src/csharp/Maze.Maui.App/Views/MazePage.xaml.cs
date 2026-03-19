@@ -10,6 +10,7 @@ namespace Maze.Maui.App.Views
     using Maze.Maui.App.Services;
     using CommunityToolkit.Maui.Extensions;
     using CommunityToolkit.Maui.Core;
+    using Maze.Maui.Controls.Pointer;
 
     /// <summary>
     /// This class represents the maze page within the application. It provides
@@ -59,7 +60,7 @@ namespace Maze.Maui.App.Views
         MazesViewModel _mazesViewModel;
         IDialogService _dialogService;
         IDeviceTypeService _deviceTypeService;
-        uint? _lastMinSpineLength;
+        uint? _lastMinSolutionLength;
 
         /// <summary>
         /// Indicates whether the page is initlialized
@@ -96,6 +97,14 @@ namespace Maze.Maui.App.Views
         /// </summary>
         /// <returns>Boolean value</returns>
         public MazeItem? MazeItem { get; set; }
+        /// <summary>
+        /// Indicates whether the maze has unsaved changes
+        /// </summary>
+        public bool IsDirty => _viewModel.CanSave;
+        /// <summary>
+        /// Saves the maze. Returns true on success, false if the save failed or was cancelled.
+        /// </summary>
+        public Task<bool> TrySaveAsync() => Save();
         /// <summary>
         /// Constructor 
         /// </summary>
@@ -313,9 +322,17 @@ namespace Maze.Maui.App.Views
         /// <summary>
         /// Triggers the save maze process
         /// </summary>
-        private Task<bool> Save()
+        private async Task<bool> Save()
         {
-            return _viewModel.SaveMaze(MazeGrid.ToMaze());
+            Pointer.SetCursor(this, Icon.Wait);
+            try
+            {
+                return await _viewModel.SaveMaze(MazeGrid.ToMaze());
+            }
+            finally
+            {
+                Pointer.SetCursor(this, Icon.Arrow);
+            }
         }
         /// <summary>
         /// Triggers the refresh maze process. If successful, the maze is updated to reflect the updated definition.
@@ -367,15 +384,15 @@ namespace Maze.Maui.App.Views
                     // If either is missing, leave the fallback defaults (top-left / bottom-right)
                 }
 
-                uint defaultMinSpineLength = (rows + cols) / 2;
-                uint minSpineLength = _lastMinSpineLength is uint last && last <= rows * cols
+                uint defaultMinSolutionLength = (rows + cols) / 2;
+                uint minSolutionLength = _lastMinSolutionLength is uint last && last <= rows * cols
                     ? last
-                    : defaultMinSpineLength;
+                    : defaultMinSolutionLength;
                 string? generationError = null;
 
                 while (true)
                 {
-                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSpineLength, generationError);
+                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, generationError);
                     IPopupResult<Maze.GenerationOptions?> result = await this.ShowPopupAsync<Maze.GenerationOptions?>(popup);
 
                     if (result.WasDismissedByTappingOutsideOfPopup || result.Result is not Maze.GenerationOptions popupOptions)
@@ -396,7 +413,7 @@ namespace Maze.Maui.App.Views
                     try
                     {
                         Maze generated = Maze.Generate(options);
-                        _lastMinSpineLength = options.MinSpineLength;
+                        _lastMinSolutionLength = options.MinSpineLength;
                         await MainThread.InvokeOnMainThreadAsync(() =>
                         {
                             MazeItem!.Definition = generated;
@@ -414,7 +431,7 @@ namespace Maze.Maui.App.Views
                         startCol = popupOptions.StartCol ?? startCol;
                         finishRow = popupOptions.FinishRow ?? finishRow;
                         finishCol = popupOptions.FinishCol ?? finishCol;
-                        minSpineLength = popupOptions.MinSpineLength ?? minSpineLength;
+                        minSolutionLength = popupOptions.MinSpineLength ?? minSolutionLength;
                     }
                 }
             }
@@ -593,13 +610,18 @@ namespace Maze.Maui.App.Views
             if (_viewModel.CanSave && e.Source == ShellNavigationSource.PopToRoot)
             {
                 var deferral = e.GetDeferral();
-                bool saveChanges = await _dialogService.ShowConfirmation(
+                bool? choice = await _dialogService.ShowConfirmation(
                     "Unsaved Changes",
                     "Do you want to save your changes?",
-                    "Yes",
-                    "No"
+                    "Save",
+                    "Discard",
+                    "Cancel"
                 );
-                if (saveChanges)
+                if (choice == null)
+                {
+                    e.Cancel();
+                }
+                else if (choice == true)
                 {
                     bool saved = await Save();
                     if (!saved)

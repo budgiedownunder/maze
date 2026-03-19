@@ -5,11 +5,15 @@
     /// </summary>
     public partial class App : Application
     {
+        private readonly AppShell _appShell;
+
         /// <summary>
         /// Constructor
         /// </summary>
-        public App()
+        /// <param name="appShell">Injected app shell</param>
+        public App(AppShell appShell)
         {
+            _appShell = appShell;
             InitializeComponent();
         }
 
@@ -18,6 +22,6 @@
         /// </summary>
         /// <param name="activationState">Activation state</param>
         /// <returns>Window</returns>
-        protected override Window CreateWindow(IActivationState? activationState) => new Window(new AppShell());
+        protected override Window CreateWindow(IActivationState? activationState) => new Window(_appShell);
     }
 }
