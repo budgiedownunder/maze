@@ -71,7 +71,7 @@ To test all `Rust` crates:
 
 ```
 cd src/rust
-cargo test -p maze
+cargo test -p maze --features generation
 cargo test -p maze_console -- --test-threads=1
 cargo test -p storage -- --test-threads=1
 cargo test -p maze_wasm
