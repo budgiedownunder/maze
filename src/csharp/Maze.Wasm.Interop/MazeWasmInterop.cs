@@ -123,9 +123,11 @@
         {
             switch (connectionType)
             {
+#if !IOS && !ANDROID
                 case ConnectionType.Wasmtime:
                     connector = new MazeWasmtimeConnector(wasmPathOrName, wasmBytes);
                     break;
+#endif
                 case ConnectionType.Wasmer:
                     connector = new MazeWasmerConnector(wasmPathOrName, wasmBytes);
                     break;

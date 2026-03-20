@@ -34,7 +34,7 @@
     <RuntimeIdentifier>android-x64</RuntimeIdentifier>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
-    <RuntimeIdentifier>ios-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">iossimulator-arm64</RuntimeIdentifier>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-maccatalyst'">
     <RuntimeIdentifiers>maccatalyst-x64;maccatalyst-arm64</RuntimeIdentifiers>
@@ -52,7 +52,8 @@
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
-    <PackageReference Include="Wasmtime" Version="22.0.0" />
+    <PackageReference Include="Wasmtime" Version="22.0.0"
+      Condition="'$(TargetFramework)' != 'net10.0-ios' And '$(TargetFramework)' != 'net10.0-android'" />
   </ItemGroup>
 
   <!-- Platform-Specific Native Libraries -->
@@ -65,22 +66,6 @@
     <NativeLibrary Include="runtimes/win-x64/native/wasmer.dll" Condition="'$(RuntimeIdentifier)' == 'win-x64'" />
   </ItemGroup>
 
-  <!-- <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
-    <Content Include="runtimes/ios-arm64/native/libwasmer.a">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup> -->
-
-<ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
-    <Content Include="runtimes/ios-sim-arm64/native/libwasmer.a">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
-    <AdditionalMtouchArguments>--gcc_flags "-framework CoreFoundation"</AdditionalMtouchArguments>
-  </PropertyGroup>
-  
   <!-- Debugging Information -->
   <Target Name="DebugNativeLibraryDetails" AfterTargets="Build">
     <Message Text="**************************" Importance="High" />
