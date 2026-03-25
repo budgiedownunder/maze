@@ -46,7 +46,7 @@
                 <Entry Placeholder="Username"
                        Text="{Binding Username}"
                        ReturnType="Next"
-                       Keyboard="Text" />
+                       Keyboard="Plain" />
 
                 <Entry Placeholder="Password"
                        Text="{Binding Password}"

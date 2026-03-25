@@ -23,7 +23,7 @@
                 <Entry Placeholder="Username"
                        Text="{Binding Username}"
                        ReturnType="Next"
-                       Keyboard="Text" />
+                       Keyboard="Plain" />
 
                 <Entry Placeholder="Full Name"
                        Text="{Binding FullName}"
