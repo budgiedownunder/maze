@@ -34,7 +34,7 @@
 		<Nullable>enable</Nullable>
 
 		<!-- Display name -->
-		<ApplicationTitle>Maze Maui App</ApplicationTitle>
+		<ApplicationTitle>Maze</ApplicationTitle>
 
 		<!-- App Identifier -->
 		<ApplicationId>com.budgiedownunder.mazemauiapp</ApplicationId>
