@@ -3,10 +3,6 @@ run-name: ${{ github.actor }} is running the generate diagram PNG files from Pla
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - '**/*.puml'
   pull_request:
     branches: [main]
     paths:
@@ -22,6 +18,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
+      with:
+        ref: ${{ github.head_ref }}
 
     - name: Install Java and PlantUML
       run: |
@@ -33,7 +31,7 @@ jobs:
       run: |
         plantuml() {
           java -jar /usr/local/bin/plantuml.jar "$@"
-        }      
+        }
         plantuml -version
         for f in $(find ./docs/diagrams -maxdepth 1 -name '*.puml'); do
           echo "Processing $f"
@@ -41,7 +39,7 @@ jobs:
         done
 
     - name: Commit PNG files
-      if: github.event_name == 'push'
+      if: github.event_name == 'pull_request'
       run: |
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@github.com"
