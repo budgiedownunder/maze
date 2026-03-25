@@ -11,11 +11,11 @@
     ///  
     /// Developers can use <see cref="NewMazeWasm()">NewMazeWasm()</see> to create
     ///  a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 
-    ///  <see cref="MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see>, 
-    ///  <see cref="MazeWasmGenerate(UInt32,UInt32)">MazeWasmGenerate()</see>, and 
-    ///  <see cref="MazeWasmSolve(UInt32)">MazeWasmSolve()</see>, to interact with the maze.
-    ///  
-    /// Once finished with, a maze should be destroyed using <see cref="FreeMazeWasm(UInt32)">FreeMazeWasm()</see>
+    ///  <see cref="MazeWasmInsertRows(UIntPtr,uint,uint)">MazeWasmInsertRows()</see>,
+    ///  <see cref="MazeWasmGenerate(UIntPtr,UIntPtr)">MazeWasmGenerate()</see>, and
+    ///  <see cref="MazeWasmSolve(UIntPtr)">MazeWasmSolve()</see>, to interact with the maze.
+    ///
+    /// Once finished with, a maze should be destroyed using <see cref="FreeMazeWasm(UIntPtr)">FreeMazeWasm()</see>
     /// to prevent memory leaks within Web Assembly.
     /// </summary>
     public class MazeWasmInterop : IDisposable
@@ -133,9 +133,11 @@
                     connector = new MazeWasmtimeConnector(wasmPathOrName, wasmBytes);
                     break;
 #endif
+#if !IOS
                 case ConnectionType.Wasmer:
                     connector = new MazeWasmerConnector(wasmPathOrName, wasmBytes);
                     break;
+#endif
 #if IOS
                 case ConnectionType.NativeIOS:
                     connector = new MazeCConnector();

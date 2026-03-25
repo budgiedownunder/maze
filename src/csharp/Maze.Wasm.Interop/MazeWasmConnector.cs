@@ -1,5 +1,7 @@
 ﻿using static Maze.Wasm.Interop.MazeWasmInterop;
+#if !IOS
 using static Maze.Wasm.Interop.WasmerInterop;
+#endif
 
 namespace Maze.Wasm.Interop
 {

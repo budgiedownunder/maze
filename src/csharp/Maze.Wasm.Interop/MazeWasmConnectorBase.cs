@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿#if !IOS
+using System.Text;
 using static Maze.Wasm.Interop.MazeWasmInterop;
 
 namespace Maze.Wasm.Interop
@@ -617,3 +618,4 @@ namespace Maze.Wasm.Interop
         }
      }
 }
+#endif // !IOS
