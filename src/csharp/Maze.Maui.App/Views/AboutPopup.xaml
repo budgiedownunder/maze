@@ -5,58 +5,40 @@
                x:Class="Maze.Maui.App.Views.AboutPopup"
                CanBeDismissedByTappingOutsideOfPopup="True">
 
-    <Border Padding="16"
-            StrokeShape="RoundRectangle 8"
-            Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
-            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+    <VerticalStackLayout Spacing="12" HorizontalOptions="Fill" Padding="16">
 
-        <VerticalStackLayout Spacing="12" HorizontalOptions="Fill">
-
-            <!-- Title -->
-            <Label Text="About"
-                   FontSize="18"
-                   FontAttributes="Bold"
+        <Border HeightRequest="100"
+                WidthRequest="100"
+                StrokeShape="Ellipse"
+                Padding="0"
+                HorizontalOptions="Center">
+            <Image Source="app.png"
+                   Aspect="AspectFill"
+                   HeightRequest="100"
+                   WidthRequest="100"
                    HorizontalOptions="Center"
-                   Margin="0,0,0,4" />
+                   VerticalOptions="Center" />
+        </Border>
+        <Label FontSize="16"
+               FontAttributes="Bold"
+               Text="Maze Application v1.0"
+               LineBreakMode="WordWrap"
+               HorizontalOptions="Center" />
+        <Label FontSize="14"
+               FontAttributes="None"
+               Text="© BudgieDownUnder, 2026"
+               HorizontalOptions="Center" />
 
-            <HorizontalStackLayout Spacing="10">
-                <Border HeightRequest="100"
-                        WidthRequest="100"
-                        StrokeShape="Ellipse"
-                        Padding="0">
-                    <Image Source="app.png"
-                           Aspect="AspectFill"
-                           HeightRequest="100"
-                           WidthRequest="100"
-                           HorizontalOptions="Center"
-                           VerticalOptions="Center" />
-                </Border>
-                <VerticalStackLayout Spacing="10" HorizontalOptions="Fill">
-                    <Label FontSize="16"
-                           FontAttributes="Bold"
-                           Text="Maze Application v1.0"
-                           LineBreakMode="WordWrap"
-                           VerticalOptions="Start"
-                           HorizontalOptions="Start" />
-                    <Label FontSize="14"
-                           FontAttributes="None"
-                           Text="© BudgieDownUnder, 2026"
-                           VerticalOptions="End"
-                           HorizontalOptions="Start" />
-                </VerticalStackLayout>
-            </HorizontalStackLayout>
+        <BoxView HeightRequest="1" BackgroundColor="Gray" HorizontalOptions="FillAndExpand" />
+        <Label Text="An app for designing and solving mazes"
+               HorizontalOptions="Center" />
 
-            <BoxView HeightRequest="1" BackgroundColor="Gray" HorizontalOptions="FillAndExpand" />
-            <Label Text="An app for designing and solving mazes" />
+        <Button Text="Close"
+                Clicked="OnCloseClicked"
+                HorizontalOptions="FillAndExpand"
+                BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
 
-            <Button Text="Close"
-                    Clicked="OnCloseClicked"
-                    HorizontalOptions="FillAndExpand"
-                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
-                    TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
-
-        </VerticalStackLayout>
-
-    </Border>
+    </VerticalStackLayout>
 
 </toolkit:Popup>
