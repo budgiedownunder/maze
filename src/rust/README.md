@@ -7,6 +7,7 @@ The following `Rust` crates are present:
 | Folder | Crate | Description
 |--------|-----------|---------------
 | `src/rust` | [`maze`](./maze/README.md) | Maze definition and calculation library
+|            | [`maze_c`](./maze_c/README.md) | Maze C API library
 |            | [`maze_console`](./maze_console/README.md) | Maze console application
 |            | [`maze_openapi_generator`](./maze_openapi_generator/README.md) | Maze OpenAPI generator console application
 |            | [`maze_wasm`](./maze_wasm/README.md) | Maze WebAssembly API library
@@ -72,6 +73,7 @@ To test all `Rust` crates:
 ```
 cd src/rust
 cargo test -p maze --features generation
+cargo test -p maze_c
 cargo test -p maze_console -- --test-threads=1
 cargo test -p storage -- --test-threads=1
 cargo test -p maze_wasm

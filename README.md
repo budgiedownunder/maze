@@ -43,7 +43,7 @@ At this stage, the following areas are covered:
   - Uses [`actix`](https://actix.rs/) to serve the `HTTPS` API and [`utoipa`](https://docs.rs/utoipa/latest/utoipa/) to publish it as an [`OpenAPI`](https://www.openapis.org/)-compliant interface for use in third party products such as [`Swagger`](https://swagger.io/)
   - Supports interactive documentation in the form of [RapiDoc](https://rapidocweb.com/), [Redoc](https://redocly.com/redoc) and [Swagger UI](https://swagger.io/tools/swagger-ui/)
 
-- Implementing a `.NET` to Web Assembly ([`maze_wasm`](./src/rust/maze_wasm/README.md)) interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) in `C#` that supports [Wasmtime](https://docs.wasmtime.dev/) (for `Windows`, `Android` and `iOS`) and [Wasmer](https://wasmer.io/) (for `Android` and `iOS`)
+- Implementing a `.NET` to Web Assembly ([`maze_wasm`](./src/rust/maze_wasm/README.md)) interop library ([`Maze.Wasm.Interop`](./src/csharp/Maze.Wasm.Interop/README.md)) in `C#` that supports [Wasmtime](https://docs.wasmtime.dev/) (for `Windows` and `Android`), [Wasmer](https://wasmer.io/) (for `Android` and `iOS` simulator), and a native C library via [`maze_c`](./src/rust/maze_c/README.md) (for `iOS`simulator and physical device)
 
 - Implementing automated `.NET` API testing with `xUnit` ([`Maze.Wasm.Interop.Tests`](./src/csharp/Maze.Wasm.Interop.Tests/README.md))
 
@@ -79,6 +79,7 @@ The following components are present:
 | `src/rust`                     | [`auth`](./src/rust/auth/README.md)                                           | Authentication library
 |                                | [`data_model`](./src/rust/data_model/README.md)                               | Data model library
 |                                | [`maze`](./src/rust/maze/README.md)                                           | Maze calculation library
+|                                | [`maze_c`](./src/rust/maze_c/README.md)                                       | Maze C API library
 |                                | [`maze_console`](./src/rust/maze_console/README.md)                           | Maze console application
 |                                | [`maze_openapi_generator`](./src/rust/maze_openapi_generator/README.md)       | Maze OpenAPI generator console application
 |                                | [`maze_wasm`](./src/rust/maze_wasm/README.md)                                 | Maze WebAssembly API library

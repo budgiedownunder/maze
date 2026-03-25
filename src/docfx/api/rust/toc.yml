@@ -6,6 +6,8 @@
   href: data_model/view_content.md
 - name: maze
   href: maze/view_content.md
+- name: maze_c
+  href: maze_c/view_content.md
 - name: maze_console
   href: maze_console/view_content.md
 - name: maze_openapi_generator

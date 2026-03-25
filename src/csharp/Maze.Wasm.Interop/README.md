@@ -10,7 +10,7 @@ It exposes a singleton instance of a `MazeWasmInterop` object, which can be acce
 var instance = MazeWasmInterop.GetInstance();
 ```
 
-The `GetInstance()` function enforces the singleton instance and, on initialisation, loads the `maze_wasm` WebAssembly and any required function entry points within it. If any functions are found to be missing, an exception will be thrown. By default, `GetInstance()` will use `Wasmtime` as the interop `ConnectionTYpe`, but the caller can override this if required. In the case of `Android` and `iOS` it is necesary to use the `Wasmer` connection type to interact with the WebAssembly as this binds in a static version of the libary in accordance with Apple policies. The different `Wasmer` interop runtimes can be found in the `runtimes` sub-directory. 
+The `GetInstance()` function enforces the singleton instance and, on initialisation, loads the `maze_wasm` WebAssembly and any required function entry points within it. If any functions are found to be missing, an exception will be thrown. By default, `GetInstance()` will use `Wasmtime` as the interop `ConnectionType`, but the caller can override this if required. On `Android`, the `Wasmer` connection type must be used (it bundles a static version of the Wasmer library). On iOS physical devices, the `NativeIOS` connection type must be used — this P/Invokes directly into the `maze_c` native `staticlib` (`libmaze_c.a`) and requires no WebAssembly runtime. The different native runtimes can be found in the `runtimes` sub-directory.
 
 Once the instance is obtained, the caller can execute methods to create and interact with `maze_wasm` objects. It is important that any object pointers that are returned to the caller are released using the appropriate `MazeWasmInterop` method. For example, to create a new maze, resize it to 10 rows by 5 columns and display the number of rows and columns, the following code can be used:
 
@@ -229,53 +229,32 @@ Testing can be performed via the [`Maze.Wasm.Interop.Tests`](../Maze.Wasm.Intero
     This should result in `libwasmer.a`, `libwasmer.d` and `libwasmer.dylib` (along with others) being generated in the `~/wasmer/target/aarch64-apple-ios-sim/release` directory. The file of interest is the static library file `libwasmer.a`, which should be copied into `Maze.Maui.App/runtimes/ios-sim-arm64/native`.
 
 
-#### 3. Building the C API for iOS (on macOS)
+#### 3. Building the Native Library for iOS Physical Devices (`libmaze_c.a`)
 
-- Ensure Xcode is installed for building iOS libraries
+iOS physical devices enforce W^X (Write XOR Execute) — Apple's code-signing policy prohibits JIT-style executable page creation at runtime. Wasmer's Cranelift backend requires this and will crash on device with `EXC_BAD_ACCESS / CODESIGNING 2`. The `maze_c` native Rust staticlib is used instead, compiled directly into the app via `DllImport("__Internal")`.
 
-- Verify `Xcode` and command-line tools:
-    ```
-    xcodebuild -version
-    ```
-    Install the `XCode` command-lien tools if not already installed:
-    ```
-    xcode-select --install
-    ```
-- Ensure Clang is available:
-    ```
-    xcrun --sdk iphonesimulator -f clang
-    ```
-    This should return the path to the clang executable, such as:
-    ```
-    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang
-    ```
-- Set Environment Variables:
-    ```
-    export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
-    export CC="$(xcrun --sdk iphoneos -f clang)"
-    export CFLAGS="-arch arm64 -isysroot $SDKROOT"
-    export LDFLAGS="-arch arm64 -isysroot $SDKROOT"    
-    ```
-- Download the `wasmer` repo to the root of your home directory:
-    ```
-    cd ~
-    git clone https://github.com/wasmerio/wasmer.git    
-    ```
-- Install Rust for iOS:
-    ```
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-    ```
+Building requires a Mac with Xcode and a Rust toolchain.
 
-- Add the `aarch64-apple-ios` target:
+- Add the iOS device target:
     ```
     rustup target add aarch64-apple-ios
     ```
 
-- Build Wasmer C API for iOS Simulator using the  `aarch64-apple-ios` target
+- Cross-compile `maze_c` for iOS device:
     ```
-    cd ~/wasmer/lib/c-api
-    cargo clean
-    cargo build --release --target aarch64-apple-ios --features c-api
+    cd src/rust
+    cargo build --release --target aarch64-apple-ios -p maze_c
     ```
-    This should result in `libwasmer.a`, `libwasmer.d` and `libwasmer.dylib` (along with others) being generated in the `~/wasmer/target/aarch64-apple-iosrelease` directory. The file of interest is the static library file `libwasmer.a`, which should be copied into `Maze.Maui.App/runtimes/ios-arm64/native`.
- 
+
+- Copy the resulting `libmaze_c.a` into the interop runtimes directory:
+    ```
+    cp target/aarch64-apple-ios/release/libmaze_c.a \
+       ../csharp/Maze.Wasm.Interop/runtimes/ios-arm64/native/libmaze_c.a
+    ```
+
+- Verify it targets the correct platform (should show `platform 2`):
+    ```
+    otool -l runtimes/ios-arm64/native/libmaze_c.a | grep platform
+    ```
+
+The `MazeCConnector` C# class (`MazeCConnector.cs`) calls these symbols via `[DllImport("__Internal")]` when `ConnectionType.NativeIOS` is selected. See [`maze_c`](../../../rust/maze_c/README.md) for the full C API reference.

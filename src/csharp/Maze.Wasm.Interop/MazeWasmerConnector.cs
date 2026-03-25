@@ -1,4 +1,5 @@
-﻿namespace Maze.Wasm.Interop
+﻿#if !IOS
+namespace Maze.Wasm.Interop
 {
     using System.Runtime.InteropServices;
     using System.Text;
@@ -677,11 +678,11 @@
     ///  
     /// Developers can use <see cref="MazeWasmConnectorBase.NewMazeWasm()">NewMazeWasm()</see> to create
     /// a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see>, 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmGenerate(UInt32,UInt32)">MazeWasmGenerate()</see>, and 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmSolve(UInt32)">MazeWasmSolve()</see>, to interact with the maze.
-    ///  
-    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UInt32)">FreeMazeWasm()</see>
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UIntPtr,uint,uint)">MazeWasmInsertRows()</see>,
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmGenerate(UIntPtr,UIntPtr)">MazeWasmGenerate()</see>, and
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmSolve(UIntPtr)">MazeWasmSolve()</see>, to interact with the maze.
+    ///
+    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UIntPtr)">FreeMazeWasm()</see>
     /// to prevent memory leaks within Web Assembly.
     /// </summary>
     class MazeWasmerConnector : MazeWasmConnectorBase, IMazeWasmConnector
@@ -786,45 +787,57 @@
         /// <returns>Nothing</returns>
         private void InitializeModule(byte[]? wasmBytes)
         {
+            Console.WriteLine("[MazeWasmerConnector] Creating engine...");
             _engine = WasmerInterop.wasm_engine_new();
             if (_engine == IntPtr.Zero)
             {
                 throw new Exception("Failed to create Wasmer engine.");
             }
+            Console.WriteLine("[MazeWasmerConnector] Engine created.");
+
+            Console.WriteLine("[MazeWasmerConnector] Creating store...");
             _store = WasmerInterop.wasm_store_new(_engine);
             if (_store == IntPtr.Zero)
             {
                 throw new Exception("Failed to create Wasm store.");
             }
+            Console.WriteLine("[MazeWasmerConnector] Store created.");
 
             if(wasmBytes is null)
                 wasmBytes = File.ReadAllBytes(wasmPathOrName);
 
+            Console.WriteLine($"[MazeWasmerConnector] Wasm bytes loaded: {wasmBytes.Length} bytes.");
             _wasmVec = new WasmerInterop.wasm_byte_vec_t();
 
             _handle = GCHandle.Alloc(wasmBytes, GCHandleType.Pinned);
 
             WasmerInterop.wasm_byte_vec_new(ref _wasmVec, (nuint)wasmBytes.Length, _handle.AddrOfPinnedObject());
 
+            Console.WriteLine("[MazeWasmerConnector] Validating module...");
             bool isValid = WasmerInterop.wasm_module_validate(_store, ref _wasmVec);
 
             if (!isValid)
             {
                 throw new Exception("Web assembly module is invalid.");
             }
+            Console.WriteLine("[MazeWasmerConnector] Module valid.");
 
+            Console.WriteLine("[MazeWasmerConnector] Creating module...");
             _module = WasmerInterop.wasm_module_new(_store, ref _wasmVec);
             if (_module == IntPtr.Zero)
             {
                 throw new Exception($"Failed to create Wasm module: {WasmerInterop.GetLastError()}");
             }
+            Console.WriteLine("[MazeWasmerConnector] Module created.");
 
+            Console.WriteLine("[MazeWasmerConnector] Instantiating module...");
             _instance = WasmerInterop.wasm_instance_new(_store, _module, ref _emptyImports, IntPtr.Zero);
             if (_instance == IntPtr.Zero)
             {
                 string errorMessage = WasmerInterop.GetLastError();
                 throw new Exception($"Failed to instantiate module => {errorMessage}");
             }
+            Console.WriteLine("[MazeWasmerConnector] Module instantiated successfully.");
         }
         /// <summary>
         /// Attempts to initializes the WebAssembly pointers (functions, memory) associated with the instance. 
@@ -833,13 +846,17 @@
         /// <returns>Nothing</returns>
         private void InitializePointers()
         {
+            Console.WriteLine("[MazeWasmerConnector] Getting instance exports...");
             WasmerInterop.wasm_instance_exports(_instance, ref _instanceExports /* wasm_extern_vec_t * */);
+            Console.WriteLine($"[MazeWasmerConnector] Instance exports: {_instanceExports.size}");
             WasmerInterop.wasm_module_exports(_module, ref _moduleExports);
+            Console.WriteLine($"[MazeWasmerConnector] Module exports: {_moduleExports.size}");
 
             InitializeFunctionMap();
 
             for (int i = 0; i < (int)_moduleExports.size; i++)
             {
+                Console.WriteLine($"[MazeWasmerConnector] Processing export {i}...");
                 IntPtr exportTypePtr = Marshal.ReadIntPtr(_moduleExports.data, i * IntPtr.Size);
                 IntPtr exportTypeNamePtr = WasmerInterop.wasm_exporttype_name(exportTypePtr);
                 WasmerInterop.wasm_byte_vec_t rawBytes = Marshal.PtrToStructure<WasmerInterop.wasm_byte_vec_t>(exportTypeNamePtr);
@@ -863,8 +880,10 @@
                 }
             }
 
+            Console.WriteLine("[MazeWasmerConnector] Export loop complete. Verifying...");
             VerifyFunctions();
             VerifyMemoryPtrs();
+            Console.WriteLine("[MazeWasmerConnector] InitializePointers complete.");
         }
         /// <summary>
         /// Initializes the function map associated with the instance, which is used to
@@ -960,3 +979,4 @@
         }
     }
 }
+#endif // !IOS

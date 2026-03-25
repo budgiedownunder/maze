@@ -14,7 +14,7 @@ namespace Maze.Api
         // Private data
         static MazeWasmInterop _interop = MazeWasmInterop.GetInstance(); // Used when UseStaticInterop = true
         private bool _disposed = false;
-        private UInt32 _solutionWasmPtr = default;
+        private UIntPtr _solutionWasmPtr = default;
         /// <summary>
         /// Controls whether the object uses a statically defined [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) instance (default = `true`). If
         /// `false`, then the maze determines the current instance on a per-API call basis.
@@ -37,7 +37,7 @@ namespace Maze.Api
         /// </summary>
         /// <param name="solutionWasmPtr">[Maze.Wasm.Interop](xref:Maze.Wasm.Interop) solution pointer</param>
         /// <returns>New solution instance</returns>
-        public Solution(UInt32 solutionWasmPtr)
+        public Solution(UIntPtr solutionWasmPtr)
         {
             _solutionWasmPtr = solutionWasmPtr;
         }
@@ -62,10 +62,10 @@ namespace Maze.Api
             if (!_disposed)
             {
                 // Dispose unmanaged resources
-                if (_solutionWasmPtr != 0)
+                if (_solutionWasmPtr != UIntPtr.Zero)
                 {
                     Interop.FreeMazeWasmSolution(_solutionWasmPtr);
-                    _solutionWasmPtr = 0;
+                    _solutionWasmPtr = UIntPtr.Zero;
                 }
 
                 _disposed = true;

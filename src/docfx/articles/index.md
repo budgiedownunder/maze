@@ -19,6 +19,7 @@ The following components are present:
 | `Rust`       | [`auth`](../api/rust/auth/view_content.md)                                     | Authentication library
 |              | [`data_model`](../api/rust/data_model/view_content.md)                         | Data model library
 |              | [`maze`](../api/rust/maze/view_content.md)                                     | Maze definition and calculation library
+|              | [`maze_c`](../api/rust/maze_c/view_content.md)                                 | Maze C API library
 |              | [`maze_console`](../api/rust/maze_console/view_content.md)                     | Maze console application
 |              | [`maze_openapi_generator`](../api/rust/maze_openapi_generator/view_content.md) | Maze OpenAPI generator console application
 |              | [`maze_wasm`](../api/rust/maze_wasm/view_content.md)                           | Maze WebAssembly API library

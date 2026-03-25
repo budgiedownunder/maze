@@ -13,24 +13,14 @@ namespace Maze.Maui.App
             string? nativeLibraryDir = Android.App.Application.Context.ApplicationInfo?.NativeLibraryDir;
             if(nativeLibraryDir is not null)
             {
-                Console.WriteLine($"*********** => Native library directory: {nativeLibraryDir}");
                 var wasmerLibFilePath = System.IO.Path.Combine(nativeLibraryDir, "libwasmer.so");
-                Console.WriteLine($"************* => {wasmerLibFilePath} exist = {File.Exists(wasmerLibFilePath)}");
-
                 try
                 {
                     IntPtr libHandle = NativeLibrary.Load(wasmerLibFilePath);
-
-                    // If successful, log success
-                    Console.WriteLine($"************* => {wasmerLibFilePath} successfully loaded");
-
-                    // Free the library to release resources
                     NativeLibrary.Free(libHandle);
-
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    Console.WriteLine($"\"************* Error loading {wasmerLibFilePath}: {ex.Message}");
                 }
             }
         }

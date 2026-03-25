@@ -34,7 +34,7 @@
 		<Nullable>enable</Nullable>
 
 		<!-- Display name -->
-		<ApplicationTitle>Maze Maui App</ApplicationTitle>
+		<ApplicationTitle>Maze</ApplicationTitle>
 
 		<!-- App Identifier -->
 		<ApplicationId>com.budgiedownunder.mazemauiapp</ApplicationId>
@@ -43,7 +43,7 @@
 		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
 		<ApplicationVersion>1</ApplicationVersion>
 
-		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">11.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">12.2</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">13.1</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">21.0</SupportedOSPlatformVersion>
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
@@ -54,11 +54,6 @@
 	<PropertyGroup>
 		<Title>BudgieDownUnder Maze App (MAUI)</Title>
 		<Description>BudgieDownUnder's Maze Application (MAUI)</Description>
-	</PropertyGroup>
-
-	<PropertyGroup Condition="'$(TargetFramework)'=='net10.0-ios'">
-	  <CodesignKey>Apple Development: Created via API (C8RQ5QK2RZ)</CodesignKey>
-	  <CodesignProvision>VS: WildCard Development</CodesignProvision>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -99,9 +94,25 @@
 
   <PropertyGroup>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net10.0-android'">android-x64</RuntimeIdentifier>
-    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net10.0-ios'">ios-arm64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(TargetFramework)' == 'net10.0-windows10.0.19041.0'">win-x64</RuntimeIdentifier>
   </PropertyGroup>
+
+  <!-- iOS native static libraries (NativeReference must live in the app project to reach the link phase) -->
+  <!-- Simulator: VS explicitly passes iossimulator-arm64 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios' And $(RuntimeIdentifier.Contains('simulator'))">
+    <NativeReference Include="..\Maze.Wasm.Interop\runtimes\ios-sim-arm64\native\libmaze_c.a">
+      <Kind>Static</Kind>
+      <SmartLink>false</SmartLink>
+    </NativeReference>
+  </ItemGroup>
+
+  <!-- Device: covers ios-arm64 AND empty/unset RID (VS passes no RID for device builds) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios' And !$(RuntimeIdentifier.Contains('simulator'))">
+    <NativeReference Include="..\Maze.Wasm.Interop\runtimes\ios-arm64\native\libmaze_c.a">
+      <Kind>Static</Kind>
+      <SmartLink>false</SmartLink>
+    </NativeReference>
+  </ItemGroup>
 
   <Target Name="DebugRuntimeIdentifier" AfterTargets="Build">
     <Message Importance="high" Text="RuntimeIdentifier: $(RuntimeIdentifier)" />
@@ -181,6 +192,12 @@
   
   <PropertyGroup>
 	<NoWarn>$(NoWarn);1591;MVVMTK0045</NoWarn>
+  </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(TargetFramework)'=='net10.0-ios'">
+    <ProvisioningType>automatic</ProvisioningType>
+    <CodesignKey>Apple Development: Created via API (D2WCKC3ZC4)</CodesignKey>
+    <CodesignProvision>VS: com.budgiedownunder.mazemauiapp Development</CodesignProvision>
   </PropertyGroup>
   
 </Project>

@@ -1,4 +1,5 @@
-﻿namespace Maze.Wasm.Interop
+﻿#if !IOS && !ANDROID
+namespace Maze.Wasm.Interop
 {
     using System.Text;
     using Wasmtime;
@@ -162,11 +163,11 @@
     ///  
     /// Developers can use <see cref="MazeWasmConnectorBase.NewMazeWasm()">NewMazeWasm()</see> to create
     /// a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UInt32,UInt32,UInt32)">MazeWasmInsertRows()</see>, 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmGenerate(UInt32,UInt32)">MazeWasmGenerate()</see>, and 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmSolve(UInt32)">MazeWasmSolve()</see>, to interact with the maze.
-    ///  
-    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UInt32)">FreeMazeWasm()</see>
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UIntPtr,uint,uint)">MazeWasmInsertRows()</see>,
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmGenerate(UIntPtr,UIntPtr)">MazeWasmGenerate()</see>, and
+    ///  <see cref="MazeWasmConnectorBase.MazeWasmSolve(UIntPtr)">MazeWasmSolve()</see>, to interact with the maze.
+    ///
+    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UIntPtr)">FreeMazeWasm()</see>
     /// to prevent memory leaks within Web Assembly.
     /// </summary>
     class MazeWasmtimeConnector : MazeWasmConnectorBase, IMazeWasmConnector
@@ -320,3 +321,4 @@
         }
      }
 }
+#endif

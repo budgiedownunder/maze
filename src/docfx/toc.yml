@@ -2,6 +2,7 @@
   href: articles/
 - name: .NET APIs
   href: api/net/
+  topicHref: api/net/index.md
 - name: JavaScript APIs
   href: api/js/index.md
 - name: Rust APIs

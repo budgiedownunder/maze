@@ -1,4 +1,4 @@
-# `Maze.Wasm.Interop>.Tests` Assembly
+# `Maze.Wasm.Interop.Tests` Assembly
 
 ## Introduction
 
