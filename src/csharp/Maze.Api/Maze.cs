@@ -14,7 +14,7 @@ namespace Maze.Api
         // Private data
         static MazeWasmInterop _interop = MazeWasmInterop.GetInstance(); // Used when UseStaticInterop = true
         private bool _disposed = false;
-        private UInt32 _mazeWasmPtr = default;
+        private UIntPtr _mazeWasmPtr = default;
         /// <summary>
         /// Controls whether the object uses a statically defined [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) instance (default = `true`). If
         /// `false`, then the maze determines the current instance on a per-API call basis.
@@ -151,7 +151,7 @@ namespace Maze.Api
         public Maze(UInt32 rowCount, UInt32 colCount)
         {
             _mazeWasmPtr = Interop.NewMazeWasm();
-            if (_mazeWasmPtr == 0)
+            if (_mazeWasmPtr == UIntPtr.Zero)
             {
                 throw new Exception("interop.NewMazeWasm() failed to create maze (zero returned)");
             }
@@ -166,7 +166,7 @@ namespace Maze.Api
         {
             Maze maze = new Maze(0, 0);
             MazeWasmGenerationAlgorithm wasmAlgorithm = (MazeWasmGenerationAlgorithm)(byte)options.Algorithm;
-            UInt32 optionsPtr = maze.Interop.NewGeneratorOptionsWasm(
+            UIntPtr optionsPtr = maze.Interop.NewGeneratorOptionsWasm(
                 options.RowCount,
                 options.ColCount,
                 wasmAlgorithm,
@@ -212,10 +212,10 @@ namespace Maze.Api
             if (!_disposed)
             {
                 // Dispose unmanaged resources
-                if (_mazeWasmPtr != 0)
+                if (_mazeWasmPtr != UIntPtr.Zero)
                 {
                     Interop.FreeMazeWasm(_mazeWasmPtr);
-                    _mazeWasmPtr = 0;
+                    _mazeWasmPtr = UIntPtr.Zero;
                 }
 
                 _disposed = true;
@@ -423,7 +423,7 @@ namespace Maze.Api
         /// <returns>Maze solution</returns>
         public global::Maze.Api.Solution Solve()
         {
-            UInt32 solutionPtr = Interop.MazeWasmSolve(_mazeWasmPtr);
+            UIntPtr solutionPtr = Interop.MazeWasmSolve(_mazeWasmPtr);
             return new global::Maze.Api.Solution(solutionPtr);
         }
     }

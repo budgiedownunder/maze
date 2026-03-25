@@ -1,20 +1,20 @@
-# `Maze.Wasm.Services` Assembly
+# `Maze.Maui.Services` Assembly
 
 ## Introduction
 
-The `Maze.Wasm.Services` .NET assembly is written in `C#` and provides custom service functionality to insulate the calling code from platform specifics, such as determining the current device capabilities.
+The `Maze.Maui.Services` .NET assembly is written in `C#` and provides custom service functionality to insulate the calling code from platform specifics, such as determining the current device capabilities.
 
 ## Getting Started
 
 ### Setup
-To setup the build environment, run the following from the `Maze.Wasm.Services` directory:
+To setup the build environment, run the following from the `Maze.Maui.Services` directory:
 
 ```
 dotnet restore
 ```
 
 ### Build
-To build the `Maze.Wasm.Services` assembly, run the following from the `Maze.Wasm.Services` directory:
+To build the `Maze.Maui.Services` assembly, run the following from the `Maze.Maui.Services` directory:
 
 ```
 dotnet build

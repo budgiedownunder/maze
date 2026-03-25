@@ -34,7 +34,12 @@
             /// <summary>
             /// The [Wasmer](https://wasmer.io/) WebAssembly runtime
             /// </summary>
-            Wasmer = 2
+            Wasmer = 2,
+            /// <summary>
+            /// Native iOS static library (`maze_c`) — no WebAssembly runtime required.
+            /// Uses P/Invoke into the statically-linked `libmaze_c.a`.
+            /// </summary>
+            NativeIOS = 3
         }
         // Singleton instance
         private static MazeWasmInterop? instance = null;
@@ -131,6 +136,11 @@
                 case ConnectionType.Wasmer:
                     connector = new MazeWasmerConnector(wasmPathOrName, wasmBytes);
                     break;
+#if IOS
+                case ConnectionType.NativeIOS:
+                    connector = new MazeCConnector();
+                    break;
+#endif
                 default:
                     throw new InvalidOperationException($"Unsupported connection type: {connectionType}");
             }
@@ -270,8 +280,8 @@
         /// <summary>
         /// Creates a new, empty `MazeWasm`, or will throw an exception if the operation fails
         /// </summary>
-        /// <returns>Pointer to the `MazeWasm`, which should later be freed by calling <see cref="FreeMazeWasm(UInt32)">FreeMazeWasm()</see></returns>
-        public UInt32 NewMazeWasm()
+        /// <returns>Pointer to the `MazeWasm`, which should later be freed by calling <see cref="FreeMazeWasm(UIntPtr)">FreeMazeWasm()</see></returns>
+        public UIntPtr NewMazeWasm()
         {
             return connector.NewMazeWasm();
         }
@@ -280,7 +290,7 @@
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to `MazeWasm`</param>
         /// <returns>Nothing</returns>
-        public void FreeMazeWasm(UInt32 mazeWasmPtr)
+        public void FreeMazeWasm(UIntPtr mazeWasmPtr)
         {
             connector.FreeMazeWasm(mazeWasmPtr);
         }
@@ -289,7 +299,7 @@
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Boolean</returns>
-        public bool MazeWasmIsEmpty(UInt32 mazeWasmPtr)
+        public bool MazeWasmIsEmpty(UIntPtr mazeWasmPtr)
         {
             return connector.MazeWasmIsEmpty(mazeWasmPtr);
         }
@@ -300,7 +310,7 @@
         /// <param name="newRowCount">New number of rows</param>
         /// <param name="newColCount">New number of columns</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmResize(UInt32 mazeWasmPtr, UInt32 newRowCount, UInt32 newColCount)
+        public void MazeWasmResize(UIntPtr mazeWasmPtr, UInt32 newRowCount, UInt32 newColCount)
         {
             connector.MazeWasmResize(mazeWasmPtr, newRowCount, newColCount);
         }
@@ -309,7 +319,7 @@
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmReset(UInt32 mazeWasmPtr)
+        public void MazeWasmReset(UIntPtr mazeWasmPtr)
         {
             connector.MazeWasmReset(mazeWasmPtr);
         }
@@ -318,7 +328,7 @@
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Row count</returns>
-        public UInt32 MazeWasmGetRowCount(UInt32 mazeWasmPtr)
+        public UInt32 MazeWasmGetRowCount(UIntPtr mazeWasmPtr)
         {
             return connector.MazeWasmGetRowCount(mazeWasmPtr);
         }
@@ -327,7 +337,7 @@
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Column count</returns>
-        public UInt32 MazeWasmGetColCount(UInt32 mazeWasmPtr)
+        public UInt32 MazeWasmGetColCount(UIntPtr mazeWasmPtr)
         {
             return connector.MazeWasmGetColCount(mazeWasmPtr);
         }
@@ -339,7 +349,7 @@
         /// <param name="row">Target row</param>
         /// <param name="col">Target column</param>
         /// <returns>Cell type</returns>
-        public MazeWasmCellType MazeWasmGetCellType(UInt32 mazeWasmPtr, UInt32 row, UInt32 col)
+        public MazeWasmCellType MazeWasmGetCellType(UIntPtr mazeWasmPtr, UInt32 row, UInt32 col)
         {
             return connector.MazeWasmGetCellType(mazeWasmPtr, row, col);
         }
@@ -351,7 +361,7 @@
         /// <param name="startRow">New start cell row</param>
         /// <param name="startCol">New start cell column</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmSetStartCell(UInt32 mazeWasmPtr, UInt32 startRow, UInt32 startCol)
+        public void MazeWasmSetStartCell(UIntPtr mazeWasmPtr, UInt32 startRow, UInt32 startCol)
         {
             connector.MazeWasmSetStartCell(mazeWasmPtr, startRow, startCol);
         }
@@ -361,7 +371,7 @@
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Start cell point</returns>
-        public MazeWasmPoint MazeWasmGetStartCell(UInt32 mazeWasmPtr)
+        public MazeWasmPoint MazeWasmGetStartCell(UIntPtr mazeWasmPtr)
         {
             return connector.MazeWasmGetStartCell(mazeWasmPtr);
         }
@@ -373,9 +383,9 @@
         /// <param name="finishRow">New finish cell row</param>
         /// <param name="finishCol">New finsh cell column</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmSetFinishCell(UInt32 mazeWasmPtr, UInt32 finishRow, UInt32 finishCol)
+        public void MazeWasmSetFinishCell(UIntPtr mazeWasmPtr, UInt32 finishRow, UInt32 finishCol)
         {
-            connector.MazeWasmSetFinishCell(mazeWasmPtr , finishRow , finishCol);
+            connector.MazeWasmSetFinishCell(mazeWasmPtr, finishRow, finishCol);
         }
         /// <summary>
         /// Gets the finish cell associated with a `MazeWasm`, or will throw an exception
@@ -383,7 +393,7 @@
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Finish cell point</returns>
-        public MazeWasmPoint MazeWasmGetFinishCell(UInt32 mazeWasmPtr)
+        public MazeWasmPoint MazeWasmGetFinishCell(UIntPtr mazeWasmPtr)
         {
             return connector.MazeWasmGetFinishCell(mazeWasmPtr);
         }
@@ -397,7 +407,7 @@
         /// <param name="endRow">Target end row</param>
         /// <param name="endCol">Target end column</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmSetWallCells(UInt32 mazeWasmPtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        public void MazeWasmSetWallCells(UIntPtr mazeWasmPtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             connector.MazeWasmSetWallCells(mazeWasmPtr, startRow, startCol, endRow, endCol);
         }
@@ -411,7 +421,7 @@
         /// <param name="endRow">Target end row</param>
         /// <param name="endCol">Target end column</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmClearCells(UInt32 mazeWasmPtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        public void MazeWasmClearCells(UIntPtr mazeWasmPtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             connector.MazeWasmClearCells(mazeWasmPtr, startRow, startCol, endRow, endCol);
         }
@@ -422,7 +432,7 @@
         /// <param name="startRow">Target start row</param>
         /// <param name="count">Number rows to insert</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmInsertRows(UInt32 mazeWasmPtr, UInt32 startRow, UInt32 count)
+        public void MazeWasmInsertRows(UIntPtr mazeWasmPtr, UInt32 startRow, UInt32 count)
         {
             connector.MazeWasmInsertRows(mazeWasmPtr, startRow, count);
         }
@@ -433,7 +443,7 @@
         /// <param name="startRow">Target start row</param>
         /// <param name="count">Number rows to delete</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmDeleteRows(UInt32 mazeWasmPtr, UInt32 startRow, UInt32 count)
+        public void MazeWasmDeleteRows(UIntPtr mazeWasmPtr, UInt32 startRow, UInt32 count)
         {
             connector.MazeWasmDeleteRows(mazeWasmPtr, startRow, count);
         }
@@ -444,7 +454,7 @@
         /// <param name="startCol">Target start column</param>
         /// <param name="count">Number columns to insert</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmInsertCols(UInt32 mazeWasmPtr, UInt32 startCol, UInt32 count)
+        public void MazeWasmInsertCols(UIntPtr mazeWasmPtr, UInt32 startCol, UInt32 count)
         {
             connector.MazeWasmInsertCols(mazeWasmPtr, startCol, count);
         }
@@ -455,7 +465,7 @@
         /// <param name="startCol">Target start column</param>
         /// <param name="count">Number columns to delete</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmDeleteCols(UInt32 mazeWasmPtr, UInt32 startCol, UInt32 count)
+        public void MazeWasmDeleteCols(UIntPtr mazeWasmPtr, UInt32 startCol, UInt32 count)
         {
             connector.MazeWasmDeleteCols(mazeWasmPtr, startCol, count);
         }
@@ -465,7 +475,7 @@
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <param name="json">JSON strimg</param>
         /// <returns>Nothing</returns>
-        public void MazeWasmFromJson(UInt32 mazeWasmPtr, string json)
+        public void MazeWasmFromJson(UIntPtr mazeWasmPtr, string json)
         {
             connector.MazeWasmFromJson(mazeWasmPtr, json);
         }
@@ -474,19 +484,19 @@
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>JSON string</returns>
-        public string MazeWasmToJson(UInt32 mazeWasmPtr)
+        public string MazeWasmToJson(UIntPtr mazeWasmPtr)
         {
             return connector.MazeWasmToJson(mazeWasmPtr);
         }
         /// <summary>
-        /// Solves a maze, else will throw an exception if the operation fails. 
+        /// Solves a maze, else will throw an exception if the operation fails.
         ///
-        /// If successful, use <see cref="MazeWasmSolutionGetPathPoints(UInt32)">MazeWasmSolutionGetPathPoints()</see> to obtain the
+        /// If successful, use <see cref="MazeWasmSolutionGetPathPoints(UIntPtr)">MazeWasmSolutionGetPathPoints()</see> to obtain the
         /// solution path.
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
-        /// <returns>Solution pointer, which should later be freed by calling <see cref="FreeMazeWasmSolution(UInt32)">FreeMazeWasmSolution()</see></returns>
-        public UInt32 MazeWasmSolve(UInt32 mazeWasmPtr)
+        /// <returns>Solution pointer, which should later be freed by calling <see cref="FreeMazeWasmSolution(UIntPtr)">FreeMazeWasmSolution()</see></returns>
+        public UIntPtr MazeWasmSolve(UIntPtr mazeWasmPtr)
         {
             return connector.MazeWasmSolve(mazeWasmPtr);
         }
@@ -495,7 +505,7 @@
         /// </summary>
         /// <param name="solutionPtr">Pointer to solution</param>
         /// <returns>List of points</returns>
-        public List<MazeWasmPoint> MazeWasmSolutionGetPathPoints(UInt32 solutionPtr)
+        public List<MazeWasmPoint> MazeWasmSolutionGetPathPoints(UIntPtr solutionPtr)
         {
             return connector.MazeWasmSolutionGetPathPoints(solutionPtr);
         }
@@ -504,7 +514,7 @@
         /// </summary>
         /// <param name="solutionPtr">Pointer to solution</param>
         /// <returns>Nothing</returns>
-        public void FreeMazeWasmSolution(UInt32 solutionPtr)
+        public void FreeMazeWasmSolution(UIntPtr solutionPtr)
         {
             connector.FreeMazeWasmSolution(solutionPtr);
         }
@@ -551,43 +561,43 @@
         /// <param name="colCount">Number of columns to generate</param>
         /// <param name="algorithm">Generation algorithm</param>
         /// <param name="seed">Random number generator seed for deterministic generation</param>
-        /// <returns>Pointer to the <c>GeneratorOptionsWasm</c>, which should later be freed by calling <see cref="FreeGeneratorOptionsWasm(UInt32)">FreeGeneratorOptionsWasm()</see></returns>
-        public UInt32 NewGeneratorOptionsWasm(UInt32 rowCount, UInt32 colCount, MazeWasmGenerationAlgorithm algorithm, UInt64 seed)
+        /// <returns>Pointer to the <c>GeneratorOptionsWasm</c>, which should later be freed by calling <see cref="FreeGeneratorOptionsWasm(UIntPtr)">FreeGeneratorOptionsWasm()</see></returns>
+        public UIntPtr NewGeneratorOptionsWasm(UInt32 rowCount, UInt32 colCount, MazeWasmGenerationAlgorithm algorithm, UInt64 seed)
         {
             return connector.NewGeneratorOptionsWasm(rowCount, colCount, algorithm, seed);
         }
         /// <summary>
         /// Sets the start cell on a <c>GeneratorOptionsWasm</c>
         /// </summary>
-        public void GeneratorOptionsSetStart(UInt32 optionsPtr, UInt32 row, UInt32 col)
+        public void GeneratorOptionsSetStart(UIntPtr optionsPtr, UInt32 row, UInt32 col)
         {
             connector.GeneratorOptionsSetStart(optionsPtr, row, col);
         }
         /// <summary>
         /// Sets the finish cell on a <c>GeneratorOptionsWasm</c>
         /// </summary>
-        public void GeneratorOptionsSetFinish(UInt32 optionsPtr, UInt32 row, UInt32 col)
+        public void GeneratorOptionsSetFinish(UIntPtr optionsPtr, UInt32 row, UInt32 col)
         {
             connector.GeneratorOptionsSetFinish(optionsPtr, row, col);
         }
         /// <summary>
         /// Sets the minimum spine length on a <c>GeneratorOptionsWasm</c>
         /// </summary>
-        public void GeneratorOptionsSetMinSpineLength(UInt32 optionsPtr, UInt32 value)
+        public void GeneratorOptionsSetMinSpineLength(UIntPtr optionsPtr, UInt32 value)
         {
             connector.GeneratorOptionsSetMinSpineLength(optionsPtr, value);
         }
         /// <summary>
         /// Sets the maximum retries on a <c>GeneratorOptionsWasm</c>
         /// </summary>
-        public void GeneratorOptionsSetMaxRetries(UInt32 optionsPtr, UInt32 value)
+        public void GeneratorOptionsSetMaxRetries(UIntPtr optionsPtr, UInt32 value)
         {
             connector.GeneratorOptionsSetMaxRetries(optionsPtr, value);
         }
         /// <summary>
         /// Sets the branch_from_finish flag on a <c>GeneratorOptionsWasm</c> (0 = false, 1 = true)
         /// </summary>
-        public void GeneratorOptionsSetBranchFromFinish(UInt32 optionsPtr, byte value)
+        public void GeneratorOptionsSetBranchFromFinish(UIntPtr optionsPtr, byte value)
         {
             connector.GeneratorOptionsSetBranchFromFinish(optionsPtr, value);
         }
@@ -596,7 +606,7 @@
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to <c>MazeWasm</c></param>
         /// <param name="optionsPtr">Pointer to <c>GeneratorOptionsWasm</c></param>
-        public void MazeWasmGenerate(UInt32 mazeWasmPtr, UInt32 optionsPtr)
+        public void MazeWasmGenerate(UIntPtr mazeWasmPtr, UIntPtr optionsPtr)
         {
             connector.MazeWasmGenerate(mazeWasmPtr, optionsPtr);
         }
@@ -604,7 +614,7 @@
         /// Frees a <c>GeneratorOptionsWasm</c> pointer
         /// </summary>
         /// <param name="optionsPtr">Pointer to <c>GeneratorOptionsWasm</c></param>
-        public void FreeGeneratorOptionsWasm(UInt32 optionsPtr)
+        public void FreeGeneratorOptionsWasm(UIntPtr optionsPtr)
         {
             connector.FreeGeneratorOptionsWasm(optionsPtr);
         }

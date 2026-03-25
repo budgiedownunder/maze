@@ -1,4 +1,4 @@
 [workspace]
 
-members = [ "auth", "data_model", "maze", "maze_console", "maze_openapi_generator", "maze_wasm", "maze_web_server", "storage", "utils"]
+members = [ "auth", "data_model", "maze", "maze_c", "maze_console", "maze_openapi_generator", "maze_wasm", "maze_web_server", "storage", "utils"]
 resolver = "2"

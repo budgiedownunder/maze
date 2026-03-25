@@ -76,13 +76,21 @@ namespace Maze.Maui.App
             // TO DO - move to a service
             try
             {
-                using var stream = await FileSystem.OpenAppPackageFileAsync("maze_wasm.wasm");
-                using var memoryStream = new MemoryStream();
-                await stream.CopyToAsync(memoryStream);
-                byte[] wasmBytes2 = memoryStream.ToArray();
-                MazeWasmInterop.ConnectionType connectionType = OperatingSystem.IsIOS() || OperatingSystem.IsAndroid() 
-                    ? MazeWasmInterop.ConnectionType.Wasmer : MazeWasmInterop.ConnectionType.Wasmtime;
-                MazeWasmInterop interop2 = MazeWasmInterop.GetInstance(connectionType, true, wasmBytes2);
+                MazeWasmInterop.ConnectionType connectionType =
+                    OperatingSystem.IsIOS()     ? MazeWasmInterop.ConnectionType.NativeIOS :
+                    OperatingSystem.IsAndroid() ? MazeWasmInterop.ConnectionType.Wasmer :
+                                                MazeWasmInterop.ConnectionType.Wasmtime;
+
+                byte[]? wasmBytes = null;
+                if (!OperatingSystem.IsIOS())
+                {
+                    using var stream = await FileSystem.OpenAppPackageFileAsync("maze_wasm.wasm");
+                    using var ms = new MemoryStream();
+                    await stream.CopyToAsync(ms);
+                    wasmBytes = ms.ToArray();
+                }
+                MazeWasmInterop interop = MazeWasmInterop.GetInstance(connectionType, true, wasmBytes);
+                
             }
             catch (Exception ex)
             {

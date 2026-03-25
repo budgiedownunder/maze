@@ -1,6 +1,6 @@
 # Architecture 
 
-The high-level architecture of the system is summarised below and illustrates how the[`maze_wasm`](../api/rust/maze_wasm/view_content.md) WebAssembly is shared between both server/client-side applications and APIs:
+The high-level architecture of the system is summarised below and illustrates how the[`maze`](../api/rust/maze/view_content.md) library is shared between both server/client-side applications and APIs:
 
 ![Diagram](../images/architecture.png)
 

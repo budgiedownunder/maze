@@ -100,19 +100,17 @@
   <!-- iOS native static libraries (NativeReference must live in the app project to reach the link phase) -->
   <!-- Simulator: VS explicitly passes iossimulator-arm64 -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios' And $(RuntimeIdentifier.Contains('simulator'))">
-    <NativeReference Include="..\Maze.Wasm.Interop\runtimes\ios-sim-arm64\native\libwasmer.a">
+    <NativeReference Include="..\Maze.Wasm.Interop\runtimes\ios-sim-arm64\native\libmaze_c.a">
       <Kind>Static</Kind>
       <SmartLink>false</SmartLink>
-      <Frameworks>CoreFoundation</Frameworks>
     </NativeReference>
   </ItemGroup>
 
   <!-- Device: covers ios-arm64 AND empty/unset RID (VS passes no RID for device builds) -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-ios' And !$(RuntimeIdentifier.Contains('simulator'))">
-    <NativeReference Include="..\Maze.Wasm.Interop\runtimes\ios-arm64\native\libwasmer.a">
+    <NativeReference Include="..\Maze.Wasm.Interop\runtimes\ios-arm64\native\libmaze_c.a">
       <Kind>Static</Kind>
       <SmartLink>false</SmartLink>
-      <Frameworks>CoreFoundation</Frameworks>
     </NativeReference>
   </ItemGroup>
 

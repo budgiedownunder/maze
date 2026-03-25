@@ -7,6 +7,7 @@ The `maze` project contains the following `Rust` crates:
 | [`auth`](auth/view_content.md)                                     | Authentication library
 | [`data_model`](data_model/view_content.md)                         | Data model library
 | [`maze`](maze/view_content.md)                                     | Maze definition and calculation library
+| [`maze_c`](maze_c/view_content.md)                                 | Maze C API library
 | [`maze_console`](maze_console/view_content.md)                     | Maze console application
 | [`maze_openapi_generator`](maze_openapi_generator/view_content.md) | Maze OpenAPI generator console application
 | [`maze_wasm`](maze_wasm/view_content.md)                           | Maze WebAssembly API library

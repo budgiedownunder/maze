@@ -1,0 +1,15 @@
+[package]
+name = "maze_c"
+version = "0.1.0"
+edition = "2021"
+description = "maze_c native static library exposing maze logic via C interface"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+maze = { path = "../maze", features = ["generation"] }
+data_model = { path = "../data_model" }
+
+[dev-dependencies]
+pretty_assertions = "1"
