@@ -3,7 +3,7 @@
 
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
-title Component Diagram for Maze Project
+title Component Diagram for Maze
 
 Person(user, "User", "A user of the system")
 
