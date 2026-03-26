@@ -10,6 +10,7 @@
 
     <ContentPage.Resources>
         <toolkit:IsStringNotNullOrEmptyConverter x:Key="StringNotEmptyConverter" />
+        <toolkit:InvertedBoolConverter x:Key="InvertBoolConverter" />
     </ContentPage.Resources>
 
     <Grid VerticalOptions="FillAndExpand"
@@ -48,11 +49,34 @@
                        ReturnType="Next"
                        Keyboard="Plain" />
 
-                <Entry Placeholder="Password"
-                       Text="{Binding Password}"
-                       IsPassword="True"
-                       ReturnType="Go"
-                       ReturnCommand="{Binding SignInCommand}" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Entry Grid.Column="0"
+                           Placeholder="Password"
+                           Text="{Binding Password}"
+                           IsPassword="{Binding ShowPassword, Converter={StaticResource InvertBoolConverter}}"
+                           ReturnType="Go"
+                           ReturnCommand="{Binding SignInCommand}" />
+                    <ImageButton Grid.Column="1"
+                                 Source="icon_show_password.png"
+                                 Command="{Binding ToggleShowPasswordCommand}"
+                                 BackgroundColor="Transparent"
+                                 HeightRequest="32"
+                                 WidthRequest="32"
+                                 Padding="4"
+                                 VerticalOptions="Center">
+                        <ImageButton.Triggers>
+                            <DataTrigger TargetType="ImageButton"
+                                         Binding="{Binding ShowPassword}"
+                                         Value="True">
+                                <Setter Property="Source" Value="icon_hide_password.png" />
+                            </DataTrigger>
+                        </ImageButton.Triggers>
+                    </ImageButton>
+                </Grid>
 
                 <Label Text="{Binding ErrorMessage}"
                        TextColor="Red"
