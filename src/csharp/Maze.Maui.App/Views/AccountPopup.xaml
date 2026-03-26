@@ -16,10 +16,10 @@
             Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
 
-        <Grid VerticalOptions="FillAndExpand"
-              HorizontalOptions="FillAndExpand">
+        <Grid VerticalOptions="Fill"
+              HorizontalOptions="Fill">
 
-            <ScrollView VerticalOptions="FillAndExpand">
+            <ScrollView VerticalOptions="Fill">
                 <VerticalStackLayout Spacing="16"
                                      HorizontalOptions="Fill">
 
@@ -93,26 +93,26 @@
                     <Button Text="Save Profile"
                             Command="{Binding SaveProfileCommand}"
                             IsVisible="{Binding IsNotBusy}"
-                            HorizontalOptions="FillAndExpand" />
+                            HorizontalOptions="Fill" />
 
                     <Button Text="Change Password"
                             Command="{Binding ChangePasswordCommand}"
                             IsVisible="{Binding IsNotBusy}"
-                            HorizontalOptions="FillAndExpand"
+                            HorizontalOptions="Fill"
                             BackgroundColor="Transparent"
                             TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
 
                     <Button Text="Delete Account"
                             Command="{Binding DeleteAccountCommand}"
                             IsVisible="{Binding IsNotBusy}"
-                            HorizontalOptions="FillAndExpand"
+                            HorizontalOptions="Fill"
                             BackgroundColor="Red"
                             TextColor="White" />
 
                     <Button Text="Close"
                             Clicked="OnCloseClicked"
                             IsVisible="{Binding IsNotBusy}"
-                            HorizontalOptions="FillAndExpand"
+                            HorizontalOptions="Fill"
                             BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                             TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
 
@@ -121,8 +121,8 @@
 
             <ActivityIndicator IsVisible="{Binding IsBusy}"
                                IsRunning="{Binding IsBusy}"
-                               HorizontalOptions="FillAndExpand"
-                               VerticalOptions="CenterAndExpand" />
+                               HorizontalOptions="Fill"
+                               VerticalOptions="Center" />
 
         </Grid>
 
