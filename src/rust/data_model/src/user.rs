@@ -251,6 +251,8 @@ impl User {
     /// println!("Created login with id = {}", login.id);
     /// ```
     pub fn create_login(&mut self, expiry_hours: u32, ip_address: Option<String>, device_info: Option<String>) -> UserLogin {
+        let now = generate_now();
+        self.logins.retain(|login| login.expires_at > now);
         let login = UserLogin::new(expiry_hours, ip_address, device_info);
         self.logins.push(login.clone());
         login
@@ -341,6 +343,7 @@ impl User {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
     use pretty_assertions::{assert_eq, assert_ne};    
 
     #[test]
@@ -567,6 +570,34 @@ mod tests {
         assert!(user.contains_valid_login(login_id));
         user.remove_login(login_id);
         assert!(!user.contains_valid_login(login_id));
+    }
+
+    #[test]
+    fn create_login_purges_expired_logins() {
+        let mut user = create_valid_user();
+
+        // Add two expired logins directly
+        let expired_login = UserLogin {
+            id: generate_uuid(),
+            created_at: generate_now() - Duration::hours(48),
+            expires_at: generate_now() - Duration::hours(24),
+            device_info: None,
+            ip_address: None,
+        };
+        user.logins.push(expired_login.clone());
+        user.logins.push(UserLogin {
+            id: generate_uuid(),
+            created_at: generate_now() - Duration::hours(48),
+            expires_at: generate_now() - Duration::hours(24),
+            device_info: None,
+            ip_address: None,
+        });
+
+        // Add one valid login
+        let valid_login = user.create_login(24, None, None);
+        assert_eq!(user.logins.len(), 1);
+        assert!(user.contains_valid_login(valid_login.id));
+        assert!(!user.contains_valid_login(expired_login.id));
     }
 
     #[test]
