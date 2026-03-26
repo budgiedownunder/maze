@@ -12,41 +12,65 @@
         <toolkit:InvertedBoolConverter x:Key="InvertBoolConverter" />
     </ContentPage.Resources>
 
-    <Grid VerticalOptions="FillAndExpand"
-          HorizontalOptions="FillAndExpand">
+    <Grid VerticalOptions="Fill"
+          HorizontalOptions="Fill">
 
-        <ScrollView VerticalOptions="FillAndExpand">
+        <ScrollView VerticalOptions="Fill">
             <VerticalStackLayout Padding="30"
                                  Spacing="16"
                                  MaximumWidthRequest="400"
                                  HorizontalOptions="Center">
 
-                <Entry Placeholder="Username"
-                       Text="{Binding Username}"
-                       ReturnType="Next"
-                       Keyboard="Plain" />
-
-                <Entry Placeholder="Full Name"
-                       Text="{Binding FullName}"
-                       ReturnType="Next"
-                       Keyboard="Text" />
-
-                <Entry Placeholder="Email"
-                       Text="{Binding Email}"
-                       ReturnType="Next"
-                       Keyboard="Email" />
-
-                <Grid>
+                <Grid ColumnSpacing="8" RowSpacing="16">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <Entry Grid.Column="0"
-                           Placeholder="Password"
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Label Grid.Row="0" Grid.Column="0"
+                           Text="Username"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="0" Grid.Column="1"
+                           Text="{Binding Username}"
+                           ReturnType="Next"
+                           Keyboard="Plain"
+                           MinimumWidthRequest="150" />
+
+                    <Label Grid.Row="1" Grid.Column="0"
+                           Text="Full Name"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="1" Grid.Column="1"
+                           Text="{Binding FullName}"
+                           ReturnType="Next"
+                           Keyboard="Text"
+                           MinimumWidthRequest="150" />
+
+                    <Label Grid.Row="2" Grid.Column="0"
+                           Text="Email"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="2" Grid.Column="1"
+                           Text="{Binding Email}"
+                           ReturnType="Next"
+                           Keyboard="Email"
+                           MinimumWidthRequest="150" />
+
+                    <Label Grid.Row="3" Grid.Column="0"
+                           Text="Password"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="3" Grid.Column="1"
                            Text="{Binding Password}"
                            IsPassword="{Binding ShowPassword, Converter={StaticResource InvertBoolConverter}}"
-                           ReturnType="Next" />
-                    <ImageButton Grid.Column="1"
+                           ReturnType="Next"
+                           MinimumWidthRequest="150" />
+                    <ImageButton Grid.Row="3" Grid.Column="2"
                                  Source="icon_show_password.png"
                                  Command="{Binding ToggleShowPasswordCommand}"
                                  BackgroundColor="Transparent"
@@ -62,20 +86,17 @@
                             </DataTrigger>
                         </ImageButton.Triggers>
                     </ImageButton>
-                </Grid>
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Entry Grid.Column="0"
-                           Placeholder="Confirm Password"
+                    <Label Grid.Row="4" Grid.Column="0"
+                           Text="Confirm Password"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="4" Grid.Column="1"
                            Text="{Binding ConfirmPassword}"
                            IsPassword="{Binding ShowConfirmPassword, Converter={StaticResource InvertBoolConverter}}"
                            ReturnType="Go"
-                           ReturnCommand="{Binding SignUpCommand}" />
-                    <ImageButton Grid.Column="1"
+                           ReturnCommand="{Binding SignUpCommand}"
+                           MinimumWidthRequest="150" />
+                    <ImageButton Grid.Row="4" Grid.Column="2"
                                  Source="icon_show_password.png"
                                  Command="{Binding ToggleShowConfirmPasswordCommand}"
                                  BackgroundColor="Transparent"
@@ -100,11 +121,11 @@
 
                 <Button Text="Sign Up"
                         Command="{Binding SignUpCommand}"
-                        HorizontalOptions="FillAndExpand" />
+                        HorizontalOptions="Fill" />
 
                 <Button Text="Back"
                         Command="{Binding GoBackCommand}"
-                        HorizontalOptions="FillAndExpand"
+                        HorizontalOptions="Fill"
                         BackgroundColor="Transparent"
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
 
@@ -113,8 +134,8 @@
 
         <ActivityIndicator IsVisible="{Binding IsBusy}"
                            IsRunning="{Binding IsBusy}"
-                           HorizontalOptions="FillAndExpand"
-                           VerticalOptions="CenterAndExpand" />
+                           HorizontalOptions="Fill"
+                           VerticalOptions="Center" />
 
     </Grid>
 
