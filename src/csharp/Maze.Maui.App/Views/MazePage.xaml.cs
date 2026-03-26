@@ -344,11 +344,19 @@ namespace Maze.Maui.App.Views
             {
                 refreshed = await _viewModel.RefreshMaze();
                 if (refreshed)
+                {
+                    _viewModel.IsBusy = true;
+                    await Task.Yield();
                     ResetDisplay();
+                }
             }
             catch (Exception ex)
             {
                 await _dialogService.ShowAlert(APP_TITLE, $"Failed to refresh maze\n\nReason: {ex.Message}", "OK");
+            }
+            finally
+            {
+                _viewModel.IsBusy = false;
             }
             return refreshed;
         }
@@ -410,16 +418,19 @@ namespace Maze.Maui.App.Views
                         MinSpineLength = popupOptions.MinSpineLength,
                     };
 
+                    bool generationSucceeded = false;
                     try
                     {
+                        _viewModel.IsBusy = true;
+                        await Task.Yield();
                         Maze generated = Maze.Generate(options);
                         _lastMinSolutionLength = options.MinSpineLength;
                         await MainThread.InvokeOnMainThreadAsync(() =>
                         {
                             MazeItem!.Definition = generated;
                             ResetDisplay();
-                            _viewModel.NotifyMazeChanged();
                         });
+                        generationSucceeded = true;
                         break;
                     }
                     catch (Exception ex)
@@ -432,6 +443,12 @@ namespace Maze.Maui.App.Views
                         finishRow = popupOptions.FinishRow ?? finishRow;
                         finishCol = popupOptions.FinishCol ?? finishCol;
                         minSolutionLength = popupOptions.MinSpineLength ?? minSolutionLength;
+                    }
+                    finally
+                    {
+                        _viewModel.IsBusy = false;
+                        if (generationSucceeded)
+                            _viewModel.NotifyMazeChanged();
                     }
                 }
             }
