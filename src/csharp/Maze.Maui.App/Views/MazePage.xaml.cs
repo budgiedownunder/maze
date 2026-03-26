@@ -306,6 +306,7 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private void Solve()
         {
+            Pointer.SetCursor(this, Icon.Wait);
             try
             {
                 Maze maze = MazeGrid.ToMaze();
@@ -317,6 +318,10 @@ namespace Maze.Maui.App.Views
             catch (Exception ex)
             {
                 _dialogService.ShowAlert(APP_TITLE, $"Unable to solve maze\n\nReason: {ex.Message}", "OK");
+            }
+            finally
+            {
+                Pointer.SetCursor(this, Icon.Arrow);
             }
         }
         /// <summary>
@@ -419,10 +424,11 @@ namespace Maze.Maui.App.Views
                     };
 
                     bool generationSucceeded = false;
+                    Pointer.SetCursor(this, Icon.Wait);
                     try
                     {
                         _viewModel.IsBusy = true;
-                        await Task.Yield();
+                        await Task.Delay(150);
                         Maze generated = Maze.Generate(options);
                         _lastMinSolutionLength = options.MinSpineLength;
                         await MainThread.InvokeOnMainThreadAsync(() =>
@@ -447,6 +453,7 @@ namespace Maze.Maui.App.Views
                     finally
                     {
                         _viewModel.IsBusy = false;
+                        Pointer.SetCursor(this, Icon.Arrow);
                         if (generationSucceeded)
                             _viewModel.NotifyMazeChanged();
                     }
