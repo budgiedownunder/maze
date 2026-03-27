@@ -11,6 +11,7 @@ namespace Maze.Maui.App.Views
     using CommunityToolkit.Maui.Extensions;
     using CommunityToolkit.Maui.Core;
     using Maze.Maui.Controls.Pointer;
+    using Maze.Maui.App.Extensions;
 
     /// <summary>
     /// This class represents the maze page within the application. It provides
@@ -317,7 +318,7 @@ namespace Maze.Maui.App.Views
             }
             catch (Exception ex)
             {
-                _dialogService.ShowAlert(APP_TITLE, $"Unable to solve maze\n\nReason: {ex.Message}", "OK");
+                _dialogService.ShowAlert(APP_TITLE, $"Unable to solve maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
             }
             finally
             {
@@ -357,7 +358,7 @@ namespace Maze.Maui.App.Views
             }
             catch (Exception ex)
             {
-                await _dialogService.ShowAlert(APP_TITLE, $"Failed to refresh maze\n\nReason: {ex.Message}", "OK");
+                await _dialogService.ShowAlert(APP_TITLE, $"Failed to refresh maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
             }
             finally
             {
@@ -459,7 +460,7 @@ namespace Maze.Maui.App.Views
             }
             catch (Exception ex)
             {
-                await _dialogService.ShowAlert(APP_TITLE, $"Failed to generate maze\n\nReason: {ex.Message}", "OK");
+                await _dialogService.ShowAlert(APP_TITLE, $"Failed to generate maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
             }
         }
         /// <summary>
