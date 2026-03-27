@@ -30,9 +30,7 @@
                 <CollectionView.EmptyView>
                     <Grid VerticalOptions="Fill"
                           HorizontalOptions="Fill"
-                          Padding="10"
-                          WidthRequest="{Binding Source={x:Reference MazesCollectionView}, Path=Width}"
-                          HeightRequest="{Binding Source={x:Reference MazesCollectionView}, Path=Height}">
+                          Padding="10">
                         <Label Text="{Binding LoadStatus}"
                                HorizontalOptions="Center"
                                VerticalOptions="Center"/>
