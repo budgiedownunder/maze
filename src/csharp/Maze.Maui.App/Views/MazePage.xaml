@@ -102,13 +102,19 @@
                         HorizontalOptions="Fill" />-->
             </StackLayout>
 
-            <ActivityIndicator x:Name="BusyIndicator"
-                               IsRunning="{Binding IsBusy}"
-                               IsVisible="{Binding IsBusy}"
-                               VerticalOptions="Center"
-                               HorizontalOptions="Center"
-                               WidthRequest="50"
-                               HeightRequest="50"
-                               Grid.RowSpan="3"/>
+            <Border IsVisible="{Binding IsBusy}"
+                    BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#303030}"
+                    StrokeShape="RoundRectangle 8"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
+                    Padding="20"
+                    VerticalOptions="Center"
+                    HorizontalOptions="Center"
+                    Grid.RowSpan="3">
+                <ActivityIndicator x:Name="BusyIndicator"
+                                   IsRunning="{Binding IsBusy}"
+                                   Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                   WidthRequest="50"
+                                   HeightRequest="50" />
+            </Border>
     </Grid>
 </ContentPage>
