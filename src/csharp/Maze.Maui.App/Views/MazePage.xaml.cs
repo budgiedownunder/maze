@@ -467,8 +467,16 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private void ClearSolution()
         {
-            IsSolutionDisplayed = !MazeGrid.ClearLastSolution();
-            UpdateControls();
+            SetBusyIndicators(true, updateViewModel: false);
+            try
+            {
+                IsSolutionDisplayed = !MazeGrid.ClearLastSolution();
+                UpdateControls();
+            }
+            finally
+            {
+                SetBusyIndicators(false, updateViewModel: false);
+            }
         }
         /// <summary>
         /// Enables or disables extended selection (select range) mode and updates the page button states appropriately
