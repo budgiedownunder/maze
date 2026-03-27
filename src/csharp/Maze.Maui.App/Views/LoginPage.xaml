@@ -10,17 +10,18 @@
 
     <ContentPage.Resources>
         <toolkit:IsStringNotNullOrEmptyConverter x:Key="StringNotEmptyConverter" />
+        <toolkit:InvertedBoolConverter x:Key="InvertBoolConverter" />
     </ContentPage.Resources>
 
-    <Grid VerticalOptions="FillAndExpand"
-          HorizontalOptions="FillAndExpand">
+    <Grid VerticalOptions="Fill"
+          HorizontalOptions="Fill">
 
-        <ScrollView VerticalOptions="CenterAndExpand">
+        <ScrollView VerticalOptions="Center">
             <VerticalStackLayout Padding="30"
                                  Spacing="16"
                                  MaximumWidthRequest="400"
                                  HorizontalOptions="Center"
-                                 VerticalOptions="CenterAndExpand">
+                                 VerticalOptions="Center">
 
                 <Border HeightRequest="100"
                         WidthRequest="100"
@@ -43,16 +44,52 @@
                        HorizontalOptions="Center"
                        Margin="0,0,0,16" />
 
-                <Entry Placeholder="Username"
-                       Text="{Binding Username}"
-                       ReturnType="Next"
-                       Keyboard="Text" />
+                <Grid ColumnSpacing="8" RowSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                <Entry Placeholder="Password"
-                       Text="{Binding Password}"
-                       IsPassword="True"
-                       ReturnType="Go"
-                       ReturnCommand="{Binding SignInCommand}" />
+                    <Label Grid.Row="0" Grid.Column="0"
+                           Text="Username"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="0" Grid.Column="1"
+                           Text="{Binding Username}"
+                           ReturnType="Next"
+                           Keyboard="Plain"
+                           MinimumWidthRequest="150" />
+
+                    <Label Grid.Row="1" Grid.Column="0"
+                           Text="Password"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="1" Grid.Column="1"
+                           Text="{Binding Password}"
+                           IsPassword="{Binding ShowPassword, Converter={StaticResource InvertBoolConverter}}"
+                           ReturnType="Go"
+                           ReturnCommand="{Binding SignInCommand}"
+                           MinimumWidthRequest="150" />
+                    <ImageButton Grid.Row="1" Grid.Column="2"
+                                 Source="icon_show_password.png"
+                                 Command="{Binding ToggleShowPasswordCommand}"
+                                 BackgroundColor="Transparent"
+                                 HeightRequest="32"
+                                 WidthRequest="32"
+                                 Padding="4"
+                                 VerticalOptions="Center">
+                        <ImageButton.Triggers>
+                            <DataTrigger TargetType="ImageButton"
+                                         Binding="{Binding ShowPassword}"
+                                         Value="True">
+                                <Setter Property="Source" Value="icon_hide_password.png" />
+                            </DataTrigger>
+                        </ImageButton.Triggers>
+                    </ImageButton>
+                </Grid>
 
                 <Label Text="{Binding ErrorMessage}"
                        TextColor="Red"
@@ -61,11 +98,11 @@
 
                 <Button Text="Sign In"
                         Command="{Binding SignInCommand}"
-                        HorizontalOptions="FillAndExpand" />
+                        HorizontalOptions="Fill" />
 
                 <Button Text="Sign Up"
                         Command="{Binding GoToSignUpCommand}"
-                        HorizontalOptions="FillAndExpand"
+                        HorizontalOptions="Fill"
                         BackgroundColor="Transparent"
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
 
@@ -74,8 +111,8 @@
 
         <ActivityIndicator IsVisible="{Binding IsBusy}"
                            IsRunning="{Binding IsBusy}"
-                           HorizontalOptions="FillAndExpand"
-                           VerticalOptions="CenterAndExpand" />
+                           HorizontalOptions="Fill"
+                           VerticalOptions="Center" />
 
     </Grid>
 

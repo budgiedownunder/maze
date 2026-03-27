@@ -94,14 +94,21 @@ namespace Maze.Maui.App.ViewModels
                 return;
 
             IsBusy = true;
-
-            await Shell.Current.GoToAsync($"{nameof(MazePage)}", true,
-                new Dictionary<string, object>
-                {
-                    {"MazeItem", item }
-                });
-
-            IsBusy = false;
+            try
+            {
+                await Shell.Current.GoToAsync($"{nameof(MazePage)}", true,
+                    new Dictionary<string, object>
+                    {
+                        {"MazeItem", item }
+                    });
+                // Hold IsBusy for a further 500ms after navigation completes to block any
+                // buffered second taps (e.g. double-click) that arrive after GoToAsync returns
+                await Task.Delay(500);
+            }
+            finally
+            {
+                IsBusy = false;
+            }
         }
         /// <summary>
         /// Activates the maze (design) page for a new maze item

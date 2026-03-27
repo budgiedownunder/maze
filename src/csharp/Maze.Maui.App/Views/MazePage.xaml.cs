@@ -54,13 +54,13 @@ namespace Maze.Maui.App.Views
     {
         // Private definitions
         const String APP_TITLE = "MAZE";
-
         // Private properties
         MazeViewModel _viewModel;
         MazesViewModel _mazesViewModel;
         IDialogService _dialogService;
         IDeviceTypeService _deviceTypeService;
         uint? _lastMinSolutionLength;
+        CancellationTokenSource? _fallbackInitCts;
 
         /// <summary>
         /// Indicates whether the page is initlialized
@@ -135,7 +135,7 @@ namespace Maze.Maui.App.Views
             _viewModel.SetFinishRequested += (s, e) => { ChangeSelectionToFinish(); };
             _viewModel.ClearRequested += (s, e) => { ClearSelection(); };
             _viewModel.SolveRequested += (s, e) => { Solve(); };
-            _viewModel.ClearSolutionRequested += (s, e) => { ClearSolution(); };
+            _viewModel.ClearSolutionRequested += async (s, e) => { await ClearSolution(); };
             _viewModel.SaveRequested += async (s, e) => { await Save(); };
             _viewModel.RefreshRequested += async (s, e) => { await Refresh(); };
             _viewModel.GenerateRequested += async (s, e) => { await Generate(); };
@@ -306,6 +306,7 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private void Solve()
         {
+            SetBusyIndicators(true, updateViewModel: false);
             try
             {
                 Maze maze = MazeGrid.ToMaze();
@@ -318,20 +319,24 @@ namespace Maze.Maui.App.Views
             {
                 _dialogService.ShowAlert(APP_TITLE, $"Unable to solve maze\n\nReason: {ex.Message}", "OK");
             }
+            finally
+            {
+                SetBusyIndicators(false, updateViewModel: false);
+            }
         }
         /// <summary>
         /// Triggers the save maze process
         /// </summary>
         private async Task<bool> Save()
         {
-            Pointer.SetCursor(this, Icon.Wait);
+            SetBusyIndicators(true, updateViewModel: false);
             try
             {
                 return await _viewModel.SaveMaze(MazeGrid.ToMaze());
             }
             finally
             {
-                Pointer.SetCursor(this, Icon.Arrow);
+                SetBusyIndicators(false, updateViewModel: false);
             }
         }
         /// <summary>
@@ -344,11 +349,19 @@ namespace Maze.Maui.App.Views
             {
                 refreshed = await _viewModel.RefreshMaze();
                 if (refreshed)
+                {
+                    _viewModel.IsBusy = true;
+                    await Task.Delay(50);
                     ResetDisplay();
+                }
             }
             catch (Exception ex)
             {
                 await _dialogService.ShowAlert(APP_TITLE, $"Failed to refresh maze\n\nReason: {ex.Message}", "OK");
+            }
+            finally
+            {
+                _viewModel.IsBusy = false;
             }
             return refreshed;
         }
@@ -410,16 +423,19 @@ namespace Maze.Maui.App.Views
                         MinSpineLength = popupOptions.MinSpineLength,
                     };
 
+                    bool generationSucceeded = false;
+                    SetBusyIndicators(true);
                     try
                     {
+                        await Task.Delay(150);
                         Maze generated = Maze.Generate(options);
                         _lastMinSolutionLength = options.MinSpineLength;
                         await MainThread.InvokeOnMainThreadAsync(() =>
                         {
                             MazeItem!.Definition = generated;
                             ResetDisplay();
-                            _viewModel.NotifyMazeChanged();
                         });
+                        generationSucceeded = true;
                         break;
                     }
                     catch (Exception ex)
@@ -433,6 +449,12 @@ namespace Maze.Maui.App.Views
                         finishCol = popupOptions.FinishCol ?? finishCol;
                         minSolutionLength = popupOptions.MinSpineLength ?? minSolutionLength;
                     }
+                    finally
+                    {
+                        SetBusyIndicators(false);
+                        if (generationSucceeded)
+                            _viewModel.NotifyMazeChanged();
+                    }
                 }
             }
             catch (Exception ex)
@@ -443,10 +465,19 @@ namespace Maze.Maui.App.Views
         /// <summary>
         /// Clears the maze solution that is displayed (if any) and resets toolbar/buttons states appropriately
         /// </summary>
-        private void ClearSolution()
+        private async Task ClearSolution()
         {
-            IsSolutionDisplayed = !MazeGrid.ClearLastSolution();
-            UpdateControls();
+            SetBusyIndicators(true, updateViewModel: false);
+            await Task.Delay(50);
+            try
+            {
+                IsSolutionDisplayed = !MazeGrid.ClearLastSolution();
+                UpdateControls();
+            }
+            finally
+            {
+                SetBusyIndicators(false, updateViewModel: false);
+            }
         }
         /// <summary>
         /// Enables or disables extended selection (select range) mode and updates the page button states appropriately
@@ -542,6 +573,17 @@ namespace Maze.Maui.App.Views
             UpdateControls();
         }
         /// <summary>
+        /// Sets the busy indicators: the cursor and optionally the view model's IsBusy flag.
+        /// </summary>
+        /// <param name="busy">True to indicate busy; false to indicate ready.</param>
+        /// <param name="updateViewModel">If true (default), also updates view model</param>
+        private void SetBusyIndicators(bool busy, bool updateViewModel = true)
+        {
+            Pointer.SetCursor(this, busy ? Icon.Wait : Icon.Arrow);
+            if (updateViewModel)
+                _viewModel.IsBusy = busy;
+        }
+        /// <summary>
         /// Updates the control visibility/enabled states
         /// </summary>
         private void UpdateControls()
@@ -576,9 +618,23 @@ namespace Maze.Maui.App.Views
         /// <param name="args">Event argumennts</param>
         protected override void OnNavigatedTo(NavigatedToEventArgs args)
         {
-            if (!IsInitialized)
-                Initialize();
             base.OnNavigatedTo(args);
+            if (!IsInitialized)
+            {
+                SetBusyIndicators(true);
+                Dispatcher.Dispatch(async () =>
+                {
+                    await Task.Delay(50);
+                    try
+                    {
+                        Initialize();
+                    }
+                    finally
+                    {
+                        SetBusyIndicators(false);
+                    }
+                });
+            }
         }
         /// <summary>
         /// Handles the page appearing event
@@ -587,6 +643,37 @@ namespace Maze.Maui.App.Views
         {
             base.OnAppearing();
             Shell.Current.Navigating += OnShellNavigating;
+            if (!IsInitialized)
+            {
+                // Safety net: call Initialize() if OnNavigatedTo doesn't fire within 1s
+                _fallbackInitCts?.Cancel();
+                _fallbackInitCts = new CancellationTokenSource();
+                var cts = _fallbackInitCts;
+                Dispatcher.Dispatch(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(1000, cts.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                    if (!IsInitialized && Shell.Current.CurrentPage == this)
+                    {
+                        SetBusyIndicators(true);
+                        await Task.Delay(50);
+                        try
+                        {
+                            Initialize();
+                        }
+                        finally
+                        {
+                            SetBusyIndicators(false);
+                        }
+                    }
+                });
+            }
         }
         /// <summary>
         /// Handles the page disappearing event
@@ -595,6 +682,8 @@ namespace Maze.Maui.App.Views
         {
             base.OnDisappearing();
             Shell.Current.Navigating -= OnShellNavigating;
+            if (IsInitialized)
+                _fallbackInitCts?.Cancel();
         }
         /// <summary>
         /// Handles the page navigating event (via shell). Checks whether the page is about

@@ -19,20 +19,18 @@
                      IconImageSource="refresh.png"/>
     </ContentPage.ToolbarItems>
 
-    <Grid VerticalOptions="FillAndExpand" HorizontalOptions="FillAndExpand">
+    <Grid VerticalOptions="Fill" HorizontalOptions="Fill">
         <RefreshView Command="{Binding GetMazesCommand}"
                      IsRefreshing="{Binding IsRefreshing}">
             <CollectionView ItemsSource="{Binding MazeItems}"
                             SelectionMode="None"
-                            VerticalOptions="FillAndExpand"
-                            HorizontalOptions="FillAndExpand"
+                            VerticalOptions="Fill"
+                            HorizontalOptions="Fill"
                             x:Name="MazesCollectionView">
                 <CollectionView.EmptyView>
-                    <Grid VerticalOptions="FillAndExpand"
-                          HorizontalOptions="FillAndExpand"
-                          Padding="10"
-                          WidthRequest="{Binding Source={x:Reference MazesCollectionView}, Path=Width}"
-                          HeightRequest="{Binding Source={x:Reference MazesCollectionView}, Path=Height}">
+                    <Grid VerticalOptions="Fill"
+                          HorizontalOptions="Fill"
+                          Padding="10">
                         <Label Text="{Binding LoadStatus}"
                                HorizontalOptions="Center"
                                VerticalOptions="Center"/>
@@ -118,7 +116,7 @@
                                                    WidthRequest="125" 
                                                    Aspect="AspectFill">
                                             </Image>
-                                            <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="CenterAndExpand">
+                                            <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="Center">
                                                 <Label Text="{Binding Name}" FontSize="24"/>
                                                 <Label Text ="{Binding DimensionsSummary}" FontSize="12"/>
                                             </VerticalStackLayout>
@@ -134,8 +132,8 @@
 
         <ActivityIndicator IsVisible="{Binding IsBusy}"
                        IsRunning="{Binding IsBusy}"
-                       HorizontalOptions="FillAndExpand"
-                       VerticalOptions="CenterAndExpand" />
+                       HorizontalOptions="Fill"
+                       VerticalOptions="Center" />
 
     </Grid>
 </ContentPage>

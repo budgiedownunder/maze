@@ -27,6 +27,24 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private string errorMessage = "";
 
+        [ObservableProperty]
+        private bool showCurrentPassword = false;
+
+        [ObservableProperty]
+        private bool showNewPassword = false;
+
+        [ObservableProperty]
+        private bool showConfirmNewPassword = false;
+
+        [RelayCommand]
+        private void ToggleShowCurrentPassword() => ShowCurrentPassword = !ShowCurrentPassword;
+
+        [RelayCommand]
+        private void ToggleShowNewPassword() => ShowNewPassword = !ShowNewPassword;
+
+        [RelayCommand]
+        private void ToggleShowConfirmNewPassword() => ShowConfirmNewPassword = !ShowConfirmNewPassword;
+
         /// <summary>
         /// Constructor
         /// </summary>

@@ -21,10 +21,10 @@ To build the `maze_c` crate, run the following from within the `maze_c` director
 cargo build
 
 # Cross-compile for iOS device
-cargo build --release --target aarch64-apple-ios -p maze_c
+cargo build --release --target aarch64-apple-ios
 
 # Cross-compile for iOS simulator
-cargo build --release --target aarch64-apple-ios-sim -p maze_c
+cargo build --release --target aarch64-apple-ios-sim
 ```
 
 For iOS, the resulting `libmaze_c.a` should then be copied to `src/csharp/Maze.Wasm.Interop/runtimes/ios-arm64/native/` (device) or `ios-sim-arm64/native/` (simulator) 

@@ -28,7 +28,7 @@
             </Grid.RowDefinitions>
 
             <!-- Top buttons -->
-            <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="FillAndExpand" Padding="10" Spacing="5"  BackgroundColor="Transparent" IsVisible="False">
+            <StackLayout x:Name="TopRowLayout" Grid.Row="0" Orientation="Horizontal" HorizontalOptions="Fill" Padding="10" Spacing="5"  BackgroundColor="Transparent" IsVisible="False">
                 <ImageButton x:Name="SetWallBtn" IsVisible="{Binding CanSetWall}" Command="{Binding SetWallCommand}" Source="wall_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
@@ -64,18 +64,18 @@
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
                 <ImageButton x:Name="SelectRangeBtn" IsVisible="{Binding CanSelectRange}" Command="{Binding SelectRangeCommand}" Source="select_range_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
-                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="EndAndExpand"/>
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
                 <Button x:Name="DoneBtn" IsVisible="{Binding CanShowDone}" Command="{Binding DoneCommand}" Text="Done"
                         HeightRequest="32" MaximumHeightRequest="32" MinimumHeightRequest="32"
                         FontAutoScalingEnabled="True"  FontAttributes="Bold" FontSize="12"  TextColor="Blue" BorderColor="DarkGray" BorderWidth="2"
-                        BackgroundColor="Transparent" Padding="0" HorizontalOptions="EndAndExpand"/>
+                        BackgroundColor="Transparent" Padding="0" HorizontalOptions="End"/>
             </StackLayout>
 
             <!-- Scrollable Maze Grid in Center -->
             <ScrollView Grid.Row="1" x:Name="MazeGridScrollView"
                         Orientation="Both"
                         HorizontalOptions="Start"
-                        VerticalOptions="StartAndExpand"
+                        VerticalOptions="Start"
                         HorizontalScrollBarVisibility="Always"
                         VerticalScrollBarVisibility="Always"
                         Padding="10">
@@ -93,22 +93,28 @@
             </ScrollView>
 
             <!-- Bottom buttons -->
-            <StackLayout x:Name="BottomRowLayout" Grid.Row="2" Orientation="Horizontal" VerticalOptions="EndAndExpand" HorizontalOptions="Start" Padding="10" Spacing="10">
+            <StackLayout x:Name="BottomRowLayout" Grid.Row="2" Orientation="Horizontal" VerticalOptions="End" HorizontalOptions="Start" Padding="10" Spacing="10">
                 <!--<Button
                         x:Name="TestBtn"
                         Text="Test"
                         SemanticProperties.Hint="Does not do anything yet"
                         Clicked="OnTestBtnClicked"
-                        HorizontalOptions="FillAndExpand" />-->
+                        HorizontalOptions="Fill" />-->
             </StackLayout>
 
-            <ActivityIndicator x:Name="BusyIndicator"
-                               IsRunning="{Binding IsBusy}"
-                               IsVisible="{Binding IsBusy}"
-                               VerticalOptions="Center"
-                               HorizontalOptions="Center"
-                               WidthRequest="50"
-                               HeightRequest="50"
-                               Grid.RowSpan="3"/>
+            <Border IsVisible="{Binding IsBusy}"
+                    BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#303030}"
+                    StrokeShape="RoundRectangle 8"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
+                    Padding="20"
+                    VerticalOptions="Center"
+                    HorizontalOptions="Center"
+                    Grid.RowSpan="3">
+                <ActivityIndicator x:Name="BusyIndicator"
+                                   IsRunning="{Binding IsBusy}"
+                                   Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                   WidthRequest="50"
+                                   HeightRequest="50" />
+            </Border>
     </Grid>
 </ContentPage>

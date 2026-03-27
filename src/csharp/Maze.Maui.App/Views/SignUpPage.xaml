@@ -9,42 +9,110 @@
 
     <ContentPage.Resources>
         <toolkit:IsStringNotNullOrEmptyConverter x:Key="StringNotEmptyConverter" />
+        <toolkit:InvertedBoolConverter x:Key="InvertBoolConverter" />
     </ContentPage.Resources>
 
-    <Grid VerticalOptions="FillAndExpand"
-          HorizontalOptions="FillAndExpand">
+    <Grid VerticalOptions="Fill"
+          HorizontalOptions="Fill">
 
-        <ScrollView VerticalOptions="FillAndExpand">
+        <ScrollView VerticalOptions="Fill">
             <VerticalStackLayout Padding="30"
                                  Spacing="16"
                                  MaximumWidthRequest="400"
                                  HorizontalOptions="Center">
 
-                <Entry Placeholder="Username"
-                       Text="{Binding Username}"
-                       ReturnType="Next"
-                       Keyboard="Text" />
+                <Grid ColumnSpacing="8" RowSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                <Entry Placeholder="Full Name"
-                       Text="{Binding FullName}"
-                       ReturnType="Next"
-                       Keyboard="Text" />
+                    <Label Grid.Row="0" Grid.Column="0"
+                           Text="Username"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="0" Grid.Column="1"
+                           Text="{Binding Username}"
+                           ReturnType="Next"
+                           Keyboard="Plain"
+                           MinimumWidthRequest="150" />
 
-                <Entry Placeholder="Email"
-                       Text="{Binding Email}"
-                       ReturnType="Next"
-                       Keyboard="Email" />
+                    <Label Grid.Row="1" Grid.Column="0"
+                           Text="Full Name"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="1" Grid.Column="1"
+                           Text="{Binding FullName}"
+                           ReturnType="Next"
+                           Keyboard="Text"
+                           MinimumWidthRequest="150" />
 
-                <Entry Placeholder="Password"
-                       Text="{Binding Password}"
-                       IsPassword="True"
-                       ReturnType="Next" />
+                    <Label Grid.Row="2" Grid.Column="0"
+                           Text="Email"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="2" Grid.Column="1"
+                           Text="{Binding Email}"
+                           ReturnType="Next"
+                           Keyboard="Email"
+                           MinimumWidthRequest="150" />
 
-                <Entry Placeholder="Confirm Password"
-                       Text="{Binding ConfirmPassword}"
-                       IsPassword="True"
-                       ReturnType="Go"
-                       ReturnCommand="{Binding SignUpCommand}" />
+                    <Label Grid.Row="3" Grid.Column="0"
+                           Text="Password"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="3" Grid.Column="1"
+                           Text="{Binding Password}"
+                           IsPassword="{Binding ShowPassword, Converter={StaticResource InvertBoolConverter}}"
+                           ReturnType="Next"
+                           MinimumWidthRequest="150" />
+                    <ImageButton Grid.Row="3" Grid.Column="2"
+                                 Source="icon_show_password.png"
+                                 Command="{Binding ToggleShowPasswordCommand}"
+                                 BackgroundColor="Transparent"
+                                 HeightRequest="32"
+                                 WidthRequest="32"
+                                 Padding="4"
+                                 VerticalOptions="Center">
+                        <ImageButton.Triggers>
+                            <DataTrigger TargetType="ImageButton"
+                                         Binding="{Binding ShowPassword}"
+                                         Value="True">
+                                <Setter Property="Source" Value="icon_hide_password.png" />
+                            </DataTrigger>
+                        </ImageButton.Triggers>
+                    </ImageButton>
+
+                    <Label Grid.Row="4" Grid.Column="0"
+                           Text="Confirm Password"
+                           VerticalOptions="Center" />
+                    <Entry Grid.Row="4" Grid.Column="1"
+                           Text="{Binding ConfirmPassword}"
+                           IsPassword="{Binding ShowConfirmPassword, Converter={StaticResource InvertBoolConverter}}"
+                           ReturnType="Go"
+                           ReturnCommand="{Binding SignUpCommand}"
+                           MinimumWidthRequest="150" />
+                    <ImageButton Grid.Row="4" Grid.Column="2"
+                                 Source="icon_show_password.png"
+                                 Command="{Binding ToggleShowConfirmPasswordCommand}"
+                                 BackgroundColor="Transparent"
+                                 HeightRequest="32"
+                                 WidthRequest="32"
+                                 Padding="4"
+                                 VerticalOptions="Center">
+                        <ImageButton.Triggers>
+                            <DataTrigger TargetType="ImageButton"
+                                         Binding="{Binding ShowConfirmPassword}"
+                                         Value="True">
+                                <Setter Property="Source" Value="icon_hide_password.png" />
+                            </DataTrigger>
+                        </ImageButton.Triggers>
+                    </ImageButton>
+                </Grid>
 
                 <Label Text="{Binding ErrorMessage}"
                        TextColor="Red"
@@ -53,11 +121,11 @@
 
                 <Button Text="Sign Up"
                         Command="{Binding SignUpCommand}"
-                        HorizontalOptions="FillAndExpand" />
+                        HorizontalOptions="Fill" />
 
                 <Button Text="Back"
                         Command="{Binding GoBackCommand}"
-                        HorizontalOptions="FillAndExpand"
+                        HorizontalOptions="Fill"
                         BackgroundColor="Transparent"
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
 
@@ -66,8 +134,8 @@
 
         <ActivityIndicator IsVisible="{Binding IsBusy}"
                            IsRunning="{Binding IsBusy}"
-                           HorizontalOptions="FillAndExpand"
-                           VerticalOptions="CenterAndExpand" />
+                           HorizontalOptions="Fill"
+                           VerticalOptions="Center" />
 
     </Grid>
 
