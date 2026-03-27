@@ -306,7 +306,7 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private void Solve()
         {
-            Pointer.SetCursor(this, Icon.Wait);
+            SetBusyIndicators(true, updateViewModel: false);
             try
             {
                 Maze maze = MazeGrid.ToMaze();
@@ -321,7 +321,7 @@ namespace Maze.Maui.App.Views
             }
             finally
             {
-                Pointer.SetCursor(this, Icon.Arrow);
+                SetBusyIndicators(false, updateViewModel: false);
             }
         }
         /// <summary>
@@ -329,14 +329,14 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private async Task<bool> Save()
         {
-            Pointer.SetCursor(this, Icon.Wait);
+            SetBusyIndicators(true, updateViewModel: false);
             try
             {
                 return await _viewModel.SaveMaze(MazeGrid.ToMaze());
             }
             finally
             {
-                Pointer.SetCursor(this, Icon.Arrow);
+                SetBusyIndicators(false, updateViewModel: false);
             }
         }
         /// <summary>
@@ -424,10 +424,9 @@ namespace Maze.Maui.App.Views
                     };
 
                     bool generationSucceeded = false;
-                    Pointer.SetCursor(this, Icon.Wait);
+                    SetBusyIndicators(true);
                     try
                     {
-                        _viewModel.IsBusy = true;
                         await Task.Delay(150);
                         Maze generated = Maze.Generate(options);
                         _lastMinSolutionLength = options.MinSpineLength;
@@ -452,8 +451,7 @@ namespace Maze.Maui.App.Views
                     }
                     finally
                     {
-                        _viewModel.IsBusy = false;
-                        Pointer.SetCursor(this, Icon.Arrow);
+                        SetBusyIndicators(false);
                         if (generationSucceeded)
                             _viewModel.NotifyMazeChanged();
                     }
@@ -566,6 +564,17 @@ namespace Maze.Maui.App.Views
             UpdateControls();
         }
         /// <summary>
+        /// Sets the busy indicators: the cursor and optionally the view model's IsBusy flag.
+        /// </summary>
+        /// <param name="busy">True to indicate busy; false to indicate ready.</param>
+        /// <param name="updateViewModel">If true (default), also updates <see cref="MazePageViewModel.IsBusy"/>.</param>
+        private void SetBusyIndicators(bool busy, bool updateViewModel = true)
+        {
+            Pointer.SetCursor(this, busy ? Icon.Wait : Icon.Arrow);
+            if (updateViewModel)
+                _viewModel.IsBusy = busy;
+        }
+        /// <summary>
         /// Updates the control visibility/enabled states
         /// </summary>
         private void UpdateControls()
@@ -603,8 +612,7 @@ namespace Maze.Maui.App.Views
             base.OnNavigatedTo(args);
             if (!IsInitialized)
             {
-                Pointer.SetCursor(this, Icon.Wait);
-                _viewModel.IsBusy = true;
+                SetBusyIndicators(true);
                 Dispatcher.Dispatch(async () =>
                 {
                     await Task.Delay(50);
@@ -614,8 +622,7 @@ namespace Maze.Maui.App.Views
                     }
                     finally
                     {
-                        _viewModel.IsBusy = false;
-                        Pointer.SetCursor(this, Icon.Arrow);
+                        SetBusyIndicators(false);
                     }
                 });
             }
@@ -645,8 +652,7 @@ namespace Maze.Maui.App.Views
                     }
                     if (!IsInitialized && Shell.Current.CurrentPage == this)
                     {
-                        Pointer.SetCursor(this, Icon.Wait);
-                        _viewModel.IsBusy = true;
+                        SetBusyIndicators(true);
                         await Task.Delay(50);
                         try
                         {
@@ -654,8 +660,7 @@ namespace Maze.Maui.App.Views
                         }
                         finally
                         {
-                            _viewModel.IsBusy = false;
-                            Pointer.SetCursor(this, Icon.Arrow);
+                            SetBusyIndicators(false);
                         }
                     }
                 });
