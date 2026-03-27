@@ -576,7 +576,7 @@ namespace Maze.Maui.App.Views
         /// Sets the busy indicators: the cursor and optionally the view model's IsBusy flag.
         /// </summary>
         /// <param name="busy">True to indicate busy; false to indicate ready.</param>
-        /// <param name="updateViewModel">If true (default), also updates <see cref="MazePageViewModel.IsBusy"/>.</param>
+        /// <param name="updateViewModel">If true (default), also updates view model</param>
         private void SetBusyIndicators(bool busy, bool updateViewModel = true)
         {
             Pointer.SetCursor(this, busy ? Icon.Wait : Icon.Arrow);
