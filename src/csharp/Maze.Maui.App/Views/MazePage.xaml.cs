@@ -54,13 +54,13 @@ namespace Maze.Maui.App.Views
     {
         // Private definitions
         const String APP_TITLE = "MAZE";
-
         // Private properties
         MazeViewModel _viewModel;
         MazesViewModel _mazesViewModel;
         IDialogService _dialogService;
         IDeviceTypeService _deviceTypeService;
         uint? _lastMinSolutionLength;
+        CancellationTokenSource? _fallbackInitCts;
 
         /// <summary>
         /// Indicates whether the page is initlialized
@@ -351,7 +351,7 @@ namespace Maze.Maui.App.Views
                 if (refreshed)
                 {
                     _viewModel.IsBusy = true;
-                    await Task.Yield();
+                    await Task.Delay(50);
                     ResetDisplay();
                 }
             }
@@ -600,9 +600,25 @@ namespace Maze.Maui.App.Views
         /// <param name="args">Event argumennts</param>
         protected override void OnNavigatedTo(NavigatedToEventArgs args)
         {
-            if (!IsInitialized)
-                Initialize();
             base.OnNavigatedTo(args);
+            if (!IsInitialized)
+            {
+                Pointer.SetCursor(this, Icon.Wait);
+                _viewModel.IsBusy = true;
+                Dispatcher.Dispatch(async () =>
+                {
+                    await Task.Delay(50);
+                    try
+                    {
+                        Initialize();
+                    }
+                    finally
+                    {
+                        _viewModel.IsBusy = false;
+                        Pointer.SetCursor(this, Icon.Arrow);
+                    }
+                });
+            }
         }
         /// <summary>
         /// Handles the page appearing event
@@ -611,6 +627,39 @@ namespace Maze.Maui.App.Views
         {
             base.OnAppearing();
             Shell.Current.Navigating += OnShellNavigating;
+            if (!IsInitialized)
+            {
+                // Safety net: call Initialize() if OnNavigatedTo doesn't fire within 1s
+                _fallbackInitCts?.Cancel();
+                _fallbackInitCts = new CancellationTokenSource();
+                var cts = _fallbackInitCts;
+                Dispatcher.Dispatch(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(1000, cts.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
+                    if (!IsInitialized && Shell.Current.CurrentPage == this)
+                    {
+                        Pointer.SetCursor(this, Icon.Wait);
+                        _viewModel.IsBusy = true;
+                        await Task.Delay(50);
+                        try
+                        {
+                            Initialize();
+                        }
+                        finally
+                        {
+                            _viewModel.IsBusy = false;
+                            Pointer.SetCursor(this, Icon.Arrow);
+                        }
+                    }
+                });
+            }
         }
         /// <summary>
         /// Handles the page disappearing event
@@ -619,6 +668,8 @@ namespace Maze.Maui.App.Views
         {
             base.OnDisappearing();
             Shell.Current.Navigating -= OnShellNavigating;
+            if (IsInitialized)
+                _fallbackInitCts?.Cancel();
         }
         /// <summary>
         /// Handles the page navigating event (via shell). Checks whether the page is about
