@@ -135,7 +135,7 @@ namespace Maze.Maui.App.Views
             _viewModel.SetFinishRequested += (s, e) => { ChangeSelectionToFinish(); };
             _viewModel.ClearRequested += (s, e) => { ClearSelection(); };
             _viewModel.SolveRequested += (s, e) => { Solve(); };
-            _viewModel.ClearSolutionRequested += (s, e) => { ClearSolution(); };
+            _viewModel.ClearSolutionRequested += async (s, e) => { await ClearSolution(); };
             _viewModel.SaveRequested += async (s, e) => { await Save(); };
             _viewModel.RefreshRequested += async (s, e) => { await Refresh(); };
             _viewModel.GenerateRequested += async (s, e) => { await Generate(); };
@@ -465,9 +465,10 @@ namespace Maze.Maui.App.Views
         /// <summary>
         /// Clears the maze solution that is displayed (if any) and resets toolbar/buttons states appropriately
         /// </summary>
-        private void ClearSolution()
+        private async Task ClearSolution()
         {
             SetBusyIndicators(true, updateViewModel: false);
+            await Task.Delay(50);
             try
             {
                 IsSolutionDisplayed = !MazeGrid.ClearLastSolution();
