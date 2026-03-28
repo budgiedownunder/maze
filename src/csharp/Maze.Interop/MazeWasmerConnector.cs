@@ -433,7 +433,7 @@ namespace Maze.Interop
     /// <summary>
     /// Provides a wrapper to [Wasmer](https://wasmer.io/) WebAssembly memory
     /// </summary>
-    internal class MazeWasmerMemory : IMemory
+    internal class MazeWasmerMemory : IWebAssemblyMemory
     {
         IntPtr _wasmMemoryPtr = IntPtr.Zero;
         /// <summary>
@@ -530,7 +530,7 @@ namespace Maze.Interop
     /// <summary>
     ///  This class wraps a Wasmer WebAssembly function
     /// </summary>
-    class MazeWasmerFunction : IFunction
+    class MazeWasmerFunction : IWebAssemblyFunction
     {
         private string _name = "";
         private IntPtr _ptr = IntPtr.Zero; // type: wasm_func_t * 
@@ -677,16 +677,16 @@ namespace Maze.Interop
     ///  [Wasmer](https://wasmer.io/), insulating the calling application from the
     ///  specifics of the underlying interop operations.
     ///
-    /// Developers can use <see cref="MazeWasmConnectorBase.NewMaze()">NewMaze()</see> to create
+    /// Developers can use <see cref="MazeWebAssemblyConnectorBase.NewMaze()">NewMaze()</see> to create
     /// a pointer to a maze object and then other maze functions, such as
-    ///  <see cref="MazeWasmConnectorBase.MazeInsertRows(UIntPtr,uint,uint)">MazeInsertRows()</see>,
-    ///  <see cref="MazeWasmConnectorBase.MazeGenerate(UIntPtr,UIntPtr)">MazeGenerate()</see>, and
-    ///  <see cref="MazeWasmConnectorBase.MazeSolve(UIntPtr)">MazeSolve()</see>, to interact with the maze.
+    ///  <see cref="MazeWebAssemblyConnectorBase.MazeInsertRows(UIntPtr,uint,uint)">MazeInsertRows()</see>,
+    ///  <see cref="MazeWebAssemblyConnectorBase.MazeGenerate(UIntPtr,UIntPtr)">MazeGenerate()</see>, and
+    ///  <see cref="MazeWebAssemblyConnectorBase.MazeSolve(UIntPtr)">MazeSolve()</see>, to interact with the maze.
     ///
-    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMaze(UIntPtr)">FreeMaze()</see>
+    /// Once finished with, a maze should be destroyed using <see cref="MazeWebAssemblyConnectorBase.FreeMaze(UIntPtr)">FreeMaze()</see>
     /// to prevent memory leaks.
     /// </summary>
-    class MazeWasmerConnector : MazeWasmConnectorBase, IMazeConnector
+    class MazeWasmerConnector : MazeWebAssemblyConnectorBase, IMazeConnector
     {
         bool _disposed = false;
 
@@ -704,7 +704,7 @@ namespace Maze.Interop
         WasmerInterop.wasm_exporttype_vec_t _moduleExports = new WasmerInterop.wasm_exporttype_vec_t();
 
         // WebAssembly functions (initialized and validated on creation)
-        public delegate ref IFunction? RefFunctionGetter();
+        public delegate ref IWebAssemblyFunction? RefFunctionGetter();
         Dictionary<string, RefFunctionGetter>? _functionMap;
 
         /// <summary>
@@ -946,7 +946,7 @@ namespace Maze.Interop
 
             if (_functionMap.ContainsKey(name))
             {
-                ref IFunction? function = ref _functionMap[name]();
+                ref IWebAssemblyFunction? function = ref _functionMap[name]();
                 function = new MazeWasmerFunction(name, wasmFuncPtr);
             }
         }
@@ -961,7 +961,7 @@ namespace Maze.Interop
             foreach (var kvp in _functionMap)
             {
                 string functionName = kvp.Key;
-                ref IFunction? function = ref kvp.Value();
+                ref IWebAssemblyFunction? function = ref kvp.Value();
                 if (function is null)
                 {
                     throw new Exception($"Failed to load the WebAssembly function: {functionName} in {wasmPathOrName}.");

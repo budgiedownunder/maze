@@ -7,7 +7,7 @@ namespace Maze.Interop
     /// <summary>
     /// WebAssembly memory wrapper interface
     /// </summary>
-    internal interface IMemory
+    internal interface IWebAssemblyMemory
     {
         /// <summary>
         /// Reads an unsigned integer from unmanaged memory
@@ -52,7 +52,7 @@ namespace Maze.Interop
     /// <summary>
     /// WebAssembly function wrapper interface
     /// </summary>
-    internal interface IFunction
+    internal interface IWebAssemblyFunction
     {
         /// <summary>
         /// Executes the WebAssembly function
@@ -65,48 +65,48 @@ namespace Maze.Interop
     /// Base class for a WebAssembly maze connector, containing wrapper functions
     /// for each WebAssembly function.
     /// </summary>
-    internal abstract class MazeWasmConnectorBase
+    internal abstract class MazeWebAssemblyConnectorBase
     {
         // Memory
-        protected IMemory memory = null!;
+        protected IWebAssemblyMemory memory = null!;
         // WebAssembly functions
-        protected IFunction? newMaze;
-        protected IFunction? freeMaze;
-        protected IFunction? mazeIsEmpty;
-        protected IFunction? mazeResize;
-        protected IFunction? mazeReset;
-        protected IFunction? mazeGetRowCount;
-        protected IFunction? mazeGetColCount;
-        protected IFunction? mazeGetCellType;
-        protected IFunction? mazeSetStartCell;
-        protected IFunction? mazeGetStartCell;
-        protected IFunction? mazeSetFinishCell;
-        protected IFunction? mazeGetFinishCell;
-        protected IFunction? mazeSetWallCells;
-        protected IFunction? mazeClearCells;
-        protected IFunction? mazeInsertRows;
-        protected IFunction? mazeDeleteRows;
-        protected IFunction? mazeInsertCols;
-        protected IFunction? mazeDeleteCols;
-        protected IFunction? mazeFromJson;
-        protected IFunction? mazeToJson;
-        protected IFunction? mazeSolve;
-        protected IFunction? mazeSolutionGetPathPoints;
-        protected IFunction? freeMazeResult;
-        protected IFunction? freeMazeSolution;
-        protected IFunction? freeMazeError;
-        protected IFunction? allocateSizedMemory;
-        protected IFunction? freeSizedMemory;
-        protected IFunction? getSizedMemoryUsed;
-        protected IFunction? getNumObjectsAllocated;
-        protected IFunction? newGeneratorOptions;
-        protected IFunction? generatorOptionsSetStart;
-        protected IFunction? generatorOptionsSetFinish;
-        protected IFunction? generatorOptionsSetMinSpineLength;
-        protected IFunction? generatorOptionsSetMaxRetries;
-        protected IFunction? generatorOptionsSetBranchFromFinish;
-        protected IFunction? mazeGenerate;
-        protected IFunction? freeGeneratorOptions;
+        protected IWebAssemblyFunction? newMaze;
+        protected IWebAssemblyFunction? freeMaze;
+        protected IWebAssemblyFunction? mazeIsEmpty;
+        protected IWebAssemblyFunction? mazeResize;
+        protected IWebAssemblyFunction? mazeReset;
+        protected IWebAssemblyFunction? mazeGetRowCount;
+        protected IWebAssemblyFunction? mazeGetColCount;
+        protected IWebAssemblyFunction? mazeGetCellType;
+        protected IWebAssemblyFunction? mazeSetStartCell;
+        protected IWebAssemblyFunction? mazeGetStartCell;
+        protected IWebAssemblyFunction? mazeSetFinishCell;
+        protected IWebAssemblyFunction? mazeGetFinishCell;
+        protected IWebAssemblyFunction? mazeSetWallCells;
+        protected IWebAssemblyFunction? mazeClearCells;
+        protected IWebAssemblyFunction? mazeInsertRows;
+        protected IWebAssemblyFunction? mazeDeleteRows;
+        protected IWebAssemblyFunction? mazeInsertCols;
+        protected IWebAssemblyFunction? mazeDeleteCols;
+        protected IWebAssemblyFunction? mazeFromJson;
+        protected IWebAssemblyFunction? mazeToJson;
+        protected IWebAssemblyFunction? mazeSolve;
+        protected IWebAssemblyFunction? mazeSolutionGetPathPoints;
+        protected IWebAssemblyFunction? freeMazeResult;
+        protected IWebAssemblyFunction? freeMazeSolution;
+        protected IWebAssemblyFunction? freeMazeError;
+        protected IWebAssemblyFunction? allocateSizedMemory;
+        protected IWebAssemblyFunction? freeSizedMemory;
+        protected IWebAssemblyFunction? getSizedMemoryUsed;
+        protected IWebAssemblyFunction? getNumObjectsAllocated;
+        protected IWebAssemblyFunction? newGeneratorOptions;
+        protected IWebAssemblyFunction? generatorOptionsSetStart;
+        protected IWebAssemblyFunction? generatorOptionsSetFinish;
+        protected IWebAssemblyFunction? generatorOptionsSetMinSpineLength;
+        protected IWebAssemblyFunction? generatorOptionsSetMaxRetries;
+        protected IWebAssemblyFunction? generatorOptionsSetBranchFromFinish;
+        protected IWebAssemblyFunction? mazeGenerate;
+        protected IWebAssemblyFunction? freeGeneratorOptions;
         /// <summary>
         /// Creates a new, empty maze, or will throw an exception if the operation fails
         /// </summary>

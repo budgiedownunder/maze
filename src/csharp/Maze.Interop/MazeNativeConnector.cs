@@ -9,7 +9,7 @@ namespace Maze.Interop
     /// native library via <c>DllImport("__Internal")</c>.
     ///
     /// Implements <see cref="IMazeConnector"/> directly (no
-    /// <see cref="MazeWasmConnectorBase"/> involvement) — all maze logic is
+    /// <see cref="MazeWebAssemblyConnectorBase"/> involvement) — all maze logic is
     /// executed natively without a WebAssembly runtime.
     /// </summary>
     internal sealed class MazeNativeConnector : IMazeConnector

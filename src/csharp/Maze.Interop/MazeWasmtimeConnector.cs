@@ -7,7 +7,7 @@ namespace Maze.Interop
     /// <summary>
     /// Provides a wrapper to [Wasmtime](https://docs.wasmtime.dev/) WebAssembly memory
     /// </summary>
-    internal class MazeWasmtimeMemory : IMemory
+    internal class MazeWasmtimeMemory : IWebAssemblyMemory
     {
         private Wasmtime.Memory _memory = null!;
         /// <summary>
@@ -87,7 +87,7 @@ namespace Maze.Interop
     ///  This class provides a C# wrapper to a [Wasmtime](https://docs.wasmtime.dev/) WebAssembly
     ///  function
     /// </summary>
-    class MazeWasmtimeFunction : IFunction
+    class MazeWasmtimeFunction : IWebAssemblyFunction
     {
         Wasmtime.Function _func;
         /// <summary>
@@ -162,16 +162,16 @@ namespace Maze.Interop
     ///  [Wasmtime](https://docs.wasmtime.dev/), insulating the calling application from the
     ///  specifics of the underlying interop operations.
     ///
-    /// Developers can use <see cref="MazeWasmConnectorBase.NewMaze()">NewMaze()</see> to create
+    /// Developers can use <see cref="MazeWebAssemblyConnectorBase.NewMaze()">NewMaze()</see> to create
     /// a pointer to a maze object and then other maze functions, such as
-    ///  <see cref="MazeWasmConnectorBase.MazeInsertRows(UIntPtr,uint,uint)">MazeInsertRows()</see>,
-    ///  <see cref="MazeWasmConnectorBase.MazeGenerate(UIntPtr,UIntPtr)">MazeGenerate()</see>, and
-    ///  <see cref="MazeWasmConnectorBase.MazeSolve(UIntPtr)">MazeSolve()</see>, to interact with the maze.
+    ///  <see cref="MazeWebAssemblyConnectorBase.MazeInsertRows(UIntPtr,uint,uint)">MazeInsertRows()</see>,
+    ///  <see cref="MazeWebAssemblyConnectorBase.MazeGenerate(UIntPtr,UIntPtr)">MazeGenerate()</see>, and
+    ///  <see cref="MazeWebAssemblyConnectorBase.MazeSolve(UIntPtr)">MazeSolve()</see>, to interact with the maze.
     ///
-    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMaze(UIntPtr)">FreeMaze()</see>
+    /// Once finished with, a maze should be destroyed using <see cref="MazeWebAssemblyConnectorBase.FreeMaze(UIntPtr)">FreeMaze()</see>
     /// to prevent memory leaks.
     /// </summary>
-    class MazeWasmtimeConnector : MazeWasmConnectorBase, IMazeConnector
+    class MazeWasmtimeConnector : MazeWebAssemblyConnectorBase, IMazeConnector
     {
         private bool _disposed = false;
 
@@ -311,7 +311,7 @@ namespace Maze.Interop
         /// Locates a WebAssembly function. Will throw an exception if the function is not found.
         /// </summary>
         /// <returns>Function</returns>
-        private IFunction ResolveFunction(string functionName)
+        private IWebAssemblyFunction ResolveFunction(string functionName)
         {
             Wasmtime.Function? func = instanceWasm?.GetFunction(functionName);
             if (func is null)
