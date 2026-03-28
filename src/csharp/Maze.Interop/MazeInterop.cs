@@ -18,7 +18,7 @@
     /// Once finished with, a maze should be destroyed using <see cref="FreeMazeWasm(UIntPtr)">FreeMazeWasm()</see>
     /// to prevent memory leaks within Web Assembly.
     /// </summary>
-    public class MazeWasmInterop : IDisposable
+    public class MazeInterop : IDisposable
     {
         const string DEFAULT_WEBASSEMBLY_NAME = "maze_wasm.wasm";
 
@@ -42,7 +42,7 @@
             Native = 3
         }
         // Singleton instance
-        private static MazeWasmInterop? instance = null;
+        private static MazeInterop? instance = null;
         private bool _disposed = false;
 
         private IMazeWasmConnector connector;
@@ -124,7 +124,7 @@
         /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
         /// <param name="connectionType">Type of WebAssembly connection technology to use</param>
         /// <param name="wasmBytes">WebAssembly bytes(</param>
-        private MazeWasmInterop(string wasmPathOrName, ConnectionType connectionType=ConnectionType.Wasmtime, byte[]? wasmBytes = null)
+        private MazeInterop(string wasmPathOrName, ConnectionType connectionType=ConnectionType.Wasmtime, byte[]? wasmBytes = null)
         {
             switch (connectionType)
             {
@@ -151,7 +151,7 @@
         /// Handles object finalization (deletion)
         /// </summary>
         /// <returns>Nothing</returns>
-        ~MazeWasmInterop()
+        ~MazeInterop()
         {
             Dispose(false);
         }
@@ -239,13 +239,13 @@
         /// <param name="createNew">Create a new instance even if a global one already exists</param>
         /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then at attempt is made to load the WebAssembly from the default location.(</param>
         /// <returns>Interop instance</returns>
-        static public MazeWasmInterop GetInstance(ConnectionType connectionType= ConnectionType.Wasmtime, 
+        static public MazeInterop GetInstance(ConnectionType connectionType= ConnectionType.Wasmtime, 
             bool createNew = false, byte[]? wasmBytes = null)
         {
             if (instance is null || createNew)
             {
                 bool useDefaultName = wasmBytes is not null;
-                MazeWasmInterop newInstance = new MazeWasmInterop(GetWasmPathOrName(useDefaultName), connectionType, wasmBytes);
+                MazeInterop newInstance = new MazeInterop(GetWasmPathOrName(useDefaultName), connectionType, wasmBytes);
                 if (instance is not null)
                     return newInstance;
                 instance = newInstance;
@@ -265,7 +265,7 @@
             if (instance is null || createNew) 
             {
                 bool useDefaultName = wasmBytes is not null;
-                instance = new MazeWasmInterop(GetWasmPathOrName(useDefaultName), connectionType, wasmBytes);
+                instance = new MazeInterop(GetWasmPathOrName(useDefaultName), connectionType, wasmBytes);
             }
         }
         /// <summary>

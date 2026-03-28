@@ -48,27 +48,27 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to result</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset)
+        public MazeInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset)
         {
-            return _memory.Read<MazeWasmInterop.MazeWasmResult>(ptrOffset);
+            return _memory.Read<MazeInterop.MazeWasmResult>(ptrOffset);
         }
         /// <summary>
         /// Reads a `MazeWasmPoint` pointer into a `MazeWasmPoint`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to point</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset)
+        public MazeInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset)
         {
-            return _memory.Read<MazeWasmInterop.MazeWasmPoint>(ptrOffset);
+            return _memory.Read<MazeInterop.MazeWasmPoint>(ptrOffset);
         }
         /// <summary>
         /// Reads a `MazeWasmError` pointer into a `MazeWasmError`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to error</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmError ReadMazeWasmError(UInt32 ptrOffset)
+        public MazeInterop.MazeWasmError ReadMazeWasmError(UInt32 ptrOffset)
         {
-            return _memory.Read<MazeWasmInterop.MazeWasmError>(ptrOffset);
+            return _memory.Read<MazeInterop.MazeWasmError>(ptrOffset);
         }
         /// <summary>
         /// Extracts the string value from a string pointer, else throws

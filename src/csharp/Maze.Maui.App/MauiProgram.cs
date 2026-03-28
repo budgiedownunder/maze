@@ -37,7 +37,7 @@ namespace Maze.Maui.App
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
 
-            InitializeMazeWasmInterop();
+            InitializeMazeInterop();
 
             builder.Services.AddSingleton<ConfigurationService>();
             builder.Services.AddSingleton<IAuthService, AuthHttpClientService>();
@@ -71,15 +71,15 @@ namespace Maze.Maui.App
         /// <summary>
         /// Initializes the Maze WebAssembly interop 
         /// </summary>
-        private static async void InitializeMazeWasmInterop()
+        private static async void InitializeMazeInterop()
         {
             // TO DO - move to a service
             try
             {
-                MazeWasmInterop.ConnectionType connectionType =
-                    OperatingSystem.IsIOS()     ? MazeWasmInterop.ConnectionType.Native :
-                    OperatingSystem.IsAndroid() ? MazeWasmInterop.ConnectionType.Wasmer :
-                                                MazeWasmInterop.ConnectionType.Wasmtime;
+                MazeInterop.ConnectionType connectionType =
+                    OperatingSystem.IsIOS()     ? MazeInterop.ConnectionType.Native :
+                    OperatingSystem.IsAndroid() ? MazeInterop.ConnectionType.Wasmer :
+                                                MazeInterop.ConnectionType.Wasmtime;
 
                 byte[]? wasmBytes = null;
                 if (!OperatingSystem.IsIOS())
@@ -89,12 +89,12 @@ namespace Maze.Maui.App
                     await stream.CopyToAsync(ms);
                     wasmBytes = ms.ToArray();
                 }
-                MazeWasmInterop interop = MazeWasmInterop.GetInstance(connectionType, true, wasmBytes);
+                MazeInterop interop = MazeInterop.GetInstance(connectionType, true, wasmBytes);
                 
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to initialize MazeWasmInterop: {ex.Message}");
+                Console.WriteLine($"Failed to initialize MazeInterop: {ex.Message}");
             }
         }
     }

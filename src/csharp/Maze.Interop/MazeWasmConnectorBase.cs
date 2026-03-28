@@ -1,6 +1,6 @@
 ﻿#if !IOS
 using System.Text;
-using static Maze.Interop.MazeWasmInterop;
+using static Maze.Interop.MazeInterop;
 
 namespace Maze.Interop
 {
@@ -28,19 +28,19 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to result</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset);
+        public MazeInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset);
         /// <summary>
         /// Reads a `MazeWasmPoint` pointer into a `MazeWasmPoint`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to point</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset);
+        public MazeInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset);
         /// <summary>
         /// Reads a `MazeWasmError` pointer into a `MazeWasmError`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to error</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmError ReadMazeWasmError(UInt32 ptrOffset);
+        public MazeInterop.MazeWasmError ReadMazeWasmError(UInt32 ptrOffset);
         /// <summary>
         /// Extracts the string value from a string pointer, else throws
         /// an exception if the operaiton failed.
@@ -184,17 +184,17 @@ namespace Maze.Interop
         /// <param name="row">Target row</param>
         /// <param name="col">Target column</param>
         /// <returns>Cell type</returns>
-        public MazeWasmInterop.MazeWasmCellType MazeWasmGetCellType(UIntPtr mazeWasmPtr, UInt32 row, UInt32 col)
+        public MazeInterop.MazeWasmCellType MazeWasmGetCellType(UIntPtr mazeWasmPtr, UInt32 row, UInt32 col)
         {
             UInt32 resultPtr = (UInt32)(Int32)(mazeWasmGetCellType?.Invoke((long)(uint)mazeWasmPtr, row, col) ?? 0);
-            MazeWasmInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtr);
+            MazeInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtr);
             if (result.error_ptr != 0)
             {
                 string errorMessage = GetErrorMessage(result.error_ptr);
                 FreeMazeWasmResult(resultPtr, true);
                 throw new Exception(errorMessage);
             }
-            MazeWasmInterop.MazeWasmCellType cellType = result.value_ptr != 0 ? (MazeWasmInterop.MazeWasmCellType)(result.value_ptr) : MazeWasmInterop.MazeWasmCellType.Empty;
+            MazeInterop.MazeWasmCellType cellType = result.value_ptr != 0 ? (MazeInterop.MazeWasmCellType)(result.value_ptr) : MazeInterop.MazeWasmCellType.Empty;
             FreeMazeWasmResult(resultPtr, true);
             return cellType;
         }
@@ -218,7 +218,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Start cell point</returns>
-        public MazeWasmInterop.MazeWasmPoint MazeWasmGetStartCell(UIntPtr mazeWasmPtr)
+        public MazeInterop.MazeWasmPoint MazeWasmGetStartCell(UIntPtr mazeWasmPtr)
         {
             UInt32 resultPtr = (UInt32)(Int32)(mazeWasmGetStartCell?.Invoke((long)(uint)mazeWasmPtr) ?? 0);
             return MazeWasmResultGetPoint(resultPtr, true);
@@ -243,7 +243,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Finish cell point</returns>
-        public MazeWasmInterop.MazeWasmPoint MazeWasmGetFinishCell(UIntPtr mazeWasmPtr)
+        public MazeInterop.MazeWasmPoint MazeWasmGetFinishCell(UIntPtr mazeWasmPtr)
         {
             UInt32 resultPtr = (UInt32)(Int32)(mazeWasmGetFinishCell?.Invoke((long)(uint)mazeWasmPtr) ?? 0);
             return MazeWasmResultGetPoint(resultPtr, true);
@@ -354,14 +354,14 @@ namespace Maze.Interop
         public string MazeWasmToJson(UIntPtr mazeWasmPtr)
         {
             UInt32 resultPtr = (UInt32)(Int32)(mazeWasmToJson?.Invoke((long)(uint)mazeWasmPtr) ?? 0);
-            MazeWasmInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtr);
+            MazeInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtr);
             if (result.error_ptr != 0)
             {
                 string errorMessage = GetErrorMessage(result.error_ptr);
                 FreeMazeWasmResult(resultPtr, true);
                 throw new Exception(errorMessage);
             }
-            if ((MazeWasmInterop.MazeWasmResultValueType)(result.value_type) != MazeWasmInterop.MazeWasmResultValueType.String)
+            if ((MazeInterop.MazeWasmResultValueType)(result.value_type) != MazeInterop.MazeWasmResultValueType.String)
             {
                 FreeMazeWasmResult(resultPtr, true);
                 throw new Exception("Result value is not a string");
@@ -383,14 +383,14 @@ namespace Maze.Interop
         public UIntPtr MazeWasmSolve(UIntPtr mazeWasmPtr)
         {
             UInt32 resultPtr = (UInt32)(Int32)(mazeWasmSolve?.Invoke((long)(uint)mazeWasmPtr) ?? 0);
-            MazeWasmInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtr);
+            MazeInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtr);
             if (result.error_ptr != 0)
             {
                 string errorMessage = GetErrorMessage(result.error_ptr);
                 FreeMazeWasmResult(resultPtr, true);
                 throw new Exception(errorMessage);
             }
-            if ((MazeWasmInterop.MazeWasmResultValueType)(result.value_type) != MazeWasmInterop.MazeWasmResultValueType.Solution)
+            if ((MazeInterop.MazeWasmResultValueType)(result.value_type) != MazeInterop.MazeWasmResultValueType.Solution)
             {
                 FreeMazeWasmResult(resultPtr, true);
                 throw new Exception("Result value is not a solution");
@@ -415,11 +415,11 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="solutionPtr">Pointer to solution</param>
         /// <returns>List of points</returns>
-        public List<MazeWasmInterop.MazeWasmPoint> MazeWasmSolutionGetPathPoints(UIntPtr solutionPtr)
+        public List<MazeInterop.MazeWasmPoint> MazeWasmSolutionGetPathPoints(UIntPtr solutionPtr)
         {
             if (solutionPtr == UIntPtr.Zero) throw new Exception("solutionPtr is zero");
             UInt32 pathPointsPtr = (UInt32)(Int32)(mazeWasmSolutionGetPathPoints?.Invoke((long)(uint)solutionPtr) ?? 0);
-            List<MazeWasmInterop.MazeWasmPoint> points = ReadPathPoints(pathPointsPtr);
+            List<MazeInterop.MazeWasmPoint> points = ReadPathPoints(pathPointsPtr);
             FreeSizedMemory(pathPointsPtr);
             return points;
         }
@@ -428,15 +428,15 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="pathPointsPtrOffset">Points pointer offset</param>
         /// <returns>List of points</returns>
-        protected List<MazeWasmInterop.MazeWasmPoint> ReadPathPoints(UInt32 pathPointsPtrOffset)
+        protected List<MazeInterop.MazeWasmPoint> ReadPathPoints(UInt32 pathPointsPtrOffset)
         {
             UInt32 dataPtrOffset = pathPointsPtrOffset + 4;
             UInt32 numPoints = memory.ReadUInt32(dataPtrOffset);
             dataPtrOffset += 4;
-            List<MazeWasmInterop.MazeWasmPoint> points = new List<MazeWasmInterop.MazeWasmPoint>();
+            List<MazeInterop.MazeWasmPoint> points = new List<MazeInterop.MazeWasmPoint>();
             for (UInt32 i = 0; i < numPoints; i++)
             {
-                MazeWasmInterop.MazeWasmPoint point = memory.ReadMazeWasmPoint(dataPtrOffset);
+                MazeInterop.MazeWasmPoint point = memory.ReadMazeWasmPoint(dataPtrOffset);
                 points.Add(point);
                 dataPtrOffset += 8;
             }
@@ -450,21 +450,21 @@ namespace Maze.Interop
         /// <param name="resultPtrOffset">Memory pointer offset to result</param>
         /// <param name="freeResultPtr">Flag indicating whether to free the result</param>
         /// <returns>Point value if successful</returns>
-        MazeWasmInterop.MazeWasmPoint MazeWasmResultGetPoint(UInt32 resultPtrOffset, bool freeResultPtr)
+        MazeInterop.MazeWasmPoint MazeWasmResultGetPoint(UInt32 resultPtrOffset, bool freeResultPtr)
         {
-            MazeWasmInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtrOffset);
+            MazeInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtrOffset);
             if (result.error_ptr != 0)
             {
                 string errorMessage = GetErrorMessage(result.error_ptr);
                 if (freeResultPtr) FreeMazeWasmResult(resultPtrOffset, true);
                 throw new Exception(errorMessage);
             }
-            if ((MazeWasmInterop.MazeWasmResultValueType)(result.value_type) != MazeWasmInterop.MazeWasmResultValueType.Point)
+            if ((MazeInterop.MazeWasmResultValueType)(result.value_type) != MazeInterop.MazeWasmResultValueType.Point)
             {
                 if (freeResultPtr) FreeMazeWasmResult(resultPtrOffset, true);
                 throw new Exception("Result value is not a Point");
             }
-            MazeWasmInterop.MazeWasmPoint point = memory.ReadMazeWasmPoint(result.value_ptr + 4);
+            MazeInterop.MazeWasmPoint point = memory.ReadMazeWasmPoint(result.value_ptr + 4);
             if (freeResultPtr) FreeMazeWasmResult(resultPtrOffset, true);
             return point;
         }
@@ -582,7 +582,7 @@ namespace Maze.Interop
         /// <returns>Error message</returns>
         protected string GetErrorMessage(UInt32 errorPtr)
         {
-            MazeWasmInterop.MazeWasmError mazeWasmError = memory.ReadMazeWasmError(errorPtr);
+            MazeInterop.MazeWasmError mazeWasmError = memory.ReadMazeWasmError(errorPtr);
             return memory.StringPtrToString(mazeWasmError.message_ptr);
         }
         /// <summary>

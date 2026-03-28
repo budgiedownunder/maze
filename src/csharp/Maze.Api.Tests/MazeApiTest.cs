@@ -1041,8 +1041,8 @@ namespace Maze.Api.Tests
         /// </summary>
         public WasmtimeTestFixture()
         {
-            MazeWasmInterop.Disconnect();
-            MazeWasmInterop.Initialize(MazeWasmInterop.ConnectionType.Wasmtime, true);
+            MazeInterop.Disconnect();
+            MazeInterop.Initialize(MazeInterop.ConnectionType.Wasmtime, true);
         }
     }
     /// <summary>
@@ -1056,7 +1056,7 @@ namespace Maze.Api.Tests
         // It is used to apply [CollectionDefinition] and ICollectionFixture
     }
     /// <summary>
-    ///  This class contains the static [Wasmtime](https://docs.wasmtime.dev/) [Maze.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) 
+    ///  This class contains the static [Wasmtime](https://docs.wasmtime.dev/) [Maze.Interop.MazeInterop.ConnectionType](xref:Maze.Interop.MazeInterop.ConnectionType) [`xUnit`](https://xunit.net/) 
     ///  unit tests for the [Maze.Api](xref:Maze.Api) class
     /// </summary>
     [Collection("WasmtimeTestFixtureCollection")]
@@ -1064,7 +1064,7 @@ namespace Maze.Api.Tests
     {
         private readonly WasmtimeTestFixture _fixture;
         /// <summary>
-        ///  Constructor for the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Api"/> tests that use a statically allocated <see cref="MazeWasmInterop"/>
+        ///  Constructor for the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Api"/> tests that use a statically allocated <see cref="MazeInterop"/>
         /// </summary>
         public MazeApiWasmtimeTest_Static(WasmtimeTestFixture fixture)
         {
@@ -1074,14 +1074,14 @@ namespace Maze.Api.Tests
         }
     }
     /// <summary>
-    ///  This class contains the non-static [Wasmtime](https://docs.wasmtime.dev/) [Maze.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
+    ///  This class contains the non-static [Wasmtime](https://docs.wasmtime.dev/) [Maze.Interop.MazeInterop.ConnectionType](xref:Maze.Interop.MazeInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
     /// </summary>
     [Collection("WasmtimeTestFixtureCollection")]
     public class MazeApiWasmtimeTest_NonStatic : MazeApiTestBase
     {
         private readonly WasmtimeTestFixture _fixture;
         /// <summary>
-        ///  Constructor for the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Api"/> tests that use a dynamically allocated <see cref="MazeWasmInterop"/>
+        ///  Constructor for the [Wasmtime](https://docs.wasmtime.dev/) <see cref="Api"/> tests that use a dynamically allocated <see cref="MazeInterop"/>
         /// </summary>
         public MazeApiWasmtimeTest_NonStatic(WasmtimeTestFixture fixture)
         {
@@ -1102,8 +1102,8 @@ namespace Maze.Api.Tests
         /// </summary>
         public WasmerTestFixture()
         {
-            MazeWasmInterop.Disconnect();
-            MazeWasmInterop.Initialize(MazeWasmInterop.ConnectionType.Wasmer, true);
+            MazeInterop.Disconnect();
+            MazeInterop.Initialize(MazeInterop.ConnectionType.Wasmer, true);
         }
     }
     /// <summary>
@@ -1117,14 +1117,14 @@ namespace Maze.Api.Tests
         // It is used to apply [CollectionDefinition] and ICollectionFixture
     }
     /// <summary>
-    ///  This class contains the static [Wasmer](https://wasmer.io/) [Maze.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
+    ///  This class contains the static [Wasmer](https://wasmer.io/) [Maze.Interop.MazeInterop.ConnectionType](xref:Maze.Interop.MazeInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
     /// </summary>
     [Collection("WasmerTestFixtureCollection")]
     public class MazeApiWasmerTest_Static : MazeApiTestBase
     {
         private readonly WasmerTestFixture _fixture;
         /// <summary>
-        ///  Constructor for the [Wasmer](https://wasmer.io/) <see cref="Api"/> tests that use a statically allocated <see cref="MazeWasmInterop"/>
+        ///  Constructor for the [Wasmer](https://wasmer.io/) <see cref="Api"/> tests that use a statically allocated <see cref="MazeInterop"/>
         /// </summary>
         public MazeApiWasmerTest_Static(WasmerTestFixture fixture)
         {
@@ -1134,14 +1134,14 @@ namespace Maze.Api.Tests
         }
     }
     /// <summary>
-    ///  This class contains the non-static [Wasmer](https://wasmer.io/) [Maze.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
+    ///  This class contains the non-static [Wasmer](https://wasmer.io/) [Maze.Interop.MazeInterop.ConnectionType](xref:Maze.Interop.MazeInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
     /// </summary>
     [Collection("WasmerTestFixtureCollection")]
     public class MazeApiWasmerTest_NonStatic : MazeApiTestBase
     {
         private readonly WasmerTestFixture _fixture;
         /// <summary>
-        ///  Constructor for the [Wasmer](https://wasmer.io/) <see cref="Api"/> tests that use a dynamically allocated <see cref="MazeWasmInterop"/>
+        ///  Constructor for the [Wasmer](https://wasmer.io/) <see cref="Api"/> tests that use a dynamically allocated <see cref="MazeInterop"/>
         /// </summary>
         public MazeApiWasmerTest_NonStatic(WasmerTestFixture fixture)
         {

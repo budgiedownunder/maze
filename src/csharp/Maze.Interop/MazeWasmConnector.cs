@@ -1,4 +1,4 @@
-﻿using static Maze.Interop.MazeWasmInterop;
+﻿using static Maze.Interop.MazeInterop;
 #if !IOS
 using static Maze.Interop.WasmerInterop;
 #endif

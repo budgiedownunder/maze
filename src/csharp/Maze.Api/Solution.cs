@@ -2,7 +2,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using static Maze.Interop.MazeWasmInterop;
+using static Maze.Interop.MazeInterop;
 
 namespace Maze.Api
 {
@@ -12,7 +12,7 @@ namespace Maze.Api
     public class Solution : IDisposable
     {
         // Private data
-        static MazeWasmInterop _interop = MazeWasmInterop.GetInstance(); // Used when UseStaticInterop = true
+        static MazeInterop _interop = MazeInterop.GetInstance(); // Used when UseStaticInterop = true
         private bool _disposed = false;
         private UIntPtr _solutionWasmPtr = default;
         /// <summary>
@@ -25,11 +25,11 @@ namespace Maze.Api
         /// The current [Maze.Interop](xref:Maze.Interop) associated with the object
         /// </summary>
         /// <returns>[Maze.Interop](xref:Maze.Interop) instance</returns>
-        public MazeWasmInterop Interop
+        public MazeInterop Interop
         {
             get
             {
-                return UseStaticInterop ? _interop : MazeWasmInterop.GetInstance();
+                return UseStaticInterop ? _interop : MazeInterop.GetInstance();
             }
         }
         /// <summary>

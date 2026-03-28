@@ -477,33 +477,33 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to result</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset)
+        public MazeInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset)
         {
             IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
             IntPtr resultPtr = IntPtr.Add(memoryBase, (int)ptrOffset);
-            return Marshal.PtrToStructure<MazeWasmInterop.MazeWasmResult>(resultPtr);
+            return Marshal.PtrToStructure<MazeInterop.MazeWasmResult>(resultPtr);
         }
         /// <summary>
         /// Reads a `MazeWasmPoint` pointer into a `MazeWasmPoint`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to point</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset)
+        public MazeInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset)
         {
             IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
             IntPtr pointPtr = IntPtr.Add(memoryBase, (int)ptrOffset);
-            return Marshal.PtrToStructure<MazeWasmInterop.MazeWasmPoint>(pointPtr);
+            return Marshal.PtrToStructure<MazeInterop.MazeWasmPoint>(pointPtr);
         }
         /// <summary>
         /// Reads a `MazeWasmError` pointer into a `MazeWasmError`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to error</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmError ReadMazeWasmError(UInt32 ptrOffset)
+        public MazeInterop.MazeWasmError ReadMazeWasmError(UInt32 ptrOffset)
         {
             IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
             IntPtr errorPtr = IntPtr.Add(memoryBase, (int)ptrOffset);
-            return Marshal.PtrToStructure<MazeWasmInterop.MazeWasmError>(errorPtr);
+            return Marshal.PtrToStructure<MazeInterop.MazeWasmError>(errorPtr);
         }
         /// <summary>
         /// Extracts the string value from a string pointer, else throws

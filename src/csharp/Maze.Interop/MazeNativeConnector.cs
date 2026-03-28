@@ -1,6 +1,6 @@
 #if IOS
 using System.Runtime.InteropServices;
-using static Maze.Interop.MazeWasmInterop;
+using static Maze.Interop.MazeInterop;
 
 namespace Maze.Interop
 {
