@@ -8,11 +8,11 @@ namespace Maze.Interop
     /// iOS-only connector that P/Invokes into the statically-linked <c>maze_c</c>
     /// native library via <c>DllImport("__Internal")</c>.
     ///
-    /// Implements <see cref="IMazeWasmConnector"/> directly (no
+    /// Implements <see cref="IMazeConnector"/> directly (no
     /// <see cref="MazeWasmConnectorBase"/> involvement) — all maze logic is
     /// executed natively without a WebAssembly runtime.
     /// </summary>
-    internal sealed class MazeNativeConnector : IMazeWasmConnector
+    internal sealed class MazeNativeConnector : IMazeConnector
     {
         // ── P/Invoke declarations ─────────────────────────────────────────────
 
@@ -69,7 +69,7 @@ namespace Maze.Interop
                 throw new Exception(GetLastErrorMessage());
         }
 
-        // ── IMazeWasmConnector ────────────────────────────────────────────────
+        // ── IMazeConnector ────────────────────────────────────────────────
 
         public void Dispose() { /* no native resources held directly */ }
 

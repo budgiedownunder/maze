@@ -685,7 +685,7 @@ namespace Maze.Interop
     /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UIntPtr)">FreeMazeWasm()</see>
     /// to prevent memory leaks within Web Assembly.
     /// </summary>
-    class MazeWasmerConnector : MazeWasmConnectorBase, IMazeWasmConnector
+    class MazeWasmerConnector : MazeWasmConnectorBase, IMazeConnector
     {
         bool _disposed = false;
 

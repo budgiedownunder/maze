@@ -45,7 +45,7 @@
         private static MazeInterop? instance = null;
         private bool _disposed = false;
 
-        private IMazeWasmConnector connector;
+        private IMazeConnector connector;
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct MazeWasmError
