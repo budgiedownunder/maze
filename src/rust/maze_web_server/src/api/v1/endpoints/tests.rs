@@ -354,6 +354,15 @@ mod test_definitions {
             users.sort_by_key(|user| user.username.clone());
             Ok(users)
         }
+
+        /// Returns the list of admin users within the store
+        fn get_admin_users(&self) -> Result<Vec<User>, StoreError> {
+            let admins: Vec<User> = self.users.values()
+                .filter(|v| v.user.is_admin)
+                .map(|v| v.user.clone())
+                .collect();
+            Ok(admins)
+        }
     }
 
     impl Manage for MockStore {
@@ -1401,10 +1410,11 @@ mod test_definitions {
             Some(VALID_ADMIN_USERNAME_1), use_login, VALID_ADMIN_USERNAME_2, StatusCode::OK).await;
     }
     
-    async fn run_can_delete_last_admin_user_with_admin_caller(use_login: bool) {
-        run_delete_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), 
-            Some(VALID_ADMIN_USERNAME_1), use_login, VALID_ADMIN_USERNAME_1, StatusCode::OK).await;
+    async fn run_cannot_delete_last_admin_user_with_admin_caller(use_login: bool) {
+        run_delete_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty),
+            Some(VALID_ADMIN_USERNAME_1), use_login, VALID_ADMIN_USERNAME_1, StatusCode::CONFLICT).await;
     }
+
 
     async fn run_cannot_delete_non_existent_admin_user_with_admin_caller(use_login: bool) {
         run_delete_user_test(&CreateUsersDef::new(1, 0, MazeContent::Empty), 
@@ -1427,8 +1437,26 @@ mod test_definitions {
     }
 
     async fn run_cannot_delete_existing_non_admin_user_with_non_admin_caller(use_login: bool) {
-        run_delete_user_test(&CreateUsersDef::new(2, 1, MazeContent::Empty), 
+        run_delete_user_test(&CreateUsersDef::new(2, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1), use_login, VALID_USERNAME_1, StatusCode::UNAUTHORIZED).await;
+    }
+
+    async fn run_cannot_delete_me_when_last_admin(use_login: bool) {
+        run_delete_me_test(
+            &CreateUsersDef::new(1, 0, MazeContent::Empty),
+            Some(VALID_ADMIN_USERNAME_1),
+            use_login,
+            StatusCode::CONFLICT,
+        ).await;
+    }
+
+    async fn run_can_delete_me_when_not_last_admin(use_login: bool) {
+        run_delete_me_test(
+            &CreateUsersDef::new(2, 0, MazeContent::Empty),
+            Some(VALID_ADMIN_USERNAME_1),
+            use_login,
+            StatusCode::NO_CONTENT,
+        ).await;
     }
 
     async fn run_can_get_mazes_with_no_mazes(use_login: bool) {
@@ -2039,13 +2067,13 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn can_delete_last_admin_user_with_admin_caller_with_api_key() {
-        run_can_delete_last_admin_user_with_admin_caller(false).await;
+    async fn cannot_delete_last_admin_user_with_admin_caller_with_api_key() {
+        run_cannot_delete_last_admin_user_with_admin_caller(false).await;
     }
 
     #[actix_web::test]
-    async fn can_delete_last_admin_user_with_admin_caller_with_login() {
-        run_can_delete_last_admin_user_with_admin_caller(true).await;
+    async fn cannot_delete_last_admin_user_with_admin_caller_with_login() {
+        run_cannot_delete_last_admin_user_with_admin_caller(true).await;
     }
 
     #[actix_web::test]
@@ -3022,6 +3050,26 @@ mod test_definitions {
             false,
             StatusCode::NO_CONTENT,
         ).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_delete_me_when_last_admin_with_api_key() {
+        run_cannot_delete_me_when_last_admin(false).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_delete_me_when_last_admin_with_login() {
+        run_cannot_delete_me_when_last_admin(true).await;
+    }
+
+    #[actix_web::test]
+    async fn can_delete_me_when_not_last_admin_with_api_key() {
+        run_can_delete_me_when_not_last_admin(false).await;
+    }
+
+    #[actix_web::test]
+    async fn can_delete_me_when_not_last_admin_with_login() {
+        run_can_delete_me_when_not_last_admin(true).await;
     }
 
     // **************************************************************************************************

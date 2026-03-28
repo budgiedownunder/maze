@@ -26,6 +26,8 @@ pub trait UserStore {
     /// Returns the list of users within the store, sorted
     /// alphabetically by username in ascending order
     fn get_users(&self) -> Result<Vec<User>, Error>;
+    /// Returns the list of admin users within the store
+    fn get_admin_users(&self) -> Result<Vec<User>, Error>;
 }
 
 /// Contains the identifying details for a maze item and (optionally)
