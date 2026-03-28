@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj" />
+    <ProjectReference Include="..\Maze.Interop\Maze.Interop.csproj" />
   </ItemGroup>
 
   <!-- Define helper property to control whether mobile frameworks are targeted -->

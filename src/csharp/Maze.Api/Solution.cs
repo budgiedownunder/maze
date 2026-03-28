@@ -1,8 +1,8 @@
-﻿using Maze.Wasm.Interop;
+﻿using Maze.Interop;
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using static Maze.Wasm.Interop.MazeWasmInterop;
+using static Maze.Interop.MazeInterop;
 
 namespace Maze.Api
 {
@@ -12,37 +12,37 @@ namespace Maze.Api
     public class Solution : IDisposable
     {
         // Private data
-        static MazeWasmInterop _interop = MazeWasmInterop.GetInstance(); // Used when UseStaticInterop = true
+        static MazeInterop _interop = MazeInterop.GetInstance(); // Used when UseStaticInterop = true
         private bool _disposed = false;
-        private UIntPtr _solutionWasmPtr = default;
+        private UIntPtr _solutionPtr = default;
         /// <summary>
-        /// Controls whether the object uses a statically defined [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) instance (default = `true`). If
+        /// Controls whether the object uses a statically defined [Maze.Interop](xref:Maze.Interop) instance (default = `true`). If
         /// `false`, then the maze determines the current instance on a per-API call basis.
         /// </summary>
         /// <returns>Boolean</returns>
         public static bool UseStaticInterop { get; set; } = true;
         /// <summary>
-        /// The current [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) associated with the object
+        /// The current [Maze.Interop](xref:Maze.Interop) associated with the object
         /// </summary>
-        /// <returns>[Maze.Wasm.Interop](xref:Maze.Wasm.Interop) instance</returns>
-        public MazeWasmInterop Interop
+        /// <returns>[Maze.Interop](xref:Maze.Interop) instance</returns>
+        public MazeInterop Interop
         {
             get
             {
-                return UseStaticInterop ? _interop : MazeWasmInterop.GetInstance();
+                return UseStaticInterop ? _interop : MazeInterop.GetInstance();
             }
         }
         /// <summary>
-        /// Creates a new solution that wraps a [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) solution pointer, or will throw an exception if the operation fails
+        /// Creates a new solution that wraps a [Maze.Interop](xref:Maze.Interop) solution pointer, or will throw an exception if the operation fails
         /// </summary>
-        /// <param name="solutionWasmPtr">[Maze.Wasm.Interop](xref:Maze.Wasm.Interop) solution pointer</param>
+        /// <param name="solutionPtr">[Maze.Interop](xref:Maze.Interop) solution pointer</param>
         /// <returns>New solution instance</returns>
-        public Solution(UIntPtr solutionWasmPtr)
+        public Solution(UIntPtr solutionPtr)
         {
-            _solutionWasmPtr = solutionWasmPtr;
+            _solutionPtr = solutionPtr;
         }
         /// <summary>
-        /// Handles object disposal, releasing managed and unmanaged [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) resources and marking
+        /// Handles object disposal, releasing managed and unmanaged [Maze.Interop](xref:Maze.Interop) resources and marking
         /// the object as having been finalized
         /// </summary>
         /// <returns>Nothing</returns>
@@ -62,10 +62,10 @@ namespace Maze.Api
             if (!_disposed)
             {
                 // Dispose unmanaged resources
-                if (_solutionWasmPtr != UIntPtr.Zero)
+                if (_solutionPtr != UIntPtr.Zero)
                 {
-                    Interop.FreeMazeWasmSolution(_solutionWasmPtr);
-                    _solutionWasmPtr = UIntPtr.Zero;
+                    Interop.FreeMazeSolution(_solutionPtr);
+                    _solutionPtr = UIntPtr.Zero;
                 }
 
                 _disposed = true;
@@ -85,7 +85,7 @@ namespace Maze.Api
         /// <returns>List of points</returns>
         public List<Maze.Point> GetPathPoints()
         {
-            return Maze.ToMazePoints(Interop.MazeWasmSolutionGetPathPoints(_solutionWasmPtr));
+            return Maze.ToMazePoints(Interop.MazeSolutionGetPathPoints(_solutionPtr));
         }
     }
 }

@@ -1,9 +1,9 @@
 ﻿#if !IOS
-namespace Maze.Wasm.Interop
+namespace Maze.Interop
 {
     using System.Runtime.InteropServices;
     using System.Text;
-    using static Maze.Wasm.Interop.WasmerInterop;
+    using static Maze.Interop.WasmerInterop;
     using System;
 
     //using Wasmtime;
@@ -433,7 +433,7 @@ namespace Maze.Wasm.Interop
     /// <summary>
     /// Provides a wrapper to [Wasmer](https://wasmer.io/) WebAssembly memory
     /// </summary>
-    internal class MazeWasmerMemory : IMemory
+    internal class MazeWasmerMemory : IWebAssemblyMemory
     {
         IntPtr _wasmMemoryPtr = IntPtr.Zero;
         /// <summary>
@@ -477,33 +477,33 @@ namespace Maze.Wasm.Interop
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to result</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset)
+        public MazeInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset)
         {
             IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
             IntPtr resultPtr = IntPtr.Add(memoryBase, (int)ptrOffset);
-            return Marshal.PtrToStructure<MazeWasmInterop.MazeWasmResult>(resultPtr);
+            return Marshal.PtrToStructure<MazeInterop.MazeWasmResult>(resultPtr);
         }
         /// <summary>
-        /// Reads a `MazeWasmPoint` pointer into a `MazeWasmPoint`
+        /// Reads a `MazePoint` pointer into a `MazePoint`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to point</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset)
+        public MazeInterop.MazePoint ReadMazePoint(UInt32 ptrOffset)
         {
             IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
             IntPtr pointPtr = IntPtr.Add(memoryBase, (int)ptrOffset);
-            return Marshal.PtrToStructure<MazeWasmInterop.MazeWasmPoint>(pointPtr);
+            return Marshal.PtrToStructure<MazeInterop.MazePoint>(pointPtr);
         }
         /// <summary>
         /// Reads a `MazeWasmError` pointer into a `MazeWasmError`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to error</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeWasmInterop.MazeWasmError ReadMazeWasmError(UInt32 ptrOffset)
+        public MazeInterop.MazeWasmError ReadMazeWasmError(UInt32 ptrOffset)
         {
             IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
             IntPtr errorPtr = IntPtr.Add(memoryBase, (int)ptrOffset);
-            return Marshal.PtrToStructure<MazeWasmInterop.MazeWasmError>(errorPtr);
+            return Marshal.PtrToStructure<MazeInterop.MazeWasmError>(errorPtr);
         }
         /// <summary>
         /// Extracts the string value from a string pointer, else throws
@@ -530,7 +530,7 @@ namespace Maze.Wasm.Interop
     /// <summary>
     ///  This class wraps a Wasmer WebAssembly function
     /// </summary>
-    class MazeWasmerFunction : IFunction
+    class MazeWasmerFunction : IWebAssemblyFunction
     {
         private string _name = "";
         private IntPtr _ptr = IntPtr.Zero; // type: wasm_func_t * 
@@ -673,19 +673,20 @@ namespace Maze.Wasm.Interop
         }
     }
     /// <summary>
-    ///  This class provides a C# connector to the `maze_wasm` web assembly via [Wasmer](https://wasmer.io/), insulating the
-    ///  calling application from the specifics of the underlying Web Assembly interop operations.
-    ///  
-    /// Developers can use <see cref="MazeWasmConnectorBase.NewMazeWasm()">NewMazeWasm()</see> to create
-    /// a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UIntPtr,uint,uint)">MazeWasmInsertRows()</see>,
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmGenerate(UIntPtr,UIntPtr)">MazeWasmGenerate()</see>, and
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmSolve(UIntPtr)">MazeWasmSolve()</see>, to interact with the maze.
+    ///  This class provides a C# connector to the <c>maze_wasm</c> WebAssembly module via
+    ///  [Wasmer](https://wasmer.io/), insulating the calling application from the
+    ///  specifics of the underlying interop operations.
     ///
-    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UIntPtr)">FreeMazeWasm()</see>
-    /// to prevent memory leaks within Web Assembly.
+    /// Developers can use <see cref="MazeWebAssemblyConnectorBase.NewMaze()">NewMaze()</see> to create
+    /// a pointer to a maze object and then other maze functions, such as
+    ///  <see cref="MazeWebAssemblyConnectorBase.MazeInsertRows(UIntPtr,uint,uint)">MazeInsertRows()</see>,
+    ///  <see cref="MazeWebAssemblyConnectorBase.MazeGenerate(UIntPtr,UIntPtr)">MazeGenerate()</see>, and
+    ///  <see cref="MazeWebAssemblyConnectorBase.MazeSolve(UIntPtr)">MazeSolve()</see>, to interact with the maze.
+    ///
+    /// Once finished with, a maze should be destroyed using <see cref="MazeWebAssemblyConnectorBase.FreeMaze(UIntPtr)">FreeMaze()</see>
+    /// to prevent memory leaks.
     /// </summary>
-    class MazeWasmerConnector : MazeWasmConnectorBase, IMazeWasmConnector
+    class MazeWasmerConnector : MazeWebAssemblyConnectorBase, IMazeConnector
     {
         bool _disposed = false;
 
@@ -703,7 +704,7 @@ namespace Maze.Wasm.Interop
         WasmerInterop.wasm_exporttype_vec_t _moduleExports = new WasmerInterop.wasm_exporttype_vec_t();
 
         // WebAssembly functions (initialized and validated on creation)
-        public delegate ref IFunction? RefFunctionGetter();
+        public delegate ref IWebAssemblyFunction? RefFunctionGetter();
         Dictionary<string, RefFunctionGetter>? _functionMap;
 
         /// <summary>
@@ -894,43 +895,43 @@ namespace Maze.Wasm.Interop
         {
             _functionMap = new Dictionary<string, RefFunctionGetter>
             {
-                { "new_maze_wasm", () => ref this.newMazeWasm },
-                { "free_maze_wasm", () => ref this.freeMazeWasm },
-                { "maze_wasm_is_empty", () => ref this.mazeWasmIsEmpty },
-                { "maze_wasm_resize", () => ref this.mazeWasmResize },
-                { "maze_wasm_reset", () => ref this.mazeWasmReset },
-                { "maze_wasm_get_row_count", () => ref this.mazeWasmGetRowCount },
-                { "maze_wasm_get_col_count", () => ref this.mazeWasmGetColCount },
-                { "maze_wasm_get_cell_type", () => ref this.mazeWasmGetCellType },
-                { "maze_wasm_set_start_cell", () => ref this.mazeWasmSetStartCell },
-                { "maze_wasm_get_start_cell", () => ref this.mazeWasmGetStartCell },
-                { "maze_wasm_set_finish_cell", () => ref this.mazeWasmSetFinishCell },
-                { "maze_wasm_get_finish_cell", () => ref this.mazeWasmGetFinishCell },
-                { "maze_wasm_set_wall_cells", () => ref this.mazeWasmSetWallCells },
-                { "maze_wasm_clear_cells", () => ref this.mazeWasmClearCells },
-                { "maze_wasm_insert_rows", () => ref this.mazeWasmInsertRows },
-                { "maze_wasm_delete_rows", () => ref this.mazeWasmDeleteRows },
-                { "maze_wasm_insert_cols", () => ref this.mazeWasmInsertCols },
-                { "maze_wasm_delete_cols", () => ref this.mazeWasmDeleteCols },
-                { "maze_wasm_from_json", () => ref this.mazeWasmFromJson },
-                { "maze_wasm_to_json", () => ref this.mazeWasmToJson },
-                { "maze_wasm_solve", () => ref this.mazeWasmSolve },
-                { "maze_wasm_solution_get_path_points", () => ref this.mazeWasmSolutionGetPathPoints },
-                { "free_maze_wasm_result", () => ref this.freeMazeWasmResult },
-                { "free_maze_wasm_solution", () => ref this.freeMazeWasmSolution },
-                { "free_maze_wasm_error", () => ref this.freeMazeWasmError },
+                { "new_maze_wasm", () => ref this.newMaze },
+                { "free_maze_wasm", () => ref this.freeMaze },
+                { "maze_wasm_is_empty", () => ref this.mazeIsEmpty },
+                { "maze_wasm_resize", () => ref this.mazeResize },
+                { "maze_wasm_reset", () => ref this.mazeReset },
+                { "maze_wasm_get_row_count", () => ref this.mazeGetRowCount },
+                { "maze_wasm_get_col_count", () => ref this.mazeGetColCount },
+                { "maze_wasm_get_cell_type", () => ref this.mazeGetCellType },
+                { "maze_wasm_set_start_cell", () => ref this.mazeSetStartCell },
+                { "maze_wasm_get_start_cell", () => ref this.mazeGetStartCell },
+                { "maze_wasm_set_finish_cell", () => ref this.mazeSetFinishCell },
+                { "maze_wasm_get_finish_cell", () => ref this.mazeGetFinishCell },
+                { "maze_wasm_set_wall_cells", () => ref this.mazeSetWallCells },
+                { "maze_wasm_clear_cells", () => ref this.mazeClearCells },
+                { "maze_wasm_insert_rows", () => ref this.mazeInsertRows },
+                { "maze_wasm_delete_rows", () => ref this.mazeDeleteRows },
+                { "maze_wasm_insert_cols", () => ref this.mazeInsertCols },
+                { "maze_wasm_delete_cols", () => ref this.mazeDeleteCols },
+                { "maze_wasm_from_json", () => ref this.mazeFromJson },
+                { "maze_wasm_to_json", () => ref this.mazeToJson },
+                { "maze_wasm_solve", () => ref this.mazeSolve },
+                { "maze_wasm_solution_get_path_points", () => ref this.mazeSolutionGetPathPoints },
+                { "free_maze_wasm_result", () => ref this.freeMazeResult },
+                { "free_maze_wasm_solution", () => ref this.freeMazeSolution },
+                { "free_maze_wasm_error", () => ref this.freeMazeError },
                 { "allocate_sized_memory", () => ref this.allocateSizedMemory },
                 { "free_sized_memory", () => ref this.freeSizedMemory },
                 { "get_sized_memory_used", () => ref this.getSizedMemoryUsed },
                 { "get_num_objects_allocated", () => ref this.getNumObjectsAllocated },
-                { "new_generator_options_wasm", () => ref this.newGeneratorOptionsWasm },
+                { "new_generator_options_wasm", () => ref this.newGeneratorOptions },
                 { "generator_options_set_start", () => ref this.generatorOptionsSetStart },
                 { "generator_options_set_finish", () => ref this.generatorOptionsSetFinish },
                 { "generator_options_set_min_spine_length", () => ref this.generatorOptionsSetMinSpineLength },
                 { "generator_options_set_max_retries", () => ref this.generatorOptionsSetMaxRetries },
                 { "generator_options_set_branch_from_finish", () => ref this.generatorOptionsSetBranchFromFinish },
-                { "maze_wasm_generate", () => ref this.mazeWasmGenerate },
-                { "free_generator_options_wasm", () => ref this.freeGeneratorOptionsWasm }
+                { "maze_wasm_generate", () => ref this.mazeGenerate },
+                { "free_generator_options_wasm", () => ref this.freeGeneratorOptions }
             };
         }
         /// <summary>
@@ -945,7 +946,7 @@ namespace Maze.Wasm.Interop
 
             if (_functionMap.ContainsKey(name))
             {
-                ref IFunction? function = ref _functionMap[name]();
+                ref IWebAssemblyFunction? function = ref _functionMap[name]();
                 function = new MazeWasmerFunction(name, wasmFuncPtr);
             }
         }
@@ -960,7 +961,7 @@ namespace Maze.Wasm.Interop
             foreach (var kvp in _functionMap)
             {
                 string functionName = kvp.Key;
-                ref IFunction? function = ref kvp.Value();
+                ref IWebAssemblyFunction? function = ref kvp.Value();
                 if (function is null)
                 {
                     throw new Exception($"Failed to load the WebAssembly function: {functionName} in {wasmPathOrName}.");

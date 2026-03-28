@@ -1,8 +1,8 @@
-﻿using Maze.Wasm.Interop;
+﻿using Maze.Interop;
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using static Maze.Wasm.Interop.MazeWasmInterop;
+using static Maze.Interop.MazeInterop;
 
 namespace Maze.Api
 {
@@ -12,24 +12,24 @@ namespace Maze.Api
     public class Maze : IDisposable
     {
         // Private data
-        static MazeWasmInterop _interop = MazeWasmInterop.GetInstance(); // Used when UseStaticInterop = true
+        static MazeInterop _interop = MazeInterop.GetInstance(); // Used when UseStaticInterop = true
         private bool _disposed = false;
-        private UIntPtr _mazeWasmPtr = default;
+        private UIntPtr _mazePtr = default;
         /// <summary>
-        /// Controls whether the object uses a statically defined [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) instance (default = `true`). If
+        /// Controls whether the object uses a statically defined [Maze.Interop](xref:Maze.Interop) instance (default = `true`). If
         /// `false`, then the maze determines the current instance on a per-API call basis.
         /// </summary>
         /// <returns>Boolean</returns>
         public static bool UseStaticInterop { get; set; } = true;
         /// <summary>
-        /// The current [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) associated with the object
+        /// The current [Maze.Interop](xref:Maze.Interop) associated with the object
         /// </summary>
-        /// <returns>[Maze.Wasm.Interop](xref:Maze.Wasm.Interop) instance</returns>
-        public MazeWasmInterop Interop
+        /// <returns>[Maze.Interop](xref:Maze.Interop) instance</returns>
+        public MazeInterop Interop
         {
             get
             {
-                return UseStaticInterop ? _interop : MazeWasmInterop.GetInstance();
+                return UseStaticInterop ? _interop : MazeInterop.GetInstance();
             }
         }
         /// <summary>
@@ -110,34 +110,34 @@ namespace Maze.Api
             public bool? BranchFromFinish { get; set; }
         }
         /// <summary>
-        /// Converts a [MazeWasmPoint](xref:Maze.Wasm.Interop.MazeWasmInterop.MazeWasmPoint) to a [Maze.Point](xref:Maze.Api.Maze.Point)
+        /// Converts a [MazePoint](xref:Maze.Interop.MazeInterop.MazePoint) to a [Maze.Point](xref:Maze.Api.Maze.Point)
         /// </summary>
-        /// <param name="wasmPoint">Point to be converted</param>
+        /// <param name="pt">Point to be converted</param>
         /// <returns>The resultant [Maze.Point](xref:Maze.Api.Maze.Point)</returns>
-        static public Maze.Point ToMazePoint(MazeWasmPoint wasmPoint)
+        static public Maze.Point ToMazePoint(MazePoint pt)
         {
             return new Maze.Point
             {
-                Row = wasmPoint.row,
-                Column = wasmPoint.col
+                Row = pt.row,
+                Column = pt.col
             };
         }
         /// <summary>
-        /// Converts a list of [MazeWasmPoint](xref:Maze.Wasm.Interop.MazeWasmInterop.MazeWasmPoint) points to a list of [Maze.Point](xref:Maze.Api.Maze.Point) points
+        /// Converts a list of [MazePoint](xref:Maze.Interop.MazeInterop.MazePoint) points to a list of [Maze.Point](xref:Maze.Api.Maze.Point) points
         /// </summary>
         /// <returns>List of [Maze.Point](xref:Maze.Api.Maze.Point) points</returns>
-        /// <param name="wasmPoints">List of [MazeWasmPoint](xref:Maze.Wasm.Interop.MazeWasmInterop.MazeWasmPoint) points to be converted</param>
-        static public List<Maze.Point> ToMazePoints(List<MazeWasmPoint> wasmPoints)
+        /// <param name="pts">List of [MazePoint](xref:Maze.Interop.MazeInterop.MazePoint) points to be converted</param>
+        static public List<Maze.Point> ToMazePoints(List<MazePoint> pts)
         {
-            int numPoints = wasmPoints.Count;
+            int numPoints = pts.Count;
             List<Maze.Point> points = new List<Maze.Point>();
             for (int i = 0; i < numPoints; i++)
             {
-                MazeWasmPoint wasmPoint = wasmPoints[i];
+                MazePoint pt = pts[i];
                 points.Add(new Maze.Point
                 {
-                    Row = wasmPoint.row,
-                    Column = wasmPoint.col,
+                    Row = pt.row,
+                    Column = pt.col,
                 });
             }
             return points;
@@ -150,12 +150,12 @@ namespace Maze.Api
         /// <returns>New maze instance</returns>
         public Maze(UInt32 rowCount, UInt32 colCount)
         {
-            _mazeWasmPtr = Interop.NewMazeWasm();
-            if (_mazeWasmPtr == UIntPtr.Zero)
+            _mazePtr = Interop.NewMaze();
+            if (_mazePtr == UIntPtr.Zero)
             {
-                throw new Exception("interop.NewMazeWasm() failed to create maze (zero returned)");
+                throw new Exception("interop.NewMaze() failed to create maze (zero returned)");
             }
-            Interop.MazeWasmResize(_mazeWasmPtr, rowCount, colCount);
+            Interop.MazeResize(_mazePtr, rowCount, colCount);
         }
         /// <summary>
         /// Generates a new maze from the given options, or will throw an exception if the operation fails
@@ -165,11 +165,11 @@ namespace Maze.Api
         public static Maze Generate(GenerationOptions options)
         {
             Maze maze = new Maze(0, 0);
-            MazeWasmGenerationAlgorithm wasmAlgorithm = (MazeWasmGenerationAlgorithm)(byte)options.Algorithm;
-            UIntPtr optionsPtr = maze.Interop.NewGeneratorOptionsWasm(
+            MazeGenerationAlgorithm mazeAlgorithm = (MazeGenerationAlgorithm)(byte)options.Algorithm;
+            UIntPtr optionsPtr = maze.Interop.NewGeneratorOptions(
                 options.RowCount,
                 options.ColCount,
-                wasmAlgorithm,
+                mazeAlgorithm,
                 options.Seed);
             try
             {
@@ -183,16 +183,16 @@ namespace Maze.Api
                     maze.Interop.GeneratorOptionsSetMaxRetries(optionsPtr, options.MaxRetries.Value);
                 if (options.BranchFromFinish.HasValue)
                     maze.Interop.GeneratorOptionsSetBranchFromFinish(optionsPtr, options.BranchFromFinish.Value ? (byte)1 : (byte)0);
-                maze.Interop.MazeWasmGenerate(maze._mazeWasmPtr, optionsPtr);
+                maze.Interop.MazeGenerate(maze._mazePtr, optionsPtr);
             }
             finally
             {
-                maze.Interop.FreeGeneratorOptionsWasm(optionsPtr);
+                maze.Interop.FreeGeneratorOptions(optionsPtr);
             }
             return maze;
         }
         /// <summary>
-        /// Handles object disposal, releasing managed and unmanaged [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) resources and marking
+        /// Handles object disposal, releasing managed and unmanaged [Maze.Interop](xref:Maze.Interop) resources and marking
         /// the object as having been finalized
         /// </summary>
         /// <returns>Nothing</returns>
@@ -212,10 +212,10 @@ namespace Maze.Api
             if (!_disposed)
             {
                 // Dispose unmanaged resources
-                if (_mazeWasmPtr != UIntPtr.Zero)
+                if (_mazePtr != UIntPtr.Zero)
                 {
-                    Interop.FreeMazeWasm(_mazeWasmPtr);
-                    _mazeWasmPtr = UIntPtr.Zero;
+                    Interop.FreeMaze(_mazePtr);
+                    _mazePtr = UIntPtr.Zero;
                 }
 
                 _disposed = true;
@@ -237,7 +237,7 @@ namespace Maze.Api
         {
             get
             {
-                return Interop.MazeWasmIsEmpty(_mazeWasmPtr);
+                return Interop.MazeIsEmpty(_mazePtr);
             }
         }
         /// <summary>
@@ -248,7 +248,7 @@ namespace Maze.Api
         {
             get
             {
-                return Interop.MazeWasmGetRowCount(_mazeWasmPtr);
+                return Interop.MazeGetRowCount(_mazePtr);
             }
         }
         /// <summary>
@@ -259,7 +259,7 @@ namespace Maze.Api
         {
             get
             {
-                return Interop.MazeWasmGetColCount(_mazeWasmPtr);
+                return Interop.MazeGetColCount(_mazePtr);
             }
         }
         /// <summary>
@@ -270,7 +270,7 @@ namespace Maze.Api
         /// <returns>Nothing</returns>
         public void Resize(UInt32 newRowCount, UInt32 newColCount)
         {
-            Interop.MazeWasmResize(_mazeWasmPtr, newRowCount, newColCount);
+            Interop.MazeResize(_mazePtr, newRowCount, newColCount);
         }
         /// <summary>
         /// Resets the maze to empty
@@ -278,7 +278,7 @@ namespace Maze.Api
         /// <returns>Nothing</returns>
         public void Reset()
         {
-            Interop.MazeWasmReset(_mazeWasmPtr);
+            Interop.MazeReset(_mazePtr);
         }
         /// <summary>
         /// Gets the cell type associated with a cell within the maze, or will throw an exception
@@ -289,7 +289,7 @@ namespace Maze.Api
         /// <returns>Cell type</returns>
         public CellType GetCellType(UInt32 row, UInt32 column)
         {
-            return (CellType)(int)Interop.MazeWasmGetCellType(_mazeWasmPtr, row, column);
+            return (CellType)(int)Interop.MazeGetCellType(_mazePtr, row, column);
         }
         /// <summary>
         /// Sets the start cell associated with the maze, or will throw an exception
@@ -300,7 +300,7 @@ namespace Maze.Api
         /// <returns>Nothing</returns>
         public void SetStartCell(UInt32 startRow, UInt32 startCol)
         {
-            Interop.MazeWasmSetStartCell(_mazeWasmPtr, startRow, startCol);
+            Interop.MazeSetStartCell(_mazePtr, startRow, startCol);
         }
         /// <summary>
         /// Indicates whether the maze has a start cell defined
@@ -317,7 +317,7 @@ namespace Maze.Api
         /// <returns>Start cell point</returns>
         public Maze.Point GetStartCell()
         {
-            return ToMazePoint(Interop.MazeWasmGetStartCell(_mazeWasmPtr));
+            return ToMazePoint(Interop.MazeGetStartCell(_mazePtr));
         }
         /// <summary>
         /// Sets the finish cell associated with the maze, or will throw an exception
@@ -328,7 +328,7 @@ namespace Maze.Api
         /// <returns>Nothing</returns>
         public void SetFinishCell(UInt32 finishRow, UInt32 finishCol)
         {
-            Interop.MazeWasmSetFinishCell(_mazeWasmPtr, finishRow, finishCol);
+            Interop.MazeSetFinishCell(_mazePtr, finishRow, finishCol);
         }
         /// <summary>
         /// Indicates whether the maze has a finish cell defined
@@ -345,7 +345,7 @@ namespace Maze.Api
         /// <returns>Finish cell point</returns>
         public Maze.Point GetFinishCell()
         {
-            return ToMazePoint(Interop.MazeWasmGetFinishCell(_mazeWasmPtr));
+            return ToMazePoint(Interop.MazeGetFinishCell(_mazePtr));
         }
         /// <summary>
         /// Sets a range of cells to walls within a maze, or will throw an exception
@@ -358,7 +358,7 @@ namespace Maze.Api
         /// <returns>Nothing</returns>
         public void SetWallCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
-            Interop.MazeWasmSetWallCells(_mazeWasmPtr, startRow, startCol, endRow, endCol);
+            Interop.MazeSetWallCells(_mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
         /// Inserts rows into the maze, or will throw an exception if the rows cannot be inserted
@@ -368,7 +368,7 @@ namespace Maze.Api
         /// <returns>Nothing</returns>
         public void InsertRows(UInt32 startRow, UInt32 count)
         {
-            Interop.MazeWasmInsertRows(_mazeWasmPtr, startRow, count);
+            Interop.MazeInsertRows(_mazePtr, startRow, count);
         }
         /// <summary>
         /// Deletes rows from the maze, or will throw an exception if the rows cannot be deleted
@@ -378,7 +378,7 @@ namespace Maze.Api
         /// <returns>Nothing</returns>
         public void DeleteRows(UInt32 startRow, UInt32 count)
         {
-            Interop.MazeWasmDeleteRows(_mazeWasmPtr, startRow, count);
+            Interop.MazeDeleteRows(_mazePtr, startRow, count);
         }
         /// <summary>
         /// Inserts columns into the maze, or will throw an exception if the columns cannot be inserted
@@ -388,7 +388,7 @@ namespace Maze.Api
         /// <returns>Nothing</returns>
         public void InsertCols(UInt32 startCol, UInt32 count)
         {
-            Interop.MazeWasmInsertCols(_mazeWasmPtr, startCol, count);
+            Interop.MazeInsertCols(_mazePtr, startCol, count);
         }
         /// <summary>
         /// Deletes columns from the maze, or will throw an exception if the columns cannot be deleted
@@ -398,7 +398,7 @@ namespace Maze.Api
         /// <returns>Nothing</returns>
         public void DeleteCols(UInt32 startCol, UInt32 count)
         {
-            Interop.MazeWasmDeleteCols(_mazeWasmPtr, startCol, count);
+            Interop.MazeDeleteCols(_mazePtr, startCol, count);
         }
         /// <summary>
         /// Reinitialises a maze from a JSON string, or will throw an exception if the operation fails
@@ -407,7 +407,7 @@ namespace Maze.Api
         /// <returns>Nothing</returns>
         public void FromJson(string json)
         {
-            Interop.MazeWasmFromJson(_mazeWasmPtr, json);
+            Interop.MazeFromJson(_mazePtr, json);
         }
         /// <summary>
         /// Converts a maze to a JSON string, or will throw an exception if the operation fails
@@ -415,7 +415,7 @@ namespace Maze.Api
         /// <returns>JSON string</returns>
         public string ToJson()
         {
-            return Interop.MazeWasmToJson(_mazeWasmPtr);
+            return Interop.MazeToJson(_mazePtr);
         }
         /// <summary>
         /// Solves a maze, else will throw an exception if the operation fails. 
@@ -423,7 +423,7 @@ namespace Maze.Api
         /// <returns>Maze solution</returns>
         public global::Maze.Api.Solution Solve()
         {
-            UIntPtr solutionPtr = Interop.MazeWasmSolve(_mazeWasmPtr);
+            UIntPtr solutionPtr = Interop.MazeSolve(_mazePtr);
             return new global::Maze.Api.Solution(solutionPtr);
         }
     }

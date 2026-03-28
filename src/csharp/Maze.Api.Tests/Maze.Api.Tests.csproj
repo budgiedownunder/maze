@@ -22,7 +22,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Maze.Api\Maze.Api.csproj" />
-		<ProjectReference Include="..\Maze.Wasm.Interop\Maze.Wasm.Interop.csproj" />
+		<ProjectReference Include="..\Maze.Interop\Maze.Interop.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -54,7 +54,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="$(ProjectDir)../Maze.Wasm.Interop/bin/Debug/net10.0/win-x64/wasmer.dll" Condition="'$(RuntimeIdentifier)' == 'win-x64'" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(ProjectDir)../Maze.Interop/bin/Debug/net10.0/win-x64/wasmer.dll" Condition="'$(RuntimeIdentifier)' == 'win-x64'" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

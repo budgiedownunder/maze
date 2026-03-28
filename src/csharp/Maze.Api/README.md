@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The `Maze.Api` .NET assembly is written in `C#` and provides clean .NET classes for use by client applications. It wraps the Web Assembly interop functionality provided by [`Maze.Wasm.Interop`](../Maze.Wasm.Interop/README.md), allowing developers to be able to work with `Maze` objects without needing to be aware of the interop occuring beneath.
+The `Maze.Api` .NET assembly is written in `C#` and provides clean .NET classes for use by client applications. It wraps the Web Assembly interop functionality provided by [`Maze.Interop`](../Maze.Interop/README.md), allowing developers to be able to work with `Maze` objects without needing to be aware of the interop occuring beneath.
 
 The assembly supports:
 
