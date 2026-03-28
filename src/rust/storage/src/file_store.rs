@@ -957,6 +957,75 @@ impl UserStore for FileStore {
         users.sort_by(|a, b| a.username.cmp(&b.username));
         Ok(users)
     }
+
+    /// Returns the list of admin users within the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create an admin user within a file store and then load the list of admin users and display their count
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    ///
+    /// // Create the admin user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: true,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    /// };
+    ///
+    /// // Create the admin user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created admin user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to load the admin user list and display the results
+    ///         match store.get_admin_users() {
+    ///             Ok(admins_found) => {
+    ///                 println!("Successfully loaded {} admin users from within the file store", admins_found.len());
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to load admin users => {}",
+    ///                      error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn get_admin_users(&self) -> Result<Vec<User>, Error> {
+        let ids = self.get_user_ids()?;
+        let mut admins: Vec<User> = Vec::new();
+        for id in ids {
+            let user = self.get_user(id)?;
+            if user.is_admin {
+                admins.push(user);
+            }
+        }
+        Ok(admins)
+    }
 }
 
 impl MazeStore for FileStore {

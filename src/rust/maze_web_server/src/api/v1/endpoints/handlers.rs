@@ -186,6 +186,15 @@ fn get_user_fetch_internal_error(id: Uuid, err: &StoreError) -> Error {
     ErrorInternalServerError(format!("Error fetching user item with id '{}': {}", id, err))
 }
 
+fn get_cannot_delete_last_admin_error() -> Error {
+    ErrorConflict("Cannot delete the last admin account".to_string())
+}
+
+fn is_last_admin(store_lock: &RwLockWriteGuard<'_, Box<dyn Store>>, user_id: Uuid) -> Result<bool, Error> {
+    let admins = store_lock.get_admin_users().map_err(|err| get_users_fetch_internal_error(&err))?;
+    Ok(admins.len() == 1 && admins[0].id == user_id)
+}
+
 // Maze-related errors
 fn get_mazes_fetch_internal_error(err: &StoreError) -> Error {
     ErrorInternalServerError(format!("Error fetching maze items: {}", err))
@@ -394,7 +403,8 @@ pub async fn get_me(
     responses(
         (status = 204, description = "Account deleted successfully"),
         (status = 401, description = "Unauthorized request"),
-        (status = 404, description = "User not found")
+        (status = 404, description = "User not found"),
+        (status = 409, description = "Cannot delete the last admin account")
     ),
     security(
         ("api_key" = []),
@@ -409,6 +419,10 @@ pub async fn delete_me(
 ) -> Result<HttpResponse, Error> {
     let mut store_lock = get_store_write_lock(&store)?;
     let user = get_authorized_user(&req, false)?;
+
+    if is_last_admin(&store_lock, user.id)? {
+        return Err(get_cannot_delete_last_admin_error());
+    }
 
     match store_lock.delete_user(user.id) {
         Ok(()) => Ok(HttpResponse::NoContent().finish()),
@@ -892,7 +906,8 @@ pub async fn update_user(
     responses(
         (status = 200, description = "User deleted successfully"),
         (status = 401, description = "Unauthorized request"),
-        (status = 404, description = "User not found")
+        (status = 404, description = "User not found"),
+        (status = 409, description = "Cannot delete the last admin account")
     ),
     security(
         ("api_key" = []),
@@ -909,6 +924,10 @@ pub async fn delete_user(
     let mut store_lock = get_store_write_lock(&store)?;
     let _ = get_authorized_user(&req, true)?;
     let id = user_id_from_str(&path.into_inner())?;
+
+    if is_last_admin(&store_lock, id)? {
+        return Err(get_cannot_delete_last_admin_error());
+    }
 
     match store_lock.delete_user(id) {
         Ok(()) => {

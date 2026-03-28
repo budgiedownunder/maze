@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
 using Maze.Maui.Services;
+using Maze.Maui.App.Extensions;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -391,7 +392,7 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (Exception ex)
             {
-                await _dialogService.ShowAlert("Error", $"Failed to save maze: {ex.Message}", "OK");
+                await _dialogService.ShowAlert("Error", $"Failed to save maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
             }
             return saved;
         }
@@ -467,7 +468,7 @@ namespace Maze.Maui.App.ViewModels
                 }
                 catch (Exception ex )
                 {
-                    await _dialogService.ShowAlert("Error", $"Failed to refresh maze: {ex.Message}", "OK");
+                    await _dialogService.ShowAlert("Error", $"Failed to refresh maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
                 }
                 finally
                 {

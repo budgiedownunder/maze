@@ -4,6 +4,7 @@ using Maze.Maui.App.Views;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Maze.Maui.App.Extensions;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -68,7 +69,7 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (Exception ex)
             {
-                await _dialogService.ShowAlert("Error", $"Unable to load mazes: {ex.Message}", "OK");
+                await _dialogService.ShowAlert("Error", $"Unable to load mazes\n\n{ex.Message.CapitalizeFirst()}", "OK");
             }
             finally
             {
@@ -240,7 +241,7 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (Exception ex)
             {
-                await _dialogService.ShowAlert("Error", $"Failed to rename maze: {ex.Message}", "OK");
+                await _dialogService.ShowAlert("Error", $"Failed to rename maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
             }
             finally
             {
@@ -279,7 +280,7 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (Exception ex)
             {
-                await _dialogService.ShowAlert("Error", $"Failed to duplicate maze: {ex.Message}", "OK");
+                await _dialogService.ShowAlert("Error", $"Failed to duplicate maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
             }
             finally
             {
@@ -306,7 +307,7 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (Exception ex)
             {
-                await _dialogService.ShowAlert("Error", $"Failed to delete maze: {ex.Message}", "OK");
+                await _dialogService.ShowAlert("Error", $"Failed to delete maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
             }
             finally
             {
