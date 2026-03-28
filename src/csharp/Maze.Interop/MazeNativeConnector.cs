@@ -73,7 +73,7 @@ namespace Maze.Interop
 
         public void Dispose() { /* no native resources held directly */ }
 
-        public UIntPtr NewMazeWasm()
+        public UIntPtr NewMaze()
         {
             IntPtr ptr = maze_c_new_maze();
             if (ptr == IntPtr.Zero)
@@ -81,103 +81,103 @@ namespace Maze.Interop
             return (UIntPtr)(ulong)ptr;
         }
 
-        public void FreeMazeWasm(UIntPtr mazePtr)
+        public void FreeMaze(UIntPtr mazePtr)
         {
             maze_c_free_maze((IntPtr)(ulong)mazePtr);
         }
 
-        public bool MazeWasmIsEmpty(UIntPtr mazePtr)
+        public bool MazeIsEmpty(UIntPtr mazePtr)
         {
             return maze_c_maze_is_empty((IntPtr)(ulong)mazePtr) != 0;
         }
 
-        public void MazeWasmResize(UIntPtr mazePtr, UInt32 newRowCount, UInt32 newColCount)
+        public void MazeResize(UIntPtr mazePtr, UInt32 newRowCount, UInt32 newColCount)
         {
             maze_c_maze_resize((IntPtr)(ulong)mazePtr, newRowCount, newColCount);
         }
 
-        public void MazeWasmReset(UIntPtr mazePtr)
+        public void MazeReset(UIntPtr mazePtr)
         {
             maze_c_maze_reset((IntPtr)(ulong)mazePtr);
         }
 
-        public UInt32 MazeWasmGetRowCount(UIntPtr mazePtr)
+        public UInt32 MazeGetRowCount(UIntPtr mazePtr)
         {
             return maze_c_maze_get_row_count((IntPtr)(ulong)mazePtr);
         }
 
-        public UInt32 MazeWasmGetColCount(UIntPtr mazePtr)
+        public UInt32 MazeGetColCount(UIntPtr mazePtr)
         {
             return maze_c_maze_get_col_count((IntPtr)(ulong)mazePtr);
         }
 
-        public MazeCellType MazeWasmGetCellType(UIntPtr mazePtr, UInt32 row, UInt32 col)
+        public MazeCellType MazeGetCellType(UIntPtr mazePtr, UInt32 row, UInt32 col)
         {
             byte ok = maze_c_maze_get_cell_type((IntPtr)(ulong)mazePtr, row, col, out UInt32 cellType);
             ThrowIfError(ok);
             return (MazeCellType)cellType;
         }
 
-        public void MazeWasmSetStartCell(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol)
+        public void MazeSetStartCell(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol)
         {
             ThrowIfError(maze_c_maze_set_start_cell((IntPtr)(ulong)mazePtr, startRow, startCol));
         }
 
-        public MazePoint MazeWasmGetStartCell(UIntPtr mazePtr)
+        public MazePoint MazeGetStartCell(UIntPtr mazePtr)
         {
             byte ok = maze_c_maze_get_start_cell((IntPtr)(ulong)mazePtr, out UInt32 row, out UInt32 col);
             ThrowIfError(ok);
             return new MazePoint { row = row, col = col };
         }
 
-        public void MazeWasmSetFinishCell(UIntPtr mazePtr, UInt32 finishRow, UInt32 finishCol)
+        public void MazeSetFinishCell(UIntPtr mazePtr, UInt32 finishRow, UInt32 finishCol)
         {
             ThrowIfError(maze_c_maze_set_finish_cell((IntPtr)(ulong)mazePtr, finishRow, finishCol));
         }
 
-        public MazePoint MazeWasmGetFinishCell(UIntPtr mazePtr)
+        public MazePoint MazeGetFinishCell(UIntPtr mazePtr)
         {
             byte ok = maze_c_maze_get_finish_cell((IntPtr)(ulong)mazePtr, out UInt32 row, out UInt32 col);
             ThrowIfError(ok);
             return new MazePoint { row = row, col = col };
         }
 
-        public void MazeWasmSetWallCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        public void MazeSetWallCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             ThrowIfError(maze_c_maze_set_wall_cells((IntPtr)(ulong)mazePtr, startRow, startCol, endRow, endCol));
         }
 
-        public void MazeWasmClearCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        public void MazeClearCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             ThrowIfError(maze_c_maze_clear_cells((IntPtr)(ulong)mazePtr, startRow, startCol, endRow, endCol));
         }
 
-        public void MazeWasmInsertRows(UIntPtr mazePtr, UInt32 startRow, UInt32 count)
+        public void MazeInsertRows(UIntPtr mazePtr, UInt32 startRow, UInt32 count)
         {
             ThrowIfError(maze_c_maze_insert_rows((IntPtr)(ulong)mazePtr, startRow, count));
         }
 
-        public void MazeWasmDeleteRows(UIntPtr mazePtr, UInt32 startRow, UInt32 count)
+        public void MazeDeleteRows(UIntPtr mazePtr, UInt32 startRow, UInt32 count)
         {
             ThrowIfError(maze_c_maze_delete_rows((IntPtr)(ulong)mazePtr, startRow, count));
         }
 
-        public void MazeWasmInsertCols(UIntPtr mazePtr, UInt32 startCol, UInt32 count)
+        public void MazeInsertCols(UIntPtr mazePtr, UInt32 startCol, UInt32 count)
         {
             ThrowIfError(maze_c_maze_insert_cols((IntPtr)(ulong)mazePtr, startCol, count));
         }
 
-        public void MazeWasmDeleteCols(UIntPtr mazePtr, UInt32 startCol, UInt32 count)
+        public void MazeDeleteCols(UIntPtr mazePtr, UInt32 startCol, UInt32 count)
         {
             ThrowIfError(maze_c_maze_delete_cols((IntPtr)(ulong)mazePtr, startCol, count));
         }
 
-        public void MazeWasmFromJson(UIntPtr mazePtr, string json)
+        public void MazeFromJson(UIntPtr mazePtr, string json)
         {
             ThrowIfError(maze_c_maze_from_json((IntPtr)(ulong)mazePtr, json));
         }
 
-        public string MazeWasmToJson(UIntPtr mazePtr)
+        public string MazeToJson(UIntPtr mazePtr)
         {
             IntPtr jsonPtr = maze_c_maze_to_json((IntPtr)(ulong)mazePtr);
             if (jsonPtr == IntPtr.Zero)
@@ -187,7 +187,7 @@ namespace Maze.Interop
             return json;
         }
 
-        public UIntPtr MazeWasmSolve(UIntPtr mazePtr)
+        public UIntPtr MazeSolve(UIntPtr mazePtr)
         {
             IntPtr solutionPtr = maze_c_maze_solve((IntPtr)(ulong)mazePtr);
             if (solutionPtr == IntPtr.Zero)
@@ -195,7 +195,7 @@ namespace Maze.Interop
             return (UIntPtr)(ulong)solutionPtr;
         }
 
-        public List<MazePoint> MazeWasmSolutionGetPathPoints(UIntPtr solutionPtr)
+        public List<MazePoint> MazeSolutionGetPathPoints(UIntPtr solutionPtr)
         {
             if (solutionPtr == UIntPtr.Zero) throw new Exception("solutionPtr is zero");
             IntPtr rawPtr = maze_c_maze_solution_get_path_points((IntPtr)(ulong)solutionPtr, out UInt32 count);
@@ -211,7 +211,7 @@ namespace Maze.Interop
             return points;
         }
 
-        public void FreeMazeWasmSolution(UIntPtr solutionPtr)
+        public void FreeMazeSolution(UIntPtr solutionPtr)
         {
             maze_c_free_maze_solution((IntPtr)(ulong)solutionPtr);
         }
@@ -236,7 +236,7 @@ namespace Maze.Interop
             return maze_c_get_num_objects_allocated();
         }
 
-        public UIntPtr NewGeneratorOptionsWasm(UInt32 rowCount, UInt32 colCount, MazeGenerationAlgorithm algorithm, UInt64 seed)
+        public UIntPtr NewGeneratorOptions(UInt32 rowCount, UInt32 colCount, MazeGenerationAlgorithm algorithm, UInt64 seed)
         {
             IntPtr ptr = maze_c_new_generator_options(rowCount, colCount, (UInt32)algorithm, seed);
             if (ptr == IntPtr.Zero)
@@ -269,12 +269,12 @@ namespace Maze.Interop
             maze_c_generator_options_set_branch_from_finish((IntPtr)(ulong)optionsPtr, value);
         }
 
-        public void MazeWasmGenerate(UIntPtr mazePtr, UIntPtr optionsPtr)
+        public void MazeGenerate(UIntPtr mazePtr, UIntPtr optionsPtr)
         {
             ThrowIfError(maze_c_maze_generate((IntPtr)(ulong)mazePtr, (IntPtr)(ulong)optionsPtr));
         }
 
-        public void FreeGeneratorOptionsWasm(UIntPtr optionsPtr)
+        public void FreeGeneratorOptions(UIntPtr optionsPtr)
         {
             maze_c_free_generator_options((IntPtr)(ulong)optionsPtr);
         }

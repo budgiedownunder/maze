@@ -285,7 +285,7 @@ namespace Maze.Interop
         /// <returns>Pointer to the maze, which should later be freed by calling <see cref="FreeMaze(UIntPtr)">FreeMaze()</see></returns>
         public UIntPtr NewMaze()
         {
-            return connector.NewMazeWasm();
+            return connector.NewMaze();
         }
         /// <summary>
         /// Frees a maze pointer
@@ -294,7 +294,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void FreeMaze(UIntPtr mazePtr)
         {
-            connector.FreeMazeWasm(mazePtr);
+            connector.FreeMaze(mazePtr);
         }
         /// <summary>
         /// Tests whether a maze is empty
@@ -303,7 +303,7 @@ namespace Maze.Interop
         /// <returns>Boolean</returns>
         public bool MazeIsEmpty(UIntPtr mazePtr)
         {
-            return connector.MazeWasmIsEmpty(mazePtr);
+            return connector.MazeIsEmpty(mazePtr);
         }
         /// <summary>
         /// Resizes a maze
@@ -314,7 +314,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeResize(UIntPtr mazePtr, UInt32 newRowCount, UInt32 newColCount)
         {
-            connector.MazeWasmResize(mazePtr, newRowCount, newColCount);
+            connector.MazeResize(mazePtr, newRowCount, newColCount);
         }
         /// <summary>
         /// Resets a maze to empty
@@ -323,7 +323,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeReset(UIntPtr mazePtr)
         {
-            connector.MazeWasmReset(mazePtr);
+            connector.MazeReset(mazePtr);
         }
         /// <summary>
         /// Gets the row count associated with a maze
@@ -332,7 +332,7 @@ namespace Maze.Interop
         /// <returns>Row count</returns>
         public UInt32 MazeGetRowCount(UIntPtr mazePtr)
         {
-            return connector.MazeWasmGetRowCount(mazePtr);
+            return connector.MazeGetRowCount(mazePtr);
         }
         /// <summary>
         /// Gets the column count associated with a maze
@@ -341,7 +341,7 @@ namespace Maze.Interop
         /// <returns>Column count</returns>
         public UInt32 MazeGetColCount(UIntPtr mazePtr)
         {
-            return connector.MazeWasmGetColCount(mazePtr);
+            return connector.MazeGetColCount(mazePtr);
         }
         /// <summary>
         /// Gets the cell type associated with a cell within a maze, or will throw an exception
@@ -353,7 +353,7 @@ namespace Maze.Interop
         /// <returns>Cell type</returns>
         public MazeCellType MazeGetCellType(UIntPtr mazePtr, UInt32 row, UInt32 col)
         {
-            return connector.MazeWasmGetCellType(mazePtr, row, col);
+            return connector.MazeGetCellType(mazePtr, row, col);
         }
         /// <summary>
         /// Sets the start cell associated with a maze, or will throw an exception
@@ -365,7 +365,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeSetStartCell(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol)
         {
-            connector.MazeWasmSetStartCell(mazePtr, startRow, startCol);
+            connector.MazeSetStartCell(mazePtr, startRow, startCol);
         }
         /// <summary>
         /// Gets the start cell associated with a maze, or will throw an exception
@@ -375,7 +375,7 @@ namespace Maze.Interop
         /// <returns>Start cell point</returns>
         public MazePoint MazeGetStartCell(UIntPtr mazePtr)
         {
-            return connector.MazeWasmGetStartCell(mazePtr);
+            return connector.MazeGetStartCell(mazePtr);
         }
         /// <summary>
         /// Sets the finish cell associated with a maze, or will throw an exception
@@ -387,7 +387,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeSetFinishCell(UIntPtr mazePtr, UInt32 finishRow, UInt32 finishCol)
         {
-            connector.MazeWasmSetFinishCell(mazePtr, finishRow, finishCol);
+            connector.MazeSetFinishCell(mazePtr, finishRow, finishCol);
         }
         /// <summary>
         /// Gets the finish cell associated with a maze, or will throw an exception
@@ -397,7 +397,7 @@ namespace Maze.Interop
         /// <returns>Finish cell point</returns>
         public MazePoint MazeGetFinishCell(UIntPtr mazePtr)
         {
-            return connector.MazeWasmGetFinishCell(mazePtr);
+            return connector.MazeGetFinishCell(mazePtr);
         }
         /// <summary>
         /// Sets a range of cells to walls within a maze, or will throw an exception
@@ -411,7 +411,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeSetWallCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
-            connector.MazeWasmSetWallCells(mazePtr, startRow, startCol, endRow, endCol);
+            connector.MazeSetWallCells(mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
         /// Clears a range of wall cells within a maze, or will throw an exception
@@ -425,7 +425,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeClearCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
-            connector.MazeWasmClearCells(mazePtr, startRow, startCol, endRow, endCol);
+            connector.MazeClearCells(mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
         /// Inserts rows into a maze, or will throw an exception if the rows cannot be inserted
@@ -436,7 +436,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeInsertRows(UIntPtr mazePtr, UInt32 startRow, UInt32 count)
         {
-            connector.MazeWasmInsertRows(mazePtr, startRow, count);
+            connector.MazeInsertRows(mazePtr, startRow, count);
         }
         /// <summary>
         /// Deletes rows from a maze, or will throw an exception if the rows cannot be deleted
@@ -447,7 +447,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeDeleteRows(UIntPtr mazePtr, UInt32 startRow, UInt32 count)
         {
-            connector.MazeWasmDeleteRows(mazePtr, startRow, count);
+            connector.MazeDeleteRows(mazePtr, startRow, count);
         }
         /// <summary>
         /// Inserts columns into a maze, or will throw an exception if the columns cannot be inserted
@@ -458,7 +458,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeInsertCols(UIntPtr mazePtr, UInt32 startCol, UInt32 count)
         {
-            connector.MazeWasmInsertCols(mazePtr, startCol, count);
+            connector.MazeInsertCols(mazePtr, startCol, count);
         }
         /// <summary>
         /// Deletes columns from a maze, or will throw an exception if the columns cannot be deleted
@@ -469,7 +469,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeDeleteCols(UIntPtr mazePtr, UInt32 startCol, UInt32 count)
         {
-            connector.MazeWasmDeleteCols(mazePtr, startCol, count);
+            connector.MazeDeleteCols(mazePtr, startCol, count);
         }
         /// <summary>
         /// Reinitialises a maze from a JSON string, or will throw an exception if the operation fails
@@ -479,7 +479,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeFromJson(UIntPtr mazePtr, string json)
         {
-            connector.MazeWasmFromJson(mazePtr, json);
+            connector.MazeFromJson(mazePtr, json);
         }
         /// <summary>
         /// Converts a maze to a JSON string, or will throw an exception if the operation fails
@@ -488,7 +488,7 @@ namespace Maze.Interop
         /// <returns>JSON string</returns>
         public string MazeToJson(UIntPtr mazePtr)
         {
-            return connector.MazeWasmToJson(mazePtr);
+            return connector.MazeToJson(mazePtr);
         }
         /// <summary>
         /// Solves a maze, else will throw an exception if the operation fails.
@@ -500,7 +500,7 @@ namespace Maze.Interop
         /// <returns>Solution pointer, which should later be freed by calling <see cref="FreeMazeSolution(UIntPtr)">FreeMazeSolution()</see></returns>
         public UIntPtr MazeSolve(UIntPtr mazePtr)
         {
-            return connector.MazeWasmSolve(mazePtr);
+            return connector.MazeSolve(mazePtr);
         }
         /// <summary>
         /// Returns the list of points associated with a solution's path, or will throw an exception if the operation fails
@@ -509,7 +509,7 @@ namespace Maze.Interop
         /// <returns>List of points</returns>
         public List<MazePoint> MazeSolutionGetPathPoints(UIntPtr solutionPtr)
         {
-            return connector.MazeWasmSolutionGetPathPoints(solutionPtr);
+            return connector.MazeSolutionGetPathPoints(solutionPtr);
         }
         /// <summary>
         /// Frees a maze solution pointer
@@ -518,7 +518,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void FreeMazeSolution(UIntPtr solutionPtr)
         {
-            connector.FreeMazeWasmSolution(solutionPtr);
+            connector.FreeMazeSolution(solutionPtr);
         }
         /// <summary>
         /// Allocates a sized memory block of a given size. A sized memory block is a block of
@@ -566,7 +566,7 @@ namespace Maze.Interop
         /// <returns>Pointer to the <c>GeneratorOptions</c>, which should later be freed by calling <see cref="FreeGeneratorOptions(UIntPtr)">FreeGeneratorOptions()</see></returns>
         public UIntPtr NewGeneratorOptions(UInt32 rowCount, UInt32 colCount, MazeGenerationAlgorithm algorithm, UInt64 seed)
         {
-            return connector.NewGeneratorOptionsWasm(rowCount, colCount, algorithm, seed);
+            return connector.NewGeneratorOptions(rowCount, colCount, algorithm, seed);
         }
         /// <summary>
         /// Sets the start cell on a <c>GeneratorOptions</c>
@@ -610,7 +610,7 @@ namespace Maze.Interop
         /// <param name="optionsPtr">Pointer to <c>GeneratorOptions</c></param>
         public void MazeGenerate(UIntPtr mazePtr, UIntPtr optionsPtr)
         {
-            connector.MazeWasmGenerate(mazePtr, optionsPtr);
+            connector.MazeGenerate(mazePtr, optionsPtr);
         }
         /// <summary>
         /// Frees a <c>GeneratorOptions</c> pointer
@@ -618,7 +618,7 @@ namespace Maze.Interop
         /// <param name="optionsPtr">Pointer to <c>GeneratorOptions</c></param>
         public void FreeGeneratorOptions(UIntPtr optionsPtr)
         {
-            connector.FreeGeneratorOptionsWasm(optionsPtr);
+            connector.FreeGeneratorOptions(optionsPtr);
         }
     }
 }

@@ -673,17 +673,18 @@ namespace Maze.Interop
         }
     }
     /// <summary>
-    ///  This class provides a C# connector to the `maze_wasm` web assembly via [Wasmer](https://wasmer.io/), insulating the
-    ///  calling application from the specifics of the underlying Web Assembly interop operations.
-    ///  
-    /// Developers can use <see cref="MazeWasmConnectorBase.NewMazeWasm()">NewMazeWasm()</see> to create
-    /// a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UIntPtr,uint,uint)">MazeWasmInsertRows()</see>,
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmGenerate(UIntPtr,UIntPtr)">MazeWasmGenerate()</see>, and
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmSolve(UIntPtr)">MazeWasmSolve()</see>, to interact with the maze.
+    ///  This class provides a C# connector to the <c>maze_wasm</c> WebAssembly module via
+    ///  [Wasmer](https://wasmer.io/), insulating the calling application from the
+    ///  specifics of the underlying interop operations.
     ///
-    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UIntPtr)">FreeMazeWasm()</see>
-    /// to prevent memory leaks within Web Assembly.
+    /// Developers can use <see cref="MazeWasmConnectorBase.NewMaze()">NewMaze()</see> to create
+    /// a pointer to a maze object and then other maze functions, such as
+    ///  <see cref="MazeWasmConnectorBase.MazeInsertRows(UIntPtr,uint,uint)">MazeInsertRows()</see>,
+    ///  <see cref="MazeWasmConnectorBase.MazeGenerate(UIntPtr,UIntPtr)">MazeGenerate()</see>, and
+    ///  <see cref="MazeWasmConnectorBase.MazeSolve(UIntPtr)">MazeSolve()</see>, to interact with the maze.
+    ///
+    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMaze(UIntPtr)">FreeMaze()</see>
+    /// to prevent memory leaks.
     /// </summary>
     class MazeWasmerConnector : MazeWasmConnectorBase, IMazeConnector
     {
@@ -894,43 +895,43 @@ namespace Maze.Interop
         {
             _functionMap = new Dictionary<string, RefFunctionGetter>
             {
-                { "new_maze_wasm", () => ref this.newMazeWasm },
-                { "free_maze_wasm", () => ref this.freeMazeWasm },
-                { "maze_wasm_is_empty", () => ref this.mazeWasmIsEmpty },
-                { "maze_wasm_resize", () => ref this.mazeWasmResize },
-                { "maze_wasm_reset", () => ref this.mazeWasmReset },
-                { "maze_wasm_get_row_count", () => ref this.mazeWasmGetRowCount },
-                { "maze_wasm_get_col_count", () => ref this.mazeWasmGetColCount },
-                { "maze_wasm_get_cell_type", () => ref this.mazeWasmGetCellType },
-                { "maze_wasm_set_start_cell", () => ref this.mazeWasmSetStartCell },
-                { "maze_wasm_get_start_cell", () => ref this.mazeWasmGetStartCell },
-                { "maze_wasm_set_finish_cell", () => ref this.mazeWasmSetFinishCell },
-                { "maze_wasm_get_finish_cell", () => ref this.mazeWasmGetFinishCell },
-                { "maze_wasm_set_wall_cells", () => ref this.mazeWasmSetWallCells },
-                { "maze_wasm_clear_cells", () => ref this.mazeWasmClearCells },
-                { "maze_wasm_insert_rows", () => ref this.mazeWasmInsertRows },
-                { "maze_wasm_delete_rows", () => ref this.mazeWasmDeleteRows },
-                { "maze_wasm_insert_cols", () => ref this.mazeWasmInsertCols },
-                { "maze_wasm_delete_cols", () => ref this.mazeWasmDeleteCols },
-                { "maze_wasm_from_json", () => ref this.mazeWasmFromJson },
-                { "maze_wasm_to_json", () => ref this.mazeWasmToJson },
-                { "maze_wasm_solve", () => ref this.mazeWasmSolve },
-                { "maze_wasm_solution_get_path_points", () => ref this.mazeWasmSolutionGetPathPoints },
-                { "free_maze_wasm_result", () => ref this.freeMazeWasmResult },
-                { "free_maze_wasm_solution", () => ref this.freeMazeWasmSolution },
-                { "free_maze_wasm_error", () => ref this.freeMazeWasmError },
+                { "new_maze_wasm", () => ref this.newMaze },
+                { "free_maze_wasm", () => ref this.freeMaze },
+                { "maze_wasm_is_empty", () => ref this.mazeIsEmpty },
+                { "maze_wasm_resize", () => ref this.mazeResize },
+                { "maze_wasm_reset", () => ref this.mazeReset },
+                { "maze_wasm_get_row_count", () => ref this.mazeGetRowCount },
+                { "maze_wasm_get_col_count", () => ref this.mazeGetColCount },
+                { "maze_wasm_get_cell_type", () => ref this.mazeGetCellType },
+                { "maze_wasm_set_start_cell", () => ref this.mazeSetStartCell },
+                { "maze_wasm_get_start_cell", () => ref this.mazeGetStartCell },
+                { "maze_wasm_set_finish_cell", () => ref this.mazeSetFinishCell },
+                { "maze_wasm_get_finish_cell", () => ref this.mazeGetFinishCell },
+                { "maze_wasm_set_wall_cells", () => ref this.mazeSetWallCells },
+                { "maze_wasm_clear_cells", () => ref this.mazeClearCells },
+                { "maze_wasm_insert_rows", () => ref this.mazeInsertRows },
+                { "maze_wasm_delete_rows", () => ref this.mazeDeleteRows },
+                { "maze_wasm_insert_cols", () => ref this.mazeInsertCols },
+                { "maze_wasm_delete_cols", () => ref this.mazeDeleteCols },
+                { "maze_wasm_from_json", () => ref this.mazeFromJson },
+                { "maze_wasm_to_json", () => ref this.mazeToJson },
+                { "maze_wasm_solve", () => ref this.mazeSolve },
+                { "maze_wasm_solution_get_path_points", () => ref this.mazeSolutionGetPathPoints },
+                { "free_maze_wasm_result", () => ref this.freeMazeResult },
+                { "free_maze_wasm_solution", () => ref this.freeMazeSolution },
+                { "free_maze_wasm_error", () => ref this.freeMazeError },
                 { "allocate_sized_memory", () => ref this.allocateSizedMemory },
                 { "free_sized_memory", () => ref this.freeSizedMemory },
                 { "get_sized_memory_used", () => ref this.getSizedMemoryUsed },
                 { "get_num_objects_allocated", () => ref this.getNumObjectsAllocated },
-                { "new_generator_options_wasm", () => ref this.newGeneratorOptionsWasm },
+                { "new_generator_options_wasm", () => ref this.newGeneratorOptions },
                 { "generator_options_set_start", () => ref this.generatorOptionsSetStart },
                 { "generator_options_set_finish", () => ref this.generatorOptionsSetFinish },
                 { "generator_options_set_min_spine_length", () => ref this.generatorOptionsSetMinSpineLength },
                 { "generator_options_set_max_retries", () => ref this.generatorOptionsSetMaxRetries },
                 { "generator_options_set_branch_from_finish", () => ref this.generatorOptionsSetBranchFromFinish },
-                { "maze_wasm_generate", () => ref this.mazeWasmGenerate },
-                { "free_generator_options_wasm", () => ref this.freeGeneratorOptionsWasm }
+                { "maze_wasm_generate", () => ref this.mazeGenerate },
+                { "free_generator_options_wasm", () => ref this.freeGeneratorOptions }
             };
         }
         /// <summary>

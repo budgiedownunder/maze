@@ -158,17 +158,18 @@ namespace Maze.Interop
         }
     }
     /// <summary>
-    ///  This class provides a C# connector to the `maze_wasm` web assembly via [Wasmtime](https://docs.wasmtime.dev/), insulating the
-    ///  calling application from the specifics of the underlying Web Assembly interop operations.
-    ///  
-    /// Developers can use <see cref="MazeWasmConnectorBase.NewMazeWasm()">NewMazeWasm()</see> to create
-    /// a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmInsertRows(UIntPtr,uint,uint)">MazeWasmInsertRows()</see>,
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmGenerate(UIntPtr,UIntPtr)">MazeWasmGenerate()</see>, and
-    ///  <see cref="MazeWasmConnectorBase.MazeWasmSolve(UIntPtr)">MazeWasmSolve()</see>, to interact with the maze.
+    ///  This class provides a C# connector to the <c>maze_wasm</c> WebAssembly module via
+    ///  [Wasmtime](https://docs.wasmtime.dev/), insulating the calling application from the
+    ///  specifics of the underlying interop operations.
     ///
-    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMazeWasm(UIntPtr)">FreeMazeWasm()</see>
-    /// to prevent memory leaks within Web Assembly.
+    /// Developers can use <see cref="MazeWasmConnectorBase.NewMaze()">NewMaze()</see> to create
+    /// a pointer to a maze object and then other maze functions, such as
+    ///  <see cref="MazeWasmConnectorBase.MazeInsertRows(UIntPtr,uint,uint)">MazeInsertRows()</see>,
+    ///  <see cref="MazeWasmConnectorBase.MazeGenerate(UIntPtr,UIntPtr)">MazeGenerate()</see>, and
+    ///  <see cref="MazeWasmConnectorBase.MazeSolve(UIntPtr)">MazeSolve()</see>, to interact with the maze.
+    ///
+    /// Once finished with, a maze should be destroyed using <see cref="MazeWasmConnectorBase.FreeMaze(UIntPtr)">FreeMaze()</see>
+    /// to prevent memory leaks.
     /// </summary>
     class MazeWasmtimeConnector : MazeWasmConnectorBase, IMazeConnector
     {
@@ -268,43 +269,43 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         private void InitializeFunctions()
         {
-            newMazeWasm = ResolveFunction("new_maze_wasm");
-            freeMazeWasm = ResolveFunction("free_maze_wasm");
-            mazeWasmIsEmpty = ResolveFunction("maze_wasm_is_empty");
-            mazeWasmResize = ResolveFunction("maze_wasm_resize");
-            mazeWasmReset = ResolveFunction("maze_wasm_reset");
-            mazeWasmGetRowCount = ResolveFunction("maze_wasm_get_row_count");
-            mazeWasmGetColCount = ResolveFunction("maze_wasm_get_col_count");
-            mazeWasmGetCellType = ResolveFunction("maze_wasm_get_cell_type");
-            mazeWasmSetStartCell = ResolveFunction("maze_wasm_set_start_cell");
-            mazeWasmGetStartCell = ResolveFunction("maze_wasm_get_start_cell");
-            mazeWasmSetFinishCell = ResolveFunction("maze_wasm_set_finish_cell");
-            mazeWasmGetFinishCell = ResolveFunction("maze_wasm_get_finish_cell");
-            mazeWasmSetWallCells = ResolveFunction("maze_wasm_set_wall_cells");
-            mazeWasmClearCells = ResolveFunction("maze_wasm_clear_cells");
-            mazeWasmInsertRows = ResolveFunction("maze_wasm_insert_rows");
-            mazeWasmDeleteRows = ResolveFunction("maze_wasm_delete_rows");
-            mazeWasmInsertCols = ResolveFunction("maze_wasm_insert_cols");
-            mazeWasmDeleteCols = ResolveFunction("maze_wasm_delete_cols");
-            mazeWasmFromJson = ResolveFunction("maze_wasm_from_json");
-            mazeWasmToJson = ResolveFunction("maze_wasm_to_json");
-            mazeWasmSolve = ResolveFunction("maze_wasm_solve");
-            mazeWasmSolutionGetPathPoints = ResolveFunction("maze_wasm_solution_get_path_points");
-            freeMazeWasmResult = ResolveFunction("free_maze_wasm_result");
-            freeMazeWasmSolution = ResolveFunction("free_maze_wasm_solution");
-            freeMazeWasmError = ResolveFunction("free_maze_wasm_error");
+            newMaze = ResolveFunction("new_maze_wasm");
+            freeMaze = ResolveFunction("free_maze_wasm");
+            mazeIsEmpty = ResolveFunction("maze_wasm_is_empty");
+            mazeResize = ResolveFunction("maze_wasm_resize");
+            mazeReset = ResolveFunction("maze_wasm_reset");
+            mazeGetRowCount = ResolveFunction("maze_wasm_get_row_count");
+            mazeGetColCount = ResolveFunction("maze_wasm_get_col_count");
+            mazeGetCellType = ResolveFunction("maze_wasm_get_cell_type");
+            mazeSetStartCell = ResolveFunction("maze_wasm_set_start_cell");
+            mazeGetStartCell = ResolveFunction("maze_wasm_get_start_cell");
+            mazeSetFinishCell = ResolveFunction("maze_wasm_set_finish_cell");
+            mazeGetFinishCell = ResolveFunction("maze_wasm_get_finish_cell");
+            mazeSetWallCells = ResolveFunction("maze_wasm_set_wall_cells");
+            mazeClearCells = ResolveFunction("maze_wasm_clear_cells");
+            mazeInsertRows = ResolveFunction("maze_wasm_insert_rows");
+            mazeDeleteRows = ResolveFunction("maze_wasm_delete_rows");
+            mazeInsertCols = ResolveFunction("maze_wasm_insert_cols");
+            mazeDeleteCols = ResolveFunction("maze_wasm_delete_cols");
+            mazeFromJson = ResolveFunction("maze_wasm_from_json");
+            mazeToJson = ResolveFunction("maze_wasm_to_json");
+            mazeSolve = ResolveFunction("maze_wasm_solve");
+            mazeSolutionGetPathPoints = ResolveFunction("maze_wasm_solution_get_path_points");
+            freeMazeResult = ResolveFunction("free_maze_wasm_result");
+            freeMazeSolution = ResolveFunction("free_maze_wasm_solution");
+            freeMazeError = ResolveFunction("free_maze_wasm_error");
             allocateSizedMemory = ResolveFunction("allocate_sized_memory");
             freeSizedMemory = ResolveFunction("free_sized_memory");
             getSizedMemoryUsed = ResolveFunction("get_sized_memory_used");
             getNumObjectsAllocated = ResolveFunction("get_num_objects_allocated");
-            newGeneratorOptionsWasm = ResolveFunction("new_generator_options_wasm");
+            newGeneratorOptions = ResolveFunction("new_generator_options_wasm");
             generatorOptionsSetStart = ResolveFunction("generator_options_set_start");
             generatorOptionsSetFinish = ResolveFunction("generator_options_set_finish");
             generatorOptionsSetMinSpineLength = ResolveFunction("generator_options_set_min_spine_length");
             generatorOptionsSetMaxRetries = ResolveFunction("generator_options_set_max_retries");
             generatorOptionsSetBranchFromFinish = ResolveFunction("generator_options_set_branch_from_finish");
-            mazeWasmGenerate = ResolveFunction("maze_wasm_generate");
-            freeGeneratorOptionsWasm = ResolveFunction("free_generator_options_wasm");
+            mazeGenerate = ResolveFunction("maze_wasm_generate");
+            freeGeneratorOptions = ResolveFunction("free_generator_options_wasm");
         }
         /// <summary>
         /// Locates a WebAssembly function. Will throw an exception if the function is not found.
