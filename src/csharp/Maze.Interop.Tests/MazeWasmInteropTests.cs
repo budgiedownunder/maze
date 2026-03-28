@@ -1129,17 +1129,17 @@ namespace Maze.Interop.Tests
 #endif
 #if IOS
     /// <summary>
-    ///  This class contains the <see cref="Maze.Interop.MazeWasmInterop.ConnectionType.NativeIOS"/> unit tests
+    ///  This class contains the <see cref="Maze.Interop.MazeWasmInterop.ConnectionType.Native"/> unit tests
     ///  for the <see cref="Maze.Interop.MazeWasmInterop"/> class. Inherits the full base test suite.
     ///  Run manually on iOS simulator or device only — cannot run in CI.
     /// </summary>
-    public class MazeWasmInteropCConnectorTest : MazeWasmInteropTestBase
+    public class MazeWasmInteropNativeConnectorTest : MazeWasmInteropTestBase
     {
         /// <summary>
-        /// Returns the <see cref="Maze.Interop.MazeWasmInterop"/> instance backed by <c>MazeCConnector</c>
+        /// Returns the <see cref="Maze.Interop.MazeWasmInterop"/> instance backed by <c>MazeNativeConnector</c>
         /// </summary>
         protected override MazeWasmInterop GetInterop() =>
-            MazeWasmInterop.GetInstance(MazeWasmInterop.ConnectionType.NativeIOS, createNew: true);
+            MazeWasmInterop.GetInstance(MazeWasmInterop.ConnectionType.Native, createNew: true);
     }
 #endif
 }

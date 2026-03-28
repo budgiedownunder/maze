@@ -12,7 +12,7 @@ namespace Maze.Interop
     /// <see cref="MazeWasmConnectorBase"/> involvement) — all maze logic is
     /// executed natively without a WebAssembly runtime.
     /// </summary>
-    internal sealed class MazeCConnector : IMazeWasmConnector
+    internal sealed class MazeNativeConnector : IMazeWasmConnector
     {
         // ── P/Invoke declarations ─────────────────────────────────────────────
 
@@ -218,12 +218,12 @@ namespace Maze.Interop
 
         public UInt32 AllocateSizedMemory(UInt32 size)
         {
-            throw new NotSupportedException("AllocateSizedMemory is not supported in NativeIOS mode");
+            throw new NotSupportedException("AllocateSizedMemory is not supported in Native mode");
         }
 
         public void FreeSizedMemory(UInt32 ptr)
         {
-            throw new NotSupportedException("FreeSizedMemory is not supported in NativeIOS mode");
+            throw new NotSupportedException("FreeSizedMemory is not supported in Native mode");
         }
 
         public Int64 GetSizedMemoryUsed()

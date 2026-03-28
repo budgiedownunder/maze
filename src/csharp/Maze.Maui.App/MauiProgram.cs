@@ -77,7 +77,7 @@ namespace Maze.Maui.App
             try
             {
                 MazeWasmInterop.ConnectionType connectionType =
-                    OperatingSystem.IsIOS()     ? MazeWasmInterop.ConnectionType.NativeIOS :
+                    OperatingSystem.IsIOS()     ? MazeWasmInterop.ConnectionType.Native :
                     OperatingSystem.IsAndroid() ? MazeWasmInterop.ConnectionType.Wasmer :
                                                 MazeWasmInterop.ConnectionType.Wasmtime;
 

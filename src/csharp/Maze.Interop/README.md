@@ -10,7 +10,7 @@ It exposes a singleton instance of a `MazeWasmInterop` object, which can be acce
 var instance = MazeWasmInterop.GetInstance();
 ```
 
-The `GetInstance()` function enforces the singleton instance and, on initialisation, loads the `maze_wasm` WebAssembly and any required function entry points within it. If any functions are found to be missing, an exception will be thrown. By default, `GetInstance()` will use `Wasmtime` as the interop `ConnectionType`, but the caller can override this if required. On `Android`, the `Wasmer` connection type must be used (it bundles a static version of the Wasmer library). On iOS physical devices, the `NativeIOS` connection type must be used — this P/Invokes directly into the `maze_c` native `staticlib` (`libmaze_c.a`) and requires no WebAssembly runtime. The different native runtimes can be found in the `runtimes` sub-directory.
+The `GetInstance()` function enforces the singleton instance and, on initialisation, loads the `maze_wasm` WebAssembly and any required function entry points within it. If any functions are found to be missing, an exception will be thrown. By default, `GetInstance()` will use `Wasmtime` as the interop `ConnectionType`, but the caller can override this if required. On `Android`, the `Wasmer` connection type must be used (it bundles a static version of the Wasmer library). On iOS physical devices, the `Native` connection type must be used — this P/Invokes directly into the `maze_c` native `staticlib` (`libmaze_c.a`) and requires no WebAssembly runtime. The different native runtimes can be found in the `runtimes` sub-directory.
 
 Once the instance is obtained, the caller can execute methods to create and interact with `maze_wasm` objects. It is important that any object pointers that are returned to the caller are released using the appropriate `MazeWasmInterop` method. For example, to create a new maze, resize it to 10 rows by 5 columns and display the number of rows and columns, the following code can be used:
 
@@ -257,4 +257,4 @@ Building requires a Mac with Xcode and a Rust toolchain.
     otool -l runtimes/ios-arm64/native/libmaze_c.a | grep platform
     ```
 
-The `MazeCConnector` C# class (`MazeCConnector.cs`) calls these symbols via `[DllImport("__Internal")]` when `ConnectionType.NativeIOS` is selected. See [`maze_c`](../../../rust/maze_c/README.md) for the full C API reference.
+The `MazeNativeConnector` C# class (`MazeNativeConnector.cs`) calls these symbols via `[DllImport("__Internal")]` when `ConnectionType.Native` is selected. See [`maze_c`](../../../rust/maze_c/README.md) for the full C API reference.

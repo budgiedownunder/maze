@@ -36,10 +36,10 @@
             /// </summary>
             Wasmer = 2,
             /// <summary>
-            /// Native iOS static library (`maze_c`) — no WebAssembly runtime required.
-            /// Uses P/Invoke into the statically-linked `libmaze_c.a`.
+            /// Native static library (`maze_c`) — no WebAssembly runtime required.
+            /// Uses P/Invoke into the statically-linked library e.g. `libmaze_c.a`.
             /// </summary>
-            NativeIOS = 3
+            Native = 3
         }
         // Singleton instance
         private static MazeWasmInterop? instance = null;
@@ -139,8 +139,8 @@
                     break;
 #endif
 #if IOS
-                case ConnectionType.NativeIOS:
-                    connector = new MazeCConnector();
+                case ConnectionType.Native:
+                    connector = new MazeNativeConnector();
                     break;
 #endif
                 default:
