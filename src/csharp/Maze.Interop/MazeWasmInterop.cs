@@ -1,4 +1,4 @@
-﻿namespace Maze.Wasm.Interop
+﻿namespace Maze.Interop
 {
     using System.Reflection;
     using System.Runtime.InteropServices;
@@ -6,8 +6,8 @@
     using System.IO;
 
     /// <summary>
-    ///  This class provides C# interop to the `maze_wasm` web assembly, insulating the
-    ///  calling application from the specifics of the underlying Web Assembly interop operations.
+    ///  This class provides C# interop to the `maze_c` library to the `maze_wasm` web assembly, insulating the
+    ///  calling application from the specifics of the underlying interop operations.
     ///  
     /// Developers can use <see cref="NewMazeWasm()">NewMazeWasm()</see> to create
     ///  a pointer to a maze object within Web Assembly and then other `MazeWasm` functions, such as 

@@ -1,8 +1,8 @@
-# `Maze.Wasm.Interop` Assembly
+# `Maze.Interop` Assembly
 
 ## Introduction
 
-The `Maze.Wasm.Interop` .NET assembly is written in `C#` and provides interop between .NET applications and the `maze_wasm.wasm` Web Assembly. Its purpose is to allow the WebAssembly's functionality to be used from with .NET applications, without needing to be concerned with the underlying .NET to WebAssembly interop specifics.
+The `Maze.Interop` .NET assembly is written in `C#` and provides interop between .NET applications and the `maze_wasm.wasm` Web Assembly. Its purpose is to allow the WebAssembly's functionality to be used from with .NET applications, without needing to be concerned with the underlying .NET to WebAssembly interop specifics.
 
 It exposes a singleton instance of a `MazeWasmInterop` object, which can be accessed via:
 
@@ -29,21 +29,21 @@ Notice that this code uses `FreeMazeWasm()` to release the `MazeWasm` pointer af
 ## Getting Started
 
 ### Setup
-To setup the build environment, run the following from the `Maze.Wasm.Interop` directory:
+To setup the build environment, run the following from the `Maze.Interop` directory:
 
 ```
 dotnet restore
 ```
 
 ### Build
-To build the `Maze.Wasm.Interop` assembly, run the following from the `Maze.Wasm.Interop` directory:
+To build the `Maze.Interop` assembly, run the following from the `Maze.Interop` directory:
 
 ```
 dotnet build
 ```
 
 ### Testing
-Testing can be performed via the [`Maze.Wasm.Interop.Tests`](../Maze.Wasm.Interop.Tests/README.md) assembly.
+Testing can be performed via the [`Maze.Interop.Tests`](../Maze.Interop.Tests/README.md) assembly.
 
 ### Wasmer C API Notes
 
@@ -249,7 +249,7 @@ Building requires a Mac with Xcode and a Rust toolchain.
 - Copy the resulting `libmaze_c.a` into the interop runtimes directory:
     ```
     cp target/aarch64-apple-ios/release/libmaze_c.a \
-       ../csharp/Maze.Wasm.Interop/runtimes/ios-arm64/native/libmaze_c.a
+       ../csharp/Maze.Interop/runtimes/ios-arm64/native/libmaze_c.a
     ```
 
 - Verify it targets the correct platform (should show `platform 2`):

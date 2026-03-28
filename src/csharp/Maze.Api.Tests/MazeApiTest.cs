@@ -4,7 +4,7 @@
 namespace Maze.Api.Tests
 {
     using global::Maze.Api;
-    using global::Maze.Wasm.Interop;
+    using global::Maze.Interop;
     using Microsoft.VisualStudio.TestPlatform.Utilities;
     using System;
     using System.Diagnostics;
@@ -1056,7 +1056,7 @@ namespace Maze.Api.Tests
         // It is used to apply [CollectionDefinition] and ICollectionFixture
     }
     /// <summary>
-    ///  This class contains the static [Wasmtime](https://docs.wasmtime.dev/) [Maze.Wasm.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Wasm.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) 
+    ///  This class contains the static [Wasmtime](https://docs.wasmtime.dev/) [Maze.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) 
     ///  unit tests for the [Maze.Api](xref:Maze.Api) class
     /// </summary>
     [Collection("WasmtimeTestFixtureCollection")]
@@ -1074,7 +1074,7 @@ namespace Maze.Api.Tests
         }
     }
     /// <summary>
-    ///  This class contains the non-static [Wasmtime](https://docs.wasmtime.dev/) [Maze.Wasm.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Wasm.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
+    ///  This class contains the non-static [Wasmtime](https://docs.wasmtime.dev/) [Maze.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
     /// </summary>
     [Collection("WasmtimeTestFixtureCollection")]
     public class MazeApiWasmtimeTest_NonStatic : MazeApiTestBase
@@ -1117,7 +1117,7 @@ namespace Maze.Api.Tests
         // It is used to apply [CollectionDefinition] and ICollectionFixture
     }
     /// <summary>
-    ///  This class contains the static [Wasmer](https://wasmer.io/) [Maze.Wasm.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Wasm.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
+    ///  This class contains the static [Wasmer](https://wasmer.io/) [Maze.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
     /// </summary>
     [Collection("WasmerTestFixtureCollection")]
     public class MazeApiWasmerTest_Static : MazeApiTestBase
@@ -1134,7 +1134,7 @@ namespace Maze.Api.Tests
         }
     }
     /// <summary>
-    ///  This class contains the non-static [Wasmer](https://wasmer.io/) [Maze.Wasm.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Wasm.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
+    ///  This class contains the non-static [Wasmer](https://wasmer.io/) [Maze.Interop.MazeWasmInterop.ConnectionType](xref:Maze.Interop.MazeWasmInterop.ConnectionType) [`xUnit`](https://xunit.net/) unit tests for the [Maze.Api](xref:Maze.Api) class
     /// </summary>
     [Collection("WasmerTestFixtureCollection")]
     public class MazeApiWasmerTest_NonStatic : MazeApiTestBase

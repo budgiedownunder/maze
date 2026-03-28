@@ -6,13 +6,13 @@ The following components are present:
 
 | Language     | Component                                                                      | Description   
 |--------------|--------------------------------------------------------------------------------|-------------------------------------------------------------
-| `C#`         | [`Maze.Api`](xref:Maze.Api)                                                    | .NET API that sits above  [`Maze.Wasm.Interop`](xref:Maze.Wasm.Interop)
+| `C#`         | [`Maze.Api`](xref:Maze.Api)                                                    | .NET API that sits above  [`Maze.Interop`](xref:Maze.Interop)
 |              | [`Maze.Api.Tests`](xref:Maze.Api.Tests)                                        | Unit tests for [`Maze.Api`](xref:Maze.Api)
+|              | [`Maze.Interop`](xref:Maze.Interop)                                            | .NET interop to [`maze_c`](../api/rust/maze_c/view_content.md) and [`maze_wasm`](../api/rust/maze_wasm/view_content.md) web assembly
+|              | [`Maze.Interop.Tests`](xref:Maze.Interop.Tests)                                | .NET test library for [`Maze.Interop`](xref:Maze.Interop)
 |              | [`Mazer.Maui.App`](xref:Maze.Maui.App)                                         | Maze [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application
 |              | [`Maze.Maui.Controls`](../api/net/Maze.Maui.Controls.md)                       | Custom [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) controls and definitions
 |              | [`Maze.Maui.Services`](xref:Maze.Maui.Services)                                | Custom [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) services
-|              | [`Maze.Wasm.Interop`](xref:Maze.Wasm.Interop)                                  | .NET interop to [`maze_wasm`](../api/rust/maze_wasm/view_content.md) web assembly
-|              | [`Maze.Wasm.Interop.Tests`](xref:Maze.Wasm.Interop.Tests)                      | .NET test library for [`Maze.Wasm.Interop`](xref:Maze.Wasm.Interop)
 |              |                                                                                |
 | `JavaScript` | [`maze_wasm.js`](../api/js/maze_wasm/view_content.md)                          | JavaScript API (wrapping `Rust`-generated [`maze_wasm`](../api/rust/maze_wasm/view_content.md) Web Assembly)
 |              |                                                                                |

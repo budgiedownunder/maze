@@ -27,7 +27,7 @@ cargo build --release --target aarch64-apple-ios
 cargo build --release --target aarch64-apple-ios-sim
 ```
 
-For iOS, the resulting `libmaze_c.a` should then be copied to `src/csharp/Maze.Wasm.Interop/runtimes/ios-arm64/native/` (device) or `ios-sim-arm64/native/` (simulator) 
+For iOS, the resulting `libmaze_c.a` should then be copied to `src/csharp/Maze.Interop/runtimes/ios-arm64/native/` (device) or `ios-sim-arm64/native/` (simulator) 
 
 ## Testing
 To test the `maze_c` crate, run the following from within the `maze_c` directory:

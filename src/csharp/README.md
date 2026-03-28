@@ -5,13 +5,13 @@ The following `C#` (`.NET`) components are present:
 
 | Folder      | Component                                                   | Description 
 |--------------|------------------------------------------------------------|---------------
-| `src/csharp` | [`Maze.Api`](./Maze.Api/README.md)                         | .NET API that sits above  [`Maze.Wasm.Interop`](./Maze.Wasm.Interop/README.md)
+| `src/csharp` | [`Maze.Api`](./Maze.Api/README.md)                         | .NET API that sits above  [`Maze.Interop`](./Maze.Interop/README.md)
 |              | [`Maze.Api.Tests`](./Maze.Api.Tests/README.md)             | Unit tests for [`Maze.Api`](./Maze.Api/README.md)
+|              | [`Maze.Interop`](./Maze.Interop/README.md)                 | .NET interop to `maze_wasm` web assembly
+|              | [`Maze.Interop.Tests`](./Maze.Interop.Tests>/README.md)    | .NET test library for [`Maze.Interop`](./Maze.Interop/README.md) 
 |              | [`Maze.Maui.App`](./Maze.Maui.App/README.md)               | Maze [MAUI](https://dotnet.microsoft.com/md) application
 |              | [`Maze.Maui.Controls`](./Maze.Maui.Controls/README.md)     | Maze [MAUI](https://dotnet.microsoft.com/en-usen-us/apps/maui) custom controls              
 |              | [`Maze.Maui.Services`](./Maze.Maui.Services/README.md)     | Maze [MAUI](https://dotnet.microsoft.com/en-usen-us/apps/maui) custom services              
-|              | [`Maze.Wasm.Interop`](./Maze.Wasm.Interop/README.md)       | .NET interop to `maze_wasm` web assembly
-|              | [`Maze.Wasm.Interop.Tests`](./Maze.Wasm.Interop/README.md) | .NET test library for [`Maze.Wasm.Interop`](./Maze.Wasm.Interop/README.md) 
 
 ## Getting Started
 

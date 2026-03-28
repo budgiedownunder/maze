@@ -1,8 +1,8 @@
 ﻿#if !IOS
 using System.Text;
-using static Maze.Wasm.Interop.MazeWasmInterop;
+using static Maze.Interop.MazeWasmInterop;
 
-namespace Maze.Wasm.Interop
+namespace Maze.Interop
 {
     /// <summary>
     /// WebAssembly memory wrapper interface

@@ -1,7 +1,7 @@
 ﻿using CommunityToolkit.Maui;
 //using Maze.Maui.App.Services;
 using Microsoft.Extensions.Logging;
-using Maze.Wasm.Interop;
+using Maze.Interop;
 using Maze.Maui.Services;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;

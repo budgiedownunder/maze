@@ -1,9 +1,9 @@
-﻿using static Maze.Wasm.Interop.MazeWasmInterop;
+﻿using static Maze.Interop.MazeWasmInterop;
 #if !IOS
-using static Maze.Wasm.Interop.WasmerInterop;
+using static Maze.Interop.WasmerInterop;
 #endif
 
-namespace Maze.Wasm.Interop
+namespace Maze.Interop
 {
     internal interface IMazeWasmConnector : IDisposable
     {

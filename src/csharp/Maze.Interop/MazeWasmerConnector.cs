@@ -1,9 +1,9 @@
 ﻿#if !IOS
-namespace Maze.Wasm.Interop
+namespace Maze.Interop
 {
     using System.Runtime.InteropServices;
     using System.Text;
-    using static Maze.Wasm.Interop.WasmerInterop;
+    using static Maze.Interop.WasmerInterop;
     using System;
 
     //using Wasmtime;

@@ -1,5 +1,5 @@
 ﻿#if !IOS && !ANDROID
-namespace Maze.Wasm.Interop
+namespace Maze.Interop
 {
     using System.Text;
     using Wasmtime;

@@ -1,8 +1,8 @@
 #if IOS
 using System.Runtime.InteropServices;
-using static Maze.Wasm.Interop.MazeWasmInterop;
+using static Maze.Interop.MazeWasmInterop;
 
-namespace Maze.Wasm.Interop
+namespace Maze.Interop
 {
     /// <summary>
     /// iOS-only connector that P/Invokes into the statically-linked <c>maze_c</c>

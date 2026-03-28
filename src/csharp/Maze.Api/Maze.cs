@@ -1,8 +1,8 @@
-﻿using Maze.Wasm.Interop;
+﻿using Maze.Interop;
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using static Maze.Wasm.Interop.MazeWasmInterop;
+using static Maze.Interop.MazeWasmInterop;
 
 namespace Maze.Api
 {
@@ -16,15 +16,15 @@ namespace Maze.Api
         private bool _disposed = false;
         private UIntPtr _mazeWasmPtr = default;
         /// <summary>
-        /// Controls whether the object uses a statically defined [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) instance (default = `true`). If
+        /// Controls whether the object uses a statically defined [Maze.Interop](xref:Maze.Interop) instance (default = `true`). If
         /// `false`, then the maze determines the current instance on a per-API call basis.
         /// </summary>
         /// <returns>Boolean</returns>
         public static bool UseStaticInterop { get; set; } = true;
         /// <summary>
-        /// The current [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) associated with the object
+        /// The current [Maze.Interop](xref:Maze.Interop) associated with the object
         /// </summary>
-        /// <returns>[Maze.Wasm.Interop](xref:Maze.Wasm.Interop) instance</returns>
+        /// <returns>[Maze.Interop](xref:Maze.Interop) instance</returns>
         public MazeWasmInterop Interop
         {
             get
@@ -110,7 +110,7 @@ namespace Maze.Api
             public bool? BranchFromFinish { get; set; }
         }
         /// <summary>
-        /// Converts a [MazeWasmPoint](xref:Maze.Wasm.Interop.MazeWasmInterop.MazeWasmPoint) to a [Maze.Point](xref:Maze.Api.Maze.Point)
+        /// Converts a [MazeWasmPoint](xref:Maze.Interop.MazeWasmInterop.MazeWasmPoint) to a [Maze.Point](xref:Maze.Api.Maze.Point)
         /// </summary>
         /// <param name="wasmPoint">Point to be converted</param>
         /// <returns>The resultant [Maze.Point](xref:Maze.Api.Maze.Point)</returns>
@@ -123,10 +123,10 @@ namespace Maze.Api
             };
         }
         /// <summary>
-        /// Converts a list of [MazeWasmPoint](xref:Maze.Wasm.Interop.MazeWasmInterop.MazeWasmPoint) points to a list of [Maze.Point](xref:Maze.Api.Maze.Point) points
+        /// Converts a list of [MazeWasmPoint](xref:Maze.Interop.MazeWasmInterop.MazeWasmPoint) points to a list of [Maze.Point](xref:Maze.Api.Maze.Point) points
         /// </summary>
         /// <returns>List of [Maze.Point](xref:Maze.Api.Maze.Point) points</returns>
-        /// <param name="wasmPoints">List of [MazeWasmPoint](xref:Maze.Wasm.Interop.MazeWasmInterop.MazeWasmPoint) points to be converted</param>
+        /// <param name="wasmPoints">List of [MazeWasmPoint](xref:Maze.Interop.MazeWasmInterop.MazeWasmPoint) points to be converted</param>
         static public List<Maze.Point> ToMazePoints(List<MazeWasmPoint> wasmPoints)
         {
             int numPoints = wasmPoints.Count;
@@ -192,7 +192,7 @@ namespace Maze.Api
             return maze;
         }
         /// <summary>
-        /// Handles object disposal, releasing managed and unmanaged [Maze.Wasm.Interop](xref:Maze.Wasm.Interop) resources and marking
+        /// Handles object disposal, releasing managed and unmanaged [Maze.Interop](xref:Maze.Interop) resources and marking
         /// the object as having been finalized
         /// </summary>
         /// <returns>Nothing</returns>

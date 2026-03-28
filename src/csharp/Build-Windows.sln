@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34607.119
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Wasm.Interop", "Maze.Wasm.Interop\Maze.Wasm.Interop.csproj", "{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Interop", "Maze.Interop\Maze.Interop.csproj", "{FFEA0D3F-0232-48A2-AADF-6B0E8A7042DC}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Wasm.Interop.Tests", "Maze.Wasm.Interop.Tests\Maze.Wasm.Interop.Tests.csproj", "{57DE5792-1129-459C-BBDF-BB2728312D03}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Interop.Tests", "Maze.Interop.Tests\Maze.Interop.Tests.csproj", "{57DE5792-1129-459C-BBDF-BB2728312D03}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Maze.Api", "Maze.Api\Maze.Api.csproj", "{E53F98B1-D49A-4E9D-B271-BDF900B3C549}"
 EndProject
