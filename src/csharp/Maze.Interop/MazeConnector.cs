@@ -58,7 +58,7 @@ namespace Maze.Interop
         /// <param name="row">Target row</param>
         /// <param name="col">Target column</param>
         /// <returns>Cell type</returns>
-        public MazeWasmCellType MazeWasmGetCellType(UIntPtr mazeWasmPtr, UInt32 row, UInt32 col);
+        public MazeCellType MazeWasmGetCellType(UIntPtr mazeWasmPtr, UInt32 row, UInt32 col);
         /// <summary>
         /// Sets the start cell associated with a `MazeWasm`, or will throw an exception
         /// if the start cell cannot be set
@@ -74,7 +74,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Start cell point</returns>
-        public MazeWasmPoint MazeWasmGetStartCell(UIntPtr mazeWasmPtr);
+        public MazePoint MazeWasmGetStartCell(UIntPtr mazeWasmPtr);
         /// <summary>
         /// Sets the finish cell associated with a `MazeWasm`, or will throw an exception
         /// if the finish cell cannot be set
@@ -90,7 +90,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Finish cell point</returns>
-        public MazeWasmPoint MazeWasmGetFinishCell(UIntPtr mazeWasmPtr);
+        public MazePoint MazeWasmGetFinishCell(UIntPtr mazeWasmPtr);
         /// <summary>
         /// Sets a range of cells to walls within a `MazeWasm`, or will throw an exception
         /// if the walls cannot be set
@@ -172,7 +172,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="solutionPtr">Pointer to solution</param>
         /// <returns>List of points</returns>
-        public List<MazeWasmPoint> MazeWasmSolutionGetPathPoints(UIntPtr solutionPtr);
+        public List<MazePoint> MazeWasmSolutionGetPathPoints(UIntPtr solutionPtr);
         /// <summary>
         /// Frees a maze solution pointer
         /// </summary>
@@ -206,7 +206,7 @@ namespace Maze.Interop
         /// <summary>
         /// Creates a new <c>GeneratorOptionsWasm</c>, or will throw an exception if the operation fails
         /// </summary>
-        public UIntPtr NewGeneratorOptionsWasm(UInt32 rowCount, UInt32 colCount, MazeWasmGenerationAlgorithm algorithm, UInt64 seed);
+        public UIntPtr NewGeneratorOptionsWasm(UInt32 rowCount, UInt32 colCount, MazeGenerationAlgorithm algorithm, UInt64 seed);
         /// <summary>Sets the start cell on a <c>GeneratorOptionsWasm</c></summary>
         public void GeneratorOptionsSetStart(UIntPtr optionsPtr, UInt32 row, UInt32 col);
         /// <summary>Sets the finish cell on a <c>GeneratorOptionsWasm</c></summary>

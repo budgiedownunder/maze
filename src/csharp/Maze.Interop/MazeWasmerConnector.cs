@@ -484,15 +484,15 @@ namespace Maze.Interop
             return Marshal.PtrToStructure<MazeInterop.MazeWasmResult>(resultPtr);
         }
         /// <summary>
-        /// Reads a `MazeWasmPoint` pointer into a `MazeWasmPoint`
+        /// Reads a `MazePoint` pointer into a `MazePoint`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to point</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset)
+        public MazeInterop.MazePoint ReadMazePoint(UInt32 ptrOffset)
         {
             IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
             IntPtr pointPtr = IntPtr.Add(memoryBase, (int)ptrOffset);
-            return Marshal.PtrToStructure<MazeInterop.MazeWasmPoint>(pointPtr);
+            return Marshal.PtrToStructure<MazeInterop.MazePoint>(pointPtr);
         }
         /// <summary>
         /// Reads a `MazeWasmError` pointer into a `MazeWasmError`

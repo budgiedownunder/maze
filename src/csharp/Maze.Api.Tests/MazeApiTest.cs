@@ -657,7 +657,7 @@ namespace Maze.Api.Tests
         /// Confirms that <see cref="Maze.Solve"/> fails for a maze that has no finish cell defined and with the expected error
         /// </summary>
         [Fact]
-        public void MazeWasmSolve_ShouldFailWithNoFinishCell()
+        public void MazeSolve_ShouldFailWithNoFinishCell()
         {
             var jsonStr = @"
             {

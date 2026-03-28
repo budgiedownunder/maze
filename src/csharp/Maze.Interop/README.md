@@ -16,15 +16,15 @@ Once the instance is obtained, the caller can execute methods to create and inte
 
 ```csharp
 var interop = MazeInterop.GetInstance();
-UInt32 mazeWasmPtr = interop.NewMazeWasm();
-interop.MazeWasmResize(mazeWasmPtr, 10, 5);
-var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
-var colCount = interop.MazeWasmGetColCount(mazeWasmPtr);
+UInt32 mazePtr = interop.NewMaze();
+interop.MazeResize(mazePtr, 10, 5);
+var rowCount = interop.MazeGetRowCount(mazePtr);
+var colCount = interop.MazeGetColCount(mazePtr);
 Console.WriteLine($"New dimensions = {rowCount} rows x {colCount} columns");
-interop.FreeMazeWasm(mazeWasmPtr);
+interop.FreeMaze(mazePtr);
 ```
 
-Notice that this code uses `FreeMazeWasm()` to release the `MazeWasm` pointer after it is no longer needed. If this is not done, a memory leak will occur within the `maze_wasm` Web Assembly.
+Notice that this code uses `FreeMaze()` to release the `MazeWasm` pointer after it is no longer needed. If this is not done, a memory leak will occur within the `maze_wasm` Web Assembly.
 
 ## Getting Started
 

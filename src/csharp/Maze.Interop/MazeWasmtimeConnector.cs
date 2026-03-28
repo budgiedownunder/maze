@@ -53,13 +53,13 @@ namespace Maze.Interop
             return _memory.Read<MazeInterop.MazeWasmResult>(ptrOffset);
         }
         /// <summary>
-        /// Reads a `MazeWasmPoint` pointer into a `MazeWasmPoint`
+        /// Reads a `MazePoint` pointer into a `MazePoint`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to point</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset)
+        public MazeInterop.MazePoint ReadMazePoint(UInt32 ptrOffset)
         {
-            return _memory.Read<MazeInterop.MazeWasmPoint>(ptrOffset);
+            return _memory.Read<MazeInterop.MazePoint>(ptrOffset);
         }
         /// <summary>
         /// Reads a `MazeWasmError` pointer into a `MazeWasmError`

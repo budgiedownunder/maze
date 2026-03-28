@@ -30,11 +30,11 @@ namespace Maze.Interop
         /// <returns>`MazeWasmResult` value</returns>
         public MazeInterop.MazeWasmResult ReadMazeWasmResult(UInt32 ptrOffset);
         /// <summary>
-        /// Reads a `MazeWasmPoint` pointer into a `MazeWasmPoint`
+        /// Reads a `MazePoint` pointer into a `MazePoint`
         /// </summary>
         /// <param name="ptrOffset">Memory pointer offset to point</param>
         /// <returns>`MazeWasmResult` value</returns>
-        public MazeInterop.MazeWasmPoint ReadMazeWasmPoint(UInt32 ptrOffset);
+        public MazeInterop.MazePoint ReadMazePoint(UInt32 ptrOffset);
         /// <summary>
         /// Reads a `MazeWasmError` pointer into a `MazeWasmError`
         /// </summary>
@@ -184,7 +184,7 @@ namespace Maze.Interop
         /// <param name="row">Target row</param>
         /// <param name="col">Target column</param>
         /// <returns>Cell type</returns>
-        public MazeInterop.MazeWasmCellType MazeWasmGetCellType(UIntPtr mazeWasmPtr, UInt32 row, UInt32 col)
+        public MazeInterop.MazeCellType MazeWasmGetCellType(UIntPtr mazeWasmPtr, UInt32 row, UInt32 col)
         {
             UInt32 resultPtr = (UInt32)(Int32)(mazeWasmGetCellType?.Invoke((long)(uint)mazeWasmPtr, row, col) ?? 0);
             MazeInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtr);
@@ -194,7 +194,7 @@ namespace Maze.Interop
                 FreeMazeWasmResult(resultPtr, true);
                 throw new Exception(errorMessage);
             }
-            MazeInterop.MazeWasmCellType cellType = result.value_ptr != 0 ? (MazeInterop.MazeWasmCellType)(result.value_ptr) : MazeInterop.MazeWasmCellType.Empty;
+            MazeInterop.MazeCellType cellType = result.value_ptr != 0 ? (MazeInterop.MazeCellType)(result.value_ptr) : MazeInterop.MazeCellType.Empty;
             FreeMazeWasmResult(resultPtr, true);
             return cellType;
         }
@@ -218,7 +218,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Start cell point</returns>
-        public MazeInterop.MazeWasmPoint MazeWasmGetStartCell(UIntPtr mazeWasmPtr)
+        public MazeInterop.MazePoint MazeWasmGetStartCell(UIntPtr mazeWasmPtr)
         {
             UInt32 resultPtr = (UInt32)(Int32)(mazeWasmGetStartCell?.Invoke((long)(uint)mazeWasmPtr) ?? 0);
             return MazeWasmResultGetPoint(resultPtr, true);
@@ -243,7 +243,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="mazeWasmPtr">Pointer to maze</param>
         /// <returns>Finish cell point</returns>
-        public MazeInterop.MazeWasmPoint MazeWasmGetFinishCell(UIntPtr mazeWasmPtr)
+        public MazeInterop.MazePoint MazeWasmGetFinishCell(UIntPtr mazeWasmPtr)
         {
             UInt32 resultPtr = (UInt32)(Int32)(mazeWasmGetFinishCell?.Invoke((long)(uint)mazeWasmPtr) ?? 0);
             return MazeWasmResultGetPoint(resultPtr, true);
@@ -415,11 +415,11 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="solutionPtr">Pointer to solution</param>
         /// <returns>List of points</returns>
-        public List<MazeInterop.MazeWasmPoint> MazeWasmSolutionGetPathPoints(UIntPtr solutionPtr)
+        public List<MazeInterop.MazePoint> MazeWasmSolutionGetPathPoints(UIntPtr solutionPtr)
         {
             if (solutionPtr == UIntPtr.Zero) throw new Exception("solutionPtr is zero");
             UInt32 pathPointsPtr = (UInt32)(Int32)(mazeWasmSolutionGetPathPoints?.Invoke((long)(uint)solutionPtr) ?? 0);
-            List<MazeInterop.MazeWasmPoint> points = ReadPathPoints(pathPointsPtr);
+            List<MazeInterop.MazePoint> points = ReadPathPoints(pathPointsPtr);
             FreeSizedMemory(pathPointsPtr);
             return points;
         }
@@ -428,15 +428,15 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="pathPointsPtrOffset">Points pointer offset</param>
         /// <returns>List of points</returns>
-        protected List<MazeInterop.MazeWasmPoint> ReadPathPoints(UInt32 pathPointsPtrOffset)
+        protected List<MazeInterop.MazePoint> ReadPathPoints(UInt32 pathPointsPtrOffset)
         {
             UInt32 dataPtrOffset = pathPointsPtrOffset + 4;
             UInt32 numPoints = memory.ReadUInt32(dataPtrOffset);
             dataPtrOffset += 4;
-            List<MazeInterop.MazeWasmPoint> points = new List<MazeInterop.MazeWasmPoint>();
+            List<MazeInterop.MazePoint> points = new List<MazeInterop.MazePoint>();
             for (UInt32 i = 0; i < numPoints; i++)
             {
-                MazeInterop.MazeWasmPoint point = memory.ReadMazeWasmPoint(dataPtrOffset);
+                MazeInterop.MazePoint point = memory.ReadMazePoint(dataPtrOffset);
                 points.Add(point);
                 dataPtrOffset += 8;
             }
@@ -450,7 +450,7 @@ namespace Maze.Interop
         /// <param name="resultPtrOffset">Memory pointer offset to result</param>
         /// <param name="freeResultPtr">Flag indicating whether to free the result</param>
         /// <returns>Point value if successful</returns>
-        MazeInterop.MazeWasmPoint MazeWasmResultGetPoint(UInt32 resultPtrOffset, bool freeResultPtr)
+        MazeInterop.MazePoint MazeWasmResultGetPoint(UInt32 resultPtrOffset, bool freeResultPtr)
         {
             MazeInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtrOffset);
             if (result.error_ptr != 0)
@@ -464,7 +464,7 @@ namespace Maze.Interop
                 if (freeResultPtr) FreeMazeWasmResult(resultPtrOffset, true);
                 throw new Exception("Result value is not a Point");
             }
-            MazeInterop.MazeWasmPoint point = memory.ReadMazeWasmPoint(result.value_ptr + 4);
+            MazeInterop.MazePoint point = memory.ReadMazePoint(result.value_ptr + 4);
             if (freeResultPtr) FreeMazeWasmResult(resultPtrOffset, true);
             return point;
         }
@@ -518,7 +518,7 @@ namespace Maze.Interop
         /// <summary>
         /// Creates a new <c>GeneratorOptionsWasm</c>, or will throw an exception if the operation fails
         /// </summary>
-        public UIntPtr NewGeneratorOptionsWasm(UInt32 rowCount, UInt32 colCount, MazeWasmGenerationAlgorithm algorithm, UInt64 seed)
+        public UIntPtr NewGeneratorOptionsWasm(UInt32 rowCount, UInt32 colCount, MazeGenerationAlgorithm algorithm, UInt64 seed)
         {
             UIntPtr optionsPtr = (UIntPtr)(uint)(int)(newGeneratorOptionsWasm?.Invoke(rowCount, colCount, (int)algorithm, seed) ?? 0);
             if (optionsPtr == UIntPtr.Zero)

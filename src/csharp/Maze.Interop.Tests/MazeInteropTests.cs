@@ -19,18 +19,18 @@ namespace Maze.Interop.Tests
         /// <see cref="Maze.Interop.MazeInterop"/> instance</returns>
         protected abstract MazeInterop GetInterop();
 
-        private UIntPtr CreateNewMazeWasm(UInt32 numRows, UInt32 numCols)
+        private UIntPtr CreateNewMaze(UInt32 numRows, UInt32 numCols)
         {
-            UIntPtr mazeWasmPtr = GetInterop().NewMazeWasm();
+            UIntPtr mazePtr = GetInterop().NewMaze();
             if (numRows > 0 || numCols > 0)
             {
-                GetInterop().MazeWasmResize(mazeWasmPtr, numRows, numCols);
+                GetInterop().MazeResize(mazePtr, numRows, numCols);
             }
-            return mazeWasmPtr;
+            return mazePtr;
         }
-        private void FreeMazeWasm(UIntPtr mazeWasmPtr)
+        private void FreeMaze(UIntPtr mazePtr)
         {
-            GetInterop().FreeMazeWasm(mazeWasmPtr);
+            GetInterop().FreeMaze(mazePtr);
         }
         private void AssertRowCount(UInt32 actual, UInt32 expected)
         {
@@ -40,694 +40,694 @@ namespace Maze.Interop.Tests
         {
             Assert.True(actual == expected, $"Expected colCount to be {expected} but got {actual}");
         }
-        private void AssertCellType(MazeWasmCellType actual, MazeWasmCellType expected)
+        private void AssertCellType(MazeCellType actual, MazeCellType expected)
         {
             Assert.True(actual == expected, $"Expected cell type to be '{expected}' but got '{actual}'");
         }
-        private void AssertPoint(string context, MazeWasmPoint actual, MazeWasmPoint expected)
+        private void AssertPoint(string context, MazePoint actual, MazePoint expected)
         {
             Assert.True(actual.row == expected.row, $"Expected {context} point row to be '{expected.row}' but got '{actual.row}'");
             Assert.True(actual.col == expected.col, $"Expected {context} point column to be '{expected.col}' but got '{actual.col}'");
         }
-        private void AssertStartCell(MazeWasmPoint actual, MazeWasmPoint expected)
+        private void AssertStartCell(MazePoint actual, MazePoint expected)
         {
             AssertPoint("start", actual, expected);
         }
-        private void AssertFinishCell(MazeWasmPoint actual, MazeWasmPoint expected)
+        private void AssertFinishCell(MazePoint actual, MazePoint expected)
         {
             AssertPoint("finish", actual, expected);
         }
-        private void AssertRangeCellType(UIntPtr mazeWasmPtr, UInt32 fromRow, UInt32 fromCol, UInt32 toRow, UInt32 toCol, MazeWasmCellType expected, bool freeMazePtrOnFail)
+        private void AssertRangeCellType(UIntPtr mazePtr, UInt32 fromRow, UInt32 fromCol, UInt32 toRow, UInt32 toCol, MazeCellType expected, bool freeMazePtrOnFail)
         {
             MazeInterop interop = GetInterop();
             for (UInt32 row = fromRow; row <= toRow; row++)
             {
                 for (UInt32 col = fromCol; col <= toCol; col++)
                 {
-                    MazeWasmCellType cellType = interop.MazeWasmGetCellType(mazeWasmPtr, fromRow, fromCol);
+                    MazeCellType cellType = interop.MazeGetCellType(mazePtr, fromRow, fromCol);
                     if (cellType != expected)
-                        FreeMazeWasm(mazeWasmPtr);
+                        FreeMaze(mazePtr);
                     Assert.True(cellType == expected, $"Expected cell type at [{row}, {col}] to be '{expected}' but got '{cellType}'");
                 }
             }
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewMazeWasm"/> returns a non-zero pointer value
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewMaze"/> returns a non-zero pointer value
         /// </summary>
         [Fact]
-        public void NewMazeWasm_ReturnsNonZeroPointer()
+        public void NewMaze_ReturnsNonZeroPointer()
         {
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            if (mazeWasmPtr != UIntPtr.Zero) FreeMazeWasm(mazeWasmPtr);
-            Assert.True(mazeWasmPtr != UIntPtr.Zero);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            if (mazePtr != UIntPtr.Zero) FreeMaze(mazePtr);
+            Assert.True(mazePtr != UIntPtr.Zero);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmIsEmpty"/> returns `true` for a newly created maze
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeIsEmpty"/> returns `true` for a newly created maze
         /// </summary>
         [Fact]
-        public void MazeWasmIsEmpty_ShouldReturnTrueForNewMaze()
+        public void MazeIsEmpty_ShouldReturnTrueForNewMaze()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            bool isEmpty = interop.MazeWasmIsEmpty(mazeWasmPtr);
-            if (mazeWasmPtr != UIntPtr.Zero) FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            bool isEmpty = interop.MazeIsEmpty(mazePtr);
+            if (mazePtr != UIntPtr.Zero) FreeMaze(mazePtr);
             Assert.True(isEmpty);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmIsEmpty"/> returns `false` for a maze that has size 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeIsEmpty"/> returns `false` for a maze that has size 
         /// </summary>
         [Fact]
-        public void MazeWasmIsEmpty_ShouldReturnFalseForMazeWithSize()
+        public void MazeIsEmpty_ShouldReturnFalseForMazeWithSize()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(1, 1);
-            bool isEmpty = interop.MazeWasmIsEmpty(mazeWasmPtr);
-            if (mazeWasmPtr != UIntPtr.Zero) FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(1, 1);
+            bool isEmpty = interop.MazeIsEmpty(mazePtr);
+            if (mazePtr != UIntPtr.Zero) FreeMaze(mazePtr);
             Assert.False(isEmpty);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetRowCount"/> returns the expected number of rows for a maze that has size 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetRowCount"/> returns the expected number of rows for a maze that has size 
         /// </summary>
         [Fact]
-        public void MazeWasmGetRowCount_ShouldReturnCorrectNumberRows()
+        public void MazeGetRowCount_ShouldReturnCorrectNumberRows()
         {
             UInt32 targetRowCount = 10;
             UInt32 targetColCount = 5;
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(targetRowCount, targetColCount);
-            var rowCount = GetInterop().MazeWasmGetRowCount(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(targetRowCount, targetColCount);
+            var rowCount = GetInterop().MazeGetRowCount(mazePtr);
+            FreeMaze(mazePtr);
             AssertRowCount(rowCount, targetRowCount);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetColCount"/> returns the expected number of columns for a maze that has size 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetColCount"/> returns the expected number of columns for a maze that has size 
         /// </summary>
         [Fact]
-        public void MazeWasmGetColCount_ShouldReturnCorrectNumberCols()
+        public void MazeGetColCount_ShouldReturnCorrectNumberCols()
         {
             UInt32 targetRowCount = 10;
             UInt32 targetColCount = 5;
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(targetRowCount, targetColCount);
-            var colCount = GetInterop().MazeWasmGetColCount(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(targetRowCount, targetColCount);
+            var colCount = GetInterop().MazeGetColCount(mazePtr);
+            FreeMaze(mazePtr);
             AssertColCount(colCount, targetColCount);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmReset"/> removes all rows and columns in a maze 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeReset"/> removes all rows and columns in a maze 
         /// </summary>
         [Fact]
-        public void MazeWasmReset_ShouldSucceed()
+        public void MazeReset_ShouldSucceed()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(10, 5);
-            interop.MazeWasmReset(mazeWasmPtr);
-            var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
-            var colCount = interop.MazeWasmGetColCount(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(10, 5);
+            interop.MazeReset(mazePtr);
+            var rowCount = interop.MazeGetRowCount(mazePtr);
+            var colCount = interop.MazeGetColCount(mazePtr);
+            FreeMaze(mazePtr);
             AssertRowCount(rowCount, 0);
             AssertColCount(colCount, 0);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmClearCells"/> clears cell content in a maze when provided with a valid target cell range
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeClearCells"/> clears cell content in a maze when provided with a valid target cell range
         /// </summary>
         [Fact]
         public void MazeWasmClear_ShouldSucceed()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(10, 5);
-            interop.MazeWasmClearCells(mazeWasmPtr, 1, 2, 3, 4);
-            var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
-            var colCount = interop.MazeWasmGetColCount(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(10, 5);
+            interop.MazeClearCells(mazePtr, 1, 2, 3, 4);
+            var rowCount = interop.MazeGetRowCount(mazePtr);
+            var colCount = interop.MazeGetColCount(mazePtr);
+            FreeMaze(mazePtr);
             AssertRowCount(rowCount, 10);
             AssertColCount(colCount, 5);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmClearCells"/> fails to clear cell content in a maze when provided with an invalid target start row 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeClearCells"/> fails to clear cell content in a maze when provided with an invalid target start row 
         /// </summary>
         [Fact]
         public void MazeWasmClear_ShouldFailForInvalidStartRow()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(10, 5);
+            UIntPtr mazePtr = CreateNewMaze(10, 5);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmClearCells(mazeWasmPtr, 11, 2, 3, 4);
+                interop.MazeClearCells(mazePtr, 11, 2, 3, 4);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'from' point [11, 2]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmClearCells"/> fails to clear cell content in a maze when provided with an invalid target start column 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeClearCells"/> fails to clear cell content in a maze when provided with an invalid target start column 
         /// </summary>
         [Fact]
         public void MazeWasmClear_ShouldFailForInvalidStartCol()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(10, 5);
+            UIntPtr mazePtr = CreateNewMaze(10, 5);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmClearCells(mazeWasmPtr, 1, 12, 3, 4);
+                interop.MazeClearCells(mazePtr, 1, 12, 3, 4);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'from' point [1, 12]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmClearCells"/> fails to clear cell content in a maze when provided with an invalid target end row 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeClearCells"/> fails to clear cell content in a maze when provided with an invalid target end row 
         /// </summary>
         [Fact]
         public void MazeWasmClear_ShouldFailForInvalidEndRow()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(10, 5);
+            UIntPtr mazePtr = CreateNewMaze(10, 5);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmClearCells(mazeWasmPtr, 1, 2, 11, 4);
+                interop.MazeClearCells(mazePtr, 1, 2, 11, 4);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'to' point [11, 4]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmClearCells"/> fails to clear cell content in a maze when provided with an invalid target end column 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeClearCells"/> fails to clear cell content in a maze when provided with an invalid target end column 
         /// </summary>
         [Fact]
         public void MazeWasmClear_ShouldFailForInvalidEndCol()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(10, 5);
+            UIntPtr mazePtr = CreateNewMaze(10, 5);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmClearCells(mazeWasmPtr, 1, 2, 3, 11);
+                interop.MazeClearCells(mazePtr, 1, 2, 3, 11);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'to' point [3, 11]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmResize"/> correctly resizes a maze to the expected row and column counts 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeResize"/> correctly resizes a maze to the expected row and column counts 
         /// </summary>
         [Fact]
-        public void MazeWasmResize_ChangesRowAndColumnCounts()
+        public void MazeResize_ChangesRowAndColumnCounts()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
             UInt32 targetRowCount = 10;
             UInt32 targetColCount = 5;
 
-            interop.MazeWasmResize(mazeWasmPtr, targetRowCount, targetColCount);
-            var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
-            var colCount = interop.MazeWasmGetColCount(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            interop.MazeResize(mazePtr, targetRowCount, targetColCount);
+            var rowCount = interop.MazeGetRowCount(mazePtr);
+            var colCount = interop.MazeGetColCount(mazePtr);
+            FreeMaze(mazePtr);
             AssertRowCount(rowCount, targetRowCount);
             AssertColCount(colCount, targetColCount);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmInsertRows"/> succeeds for a valid start row 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeInsertRows"/> succeeds for a valid start row 
         /// </summary>
         [Fact]
-        public void MazeWasmInsertRows_SucceedsForValidStartRow()
+        public void MazeInsertRows_SucceedsForValidStartRow()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            interop.MazeWasmInsertRows(mazeWasmPtr, 0, 2);
-            var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            interop.MazeInsertRows(mazePtr, 0, 2);
+            var rowCount = interop.MazeGetRowCount(mazePtr);
+            FreeMaze(mazePtr);
             AssertRowCount(rowCount, 2);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmInsertRows"/> fails for an invalid start row 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeInsertRows"/> fails for an invalid start row 
         /// </summary>
         [Fact]
-        public void MazeWasmInsertRows_FailsForInvalidStartRow()
+        public void MazeInsertRows_FailsForInvalidStartRow()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmInsertRows(mazeWasmPtr, 1, 2);
+                interop.MazeInsertRows(mazePtr, 1, 2);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'start_row' index (1)", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmDeleteRows"/> fails for an empty maze 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeDeleteRows"/> fails for an empty maze 
         /// </summary>
         [Fact]
-        public void MazeWasmDeleteRows_FailsForEmptyMaze()
+        public void MazeDeleteRows_FailsForEmptyMaze()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmDeleteRows(mazeWasmPtr, 1, 2);
+                interop.MazeDeleteRows(mazePtr, 1, 2);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("definition is empty", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmDeleteRows"/> fails for an invalid start row 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeDeleteRows"/> fails for an invalid start row 
         /// </summary>
         [Fact]
-        public void MazeWasmDeleteRows_FailsForInvalidStartRow()
+        public void MazeDeleteRows_FailsForInvalidStartRow()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(1, 1);
+            UIntPtr mazePtr = CreateNewMaze(1, 1);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmDeleteRows(mazeWasmPtr, 1, 2);
+                interop.MazeDeleteRows(mazePtr, 1, 2);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'start_row' index (1)", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmDeleteRows"/> fails if the number of rows requested is too large 
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeDeleteRows"/> fails if the number of rows requested is too large 
         /// </summary>
         [Fact]
-        public void MazeWasmDeleteRows_FailsIfCountTooLarge()
+        public void MazeDeleteRows_FailsIfCountTooLarge()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(2, 1);
+            UIntPtr mazePtr = CreateNewMaze(2, 1);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmDeleteRows(mazeWasmPtr, 1, 3);
+                interop.MazeDeleteRows(mazePtr, 1, 3);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'count' (3) - too large", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmDeleteRows"/> succeeds for a valid start row and row count
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeDeleteRows"/> succeeds for a valid start row and row count
         /// </summary>
         [Fact]
-        public void MazeWasmDeleteRows_SucceedsForValidStartRow()
+        public void MazeDeleteRows_SucceedsForValidStartRow()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(3, 1);
-            interop.MazeWasmDeleteRows(mazeWasmPtr, 0, 1);
-            var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(3, 1);
+            interop.MazeDeleteRows(mazePtr, 0, 1);
+            var rowCount = interop.MazeGetRowCount(mazePtr);
+            FreeMaze(mazePtr);
             AssertRowCount(rowCount, 2);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmInsertCols"/> fails for an empty maze
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeInsertCols"/> fails for an empty maze
         /// </summary>
         [Fact]
-        public void MazeWasmInsertCols_FailsForEmptyMaze()
+        public void MazeInsertCols_FailsForEmptyMaze()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmInsertCols(mazeWasmPtr, 0, 0);
+                interop.MazeInsertCols(mazePtr, 0, 0);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("definition is empty", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmInsertCols"/> fails for an invalid start column
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeInsertCols"/> fails for an invalid start column
         /// </summary>
         [Fact]
-        public void MazeWasmInsertCols_FailsForInvalidStartCol()
+        public void MazeInsertCols_FailsForInvalidStartCol()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(1, 0);
+            UIntPtr mazePtr = CreateNewMaze(1, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmInsertCols(mazeWasmPtr, 2, 1);
+                interop.MazeInsertCols(mazePtr, 2, 1);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'start_col' index (2)", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmInsertCols"/> succeeds for a valid start column and column count
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeInsertCols"/> succeeds for a valid start column and column count
         /// </summary>
         [Fact]
-        public void MazeWasmInsertCols_SucceedsForValidStartCol()
+        public void MazeInsertCols_SucceedsForValidStartCol()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(1, 0);
-            interop.MazeWasmInsertCols(mazeWasmPtr, 0, 3);
-            var colCount = interop.MazeWasmGetColCount(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(1, 0);
+            interop.MazeInsertCols(mazePtr, 0, 3);
+            var colCount = interop.MazeGetColCount(mazePtr);
+            FreeMaze(mazePtr);
             AssertColCount(colCount, 3);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmDeleteCols"/> fails for an empty maze
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeDeleteCols"/> fails for an empty maze
         /// </summary>
         [Fact]
-        public void MazeWasmDeleteCols_FailsForEmptyMaze()
+        public void MazeDeleteCols_FailsForEmptyMaze()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmDeleteCols(mazeWasmPtr, 1, 2);
+                interop.MazeDeleteCols(mazePtr, 1, 2);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("definition is empty", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmDeleteCols"/> fails for an invalid start column
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeDeleteCols"/> fails for an invalid start column
         /// </summary>
         [Fact]
-        public void MazeWasmDeleteCols_FailsForInvalidStartCol()
+        public void MazeDeleteCols_FailsForInvalidStartCol()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(1, 1);
+            UIntPtr mazePtr = CreateNewMaze(1, 1);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmDeleteCols(mazeWasmPtr, 1, 2);
+                interop.MazeDeleteCols(mazePtr, 1, 2);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'start_col' index (1)", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmDeleteCols"/> fails if the number of columns requested is too large
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeDeleteCols"/> fails if the number of columns requested is too large
         /// </summary>
         [Fact]
-        public void MazeWasmDeleteCols_FailsIfCountTooLarge()
+        public void MazeDeleteCols_FailsIfCountTooLarge()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(2, 2);
+            UIntPtr mazePtr = CreateNewMaze(2, 2);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmDeleteCols(mazeWasmPtr, 1, 3);
+                interop.MazeDeleteCols(mazePtr, 1, 3);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'count' (3) - too large", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmDeleteCols"/> succeeds for a valid start column and column count
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeDeleteCols"/> succeeds for a valid start column and column count
         /// </summary>
         [Fact]
-        public void MazeWasmDeleteCols_SucceedsForValidStartCol()
+        public void MazeDeleteCols_SucceedsForValidStartCol()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(1, 3);
-            interop.MazeWasmDeleteCols(mazeWasmPtr, 0, 1);
-            var colCount = interop.MazeWasmGetColCount(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(1, 3);
+            interop.MazeDeleteCols(mazePtr, 0, 1);
+            var colCount = interop.MazeGetColCount(mazePtr);
+            FreeMaze(mazePtr);
             AssertColCount(colCount, 2);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetCellType"/> fails for an empty maze
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetCellType"/> fails for an empty maze
         /// </summary>
         [Fact]
-        public void MazeWasmGetCellType_FailsForEmptyMaze()
+        public void MazeGetCellType_FailsForEmptyMaze()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            MazeWasmCellType cellType = MazeWasmCellType.Empty;
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            MazeCellType cellType = MazeCellType.Empty;
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                cellType = interop.MazeWasmGetCellType(mazeWasmPtr, 0, 0);
+                cellType = interop.MazeGetCellType(mazePtr, 0, 0);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("row index (0) out of bounds", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetCellType"/> fails for an invalid target row
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetCellType"/> fails for an invalid target row
         /// </summary>
         [Fact]
-        public void MazeWasmGetCellType_FailsForInvalidRow()
+        public void MazeGetCellType_FailsForInvalidRow()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(10, 5);
-            MazeWasmCellType cellType = MazeWasmCellType.Empty;
+            UIntPtr mazePtr = CreateNewMaze(10, 5);
+            MazeCellType cellType = MazeCellType.Empty;
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                cellType = interop.MazeWasmGetCellType(mazeWasmPtr, 10, 4);
+                cellType = interop.MazeGetCellType(mazePtr, 10, 4);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("row index (10) out of bounds", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetCellType"/> fails for an invalid target column
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetCellType"/> fails for an invalid target column
         /// </summary>
         [Fact]
-        public void MazeWasmGetCellType_FailsForInvalidCol()
+        public void MazeGetCellType_FailsForInvalidCol()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(10, 5);
-            MazeWasmCellType cellType = MazeWasmCellType.Empty;
+            UIntPtr mazePtr = CreateNewMaze(10, 5);
+            MazeCellType cellType = MazeCellType.Empty;
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                cellType = interop.MazeWasmGetCellType(mazeWasmPtr, 9, 5);
+                cellType = interop.MazeGetCellType(mazePtr, 9, 5);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("column index (5) out of bounds", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetCellType"/> succeeds for a valid cell location
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetCellType"/> succeeds for a valid cell location
         /// </summary>
         [Fact]
-        public void MazeWasmGetCellType_SucceedsForValidCellLocation()
+        public void MazeGetCellType_SucceedsForValidCellLocation()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(1, 1);
-            MazeWasmCellType cellType = interop.MazeWasmGetCellType(mazeWasmPtr, 0, 0);
-            FreeMazeWasm(mazeWasmPtr);
-            AssertCellType(cellType, MazeWasmCellType.Empty);
+            UIntPtr mazePtr = CreateNewMaze(1, 1);
+            MazeCellType cellType = interop.MazeGetCellType(mazePtr, 0, 0);
+            FreeMaze(mazePtr);
+            AssertCellType(cellType, MazeCellType.Empty);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSetStartCell"/> fails for an invalid target row
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetStartCell"/> fails for an invalid target row
         /// </summary>
         [Fact]
-        public void MazeWasmSetStartCell_FailsForInvalidRow()
+        public void MazeSetStartCell_FailsForInvalidRow()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 5);
+            UIntPtr mazePtr = CreateNewMaze(5, 5);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmSetStartCell(mazeWasmPtr, 20, 2);
+                interop.MazeSetStartCell(mazePtr, 20, 2);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'start' point [20, 2]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSetStartCell"/> fails for an invalid target column
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetStartCell"/> fails for an invalid target column
         /// </summary>
         [Fact]
-        public void MazeWasmSetStartCell_FailsForInvalidCol()
+        public void MazeSetStartCell_FailsForInvalidCol()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 5);
+            UIntPtr mazePtr = CreateNewMaze(5, 5);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmSetStartCell(mazeWasmPtr, 1, 10);
+                interop.MazeSetStartCell(mazePtr, 1, 10);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'start' point [1, 10]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetStartCell"/> fails for an empty maze
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetStartCell"/> fails for an empty maze
         /// </summary>
         [Fact]
-        public void MazeWasmGetStartCell_FailsForEmptyMaze()
+        public void MazeGetStartCell_FailsForEmptyMaze()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            MazeWasmPoint? start;
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            MazePoint? start;
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                start = interop.MazeWasmGetStartCell(mazeWasmPtr);
+                start = interop.MazeGetStartCell(mazePtr);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("no start cell defined", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetStartCell"/> fails if a start cell is not defined
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetStartCell"/> fails if a start cell is not defined
         /// </summary>
         [Fact]
-        public void MazeWasmGetStartCell_FailsIfNotDefined()
+        public void MazeGetStartCell_FailsIfNotDefined()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 5);
-            MazeWasmPoint start;
+            UIntPtr mazePtr = CreateNewMaze(5, 5);
+            MazePoint start;
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                start = interop.MazeWasmGetStartCell(mazeWasmPtr);
+                start = interop.MazeGetStartCell(mazePtr);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("no start cell defined", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetStartCell"/> succeeds if a start cell is defined
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetStartCell"/> succeeds if a start cell is defined
         /// </summary>
         [Fact]
-        public void MazeWasmGetStartCell_SucceedsIfDefined()
+        public void MazeGetStartCell_SucceedsIfDefined()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 5);
-            MazeWasmPoint start = new MazeWasmPoint();
-            interop.MazeWasmSetStartCell(mazeWasmPtr, 1, 2);
-            start = interop.MazeWasmGetStartCell(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
-            AssertStartCell(start, new MazeWasmPoint() { row = 1, col = 2 });
+            UIntPtr mazePtr = CreateNewMaze(5, 5);
+            MazePoint start = new MazePoint();
+            interop.MazeSetStartCell(mazePtr, 1, 2);
+            start = interop.MazeGetStartCell(mazePtr);
+            FreeMaze(mazePtr);
+            AssertStartCell(start, new MazePoint() { row = 1, col = 2 });
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSetFinishCell"/> fails for an invalid target row
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetFinishCell"/> fails for an invalid target row
         /// </summary>
         [Fact]
-        public void MazeWasmSetFinishCell_FailsForInvalidRow()
+        public void MazeSetFinishCell_FailsForInvalidRow()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 5);
+            UIntPtr mazePtr = CreateNewMaze(5, 5);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmSetFinishCell(mazeWasmPtr, 20, 2);
+                interop.MazeSetFinishCell(mazePtr, 20, 2);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'finish' point [20, 2]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSetFinishCell"/> fails for an invalid target column
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetFinishCell"/> fails for an invalid target column
         /// </summary>
         [Fact]
-        public void MazeWasmSetFinishCell_FailsForInvalidCol()
+        public void MazeSetFinishCell_FailsForInvalidCol()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 5);
+            UIntPtr mazePtr = CreateNewMaze(5, 5);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmSetFinishCell(mazeWasmPtr, 1, 10);
+                interop.MazeSetFinishCell(mazePtr, 1, 10);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'finish' point [1, 10]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetFinishCell"/> fails for an empty maze
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetFinishCell"/> fails for an empty maze
         /// </summary>
         [Fact]
-        public void MazeWasmGetFinishCell_FailsForEmptyMaze()
+        public void MazeGetFinishCell_FailsForEmptyMaze()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            MazeWasmPoint? finish;
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            MazePoint? finish;
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                finish = interop.MazeWasmGetFinishCell(mazeWasmPtr);
+                finish = interop.MazeGetFinishCell(mazePtr);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("no finish cell defined", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetFinishCell"/> fails if a finish cell is not defined
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetFinishCell"/> fails if a finish cell is not defined
         /// </summary>
         [Fact]
-        public void MazeWasmGetFinishCell_FailsIfNotDefined()
+        public void MazeGetFinishCell_FailsIfNotDefined()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 5);
-            MazeWasmPoint finish;
+            UIntPtr mazePtr = CreateNewMaze(5, 5);
+            MazePoint finish;
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                finish = interop.MazeWasmGetFinishCell(mazeWasmPtr);
+                finish = interop.MazeGetFinishCell(mazePtr);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("no finish cell defined", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmGetFinishCell"/> succeeds if a finish cell is defined
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGetFinishCell"/> succeeds if a finish cell is defined
         /// </summary>
         [Fact]
-        public void MazeWasmGetFinishCell_SucceedsIfDefined()
+        public void MazeGetFinishCell_SucceedsIfDefined()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 5);
-            MazeWasmPoint finish = new MazeWasmPoint();
-            interop.MazeWasmSetFinishCell(mazeWasmPtr, 3, 4);
-            finish = interop.MazeWasmGetFinishCell(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
-            AssertFinishCell(finish, new MazeWasmPoint() { row = 3, col = 4 });
+            UIntPtr mazePtr = CreateNewMaze(5, 5);
+            MazePoint finish = new MazePoint();
+            interop.MazeSetFinishCell(mazePtr, 3, 4);
+            finish = interop.MazeGetFinishCell(mazePtr);
+            FreeMaze(mazePtr);
+            AssertFinishCell(finish, new MazePoint() { row = 3, col = 4 });
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSetWallCells"/> fails for an empty maze
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetWallCells"/> fails for an empty maze
         /// </summary>
         [Fact]
-        public void MazeWasmSetWallCells_FailsForEmptyMaze()
+        public void MazeSetWallCells_FailsForEmptyMaze()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmSetWallCells(mazeWasmPtr, 0, 0, 0, 0);
+                interop.MazeSetWallCells(mazePtr, 0, 0, 0, 0);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'from' point [0, 0]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSetWallCells"/> fails for an invalid start location
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetWallCells"/> fails for an invalid start location
         /// </summary>
         [Fact]
-        public void MazeWasmSetWallCells_FailsForInvalidStartLocation()
+        public void MazeSetWallCells_FailsForInvalidStartLocation()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 10);
+            UIntPtr mazePtr = CreateNewMaze(5, 10);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmSetWallCells(mazeWasmPtr, 5, 1, 3, 6);
+                interop.MazeSetWallCells(mazePtr, 5, 1, 3, 6);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'from' point [5, 1]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSetWallCells"/> fails for an invalid end location
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetWallCells"/> fails for an invalid end location
         /// </summary>
         [Fact]
-        public void MazeWasmSetWallCells_FailsForInvalidEndLocation()
+        public void MazeSetWallCells_FailsForInvalidEndLocation()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 10);
+            UIntPtr mazePtr = CreateNewMaze(5, 10);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmSetWallCells(mazeWasmPtr, 0, 0, 5, 6);
+                interop.MazeSetWallCells(mazePtr, 0, 0, 5, 6);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("invalid 'to' point [5, 6]", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSetWallCells"/> succeeds for a valid cell range
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetWallCells"/> succeeds for a valid cell range
         /// </summary>
         [Fact]
-        public void MazeWasmSetWallCells_SucceedsForValidCellRange()
+        public void MazeSetWallCells_SucceedsForValidCellRange()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(5, 10);
-            interop.MazeWasmSetWallCells(mazeWasmPtr, 0, 0, 3, 6);
-            AssertRangeCellType(mazeWasmPtr, 0, 0, 3, 6, MazeWasmCellType.Wall, true);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(5, 10);
+            interop.MazeSetWallCells(mazePtr, 0, 0, 3, 6);
+            AssertRangeCellType(mazePtr, 0, 0, 3, 6, MazeCellType.Wall, true);
+            FreeMaze(mazePtr);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmToJson"/> succeeds and produces the expected output
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeToJson"/> succeeds and produces the expected output
         /// </summary>
         [Fact]
-        public void MazeWasmToJson_ShouldSucceed()
+        public void MazeToJson_ShouldSucceed()
         {
             MazeInterop interop = GetInterop();
             var expected = @"{""id"":"""",""name"":"""",""definition"":{""grid"":[]}}";
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            var json = interop.MazeWasmToJson(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            var json = interop.MazeToJson(mazePtr);
+            FreeMaze(mazePtr);
             Assert.Equal(json, expected);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmFromJson"/> fails when presented with invalid JSON
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeFromJson"/> fails when presented with invalid JSON
         /// </summary>
         [Fact]
-        public void MazeWasmFromJson_ShouldFail()
+        public void MazeFromJson_ShouldFail()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                interop.MazeWasmFromJson(mazeWasmPtr, "{");
+                interop.MazeFromJson(mazePtr, "{");
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("EOF while parsing an object at line 1 column 1", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmFromJson"/> succeeds when presented with valid JSON
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeFromJson"/> succeeds when presented with valid JSON
         /// </summary>
         [Fact]
-        public void MazeWasmFromJson_ShouldSucceed()
+        public void MazeFromJson_ShouldSucceed()
         {
             var jsonStr = @"
             {
@@ -747,19 +747,19 @@ namespace Maze.Interop.Tests
             }
             ";
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            interop.MazeWasmFromJson(mazeWasmPtr, jsonStr);
-            var rowCount = interop.MazeWasmGetRowCount(mazeWasmPtr);
-            var colCount = interop.MazeWasmGetColCount(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            interop.MazeFromJson(mazePtr, jsonStr);
+            var rowCount = interop.MazeGetRowCount(mazePtr);
+            var colCount = interop.MazeGetColCount(mazePtr);
+            FreeMaze(mazePtr);
             AssertRowCount(rowCount, 7);
             AssertColCount(colCount, 5);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSolve"/> fails if a maze does not contain a start cell and returns an error indicating that it is missing
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSolve"/> fails if a maze does not contain a start cell and returns an error indicating that it is missing
         /// </summary>
         [Fact]
-        public void MazeWasmSolve_ShouldFailWithNoStartCell()
+        public void MazeSolve_ShouldFailWithNoStartCell()
         {
             var jsonStr = @"
             {
@@ -774,20 +774,20 @@ namespace Maze.Interop.Tests
             }
             ";
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            interop.MazeWasmFromJson(mazeWasmPtr, jsonStr);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            interop.MazeFromJson(mazePtr, jsonStr);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                UIntPtr solution = interop.MazeWasmSolve(mazeWasmPtr);
+                UIntPtr solution = interop.MazeSolve(mazePtr);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("no start cell found within maze", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSolve"/> fails if a maze does not contain a finish cell and returns an error indicating that it is missing
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSolve"/> fails if a maze does not contain a finish cell and returns an error indicating that it is missing
         /// </summary>
         [Fact]
-        public void MazeWasmSolve_ShouldFailWithNoFinishCell()
+        public void MazeSolve_ShouldFailWithNoFinishCell()
         {
             var jsonStr = @"
             {
@@ -802,20 +802,20 @@ namespace Maze.Interop.Tests
             }
             ";
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            interop.MazeWasmFromJson(mazeWasmPtr, jsonStr);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            interop.MazeFromJson(mazePtr, jsonStr);
             var exception = Assert.ThrowsAny<Exception>(() =>
             {
-                UIntPtr solution = interop.MazeWasmSolve(mazeWasmPtr);
+                UIntPtr solution = interop.MazeSolve(mazePtr);
             });
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             Assert.Equal("no finish cell found within maze", exception.Message);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSolve"/> succeeds for a valid maze
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSolve"/> succeeds for a valid maze
         /// </summary>
         [Fact]
-        public void MazeWasmSolve_ShouldSucceed()
+        public void MazeSolve_ShouldSucceed()
         {
             var jsonStr = @"
             {
@@ -835,17 +835,17 @@ namespace Maze.Interop.Tests
             }
             ";
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            interop.MazeWasmFromJson(mazeWasmPtr, jsonStr);
-            UIntPtr solution = interop.MazeWasmSolve(mazeWasmPtr);
-            FreeMazeWasm(mazeWasmPtr);
-            interop.FreeMazeWasmSolution(solution);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            interop.MazeFromJson(mazePtr, jsonStr);
+            UIntPtr solution = interop.MazeSolve(mazePtr);
+            FreeMaze(mazePtr);
+            interop.FreeMazeSolution(solution);
         }
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeWasmSolutionGetPathPoints"/> succeeds when provided with a valid solution and produces the expected path
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSolutionGetPathPoints"/> succeeds when provided with a valid solution and produces the expected path
         /// </summary>
         [Fact]
-        public void MazeWasmSolutionGetPathPoints_ShouldSucceed()
+        public void MazeSolutionGetPathPoints_ShouldSucceed()
         {
             var jsonStr = @"
                 {
@@ -865,12 +865,12 @@ namespace Maze.Interop.Tests
                 }
                 ";
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
-            interop.MazeWasmFromJson(mazeWasmPtr, jsonStr);
-            UIntPtr solution = interop.MazeWasmSolve(mazeWasmPtr);
-            List<MazeWasmPoint> solutionPath = interop.MazeWasmSolutionGetPathPoints(solution);
-            FreeMazeWasm(mazeWasmPtr);
-            interop.FreeMazeWasmSolution(solution);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
+            interop.MazeFromJson(mazePtr, jsonStr);
+            UIntPtr solution = interop.MazeSolve(mazePtr);
+            List<MazePoint> solutionPath = interop.MazeSolutionGetPathPoints(solution);
+            FreeMaze(mazePtr);
+            interop.FreeMazeSolution(solution);
             Int32 numPointsExpected = 13;
             Assert.True(solutionPath.Count == numPointsExpected, $"Expected {numPointsExpected} points in the solution but got '{solutionPath.Count}'");
         }
@@ -881,9 +881,9 @@ namespace Maze.Interop.Tests
         public void MazeWasmGetSizedMemoryUsed_ShouldSucceedAndBeZero()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
             var bytesUsed = interop.GetSizedMemoryUsed();
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             var bytesUsedExpected = 0;
             Assert.True(bytesUsed == bytesUsedExpected, $"Expected {bytesUsedExpected} bytes used but got '{bytesUsed}'");
         }
@@ -921,9 +921,9 @@ namespace Maze.Interop.Tests
         public void MazeWasmGetNumObjectsAllocated_ShouldSucceedAndBeNonZero()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = CreateNewMazeWasm(0, 0);
+            UIntPtr mazePtr = CreateNewMaze(0, 0);
             var numObjects = interop.GetNumObjectsAllocated();
-            FreeMazeWasm(mazeWasmPtr);
+            FreeMaze(mazePtr);
             var numObjectsExpected = 1;
             Assert.True(numObjects == numObjectsExpected, $"Expected {numObjectsExpected} but got '{numObjects}'");
         }
@@ -931,99 +931,99 @@ namespace Maze.Interop.Tests
         // --- Generation tests ---
 
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewGeneratorOptionsWasm"/> succeeds and returns the expected dimensions when provided with valid parameters
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewGeneratorOptions"/> succeeds and returns the expected dimensions when provided with valid parameters
         /// </summary>
         [Fact]
-        public void MazeWasmGenerate_ShouldSucceedAndReturnCorrectDimensions()
+        public void MazeGenerate_ShouldSucceedAndReturnCorrectDimensions()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = interop.NewMazeWasm();
-            UIntPtr optionsPtr = interop.NewGeneratorOptionsWasm(7, 5, MazeWasmGenerationAlgorithm.RecursiveBacktracking, 42);
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(7, 5, MazeGenerationAlgorithm.RecursiveBacktracking, 42);
             try
             {
-                interop.MazeWasmGenerate(mazeWasmPtr, optionsPtr);
-                AssertRowCount(interop.MazeWasmGetRowCount(mazeWasmPtr), 7);
-                AssertColCount(interop.MazeWasmGetColCount(mazeWasmPtr), 5);
+                interop.MazeGenerate(mazePtr, optionsPtr);
+                AssertRowCount(interop.MazeGetRowCount(mazePtr), 7);
+                AssertColCount(interop.MazeGetColCount(mazePtr), 5);
             }
             finally
             {
-                interop.FreeGeneratorOptionsWasm(optionsPtr);
-                interop.FreeMazeWasm(mazeWasmPtr);
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
             }
         }
 
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewGeneratorOptionsWasm"/> succeeds and returns the expected output when provided with a specific seed
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewGeneratorOptions"/> succeeds and returns the expected output when provided with a specific seed
         /// </summary>
         [Fact]
-        public void MazeWasmGenerate_SameSeedProducesDeterministicOutput()
+        public void MazeGenerate_SameSeedProducesDeterministicOutput()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr maze1Ptr = interop.NewMazeWasm();
-            UIntPtr maze2Ptr = interop.NewMazeWasm();
-            UIntPtr opts1Ptr = interop.NewGeneratorOptionsWasm(11, 11, MazeWasmGenerationAlgorithm.RecursiveBacktracking, 999);
-            UIntPtr opts2Ptr = interop.NewGeneratorOptionsWasm(11, 11, MazeWasmGenerationAlgorithm.RecursiveBacktracking, 999);
+            UIntPtr maze1Ptr = interop.NewMaze();
+            UIntPtr maze2Ptr = interop.NewMaze();
+            UIntPtr opts1Ptr = interop.NewGeneratorOptions(11, 11, MazeGenerationAlgorithm.RecursiveBacktracking, 999);
+            UIntPtr opts2Ptr = interop.NewGeneratorOptions(11, 11, MazeGenerationAlgorithm.RecursiveBacktracking, 999);
             try
             {
-                interop.MazeWasmGenerate(maze1Ptr, opts1Ptr);
-                interop.MazeWasmGenerate(maze2Ptr, opts2Ptr);
-                string json1 = interop.MazeWasmToJson(maze1Ptr);
-                string json2 = interop.MazeWasmToJson(maze2Ptr);
+                interop.MazeGenerate(maze1Ptr, opts1Ptr);
+                interop.MazeGenerate(maze2Ptr, opts2Ptr);
+                string json1 = interop.MazeToJson(maze1Ptr);
+                string json2 = interop.MazeToJson(maze2Ptr);
                 Assert.Equal(json1, json2);
             }
             finally
             {
-                interop.FreeGeneratorOptionsWasm(opts1Ptr);
-                interop.FreeGeneratorOptionsWasm(opts2Ptr);
-                interop.FreeMazeWasm(maze1Ptr);
-                interop.FreeMazeWasm(maze2Ptr);
+                interop.FreeGeneratorOptions(opts1Ptr);
+                interop.FreeGeneratorOptions(opts2Ptr);
+                interop.FreeMaze(maze1Ptr);
+                interop.FreeMaze(maze2Ptr);
             }
         }
 
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewGeneratorOptionsWasm"/> succeeds and returns the expected dimensions
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewGeneratorOptions"/> succeeds and returns the expected dimensions
         /// </summary>
         [Fact]
-        public void MazeWasmGenerate_WithExplicitStartFinishAndSpine_ShouldSucceedAndReturnCorrectDimensions()
+        public void MazeGenerate_WithExplicitStartFinishAndSpine_ShouldSucceedAndReturnCorrectDimensions()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = interop.NewMazeWasm();
-            UIntPtr optionsPtr = interop.NewGeneratorOptionsWasm(9, 7, MazeWasmGenerationAlgorithm.RecursiveBacktracking, 1);
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(9, 7, MazeGenerationAlgorithm.RecursiveBacktracking, 1);
             try
             {
                 interop.GeneratorOptionsSetStart(optionsPtr, 0, 0);
                 interop.GeneratorOptionsSetFinish(optionsPtr, 8, 6);
                 interop.GeneratorOptionsSetMinSpineLength(optionsPtr, 5);
                 interop.GeneratorOptionsSetMaxRetries(optionsPtr, 50);
-                interop.MazeWasmGenerate(mazeWasmPtr, optionsPtr);
-                AssertRowCount(interop.MazeWasmGetRowCount(mazeWasmPtr), 9);
-                AssertColCount(interop.MazeWasmGetColCount(mazeWasmPtr), 7);
+                interop.MazeGenerate(mazePtr, optionsPtr);
+                AssertRowCount(interop.MazeGetRowCount(mazePtr), 9);
+                AssertColCount(interop.MazeGetColCount(mazePtr), 7);
             }
             finally
             {
-                interop.FreeGeneratorOptionsWasm(optionsPtr);
-                interop.FreeMazeWasm(mazeWasmPtr);
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
             }
         }
 
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewGeneratorOptionsWasm"/> fails if an invalid row count is specified
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewGeneratorOptions"/> fails if an invalid row count is specified
         /// </summary>
         [Fact]
-        public void MazeWasmGenerate_WithInvalidRowCount_ShouldThrow()
+        public void MazeGenerate_WithInvalidRowCount_ShouldThrow()
         {
             MazeInterop interop = GetInterop();
-            UIntPtr mazeWasmPtr = interop.NewMazeWasm();
-            UIntPtr optionsPtr = interop.NewGeneratorOptionsWasm(2, 5, MazeWasmGenerationAlgorithm.RecursiveBacktracking, 1);
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(2, 5, MazeGenerationAlgorithm.RecursiveBacktracking, 1);
             try
             {
-                var ex = Assert.Throws<Exception>(() => interop.MazeWasmGenerate(mazeWasmPtr, optionsPtr));
+                var ex = Assert.Throws<Exception>(() => interop.MazeGenerate(mazePtr, optionsPtr));
                 Assert.Contains("row_count", ex.Message);
             }
             finally
             {
-                interop.FreeGeneratorOptionsWasm(optionsPtr);
-                interop.FreeMazeWasm(mazeWasmPtr);
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
             }
         }
     }

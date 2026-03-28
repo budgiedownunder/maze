@@ -14,7 +14,7 @@ namespace Maze.Api
         // Private data
         static MazeInterop _interop = MazeInterop.GetInstance(); // Used when UseStaticInterop = true
         private bool _disposed = false;
-        private UIntPtr _solutionWasmPtr = default;
+        private UIntPtr _solutionPtr = default;
         /// <summary>
         /// Controls whether the object uses a statically defined [Maze.Interop](xref:Maze.Interop) instance (default = `true`). If
         /// `false`, then the maze determines the current instance on a per-API call basis.
@@ -35,11 +35,11 @@ namespace Maze.Api
         /// <summary>
         /// Creates a new solution that wraps a [Maze.Interop](xref:Maze.Interop) solution pointer, or will throw an exception if the operation fails
         /// </summary>
-        /// <param name="solutionWasmPtr">[Maze.Interop](xref:Maze.Interop) solution pointer</param>
+        /// <param name="solutionPtr">[Maze.Interop](xref:Maze.Interop) solution pointer</param>
         /// <returns>New solution instance</returns>
-        public Solution(UIntPtr solutionWasmPtr)
+        public Solution(UIntPtr solutionPtr)
         {
-            _solutionWasmPtr = solutionWasmPtr;
+            _solutionPtr = solutionPtr;
         }
         /// <summary>
         /// Handles object disposal, releasing managed and unmanaged [Maze.Interop](xref:Maze.Interop) resources and marking
@@ -62,10 +62,10 @@ namespace Maze.Api
             if (!_disposed)
             {
                 // Dispose unmanaged resources
-                if (_solutionWasmPtr != UIntPtr.Zero)
+                if (_solutionPtr != UIntPtr.Zero)
                 {
-                    Interop.FreeMazeWasmSolution(_solutionWasmPtr);
-                    _solutionWasmPtr = UIntPtr.Zero;
+                    Interop.FreeMazeSolution(_solutionPtr);
+                    _solutionPtr = UIntPtr.Zero;
                 }
 
                 _disposed = true;
@@ -85,7 +85,7 @@ namespace Maze.Api
         /// <returns>List of points</returns>
         public List<Maze.Point> GetPathPoints()
         {
-            return Maze.ToMazePoints(Interop.MazeWasmSolutionGetPathPoints(_solutionWasmPtr));
+            return Maze.ToMazePoints(Interop.MazeSolutionGetPathPoints(_solutionPtr));
         }
     }
 }
