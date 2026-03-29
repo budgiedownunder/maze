@@ -27,6 +27,29 @@ namespace Maze.Maui.App
         /// <returns>Instance</returns>
         public static MauiApp CreateMauiApp()
         {
+#if ANDROID
+            // IconTintColorBehavior does not apply inside SwipeItemView on Android.
+            // Apply a white colour filter directly via the native image handler instead.
+            Microsoft.Maui.Handlers.ImageHandler.Mapper.AppendToMapping("SwipeItemWhiteTint", (handler, view) =>
+            {
+                if (view is Image { ClassId: "white-tint" })
+                    handler.PlatformView.SetColorFilter(
+                        Android.Graphics.Color.White,
+                        Android.Graphics.PorterDuff.Mode.SrcIn!);
+            });
+#elif IOS || MACCATALYST
+            // Same limitation applies on iOS — IconTintColorBehavior does not tint inside SwipeItemView.
+            Microsoft.Maui.Handlers.ImageHandler.Mapper.AppendToMapping("SwipeItemWhiteTint", (handler, view) =>
+            {
+                if (view is Image { ClassId: "white-tint" })
+                {
+                    handler.PlatformView.TintColor = UIKit.UIColor.White;
+                    handler.PlatformView.Image = handler.PlatformView.Image?
+                        .ImageWithRenderingMode(UIKit.UIImageRenderingMode.AlwaysTemplate);
+                }
+            });
+#endif
+
             var builder = MauiApp.CreateBuilder();
             builder
                 .UseMauiApp<App>()
