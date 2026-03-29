@@ -15,11 +15,23 @@
     <Grid VerticalOptions="Fill"
           HorizontalOptions="Fill">
 
-        <ScrollView VerticalOptions="Fill">
+        <ScrollView VerticalOptions="Center">
             <VerticalStackLayout Padding="30"
                                  Spacing="16"
                                  MaximumWidthRequest="400"
-                                 HorizontalOptions="Center">
+                                 HorizontalOptions="Center"
+                                 VerticalOptions="Center">
+
+                <Border HeightRequest="100"
+                        WidthRequest="100"
+                        StrokeShape="Ellipse"
+                        Padding="0"
+                        HorizontalOptions="Center">
+                    <Image Source="app.png"
+                           Aspect="AspectFill"
+                           HeightRequest="100"
+                           WidthRequest="100" />
+                </Border>
 
                 <Grid ColumnSpacing="8" RowSpacing="16">
                     <Grid.ColumnDefinitions>
