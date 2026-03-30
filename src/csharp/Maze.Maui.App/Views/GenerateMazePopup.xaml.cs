@@ -10,6 +10,37 @@ namespace Maze.Maui.App.Views
     /// Start and finish cell values are displayed and entered as 1-based (row 1 = top row).
     /// Returns a <see cref="Maze.GenerationOptions"/> on confirmation (with Seed set to 0 as a
     /// placeholder — the caller is responsible for assigning the final seed), or <c>null</c> on cancel.
+    /// This is how the page appears on Windows Desktop:
+    /// 
+    ///   <table>
+    ///     <thead>
+    ///       <tr>
+    ///         <th><strong>Windows</strong></th>
+    ///       </tr>
+    ///     </thead>
+    ///     <tbody>
+    ///       <tr>
+    ///         <td><img src="../../images/screenshots/windows-generate-maze.png" height="500" width="500"/></td>
+    ///       </tr>
+    ///     </tbody> 
+    ///  </table>
+    ///  
+    /// and this is how it appears on Android/iOS devices:
+    /// 
+    ///   <table>
+    ///     <thead>
+    ///       <tr>
+    ///         <th><strong>Android</strong></th>
+    ///         <th><strong>iOS</strong></th>
+    ///       </tr>
+    ///     </thead>
+    ///     <tbody>
+    ///       <tr>
+    ///         <td><img src="../../images/screenshots/android-generate-maze.png" width="250"/></td>
+    ///         <td><img src="../../images/screenshots/ios-generate-maze.png" width="250"/></td>
+    ///       </tr>
+    ///     </tbody> 
+    ///  </table>
     /// </summary>
     public partial class GenerateMazePopup : Popup
     {
