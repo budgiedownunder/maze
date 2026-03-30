@@ -26,14 +26,6 @@ and these screenshots show it running on `Android` and `iOS` mobile devices:
 |-------------|-------------
 |<img src = "Screenshots/android-solved.png" width="250"> | <img src = "Screenshots/ios-solved.png" width="250">
 
-This short animation clip demonstrates it being used on `Windows` to solve a more complex maze before introducing a blocking wall that then forces the solver to go via a different route on the next solve attempt:
-
-<img src="Gifs/windows/solve-demo.gif" height="600">
-
-and this one shows the design and solve processes being performed on an `iOS` device using extended (animated) selection:
-
-<img src="Gifs/ios/solve-demo.gif" height="400">
-
 ## Navigation
 
 The app uses a two-area navigation model:
