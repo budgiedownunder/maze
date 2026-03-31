@@ -72,13 +72,16 @@ To test all `Rust` crates:
 
 ```
 cd src/rust
-cargo test -p maze --features generation
-cargo test -p maze_c -- --test-threads=1
-cargo test -p maze_console -- --test-threads=1
-cargo test -p storage -- --test-threads=1
-cargo test -p maze_wasm
-cargo test -p maze_web_server
-cargo test -p maze_openapi_generator
+cargo test --locked -p auth
+cargo test --locked -p data_model
+cargo test --locked -p maze --features generation
+cargo test --locked -p maze_c -- --test-threads=1
+cargo test --locked -p maze_console -- --test-threads=1
+cargo test --locked -p storage -- --test-threads=1
+cargo test --locked -p maze_wasm
+cargo test --locked -p maze_web_server
+cargo test --locked -p maze_openapi_generator
+cargo test --locked -p utils
 ```
 
 #### 2. JavaScript APIs

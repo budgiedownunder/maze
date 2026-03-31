@@ -77,7 +77,8 @@ namespace Maze.Api
         public enum GenerationAlgorithm
         {
             /// <summary>
-            /// Two-phase recursive backtracking
+            /// Generates a perfect maze using a single-pass iterative depth-first search from the start cell.
+            /// See <see href="https://en.wikipedia.org/wiki/Maze_generation_algorithm#Randomized_depth-first_search">Randomized depth-first search</see>.
             /// </summary>
             RecursiveBacktracking = 0,
         }

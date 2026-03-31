@@ -13,7 +13,7 @@ docfx metadata docfx.json
 docfx build docfx.json
 
 cd ../rust
-cargo doc --locked --no-deps --target-dir ../docfx/rust-doc-tmp
+cargo doc --locked --no-deps --features "maze_wasm/wasm-lite" --target-dir ../docfx/rust-doc-tmp
 
 cd ../docfx
 xcopy "rust-doc-tmp\doc\*" "_site\api\rust" /s /e /y

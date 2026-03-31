@@ -1,11 +1,10 @@
 use rand::seq::SliceRandom;
-use rand::Rng;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 
 use data_model::{Maze, MazeDefinition, MazePoint};
 
-use crate::{Error, GenerationAlgorithm};
+use crate::{Error, GenerationAlgorithm, Solver};
 
 /// Options that control how a maze is generated.
 ///
@@ -23,11 +22,13 @@ pub struct GeneratorOptions {
     /// Finish cell. Defaults to `(row_count - 1, col_count - 1)`.
     pub finish: Option<MazePoint>,
     /// Minimum number of cells on the spine (the direct start to finish path).
-    /// Attempts that produce a shorter spine are discarded and retried.
+    /// If no path of this length exists given the grid geometry, generation returns an error.
     /// Defaults to `(row_count + col_count) / 2`.
     pub min_spine_length: Option<usize>,
-    /// Maximum number of generation attempts before returning an error
-    /// Defaults to `100`.
+    /// Maximum number of generation attempts before returning an error. Each attempt uses a fresh
+    /// RNG draw and may fail if finish is unreachable in that Depth-First Search (DFS) pass or the spine is shorter
+    /// than `min_spine_length`. Passing `Some(0)` returns an error immediately without attempting
+    /// generation. Defaults to `100`.
     pub max_retries: Option<usize>,
     /// Whether branches may grow out of the finish cell.
     /// When `false` (the default) the finish cell is excluded from branching,
@@ -77,7 +78,8 @@ impl Generator {
     /// # Returns
     ///
     /// A `Result` containing the generated [`Maze`] if successful, or an
-    /// [`Error::Generate`] if validation fails or all retry attempts are exhausted.
+    /// [`Error::Generate`] if validation fails or all `max_retries` attempts are exhausted
+    /// without producing a maze that satisfies `min_spine_length`.
     pub fn generate(&self) -> Result<Maze, Error> {
         self.validate()?;
         match self.options.algorithm {
@@ -153,6 +155,10 @@ impl Generator {
             r >= 0 && (r as usize) < rows && c >= 0 && (c as usize) < cols
         };
 
+        // Returns true if carving from (from_r, from_c) into (nr, nc) would not create a cycle.
+        // A cycle would occur if (nr, nc) is already adjacent to any carved cell other than
+        // (from_r, from_c). In this grid-based representation, adjacency of two passable cells
+        // IS a passage — so we must ensure the new cell only touches its single parent.
         let can_carve =
             |grid: &[Vec<char>], from_r: usize, from_c: usize, nr: usize, nc: usize| -> bool {
                 for (dr, dc) in &OFFSETS {
@@ -161,8 +167,7 @@ impl Generator {
                     if !in_bounds(rr, cc) {
                         continue;
                     }
-                    let rr = rr as usize;
-                    let cc = cc as usize;
+                    let (rr, cc) = (rr as usize, cc as usize);
                     if rr == from_r && cc == from_c {
                         continue;
                     }
@@ -173,158 +178,115 @@ impl Generator {
                 true
             };
 
-        let mut last_err = String::new();
+        // Collects unvisited ('W') neighbours of `cell` that pass can_carve, shuffled.
+        let collect_neighbors =
+            |grid: &[Vec<char>], cell: &MazePoint, rng: &mut StdRng| -> Vec<MazePoint> {
+                let mut result: Vec<MazePoint> = Vec::new();
+                for (dr, dc) in &OFFSETS {
+                    let nr = cell.row as i64 + dr;
+                    let nc = cell.col as i64 + dc;
+                    if !in_bounds(nr, nc) {
+                        continue;
+                    }
+                    let (nr, nc) = (nr as usize, nc as usize);
+                    if grid[nr][nc] != 'W' {
+                        continue;
+                    }
+                    if !can_carve(grid, cell.row, cell.col, nr, nc) {
+                        continue;
+                    }
+                    result.push(MazePoint { row: nr, col: nc });
+                }
+                result.shuffle(rng);
+                result
+            };
+
+        // max_retries == 0 is a special sentinel that means "don't attempt at all".
+        if max_retries == 0 {
+            return Err(Error::Generate("max_retries is 0, no attempts made".to_string()));
+        }
+
+        // A single iterative Depth-First Search (DFS) from start carves the full maze in one pass.
+        // can_carve ensures each new cell touches only its DFS parent, which guarantees
+        // the result is a spanning tree (perfect maze: exactly one path between any two cells).
+        // Cells are never un-carved, so each cell is visited at most once and generation
+        // is always O(n) regardless of grid size or RNG seed.
+        //
+        // After generation the maze is solved to check the spine length. Two retry conditions:
+        //   1. finish stayed 'W' — can_carve can block all paths to finish when its neighbours
+        //      all get carved before the DFS reaches it; retry with the next RNG draw.
+        //   2. spine shorter than min_spine — retry until the DFS produces a long enough path.
+        //
+        // branch_from_finish: when false, finish is carved but not pushed onto the DFS stack,
+        // keeping it as an unambiguous dead end with exactly one inbound passage.
+
+        let mut last_err = format!(
+            "solution length is less than minimum solution length {}",
+            min_spine
+        );
 
         for _ in 0..max_retries {
             let mut grid = vec![vec!['W'; cols]; rows];
             grid[start.row][start.col] = ' ';
 
-            // Phase 1: random walk from start to finish (builds the spine)
-            let mut current = start.clone();
-            let mut spine: Vec<MazePoint> = vec![current.clone()];
-            let mut stuck = false;
+            let init_neighbors = collect_neighbors(&grid, &start, &mut rng);
+            // Stack frame: (from_row, from_col, remaining_neighbors).
+            // from_row/from_col are stored as usize (Copy) so they can be read before the
+            // mutable pop() without conflicting borrows.
+            let mut stack: Vec<(usize, usize, Vec<MazePoint>)> =
+                vec![(start.row, start.col, init_neighbors)];
 
-            loop {
-                if current == finish {
-                    break;
-                }
-
-                let mut neighbours: Vec<MazePoint> = vec![];
-                for (dr, dc) in &OFFSETS {
-                    let nr = current.row as i64 + dr;
-                    let nc = current.col as i64 + dc;
-                    if !in_bounds(nr, nc) {
-                        continue;
+            while let Some(frame) = stack.last_mut() {
+                let (from_row, from_col) = (frame.0, frame.1);
+                match frame.2.pop() {
+                    Some(next) => {
+                        // Re-check: grid may have changed since this frame was pushed.
+                        if grid[next.row][next.col] != 'W' {
+                            continue;
+                        }
+                        if !can_carve(&grid, from_row, from_col, next.row, next.col) {
+                            continue;
+                        }
+                        grid[next.row][next.col] = ' ';
+                        if !(next.row == finish.row
+                            && next.col == finish.col
+                            && !branch_from_finish)
+                        {
+                            let nbrs = collect_neighbors(&grid, &next, &mut rng);
+                            stack.push((next.row, next.col, nbrs));
+                        }
                     }
-                    let nr = nr as usize;
-                    let nc = nc as usize;
-                    if grid[nr][nc] != 'W' {
-                        continue;
+                    None => {
+                        stack.pop();
                     }
-                    if !can_carve(&grid, current.row, current.col, nr, nc) {
-                        continue;
-                    }
-                    neighbours.push(MazePoint { row: nr, col: nc });
                 }
-
-                if neighbours.is_empty() {
-                    stuck = true;
-                    break;
-                }
-
-                let next = neighbours.choose(&mut rng).unwrap().clone();
-                grid[next.row][next.col] = ' ';
-                spine.push(next.clone());
-                current = next;
             }
 
-            if stuck {
-                last_err = "walk got stuck before reaching finish".to_string();
+            // If finish was never carved (can_carve blocked all paths to it), retry.
+            if grid[finish.row][finish.col] == 'W' {
                 continue;
             }
 
-            if spine.len() < min_spine {
-                last_err = format!(
-                    "solution length {} is less than minimum solution length {}",
-                    spine.len(),
-                    min_spine
-                );
-                continue;
-            }
-
-            // Phase 2: DFS branches from (shuffled) spine cells
-            let mut branch_cells = spine.clone();
-            if !branch_from_finish {
-                branch_cells.retain(|p| !(p.row == finish.row && p.col == finish.col));
-            }
-            branch_cells.shuffle(&mut rng);
-
-            for cell in branch_cells {
-                Self::dfs_branch(&mut grid, rows, cols, cell.row, cell.col, &OFFSETS, &mut rng);
-            }
-
-            // Place S and F markers
             grid[start.row][start.col] = 'S';
             grid[finish.row][finish.col] = 'F';
 
-            return Ok(Maze::new(MazeDefinition::from_vec(grid)));
-        }
-
-        Err(Error::Generate(if last_err.is_empty() {
-            "max_retries is 0, no attempts made".to_string()
-        } else {
-            last_err
-        }))
-    }
-
-    fn dfs_branch(
-        grid: &mut Vec<Vec<char>>,
-        rows: usize,
-        cols: usize,
-        r: usize,
-        c: usize,
-        offsets: &[(i64, i64); 4],
-        rng: &mut impl Rng,
-    ) {
-        // Collect valid neighbours to carve into
-        let mut neighbours: Vec<(usize, usize)> = vec![];
-        for (dr, dc) in offsets.iter() {
-            let nr = r as i64 + dr;
-            let nc = c as i64 + dc;
-            if nr < 0 || nr as usize >= rows || nc < 0 || nc as usize >= cols {
-                continue;
-            }
-            let nr = nr as usize;
-            let nc = nc as usize;
-            if grid[nr][nc] != 'W' {
-                continue;
-            }
-            if Self::check_can_carve(grid, rows, cols, r, c, nr, nc, offsets) {
-                neighbours.push((nr, nc));
+            let maze = Maze::new(MazeDefinition::from_vec(grid));
+            match (Solver { maze: &maze }).solve() {
+                Ok(solution) if solution.path.points.len() >= min_spine => return Ok(maze),
+                Ok(solution) => {
+                    last_err = format!(
+                        "solution length {} is less than minimum solution length {}",
+                        solution.path.points.len(),
+                        min_spine,
+                    );
+                }
+                Err(_) => {
+                    last_err = "maze is not solvable".to_string();
+                }
             }
         }
 
-        neighbours.shuffle(rng);
-
-        for (nr, nc) in neighbours {
-            // Re-check since the grid may have changed from earlier recursive calls
-            if grid[nr][nc] != 'W' {
-                continue;
-            }
-            if !Self::check_can_carve(grid, rows, cols, r, c, nr, nc, offsets) {
-                continue;
-            }
-            grid[nr][nc] = ' ';
-            Self::dfs_branch(grid, rows, cols, nr, nc, offsets, rng);
-        }
-    }
-
-    fn check_can_carve(
-        grid: &[Vec<char>],
-        rows: usize,
-        cols: usize,
-        from_r: usize,
-        from_c: usize,
-        nr: usize,
-        nc: usize,
-        offsets: &[(i64, i64); 4],
-    ) -> bool {
-        for (dr, dc) in offsets.iter() {
-            let rr = nr as i64 + dr;
-            let cc = nc as i64 + dc;
-            if rr < 0 || rr as usize >= rows || cc < 0 || cc as usize >= cols {
-                continue;
-            }
-            let rr = rr as usize;
-            let cc = cc as usize;
-            if rr == from_r && cc == from_c {
-                continue;
-            }
-            if grid[rr][cc] != 'W' {
-                return false;
-            }
-        }
-        true
+        Err(Error::Generate(last_err))
     }
 }
 
@@ -430,13 +392,7 @@ mod tests {
         // Correct dimensions
         assert_eq!(grid.len(), rows, "row count mismatch for {}x{}", rows, cols);
         for row in grid {
-            assert_eq!(
-                row.len(),
-                cols,
-                "col count mismatch for {}x{}",
-                rows,
-                cols
-            );
+            assert_eq!(row.len(), cols, "col count mismatch for {}x{}", rows, cols);
         }
 
         // Exactly one S and one F
@@ -497,6 +453,11 @@ mod tests {
     #[test]
     fn structural_correctness_21x31() {
         assert_structural_correctness(21, 31);
+    }
+
+    #[test]
+    fn structural_correctness_51x51() {
+        assert_structural_correctness(51, 51);
     }
 
     // --- Custom start/finish placement ---

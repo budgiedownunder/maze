@@ -30,7 +30,7 @@ cargo build
 ### Testing
 To test the `maze` crate, run the following from within the `maze` directory:
 ```
-cargo test
+cargo test --features generation
 ```
 
 ### Benchmarking

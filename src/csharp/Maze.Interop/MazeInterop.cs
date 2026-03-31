@@ -93,7 +93,10 @@ namespace Maze.Interop
         /// </summary>
         public enum MazeGenerationAlgorithm : byte
         {
-            /// <summary>Two-phase recursive backtracking.</summary>
+            /// <summary>
+            /// Generates a perfect maze using a single-pass iterative depth-first search from the start cell.
+            /// See <see href="https://en.wikipedia.org/wiki/Maze_generation_algorithm#Randomized_depth-first_search">Randomized depth-first search</see>.
+            /// </summary>
             RecursiveBacktracking = 0
         }
         /// <summary>
