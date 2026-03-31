@@ -54,7 +54,8 @@ pub enum MazeCellTypeWasm {
 #[cfg(feature = "wasm-bindgen")]
 #[wasm_bindgen]
 pub enum GenerationAlgorithmWasm {
-    /// Two-phase recursive backtracking — see [`maze::GenerationAlgorithm::RecursiveBacktracking`].
+    /// Generates a perfect maze using a single-pass iterative depth-first search from the start cell.
+    /// See [Randomized depth-first search](https://en.wikipedia.org/wiki/Maze_generation_algorithm#Randomized_depth-first_search).
     RecursiveBacktracking = 0,
 }
 
@@ -65,7 +66,8 @@ pub enum GenerationAlgorithmWasm {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub enum GenerationAlgorithmWasm {
-    /// Two-phase recursive backtracking — see `maze::GenerationAlgorithm::RecursiveBacktracking`.
+    /// Generates a perfect maze using a single-pass iterative depth-first search from the start cell.
+    /// See [Randomized depth-first search](https://en.wikipedia.org/wiki/Maze_generation_algorithm#Randomized_depth-first_search).
     RecursiveBacktracking = 0,
 }
 
