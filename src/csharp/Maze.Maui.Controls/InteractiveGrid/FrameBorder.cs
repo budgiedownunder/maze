@@ -505,13 +505,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 AddViewToGrid(grip);
         }
         /// <summary>
-        /// Adds a view object to the parent grid
+        /// Adds a view object to the data grid
         /// </summary>
         private void AddViewToGrid(IView view)
         {
-            ParentGrid.SetRow(view, 0);
-            ParentGrid.SetColumn(view, 0);
-            ParentGrid.Children.Add(view);
+            Microsoft.Maui.Controls.Grid.SetRow((BindableObject)view, 0);
+            Microsoft.Maui.Controls.Grid.SetColumn((BindableObject)view, 0);
+            ParentGrid.AddToDataGrid(view);
         }
         /// <summary>
         /// Removes the object's components from the parent grid
@@ -523,11 +523,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 RemoveViewFromGrid(grip);
         }
         /// <summary>
-        /// Removes a view object from the parent grid
+        /// Removes a view object from the data grid
         /// </summary>
         private void RemoveViewFromGrid(IView view)
         {
-            ParentGrid.Children.Remove(view);
+            ParentGrid.RemoveFromDataGrid(view);
         }
         /// <summary>
         /// Sets the display position and margin for the object
@@ -542,16 +542,16 @@ namespace Maze.Maui.Controls.InteractiveGrid
             startRow = row;
             startColumn = column;
 
-            ParentGrid.SetRow(box, StartRow);
-            ParentGrid.SetColumn(box, StartColumn);
+            Microsoft.Maui.Controls.Grid.SetRow(box, StartRow);
+            Microsoft.Maui.Controls.Grid.SetColumn(box, StartColumn);
             box.WidthRequest = width;
             box.HeightRequest = height;
             box.Margin = margin;
 
             if (grip is not null)
             {
-                ParentGrid.SetRow(grip, row);
-                ParentGrid.SetColumn(grip, column);
+                Microsoft.Maui.Controls.Grid.SetRow(grip, row);
+                Microsoft.Maui.Controls.Grid.SetColumn(grip, column);
                 grip.TranslationX = GetGripTranslationX(width);
                 grip.TranslationY = GetGripTranslationY(height);
                 grip.Margin = margin;
