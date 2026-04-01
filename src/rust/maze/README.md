@@ -5,6 +5,9 @@
 The `maze` crate is written in `Rust` and defines an API for calculating maze solutions. It exposes the following `struct` and '`trait` types that a developer can use to define and solve mazes:
 
 - `Error` - represents a maze error
+- `GenerationAlgorithm` - enum representng a maze generation algorithm
+- `Generator` - represents a maze generator
+- `GeneratorOptions` - defines maze generation options 
 - `MazePath` - represents a path composed of a sequence of maze points
 - `MazePathDirection` - represents a direction within a maze path
 - `MazePointOffset` - represents an offset between maze points
@@ -15,7 +18,7 @@ The `maze` crate is written in `Rust` and defines an API for calculating maze so
 
 With these, you would typically:
 1. Create a `maze` instance with `Maze::new()` defined in the `data_model` crate
-2. Modify the `maze` definition using functions such as `maze.from_json()`, `maze.definition.insert_rows()` etc. 
+2. Modify the `maze` definition using functions such as `maze.from_json()`, `maze.definition.insert_rows()` etc or, alternatively, generate one from scratch using `Maze::generate()`
 3. Solve for a `solution` using `Maze::solve()`.
 4. Access the `solution.path`  to determine the path through the maze 
 
