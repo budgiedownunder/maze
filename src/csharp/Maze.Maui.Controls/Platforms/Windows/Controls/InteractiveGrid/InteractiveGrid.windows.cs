@@ -20,14 +20,23 @@ namespace Maze.Maui.Controls.InteractiveGrid
             var mauiWinWindow = (Microsoft.UI.Xaml.Window)windowObject;
             if (mauiWinWindow is not null)
             {
-                // Subscribe to KeyDown event on the window's content (which is the root element)
-                mauiWinWindow.Content.KeyDown += OnKeyDown;
+                // Subscribe to PreviewKeyDown (tunneling) so we intercept navigation keys
+                // before WinUI's ScrollViewer can process them (End/Home would otherwise
+                // scroll the Shell page, shifting the grid up into the navigation bar).
+                mauiWinWindow.Content.PreviewKeyDown += OnKeyDown;
             }
         }
 
         private void OnKeyDown(object sender, KeyRoutedEventArgs e)
         {
-            OnProcessKeyDown(GetKeyState(), GetKey(e.Key), true);
+            var key = GetKey(e.Key);
+            OnProcessKeyDown(GetKeyState(), key, true);
+            // Mark navigation keys as handled so WinUI elements (e.g. Shell ScrollViewer)
+            // do not also respond to them and shift the page layout.
+            if (key == Keyboard.Key.Left  || key == Keyboard.Key.Right ||
+                key == Keyboard.Key.Up    || key == Keyboard.Key.Down  ||
+                key == Keyboard.Key.Home  || key == Keyboard.Key.End)
+                e.Handled = true;
         }
         /// <summary>
         /// Determines the current keyboard press state
