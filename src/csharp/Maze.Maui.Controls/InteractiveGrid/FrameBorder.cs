@@ -224,7 +224,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 WidthRequest = 0,
                 HorizontalOptions = LayoutOptions.Start,
                 VerticalOptions = LayoutOptions.Start,
-                InputTransparent = false
+                InputTransparent = false,
+                ZIndex = 1
             };
             return borderBox;
         }
@@ -242,7 +243,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 IsVisible = false,
                 HorizontalOptions = LayoutOptions.Start,
                 VerticalOptions = LayoutOptions.Start,
-                InputTransparent = false
+                InputTransparent = false,
+                ZIndex = 1
             };
             return grip;
         }
