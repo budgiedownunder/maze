@@ -520,6 +520,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
             return new DefaultCellContent();
         }
         /// <summary>
+        /// Called when a cell enters the visible viewport (during init and during virtual scrolling).
+        /// Override to populate cell content from a logical model rather than keeping all frames live.
+        /// Default implementation is empty — existing behaviour is preserved via CreateCellContent.
+        /// Row and column are 0-based.
+        /// </summary>
+        protected virtual void UpdateCellContent(CellFrame frame, int row, int column) { }
+        /// <summary>
         /// Sets cell content at a given location, where (0,0) corresponds to (1,1) in display terms
         /// </summary>
         /// <param name="row">Row index</param>
