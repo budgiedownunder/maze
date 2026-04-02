@@ -25,6 +25,17 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 // scroll the Shell page, shifting the grid up into the navigation bar).
                 mauiWinWindow.Content.PreviewKeyDown += OnKeyDown;
             }
+
+            // Suppress BringIntoViewRequested on the _dataGrid's native WinUI panel so
+            // that adding virtual cells cannot bubble up past our ScrollViewer to the
+            // Shell's outer ScrollViewer and shift the page layout (hiding the toolbar).
+            // We suppress at the content panel level, not at the ScrollViewer level,
+            // so MAUI's internal scroll-positioning logic is not affected.
+            _dataGrid.HandlerChanged += (s, e) =>
+            {
+                if (_dataGrid.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement panel)
+                    panel.BringIntoViewRequested += (sender, args) => args.Handled = true;
+            };
         }
 
         private void OnKeyDown(object sender, KeyRoutedEventArgs e)
