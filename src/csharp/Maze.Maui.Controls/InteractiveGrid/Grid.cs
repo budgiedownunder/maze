@@ -26,6 +26,15 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private HeaderFrame? _cornerFrame;
         private bool _isSyncingScroll = false;
 
+        // Virtual cell/header pools — populated in Phase C
+        private readonly Dictionary<(int row, int col), CellFrame> _activeCells = new();
+        private readonly Queue<CellFrame> _cellPool = new();
+        private readonly Dictionary<int, HeaderFrame> _activeColHeaders = new();
+        private readonly Dictionary<int, HeaderFrame> _activeRowHeaders = new();
+        private readonly Queue<HeaderFrame> _colHeaderPool = new();
+        private readonly Queue<HeaderFrame> _rowHeaderPool = new();
+        private readonly HashSet<(int row, int col)> _highlightedCells = new();
+
         const double DEFAULT_COL_HEADER_HEIGHT = 35.0;
         const double DEFAULT_COL_HEADER_MARGIN = 0.0;
         const double DEFAULT_COL_HEADER_PADDING = 0.0;
@@ -526,6 +535,146 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// Row and column are 0-based.
         /// </summary>
         protected virtual void UpdateCellContent(CellFrame frame, int row, int column) { }
+        /// <summary>
+        /// Returns a snapshot of the currently active (visible) cells keyed by 0-based (row, col).
+        /// Used by subclasses to refresh only visible cells (e.g. when clearing a solution overlay).
+        /// </summary>
+        protected IEnumerable<KeyValuePair<(int row, int col), CellFrame>> GetActiveCells()
+            => _activeCells;
+        /// <summary>
+        /// Returns the background colour a cell at the given 1-based display position should have
+        /// given current active/anchor/highlight state
+        /// </summary>
+        private Color GetCellDisplayColor(int displayRow, int displayCol)
+        {
+            bool hasAnchor = anchorCellPoint.Row > 0;
+            if (hasAnchor && anchorCellPoint.IsPosition(displayRow, displayCol))
+                return AnchorCellBackgroundColor;
+            if (!hasAnchor && activeCellPoint.IsPosition(displayRow, displayCol))
+                return ActiveCellBackgroundColor;
+            if (_highlightedCells.Contains((displayRow - 1, displayCol - 1)))
+                return HighlightCellBackgroundColor;
+            return CellBackgroundColor;
+        }
+        /// <summary>
+        /// Creates a new cell frame shell (no content) for use in the virtual pool
+        /// </summary>
+        private CellFrame NewCellFrameShell(int row, int column)
+        {
+            CellFrame frame = new CellFrame(row, column)
+            {
+                BackgroundColor = this.CellBackgroundColor,
+                Padding = CellPadding,
+                Margin = CellMargin == 0.0 ? -0.5 : CellMargin,
+                Stroke = new SolidColorBrush(CellBorderColor),
+                StrokeThickness = 1,
+                StrokeShape = new RoundRectangle { CornerRadius = 0 },
+            };
+            AddSingleTapGesture(frame);
+            AddDoubleTapGesture(frame);
+            return frame;
+        }
+        /// <summary>
+        /// Takes a cell from the pool (or creates a new one), positions it, populates content,
+        /// and adds it to the data grid. row0/col0 are 0-based.
+        /// </summary>
+        private CellFrame ActivateViewCell(int row0, int col0)
+        {
+            CellFrame frame;
+            if (_cellPool.Count > 0)
+            {
+                frame = _cellPool.Dequeue();
+                frame.Row = row0;
+                frame.Column = col0;
+            }
+            else
+            {
+                frame = NewCellFrameShell(row0, col0);
+            }
+            UpdateCellContent(frame, row0, col0);
+            frame.BackgroundColor = GetCellDisplayColor(row0 + 1, col0 + 1);
+            _dataGrid.Add(frame, col0, row0);
+            _activeCells[(row0, col0)] = frame;
+            if (activeCellPoint.IsPosition(row0 + 1, col0 + 1)) activeCell = frame;
+            if (anchorCellPoint.Row > 0 && anchorCellPoint.IsPosition(row0 + 1, col0 + 1)) anchorCell = frame;
+            return frame;
+        }
+        /// <summary>
+        /// Returns a cell at (row0, col0) (0-based) to the pool
+        /// </summary>
+        private void RecycleViewCell(int row0, int col0)
+        {
+            if (!_activeCells.TryGetValue((row0, col0), out var frame)) return;
+            _dataGrid.Children.Remove(frame);
+            _activeCells.Remove((row0, col0));
+            _cellPool.Enqueue(frame);
+            if (activeCell == frame) activeCell = null;
+            if (anchorCell == frame) anchorCell = null;
+        }
+        /// <summary>
+        /// Takes a column header from the pool (or creates a new one) and positions it at col0 (0-based)
+        /// </summary>
+        private void ActivateViewColHeader(int col0)
+        {
+            HeaderFrame frame;
+            if (_colHeaderPool.Count > 0)
+            {
+                frame = _colHeaderPool.Dequeue();
+                frame.Index = col0;
+                frame.Content = GetHeaderCellContent(HeaderType.Column, col0);
+            }
+            else
+            {
+                frame = NewHeaderFrame(HeaderType.Column, col0);
+                var tap = new TapGestureRecognizer();
+                tap.Tapped += (s, e) => OnColumnHeaderTapped(frame);
+                frame.GestureRecognizers.Add(tap);
+            }
+            _colHeaderGrid.Add(frame, col0, 0);
+            _activeColHeaders[col0] = frame;
+        }
+        /// <summary>
+        /// Returns a column header at col0 (0-based) to the pool
+        /// </summary>
+        private void RecycleViewColHeader(int col0)
+        {
+            if (!_activeColHeaders.TryGetValue(col0, out var frame)) return;
+            _colHeaderGrid.Children.Remove(frame);
+            _activeColHeaders.Remove(col0);
+            _colHeaderPool.Enqueue(frame);
+        }
+        /// <summary>
+        /// Takes a row header from the pool (or creates a new one) and positions it at row0 (0-based)
+        /// </summary>
+        private void ActivateViewRowHeader(int row0)
+        {
+            HeaderFrame frame;
+            if (_rowHeaderPool.Count > 0)
+            {
+                frame = _rowHeaderPool.Dequeue();
+                frame.Index = row0;
+                frame.Content = GetHeaderCellContent(HeaderType.Row, row0);
+            }
+            else
+            {
+                frame = NewHeaderFrame(HeaderType.Row, row0);
+                var tap = new TapGestureRecognizer();
+                tap.Tapped += (s, e) => OnRowHeaderTapped(frame);
+                frame.GestureRecognizers.Add(tap);
+            }
+            _rowHeaderGrid.Add(frame, 0, row0);
+            _activeRowHeaders[row0] = frame;
+        }
+        /// <summary>
+        /// Returns a row header at row0 (0-based) to the pool
+        /// </summary>
+        private void RecycleViewRowHeader(int row0)
+        {
+            if (!_activeRowHeaders.TryGetValue(row0, out var frame)) return;
+            _rowHeaderGrid.Children.Remove(frame);
+            _activeRowHeaders.Remove(row0);
+            _rowHeaderPool.Enqueue(frame);
+        }
         /// <summary>
         /// Sets cell content at a given location, where (0,0) corresponds to (1,1) in display terms
         /// </summary>
