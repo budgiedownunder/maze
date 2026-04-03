@@ -253,10 +253,18 @@ namespace Maze.Maui.Controls.InteractiveGrid
             }
         }
         /// <summary>
-        /// The current active cell frame (if any)
+        /// The current active cell frame (if any). May be null when the active cell is outside
+        /// the virtual viewport even though a logical active cell position exists. Use HasActiveCell
+        /// to check whether a cell is logically active regardless of viewport visibility.
         /// </summary>
         /// <returns>Active cell frame</returns>
         public CellFrame? ActiveCell { get => activeCell; }
+        /// <summary>
+        /// Indicates whether a cell is logically active, regardless of whether its frame is
+        /// currently within the virtual viewport.
+        /// </summary>
+        /// <returns>True if a cell is active</returns>
+        public bool HasActiveCell => activeCellPoint.Row > 0;
         /// <summary>
         /// The current selected cell range (if any)
         /// </summary>
@@ -307,6 +315,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 Content = _dataGrid
             };
             _dataScrollView.Scrolled += OnDataScrolled;
+            _dataScrollView.SizeChanged += OnDataScrollViewSizeChanged;
             _colHeaderScrollView.Scrolled += OnColHeaderScrolled;
             _rowHeaderScrollView.Scrolled += OnRowHeaderScrolled;
 
@@ -332,6 +341,14 @@ namespace Maze.Maui.Controls.InteractiveGrid
             _shellGrid.Add(_dataScrollView, 1, 1);
 
             Content = _shellGrid;
+        }
+        /// <summary>
+        /// Repopulates the virtual viewport when the scroll view is resized (e.g. window drag).
+        /// </summary>
+        private void OnDataScrollViewSizeChanged(object? sender, EventArgs e)
+        {
+            if (RowCount == 0 || ColumnCount == 0) return;
+            UpdateVirtualViewport(_dataScrollView.ScrollX, _dataScrollView.ScrollY);
         }
         /// <summary>
         /// Syncs the header scroll views when the data scroll view is scrolled
@@ -1158,7 +1175,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void SelectRow(int row, bool maintainSelection)
         {
             int displayRow = row;
-            if (!maintainSelection || anchorCell is null)
+            if (!maintainSelection || anchorCellPoint.Row < 0)
             {
                 bool hadAnchorCell = anchorCell is not null;
                 CellPoint activePoint = activeCellPoint.Clone();
@@ -1195,7 +1212,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void SelectColumn(int column, bool maintainSelection)
         {
             int displayCol = column;
-            if (!maintainSelection || anchorCell is null)
+            if (!maintainSelection || anchorCellPoint.Row < 0)
             {
                 bool hadAnchorCell = anchorCell is not null;
                 CellPoint activePoint = activeCellPoint.Clone();
@@ -1529,7 +1546,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="column">New column</param>
         /// <param name="maintainSelection">Maintain selection?</param>
         /// <param name="scrollActiveCellIntoView">Scroll the active cell into view?</param>
-        private void UpdateSelection(CellFrame newActiveCell, int row, int column, bool maintainSelection, bool scrollActiveCellIntoView)
+        private void UpdateSelection(CellFrame? newActiveCell, int row, int column, bool maintainSelection, bool scrollActiveCellIntoView)
         {
             // Reset the previously active cell if needed
             if (activeCell is not null)
@@ -1539,10 +1556,16 @@ namespace Maze.Maui.Controls.InteractiveGrid
             {
                 if (anchorCell is null)
                 {
-                    if (activeCell is null)
-                        SetAnchorCell(row, column);
-                    else
-                        SetAnchorCell(activeCellPoint.Row, activeCellPoint.Column);
+                    if (anchorCellPoint.Row < 0)
+                    {
+                        // No anchor at all — establish one at the current active position (or destination if none).
+                        // Use activeCellPoint (logical position) rather than activeCell (frame, may be null if off-screen).
+                        if (activeCellPoint.Row > 0)
+                            SetAnchorCell(activeCellPoint.Row, activeCellPoint.Column);
+                        else
+                            SetAnchorCell(row, column);
+                    }
+                    // else: anchor frame was recycled out of viewport — anchorCellPoint is still valid, leave it alone.
                 }
             }
             else
@@ -1560,7 +1583,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             activeCellPoint.Set(row, column);
 
-            if (anchorCell is not null)
+            // Use anchorCellPoint (logical) rather than anchorCell (frame) so that selections extending
+            // beyond the virtual buffer still update correctly when the anchor frame has been recycled.
+            if (anchorCell is not null || anchorCellPoint.Row > 0)
                 UpdateSelectedCells(anchorCellPoint, activeCellPoint, true, true);
             else
             {
@@ -1572,9 +1597,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 ScrollCellIntoView(row, column);
         }
         /// <summary>
-        /// Scrolls a cell frame into view as needed
+        /// Scrolls a cell into view as needed
         /// </summary>
-        /// <param name="cell">Cell frame to scroll into view</param>
+        /// <param name="displayRow">1-based display row of the cell to scroll into view</param>
+        /// <param name="displayCol">1-based display column of the cell to scroll into view</param>
         private async void ScrollCellIntoView(int displayRow, int displayCol)
         {
             double cellLeftX   = (displayCol - 1) * CellWidth;
@@ -1602,10 +1628,19 @@ namespace Maze.Maui.Controls.InteractiveGrid
             if      (cellTopY    < currentScrollY)                        targetY = cellTopY;
             else if (cellBottomY > currentScrollY + scrollViewHeight)     targetY = cellBottomY - scrollViewHeight;
 
-            // Pre-populate the destination viewport so cells exist before the scroll arrives
-            UpdateVirtualViewport(targetX, targetY);
+            // Use instant (non-animated) scroll for large jumps (e.g. Ctrl+End/Home).
+            // This prevents WinUI scroll anchoring from shifting the Shell page: when
+            // UpdateVirtualViewport adds cells at the target position while the scroll view
+            // is still at the source, the layout engine compensates by adjusting the outer
+            // Shell ScrollViewer offset (T1). By scrolling first and populating after, the
+            // _dataGrid content only changes once the scroll view is already at its destination.
+            bool animated = Math.Abs(targetX - currentScrollX) < scrollViewWidth &&
+                            Math.Abs(targetY - currentScrollY) < scrollViewHeight;
 
-            await _dataScrollView.ScrollToAsync(targetX, targetY, true);
+            await _dataScrollView.ScrollToAsync(targetX, targetY, animated);
+
+            // Populate the destination viewport after the scroll completes
+            UpdateVirtualViewport(targetX, targetY);
         }
 
 #if !WINDOWS
@@ -1790,6 +1825,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 {
                     if (row != anchorCellPoint.Row || column != anchorCellPoint.Column)
                     {
+                        if (clear)
+                            _highlightedCells.Remove((row - 1, column - 1));
+                        else
+                            _highlightedCells.Add((row - 1, column - 1));
                         CellFrame? cellFrame = GetCell(row, column) as CellFrame;
                         if (cellFrame is not null)
                             cellFrame.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightCellBackgroundColor;
