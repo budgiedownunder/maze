@@ -214,6 +214,20 @@ namespace Maze.Maui.App
             return new MazeCellContent(gridInitializing ? _cellTypes[row, column] : CellType.Empty);
         }
         /// <summary>
+        /// Populates the content of a cell frame from the logical model.
+        /// Called by the base class whenever a cell enters the visible viewport.
+        /// Row and column are 0-based.
+        /// </summary>
+        protected override void UpdateCellContent(CellFrame frame, int row, int column)
+        {
+            var type      = _cellTypes[row, column];
+            var direction = _solutionDirections[row, column];
+            var content   = new MazeCellContent(type);
+            if (direction != MazeCellContent.PathDirection.None)
+                content.SetSolutionPath(direction);
+            frame.Content = content;
+        }
+        /// <summary>
         /// Returns the cell type associated with the current maze item for a given location
         /// </summary>
         /// <param name="row">Row index (zero-based)</param>

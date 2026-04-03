@@ -33,8 +33,14 @@ namespace Maze.Maui.Controls.InteractiveGrid
             // so MAUI's internal scroll-positioning logic is not affected.
             _dataGrid.HandlerChanged += (s, e) =>
             {
-                if (_dataGrid.Handler?.PlatformView is Microsoft.UI.Xaml.UIElement panel)
+                if (_dataGrid.Handler?.PlatformView is Microsoft.UI.Xaml.FrameworkElement panel)
+                {
                     panel.BringIntoViewRequested += (sender, args) => args.Handled = true;
+                    // Anchor _dataGrid to the top-left of its ScrollViewer so that when the grid
+                    // is smaller than the viewport it does not get centred by WinUI layout.
+                    panel.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left;
+                    panel.VerticalAlignment   = Microsoft.UI.Xaml.VerticalAlignment.Top;
+                }
             };
         }
 
