@@ -29,7 +29,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         // Virtual viewport state
         private int _vpFirstRow = 0, _vpLastRow = -1;
         private int _vpFirstCol = 0, _vpLastCol = -1;
-        private const int VIRTUAL_BUFFER = 4;
+        private const int VIRTUAL_BUFFER = 10;
 
         // Virtual cell/header pools
         private readonly Dictionary<(int row, int col), CellFrame> _activeCells = new();
@@ -378,6 +378,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
             int newFirstCol = Math.Max(0, (int)(scrollX / CellWidth)  - VIRTUAL_BUFFER);
             int newLastCol  = Math.Min(ColumnCount - 1, (int)Math.Ceiling((scrollX + viewW) / CellWidth)  + VIRTUAL_BUFFER);
 
+            _dataGrid.BatchBegin();
+            _colHeaderGrid.BatchBegin();
+            _rowHeaderGrid.BatchBegin();
+
             // Recycle cells leaving the new range
             for (int r = _vpFirstRow; r <= _vpLastRow; r++)
                 for (int c = _vpFirstCol; c <= _vpLastCol; c++)
@@ -406,6 +410,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             _vpFirstRow = newFirstRow; _vpLastRow = newLastRow;
             _vpFirstCol = newFirstCol; _vpLastCol = newLastCol;
+
+            _dataGrid.BatchCommit();
+            _colHeaderGrid.BatchCommit();
+            _rowHeaderGrid.BatchCommit();
         }
         /// <summary>
         /// Syncs the data scroll view horizontally when the column header scroll view is scrolled directly (e.g. touch on iOS)
@@ -536,12 +544,20 @@ namespace Maze.Maui.Controls.InteractiveGrid
             _vpFirstCol = 0;
             _vpLastCol  = Math.Min((int)Math.Ceiling(viewW / CellWidth)  + VIRTUAL_BUFFER, ColumnCount - 1);
 
+            _dataGrid.BatchBegin();
+            _colHeaderGrid.BatchBegin();
+            _rowHeaderGrid.BatchBegin();
+
             for (int r = _vpFirstRow; r <= _vpLastRow; r++)
                 for (int c = _vpFirstCol; c <= _vpLastCol; c++)
                     ActivateViewCell(r, c);
 
             for (int c = _vpFirstCol; c <= _vpLastCol; c++) ActivateViewColHeader(c);
             for (int r = _vpFirstRow; r <= _vpLastRow; r++) ActivateViewRowHeader(r);
+
+            _dataGrid.BatchCommit();
+            _colHeaderGrid.BatchCommit();
+            _rowHeaderGrid.BatchCommit();
         }
         /// <summary>
         /// Adds the grid's row definitions
@@ -690,29 +706,42 @@ namespace Maze.Maui.Controls.InteractiveGrid
             CellFrame frame;
             if (_cellPool.Count > 0)
             {
+                // Frame stays in _dataGrid (handler connected); reposition and update while invisible,
+                // then make visible so it appears fully-rendered in one step.
                 frame = _cellPool.Dequeue();
                 frame.Row = row0;
                 frame.Column = col0;
+                Microsoft.Maui.Controls.Grid.SetRow(frame, row0);
+                Microsoft.Maui.Controls.Grid.SetColumn(frame, col0);
+                frame.BackgroundColor = GetCellDisplayColor(row0 + 1, col0 + 1);
+                UpdateCellContent(frame, row0, col0);
+                frame.IsVisible = true;
             }
             else
             {
                 frame = NewCellFrameShell(row0, col0);
+                frame.IsVisible = false;
+                frame.BackgroundColor = GetCellDisplayColor(row0 + 1, col0 + 1);
+                _dataGrid.Add(frame, col0, row0);
+                UpdateCellContent(frame, row0, col0);
+                frame.IsVisible = true;
             }
-            UpdateCellContent(frame, row0, col0);
-            frame.BackgroundColor = GetCellDisplayColor(row0 + 1, col0 + 1);
-            _dataGrid.Add(frame, col0, row0);
             _activeCells[(row0, col0)] = frame;
             if (activeCellPoint.IsPosition(row0 + 1, col0 + 1)) activeCell = frame;
             if (anchorCellPoint.Row > 0 && anchorCellPoint.IsPosition(row0 + 1, col0 + 1)) anchorCell = frame;
             return frame;
         }
         /// <summary>
-        /// Returns a cell at (row0, col0) (0-based) to the pool
+        /// Returns a cell at (row0, col0) (0-based) to the pool.
+        /// The frame remains in _dataGrid (IsVisible = false) so its WinUI handler stays connected
+        /// and the native Image control retains its loaded texture for instant re-use.
         /// </summary>
         private void RecycleViewCell(int row0, int col0)
         {
             if (!_activeCells.TryGetValue((row0, col0), out var frame)) return;
-            _dataGrid.Children.Remove(frame);
+            frame.IsVisible = false;
+            Microsoft.Maui.Controls.Grid.SetRow(frame, 0);
+            Microsoft.Maui.Controls.Grid.SetColumn(frame, 0);
             _activeCells.Remove((row0, col0));
             _cellPool.Enqueue(frame);
             if (activeCell == frame) activeCell = null;

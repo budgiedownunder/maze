@@ -222,10 +222,15 @@ namespace Maze.Maui.App
         {
             var type      = _cellTypes[row, column];
             var direction = _solutionDirections[row, column];
-            var content   = new MazeCellContent(type);
-            if (direction != MazeCellContent.PathDirection.None)
-                content.SetSolutionPath(direction);
-            frame.Content = content;
+            if (frame.Content is MazeCellContent existing)
+                existing.Update(type, direction);
+            else
+            {
+                var content = new MazeCellContent(type);
+                if (direction != MazeCellContent.PathDirection.None)
+                    content.SetSolutionPath(direction);
+                frame.Content = content;
+            }
         }
         /// <summary>
         /// Returns the cell type associated with the current maze item for a given location
@@ -943,6 +948,43 @@ namespace Maze.Maui.App
                     return "wall.png";
             }
             return "";
+        }
+        /// <summary>
+        /// Updates the cell content in-place, reusing the existing Image or Label where possible
+        /// to avoid a new async image-load cycle on pool-recycled frames.
+        /// </summary>
+        /// <param name="newCellType">New cell type</param>
+        /// <param name="newDirection">New solution path direction</param>
+        public void Update(CellType newCellType, PathDirection newDirection)
+        {
+            cellType = newCellType;
+            solutionPathDirection = newDirection;
+
+            bool needsImage = cellType != CellType.Empty || solutionPathDirection != PathDirection.None;
+            string? source = needsImage
+                ? (cellType == CellType.Empty ? GetSolutionPathImage() : GetImageName(true))
+                : null;
+
+            if (needsImage)
+            {
+                if (Content is Image img)
+                    img.Source = source;
+                else
+                    Content = new Image
+                    {
+                        Source = source,
+                        Aspect = Aspect.AspectFit,
+                        HorizontalOptions = LayoutOptions.Fill,
+                        VerticalOptions = LayoutOptions.Fill
+                    };
+                Content.BackgroundColor = GetSolutionPathHighlightColor();
+            }
+            else
+            {
+                if (Content is not Label)
+                    Content = new Label();
+                Content.BackgroundColor = Colors.Transparent;
+            }
         }
         /// <summary>
         /// Sets the solution path direction in the cell
