@@ -1,4 +1,6 @@
-﻿using Microsoft.Maui.Controls.Shapes;
+﻿using CursorIcon    = Maze.Maui.Controls.Pointer.Icon;
+using CursorPointer = Maze.Maui.Controls.Pointer.Pointer;
+using Microsoft.Maui.Controls.Shapes;
 
 namespace Maze.Maui.Controls.InteractiveGrid
 {
@@ -1705,10 +1707,20 @@ namespace Maze.Maui.Controls.InteractiveGrid
             bool animated = Math.Abs(targetX - currentScrollX) < scrollViewWidth &&
                             Math.Abs(targetY - currentScrollY) < scrollViewHeight;
 
-            await _dataScrollView.ScrollToAsync(targetX, targetY, animated);
+            if (!animated)
+                CursorPointer.SetCursor(this, CursorIcon.Wait);
+            try
+            {
+                await _dataScrollView.ScrollToAsync(targetX, targetY, animated);
 
-            // Populate the destination viewport after the scroll completes
-            UpdateVirtualViewport(targetX, targetY);
+                // Populate the destination viewport after the scroll completes
+                UpdateVirtualViewport(targetX, targetY);
+            }
+            finally
+            {
+                if (!animated)
+                    CursorPointer.SetCursor(this, CursorIcon.Arrow);
+            }
         }
 
 #if !WINDOWS
