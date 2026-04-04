@@ -122,7 +122,13 @@ namespace Maze.Maui.App
 
             haveSolutionCells = false;
 
-            VirtualBuffer = RowCount * ColumnCount <= 2500 ? 0 : 10;
+#if ANDROID
+            VirtualBuffer = RowCount * ColumnCount <= 900  ? 0 : 10;
+#elif IOS || MACCATALYST
+            VirtualBuffer = RowCount * ColumnCount <= 1600 ? 0 : 10;
+#else
+            VirtualBuffer = RowCount * ColumnCount <= 3600 ? 0 : 10;
+#endif
             InitializeContent();
         }
         /// <summary>
