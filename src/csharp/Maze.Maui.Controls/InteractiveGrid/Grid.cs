@@ -9,7 +9,6 @@ namespace Maze.Maui.Controls.InteractiveGrid
     /// </summary>
     public partial class Grid : ContentView
     {
-        // Private properties
         private CellFrame? activeCell = null;
         private CellPoint activeCellPoint = new CellPoint();
         private CellFrame? anchorCell = null;
@@ -232,8 +231,6 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <returns>Boolean</returns>
         public bool IsPanSupportEnabled { get; set; } = DEFAULT_IS_PAN_SUPPORT_ENABLED;
-
-        //private CommunityToolkit.Maui.Behaviors.TouchBehavior longPressBehaviour;
 
         /// <summary>
         /// Indicates whether the grid currently has all columns selected
@@ -1772,7 +1769,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             // This prevents WinUI scroll anchoring from shifting the Shell page: when
             // UpdateVirtualViewport adds cells at the target position while the scroll view
             // is still at the source, the layout engine compensates by adjusting the outer
-            // Shell ScrollViewer offset (T1). By scrolling first and populating after, the
+            // Shell ScrollViewer offset. By scrolling first and populating after, the
             // _dataGrid content only changes once the scroll view is already at its destination.
             bool animated = Math.Abs(targetX - currentScrollX) < scrollViewWidth &&
                             Math.Abs(targetY - currentScrollY) < scrollViewHeight;

@@ -10,7 +10,6 @@ namespace Maze.Maui.App
     /// </summary>
     public class MazeGrid : Controls.InteractiveGrid.Grid
     {
-        // Private properties
         private const int DEFAULT_ROW_COUNT = 5;
         private const int DEFAULT_COLUMN_COUNT = 5;
         private MazeItem? mazeItem;
@@ -460,17 +459,14 @@ namespace Maze.Maui.App
         /// <returns>Cell frame</returns>
         private CellFrame? SetCellContent(int row, int column, CellType cellType)
         {
-            // Update logical model
             if (row >= 1 && row <= RowCount && column >= 1 && column <= ColumnCount)
             {
                 _cellTypes[row - 1, column - 1] = cellType;
-                // Track start/finish positions
                 if      (cellType == CellType.Start)                              { _startRow  = row;  _startCol  = column; }
                 else if (cellType == CellType.Finish)                             { _finishRow = row;  _finishCol = column; }
                 else if (_startRow  == row && _startCol  == column) _startRow  = _startCol  = -1;
                 else if (_finishRow == row && _finishCol == column) _finishRow = _finishCol = -1;
             }
-            // Update the visible frame (if in viewport)
             CellFrame? cellFrame = GetCell(row, column) as CellFrame;
             if (cellFrame is not null)
                 SetCellContent(cellFrame, new MazeCellContent(cellType));
@@ -765,7 +761,6 @@ namespace Maze.Maui.App
     /// </summary>
     public class MazeGridKeyDownEventArgs : EventArgs
     {
-        // Private properties
         Controls.Keyboard.KeyState keyState = Controls.Keyboard.KeyState.None;
         Controls.Keyboard.Key key = Controls.Keyboard.Key.None;
 
@@ -944,7 +939,6 @@ namespace Maze.Maui.App
             DownFromRight = 12
         }
 
-        // Private properties
         static private Color SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR = Colors.White;
         static private Color SOLUTION_PATH_CELL_HIGHLIGHT_COLOR = Colors.LightGreen;
 
