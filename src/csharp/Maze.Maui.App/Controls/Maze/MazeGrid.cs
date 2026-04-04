@@ -122,6 +122,8 @@ namespace Maze.Maui.App
             }
 
             haveSolutionCells = false;
+
+            VirtualBuffer = RowCount * ColumnCount <= 2500 ? 0 : 10;
             InitializeContent();
         }
         /// <summary>
