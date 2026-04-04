@@ -31,7 +31,6 @@ namespace Maze.Maui.Controls.InteractiveGrid
         // Virtual viewport state
         private int _vpFirstRow = 0, _vpLastRow = -1;
         private int _vpFirstCol = 0, _vpLastCol = -1;
-        private const int VIRTUAL_BUFFER = 10;
 
         // Virtual cell/header pools
         private readonly Dictionary<(int row, int col), CellFrame> _activeCells = new();
@@ -102,6 +101,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <returns>Number of columns</returns>
         public int ColumnCount { get; set; } = 0;
+        /// <summary>
+        /// Number of rows/columns to pre-load beyond the visible edge of the scroll view.
+        /// Set to 0 to disable virtualization — all cells are created upfront and kept active.
+        /// Must be >= 0. Defaults to 10.
+        /// </summary>
+        public int VirtualBuffer { get; set; } = 10;
         /// <summary>
         /// Column header height (in DIPs)
         /// </summary>
@@ -349,7 +354,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void OnDataScrollViewSizeChanged(object? sender, EventArgs e)
         {
-            if (RowCount == 0 || ColumnCount == 0) return;
+            if (RowCount == 0 || ColumnCount == 0 || VirtualBuffer == 0) return;
             UpdateVirtualViewport(_dataScrollView.ScrollX, _dataScrollView.ScrollY);
         }
         /// <summary>
@@ -370,15 +375,15 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void UpdateVirtualViewport(double scrollX, double scrollY)
         {
-            if (RowCount == 0 || ColumnCount == 0) return;
+            if (RowCount == 0 || ColumnCount == 0 || VirtualBuffer == 0) return;
 
             double viewW = _dataScrollView.Width  > 0 ? _dataScrollView.Width  : CellWidth  * 10;
             double viewH = _dataScrollView.Height > 0 ? _dataScrollView.Height : CellHeight * 10;
 
-            int newFirstRow = Math.Max(0, (int)(scrollY / CellHeight) - VIRTUAL_BUFFER);
-            int newLastRow  = Math.Min(RowCount    - 1, (int)Math.Ceiling((scrollY + viewH) / CellHeight) + VIRTUAL_BUFFER);
-            int newFirstCol = Math.Max(0, (int)(scrollX / CellWidth)  - VIRTUAL_BUFFER);
-            int newLastCol  = Math.Min(ColumnCount - 1, (int)Math.Ceiling((scrollX + viewW) / CellWidth)  + VIRTUAL_BUFFER);
+            int newFirstRow = Math.Max(0, (int)(scrollY / CellHeight) - VirtualBuffer);
+            int newLastRow  = Math.Min(RowCount    - 1, (int)Math.Ceiling((scrollY + viewH) / CellHeight) + VirtualBuffer);
+            int newFirstCol = Math.Max(0, (int)(scrollX / CellWidth)  - VirtualBuffer);
+            int newLastCol  = Math.Min(ColumnCount - 1, (int)Math.Ceiling((scrollX + viewW) / CellWidth)  + VirtualBuffer);
 
             _dataGrid.BatchBegin();
             _colHeaderGrid.BatchBegin();
@@ -542,9 +547,17 @@ namespace Maze.Maui.Controls.InteractiveGrid
             double viewH = _dataScrollView.Height > 0 ? _dataScrollView.Height : CellHeight * 10;
 
             _vpFirstRow = 0;
-            _vpLastRow  = Math.Min((int)Math.Ceiling(viewH / CellHeight) + VIRTUAL_BUFFER, RowCount    - 1);
             _vpFirstCol = 0;
-            _vpLastCol  = Math.Min((int)Math.Ceiling(viewW / CellWidth)  + VIRTUAL_BUFFER, ColumnCount - 1);
+            if (VirtualBuffer == 0)
+            {
+                _vpLastRow = RowCount    - 1;
+                _vpLastCol = ColumnCount - 1;
+            }
+            else
+            {
+                _vpLastRow = Math.Min((int)Math.Ceiling(viewH / CellHeight) + VirtualBuffer, RowCount    - 1);
+                _vpLastCol = Math.Min((int)Math.Ceiling(viewW / CellWidth)  + VirtualBuffer, ColumnCount - 1);
+            }
 
             _dataGrid.BatchBegin();
             _colHeaderGrid.BatchBegin();
@@ -590,7 +603,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
             _dataGrid.WidthRequest  = ColumnCount * CellWidth;
             _dataGrid.HeightRequest = RowCount    * CellHeight;
 
-            UpdateVirtualViewport(_dataScrollView.ScrollX, _dataScrollView.ScrollY);
+            if (VirtualBuffer == 0)
+                PopulateInitialViewport();
+            else
+                UpdateVirtualViewport(_dataScrollView.ScrollX, _dataScrollView.ScrollY);
         }
         /// <summary>
         /// Adds the grid's row definitions
