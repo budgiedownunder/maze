@@ -560,6 +560,37 @@ namespace Maze.Maui.Controls.InteractiveGrid
             _rowHeaderGrid.BatchCommit();
         }
         /// <summary>
+        /// Clears all virtual cell/header frames and pools, updates the data grid content size,
+        /// then repopulates the viewport based on the current scroll position.
+        /// Called after rows or columns are inserted or removed to fix stale _activeCells keys.
+        /// </summary>
+        private void ResetVirtualViewport()
+        {
+            // Remove all cell and header frames from the sub-grids.
+            // Data-cell pool frames stay in _dataGrid (IsVisible=false) — remove them too.
+            // Header frames are removed from their grids on recycle so only active ones are present.
+            for (int i = _dataGrid.Children.Count - 1; i >= 0; i--)
+                if (IsGridCellOrHeader(_dataGrid.Children[i]))
+                    _dataGrid.Children.RemoveAt(i);
+            _rowHeaderGrid.Children.Clear();
+            _colHeaderGrid.Children.Clear();
+
+            _activeCells.Clear();
+            _activeRowHeaders.Clear();
+            _activeColHeaders.Clear();
+            _cellPool.Clear();
+            _rowHeaderPool.Clear();
+            _colHeaderPool.Clear();
+            _vpFirstRow = 0; _vpLastRow = -1;
+            _vpFirstCol = 0; _vpLastCol = -1;
+
+            // Keep the data grid pinned to its exact new content size.
+            _dataGrid.WidthRequest  = ColumnCount * CellWidth;
+            _dataGrid.HeightRequest = RowCount    * CellHeight;
+
+            UpdateVirtualViewport(_dataScrollView.ScrollX, _dataScrollView.ScrollY);
+        }
+        /// <summary>
         /// Adds the grid's row definitions
         /// </summary>
         private void AddRowDefinitions()
@@ -658,6 +689,14 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// Row and column are 0-based.
         /// </summary>
         protected virtual void UpdateCellContent(CellFrame frame, int row, int column) { }
+        /// <summary>Called before rows are inserted into the grid. RowCount still reflects the pre-insert value.</summary>
+        protected virtual void OnBeforeRowsInserted(int startDisplayRow, int count) { }
+        /// <summary>Called before columns are inserted into the grid. ColumnCount still reflects the pre-insert value.</summary>
+        protected virtual void OnBeforeColumnsInserted(int startDisplayColumn, int count) { }
+        /// <summary>Called after rows are removed from the grid. RowCount already reflects the post-remove value.</summary>
+        protected virtual void OnAfterRowsRemoved(int startDisplayRow, int count) { }
+        /// <summary>Called after columns are removed from the grid. ColumnCount already reflects the post-remove value.</summary>
+        protected virtual void OnAfterColumnsRemoved(int startDisplayColumn, int count) { }
         /// <summary>
         /// Returns a snapshot of the currently active (visible) cells keyed by 0-based (row, col).
         /// Used by subclasses to refresh only visible cells (e.g. when clearing a solution overlay).
@@ -2318,6 +2357,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             if (removed)
             {
+                ResetVirtualViewport();
+
                 switch (target)
                 {
                     case Target.Row:
@@ -2360,7 +2401,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
             }
 
             if (removed)
+            {
                 ResetChildPositions(target, startPosition, -(endPosition - startPosition + 1));
+                int count = endPosition - startPosition + 1;
+                if (target == Target.Row) OnAfterRowsRemoved(startPosition, count);
+                else                      OnAfterColumnsRemoved(startPosition, count);
+            }
 
             return removed;
         }
@@ -2475,6 +2521,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             inserted = InsertChildren(target, startPosition, endPosition);
 
+            if (inserted)
+                ResetVirtualViewport();
+
             ReinitializeSelectionFrame();
 
             RestoreSelectionState(selectionState, retainAnchorCell, true);
@@ -2497,6 +2546,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
             {
                 return false;
             }
+
+            int count = endPosition - startPosition + 1;
+            if (target == Target.Row) OnBeforeRowsInserted(startPosition, count);
+            else                      OnBeforeColumnsInserted(startPosition, count);
 
             bool inserted = false;
 

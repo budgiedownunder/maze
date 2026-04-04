@@ -232,6 +232,96 @@ namespace Maze.Maui.App
                 frame.Content = content;
             }
         }
+        protected override void OnBeforeRowsInserted(int startDisplayRow, int count)
+        {
+            int insertIdx = startDisplayRow - 1;
+            int newRowCount = RowCount + count;
+            var newTypes = new CellType[newRowCount, ColumnCount];
+            var newDirs  = new MazeCellContent.PathDirection[newRowCount, ColumnCount];
+
+            for (int r = 0; r < insertIdx; r++)
+                for (int c = 0; c < ColumnCount; c++)
+                { newTypes[r, c] = _cellTypes[r, c]; newDirs[r, c] = _solutionDirections[r, c]; }
+
+            for (int r = insertIdx; r < RowCount; r++)
+                for (int c = 0; c < ColumnCount; c++)
+                { newTypes[r + count, c] = _cellTypes[r, c]; newDirs[r + count, c] = _solutionDirections[r, c]; }
+
+            _cellTypes = newTypes;
+            _solutionDirections = newDirs;
+
+            if (_startRow  >= startDisplayRow) _startRow  += count;
+            if (_finishRow >= startDisplayRow) _finishRow += count;
+        }
+        protected override void OnBeforeColumnsInserted(int startDisplayColumn, int count)
+        {
+            int insertIdx = startDisplayColumn - 1;
+            int newColCount = ColumnCount + count;
+            var newTypes = new CellType[RowCount, newColCount];
+            var newDirs  = new MazeCellContent.PathDirection[RowCount, newColCount];
+
+            for (int r = 0; r < RowCount; r++)
+            {
+                for (int c = 0; c < insertIdx; c++)
+                { newTypes[r, c] = _cellTypes[r, c]; newDirs[r, c] = _solutionDirections[r, c]; }
+                for (int c = insertIdx; c < ColumnCount; c++)
+                { newTypes[r, c + count] = _cellTypes[r, c]; newDirs[r, c + count] = _solutionDirections[r, c]; }
+            }
+
+            _cellTypes = newTypes;
+            _solutionDirections = newDirs;
+
+            if (_startCol  >= startDisplayColumn) _startCol  += count;
+            if (_finishCol >= startDisplayColumn) _finishCol += count;
+        }
+        protected override void OnAfterRowsRemoved(int startDisplayRow, int count)
+        {
+            int removeIdx  = startDisplayRow - 1;
+            int removedEnd = startDisplayRow + count - 1;
+            var newTypes = new CellType[RowCount, ColumnCount];
+            var newDirs  = new MazeCellContent.PathDirection[RowCount, ColumnCount];
+
+            for (int r = 0; r < removeIdx; r++)
+                for (int c = 0; c < ColumnCount; c++)
+                { newTypes[r, c] = _cellTypes[r, c]; newDirs[r, c] = _solutionDirections[r, c]; }
+
+            for (int r = removeIdx + count; r < RowCount + count; r++)
+                for (int c = 0; c < ColumnCount; c++)
+                { newTypes[r - count, c] = _cellTypes[r, c]; newDirs[r - count, c] = _solutionDirections[r, c]; }
+
+            _cellTypes = newTypes;
+            _solutionDirections = newDirs;
+
+            if      (_startRow >= startDisplayRow && _startRow <= removedEnd) _startRow = _startCol = -1;
+            else if (_startRow > removedEnd)                                  _startRow -= count;
+
+            if      (_finishRow >= startDisplayRow && _finishRow <= removedEnd) _finishRow = _finishCol = -1;
+            else if (_finishRow > removedEnd)                                   _finishRow -= count;
+        }
+        protected override void OnAfterColumnsRemoved(int startDisplayColumn, int count)
+        {
+            int removeIdx  = startDisplayColumn - 1;
+            int removedEnd = startDisplayColumn + count - 1;
+            var newTypes = new CellType[RowCount, ColumnCount];
+            var newDirs  = new MazeCellContent.PathDirection[RowCount, ColumnCount];
+
+            for (int r = 0; r < RowCount; r++)
+            {
+                for (int c = 0; c < removeIdx; c++)
+                { newTypes[r, c] = _cellTypes[r, c]; newDirs[r, c] = _solutionDirections[r, c]; }
+                for (int c = removeIdx + count; c < ColumnCount + count; c++)
+                { newTypes[r, c - count] = _cellTypes[r, c]; newDirs[r, c - count] = _solutionDirections[r, c]; }
+            }
+
+            _cellTypes = newTypes;
+            _solutionDirections = newDirs;
+
+            if      (_startCol >= startDisplayColumn && _startCol <= removedEnd) _startRow = _startCol = -1;
+            else if (_startCol > removedEnd)                                     _startCol -= count;
+
+            if      (_finishCol >= startDisplayColumn && _finishCol <= removedEnd) _finishRow = _finishCol = -1;
+            else if (_finishCol > removedEnd)                                      _finishCol -= count;
+        }
         /// <summary>
         /// Returns the cell type associated with the current maze item for a given location
         /// </summary>
