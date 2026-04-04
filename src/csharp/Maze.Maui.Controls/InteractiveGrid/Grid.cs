@@ -369,6 +369,16 @@ namespace Maze.Maui.Controls.InteractiveGrid
             _isSyncingScroll = false;
             UpdateVirtualViewport(e.ScrollX, e.ScrollY);
         }
+        private void BatchGrids(Action action)
+        {
+            _dataGrid.BatchBegin();
+            _colHeaderGrid.BatchBegin();
+            _rowHeaderGrid.BatchBegin();
+            action();
+            _dataGrid.BatchCommit();
+            _colHeaderGrid.BatchCommit();
+            _rowHeaderGrid.BatchCommit();
+        }
         /// <summary>
         /// Updates the virtual viewport: recycles cells/headers that have left the buffered
         /// range and activates new ones that have entered it.
@@ -385,42 +395,31 @@ namespace Maze.Maui.Controls.InteractiveGrid
             int newFirstCol = Math.Max(0, (int)(scrollX / CellWidth)  - VirtualBuffer);
             int newLastCol  = Math.Min(ColumnCount - 1, (int)Math.Ceiling((scrollX + viewW) / CellWidth)  + VirtualBuffer);
 
-            _dataGrid.BatchBegin();
-            _colHeaderGrid.BatchBegin();
-            _rowHeaderGrid.BatchBegin();
+            BatchGrids(() =>
+            {
+                for (int r = _vpFirstRow; r <= _vpLastRow; r++)
+                    for (int c = _vpFirstCol; c <= _vpLastCol; c++)
+                        if (r < newFirstRow || r > newLastRow || c < newFirstCol || c > newLastCol)
+                            RecycleViewCell(r, c);
 
-            // Recycle cells leaving the new range
-            for (int r = _vpFirstRow; r <= _vpLastRow; r++)
+                for (int r = newFirstRow; r <= newLastRow; r++)
+                    for (int c = newFirstCol; c <= newLastCol; c++)
+                        if (!_activeCells.ContainsKey((r, c)))
+                            ActivateViewCell(r, c);
+
                 for (int c = _vpFirstCol; c <= _vpLastCol; c++)
-                    if (r < newFirstRow || r > newLastRow || c < newFirstCol || c > newLastCol)
-                        RecycleViewCell(r, c);
-
-            // Activate cells entering the new range
-            for (int r = newFirstRow; r <= newLastRow; r++)
+                    if (c < newFirstCol || c > newLastCol) RecycleViewColHeader(c);
                 for (int c = newFirstCol; c <= newLastCol; c++)
-                    if (!_activeCells.ContainsKey((r, c)))
-                        ActivateViewCell(r, c);
+                    if (!_activeColHeaders.ContainsKey(c)) ActivateViewColHeader(c);
 
-            // Recycle col headers leaving the range
-            for (int c = _vpFirstCol; c <= _vpLastCol; c++)
-                if (c < newFirstCol || c > newLastCol) RecycleViewColHeader(c);
-            // Activate col headers entering the range
-            for (int c = newFirstCol; c <= newLastCol; c++)
-                if (!_activeColHeaders.ContainsKey(c)) ActivateViewColHeader(c);
+                for (int r = _vpFirstRow; r <= _vpLastRow; r++)
+                    if (r < newFirstRow || r > newLastRow) RecycleViewRowHeader(r);
+                for (int r = newFirstRow; r <= newLastRow; r++)
+                    if (!_activeRowHeaders.ContainsKey(r)) ActivateViewRowHeader(r);
 
-            // Recycle row headers leaving the range
-            for (int r = _vpFirstRow; r <= _vpLastRow; r++)
-                if (r < newFirstRow || r > newLastRow) RecycleViewRowHeader(r);
-            // Activate row headers entering the range
-            for (int r = newFirstRow; r <= newLastRow; r++)
-                if (!_activeRowHeaders.ContainsKey(r)) ActivateViewRowHeader(r);
-
-            _vpFirstRow = newFirstRow; _vpLastRow = newLastRow;
-            _vpFirstCol = newFirstCol; _vpLastCol = newLastCol;
-
-            _dataGrid.BatchCommit();
-            _colHeaderGrid.BatchCommit();
-            _rowHeaderGrid.BatchCommit();
+                _vpFirstRow = newFirstRow; _vpLastRow = newLastRow;
+                _vpFirstCol = newFirstCol; _vpLastCol = newLastCol;
+            });
         }
         /// <summary>
         /// Syncs the data scroll view horizontally when the column header scroll view is scrolled directly (e.g. touch on iOS)
@@ -559,54 +558,109 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 _vpLastCol = Math.Min((int)Math.Ceiling(viewW / CellWidth)  + VirtualBuffer, ColumnCount - 1);
             }
 
-            _dataGrid.BatchBegin();
-            _colHeaderGrid.BatchBegin();
-            _rowHeaderGrid.BatchBegin();
+            BatchGrids(() =>
+            {
+                for (int r = _vpFirstRow; r <= _vpLastRow; r++)
+                    for (int c = _vpFirstCol; c <= _vpLastCol; c++)
+                        ActivateViewCell(r, c);
 
-            for (int r = _vpFirstRow; r <= _vpLastRow; r++)
-                for (int c = _vpFirstCol; c <= _vpLastCol; c++)
-                    ActivateViewCell(r, c);
-
-            for (int c = _vpFirstCol; c <= _vpLastCol; c++) ActivateViewColHeader(c);
-            for (int r = _vpFirstRow; r <= _vpLastRow; r++) ActivateViewRowHeader(r);
-
-            _dataGrid.BatchCommit();
-            _colHeaderGrid.BatchCommit();
-            _rowHeaderGrid.BatchCommit();
+                for (int c = _vpFirstCol; c <= _vpLastCol; c++) ActivateViewColHeader(c);
+                for (int r = _vpFirstRow; r <= _vpLastRow; r++) ActivateViewRowHeader(r);
+            });
         }
         /// <summary>
-        /// Clears all virtual cell/header frames and pools, updates the data grid content size,
-        /// then repopulates the viewport based on the current scroll position.
-        /// Called after rows or columns are inserted or removed to fix stale _activeCells keys.
+        /// Updates the virtual viewport after rows or columns are inserted or removed.
+        /// For non-virtual grids (VirtualBuffer == 0): full teardown and repopulate.
+        /// For virtual grids: skips DOM changes — ResetChildPositions has already repositioned
+        /// all frames; only the dict keys are stale. RebuildActiveDicts rescans children to
+        /// re-key the dicts, then UpdateVirtualViewport trims excess and fills gaps.
         /// </summary>
         private void ResetVirtualViewport()
         {
-            // Remove all cell and header frames from the sub-grids.
-            // Data-cell pool frames stay in _dataGrid (IsVisible=false) — remove them too.
-            // Header frames are removed from their grids on recycle so only active ones are present.
-            for (int i = _dataGrid.Children.Count - 1; i >= 0; i--)
-                if (IsGridCellOrHeader(_dataGrid.Children[i]))
-                    _dataGrid.Children.RemoveAt(i);
-            _rowHeaderGrid.Children.Clear();
-            _colHeaderGrid.Children.Clear();
-
-            _activeCells.Clear();
-            _activeRowHeaders.Clear();
-            _activeColHeaders.Clear();
-            _cellPool.Clear();
-            _rowHeaderPool.Clear();
-            _colHeaderPool.Clear();
-            _vpFirstRow = 0; _vpLastRow = -1;
-            _vpFirstCol = 0; _vpLastCol = -1;
-
-            // Keep the data grid pinned to its exact new content size.
             _dataGrid.WidthRequest  = ColumnCount * CellWidth;
             _dataGrid.HeightRequest = RowCount    * CellHeight;
 
             if (VirtualBuffer == 0)
+            {
+                for (int i = _dataGrid.Children.Count - 1; i >= 0; i--)
+                    if (IsGridCellOrHeader(_dataGrid.Children[i]))
+                        _dataGrid.Children.RemoveAt(i);
+                _rowHeaderGrid.Children.Clear();
+                _colHeaderGrid.Children.Clear();
+                _activeCells.Clear(); _activeRowHeaders.Clear(); _activeColHeaders.Clear();
+                _cellPool.Clear(); _rowHeaderPool.Clear(); _colHeaderPool.Clear();
+                _vpFirstRow = 0; _vpLastRow = -1;
+                _vpFirstCol = 0; _vpLastCol = -1;
                 PopulateInitialViewport();
+            }
             else
+            {
+                RebuildActiveDicts();
                 UpdateVirtualViewport(_dataScrollView.ScrollX, _dataScrollView.ScrollY);
+            }
+        }
+        /// <summary>
+        /// Rescans _dataGrid / _rowHeaderGrid / _colHeaderGrid children to rebuild the
+        /// _activeCells, _activeRowHeaders, _activeColHeaders dicts and recalculate VP bounds.
+        /// No DOM changes — only dict re-keying. Pool frames (IsVisible=false) are reset to
+        /// row/col 0 and re-enqueued so they are reusable after ResetChildPositions may have
+        /// shifted them.
+        /// </summary>
+        private void RebuildActiveDicts()
+        {
+            activeCell = null;
+            anchorCell = null;
+
+            _activeCells.Clear();
+            _cellPool.Clear();
+            foreach (var child in _dataGrid.Children)
+            {
+                if (child is CellFrame frame)
+                {
+                    if (frame.IsVisible)
+                    {
+                        _activeCells[(frame.Row, frame.Column)] = frame;
+                        if (activeCellPoint.IsPosition(frame.Row + 1, frame.Column + 1)) activeCell = frame;
+                        if (anchorCellPoint.Row > 0 && anchorCellPoint.IsPosition(frame.Row + 1, frame.Column + 1)) anchorCell = frame;
+                    }
+                    else
+                    {
+                        frame.Row = 0;
+                        frame.Column = 0;
+                        Microsoft.Maui.Controls.Grid.SetRow(frame, 0);
+                        Microsoft.Maui.Controls.Grid.SetColumn(frame, 0);
+                        _cellPool.Enqueue(frame);
+                    }
+                }
+            }
+
+            _activeColHeaders.Clear();
+            foreach (var child in _colHeaderGrid.Children)
+                if (child is HeaderFrame hf) _activeColHeaders[hf.Index] = hf;
+
+            _activeRowHeaders.Clear();
+            foreach (var child in _rowHeaderGrid.Children)
+                if (child is HeaderFrame hf) _activeRowHeaders[hf.Index] = hf;
+
+            if (_activeCells.Count > 0)
+            {
+                int minRow = int.MaxValue, maxRow = int.MinValue;
+                int minCol = int.MaxValue, maxCol = int.MinValue;
+                foreach (var key in _activeCells.Keys)
+                {
+                    if (key.row < minRow) minRow = key.row;
+                    if (key.row > maxRow) maxRow = key.row;
+                    if (key.col < minCol) minCol = key.col;
+                    if (key.col > maxCol) maxCol = key.col;
+                }
+                _vpFirstRow = minRow; _vpLastRow = maxRow;
+                _vpFirstCol = minCol; _vpLastCol = maxCol;
+            }
+            else
+            {
+                _vpFirstRow = 0; _vpLastRow = -1;
+                _vpFirstCol = 0; _vpLastCol = -1;
+            }
         }
         /// <summary>
         /// Adds the grid's row definitions
