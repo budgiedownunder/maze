@@ -222,11 +222,12 @@
             double width = ParentGrid.GetCellsWidth(CellRange);
             double height = ParentGrid.GetCellsHeight(CellRange);
 
-            SetBorder(BORDER_ID_TOP, TopRow, LeftColumn, width, BorderWidth, new Thickness(0));
-            SetBorder(BORDER_ID_LEFT, TopRow, LeftColumn, BorderWidth, height, new Thickness(0));
-            SetBorder(BORDER_ID_BOTTOM, BottomRow, LeftColumn, width, BorderWidth,
+            // Subtract 1 to convert 1-based display coords to 0-based _dataGrid coords
+            SetBorder(BORDER_ID_TOP, TopRow - 1, LeftColumn - 1, width, BorderWidth, new Thickness(0));
+            SetBorder(BORDER_ID_LEFT, TopRow - 1, LeftColumn - 1, BorderWidth, height, new Thickness(0));
+            SetBorder(BORDER_ID_BOTTOM, BottomRow - 1, LeftColumn - 1, width, BorderWidth,
                 new Thickness(0, ParentGrid.GetRowHeight(BottomRow) - BorderWidth, 0, 0));
-            SetBorder(BORDER_ID_RIGHT, TopRow, RightColumn, BorderWidth, height,
+            SetBorder(BORDER_ID_RIGHT, TopRow - 1, RightColumn - 1, BorderWidth, height,
                 new Thickness(ParentGrid.GetColumnWidth(RightColumn) - BorderWidth, 0, 0, 0));
             Show(show);
         }
