@@ -10,13 +10,17 @@ namespace Maze.Maui.App
     /// </summary>
     public class MazeGrid : Controls.InteractiveGrid.Grid
     {
-        // Private properties
         private const int DEFAULT_ROW_COUNT = 5;
         private const int DEFAULT_COLUMN_COUNT = 5;
         private MazeItem? mazeItem;
-        private CellFrame? startCell;
-        private CellFrame? finishCell;
         private bool haveSolutionCells = false;
+
+        // Logical cell state (independent of the visual tree — required for virtualization)
+        private CellType[,] _cellTypes = new CellType[0, 0];
+        private MazeCellContent.PathDirection[,] _solutionDirections = new MazeCellContent.PathDirection[0, 0];
+        // 1-based positions of start/finish cells (-1 = not set)
+        private int _startRow = -1, _startCol = -1;
+        private int _finishRow = -1, _finishCol = -1;
 
         /// <summary>
         /// Cell tapped event handler delegate
@@ -67,15 +71,21 @@ namespace Maze.Maui.App
         /// <returns>Event handler</returns>
         public event SelectionChangedEventHandler? SelectionChanged;
         /// <summary>
-        /// Start cell (if any)
+        /// Start cell frame (if currently visible), or null when off-screen or not placed
         /// </summary>
-        /// <returns>Start cell</returns>
-        public CellFrame? StartCell { get => startCell; }
+        public CellFrame? StartCell { get => _startRow > 0 ? GetCell(_startRow, _startCol) as CellFrame : null; }
         /// <summary>
-        /// Finish cell (if any)
+        /// Finish cell frame (if currently visible), or null when off-screen or not placed
         /// </summary>
-        /// <returns>Finish cell</returns>
-        public CellFrame? FinishCell { get => finishCell; }
+        public CellFrame? FinishCell { get => _finishRow > 0 ? GetCell(_finishRow, _finishCol) as CellFrame : null; }
+        /// <summary>
+        /// Whether a start cell has been placed in the grid
+        /// </summary>
+        public bool HasStartCellPlaced { get => _startRow > 0; }
+        /// <summary>
+        /// Whether a finish cell has been placed in the grid
+        /// </summary>
+        public bool HasFinishCellPlaced { get => _finishRow > 0; }
         /// <summary>
         /// Constructor
         /// </summary>
@@ -92,11 +102,33 @@ namespace Maze.Maui.App
         {
             IsPanSupportEnabled = enablePanSupport;
             this.mazeItem = mazeItem;
-            RowCount = (int)(mazeItem?.Definition?.RowCount ?? DEFAULT_ROW_COUNT);
+            RowCount    = (int)(mazeItem?.Definition?.RowCount   ?? DEFAULT_ROW_COUNT);
             ColumnCount = (int)(mazeItem?.Definition?.ColCount ?? DEFAULT_COLUMN_COUNT);
-            startCell = null;
-            finishCell = null;
+
+            // Populate the logical cell-type model before building the visual layer
+            _cellTypes          = new CellType[RowCount, ColumnCount];
+            _solutionDirections = new MazeCellContent.PathDirection[RowCount, ColumnCount];
+            _startRow = _startCol = _finishRow = _finishCol = -1;
+
+            for (int r = 0; r < RowCount; r++)
+            {
+                for (int c = 0; c < ColumnCount; c++)
+                {
+                    _cellTypes[r, c] = GetMazeItemCellType(r, c);
+                    if      (_cellTypes[r, c] == CellType.Start)  { _startRow  = r + 1; _startCol  = c + 1; }
+                    else if (_cellTypes[r, c] == CellType.Finish) { _finishRow = r + 1; _finishCol = c + 1; }
+                }
+            }
+
             haveSolutionCells = false;
+
+#if ANDROID
+            VirtualBuffer = RowCount * ColumnCount <= 900  ? 0 : 10;
+#elif IOS || MACCATALYST
+            VirtualBuffer = RowCount * ColumnCount <= 1600 ? 0 : 10;
+#else
+            VirtualBuffer = RowCount * ColumnCount <= 3600 ? 0 : 10;
+#endif
             InitializeContent();
         }
         /// <summary>
@@ -170,18 +202,8 @@ namespace Maze.Maui.App
         /// <returns>Maze cell type</returns>
         public CellType GetCellType(int row, int column)
         {
-            if (row >= 0 && column >= 0)
-            {
-                CellFrame? cellFrame = GetCell(row, column) as CellFrame;
-                if (cellFrame is not null)
-                {
-                    MazeCellContent? cellContent = cellFrame.Content as MazeCellContent;
-                    if (cellContent is not null)
-                    {
-                        return cellContent.CellType;
-                    }
-                }
-            }
+            if (row >= 1 && row <= RowCount && column >= 1 && column <= ColumnCount)
+                return _cellTypes[row - 1, column - 1];
             return CellType.Empty;
         }
         /// <summary>
@@ -195,16 +217,107 @@ namespace Maze.Maui.App
         /// <returns>Maze cell content</returns>
         public override ContentView CreateCellContent(CellFrame frame, int row, int column, bool gridInitializing)
         {
-            MazeCellContent content =  gridInitializing ? new MazeCellContent(GetMazeItemCellType(row, column))
-                                                        : new MazeCellContent(CellType.Empty);
-            if (gridInitializing)
+            // Logical model is already populated in Initialize() before InitializeContent() runs
+            return new MazeCellContent(gridInitializing ? _cellTypes[row, column] : CellType.Empty);
+        }
+        /// <summary>
+        /// Populates the content of a cell frame from the logical model.
+        /// Called by the base class whenever a cell enters the visible viewport.
+        /// Row and column are 0-based.
+        /// </summary>
+        protected override void UpdateCellContent(CellFrame frame, int row, int column)
+        {
+            var type      = _cellTypes[row, column];
+            var direction = _solutionDirections[row, column];
+            if (frame.Content is MazeCellContent existing)
+                existing.Update(type, direction);
+            else
             {
-                if (content.CellType == CellType.Start)
-                    startCell = frame;
-                else if (content.CellType == CellType.Finish)
-                    finishCell = frame;
+                var content = new MazeCellContent(type);
+                if (direction != MazeCellContent.PathDirection.None)
+                    content.SetSolutionPath(direction);
+                frame.Content = content;
             }
-            return content;
+        }
+        protected override void OnBeforeRowsInserted(int startDisplayRow, int count)
+        {
+            ResizeLogicalArrayRows(RowCount + count, startDisplayRow - 1, count, true);
+            if (_startRow  >= startDisplayRow) _startRow  += count;
+            if (_finishRow >= startDisplayRow) _finishRow += count;
+        }
+        protected override void OnBeforeColumnsInserted(int startDisplayColumn, int count)
+        {
+            ResizeLogicalArrayCols(ColumnCount + count, startDisplayColumn - 1, count, true);
+            if (_startCol  >= startDisplayColumn) _startCol  += count;
+            if (_finishCol >= startDisplayColumn) _finishCol += count;
+        }
+        protected override void OnAfterRowsRemoved(int startDisplayRow, int count)
+        {
+            ResizeLogicalArrayRows(RowCount, startDisplayRow - 1, count, false);
+            int removedEnd = startDisplayRow + count - 1;
+            if      (_startRow >= startDisplayRow && _startRow <= removedEnd) _startRow = _startCol = -1;
+            else if (_startRow > removedEnd)                                  _startRow -= count;
+            if      (_finishRow >= startDisplayRow && _finishRow <= removedEnd) _finishRow = _finishCol = -1;
+            else if (_finishRow > removedEnd)                                   _finishRow -= count;
+        }
+        protected override void OnAfterColumnsRemoved(int startDisplayColumn, int count)
+        {
+            ResizeLogicalArrayCols(ColumnCount, startDisplayColumn - 1, count, false);
+            int removedEnd = startDisplayColumn + count - 1;
+            if      (_startCol >= startDisplayColumn && _startCol <= removedEnd) _startRow = _startCol = -1;
+            else if (_startCol > removedEnd)                                     _startCol -= count;
+            if      (_finishCol >= startDisplayColumn && _finishCol <= removedEnd) _finishRow = _finishCol = -1;
+            else if (_finishCol > removedEnd)                                      _finishCol -= count;
+        }
+        private void ResizeLogicalArrayRows(int newRowCount, int insertIdx, int count, bool insert)
+        {
+            var newTypes = new CellType[newRowCount, ColumnCount];
+            var newDirs  = new MazeCellContent.PathDirection[newRowCount, ColumnCount];
+
+            for (int r = 0; r < insertIdx; r++)
+                for (int c = 0; c < ColumnCount; c++)
+                { newTypes[r, c] = _cellTypes[r, c]; newDirs[r, c] = _solutionDirections[r, c]; }
+
+            if (insert)
+            {
+                for (int r = insertIdx; r < RowCount; r++)
+                    for (int c = 0; c < ColumnCount; c++)
+                    { newTypes[r + count, c] = _cellTypes[r, c]; newDirs[r + count, c] = _solutionDirections[r, c]; }
+            }
+            else
+            {
+                for (int r = insertIdx + count; r < newRowCount + count; r++)
+                    for (int c = 0; c < ColumnCount; c++)
+                    { newTypes[r - count, c] = _cellTypes[r, c]; newDirs[r - count, c] = _solutionDirections[r, c]; }
+            }
+
+            _cellTypes = newTypes;
+            _solutionDirections = newDirs;
+        }
+        private void ResizeLogicalArrayCols(int newColCount, int insertIdx, int count, bool insert)
+        {
+            var newTypes = new CellType[RowCount, newColCount];
+            var newDirs  = new MazeCellContent.PathDirection[RowCount, newColCount];
+
+            for (int r = 0; r < RowCount; r++)
+            {
+                for (int c = 0; c < insertIdx; c++)
+                { newTypes[r, c] = _cellTypes[r, c]; newDirs[r, c] = _solutionDirections[r, c]; }
+
+                if (insert)
+                {
+                    for (int c = insertIdx; c < ColumnCount; c++)
+                    { newTypes[r, c + count] = _cellTypes[r, c]; newDirs[r, c + count] = _solutionDirections[r, c]; }
+                }
+                else
+                {
+                    for (int c = insertIdx + count; c < newColCount + count; c++)
+                    { newTypes[r, c - count] = _cellTypes[r, c]; newDirs[r, c - count] = _solutionDirections[r, c]; }
+                }
+            }
+
+            _cellTypes = newTypes;
+            _solutionDirections = newDirs;
         }
         /// <summary>
         /// Returns the cell type associated with the current maze item for a given location
@@ -301,13 +414,12 @@ namespace Maze.Maui.App
             CellRange? currentSelection = CurrentSelection;
             if (currentSelection is not null && currentSelection.IsSingleCell)
             {
-                if (startCell is not null && startCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
-                    return;
-                if (startCell is not null)
-                    SetCellContent(startCell, CellType.Empty);
-                startCell = SetCellContent(currentSelection.Top, currentSelection.Left, CellType.Start);
-                if (startCell is not null && finishCell is not null && finishCell.IsDisplayPosition(startCell.DisplayRow, startCell.DisplayColumn))
-                    finishCell = null;
+                int selRow = currentSelection.Top, selCol = currentSelection.Left;
+                if (_startRow == selRow && _startCol == selCol) return;
+                if (_startRow > 0) SetCellContent(_startRow, _startCol, CellType.Empty);
+                SetCellContent(selRow, selCol, CellType.Start);
+                // Clear finish if it occupies the same cell
+                if (_finishRow == selRow && _finishCol == selCol) { _finishRow = _finishCol = -1; }
             }
         }
         /// <summary>
@@ -318,13 +430,12 @@ namespace Maze.Maui.App
             CellRange? currentSelection = CurrentSelection;
             if (currentSelection is not null && currentSelection.IsSingleCell)
             {
-                if (finishCell is not null && finishCell.IsDisplayPosition(currentSelection.Top, currentSelection.Left))
-                    return;
-                if (finishCell is not null)
-                    SetCellContent(finishCell, CellType.Empty);
-                finishCell = SetCellContent(currentSelection.Top, currentSelection.Left, CellType.Finish);
-                if (finishCell is not null && startCell is not null && startCell.IsDisplayPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
-                    startCell = null;
+                int selRow = currentSelection.Top, selCol = currentSelection.Left;
+                if (_finishRow == selRow && _finishCol == selCol) return;
+                if (_finishRow > 0) SetCellContent(_finishRow, _finishCol, CellType.Empty);
+                SetCellContent(selRow, selCol, CellType.Finish);
+                // Clear start if it occupies the same cell
+                if (_startRow == selRow && _startCol == selCol) { _startRow = _startCol = -1; }
             }
         }
         /// <summary>
@@ -341,10 +452,8 @@ namespace Maze.Maui.App
                     for (int column = currentSelection.Left; column <= currentSelection.Right; column++)
                         SetCellContent(row, column, cellType);
                 }
-                if (startCell is not null && currentSelection.ContainsPosition(startCell.DisplayRow, startCell.DisplayColumn))
-                    startCell = null;
-                if (finishCell is not null && currentSelection.ContainsPosition(finishCell.DisplayRow, finishCell.DisplayColumn))
-                    finishCell = null;
+                if (_startRow  > 0 && currentSelection.ContainsPosition(_startRow,  _startCol))  { _startRow  = _startCol  = -1; }
+                if (_finishRow > 0 && currentSelection.ContainsPosition(_finishRow, _finishCol)) { _finishRow = _finishCol = -1; }
             }
         }
         /// <summary>
@@ -356,25 +465,17 @@ namespace Maze.Maui.App
         /// <returns>Cell frame</returns>
         private CellFrame? SetCellContent(int row, int column, CellType cellType)
         {
+            if (row >= 1 && row <= RowCount && column >= 1 && column <= ColumnCount)
+            {
+                _cellTypes[row - 1, column - 1] = cellType;
+                if      (cellType == CellType.Start)                              { _startRow  = row;  _startCol  = column; }
+                else if (cellType == CellType.Finish)                             { _finishRow = row;  _finishCol = column; }
+                else if (_startRow  == row && _startCol  == column) _startRow  = _startCol  = -1;
+                else if (_finishRow == row && _finishCol == column) _finishRow = _finishCol = -1;
+            }
             CellFrame? cellFrame = GetCell(row, column) as CellFrame;
             if (cellFrame is not null)
-                cellFrame = SetCellContent(cellFrame, cellType);
-            return cellFrame;
-        }
-        /// <summary>
-        /// Sets the content in given cell frame to be a given type
-        /// </summary>
-        /// <param name="cellFrame">Cell frame</param>
-        /// <param name="cellType">Cell type</param>
-        /// <returns>Cell frame</returns>
-        private CellFrame? SetCellContent(CellFrame? cellFrame, CellType cellType)
-        {
-            if (cellFrame is not null)
-            {
-                MazeCellContent? cellContent = cellFrame.Content as MazeCellContent;
-                if (cellContent is not null && cellContent.CellType != cellType)
-                    SetCellContent(cellFrame, new MazeCellContent(cellType));
-            }
+                SetCellContent(cellFrame, new MazeCellContent(cellType));
             return cellFrame;
         }
         /// <summary>
@@ -384,24 +485,16 @@ namespace Maze.Maui.App
         public Api.Maze ToMaze()
         {
             Api.Maze maze = new Api.Maze((uint)RowCount, (uint)ColumnCount);
-            CellType cellType;
 
             for (int row = 0; row < RowCount; row++)
             {
                 for (int column = 0; column < ColumnCount; column++)
                 {
-                    cellType = GetCellType(row + 1, column + 1);
-                    switch (cellType)
+                    switch (_cellTypes[row, column])
                     {
-                        case CellType.Start:
-                            maze.SetStartCell((uint)row, (uint)column);
-                            break;
-                        case CellType.Finish:
-                            maze.SetFinishCell((uint)row, (uint)column);
-                            break;
-                        case CellType.Wall:
-                            maze.SetWallCells((uint)row, (uint)column, (uint)row, (uint)column);
-                            break;
+                        case CellType.Start:  maze.SetStartCell((uint)row, (uint)column);                              break;
+                        case CellType.Finish: maze.SetFinishCell((uint)row, (uint)column);                             break;
+                        case CellType.Wall:   maze.SetWallCells((uint)row, (uint)column, (uint)row, (uint)column);     break;
                     }
                 }
             }
@@ -604,11 +697,15 @@ namespace Maze.Maui.App
         {
             if (haveSolutionCells)
             {
-                for (int row = 0; row < RowCount; row++)
+                Array.Clear(_solutionDirections, 0, _solutionDirections.Length);
+                // Refresh all visible cells so the solution overlay is removed
+                for (int row = 1; row <= RowCount; row++)
                 {
-                    for (int column = 0; column < ColumnCount; column++)
+                    for (int column = 1; column <= ColumnCount; column++)
                     {
-                        SetSolutionCell(row + 1, column + 1, MazeCellContent.PathDirection.None);
+                        MazeCellContent? cellContent = GetCellContent(row, column);
+                        if (cellContent is not null)
+                            cellContent.SetSolutionPath(MazeCellContent.PathDirection.None);
                     }
                 }
                 haveSolutionCells = false;
@@ -616,17 +713,16 @@ namespace Maze.Maui.App
             return true;
         }
         /// <summary>
-        /// Sets a solution cell direction
-        /// /// </summary>
-        /// <param name="row">Row index (zero-based)</param>
-        /// <param name="column">Column index (zero-based)</param>
-        /// <param name="direction">Direction</param>
+        /// Sets a solution cell direction in the logical model and updates the visible frame (if any)
+        /// </summary>
         private void SetSolutionCell(int row, int column, MazeCellContent.PathDirection direction)
         {
-            MazeCellContent? cellContent = GetCellContent(row, column);
-            if (cellContent is not null)
+            if (row >= 1 && row <= RowCount && column >= 1 && column <= ColumnCount)
             {
-                cellContent.SetSolutionPath(direction);
+                _solutionDirections[row - 1, column - 1] = direction;
+                MazeCellContent? cellContent = GetCellContent(row, column);
+                if (cellContent is not null)
+                    cellContent.SetSolutionPath(direction);
             }
         }
     }
@@ -671,7 +767,6 @@ namespace Maze.Maui.App
     /// </summary>
     public class MazeGridKeyDownEventArgs : EventArgs
     {
-        // Private properties
         Controls.Keyboard.KeyState keyState = Controls.Keyboard.KeyState.None;
         Controls.Keyboard.Key key = Controls.Keyboard.Key.None;
 
@@ -850,7 +945,6 @@ namespace Maze.Maui.App
             DownFromRight = 12
         }
 
-        // Private properties
         static private Color SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR = Colors.White;
         static private Color SOLUTION_PATH_CELL_HIGHLIGHT_COLOR = Colors.LightGreen;
 
@@ -936,6 +1030,43 @@ namespace Maze.Maui.App
                     return "wall.png";
             }
             return "";
+        }
+        /// <summary>
+        /// Updates the cell content in-place, reusing the existing Image or Label where possible
+        /// to avoid a new async image-load cycle on pool-recycled frames.
+        /// </summary>
+        /// <param name="newCellType">New cell type</param>
+        /// <param name="newDirection">New solution path direction</param>
+        public void Update(CellType newCellType, PathDirection newDirection)
+        {
+            cellType = newCellType;
+            solutionPathDirection = newDirection;
+
+            bool needsImage = cellType != CellType.Empty || solutionPathDirection != PathDirection.None;
+            string? source = needsImage
+                ? (cellType == CellType.Empty ? GetSolutionPathImage() : GetImageName(true))
+                : null;
+
+            if (needsImage)
+            {
+                if (Content is Image img)
+                    img.Source = source;
+                else
+                    Content = new Image
+                    {
+                        Source = source,
+                        Aspect = Aspect.AspectFit,
+                        HorizontalOptions = LayoutOptions.Fill,
+                        VerticalOptions = LayoutOptions.Fill
+                    };
+                Content.BackgroundColor = GetSolutionPathHighlightColor();
+            }
+            else
+            {
+                if (Content is not Label)
+                    Content = new Label();
+                Content.BackgroundColor = Colors.Transparent;
+            }
         }
         /// <summary>
         /// Sets the solution path direction in the cell

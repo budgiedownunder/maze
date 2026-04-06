@@ -71,26 +71,12 @@
                         BackgroundColor="Transparent" Padding="0" HorizontalOptions="End"/>
             </StackLayout>
 
-            <!-- Scrollable Maze Grid in Center -->
-            <ScrollView Grid.Row="1" x:Name="MazeGridScrollView"
-                        Orientation="Both"
-                        HorizontalOptions="Start"
-                        VerticalOptions="Start"
-                        HorizontalScrollBarVisibility="Always"
-                        VerticalScrollBarVisibility="Always"
-                        Padding="10">
-                <ContentView x:Name="MazeGridContentView">
-                    <controls:MazeGrid x:Name="MazeGrid"
-                                       ContainerScrollView="{Binding Source={x:Reference MazeGridScrollView}}"
-                                       ContainerContentView="{Binding Source={x:Reference MazeGridContentView}}"
-                                       RowSpacing="0"
-                                       ColumnSpacing="0"
-                                       Padding="0"
-                                       HorizontalOptions="Start"
-                                       VerticalOptions="Start">
-                    </controls:MazeGrid>
-                </ContentView>
-            </ScrollView>
+            <!-- Maze Grid with built-in frozen-pane scroll -->
+            <controls:MazeGrid x:Name="MazeGrid"
+                               Grid.Row="1"
+                               HorizontalOptions="Fill"
+                               VerticalOptions="Fill">
+            </controls:MazeGrid>
 
             <!-- Bottom buttons -->
             <StackLayout x:Name="BottomRowLayout" Grid.Row="2" Orientation="Horizontal" VerticalOptions="End" HorizontalOptions="Start" Padding="10" Spacing="10">

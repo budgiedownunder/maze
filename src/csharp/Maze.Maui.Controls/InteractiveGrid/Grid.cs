@@ -1,19 +1,44 @@
-﻿using Microsoft.Maui.Controls.Shapes;
+﻿using CursorIcon    = Maze.Maui.Controls.Pointer.Icon;
+using CursorPointer = Maze.Maui.Controls.Pointer.Pointer;
+using Microsoft.Maui.Controls.Shapes;
 
 namespace Maze.Maui.Controls.InteractiveGrid
 {
     /// <summary>
     /// The `Grid` class represents an interactive grid that suppports cell display and selection/highlighting via mouse/keyboard/touch
     /// </summary>
-    public partial class Grid : Microsoft.Maui.Controls.Grid
+    public partial class Grid : ContentView
     {
-        // Private properties
         private CellFrame? activeCell = null;
         private CellPoint activeCellPoint = new CellPoint();
         private CellFrame? anchorCell = null;
         private CellPoint anchorCellPoint = new CellPoint();
         private CellRange? selectedCells;
         private SelectionFrame? selectionFrame;
+
+        // Sub-grid shell (2x2 frozen-pane layout)
+        private Microsoft.Maui.Controls.Grid _shellGrid = null!;
+        private Microsoft.Maui.Controls.Grid _dataGrid = null!;
+        private Microsoft.Maui.Controls.Grid _colHeaderGrid = null!;
+        private Microsoft.Maui.Controls.Grid _rowHeaderGrid = null!;
+        private ScrollView _dataScrollView = null!;
+        private ScrollView _colHeaderScrollView = null!;
+        private ScrollView _rowHeaderScrollView = null!;
+        private HeaderFrame? _cornerFrame;
+        private bool _isSyncingScroll = false;
+
+        // Virtual viewport state
+        private int _vpFirstRow = 0, _vpLastRow = -1;
+        private int _vpFirstCol = 0, _vpLastCol = -1;
+
+        // Virtual cell/header pools
+        private readonly Dictionary<(int row, int col), CellFrame> _activeCells = new();
+        private readonly Queue<CellFrame> _cellPool = new();
+        private readonly Dictionary<int, HeaderFrame> _activeColHeaders = new();
+        private readonly Dictionary<int, HeaderFrame> _activeRowHeaders = new();
+        private readonly Queue<HeaderFrame> _colHeaderPool = new();
+        private readonly Queue<HeaderFrame> _rowHeaderPool = new();
+        private readonly HashSet<(int row, int col)> _highlightedCells = new();
 
         const double DEFAULT_COL_HEADER_HEIGHT = 35.0;
         const double DEFAULT_COL_HEADER_MARGIN = 0.0;
@@ -75,6 +100,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <returns>Number of columns</returns>
         public int ColumnCount { get; set; } = 0;
+        /// <summary>
+        /// Number of rows/columns to pre-load beyond the visible edge of the scroll view.
+        /// Set to 0 to disable virtualization — all cells are created upfront and kept active.
+        /// Must be >= 0. Defaults to 10.
+        /// </summary>
+        public int VirtualBuffer { get; set; } = 10;
         /// <summary>
         /// Column header height (in DIPs)
         /// </summary>
@@ -201,8 +232,6 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Boolean</returns>
         public bool IsPanSupportEnabled { get; set; } = DEFAULT_IS_PAN_SUPPORT_ENABLED;
 
-        //private CommunityToolkit.Maui.Behaviors.TouchBehavior longPressBehaviour;
-
         /// <summary>
         /// Indicates whether the grid currently has all columns selected
         /// </summary>
@@ -228,10 +257,18 @@ namespace Maze.Maui.Controls.InteractiveGrid
             }
         }
         /// <summary>
-        /// The current active cell frame (if any)
+        /// The current active cell frame (if any). May be null when the active cell is outside
+        /// the virtual viewport even though a logical active cell position exists. Use HasActiveCell
+        /// to check whether a cell is logically active regardless of viewport visibility.
         /// </summary>
         /// <returns>Active cell frame</returns>
         public CellFrame? ActiveCell { get => activeCell; }
+        /// <summary>
+        /// Indicates whether a cell is logically active, regardless of whether its frame is
+        /// currently within the virtual viewport.
+        /// </summary>
+        /// <returns>True if a cell is active</returns>
+        public bool HasActiveCell => activeCellPoint.Row > 0;
         /// <summary>
         /// The current selected cell range (if any)
         /// </summary>
@@ -242,87 +279,177 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         public Grid()
         {
+            BuildShell();
             InitializePlatformSpecificCode();
-            AddPinchGesture();
         }
         /// <summary>
-        /// The container scroll view linked to the object
+        /// Builds the internal 2x2 shell: corner (fixed), column headers (H-scroll), row headers (V-scroll), data (both-scroll)
         /// </summary>
-        /// <returns>Container scroll view</returns>
-        public static readonly BindableProperty ContainerScrollViewProperty =
-            BindableProperty.Create(nameof(ContainerScrollView), typeof(ScrollView), typeof(Grid));
+        private void BuildShell()
+        {
+            _colHeaderGrid = new Microsoft.Maui.Controls.Grid { RowSpacing = 0, ColumnSpacing = 0 };
+            _colHeaderGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        /// <summary>
-        /// The container scroll view linked to the object
-        /// </summary>
-        /// <returns>Container scroll view</returns>
-        public ScrollView ContainerScrollView
-        {
-            get => (ScrollView)GetValue(ContainerScrollViewProperty);
-            set => SetValue(ContainerScrollViewProperty, value);
+            _rowHeaderGrid = new Microsoft.Maui.Controls.Grid { RowSpacing = 0, ColumnSpacing = 0 };
+            _rowHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            _dataGrid = new Microsoft.Maui.Controls.Grid { RowSpacing = 0, ColumnSpacing = 0 };
+
+            _colHeaderScrollView = new ScrollView
+            {
+                Orientation = ScrollOrientation.Horizontal,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Never,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Never,
+                Content = _colHeaderGrid
+            };
+
+            _rowHeaderScrollView = new ScrollView
+            {
+                Orientation = ScrollOrientation.Vertical,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Never,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Never,
+                Content = _rowHeaderGrid
+            };
+
+            _dataScrollView = new ScrollView
+            {
+                Orientation = ScrollOrientation.Both,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Always,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Always,
+                Content = _dataGrid
+            };
+            _dataScrollView.Scrolled += OnDataScrolled;
+            _dataScrollView.SizeChanged += OnDataScrollViewSizeChanged;
+            _colHeaderScrollView.Scrolled += OnColHeaderScrolled;
+            _rowHeaderScrollView.Scrolled += OnRowHeaderScrolled;
+
+            _shellGrid = new Microsoft.Maui.Controls.Grid
+            {
+                RowSpacing = 0,
+                ColumnSpacing = 0,
+                Padding = 10,
+                RowDefinitions = new RowDefinitionCollection
+                {
+                    new RowDefinition { Height = GridLength.Auto },
+                    new RowDefinition { Height = GridLength.Star }
+                },
+                ColumnDefinitions = new ColumnDefinitionCollection
+                {
+                    new ColumnDefinition { Width = GridLength.Auto },
+                    new ColumnDefinition { Width = GridLength.Star }
+                }
+            };
+
+            _shellGrid.Add(_colHeaderScrollView, 1, 0);
+            _shellGrid.Add(_rowHeaderScrollView, 0, 1);
+            _shellGrid.Add(_dataScrollView, 1, 1);
+
+            Content = _shellGrid;
         }
         /// <summary>
-        /// The container content view linked to the object
+        /// Repopulates the virtual viewport when the scroll view is resized (e.g. window drag).
         /// </summary>
-        /// <returns>Container content view</returns>
-        public static readonly BindableProperty ContainerContentViewProperty =
-            BindableProperty.Create(nameof(ContainerContentView), typeof(ContentView), typeof(Grid));
-        /// <summary>
-        /// The container content view linked to the object
-        /// </summary>
-        /// <returns>Container content view</returns>
-        public ContentView ContainerContentView
+        private void OnDataScrollViewSizeChanged(object? sender, EventArgs e)
         {
-            get => (ContentView)GetValue(ContainerContentViewProperty);
-            set => SetValue(ContainerContentViewProperty, value);
+            if (RowCount == 0 || ColumnCount == 0 || VirtualBuffer == 0) return;
+            UpdateVirtualViewport(_dataScrollView.ScrollX, _dataScrollView.ScrollY);
         }
+        /// <summary>
+        /// Syncs the header scroll views when the data scroll view is scrolled
+        /// </summary>
+        private void OnDataScrolled(object? sender, ScrolledEventArgs e)
+        {
+            if (_isSyncingScroll) return;
+            _isSyncingScroll = true;
+            _ = _colHeaderScrollView.ScrollToAsync(e.ScrollX, 0, false);
+            _ = _rowHeaderScrollView.ScrollToAsync(0, e.ScrollY, false);
+            _isSyncingScroll = false;
+            UpdateVirtualViewport(e.ScrollX, e.ScrollY);
+        }
+        private void BatchGrids(Action action)
+        {
+            _dataGrid.BatchBegin();
+            _colHeaderGrid.BatchBegin();
+            _rowHeaderGrid.BatchBegin();
+            action();
+            _dataGrid.BatchCommit();
+            _colHeaderGrid.BatchCommit();
+            _rowHeaderGrid.BatchCommit();
+        }
+        /// <summary>
+        /// Updates the virtual viewport: recycles cells/headers that have left the buffered
+        /// range and activates new ones that have entered it.
+        /// </summary>
+        private void UpdateVirtualViewport(double scrollX, double scrollY)
+        {
+            if (RowCount == 0 || ColumnCount == 0 || VirtualBuffer == 0) return;
+
+            double viewW = _dataScrollView.Width  > 0 ? _dataScrollView.Width  : CellWidth  * 10;
+            double viewH = _dataScrollView.Height > 0 ? _dataScrollView.Height : CellHeight * 10;
+
+            int newFirstRow = Math.Max(0, (int)(scrollY / CellHeight) - VirtualBuffer);
+            int newLastRow  = Math.Min(RowCount    - 1, (int)Math.Ceiling((scrollY + viewH) / CellHeight) + VirtualBuffer);
+            int newFirstCol = Math.Max(0, (int)(scrollX / CellWidth)  - VirtualBuffer);
+            int newLastCol  = Math.Min(ColumnCount - 1, (int)Math.Ceiling((scrollX + viewW) / CellWidth)  + VirtualBuffer);
+
+            BatchGrids(() =>
+            {
+                for (int r = _vpFirstRow; r <= _vpLastRow; r++)
+                    for (int c = _vpFirstCol; c <= _vpLastCol; c++)
+                        if (r < newFirstRow || r > newLastRow || c < newFirstCol || c > newLastCol)
+                            RecycleViewCell(r, c);
+
+                for (int r = newFirstRow; r <= newLastRow; r++)
+                    for (int c = newFirstCol; c <= newLastCol; c++)
+                        if (!_activeCells.ContainsKey((r, c)))
+                            ActivateViewCell(r, c);
+
+                for (int c = _vpFirstCol; c <= _vpLastCol; c++)
+                    if (c < newFirstCol || c > newLastCol) RecycleViewColHeader(c);
+                for (int c = newFirstCol; c <= newLastCol; c++)
+                    if (!_activeColHeaders.ContainsKey(c)) ActivateViewColHeader(c);
+
+                for (int r = _vpFirstRow; r <= _vpLastRow; r++)
+                    if (r < newFirstRow || r > newLastRow) RecycleViewRowHeader(r);
+                for (int r = newFirstRow; r <= newLastRow; r++)
+                    if (!_activeRowHeaders.ContainsKey(r)) ActivateViewRowHeader(r);
+
+                _vpFirstRow = newFirstRow; _vpLastRow = newLastRow;
+                _vpFirstCol = newFirstCol; _vpLastCol = newLastCol;
+            });
+        }
+        /// <summary>
+        /// Syncs the data scroll view horizontally when the column header scroll view is scrolled directly (e.g. touch on iOS)
+        /// </summary>
+        private void OnColHeaderScrolled(object? sender, ScrolledEventArgs e)
+        {
+            if (_isSyncingScroll) return;
+            _isSyncingScroll = true;
+            _ = _dataScrollView.ScrollToAsync(e.ScrollX, _dataScrollView.ScrollY, false);
+            _isSyncingScroll = false;
+        }
+        /// <summary>
+        /// Syncs the data scroll view vertically when the row header scroll view is scrolled directly (e.g. touch on iOS)
+        /// </summary>
+        private void OnRowHeaderScrolled(object? sender, ScrolledEventArgs e)
+        {
+            if (_isSyncingScroll) return;
+            _isSyncingScroll = true;
+            _ = _dataScrollView.ScrollToAsync(_dataScrollView.ScrollX, e.ScrollY, false);
+            _isSyncingScroll = false;
+        }
+        /// <summary>
+        /// Adds a view to the data grid (used by SelectionFrame / FrameBorder)
+        /// </summary>
+        internal void AddToDataGrid(IView view) { _dataGrid.Children.Add(view); }
+        /// <summary>
+        /// Removes a view from the data grid (used by SelectionFrame / FrameBorder)
+        /// </summary>
+        internal void RemoveFromDataGrid(IView view) { _dataGrid.Children.Remove(view); }
         /// <summary>
         /// Placeholder for platform-specific code
         /// </summary>
         partial void InitializePlatformSpecificCode();
-        /// <summary>
-        /// Adds support for the pinch gesture
-        /// </summary>
-        private void AddPinchGesture()
-        {
-            var pinchGesture = new PinchGestureRecognizer();
-            pinchGesture.PinchUpdated += OnPinchUpdated;
-            GestureRecognizers.Add(pinchGesture);
-        }
-        // Pinch status
-        private double currentScale = 1;
-        private double startScale = 1;
-        private bool isPinching = false;
-        /// <summary>
-        /// Handles the pinch updated event
-        /// </summary>
-        /// <param name="sender">Object sender</param>
-        /// <param name="e">Pinch gesture updated event arguments</param>
-        private void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
-        {
-            if (sender is null) return;
-
-            if (e.Status == GestureStatus.Started)
-            {
-                startScale = currentScale;
-                isPinching = true;
-                ContainerScrollView.IsEnabled = false;
-            }
-            else if (e.Status == GestureStatus.Running && isPinching)
-            {
-                if (Math.Abs(e.Scale - 1) > 0.01)
-                {
-                    currentScale = Math.Clamp(startScale * e.Scale, 0.5, 3.0);
-                    ContainerContentView.Scale = currentScale;
-                }
-            }
-            else if (e.Status == GestureStatus.Completed)
-            {
-                isPinching = false;
-                ContainerScrollView.IsEnabled = true;
-                startScale = currentScale;
-            }
-        }
         /// <summary>
         /// Creates a new row definition
         /// </summary>
@@ -365,9 +492,28 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void ClearContent()
         {
-            RowDefinitions.Clear();
-            ColumnDefinitions.Clear();
-            Children.Clear();
+            if (_cornerFrame != null)
+            {
+                _shellGrid.Children.Remove(_cornerFrame);
+                _cornerFrame = null;
+            }
+            _dataGrid.RowDefinitions.Clear();
+            _dataGrid.ColumnDefinitions.Clear();
+            _dataGrid.Children.Clear();
+            _colHeaderGrid.ColumnDefinitions.Clear();
+            _colHeaderGrid.Children.Clear();
+            _rowHeaderGrid.RowDefinitions.Clear();
+            _rowHeaderGrid.Children.Clear();
+
+            _activeCells.Clear();
+            _activeColHeaders.Clear();
+            _activeRowHeaders.Clear();
+            _cellPool.Clear();
+            _colHeaderPool.Clear();
+            _rowHeaderPool.Clear();
+            _highlightedCells.Clear();
+            _vpFirstRow = 0; _vpLastRow = -1;
+            _vpFirstCol = 0; _vpLastCol = -1;
         }
         /// <summary>
         /// Adds the grid's content 
@@ -376,28 +522,164 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             AddRowDefinitions();
             AddColumnDefinitions();
-            AddHeaderRow();
-            AddRowsContent();
+            // Pin _dataGrid to its exact content size so that adding/removing virtual cells
+            // does not trigger layout invalidation up to the Shell navigation bar.
+            _dataGrid.WidthRequest  = ColumnCount * CellWidth;
+            _dataGrid.HeightRequest = RowCount    * CellHeight;
+            // Anchor to top-left so that when the grid is smaller than the ScrollView viewport
+            // it does not get centred by WinUI/MAUI layout.
+            _dataGrid.HorizontalOptions = LayoutOptions.Start;
+            _dataGrid.VerticalOptions   = LayoutOptions.Start;
+            AddCornerHeader();
+            PopulateInitialViewport();
         }
         /// <summary>
-        /// Adds the grid's row definitions 
+        /// Populates the initially-visible slice of the viewport (cells + headers).
+        /// Falls back to a safe default when layout has not yet run (Width/Height == 0).
+        /// </summary>
+        private void PopulateInitialViewport()
+        {
+            double viewW = _dataScrollView.Width  > 0 ? _dataScrollView.Width  : CellWidth  * 10;
+            double viewH = _dataScrollView.Height > 0 ? _dataScrollView.Height : CellHeight * 10;
+
+            _vpFirstRow = 0;
+            _vpFirstCol = 0;
+            if (VirtualBuffer == 0)
+            {
+                _vpLastRow = RowCount    - 1;
+                _vpLastCol = ColumnCount - 1;
+            }
+            else
+            {
+                _vpLastRow = Math.Min((int)Math.Ceiling(viewH / CellHeight) + VirtualBuffer, RowCount    - 1);
+                _vpLastCol = Math.Min((int)Math.Ceiling(viewW / CellWidth)  + VirtualBuffer, ColumnCount - 1);
+            }
+
+            BatchGrids(() =>
+            {
+                for (int r = _vpFirstRow; r <= _vpLastRow; r++)
+                    for (int c = _vpFirstCol; c <= _vpLastCol; c++)
+                        ActivateViewCell(r, c);
+
+                for (int c = _vpFirstCol; c <= _vpLastCol; c++) ActivateViewColHeader(c);
+                for (int r = _vpFirstRow; r <= _vpLastRow; r++) ActivateViewRowHeader(r);
+            });
+        }
+        /// <summary>
+        /// Updates the virtual viewport after rows or columns are inserted or removed.
+        /// For non-virtual grids (VirtualBuffer == 0): full teardown and repopulate.
+        /// For virtual grids: skips DOM changes — ResetChildPositions has already repositioned
+        /// all frames; only the dict keys are stale. RebuildActiveDicts rescans children to
+        /// re-key the dicts, then UpdateVirtualViewport trims excess and fills gaps.
+        /// </summary>
+        private void ResetVirtualViewport()
+        {
+            _dataGrid.WidthRequest  = ColumnCount * CellWidth;
+            _dataGrid.HeightRequest = RowCount    * CellHeight;
+
+            if (VirtualBuffer == 0)
+            {
+                for (int i = _dataGrid.Children.Count - 1; i >= 0; i--)
+                    if (IsGridCellOrHeader(_dataGrid.Children[i]))
+                        _dataGrid.Children.RemoveAt(i);
+                _rowHeaderGrid.Children.Clear();
+                _colHeaderGrid.Children.Clear();
+                _activeCells.Clear(); _activeRowHeaders.Clear(); _activeColHeaders.Clear();
+                _cellPool.Clear(); _rowHeaderPool.Clear(); _colHeaderPool.Clear();
+                _vpFirstRow = 0; _vpLastRow = -1;
+                _vpFirstCol = 0; _vpLastCol = -1;
+                PopulateInitialViewport();
+            }
+            else
+            {
+                RebuildActiveDicts();
+                UpdateVirtualViewport(_dataScrollView.ScrollX, _dataScrollView.ScrollY);
+            }
+        }
+        /// <summary>
+        /// Rescans _dataGrid / _rowHeaderGrid / _colHeaderGrid children to rebuild the
+        /// _activeCells, _activeRowHeaders, _activeColHeaders dicts and recalculate VP bounds.
+        /// No DOM changes — only dict re-keying. Pool frames (IsVisible=false) are reset to
+        /// row/col 0 and re-enqueued so they are reusable after ResetChildPositions may have
+        /// shifted them.
+        /// </summary>
+        private void RebuildActiveDicts()
+        {
+            activeCell = null;
+            anchorCell = null;
+
+            _activeCells.Clear();
+            _cellPool.Clear();
+            foreach (var child in _dataGrid.Children)
+            {
+                if (child is CellFrame frame)
+                {
+                    if (frame.IsVisible)
+                    {
+                        _activeCells[(frame.Row, frame.Column)] = frame;
+                        if (activeCellPoint.IsPosition(frame.Row + 1, frame.Column + 1)) activeCell = frame;
+                        if (anchorCellPoint.Row > 0 && anchorCellPoint.IsPosition(frame.Row + 1, frame.Column + 1)) anchorCell = frame;
+                    }
+                    else
+                    {
+                        frame.Row = 0;
+                        frame.Column = 0;
+                        Microsoft.Maui.Controls.Grid.SetRow(frame, 0);
+                        Microsoft.Maui.Controls.Grid.SetColumn(frame, 0);
+                        _cellPool.Enqueue(frame);
+                    }
+                }
+            }
+
+            _activeColHeaders.Clear();
+            foreach (var child in _colHeaderGrid.Children)
+                if (child is HeaderFrame hf) _activeColHeaders[hf.Index] = hf;
+
+            _activeRowHeaders.Clear();
+            foreach (var child in _rowHeaderGrid.Children)
+                if (child is HeaderFrame hf) _activeRowHeaders[hf.Index] = hf;
+
+            if (_activeCells.Count > 0)
+            {
+                int minRow = int.MaxValue, maxRow = int.MinValue;
+                int minCol = int.MaxValue, maxCol = int.MinValue;
+                foreach (var key in _activeCells.Keys)
+                {
+                    if (key.row < minRow) minRow = key.row;
+                    if (key.row > maxRow) maxRow = key.row;
+                    if (key.col < minCol) minCol = key.col;
+                    if (key.col > maxCol) maxCol = key.col;
+                }
+                _vpFirstRow = minRow; _vpLastRow = maxRow;
+                _vpFirstCol = minCol; _vpLastCol = maxCol;
+            }
+            else
+            {
+                _vpFirstRow = 0; _vpLastRow = -1;
+                _vpFirstCol = 0; _vpLastCol = -1;
+            }
+        }
+        /// <summary>
+        /// Adds the grid's row definitions
         /// </summary>
         private void AddRowDefinitions()
         {
-            RowDefinitions.Add(NewRowDefinition(true));
-
             for (int row = 0; row < RowCount; row++)
-                RowDefinitions.Add(NewRowDefinition(false));
+            {
+                _dataGrid.RowDefinitions.Add(NewRowDefinition(false));
+                _rowHeaderGrid.RowDefinitions.Add(NewRowDefinition(false));
+            }
         }
         /// <summary>
-        /// Adds the grid's column definitions 
+        /// Adds the grid's column definitions
         /// </summary>
         private void AddColumnDefinitions()
         {
-            ColumnDefinitions.Add(NewColumnDefinition(true));
-
             for (int column = 0; column < ColumnCount; column++)
-                ColumnDefinitions.Add(NewColumnDefinition(false));
+            {
+                _dataGrid.ColumnDefinitions.Add(NewColumnDefinition(false));
+                _colHeaderGrid.ColumnDefinitions.Add(NewColumnDefinition(false));
+            }
         }
         /// <summary>
         /// Adds the grid's rows content (row header + cells)
@@ -468,6 +750,174 @@ namespace Maze.Maui.Controls.InteractiveGrid
         virtual public ContentView CreateCellContent(CellFrame frame, int row, int column, bool gridInitializing)
         {
             return new DefaultCellContent();
+        }
+        /// <summary>
+        /// Called when a cell enters the visible viewport (during init and during virtual scrolling).
+        /// Override to populate cell content from a logical model rather than keeping all frames live.
+        /// Default implementation is empty — existing behaviour is preserved via CreateCellContent.
+        /// Row and column are 0-based.
+        /// </summary>
+        protected virtual void UpdateCellContent(CellFrame frame, int row, int column) { }
+        /// <summary>Called before rows are inserted into the grid. RowCount still reflects the pre-insert value.</summary>
+        protected virtual void OnBeforeRowsInserted(int startDisplayRow, int count) { }
+        /// <summary>Called before columns are inserted into the grid. ColumnCount still reflects the pre-insert value.</summary>
+        protected virtual void OnBeforeColumnsInserted(int startDisplayColumn, int count) { }
+        /// <summary>Called after rows are removed from the grid. RowCount already reflects the post-remove value.</summary>
+        protected virtual void OnAfterRowsRemoved(int startDisplayRow, int count) { }
+        /// <summary>Called after columns are removed from the grid. ColumnCount already reflects the post-remove value.</summary>
+        protected virtual void OnAfterColumnsRemoved(int startDisplayColumn, int count) { }
+        /// <summary>
+        /// Returns a snapshot of the currently active (visible) cells keyed by 0-based (row, col).
+        /// Used by subclasses to refresh only visible cells (e.g. when clearing a solution overlay).
+        /// </summary>
+        protected IEnumerable<KeyValuePair<(int row, int col), CellFrame>> GetActiveCells()
+            => _activeCells;
+        /// <summary>
+        /// Returns the background colour a cell at the given 1-based display position should have
+        /// given current active/anchor/highlight state
+        /// </summary>
+        private Color GetCellDisplayColor(int displayRow, int displayCol)
+        {
+            bool hasAnchor = anchorCellPoint.Row > 0;
+            if (hasAnchor && anchorCellPoint.IsPosition(displayRow, displayCol))
+                return AnchorCellBackgroundColor;
+            if (!hasAnchor && activeCellPoint.IsPosition(displayRow, displayCol))
+                return ActiveCellBackgroundColor;
+            if (_highlightedCells.Contains((displayRow - 1, displayCol - 1)))
+                return HighlightCellBackgroundColor;
+            return CellBackgroundColor;
+        }
+        /// <summary>
+        /// Creates a new cell frame shell (no content) for use in the virtual pool
+        /// </summary>
+        private CellFrame NewCellFrameShell(int row, int column)
+        {
+            CellFrame frame = new CellFrame(row, column)
+            {
+                BackgroundColor = this.CellBackgroundColor,
+                Padding = CellPadding,
+                Margin = CellMargin == 0.0 ? -0.5 : CellMargin,
+                Stroke = new SolidColorBrush(CellBorderColor),
+                StrokeThickness = 1,
+                StrokeShape = new RoundRectangle { CornerRadius = 0 },
+            };
+            AddSingleTapGesture(frame);
+            AddDoubleTapGesture(frame);
+            return frame;
+        }
+        /// <summary>
+        /// Takes a cell from the pool (or creates a new one), positions it, populates content,
+        /// and adds it to the data grid. row0/col0 are 0-based.
+        /// </summary>
+        private CellFrame ActivateViewCell(int row0, int col0)
+        {
+            CellFrame frame;
+            if (_cellPool.Count > 0)
+            {
+                // Frame stays in _dataGrid (handler connected); reposition and update while invisible,
+                // then make visible so it appears fully-rendered in one step.
+                frame = _cellPool.Dequeue();
+                frame.Row = row0;
+                frame.Column = col0;
+                Microsoft.Maui.Controls.Grid.SetRow(frame, row0);
+                Microsoft.Maui.Controls.Grid.SetColumn(frame, col0);
+                frame.BackgroundColor = GetCellDisplayColor(row0 + 1, col0 + 1);
+                UpdateCellContent(frame, row0, col0);
+                frame.IsVisible = true;
+            }
+            else
+            {
+                frame = NewCellFrameShell(row0, col0);
+                frame.IsVisible = false;
+                frame.BackgroundColor = GetCellDisplayColor(row0 + 1, col0 + 1);
+                _dataGrid.Add(frame, col0, row0);
+                UpdateCellContent(frame, row0, col0);
+                frame.IsVisible = true;
+            }
+            _activeCells[(row0, col0)] = frame;
+            if (activeCellPoint.IsPosition(row0 + 1, col0 + 1)) activeCell = frame;
+            if (anchorCellPoint.Row > 0 && anchorCellPoint.IsPosition(row0 + 1, col0 + 1)) anchorCell = frame;
+            return frame;
+        }
+        /// <summary>
+        /// Returns a cell at (row0, col0) (0-based) to the pool.
+        /// The frame remains in _dataGrid (IsVisible = false) so its WinUI handler stays connected
+        /// and the native Image control retains its loaded texture for instant re-use.
+        /// </summary>
+        private void RecycleViewCell(int row0, int col0)
+        {
+            if (!_activeCells.TryGetValue((row0, col0), out var frame)) return;
+            frame.IsVisible = false;
+            Microsoft.Maui.Controls.Grid.SetRow(frame, 0);
+            Microsoft.Maui.Controls.Grid.SetColumn(frame, 0);
+            _activeCells.Remove((row0, col0));
+            _cellPool.Enqueue(frame);
+            if (activeCell == frame) activeCell = null;
+            if (anchorCell == frame) anchorCell = null;
+        }
+        /// <summary>
+        /// Takes a column header from the pool (or creates a new one) and positions it at col0 (0-based)
+        /// </summary>
+        private void ActivateViewColHeader(int col0)
+        {
+            HeaderFrame frame;
+            if (_colHeaderPool.Count > 0)
+            {
+                frame = _colHeaderPool.Dequeue();
+                frame.Index = col0;
+                frame.Content = GetHeaderCellContent(HeaderType.Column, col0);
+            }
+            else
+            {
+                frame = NewHeaderFrame(HeaderType.Column, col0);
+                var tap = new TapGestureRecognizer();
+                tap.Tapped += (s, e) => OnColumnHeaderTapped(frame);
+                frame.GestureRecognizers.Add(tap);
+            }
+            _colHeaderGrid.Add(frame, col0, 0);
+            _activeColHeaders[col0] = frame;
+        }
+        /// <summary>
+        /// Returns a column header at col0 (0-based) to the pool
+        /// </summary>
+        private void RecycleViewColHeader(int col0)
+        {
+            if (!_activeColHeaders.TryGetValue(col0, out var frame)) return;
+            _colHeaderGrid.Children.Remove(frame);
+            _activeColHeaders.Remove(col0);
+            _colHeaderPool.Enqueue(frame);
+        }
+        /// <summary>
+        /// Takes a row header from the pool (or creates a new one) and positions it at row0 (0-based)
+        /// </summary>
+        private void ActivateViewRowHeader(int row0)
+        {
+            HeaderFrame frame;
+            if (_rowHeaderPool.Count > 0)
+            {
+                frame = _rowHeaderPool.Dequeue();
+                frame.Index = row0;
+                frame.Content = GetHeaderCellContent(HeaderType.Row, row0);
+            }
+            else
+            {
+                frame = NewHeaderFrame(HeaderType.Row, row0);
+                var tap = new TapGestureRecognizer();
+                tap.Tapped += (s, e) => OnRowHeaderTapped(frame);
+                frame.GestureRecognizers.Add(tap);
+            }
+            _rowHeaderGrid.Add(frame, 0, row0);
+            _activeRowHeaders[row0] = frame;
+        }
+        /// <summary>
+        /// Returns a row header at row0 (0-based) to the pool
+        /// </summary>
+        private void RecycleViewRowHeader(int row0)
+        {
+            if (!_activeRowHeaders.TryGetValue(row0, out var frame)) return;
+            _rowHeaderGrid.Children.Remove(frame);
+            _activeRowHeaders.Remove(row0);
+            _rowHeaderPool.Enqueue(frame);
         }
         /// <summary>
         /// Sets cell content at a given location, where (0,0) corresponds to (1,1) in display terms
@@ -569,7 +1019,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             CellFrame cellFrame = NewCellFrame(row, column, gridInitializing);
 
-            this.Add(cellFrame, cellFrame.DisplayColumn, cellFrame.DisplayRow);
+            _dataGrid.Add(cellFrame, cellFrame.Column, cellFrame.Row);
 
             return cellFrame;
         }
@@ -578,19 +1028,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void AddCornerHeader()
         {
-            HeaderFrame frame = NewHeaderFrame(HeaderType.Corner, 0);
+            _cornerFrame = NewHeaderFrame(HeaderType.Corner, 0);
             var tapGesture = new TapGestureRecognizer();
             tapGesture.Tapped += (s, e) => OnCornerHeaderTapped();
-            frame.GestureRecognizers.Add(tapGesture);
-
-            /*
-            Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
-            {
-                OnCornerHeaderLongPressed(frame);
-            }));
-            */
-
-            this.Add(frame, 0, 0);
+            _cornerFrame.GestureRecognizers.Add(tapGesture);
+            _shellGrid.Add(_cornerFrame, 0, 0);
         }
         /// <summary>
         /// Adds a column header to the grid
@@ -602,15 +1044,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             var tapGesture = new TapGestureRecognizer();
             tapGesture.Tapped += (s, e) => OnColumnHeaderTapped(frame);
             frame.GestureRecognizers.Add(tapGesture);
-
-            /*
-            Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
-            {
-                OnColumnHeaderLongPressed(frame, currentCol);
-            }));
-            */
-
-            this.Add(frame, column + 1, 0);
+            _colHeaderGrid.Add(frame, column, 0);
         }
         /// <summary>
         /// Adds a row header to the grid
@@ -622,15 +1056,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             var tapGesture = new TapGestureRecognizer();
             tapGesture.Tapped += (s, e) => OnRowHeaderTapped(frame);
             frame.GestureRecognizers.Add(tapGesture);
-
-            /*
-            Gesture.SetLongPressPointCommand(frame, new Command<PointEventArgs>(args =>
-            {
-                OnRowHeaderLongPressed(frame, currentRow);
-            }));
-            */
-
-            this.Add(frame, 0, frame.DisplayIndex);
+            _rowHeaderGrid.Add(frame, 0, row);
         }
         /// <summary>
         /// Creates new header frame
@@ -886,7 +1312,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void SelectRow(int row, bool maintainSelection)
         {
             int displayRow = row;
-            if (!maintainSelection || anchorCell is null)
+            if (!maintainSelection || anchorCellPoint.Row < 0)
             {
                 bool hadAnchorCell = anchorCell is not null;
                 CellPoint activePoint = activeCellPoint.Clone();
@@ -923,7 +1349,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void SelectColumn(int column, bool maintainSelection)
         {
             int displayCol = column;
-            if (!maintainSelection || anchorCell is null)
+            if (!maintainSelection || anchorCellPoint.Row < 0)
             {
                 bool hadAnchorCell = anchorCell is not null;
                 CellPoint activePoint = activeCellPoint.Clone();
@@ -1158,8 +1584,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             int referenceRow = !maintainSelection && (anchorCell is not null) ? anchorCellPoint.Row : activeCellPoint.Row;
             int referenceCol = !maintainSelection && (anchorCell is not null) ? anchorCellPoint.Column : activeCellPoint.Column;
-            int newRow = Math.Clamp(referenceRow + deltaY, 1, this.RowDefinitions.Count);
-            int newCol = Math.Clamp(referenceCol + deltaX, 1, this.ColumnDefinitions.Count);
+            int newRow = Math.Clamp(referenceRow + deltaY, 1, _dataGrid.RowDefinitions.Count);
+            int newCol = Math.Clamp(referenceCol + deltaX, 1, _dataGrid.ColumnDefinitions.Count);
 
             if (maintainSelection && AllRowsSelected && deltaX != 0 && deltaY == 0)
                 SelectColumn(newCol, true);
@@ -1244,16 +1670,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
                     UpdateSelectionFrame(true);
                 return;
             }
-            // Find the new active cell
-            var newActiveCell = this.Children
-                .OfType<CellFrame>()
-                .FirstOrDefault(cell => Microsoft.Maui.Controls.Grid.GetRow(cell) == newRow && Microsoft.Maui.Controls.Grid.GetColumn(cell) == newColumn);
-
-            if (newActiveCell is not null && newActiveCell is CellFrame)
-            {
-                // Scroll the new active cell into view and/or update selection state as needed
-                UpdateSelection(newActiveCell as CellFrame, newRow, newColumn, maintainSelection, scrollActiveCellIntoView);
-            }
+            // Find the new active cell — may be null if outside the current virtual viewport
+            // (scrollActiveCellIntoView=true will bring it into view and UpdateSelection handles null activeCell)
+            var newActiveCell = GetCell(newRow, newColumn) as CellFrame;
+            UpdateSelection(newActiveCell, newRow, newColumn, maintainSelection, scrollActiveCellIntoView);
         }
         /// <summary>
         /// Updates the selection
@@ -1263,7 +1683,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="column">New column</param>
         /// <param name="maintainSelection">Maintain selection?</param>
         /// <param name="scrollActiveCellIntoView">Scroll the active cell into view?</param>
-        private void UpdateSelection(CellFrame newActiveCell, int row, int column, bool maintainSelection, bool scrollActiveCellIntoView)
+        private void UpdateSelection(CellFrame? newActiveCell, int row, int column, bool maintainSelection, bool scrollActiveCellIntoView)
         {
             // Reset the previously active cell if needed
             if (activeCell is not null)
@@ -1273,10 +1693,16 @@ namespace Maze.Maui.Controls.InteractiveGrid
             {
                 if (anchorCell is null)
                 {
-                    if (activeCell is null)
-                        SetAnchorCell(row, column);
-                    else
-                        SetAnchorCell(activeCellPoint.Row, activeCellPoint.Column);
+                    if (anchorCellPoint.Row < 0)
+                    {
+                        // No anchor at all — establish one at the current active position (or destination if none).
+                        // Use activeCellPoint (logical position) rather than activeCell (frame, may be null if off-screen).
+                        if (activeCellPoint.Row > 0)
+                            SetAnchorCell(activeCellPoint.Row, activeCellPoint.Column);
+                        else
+                            SetAnchorCell(row, column);
+                    }
+                    // else: anchor frame was recycled out of viewport — anchorCellPoint is still valid, leave it alone.
                 }
             }
             else
@@ -1285,16 +1711,18 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 ClearAnchorCell(true);
             }
 
-            // Set the new active cell
+            // Set the new active cell (may be null when target is outside the current viewport)
             activeCell = newActiveCell;
             if (anchorCell is not null)
                 anchorCell.BackgroundColor = this.AnchorCellBackgroundColor;
-            else
+            else if (activeCell is not null)
                 activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
 
             activeCellPoint.Set(row, column);
 
-            if (anchorCell is not null)
+            // Use anchorCellPoint (logical) rather than anchorCell (frame) so that selections extending
+            // beyond the virtual buffer still update correctly when the anchor frame has been recycled.
+            if (anchorCell is not null || anchorCellPoint.Row > 0)
                 UpdateSelectedCells(anchorCellPoint, activeCellPoint, true, true);
             else
             {
@@ -1303,54 +1731,63 @@ namespace Maze.Maui.Controls.InteractiveGrid
             }
 
             if (scrollActiveCellIntoView)
-                ScrollCellIntoView(newActiveCell);
+                ScrollCellIntoView(row, column);
         }
         /// <summary>
-        /// Scrolls a cell frame into view as needed
+        /// Scrolls a cell into view as needed
         /// </summary>
-        /// <param name="cell">Cell frame to scroll into view</param>
-        private async void ScrollCellIntoView(CellFrame cell)
+        /// <param name="displayRow">1-based display row of the cell to scroll into view</param>
+        /// <param name="displayCol">1-based display column of the cell to scroll into view</param>
+        private async void ScrollCellIntoView(int displayRow, int displayCol)
         {
-            // Handle scroll
-            double cellWidth = cell.Bounds.Width;
-            double cellLeftX = cell.Bounds.X;
-            double cellRightX = cellLeftX + cellWidth - 1;
-            double cellHeight = cell.Bounds.Height;
-            double cellTopY = cell.Bounds.Y;
-            double cellBottomY = cellTopY + cellHeight - 1;
-            double currentScrollX = ContainerScrollView.ScrollX;
-            double scrollViewWidth = ContainerScrollView.Width;
-            double scrollMaxVisibleX = currentScrollX + scrollViewWidth;
-            double scrollViewHeight = ContainerScrollView.Height;
-            double currentScrollY = ContainerScrollView.ScrollY;
-            double scrolMaxlVisibleY = currentScrollY + scrollViewHeight;
+            double cellLeftX   = (displayCol - 1) * CellWidth;
+            double cellTopY    = (displayRow - 1) * CellHeight;
+            double cellRightX  = cellLeftX  + CellWidth  - 1;
+            double cellBottomY = cellTopY   + CellHeight - 1;
+
+            double currentScrollX   = _dataScrollView.ScrollX;
+            double currentScrollY   = _dataScrollView.ScrollY;
+            double scrollViewWidth  = _dataScrollView.Width;
+            double scrollViewHeight = _dataScrollView.Height;
 
             // If the cell is already fully visible, there is no need to scroll
-            if (cellLeftX >= currentScrollX && cellRightX <= scrollMaxVisibleX &&
-                cellBottomY >= currentScrollY && cellBottomY <= scrolMaxlVisibleY)
-            {
+            if (cellLeftX >= currentScrollX && cellRightX  <= currentScrollX + scrollViewWidth &&
+                cellTopY  >= currentScrollY && cellBottomY <= currentScrollY + scrollViewHeight)
                 return;
-            }
 
             // Calculate scroll adjustments (if any)
             double targetX = currentScrollX;
             double targetY = currentScrollY;
 
-            if (cellLeftX < currentScrollX)
-                targetX = cellLeftX;
-            else if (cellRightX > scrollMaxVisibleX)
-                targetX = cellRightX - scrollViewWidth;
-            else
-                targetX = currentScrollX;
+            if      (cellLeftX  < currentScrollX)                         targetX = cellLeftX;
+            else if (cellRightX > currentScrollX + scrollViewWidth)       targetX = cellRightX  - scrollViewWidth;
 
-            if (cellTopY < currentScrollY)
-                targetY = cellTopY;
-            else if (cellBottomY > (currentScrollY + scrollViewHeight))
-                targetY = cellBottomY - scrollViewHeight;
-            else
-                targetY = currentScrollY;
+            if      (cellTopY    < currentScrollY)                        targetY = cellTopY;
+            else if (cellBottomY > currentScrollY + scrollViewHeight)     targetY = cellBottomY - scrollViewHeight;
 
-            await ContainerScrollView.ScrollToAsync(targetX, targetY, true);
+            // Use instant (non-animated) scroll for large jumps (e.g. Ctrl+End/Home).
+            // This prevents WinUI scroll anchoring from shifting the Shell page: when
+            // UpdateVirtualViewport adds cells at the target position while the scroll view
+            // is still at the source, the layout engine compensates by adjusting the outer
+            // Shell ScrollViewer offset. By scrolling first and populating after, the
+            // _dataGrid content only changes once the scroll view is already at its destination.
+            bool animated = Math.Abs(targetX - currentScrollX) < scrollViewWidth &&
+                            Math.Abs(targetY - currentScrollY) < scrollViewHeight;
+
+            if (!animated)
+                CursorPointer.SetCursor(this, CursorIcon.Wait);
+            try
+            {
+                await _dataScrollView.ScrollToAsync(targetX, targetY, animated);
+
+                // Populate the destination viewport after the scroll completes
+                UpdateVirtualViewport(targetX, targetY);
+            }
+            finally
+            {
+                if (!animated)
+                    CursorPointer.SetCursor(this, CursorIcon.Arrow);
+            }
         }
 
 #if !WINDOWS
@@ -1535,6 +1972,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 {
                     if (row != anchorCellPoint.Row || column != anchorCellPoint.Column)
                     {
+                        if (clear)
+                            _highlightedCells.Remove((row - 1, column - 1));
+                        else
+                            _highlightedCells.Add((row - 1, column - 1));
                         CellFrame? cellFrame = GetCell(row, column) as CellFrame;
                         if (cellFrame is not null)
                             cellFrame.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightCellBackgroundColor;
@@ -1668,8 +2109,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Display width</returns>
         public double GetColumnWidth(int column)
         {
-            if (column < 0 || column > ColumnCount) return 0.0;
-            return ColumnDefinitions[column].Width.Value;
+            if (column <= 0 || column > ColumnCount) return 0.0;
+            return _dataGrid.ColumnDefinitions[column - 1].Width.Value;
         }
         /// <summary>
         /// Gets the total display height associated with a given cell range
@@ -1691,8 +2132,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Display height</returns>
         public double GetRowHeight(int row)
         {
-            if (row < 0 || row > RowCount) return 0.0;
-            return RowDefinitions[row].Height.Value;
+            if (row <= 0 || row > RowCount) return 0.0;
+            return _dataGrid.RowDefinitions[row - 1].Height.Value;
         }
         /// <summary>
         /// Locates the cell row number offset from a starting row
@@ -1820,17 +2261,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Cell border</returns>
         protected Border? GetCell(int row, int column)
         {
-            foreach (var child in this.Children)
-            {
-                if (IsGridCellOrHeader(child) &&
-                    this.GetRow(child) == row &&
-                    this.GetColumn(child) == column)
-                {
-                    return child as Border;
-                }
-            }
-
-            return null;
+            // row and column are 1-based display coords (0,0 = corner, 0,c = col header, r,0 = row header, r,c = data cell)
+            // Returns null when the cell is outside the current virtual viewport.
+            if (row == 0 && column == 0) return _cornerFrame;
+            if (row == 0) return _activeColHeaders.TryGetValue(column - 1, out var ch) ? ch : null;
+            if (column == 0) return _activeRowHeaders.TryGetValue(row - 1, out var rh) ? rh : null;
+            return _activeCells.TryGetValue((row - 1, column - 1), out var cell) ? cell : null;
         }
         /// <summary>
         /// Deletes the selected rows, providing all columns are selected and there is more than one row
@@ -2000,6 +2436,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             if (removed)
             {
+                ResetVirtualViewport();
+
                 switch (target)
                 {
                     case Target.Row:
@@ -2042,7 +2480,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
             }
 
             if (removed)
+            {
                 ResetChildPositions(target, startPosition, -(endPosition - startPosition + 1));
+                int count = endPosition - startPosition + 1;
+                if (target == Target.Row) OnAfterRowsRemoved(startPosition, count);
+                else                      OnAfterColumnsRemoved(startPosition, count);
+            }
 
             return removed;
         }
@@ -2075,37 +2518,34 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="position">Position index</param>
         private void RemoveChildElementsAt(Target target, int position)
         {
-            for (int i = Children.Count - 1; i >= 0; i--)
+            // position is 1-based display; sub-grids use 0-based positions
+            int gridPosition = position - 1;
+            switch (target)
             {
-                var child = Children[i];
-                if (IsGridCellOrHeader(child))
-                {
-                    if (IsValidRemoveTarget(target, child, position))
-                        Children.RemoveAt(i);
-                }
+                case Target.Row:
+                    RemoveChildrenFromGrid(_dataGrid, Target.Row, gridPosition);
+                    RemoveChildrenFromGrid(_rowHeaderGrid, Target.Row, gridPosition);
+                    break;
+                case Target.Column:
+                    RemoveChildrenFromGrid(_dataGrid, Target.Column, gridPosition);
+                    RemoveChildrenFromGrid(_colHeaderGrid, Target.Column, gridPosition);
+                    break;
             }
         }
-        /// <summary>
-        /// Determines whether a given child view can be removed
-        /// </summary>
-        /// <param name="target">Target type</param>
-        /// <param name="child">Child view</param>
-        /// <param name="position">Position index</param>
-        /// <returns>Boolean</returns>
-        private bool IsValidRemoveTarget(Target target, IView child, int position)
+        private void RemoveChildrenFromGrid(Microsoft.Maui.Controls.Grid grid, Target target, int gridPosition)
         {
-            if (IsGridCellOrHeader(child))
+            for (int i = grid.Children.Count - 1; i >= 0; i--)
             {
-                switch (target)
+                var child = grid.Children[i];
+                if (IsGridCellOrHeader(child))
                 {
-                    case Target.Row:
-                        return GetRow(child) == position;
-                    case Target.Column:
-                        return GetColumn(child) == position;
+                    bool isTarget = target == Target.Row
+                        ? Microsoft.Maui.Controls.Grid.GetRow((BindableObject)child) == gridPosition
+                        : Microsoft.Maui.Controls.Grid.GetColumn((BindableObject)child) == gridPosition;
+                    if (isTarget)
+                        grid.Children.RemoveAt(i);
                 }
             }
-
-            return false;
         }
         /// <summary>
         /// Resets the positions associated with the grid children
@@ -2117,10 +2557,26 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             if (positionChange == 0) return;
 
-            foreach (var child in Children)
+            switch (target)
+            {
+                case Target.Row:
+                    ResetSubGridChildPositions(target, _dataGrid, startPosition, positionChange);
+                    ResetSubGridChildPositions(target, _rowHeaderGrid, startPosition, positionChange);
+                    break;
+                case Target.Column:
+                    ResetSubGridChildPositions(target, _dataGrid, startPosition, positionChange);
+                    ResetSubGridChildPositions(target, _colHeaderGrid, startPosition, positionChange);
+                    break;
+            }
+        }
+        private void ResetSubGridChildPositions(Target target, Microsoft.Maui.Controls.Grid grid, int startPosition, int positionChange)
+        {
+            // startPosition is 1-based display; sub-grid positions are 0-based.
+            // Children to shift: those with 0-based position >= startPosition (equivalent to display pos > startPosition).
+            foreach (var child in grid.Children)
             {
                 int currentPosition = GetChildPosition(target, child);
-                if (currentPosition > startPosition)
+                if (currentPosition >= startPosition)
                     SetChildPosition(target, child, currentPosition + positionChange);
             }
         }
@@ -2144,6 +2600,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             inserted = InsertChildren(target, startPosition, endPosition);
 
+            if (inserted)
+                ResetVirtualViewport();
+
             ReinitializeSelectionFrame();
 
             RestoreSelectionState(selectionState, retainAnchorCell, true);
@@ -2166,6 +2625,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
             {
                 return false;
             }
+
+            int count = endPosition - startPosition + 1;
+            if (target == Target.Row) OnBeforeRowsInserted(startPosition, count);
+            else                      OnBeforeColumnsInserted(startPosition, count);
 
             bool inserted = false;
 
@@ -2219,15 +2682,21 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="position">Position index</param>
         private void RemoveDefinitionAt(Target target, int position)
         {
+            // position is 1-based display; sub-grids use 0-based
+            int idx = position - 1;
             switch (target)
             {
                 case Target.Column:
-                    if (ColumnDefinitions.Count > position)
-                        ColumnDefinitions.RemoveAt(position);
+                    if (_dataGrid.ColumnDefinitions.Count > idx)
+                        _dataGrid.ColumnDefinitions.RemoveAt(idx);
+                    if (_colHeaderGrid.ColumnDefinitions.Count > idx)
+                        _colHeaderGrid.ColumnDefinitions.RemoveAt(idx);
                     break;
                 case Target.Row:
-                    if (RowDefinitions.Count > position)
-                        RowDefinitions.RemoveAt(position);
+                    if (_dataGrid.RowDefinitions.Count > idx)
+                        _dataGrid.RowDefinitions.RemoveAt(idx);
+                    if (_rowHeaderGrid.RowDefinitions.Count > idx)
+                        _rowHeaderGrid.RowDefinitions.RemoveAt(idx);
                     break;
             }
         }
@@ -2238,15 +2707,21 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="position">Position index</param>
         private void InsertDefinitionAt(Target target, int position)
         {
+            // position is 1-based display; sub-grids use 0-based
+            int idx = position - 1;
             switch (target)
             {
                 case Target.Column:
-                    if (position <= ColumnDefinitions.Count)
-                        ColumnDefinitions.Insert(position, NewColumnDefinition(false));
+                    if (idx <= _dataGrid.ColumnDefinitions.Count)
+                        _dataGrid.ColumnDefinitions.Insert(idx, NewColumnDefinition(false));
+                    if (idx <= _colHeaderGrid.ColumnDefinitions.Count)
+                        _colHeaderGrid.ColumnDefinitions.Insert(idx, NewColumnDefinition(false));
                     break;
                 case Target.Row:
-                    if (position <= RowDefinitions.Count)
-                        RowDefinitions.Insert(position, NewRowDefinition(false));
+                    if (idx <= _dataGrid.RowDefinitions.Count)
+                        _dataGrid.RowDefinitions.Insert(idx, NewRowDefinition(false));
+                    if (idx <= _rowHeaderGrid.RowDefinitions.Count)
+                        _rowHeaderGrid.RowDefinitions.Insert(idx, NewRowDefinition(false));
                     break;
             }
         }
@@ -2261,9 +2736,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
             switch (target)
             {
                 case Target.Row:
-                    return GetRow(child);
+                    return Microsoft.Maui.Controls.Grid.GetRow((BindableObject)child);
                 case Target.Column:
-                    return GetColumn(child);
+                    return Microsoft.Maui.Controls.Grid.GetColumn((BindableObject)child);
             }
             return -1;
         }
@@ -2286,32 +2761,30 @@ namespace Maze.Maui.Controls.InteractiveGrid
             }
         }
         /// <summary>
-        /// Sets the column associated with a given child view
+        /// Sets the column associated with a given child view (newColumn is 0-based in the sub-grid)
         /// </summary>
         /// <param name="child">Child view</param>
-        /// <param name="newColumn">New column</param>
+        /// <param name="newColumn">New column (0-based)</param>
         private void SetChildColumn(IView child, int newColumn)
         {
-            int row = GetRow(child);
-            SetColumn(child, newColumn);
-            if (row == 0)
-                UpdateHeaderIndex(HeaderType.Column, child, newColumn - 1);
+            Microsoft.Maui.Controls.Grid.SetColumn((BindableObject)child, newColumn);
+            if (child is HeaderFrame hf && hf.Type == HeaderType.Column)
+                UpdateHeaderIndex(HeaderType.Column, child, newColumn);
             else
-                UpdateCellIndex(Target.Column, child, newColumn - 1);
+                UpdateCellIndex(Target.Column, child, newColumn);
         }
         /// <summary>
-        /// Sets the row associated with a given child view
+        /// Sets the row associated with a given child view (newRow is 0-based in the sub-grid)
         /// </summary>
         /// <param name="child">Child view</param>
-        /// <param name="newRow">New row</param>
+        /// <param name="newRow">New row (0-based)</param>
         private void SetChildRow(IView child, int newRow)
         {
-            int column = GetColumn(child);
-            SetRow(child, newRow);
-            if (column == 0)
-                UpdateHeaderIndex(HeaderType.Row, child, newRow - 1);
+            Microsoft.Maui.Controls.Grid.SetRow((BindableObject)child, newRow);
+            if (child is HeaderFrame hf && hf.Type == HeaderType.Row)
+                UpdateHeaderIndex(HeaderType.Row, child, newRow);
             else
-                UpdateCellIndex(Target.Row, child, newRow - 1);
+                UpdateCellIndex(Target.Row, child, newRow);
         }
         /// <summary>
         /// Updates the cell index associated with a given child view
