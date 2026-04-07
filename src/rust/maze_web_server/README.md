@@ -44,10 +44,9 @@ This will utilise the following self-signed certificate files:
 | `cert.pem`    | Certficate file     | `PKCS#8`
 | `key.pem`     | Private key file    | `PKCS#8`
 
-These curremtly have a 365 day expiry of `18-JAN-2025`. Hence, they will need to be renewed after this time has elapsed by using tools such as `openssl` or, for production, 
-a trusted Certificate Authority (e.g. Let's Encrypt).
+These curremtly have an expiry of `07-APR-2027`. Hence, they will need to be renewed after this time has elapsed by using tools such as `openssl` or, for production, a trusted Certificate Authority (e.g. Let's Encrypt). 
 
-The following command will regenerate these files using `openssl`:
+Any new files must be generated in `PKCS#8` format. The following command using `openssl` (1.11 and later) will regenerate these files with a `365` day expiry in this format:
 
 ```
 openssl req -x509 -nodes -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365
