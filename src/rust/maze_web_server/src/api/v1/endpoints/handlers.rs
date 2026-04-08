@@ -54,11 +54,11 @@ fn get_logout_details(req: &HttpRequest) -> Result<(User, uuid::Uuid), Error> {
         .get::<LoginId>()
         .copied()
         .ok_or_else(|| {
-            if has_api_key { 
-                println!("\nReturning logout complete\n");
+            if has_api_key {
+                log::info!("Returning logout complete");
                 InternalError::from_response("Logout complete", HttpResponse::NoContent().finish()).into()
             } else {
-                println!("\nReturning unauthorizes (missing login id token)\n");
+                log::warn!("Returning unauthorized: missing login id token");
                 ErrorUnauthorized("Missing login id token")
             }
         })?

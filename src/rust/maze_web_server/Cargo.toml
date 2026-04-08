@@ -18,7 +18,7 @@ auth = { path = "../auth" }
 chrono = { version = "0.4", features = ["serde"] }
 config = "0.13"
 data_model = { path = "../data_model" }
-env_logger = "0.10"
+fern = "0.7"
 lazy_static = "1.4"
 log = "0.4"
 maze = { path = "../maze", features = ["generation"] }
@@ -39,3 +39,4 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 [dev-dependencies]
 actix-http = "3.9"
 pretty_assertions = "1"
+toml = "0.8"

@@ -2,6 +2,7 @@ pub mod api;
 pub mod config;
 pub mod middleware;
 pub mod service;
+mod utils;
 
 use actix_web::{ App, middleware::Logger, HttpServer, web};
 use auth::{config::PasswordHashConfig, hashing::hash_password};
@@ -99,9 +100,9 @@ pub fn create_app(
 /// for use in third party products such as `Swagger`. In addition, the server also publishes its own 
 /// Swagger-related endpoints that can be used to manually test the API in user-friendly web pages (e.g. `/api-docs/v1/swagger-ui/`). 
 pub async fn run_server() -> std::io::Result<()> {
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-
     let config = AppConfig::load().expect("Failed to load configuration settings");
+    utils::logger::init(&config.logging.log_dir, &config.logging.log_level, &config.logging.log_file_prefix)
+        .expect("Failed to initialise logger");
     config.log_config();
   
     let bind_address = construct_bind_address(config.port);

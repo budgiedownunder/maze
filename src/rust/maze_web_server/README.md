@@ -74,24 +74,34 @@ The following configuration settings exist:
 
 | Type     | Name         | Type    | Default Value    | Environment Variable Override
 |:---------|:-------------|:--------|:-----------------|:------------
-| Global   | `port`       | Integer | `8443`           | `MAZE_WEB_SERVER_PORT`
-| Security | `cert_file`  | Text    | `cert.pem`       | `MAZE_WEB_SERVER_SECURITY_CERT_FILE`
-|          | `key_file`   | Text    | `key.pem`        | `MAZE_WEB_SERVER_SECURITY_KEY_FILE`
-|          | `auth_token` | Text    |  -               | `MAZE_WEB_SERVER_SECURITY_AUTH_TOKEN`
+| Global   | `port`             | Integer | `8443`   | `MAZE_WEB_SERVER_PORT`
+| Security | `cert_file`        | Text    | `cert.pem` | `MAZE_WEB_SERVER_SECURITY_CERT_FILE`
+|          | `key_file`         | Text    | `key.pem`  | `MAZE_WEB_SERVER_SECURITY_KEY_FILE`
+|          | `auth_token`       | Text    | -          | `MAZE_WEB_SERVER_SECURITY_AUTH_TOKEN`
+| Logging  | `log_dir`          | Text    | `logs`            | `MAZE_WEB_SERVER_LOGGING_LOG_DIR`
+|          | `log_level`        | Text    | `info`            | `MAZE_WEB_SERVER_LOGGING_LOG_LEVEL`
+|          | `log_file_prefix`  | Text    | `maze_web_server_`| `MAZE_WEB_SERVER_LOGGING_LOG_FILE_PREFIX`
 
 These can also be set in a local configuration file called `config.toml` as follows
 
-``` 
+```toml
 port = 8443
 
 [security]
 cert_file = "cert.pem"
 key_file = "key.pem"
+
+[logging]
+log_dir = "logs"
+log_level = "info"
 ```
 
-Note:
+Notes:
 
-Any environment variable values will take precedence over their corresponding configuration file values.
+- Any environment variable values will take precedence over their corresponding configuration file values.
+- `log_dir` is relative to the server working directory. Log files are named `{log_file_prefix}{YYYY-MM-DD}.log` and a new file is started each calendar day. Old log files are not deleted automatically.
+- `log_file_prefix` is used verbatim — include any desired separator as the final character (e.g. `"maze_web_server_"` produces `maze_web_server_2026-04-09.log`, while `"my-app-"` produces `my-app-2026-04-09.log`).
+- Valid `log_level` values are: `error`, `warn`, `info`, `debug`, `trace`.
 
 > `auth_token` is a static API key used for privileged (admin) or service-to-service access via the `X-API-Key` request header. Regular users authenticate via the `POST /api/v1/login` endpoint, which returns a short-lived bearer token.
 
