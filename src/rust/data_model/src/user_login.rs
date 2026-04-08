@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-/// Represents a user login 
+/// Represents a user login
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
 pub struct UserLogin {
     #[schema(value_type = String)] // Treat as string during serlialization
@@ -60,6 +60,27 @@ impl UserLogin {
             device_info,
         }
     }
+
+    /// Extends the expiry of this login by setting expires_at to the current time plus the given number of hours
+    ///
+    /// # Returns
+    ///
+    /// Nothing
+    ///
+    /// # Examples
+    ///
+    /// Create a login, renew it, and verify the expiry has been extended
+    /// ```
+    /// use data_model::UserLogin;
+    /// let mut login = UserLogin::new(24, None, None);
+    /// let original_expiry = login.expires_at;
+    /// login.renew(24);
+    /// assert!(login.expires_at > original_expiry);
+    /// ```
+    pub fn renew(&mut self, expiry_hours: u32) {
+        self.expires_at = generate_now() + Duration::hours(expiry_hours.into());
+    }
+
     /// Generates the JSON string representation for the user login
     ///
     /// # Returns
@@ -86,8 +107,9 @@ impl UserLogin {
     pub fn to_json(&self) -> Result<String, Error> {
         Ok(serde_json::to_string(&self)?)
     }
+
     /// Initializes a user login instance by reading the JSON string content provided
-    /// 
+    ///
     /// # Returns
     ///
     /// This function will return an error if the JSON could not be read
@@ -124,7 +146,7 @@ impl UserLogin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;    
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn can_create() {
@@ -142,4 +164,12 @@ mod tests {
         assert_eq!(login_created, login_loaded);
     }
 
-}        
+    #[test]
+    fn can_renew() {
+        let mut login = UserLogin::new(24, None, None);
+        let original_expiry = login.expires_at;
+        login.renew(24);
+        assert!(login.expires_at > original_expiry);
+    }
+
+}

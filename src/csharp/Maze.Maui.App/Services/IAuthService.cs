@@ -54,5 +54,16 @@ namespace Maze.Maui.App.Services
 
         /// <summary>Updates the current user's profile (username, full name, email). Returns the updated profile.</summary>
         Task<UserProfile> UpdateProfileAsync(string username, string fullName, string email);
+
+        /// <summary>
+        /// Attempts to renew the current bearer login token, extending its lifetime without
+        /// re-authenticating. Updates the stored token expiry on success.
+        /// </summary>
+        /// <returns>True if the server confirmed renewal; false if the token is missing, expired, or the request failed</returns>
+        Task<bool> RenewAsync();
+
+        /// <summary>Returns the expiry timestamp of the stored bearer token, or null if not available.</summary>
+        /// <returns>Token expiry, or null</returns>
+        Task<DateTimeOffset?> GetTokenExpiryAsync();
     }
 }

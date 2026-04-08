@@ -33,6 +33,13 @@ namespace Maze.Maui.App.Services
         /// </summary>
         /// <returns>Boolean</returns>
         public bool DisableStrictTLSCertificateValidation { get; set; } = true;
+
+        /// <summary>
+        /// The number of minutes remaining on the login token lifetime below which a renewal
+        /// attempt will be made before the next API request. Defaults to 240 (4 hours).
+        /// </summary>
+        /// <returns>Threshold in minutes</returns>
+        public int LoginTokenRenewalThresholdMinutes { get; set; } = 240;
     }
     /// <summary>
     /// Represents a service for managing configuratuon settings
@@ -52,6 +59,13 @@ namespace Maze.Maui.App.Services
         /// </summary>
         /// <returns>Boolean</returns>
         public bool DisableStrictTLSCertificateValidation { get => _settings.DisableStrictTLSCertificateValidation; }
+
+        /// <summary>
+        /// The number of minutes remaining on the login token lifetime below which a renewal
+        /// attempt will be made before the next API request
+        /// </summary>
+        /// <returns>Threshold in minutes</returns>
+        public int LoginTokenRenewalThresholdMinutes { get => _settings.LoginTokenRenewalThresholdMinutes; }
         /// <summary>
         /// Constructor
         /// </summary>

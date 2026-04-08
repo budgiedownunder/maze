@@ -25,6 +25,21 @@ namespace Maze.Maui.App.Services
     {
         [JsonPropertyName("login_token_id")]
         public string LoginTokenId { get; set; } = "";
+
+        [JsonPropertyName("login_token_expires_at")]
+        public DateTimeOffset LoginTokenExpiresAt { get; set; }
+    }
+
+    /// <summary>
+    /// Renew login token response body
+    /// </summary>
+    internal class RenewResponse
+    {
+        [JsonPropertyName("login_token_id")]
+        public string LoginTokenId { get; set; } = "";
+
+        [JsonPropertyName("login_token_expires_at")]
+        public DateTimeOffset LoginTokenExpiresAt { get; set; }
     }
 
     /// <summary>
@@ -78,6 +93,7 @@ namespace Maze.Maui.App.Services
     public class AuthHttpClientService : IAuthService
     {
         private const string TOKEN_STORAGE_KEY = "bearer_token";
+        private const string TOKEN_EXPIRY_STORAGE_KEY = "bearer_token_expires_at";
         private const string HEADER_AUTHORIZATION = "Authorization";
         private const double REQUEST_TIMEOUT_SECONDS = 30.0;
 
@@ -135,6 +151,7 @@ namespace Maze.Maui.App.Services
                 throw new Exception("Server returned an empty login token");
 
             await SecureStorage.Default.SetAsync(TOKEN_STORAGE_KEY, loginResponse.LoginTokenId);
+            await SecureStorage.Default.SetAsync(TOKEN_EXPIRY_STORAGE_KEY, loginResponse.LoginTokenExpiresAt.ToString("O"));
 
             return await GetMyProfileAsync();
         }
@@ -155,6 +172,7 @@ namespace Maze.Maui.App.Services
             finally
             {
                 SecureStorage.Default.Remove(TOKEN_STORAGE_KEY);
+                SecureStorage.Default.Remove(TOKEN_EXPIRY_STORAGE_KEY);
             }
         }
 
@@ -203,6 +221,7 @@ namespace Maze.Maui.App.Services
             finally
             {
                 SecureStorage.Default.Remove(TOKEN_STORAGE_KEY);
+                SecureStorage.Default.Remove(TOKEN_EXPIRY_STORAGE_KEY);
             }
         }
 
@@ -239,6 +258,44 @@ namespace Maze.Maui.App.Services
             string json = await response.Content.ReadAsStringAsync();
             return JsonSerializer.Deserialize<UserProfile>(json)
                 ?? throw new Exception("Invalid profile response from server");
+        }
+
+        /// <inheritdoc/>
+        public async Task<bool> RenewAsync()
+        {
+            try
+            {
+                string? token = await SecureStorage.Default.GetAsync(TOKEN_STORAGE_KEY);
+                if (string.IsNullOrEmpty(token))
+                    return false;
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, "login/renew");
+                request.Headers.Add(HEADER_AUTHORIZATION, $"Bearer {token}");
+                var response = await _httpClient.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                    return false;
+
+                string json = await response.Content.ReadAsStringAsync();
+                var renewResponse = JsonSerializer.Deserialize<RenewResponse>(json);
+                if (renewResponse is null)
+                    return false;
+
+                await SecureStorage.Default.SetAsync(TOKEN_EXPIRY_STORAGE_KEY, renewResponse.LoginTokenExpiresAt.ToString("O"));
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <inheritdoc/>
+        public async Task<DateTimeOffset?> GetTokenExpiryAsync()
+        {
+            string? raw = await SecureStorage.Default.GetAsync(TOKEN_EXPIRY_STORAGE_KEY);
+            if (DateTimeOffset.TryParse(raw, out var expiry))
+                return expiry;
+            return null;
         }
 
         private async Task AddBearerHeaderAsync(HttpRequestMessage request)

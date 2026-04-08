@@ -295,6 +295,43 @@ impl User {
     pub fn remove_login(&mut self, login_id: Uuid)  {
         self.logins.retain(|login| login.id != login_id);
     }
+    /// Renews an existing login session by extending its expiry, if the login exists
+    ///
+    /// # Returns
+    ///
+    /// The updated login if found, or None if no login with the given id exists
+    ///
+    /// # Examples
+    ///
+    /// Create a user and a login, renew it, and verify the expiry has been extended
+    /// ```
+    /// use data_model::{User, UserLogin};
+    /// use uuid::Uuid;
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    /// };
+    ///
+    /// let login = user.create_login(24, None, None);
+    /// let original_expiry = login.expires_at;
+    /// let renewed = user.renew_login(login.id, 24).expect("Login not found");
+    /// assert!(renewed.expires_at > original_expiry);
+    /// ```
+    pub fn renew_login(&mut self, login_id: Uuid, expiry_hours: u32) -> Option<UserLogin> {
+        if let Some(login) = self.logins.iter_mut().find(|l| l.id == login_id) {
+            login.renew(expiry_hours);
+            Some(login.clone())
+        } else {
+            None
+        }
+    }
     /// Checks whether a user object contains the given login token id and, if so, that it has not expired 
     ///
     /// # Returns
@@ -609,6 +646,22 @@ mod tests {
         user.remove_login(bad_login_id);
         let login_count_after = user.logins.len();
         assert_eq!(login_count_after, login_count_before);
+    }
+
+    #[test]
+    fn can_renew_login() {
+        let (mut user, login_id) = create_valid_user_with_login();
+        let original_expiry = user.logins[0].expires_at;
+        let renewed = user.renew_login(login_id, 24).expect("Login not found");
+        assert!(renewed.expires_at > original_expiry);
+        assert_eq!(renewed.id, login_id);
+    }
+
+    #[test]
+    fn renew_login_returns_none_for_unknown_id() {
+        let (mut user, _) = create_valid_user_with_login();
+        let unknown_id = generate_uuid();
+        assert!(user.renew_login(unknown_id, 24).is_none());
     }
 
 }

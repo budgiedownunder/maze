@@ -647,6 +647,58 @@ pub async fn logout(
     Ok(HttpResponse::NoContent().finish())
 }
 // **************************************************************************************************
+// Endpoint: POST /api/v1/login/renew
+// Handler:  renew()
+// **************************************************************************************************
+/// Renew login token response
+#[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
+pub struct RenewResponse {
+    #[schema(value_type = String, example = "550e8400-e29b-41d4-a716-446655440000")]
+    /// Login token id
+    pub login_token_id: Uuid,
+    #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
+    /// Updated expiry timestamp of the login token
+    pub login_token_expires_at: DateTime<Utc>,
+}
+/// Extends the lifetime of the current bearer login token without re-authenticating
+#[utoipa::path(
+    summary = "Renew login token",
+    description = "Extends the lifetime of the current bearer login token without re-authenticating. The same token ID is retained. API keys are not accepted.",
+    post,
+    path = "/api/v1/login/renew",
+    responses(
+        (status = 200, description = "Token renewed successfully", body = RenewResponse),
+        (status = 401, description = "Unauthorized — token missing, expired, or API key used"),
+    ),
+    security(
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[post("/login/renew")]
+pub async fn renew(
+    config: web::Data<AppConfig>,
+    store: web::Data<SharedStore>,
+    req: HttpRequest,
+) -> Result<HttpResponse, Error> {
+    let login_id = req.extensions()
+        .get::<LoginId>()
+        .copied()
+        .ok_or_else(|| ErrorUnauthorized("Unauthorized request"))?;
+    let mut user = get_authorized_user(&req, false)?;
+    let login_expiry_hours = config.security.login_expiry_hours;
+    let renewed = user.renew_login(login_id.0, login_expiry_hours)
+        .ok_or_else(|| ErrorUnauthorized("Unauthorized request"))?;
+    let store_lock = get_store_write_lock(&store)?;
+    update_store_user(store_lock, &mut user, |err| {
+        get_user_update_internal_error(err)
+    })?;
+    Ok(HttpResponse::Ok().json(RenewResponse {
+        login_token_id: renewed.id,
+        login_token_expires_at: renewed.expires_at,
+    }))
+}
+// **************************************************************************************************
 // Endpoint: GET /api/v1/users
 // Handler:  get_users()
 // **************************************************************************************************
