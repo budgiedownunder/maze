@@ -126,7 +126,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
         /// <param name="connectionType">Type of WebAssembly connection technology to use</param>
-        /// <param name="wasmBytes">WebAssembly bytes(</param>
+        /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then an attempt is made to load WebAssembly from the default location.</param>
         private MazeInterop(string wasmPathOrName, ConnectionType connectionType=ConnectionType.Wasmtime, byte[]? wasmBytes = null)
         {
             switch (connectionType)
@@ -240,7 +240,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="connectionType">Type of connection technology to use</param>
         /// <param name="createNew">Create a new instance even if a global one already exists</param>
-        /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then at attempt is made to load WebAssembly from the default location.(</param>
+        /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then an attempt is made to load WebAssembly from the default location.</param>
         /// <returns>Interop instance</returns>
         static public MazeInterop GetInstance(ConnectionType connectionType= ConnectionType.Wasmtime,
             bool createNew = false, byte[]? wasmBytes = null)
@@ -260,7 +260,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="connectionType">Type of WebAssembly connection technology to use</param>
         /// <param name="createNew">Create a new instance, even if a global one already exists (overwriting existing)</param>
-        /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then at attempt is made to load WebAssembly from the default location.(</param>
+        /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then an attempt is made to load WebAssembly from the default location.</param>
         /// <returns>Interop instance</returns>
         static public void Initialize(ConnectionType connectionType = ConnectionType.Wasmtime,
             bool createNew = false, byte[]? wasmBytes = null)

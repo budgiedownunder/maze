@@ -28,6 +28,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(handlers::delete_me)
                 // Users (admin)
                 .service(handlers::logout)
+                .service(handlers::renew)
                 .service(handlers::get_users)
                 .service(handlers::create_user)
                 .service(handlers::delete_user)

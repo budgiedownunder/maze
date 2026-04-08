@@ -53,25 +53,38 @@ namespace Maze.Maui.App.Services
         }
     }
     /// <summary>
-    /// Delegating handler that injects a Bearer token into every outgoing request
+    /// Delegating handler that injects a Bearer token into every outgoing request,
+    /// and proactively renews the token when its remaining lifetime falls below the configured threshold
     /// </summary>
     public class BearerTokenHandler : DelegatingHandler
     {
         private readonly IAuthService _authService;
+        private readonly ConfigurationService _configurationService;
 
         /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="authService">Injected auth service</param>
+        /// <param name="configurationService">Injected configuration service</param>
         /// <param name="innerHandler">Inner HTTP message handler</param>
-        public BearerTokenHandler(IAuthService authService, HttpMessageHandler innerHandler) : base(innerHandler)
+        public BearerTokenHandler(IAuthService authService, ConfigurationService configurationService, HttpMessageHandler innerHandler) : base(innerHandler)
         {
             _authService = authService;
+            _configurationService = configurationService;
         }
 
         /// <inheritdoc/>
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            var expiry = await _authService.GetTokenExpiryAsync();
+            if (expiry.HasValue)
+            {
+                var remaining = expiry.Value - DateTimeOffset.UtcNow;
+                var threshold = TimeSpan.FromMinutes(_configurationService.LoginTokenRenewalThresholdMinutes);
+                if (remaining > TimeSpan.Zero && remaining < threshold)
+                    await _authService.RenewAsync();
+            }
+
             string? token = await _authService.GetBearerTokenAsync();
             if (!string.IsNullOrEmpty(token))
                 request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
@@ -114,7 +127,7 @@ namespace Maze.Maui.App.Services
             if (_configurationService.DisableStrictTLSCertificateValidation)
                 innerHandler.ServerCertificateCustomValidationCallback = (message, cert, chain, sslPolicyErrors) => true;
 
-            BearerTokenHandler handler = new BearerTokenHandler(authService, innerHandler);
+            BearerTokenHandler handler = new BearerTokenHandler(authService, _configurationService, innerHandler);
 
             return new HttpClient(handler)
             {

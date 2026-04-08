@@ -1706,6 +1706,58 @@ mod test_definitions {
         ).await;
     }
 
+    // Renew
+    #[actix_web::test]
+    async fn can_renew_with_valid_token() {
+        use crate::api::v1::endpoints::handlers::RenewResponse;
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+
+        // Log in first
+        let login_request = LoginRequest { username: VALID_USERNAME_1.to_string(), password: VALID_USER_PASSWORD.to_string() };
+        let login_req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let login_resp = test::call_service(&app, login_req).await;
+        assert_eq!(login_resp.status(), StatusCode::OK);
+
+        let login_resp_body = test::read_body(login_resp).await;
+        let login_response: LoginResponse = serde_json::from_slice(&login_resp_body).expect("failed to deserialize login response");
+        let login_id = login_response.login_token_id;
+        let original_expiry = login_response.login_token_expires_at;
+
+        // Renew the token
+        let renew_req = create_test_post_request("/api/v1/login/renew", None, Some(login_id), None::<&()>);
+        let renew_resp = test::call_service(&app, renew_req).await;
+        assert_eq!(renew_resp.status(), StatusCode::OK);
+
+        let renew_resp_body = test::read_body(renew_resp).await;
+        let renew_response: RenewResponse = serde_json::from_slice(&renew_resp_body).expect("failed to deserialize renew response");
+
+        // Token ID is unchanged
+        assert_eq!(renew_response.login_token_id, login_id);
+        // Expiry is extended
+        assert!(renew_response.login_token_expires_at >= original_expiry);
+        // Login still present in store
+        verify_user_login_presence(&shared_store, VALID_USERNAME_1, login_id, true);
+    }
+
+    #[actix_web::test]
+    async fn cannot_renew_with_api_key() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, _) = create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let renew_req = create_test_post_request("/api/v1/login/renew", api_key.map(|k| k), None, None::<&()>);
+        let renew_resp = test::call_service(&app, renew_req).await;
+        assert_eq!(renew_resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn cannot_renew_without_auth_header() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let renew_req = create_test_post_request("/api/v1/login/renew", None, None, None::<&()>);
+        test::call_service(&app, renew_req).await;
+    }
+
     // Get users
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]

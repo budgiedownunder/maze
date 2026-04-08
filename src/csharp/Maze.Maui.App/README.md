@@ -46,6 +46,7 @@ The app reads its settings from `Resources/Raw/appsettings.json` at startup:
 |:--------|:-----|:--------|:------------|
 | `ApiRootUri` | Text | See below | Root URI of the `maze_web_server` REST API |
 | `DisableStrictTLSCertificateValidation` | Boolean | `true` | Disables strict TLS certificate validation — set to `false` in production |
+| `LoginTokenRenewalThresholdMinutes` | Integer | `240` | Login renewal threshold (in minutes) |
 
 If `ApiRootUri` is not set, the app falls back to a platform-specific development default:
 

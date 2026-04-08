@@ -184,7 +184,8 @@ namespace Maze.Interop
         /// Constructor
         /// </summary>
         /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
-        /// <param name="wasmBytes">WebAssembly bytes(</param>
+        /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then an attempt is made to load WebAssembly from the path
+        /// defined by `wasmPathOrName`.</param>
         public MazeWasmtimeConnector(string wasmPathOrName, byte[]? wasmBytes = null)
         {
             if (wasmPathOrName is null)
@@ -237,7 +238,7 @@ namespace Maze.Interop
         /// Initializes the WebAssembly module
         /// </summary>
         /// <param name="wasmBytes">WebAssembly bytes. If this is `null`, then the WebAssembly will be loaded from the path
-        /// defined by `wasmPathOrName`.(</param>
+        /// defined by `wasmPathOrName`.</param>
         /// <returns>Nothing</returns>
         private void InitializeModule(byte[]? wasmBytes)
         {
