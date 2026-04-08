@@ -7,7 +7,7 @@ use utoipa::{
 };
 
 use crate::api::v1::endpoints::handlers::{
-    LoginRequest, LoginResponse,
+    LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
     ChangePasswordRequest, UpdateProfileRequest};
 
@@ -57,9 +57,10 @@ impl utoipa::Modify for LoginTokenAuth {
         )
     ),
     paths(
-        // Login, logout, signup
+        // Login, logout, renew, signup
         crate::api::v1::endpoints::handlers::login,
         crate::api::v1::endpoints::handlers::logout,
+        crate::api::v1::endpoints::handlers::renew,
         crate::api::v1::endpoints::handlers::signup,
         // Self-service account
         crate::api::v1::endpoints::handlers::change_password_me,
@@ -85,7 +86,7 @@ impl utoipa::Modify for LoginTokenAuth {
     ),
     components(
         schemas(
-            LoginRequest, LoginResponse,
+            LoginRequest, LoginResponse, RenewResponse,
             SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
             ChangePasswordRequest, UpdateProfileRequest,
             Maze, MazeDefinition, MazeItem, MazePath, MazeSolution,
