@@ -518,6 +518,11 @@ namespace Maze.Interop
         /// <summary>
         /// Creates a new <c>GeneratorOptions</c>, or will throw an exception if the operation fails
         /// </summary>
+        /// <param name="rowCount">Number of rows</param>
+        /// <param name="colCount">Number of columns</param>
+        /// <param name="algorithm">Generation algorithm to use</param>
+        /// <param name="seed">Random seed for generation</param>
+        /// <returns>Pointer to the new generator options</returns>
         public UIntPtr NewGeneratorOptions(UInt32 rowCount, UInt32 colCount, MazeGenerationAlgorithm algorithm, UInt64 seed)
         {
             UIntPtr optionsPtr = (UIntPtr)(uint)(int)(newGeneratorOptions?.Invoke(rowCount, colCount, (int)algorithm, seed) ?? 0);
@@ -526,26 +531,38 @@ namespace Maze.Interop
             return optionsPtr;
         }
         /// <summary>Sets the start cell on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
         public void GeneratorOptionsSetStart(UIntPtr optionsPtr, UInt32 row, UInt32 col)
         {
             generatorOptionsSetStart?.Invoke((long)(uint)optionsPtr, row, col);
         }
         /// <summary>Sets the finish cell on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
         public void GeneratorOptionsSetFinish(UIntPtr optionsPtr, UInt32 row, UInt32 col)
         {
             generatorOptionsSetFinish?.Invoke((long)(uint)optionsPtr, row, col);
         }
         /// <summary>Sets the minimum spine length on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Minimum spine length</param>
         public void GeneratorOptionsSetMinSpineLength(UIntPtr optionsPtr, UInt32 value)
         {
             generatorOptionsSetMinSpineLength?.Invoke((long)(uint)optionsPtr, value);
         }
         /// <summary>Sets the maximum retries on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Maximum number of retries</param>
         public void GeneratorOptionsSetMaxRetries(UIntPtr optionsPtr, UInt32 value)
         {
             generatorOptionsSetMaxRetries?.Invoke((long)(uint)optionsPtr, value);
         }
         /// <summary>Sets the branch_from_finish flag on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Non-zero to enable branching from the finish cell</param>
         public void GeneratorOptionsSetBranchFromFinish(UIntPtr optionsPtr, byte value)
         {
             generatorOptionsSetBranchFromFinish?.Invoke((long)(uint)optionsPtr, (int)value);
@@ -553,6 +570,8 @@ namespace Maze.Interop
         /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails
         /// </summary>
+        /// <param name="mazePtr">Pointer to the maze to populate</param>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
         public void MazeGenerate(UIntPtr mazePtr, UIntPtr optionsPtr)
         {
             UInt32 errorPtr = (UInt32)(Int32)(mazeGenerate?.Invoke((long)(uint)mazePtr, (long)(uint)optionsPtr) ?? 0);
@@ -560,6 +579,7 @@ namespace Maze.Interop
                 TidyAndThrowError(errorPtr);
         }
         /// <summary>Frees a <c>GeneratorOptions</c> pointer</summary>
+        /// <param name="optionsPtr">Pointer to the generator options to free</param>
         public void FreeGeneratorOptions(UIntPtr optionsPtr)
         {
             freeGeneratorOptions?.Invoke((long)(uint)optionsPtr);

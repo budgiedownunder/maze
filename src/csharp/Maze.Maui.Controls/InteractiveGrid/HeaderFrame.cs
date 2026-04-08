@@ -10,14 +10,17 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <summary>
         /// Corner header
         /// </summary>
+        /// <returns>Corner header</returns>
         Corner = 0,
         /// <summary>
         /// Row header
         /// </summary>
+        /// <returns>Row header</returns>
         Row = 1,
         /// <summary>
         /// Column header
         /// </summary>
+        /// <returns>Column header</returns>
         Column = 2
     }
     /// <summary>

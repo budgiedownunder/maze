@@ -62,6 +62,7 @@
         /// <summary>
         /// Restricts the row associated with the object so that it does not exceed a given maximum row number
         /// </summary>
+        /// <param name="maxRow">Maximum row</param>
         public void ClampRow(int maxRow)
         {
             if (Row > maxRow)

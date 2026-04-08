@@ -70,10 +70,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
             /// <summary>
             /// Offset is from left edge
             /// </summary>
+            /// <returns>Offset is from left edge</returns>
             LeftEdge = 0,
             /// <summary>
             /// Offset is from right edge
             /// </summary>
+            /// <returns>Offset is from right edge</returns>
             RightEdge = 1
         }
         /// <summary>
@@ -84,10 +86,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
             /// <summary>
             /// Offset is from top edge
             /// </summary>
+            /// <returns>Offset is from top edge</returns>
             TopEdge = 0,
             /// <summary>
             /// Offset is from bottom edge
             /// </summary>
+            /// <returns>Offset is from bottom edge</returns>
             BottomEdge = 1
         }
         /// <summary>
@@ -104,6 +108,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// Number of rows/columns to pre-load beyond the visible edge of the scroll view.
         /// Set to 0 to disable virtualization — all cells are created upfront and kept active.
         /// Must be >= 0. Defaults to 10.
+        /// <returns>Number of rows/columns to pre-load beyond the visible edge of the scroll view</returns>
         /// </summary>
         public int VirtualBuffer { get; set; } = 10;
         /// <summary>
@@ -757,14 +762,25 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// Default implementation is empty — existing behaviour is preserved via CreateCellContent.
         /// Row and column are 0-based.
         /// </summary>
+        /// <param name="frame">Frame to update</param>
+        /// <param name="row">Row</param>
+        /// <param name="column">Column</param>
         protected virtual void UpdateCellContent(CellFrame frame, int row, int column) { }
         /// <summary>Called before rows are inserted into the grid. RowCount still reflects the pre-insert value.</summary>
+        /// <param name="startDisplayRow">Starting display row at which insert is to occur</param>
+        /// <param name="count">Number of rows to be inserted</param>
         protected virtual void OnBeforeRowsInserted(int startDisplayRow, int count) { }
         /// <summary>Called before columns are inserted into the grid. ColumnCount still reflects the pre-insert value.</summary>
+        /// <param name="startDisplayColumn">Starting display column at which insert is to occur</param>
+        /// <param name="count">Number of columns to be inserted</param>
         protected virtual void OnBeforeColumnsInserted(int startDisplayColumn, int count) { }
         /// <summary>Called after rows are removed from the grid. RowCount already reflects the post-remove value.</summary>
+        /// <param name="startDisplayRow">Starting display row removed</param>
+        /// <param name="count">Number of rows removed</param>
         protected virtual void OnAfterRowsRemoved(int startDisplayRow, int count) { }
         /// <summary>Called after columns are removed from the grid. ColumnCount already reflects the post-remove value.</summary>
+        /// <param name="startDisplayColumn">Starting display column removed</param>
+        /// <param name="count">Number of columns removed</param>
         protected virtual void OnAfterColumnsRemoved(int startDisplayColumn, int count) { }
         /// <summary>
         /// Returns a snapshot of the currently active (visible) cells keyed by 0-based (row, col).
