@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
-async function login(page: ReturnType<typeof test.extend>['page'] extends infer P ? P : never) {
+async function login(page: Page) {
   await page.goto('/login')
   await page.getByLabel('Username').fill('testuser')
   await page.getByLabel('Password', { exact: true }).fill('Password1!')
