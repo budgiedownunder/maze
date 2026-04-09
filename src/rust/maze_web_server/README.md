@@ -77,6 +77,7 @@ The following configuration settings exist:
 | Global   | `port`             | Integer | `8443`   | `MAZE_WEB_SERVER_PORT`
 | Security | `cert_file`        | Text    | `cert.pem` | `MAZE_WEB_SERVER_SECURITY_CERT_FILE`
 |          | `key_file`         | Text    | `key.pem`  | `MAZE_WEB_SERVER_SECURITY_KEY_FILE`
+| Static   | `static_dir`       | Text    | `static`          | `MAZE_WEB_SERVER_STATIC_DIR`
 | Logging  | `log_dir`          | Text    | `logs`            | `MAZE_WEB_SERVER_LOGGING_LOG_DIR`
 |          | `log_level`        | Text    | `info`            | `MAZE_WEB_SERVER_LOGGING_LOG_LEVEL`
 |          | `log_file_prefix`  | Text    | `maze_web_server_`| `MAZE_WEB_SERVER_LOGGING_LOG_FILE_PREFIX`
@@ -102,6 +103,24 @@ Notes:
 - `log_file_prefix` is used verbatim — include any desired separator as the final character (e.g. `"maze_web_server_"` produces `maze_web_server_2026-04-09.log`, while `"my-app-"` produces `my-app-2026-04-09.log`).
 - Valid `log_level` values are: `error`, `warn`, `info`, `debug`, `trace`.
 
+
+## Web Frontend
+
+A React Single Page Application (SPA) is available at [`src/react/maze_web_server/`](../../../src/react/maze_web_server/README.md). Build it and point `static_dir` at the output:
+
+```bash
+cd src/react/maze_web_server
+npm install
+npm run build
+```
+
+Then set `static_dir` in `config.toml`:
+
+```toml
+static_dir = "../../react/maze_web_server/dist"
+```
+
+The server will serve `index.html` for all non-API routes, enabling client-side routing. If `static_dir` does not exist or is not set, the server runs as API-only.
 
 ## Authentication
 
