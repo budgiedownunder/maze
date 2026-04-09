@@ -82,6 +82,11 @@ jobs:
       with:
         version: 'latest'
     
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+
     - name: Install DocFX
       working-directory: ./
       run: dotnet tool install -g docfx
@@ -187,6 +192,22 @@ jobs:
       working-directory: ./src/csharp 
       run: |
         dotnet test ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }}
+
+    - name: Install React dependencies
+      working-directory: ./src/react/maze_web_server
+      run: npm ci
+
+    - name: Run React unit tests
+      working-directory: ./src/react/maze_web_server
+      run: npm test
+
+    - name: Install Playwright browser
+      working-directory: ./src/react/maze_web_server
+      run: npx playwright install chromium --with-deps
+
+    - name: Run React E2E tests
+      working-directory: ./src/react/maze_web_server
+      run: npx playwright test
 
     - name: Build HTML documentation (Windows)
       if: runner.os == 'Windows'
