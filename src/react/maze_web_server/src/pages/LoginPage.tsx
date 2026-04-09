@@ -9,21 +9,26 @@ export function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const { login, isLoading } = useAuth()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
 
-  const submitDisabled = !username.trim() || !password || isLoading
+  const isBusy = isLoading || isSubmitting
+  const submitDisabled = !username.trim() || !password || isBusy
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    setIsSubmitting(true)
     try {
       await login(username, password)
       navigate('/mazes', { replace: true })
     } catch (ex: unknown) {
       const status = (ex as { status?: number }).status
       setError(status === 401 ? 'Invalid username or password' : 'Login failed. Please try again.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -36,7 +41,7 @@ export function LoginPage() {
       >
         {theme === 'dark' ? '☀' : '☾'}
       </button>
-      {isLoading && <div className="spinner-overlay"><div>Loading...</div></div>}
+      {isBusy && <div className="spinner-overlay"><div>Loading...</div></div>}
 
       <img src={appIcon} alt="Maze" width={100} height={100} className="auth-logo" />
       <h1 className="auth-title">Maze</h1>
@@ -48,19 +53,19 @@ export function LoginPage() {
           id="username"
           value={username}
           onChange={e => setUsername(e.target.value)}
-          disabled={isLoading}
+          disabled={isBusy}
           autoComplete="username"
         />
 
         <label htmlFor="password">Password</label>
-        <PasswordInput id="password" value={password} onChange={setPassword} disabled={isLoading} />
+        <PasswordInput id="password" value={password} onChange={setPassword} disabled={isBusy} />
 
         {error && <p role="alert" className="error-msg">{error}</p>}
 
         <button type="submit" disabled={submitDisabled} className="btn-submit">
           Sign In
         </button>
-        <button type="button" onClick={() => navigate('/signup')} disabled={isLoading} className="btn-link">
+        <button type="button" onClick={() => navigate('/signup')} disabled={isBusy} className="btn-link">
           Sign Up
         </button>
       </form>

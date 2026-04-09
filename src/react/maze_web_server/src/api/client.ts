@@ -2,19 +2,20 @@ import type { ChangePasswordRequest, LoginResponse, RenewResponse, UpdateProfile
 
 const BASE = '/api/v1'
 
+async function throwForStatus(response: Response): Promise<never> {
+  const message = await response.text().catch(() => response.statusText)
+  throw Object.assign(new Error(message || response.statusText), { status: response.status })
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE}${path}`, options)
-  if (!response.ok) {
-    throw Object.assign(new Error(response.statusText), { status: response.status })
-  }
+  if (!response.ok) await throwForStatus(response)
   return response.json() as Promise<T>
 }
 
 async function requestEmpty(path: string, options?: RequestInit): Promise<void> {
   const response = await fetch(`${BASE}${path}`, options)
-  if (!response.ok) {
-    throw Object.assign(new Error(response.statusText), { status: response.status })
-  }
+  if (!response.ok) await throwForStatus(response)
 }
 
 function authHeaders(token: string): Record<string, string> {
@@ -79,8 +80,8 @@ export function changePassword(token: string, body: ChangePasswordRequest): Prom
   })
 }
 
-export async function deleteMe(token: string): Promise<void> {
-  await fetch(`${BASE}/users/me`, {
+export function deleteMe(token: string): Promise<void> {
+  return requestEmpty('/users/me', {
     method: 'DELETE',
     headers: authHeaders(token),
   })

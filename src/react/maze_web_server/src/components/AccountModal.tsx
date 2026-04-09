@@ -20,11 +20,18 @@ export function AccountModal({ onClose }: Props) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<UserProfile | null>(null)
   const [username, setUsername] = useState('')
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
+
+  useEffect(() => {
+    const busy = isSaving || isLoading || isDeleting
+    document.body.classList.toggle('is-busy', busy)
+    return () => document.body.classList.remove('is-busy')
+  }, [isSaving, isLoading, isDeleting])
 
   useEffect(() => {
     api.getMe(token)
@@ -64,13 +71,16 @@ export function AccountModal({ onClose }: Props) {
   }
 
   async function handleDeleteConfirm() {
+    setIsDeleting(true)
     try {
       await api.deleteMe(token)
       await logout()
       navigate('/login', { replace: true })
-    } catch {
-      setError('Failed to delete account')
+    } catch (ex: unknown) {
+      setError((ex as { message?: string }).message ?? 'Failed to delete account')
       setShowDeleteConfirm(false)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -86,7 +96,7 @@ export function AccountModal({ onClose }: Props) {
         onCancel={() => setShowDeleteConfirm(false)}
       />
     )}
-    <div role="dialog" aria-modal="true" aria-label="My Account" className="modal-overlay">
+    <div role="dialog" aria-modal="true" aria-label="My Account" className="modal-overlay" style={{ cursor: (isSaving || isLoading) ? 'wait' : undefined }}>
       <div className="modal modal-md">
         <h2 className="modal-title">My Account</h2>
 
@@ -94,10 +104,6 @@ export function AccountModal({ onClose }: Props) {
           <p>Loading profile...</p>
         ) : (
           <form onSubmit={handleSave} className="modal-form">
-            {saved?.is_admin && (
-              <span className="badge-admin">Administrator</span>
-            )}
-
             <label htmlFor="acc-username">Username</label>
             <input id="acc-username" value={username} onChange={e => setUsername(e.target.value)} disabled={isSaving} />
 
@@ -106,6 +112,10 @@ export function AccountModal({ onClose }: Props) {
 
             <label htmlFor="acc-email">Email</label>
             <input id="acc-email" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={isSaving} />
+
+            {saved?.is_admin && (
+              <span className="badge-admin">Administrator</span>
+            )}
 
             {error && <p role="alert" className="error-msg">{error}</p>}
 

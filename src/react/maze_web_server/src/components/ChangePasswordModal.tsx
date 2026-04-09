@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PasswordInput } from './PasswordInput'
 import * as api from '../api/client'
 import { useToken } from '../context/AuthContext'
@@ -37,7 +37,10 @@ export function ChangePasswordModal({ onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const validationError = validateChangePasswordForm({ currentPassword, newPassword, confirmPassword })
+  useEffect(() => {
+    document.body.classList.toggle('is-busy', isLoading)
+    return () => document.body.classList.remove('is-busy')
+  }, [isLoading])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -58,7 +61,7 @@ export function ChangePasswordModal({ onClose }: Props) {
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Change Password" className="modal-overlay" style={{ zIndex: 1100 }}>
+    <div role="dialog" aria-modal="true" aria-label="Change Password" className="modal-overlay" style={{ zIndex: 1100, cursor: isLoading ? 'wait' : undefined }}>
       <div className="modal modal-md modal-centered">
         <img src={lockIcon} alt="" width={64} height={64} className="auth-logo" />
         <h2 className="modal-title" style={{ marginTop: '1rem', marginBottom: '1rem' }}>Change Password</h2>
@@ -75,7 +78,7 @@ export function ChangePasswordModal({ onClose }: Props) {
           {error && <p role="alert" className="error-msg">{error}</p>}
 
           <div className="modal-actions">
-            <button type="submit" className="btn-gray" disabled={!!validationError || isLoading}>
+            <button type="submit" className="btn-gray" disabled={isLoading}>
               {isLoading ? 'Changing...' : 'Change Password'}
             </button>
             <button type="button" className="btn-link" onClick={onClose} disabled={isLoading}>Back</button>

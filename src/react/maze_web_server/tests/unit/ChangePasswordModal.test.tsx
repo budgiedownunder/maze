@@ -35,21 +35,24 @@ async function fillForm(current = 'OldPass1!', newPass = 'NewPass1!', confirm = 
 }
 
 describe('ChangePasswordModal', () => {
-  it('disables Change Password button when fields are empty', () => {
+  it('shows error when Change Password is clicked with empty fields', async () => {
     renderModal()
-    expect(screen.getByRole('button', { name: /change password/i })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: /change password/i }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/all fields are required/i)
   })
 
-  it('disables button when new passwords do not match', async () => {
+  it('shows error when new passwords do not match', async () => {
     renderModal()
     await fillForm('OldPass1!', 'NewPass1!', 'Different1!')
-    expect(screen.getByRole('button', { name: /change password/i })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: /change password/i }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/do not match/i)
   })
 
-  it('disables button when new password fails complexity', async () => {
+  it('shows error when new password fails complexity', async () => {
     renderModal()
     await fillForm('OldPass1!', 'weak', 'weak')
-    expect(screen.getByRole('button', { name: /change password/i })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: /change password/i }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/password must/i)
   })
 
   it('calls PUT and closes modal on success', async () => {
