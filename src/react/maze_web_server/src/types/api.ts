@@ -7,9 +7,13 @@ export interface UserProfile {
 }
 
 export interface LoginResponse {
-  token: string
-  issued_at: string
-  expiry: string
+  login_token_id: string
+  login_token_expires_at: string
+}
+
+export interface RenewResponse {
+  login_token_id: string
+  login_token_expires_at: string
 }
 
 export interface UpdateProfileRequest {

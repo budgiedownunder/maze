@@ -1,4 +1,4 @@
-import type { ChangePasswordRequest, LoginResponse, UpdateProfileRequest, UserProfile } from '../types/api'
+import type { ChangePasswordRequest, LoginResponse, RenewResponse, UpdateProfileRequest, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -22,15 +22,16 @@ export function login(username: string, password: string): Promise<LoginResponse
   })
 }
 
-export function logout(token: string, loginId: string): Promise<void> {
-  return fetch(`${BASE}/logout`, {
+// The server reads the login ID from the Bearer token itself — no extra header needed.
+export async function logout(token: string): Promise<void> {
+  await fetch(`${BASE}/logout`, {
     method: 'POST',
-    headers: { ...authHeaders(token), 'X-Login-Id': loginId },
-  }).then(() => undefined)
+    headers: { Authorization: `Bearer ${token}` },
+  })
 }
 
-export function renewToken(token: string): Promise<LoginResponse> {
-  return request<LoginResponse>('/login/renew', {
+export function renewToken(token: string): Promise<RenewResponse> {
+  return request<RenewResponse>('/login/renew', {
     method: 'POST',
     headers: authHeaders(token),
   })
@@ -71,9 +72,9 @@ export function changePassword(token: string, body: ChangePasswordRequest): Prom
   })
 }
 
-export function deleteMe(token: string): Promise<void> {
-  return fetch(`${BASE}/users/me`, {
+export async function deleteMe(token: string): Promise<void> {
+  await fetch(`${BASE}/users/me`, {
     method: 'DELETE',
     headers: authHeaders(token),
-  }).then(() => undefined)
+  })
 }
