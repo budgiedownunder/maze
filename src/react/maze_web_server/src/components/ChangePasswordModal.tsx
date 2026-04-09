@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PasswordInput } from './PasswordInput'
 import * as api from '../api/client'
 import { useToken } from '../context/AuthContext'
+import lockIcon from '../assets/icon_lock.svg'
 
 export function validateChangePasswordForm(fields: {
   currentPassword: string
@@ -57,10 +58,11 @@ export function ChangePasswordModal({ onClose }: Props) {
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Change Password" style={overlayStyle}>
-      <div style={modalStyle}>
-        <h2 style={{ marginTop: 0 }}>Change Password</h2>
-        <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+    <div role="dialog" aria-modal="true" aria-label="Change Password" className="modal-overlay" style={{ zIndex: 1100 }}>
+      <div className="modal modal-md modal-centered">
+        <img src={lockIcon} alt="" width={64} height={64} className="auth-logo" />
+        <h2 className="modal-title" style={{ marginTop: '1rem', marginBottom: '1rem' }}>Change Password</h2>
+        <form onSubmit={handleSubmit} className="modal-form">
           <label htmlFor="currentPassword">Current Password</label>
           <PasswordInput id="currentPassword" value={currentPassword} onChange={setCurrentPassword} disabled={isLoading} />
 
@@ -70,32 +72,16 @@ export function ChangePasswordModal({ onClose }: Props) {
           <label htmlFor="confirmPassword">Confirm New Password</label>
           <PasswordInput id="confirmPassword" value={confirmPassword} onChange={setConfirmPassword} disabled={isLoading} />
 
-          {error && <p role="alert" style={{ color: 'red', margin: 0 }}>{error}</p>}
+          {error && <p role="alert" className="error-msg">{error}</p>}
 
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-            <button type="button" onClick={onClose} disabled={isLoading}>Back</button>
-            <button type="submit" disabled={!!validationError || isLoading}>
+          <div className="modal-actions">
+            <button type="submit" className="btn-gray" disabled={!!validationError || isLoading}>
               {isLoading ? 'Changing...' : 'Change Password'}
             </button>
+            <button type="button" className="btn-link" onClick={onClose} disabled={isLoading}>Back</button>
           </div>
         </form>
       </div>
     </div>
   )
-}
-
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed', inset: 0,
-  background: 'rgba(0,0,0,0.6)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  zIndex: 1100,
-}
-
-const modalStyle: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: '0.5rem',
-  padding: '2rem',
-  minWidth: '300px',
-  maxWidth: '400px',
-  width: '100%',
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { PasswordInput } from '../components/PasswordInput'
 import appIcon from '../assets/app.png'
 
@@ -10,6 +11,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const { login, isLoading } = useAuth()
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
 
   const submitDisabled = !username.trim() || !password || isLoading
 
@@ -26,14 +28,21 @@ export function LoginPage() {
   }
 
   return (
-    <div style={pageStyle}>
-      {isLoading && <div style={spinnerOverlayStyle}><div>Loading...</div></div>}
+    <div className="auth-page">
+      <button
+        className="theme-toggle auth-theme-toggle"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        {theme === 'dark' ? '☀' : '☾'}
+      </button>
+      {isLoading && <div className="spinner-overlay"><div>Loading...</div></div>}
 
-      <img src={appIcon} alt="Maze" width={100} height={100} style={{ borderRadius: '50%' }} />
-      <h1 style={{ margin: '0.75rem 0 0.25rem' }}>Maze</h1>
-      <p style={{ margin: '0 0 1.5rem', color: '#555' }}>Sign in to your account</p>
+      <img src={appIcon} alt="Maze" width={100} height={100} className="auth-logo" />
+      <h1 className="auth-title">Maze</h1>
+      <p className="auth-subtitle">Sign in to your account</p>
 
-      <form onSubmit={handleSubmit} style={formStyle}>
+      <form onSubmit={handleSubmit} className="auth-form">
         <label htmlFor="username">Username</label>
         <input
           id="username"
@@ -46,31 +55,15 @@ export function LoginPage() {
         <label htmlFor="password">Password</label>
         <PasswordInput id="password" value={password} onChange={setPassword} disabled={isLoading} />
 
-        {error && <p role="alert" style={{ color: 'red', margin: 0 }}>{error}</p>}
+        {error && <p role="alert" className="error-msg">{error}</p>}
 
-        <button type="submit" disabled={submitDisabled} style={{ marginTop: '0.5rem' }}>
+        <button type="submit" disabled={submitDisabled} className="btn-submit">
           Sign In
         </button>
-        <button type="button" onClick={() => navigate('/signup')} disabled={isLoading} style={{ background: 'none', border: '1px solid #ccc' }}>
+        <button type="button" onClick={() => navigate('/signup')} disabled={isLoading} className="btn-link">
           Sign Up
         </button>
       </form>
     </div>
   )
-}
-
-const pageStyle: React.CSSProperties = {
-  display: 'flex', flexDirection: 'column', alignItems: 'center',
-  justifyContent: 'center', minHeight: '100vh', padding: '2rem',
-}
-
-const formStyle: React.CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: '0.5rem',
-  width: '100%', maxWidth: '360px',
-}
-
-const spinnerOverlayStyle: React.CSSProperties = {
-  position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.7)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  zIndex: 2000,
 }

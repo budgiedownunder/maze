@@ -139,7 +139,7 @@ describe('AccountModal', () => {
     renderModal()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     await userEvent.click(screen.getByRole('button', { name: /delete account/i }))
-    await userEvent.click(screen.getByRole('button', { name: /confirm/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true }))
   })
 

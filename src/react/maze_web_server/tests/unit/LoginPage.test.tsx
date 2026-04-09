@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
+import { ThemeProvider } from '../../src/context/ThemeContext'
 import { LoginPage } from '../../src/pages/LoginPage'
 
 const mockNavigate = vi.fn()
@@ -31,7 +32,9 @@ vi.mock('../../src/context/AuthContext', async () => {
 function renderLoginPage() {
   return render(
     <MemoryRouter>
-      <LoginPage />
+      <ThemeProvider>
+        <LoginPage />
+      </ThemeProvider>
     </MemoryRouter>
   )
 }

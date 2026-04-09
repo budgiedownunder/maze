@@ -14,7 +14,7 @@ export function PasswordInput({ id, value, onChange, placeholder, disabled }: Pr
   const [visible, setVisible] = useState(false)
 
   return (
-    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+    <div className="password-wrapper">
       <input
         id={id}
         type={visible ? 'text' : 'password'}
@@ -22,21 +22,14 @@ export function PasswordInput({ id, value, onChange, placeholder, disabled }: Pr
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        style={{ flex: 1, paddingRight: '2.5rem' }}
+        className="password-input"
       />
       <button
         type="button"
         onClick={() => setVisible(v => !v)}
         disabled={disabled}
         aria-label={visible ? 'Hide password' : 'Show password'}
-        style={{
-          position: 'absolute',
-          right: '0.5rem',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 0,
-        }}
+        className="password-toggle"
       >
         <img src={visible ? hideIcon : showIcon} alt="" width={20} height={20} />
       </button>

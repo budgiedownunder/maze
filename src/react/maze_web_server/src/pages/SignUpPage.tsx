@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as api from '../api/client'
+import { useTheme } from '../context/ThemeContext'
 import { PasswordInput } from '../components/PasswordInput'
+import appIcon from '../assets/app.png'
 
 export function validateSignupForm(fields: {
   username: string
@@ -35,6 +37,7 @@ export function SignUpPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
 
   const allFilled = username.trim() && fullName.trim() && email.trim() && password && confirmPassword
   const submitDisabled = !allFilled || isLoading
@@ -58,12 +61,20 @@ export function SignUpPage() {
   }
 
   return (
-    <div style={pageStyle}>
-      {isLoading && <div style={spinnerOverlayStyle}><div>Loading...</div></div>}
+    <div className="auth-page">
+      <button
+        className="theme-toggle auth-theme-toggle"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        {theme === 'dark' ? '☀' : '☾'}
+      </button>
+      {isLoading && <div className="spinner-overlay"><div>Loading...</div></div>}
 
-      <h1 style={{ marginBottom: '1.5rem' }}>Create Account</h1>
+      <img src={appIcon} alt="Maze" width={100} height={100} className="auth-logo" />
+      <h1 className="auth-title auth-title--solo">Create Account</h1>
 
-      <form onSubmit={handleSubmit} style={formStyle}>
+      <form onSubmit={handleSubmit} className="auth-form">
         <label htmlFor="su-username">Username</label>
         <input id="su-username" value={username} onChange={e => setUsername(e.target.value)} disabled={isLoading} autoComplete="username" />
 
@@ -79,31 +90,15 @@ export function SignUpPage() {
         <label htmlFor="su-confirm">Confirm Password</label>
         <PasswordInput id="su-confirm" value={confirmPassword} onChange={setConfirmPassword} disabled={isLoading} />
 
-        {error && <p role="alert" style={{ color: 'red', margin: 0 }}>{error}</p>}
+        {error && <p role="alert" className="error-msg">{error}</p>}
 
-        <button type="submit" disabled={submitDisabled} style={{ marginTop: '0.5rem' }}>
+        <button type="submit" disabled={submitDisabled} className="btn-submit">
           Sign Up
         </button>
-        <button type="button" onClick={() => navigate('/login')} disabled={isLoading} style={{ background: 'none', border: '1px solid #ccc' }}>
+        <button type="button" onClick={() => navigate('/login')} disabled={isLoading} className="btn-link">
           Back
         </button>
       </form>
     </div>
   )
-}
-
-const pageStyle: React.CSSProperties = {
-  display: 'flex', flexDirection: 'column', alignItems: 'center',
-  justifyContent: 'center', minHeight: '100vh', padding: '2rem',
-}
-
-const formStyle: React.CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: '0.5rem',
-  width: '100%', maxWidth: '360px',
-}
-
-const spinnerOverlayStyle: React.CSSProperties = {
-  position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.7)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  zIndex: 2000,
 }

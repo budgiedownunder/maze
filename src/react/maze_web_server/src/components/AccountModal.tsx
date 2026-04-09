@@ -3,19 +3,21 @@ import { useNavigate } from 'react-router-dom'
 import * as api from '../api/client'
 import { useAuth, useToken } from '../context/AuthContext'
 import { ChangePasswordModal } from './ChangePasswordModal'
+import { DeleteAccountModal } from './DeleteAccountModal'
 import type { UserProfile } from '../types/api'
 
 interface Props {
   onClose: () => void
 }
 
-type ModalView = 'account' | 'changePassword' | 'confirmDelete'
+type ModalView = 'account' | 'changePassword'
 
 export function AccountModal({ onClose }: Props) {
   const token = useToken() ?? ''
   const { logout } = useAuth()
   const navigate = useNavigate()
   const [view, setView] = useState<ModalView>('account')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -68,7 +70,7 @@ export function AccountModal({ onClose }: Props) {
       navigate('/login', { replace: true })
     } catch {
       setError('Failed to delete account')
-      setView('account')
+      setShowDeleteConfirm(false)
     }
   }
 
@@ -77,18 +79,23 @@ export function AccountModal({ onClose }: Props) {
   }
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="My Account" style={overlayStyle}>
-      <div style={modalStyle}>
-        <h2 style={{ marginTop: 0 }}>My Account</h2>
+    <>
+    {showDeleteConfirm && (
+      <DeleteAccountModal
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
+    )}
+    <div role="dialog" aria-modal="true" aria-label="My Account" className="modal-overlay">
+      <div className="modal modal-md">
+        <h2 className="modal-title">My Account</h2>
 
         {isLoading ? (
           <p>Loading profile...</p>
         ) : (
-          <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <form onSubmit={handleSave} className="modal-form">
             {saved?.is_admin && (
-              <span style={{ alignSelf: 'flex-start', background: '#4f46e5', color: '#fff', borderRadius: '0.25rem', padding: '0.1rem 0.5rem', fontSize: '0.8rem' }}>
-                Administrator
-              </span>
+              <span className="badge-admin">Administrator</span>
             )}
 
             <label htmlFor="acc-username">Username</label>
@@ -100,56 +107,25 @@ export function AccountModal({ onClose }: Props) {
             <label htmlFor="acc-email">Email</label>
             <input id="acc-email" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={isSaving} />
 
-            {error && <p role="alert" style={{ color: 'red', margin: 0 }}>{error}</p>}
+            {error && <p role="alert" className="error-msg">{error}</p>}
 
-            <button type="submit" disabled={saveDisabled}>
+            <button type="submit" disabled={saveDisabled} className="btn-gray">
               {isSaving ? 'Saving...' : 'Save Profile'}
             </button>
           </form>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem', width: '100%' }}>
-          <button type="button" onClick={() => setView('changePassword')} disabled={isLoading}>
+        <div className="modal-actions">
+          <button type="button" onClick={() => setView('changePassword')} disabled={isLoading} className="btn-link">
             Change Password
           </button>
-
-          {view === 'confirmDelete' ? (
-            <>
-              <p style={{ color: '#b91c1c', margin: '0.5rem 0' }}>
-                Are you sure? This will delete all your mazes and cannot be undone.
-              </p>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="button" onClick={handleDeleteConfirm} style={{ background: '#b91c1c', color: '#fff' }}>
-                  Confirm
-                </button>
-                <button type="button" onClick={() => setView('account')}>Cancel</button>
-              </div>
-            </>
-          ) : (
-            <button type="button" onClick={() => setView('confirmDelete')} style={{ color: '#b91c1c', borderColor: '#b91c1c' }}>
-              Delete Account
-            </button>
-          )}
-
-          <button type="button" onClick={onClose} style={{ marginTop: '0.25rem' }}>Close</button>
+          <button type="button" onClick={() => setShowDeleteConfirm(true)} disabled={isLoading} className="btn-danger">
+            Delete Account
+          </button>
+          <button type="button" onClick={onClose} className="btn-gray">Close</button>
         </div>
       </div>
     </div>
+    </>
   )
-}
-
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed', inset: 0,
-  background: 'rgba(0,0,0,0.5)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  zIndex: 1000,
-}
-
-const modalStyle: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: '0.5rem',
-  padding: '2rem',
-  minWidth: '300px',
-  maxWidth: '420px',
-  width: '100%',
 }

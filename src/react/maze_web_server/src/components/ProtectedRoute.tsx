@@ -9,7 +9,7 @@ export function ProtectedRoute({ children }: Props) {
   const { isAuthenticated, isLoading } = useAuth()
 
   if (isLoading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>Loading...</div>
+    return <div className="loading-center">Loading...</div>
   }
 
   if (!isAuthenticated) {

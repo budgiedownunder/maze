@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
+import { ThemeProvider } from '../../src/context/ThemeContext'
 import { SignUpPage } from '../../src/pages/SignUpPage'
 
 const mockNavigate = vi.fn()
@@ -32,7 +33,9 @@ async function fillForm(overrides: Partial<Record<string, string>> = {}) {
 function renderSignUpPage() {
   return render(
     <MemoryRouter>
-      <SignUpPage />
+      <ThemeProvider>
+        <SignUpPage />
+      </ThemeProvider>
     </MemoryRouter>
   )
 }
