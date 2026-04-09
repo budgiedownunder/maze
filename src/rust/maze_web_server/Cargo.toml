@@ -12,7 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 actix-web = { version = "4", features = ["rustls-0_20"] }
-actix-service = "2" 
+actix-files = "0.6"
+actix-service = "2"
 argon2 = "0.5"
 auth = { path = "../auth" }
 chrono = { version = "0.4", features = ["serde"] }

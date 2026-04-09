@@ -85,6 +85,12 @@ pub struct AppConfig {
     /// Logging configuration controlling log file output.
     #[serde(default)]
     pub logging: LoggingConfig,
+
+    /// Path to the built React app dist directory (relative to the server working directory,
+    /// or absolute). If the directory does not exist, the server runs as API-only.
+    /// Can be overridden with `MAZE_WEB_SERVER_STATIC_DIR`.
+    #[serde(default = "default_static_dir")]
+    pub static_dir: String,
 }
 
 impl Default for AppConfig {
@@ -93,6 +99,7 @@ impl Default for AppConfig {
             port: default_port(),
             security: SecurityConfig::default(),
             logging: LoggingConfig::default(),
+            static_dir: default_static_dir(),
         }
     }
 }
@@ -100,6 +107,7 @@ impl Default for AppConfig {
 
 // Default values
 fn default_port() -> u16 { 8443 }
+fn default_static_dir() -> String { "static".to_string() }
 fn default_security_cert_file() -> String { "cert.pem".to_string() }
 fn default_security_key_file() -> String { "key.pem".to_string() }
 fn default_security_login_expiry_hours() -> u32 { 24 }
@@ -117,6 +125,7 @@ impl AppConfig {
             .set_default("logging.log_dir", default_logging_log_dir())?
             .set_default("logging.log_level", default_logging_log_level())?
             .set_default("logging.log_file_prefix", default_logging_log_file_prefix())?
+            .set_default("static_dir", default_static_dir())?
             .add_source(File::with_name("config.toml").required(false));
 
         builder = set_env_overrides(builder)?;
@@ -162,6 +171,10 @@ fn set_env_overrides(mut builder: ConfigBuilder<DefaultState>) -> Result<ConfigB
         builder = builder.set_override("logging.log_file_prefix", log_file_prefix)?;
     }
 
+    if let Ok(static_dir) = std::env::var(get_app_env_name("STATIC_DIR")) {
+        builder = builder.set_override("static_dir", static_dir)?;
+    }
+
     Ok(builder)
 }
 
@@ -204,5 +217,18 @@ mod tests {
         "#;
         let cfg: AppConfig = toml::from_str(toml).unwrap();
         assert_eq!(cfg.logging.log_file_prefix, "my-app-");
+    }
+
+    #[test]
+    fn static_dir_deserialises_from_toml() {
+        let toml = r#"static_dir = "../../react/maze_web_server/dist""#;
+        let cfg: AppConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.static_dir, "../../react/maze_web_server/dist");
+    }
+
+    #[test]
+    fn static_dir_uses_default_when_absent() {
+        let cfg: AppConfig = toml::from_str("").unwrap();
+        assert_eq!(cfg.static_dir, "static");
     }
 }

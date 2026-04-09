@@ -4,7 +4,8 @@ pub mod middleware;
 pub mod service;
 mod utils;
 
-use actix_web::{ App, middleware::Logger, HttpServer, web};
+use actix_files::{Files, NamedFile};
+use actix_web::{ App, HttpRequest, middleware::Logger, HttpServer, web};
 use auth::{config::PasswordHashConfig, hashing::hash_password};
 use config::app::AppConfig;
 use rustls::{ServerConfig, Certificate, PrivateKey};
@@ -76,6 +77,7 @@ fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Stor
 pub fn create_app(
     hash_config: &PasswordHashConfig,
     store: web::Data<SharedStore>,
+    static_dir: String,
 ) -> App<impl actix_service::ServiceFactory<
     actix_web::dev::ServiceRequest,
     Config = (),
@@ -84,7 +86,8 @@ pub fn create_app(
     InitError = (),
 >> {
     let auth_service = web::Data::new(AuthService::new(hash_config.clone()));
-  
+    let index_path = format!("{}/index.html", static_dir);
+
     App::new()
         .app_data(auth_service)
         .app_data(store)
@@ -92,6 +95,21 @@ pub fn create_app(
         .service(api::register_redoc())
         .service(api::register_rapidoc())
         .service(api::register_swagger_ui())
+        .service(
+            Files::new("/", &static_dir)
+                .index_file("index.html")
+                .default_handler({
+                    let idx = index_path.clone();
+                    web::get().to(move |req: HttpRequest| {
+                        let path = idx.clone();
+                        async move {
+                            NamedFile::open_async(&path)
+                                .await
+                                .map(|f| f.into_response(&req))
+                        }
+                    })
+                }),
+        )
 }
 
 
@@ -116,7 +134,7 @@ pub async fn run_server() -> std::io::Result<()> {
     let shared_store: SharedStore = Arc::new(RwLock::new(store));
 
     HttpServer::new(move || {
-        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()))
+        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()), config.static_dir.clone())
         .app_data(web::Data::new(config.clone()))
         .wrap(Logger::default())
     })

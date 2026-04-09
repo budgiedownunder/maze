@@ -3,6 +3,12 @@
 # Server port to listen on (default: 8443)
 port = 8443
 
+# Path to the built React app dist directory (relative to the server working directory,
+# or absolute). For local development with the React app, set to:
+#   ../../react/maze_web_server/dist
+# If the directory does not exist, the server runs as API-only (no frontend served).
+static_dir = "static"
+
 [security]
 # Path to TLS certificate file (default: "cert.pem")
 cert_file = "cert.pem"
