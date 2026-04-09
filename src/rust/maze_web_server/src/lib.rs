@@ -86,7 +86,6 @@ pub fn create_app(
     InitError = (),
 >> {
     let auth_service = web::Data::new(AuthService::new(hash_config.clone()));
-    let index_path = format!("{}/index.html", static_dir);
 
     App::new()
         .app_data(auth_service)
@@ -95,21 +94,27 @@ pub fn create_app(
         .service(api::register_redoc())
         .service(api::register_rapidoc())
         .service(api::register_swagger_ui())
-        .service(
-            Files::new("/", &static_dir)
-                .index_file("index.html")
-                .default_handler({
-                    let idx = index_path.clone();
-                    web::get().to(move |req: HttpRequest| {
-                        let path = idx.clone();
-                        async move {
-                            NamedFile::open_async(&path)
-                                .await
-                                .map(|f| f.into_response(&req))
-                        }
-                    })
-                }),
-        )
+        .configure(move |cfg| {
+            if std::path::Path::new(&static_dir).is_dir() {
+                let index_path = format!("{}/index.html", static_dir);
+                cfg.service(
+                    Files::new("/", &static_dir)
+                        .index_file("index.html")
+                        .default_handler({
+                            web::get().to(move |req: HttpRequest| {
+                                let path = index_path.clone();
+                                async move {
+                                    NamedFile::open_async(&path)
+                                        .await
+                                        .map(|f| f.into_response(&req))
+                                }
+                            })
+                        }),
+                );
+            } else {
+                log::info!("static_dir '{}' does not exist — running as API-only", static_dir);
+            }
+        })
 }
 
 
