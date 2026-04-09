@@ -175,8 +175,7 @@ export function useAuth(): AuthContextValue {
   return ctx
 }
 
-export function useToken(): string {
+export function useToken(): string | null {
   const stored = loadAuthState()
-  if (!stored) throw new Error('No auth token available')
-  return stored.token
+  return stored?.token ?? null
 }

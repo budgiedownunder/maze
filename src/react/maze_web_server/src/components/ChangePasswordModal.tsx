@@ -29,7 +29,7 @@ interface Props {
 }
 
 export function ChangePasswordModal({ onClose }: Props) {
-  const token = useToken()
+  const token = useToken() ?? ''
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')

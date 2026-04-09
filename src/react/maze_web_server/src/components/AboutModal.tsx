@@ -1,4 +1,4 @@
-import appIcon from '/app.png'
+import appIcon from '../assets/app.png'
 
 interface Props {
   onClose: () => void

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { PasswordInput } from '../components/PasswordInput'
-import appIcon from '/app.png'
+import appIcon from '../assets/app.png'
 
 export function LoginPage() {
   const [username, setUsername] = useState('')

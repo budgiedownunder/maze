@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import * as api from '../api/client'
 import { useAuth, useToken } from '../context/AuthContext'
 import { ChangePasswordModal } from './ChangePasswordModal'
@@ -11,8 +12,9 @@ interface Props {
 type ModalView = 'account' | 'changePassword' | 'confirmDelete'
 
 export function AccountModal({ onClose }: Props) {
-  const token = useToken()
+  const token = useToken() ?? ''
   const { logout } = useAuth()
+  const navigate = useNavigate()
   const [view, setView] = useState<ModalView>('account')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -63,6 +65,7 @@ export function AccountModal({ onClose }: Props) {
     try {
       await api.deleteMe(token)
       await logout()
+      navigate('/login', { replace: true })
     } catch {
       setError('Failed to delete account')
       setView('account')

@@ -10,6 +10,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+async function requestEmpty(path: string, options?: RequestInit): Promise<void> {
+  const response = await fetch(`${BASE}${path}`, options)
+  if (!response.ok) {
+    throw Object.assign(new Error(response.statusText), { status: response.status })
+  }
+}
+
 function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
 }
@@ -43,7 +50,7 @@ export function signup(
   email: string,
   password: string,
 ): Promise<void> {
-  return request<void>('/signup', {
+  return requestEmpty('/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, full_name, email, password }),
@@ -65,7 +72,7 @@ export function updateProfile(token: string, body: UpdateProfileRequest): Promis
 }
 
 export function changePassword(token: string, body: ChangePasswordRequest): Promise<void> {
-  return request<void>('/users/me/password', {
+  return requestEmpty('/users/me/password', {
     method: 'PUT',
     headers: authHeaders(token),
     body: JSON.stringify(body),
