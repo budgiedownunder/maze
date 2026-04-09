@@ -77,7 +77,6 @@ The following configuration settings exist:
 | Global   | `port`             | Integer | `8443`   | `MAZE_WEB_SERVER_PORT`
 | Security | `cert_file`        | Text    | `cert.pem` | `MAZE_WEB_SERVER_SECURITY_CERT_FILE`
 |          | `key_file`         | Text    | `key.pem`  | `MAZE_WEB_SERVER_SECURITY_KEY_FILE`
-|          | `auth_token`       | Text    | -          | `MAZE_WEB_SERVER_SECURITY_AUTH_TOKEN`
 | Logging  | `log_dir`          | Text    | `logs`            | `MAZE_WEB_SERVER_LOGGING_LOG_DIR`
 |          | `log_level`        | Text    | `info`            | `MAZE_WEB_SERVER_LOGGING_LOG_LEVEL`
 |          | `log_file_prefix`  | Text    | `maze_web_server_`| `MAZE_WEB_SERVER_LOGGING_LOG_FILE_PREFIX`
@@ -103,7 +102,6 @@ Notes:
 - `log_file_prefix` is used verbatim — include any desired separator as the final character (e.g. `"maze_web_server_"` produces `maze_web_server_2026-04-09.log`, while `"my-app-"` produces `my-app-2026-04-09.log`).
 - Valid `log_level` values are: `error`, `warn`, `info`, `debug`, `trace`.
 
-> `auth_token` is a static API key used for privileged (admin) or service-to-service access via the `X-API-Key` request header. Regular users authenticate via the `POST /api/v1/login` endpoint, which returns a short-lived bearer token.
 
 ## Authentication
 
@@ -111,7 +109,7 @@ The server supports two authentication mechanisms:
 
 | Mechanism | Header | Usage |
 |:----------|:-------|:------|
-| Static API key | `X-API-Key: <auth_token>` | Admin / service access; configured via `auth_token` |
+| Static API key | `X-API-Key: <key>` | API access; key is a UUID stored per user in the data store |
 | Bearer token | `Authorization: Bearer <token>` | Per-user login; token obtained via `POST /api/v1/login` |
 
 The following endpoints manage user identity:
@@ -154,5 +152,3 @@ On first run, if no admin user exists in the data store, the server automaticall
 | Password | `Admin1!` |
 
 > **Important:** The default password is intentionally simple. **Change it immediately after first login** using the self-service endpoint (`PUT /api/v1/users/me/password`) or the admin user-management API (`PUT /api/v1/users/{id}`).
-
-The admin account is used with the bearer token mechanism (`POST /api/v1/login`) or, for service access, via the static API key configured in `auth_token`.

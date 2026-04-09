@@ -102,7 +102,6 @@ impl Default for AppConfig {
 fn default_port() -> u16 { 8443 }
 fn default_security_cert_file() -> String { "cert.pem".to_string() }
 fn default_security_key_file() -> String { "key.pem".to_string() }
-fn default_security_auth_token() -> String { "".to_string() }
 fn default_security_login_expiry_hours() -> u32 { 24 }
 fn default_logging_log_dir() -> String { "logs".to_string() }
 fn default_logging_log_level() -> String { "info".to_string() }
@@ -115,7 +114,6 @@ impl AppConfig {
             .set_default("port", 8443)?
             .set_default("security.cert_file", default_security_cert_file())?
             .set_default("security.key_file", default_security_key_file())?
-            .set_default("security.auth_token", default_security_auth_token())?
             .set_default("logging.log_dir", default_logging_log_dir())?
             .set_default("logging.log_level", default_logging_log_level())?
             .set_default("logging.log_file_prefix", default_logging_log_file_prefix())?
@@ -150,10 +148,6 @@ fn set_env_overrides(mut builder: ConfigBuilder<DefaultState>) -> Result<ConfigB
 
     if let Ok(key_file) = std::env::var(get_app_env_name("SECURITY_KEY_FILE")) {
         builder = builder.set_override("security.key_file", key_file)?;
-    }
-
-    if let Ok(auth_token) = std::env::var(get_app_env_name("SECURITY_AUTH_TOKEN")) {
-        builder = builder.set_override("security.auth_token", auth_token)?;
     }
 
     if let Ok(log_dir) = std::env::var(get_app_env_name("LOGGING_LOG_DIR")) {
