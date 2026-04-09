@@ -4,9 +4,9 @@ import userEvent from '@testing-library/user-event'
 import { AboutModal } from '../../src/components/AboutModal'
 
 describe('AboutModal', () => {
-  it('renders app name and version', () => {
+  it('renders app name', () => {
     render(<AboutModal onClose={() => {}} />)
-    expect(screen.getByText('Maze Application v1.0')).toBeInTheDocument()
+    expect(screen.getByText('Maze')).toBeInTheDocument()
   })
 
   it('renders copyright', () => {
@@ -16,7 +16,7 @@ describe('AboutModal', () => {
 
   it('renders description', () => {
     render(<AboutModal onClose={() => {}} />)
-    expect(screen.getByText('An app for designing and solving mazes')).toBeInTheDocument()
+    expect(screen.getByText('Maze designer and solver')).toBeInTheDocument()
   })
 
   it('calls onClose when Close button is clicked', async () => {

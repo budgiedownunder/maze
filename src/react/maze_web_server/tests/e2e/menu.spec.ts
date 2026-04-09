@@ -20,7 +20,7 @@ test('About modal opens and closes', async ({ page }) => {
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /about/i }).click()
   await expect(page.getByRole('dialog', { name: /about/i })).toBeVisible()
-  await expect(page.getByRole('dialog')).toContainText('Maze Application v1.0')
+  await expect(page.getByRole('dialog')).toContainText('Maze')
   await expect(page.getByRole('dialog')).toContainText('© BudgieDownUnder, 2026')
   await page.getByRole('button', { name: /close/i }).click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
