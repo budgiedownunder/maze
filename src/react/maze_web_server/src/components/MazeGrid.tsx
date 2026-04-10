@@ -1,4 +1,4 @@
-import { forwardRef, useMemo, Fragment } from 'react'
+import { forwardRef, useMemo } from 'react'
 import type { CellPoint } from '../hooks/useMazeEditor'
 
 export const CELL_SIZE = 32
@@ -127,56 +127,56 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         onKeyDown={onKeyDown}
         aria-label="Maze grid"
       >
-        <div
-          className="maze-grid"
-          style={{ '--cols': cols } as React.CSSProperties}
-        >
-          {/* Corner */}
-          <div className="maze-cell-corner" />
-
-          {/* Column headers */}
-          {Array.from({ length: cols }, (_, c) => (
-            <div
-              key={`col-${c}`}
-              className="maze-cell-col-header"
-              onClick={e => onColHeaderClick?.(c, e.shiftKey)}
-              aria-label={`Column ${c + 1}`}
-            >
-              {c + 1}
-            </div>
-          ))}
-
-          {/* Rows */}
-          {Array.from({ length: rows }, (_, r) => (
-            <Fragment key={`row-${r}`}>
-              <div
-                className="maze-cell-row-header"
-                onClick={e => onRowHeaderClick?.(r, e.shiftKey)}
-                aria-label={`Row ${r + 1}`}
-              >
-                {r + 1}
-              </div>
-              {Array.from({ length: cols }, (_, c) => {
-                const cell = grid[r]?.[c] ?? ' '
-                const img = cellImage(cell)
-                const solutionImgSrc = solutionMap.get(`${r},${c}`)
-                return (
-                  <div
-                    key={`cell-${r}-${c}`}
-                    className={getCellClasses(r, c)}
-                    onClick={e => onCellClick?.(r, c, e.shiftKey)}
-                    aria-label={`Cell ${r + 1},${c + 1}`}
-                  >
-                    {img && <img src={img.src} alt={img.alt} />}
-                    {solutionImgSrc && (
-                      <img src={solutionImgSrc} alt="Solution path" className="maze-cell-solution-img" />
-                    )}
-                  </div>
-                )
-              })}
-            </Fragment>
-          ))}
-        </div>
+        <table className="maze-grid">
+          <thead>
+            <tr>
+              <th className="maze-cell-corner" aria-hidden="true" />
+              {Array.from({ length: cols }, (_, c) => (
+                <th
+                  key={`col-${c}`}
+                  scope="col"
+                  className="maze-cell-col-header"
+                  onClick={e => onColHeaderClick?.(c, e.shiftKey)}
+                  aria-label={`Column ${c + 1}`}
+                >
+                  {c + 1}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: rows }, (_, r) => (
+              <tr key={`row-${r}`}>
+                <th
+                  scope="row"
+                  className="maze-cell-row-header"
+                  onClick={e => onRowHeaderClick?.(r, e.shiftKey)}
+                  aria-label={`Row ${r + 1}`}
+                >
+                  {r + 1}
+                </th>
+                {Array.from({ length: cols }, (_, c) => {
+                  const cell = grid[r]?.[c] ?? ' '
+                  const img = cellImage(cell)
+                  const solutionImgSrc = solutionMap.get(`${r},${c}`)
+                  return (
+                    <td
+                      key={`cell-${r}-${c}`}
+                      className={getCellClasses(r, c)}
+                      onClick={e => onCellClick?.(r, c, e.shiftKey)}
+                      aria-label={`Cell ${r + 1},${c + 1}`}
+                    >
+                      {img && <img src={img.src} alt={img.alt} />}
+                      {solutionImgSrc && (
+                        <img src={solutionImgSrc} alt="Solution path" className="maze-cell-solution-img" />
+                      )}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
         {frameStyle && (
           <div

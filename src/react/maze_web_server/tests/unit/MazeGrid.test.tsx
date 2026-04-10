@@ -24,27 +24,21 @@ function renderGrid(props: Partial<React.ComponentPropsWithoutRef<typeof MazeGri
 describe('MazeGrid', () => {
   it('renders correct number of data cells', () => {
     renderGrid()
-    // 3 rows × 3 cols = 9 data cells, labelled "Cell R,C"
-    const cells = screen.getAllByRole('generic').filter(el =>
-      el.getAttribute('aria-label')?.startsWith('Cell '),
-    )
-    expect(cells).toHaveLength(9)
+    // 3 rows × 3 cols = 9 data cells (<td> elements)
+    expect(screen.getAllByRole('cell')).toHaveLength(9)
   })
 
   it('renders correct number of column headers', () => {
     renderGrid()
-    const colHeaders = screen.getAllByRole('generic').filter(el =>
-      /^Column \d+$/.test(el.getAttribute('aria-label') ?? ''),
-    )
+    // <th scope="col"> — excludes the corner (aria-hidden)
+    const colHeaders = screen.getAllByRole('columnheader')
     expect(colHeaders).toHaveLength(3)
   })
 
   it('renders correct number of row headers', () => {
     renderGrid()
-    const rowHeaders = screen.getAllByRole('generic').filter(el =>
-      /^Row \d+$/.test(el.getAttribute('aria-label') ?? ''),
-    )
-    expect(rowHeaders).toHaveLength(3)
+    // <th scope="row">
+    expect(screen.getAllByRole('rowheader')).toHaveLength(3)
   })
 
   it('renders Wall image for W cells', () => {

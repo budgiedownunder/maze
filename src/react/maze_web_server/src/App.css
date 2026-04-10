@@ -522,8 +522,10 @@
 }
 
 .maze-grid {
-  display: grid;
-  grid-template-columns: 24px repeat(var(--cols), 32px);
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  width: max-content;
 }
 
 /* Corner cell — sticky on both axes */
@@ -552,9 +554,8 @@
   border-bottom: 1px solid #d1d5db;
   box-sizing: border-box;
   font-size: 0.6rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  text-align: center;
+  vertical-align: middle;
   color: #6b7280;
   cursor: pointer;
   user-select: none;
@@ -576,9 +577,8 @@
   border-bottom: 1px solid #d1d5db;
   box-sizing: border-box;
   font-size: 0.6rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  text-align: center;
+  vertical-align: middle;
   color: #6b7280;
   cursor: pointer;
   user-select: none;
