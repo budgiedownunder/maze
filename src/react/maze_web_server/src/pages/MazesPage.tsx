@@ -190,11 +190,11 @@ export function MazesPage() {
                 <li
                   key={maze.id}
                   className="maze-list-item"
-                  onClick={() => navigate(`/mazes/${maze.id}`)}
+                  onClick={() => navigate(`/mazes/${encodeURIComponent(maze.id)}`)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={e => {
-                    if (e.key === 'Enter' || e.key === ' ') navigate(`/mazes/${maze.id}`)
+                    if (e.key === 'Enter' || e.key === ' ') navigate(`/mazes/${encodeURIComponent(maze.id)}`)
                   }}
                 >
                   <img src="/images/maze/maze.png" className="maze-item-icon" alt="" aria-hidden="true" />

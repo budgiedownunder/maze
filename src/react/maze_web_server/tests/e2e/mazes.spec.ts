@@ -153,14 +153,11 @@ test('Delete → cancel → item stays in list', async ({ page }) => {
 test('refresh button reloads the maze list', async ({ page }) => {
   await login(page)
 
-  // Wait for initial load to complete (list or empty state visible)
-  await expect(page.locator('main')).toBeVisible()
-  const hasItems = await page.locator('.maze-list-item').count() > 0
-  if (hasItems) {
-    await expect(page.locator('.maze-list')).toBeVisible()
-  } else {
-    await expect(page.getByText(/no mazes yet/i)).toBeVisible()
-  }
+  // Wait for initial load to complete — either the list or the empty state must be visible
+  const items = page.locator('.maze-list-item')
+  const emptyState = page.getByText(/no mazes yet/i)
+  await expect(items.first().or(emptyState)).toBeVisible()
+  const hasItems = await items.count() > 0
 
   // Click refresh — page should still show the list or empty state afterwards
   await page.getByRole('button', { name: /refresh/i }).click()
@@ -168,6 +165,6 @@ test('refresh button reloads the maze list', async ({ page }) => {
   if (hasItems) {
     await expect(page.locator('.maze-list')).toBeVisible()
   } else {
-    await expect(page.getByText(/no mazes yet/i)).toBeVisible()
+    await expect(emptyState).toBeVisible()
   }
 })

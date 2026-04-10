@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { LoginPage } from './pages/LoginPage'
 import { SignUpPage } from './pages/SignUpPage'
 import { MazesPage } from './pages/MazesPage'
+import { MazePage } from './pages/MazePage'
 
 export default function App() {
   return (
@@ -19,6 +20,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <MazesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mazes/new"
+            element={
+              <ProtectedRoute>
+                <MazePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/mazes/:id"
+            element={
+              <ProtectedRoute>
+                <MazePage />
               </ProtectedRoute>
             }
           />
