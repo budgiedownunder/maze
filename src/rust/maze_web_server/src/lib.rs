@@ -97,20 +97,40 @@ pub fn create_app(
         .configure(move |cfg| {
             if std::path::Path::new(&static_dir).is_dir() {
                 let index_path = format!("{}/index.html", static_dir);
-                cfg.service(
-                    Files::new("/", &static_dir)
-                        .index_file("index.html")
-                        .default_handler({
-                            web::get().to(move |req: HttpRequest| {
-                                let path = index_path.clone();
-                                async move {
-                                    NamedFile::open_async(&path)
-                                        .await
-                                        .map(|f| f.into_response(&req))
-                                }
-                            })
-                        }),
-                );
+
+                // Register known SPA routes explicitly.
+                // This prevents actix-files from attempting to decode the URL path as
+                // a filesystem path — which rejects segments containing characters like
+                // '\' before the default_handler can fire.
+                let spa = {
+                    let path = index_path.clone();
+                    move |req: HttpRequest| {
+                        let path = path.clone();
+                        async move {
+                            NamedFile::open_async(&path)
+                                .await
+                                .map(|f| f.into_response(&req))
+                        }
+                    }
+                };
+                cfg.route("/login",        web::get().to(spa.clone()))
+                   .route("/signup",       web::get().to(spa.clone()))
+                   .route("/mazes",        web::get().to(spa.clone()))
+                   .route("/mazes/{tail}", web::get().to(spa.clone()))
+                   .service(
+                       Files::new("/", &static_dir)
+                           .index_file("index.html")
+                           .default_handler({
+                               web::get().to(move |req: HttpRequest| {
+                                   let path = index_path.clone();
+                                   async move {
+                                       NamedFile::open_async(&path)
+                                           .await
+                                           .map(|f| f.into_response(&req))
+                                   }
+                               })
+                           }),
+                   );
             } else {
                 log::info!("static_dir '{}' does not exist — running as API-only", static_dir);
             }
