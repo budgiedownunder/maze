@@ -163,6 +163,98 @@ describe('MazesPage', () => {
     expect(screen.getByText(mockMazeBeta.name)).toBeInTheDocument()
   })
 
+  it('each maze item has a Rename button', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    const renameButtons = screen.getAllByRole('button', { name: /^Rename /i })
+    expect(renameButtons).toHaveLength(2)
+  })
+
+  it('clicking Rename opens the prompt modal pre-filled with the maze name', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Rename ${mockMazeAlpha.name}` }))
+    const dialog = screen.getByRole('dialog', { name: 'Rename Maze' })
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByRole('textbox')).toHaveValue(mockMazeAlpha.name)
+  })
+
+  it('Rename Cancel closes the modal without saving', async () => {
+    const putSpy = vi.fn()
+    server.use(http.put('/api/v1/mazes/:id', () => { putSpy(); return new HttpResponse(null, { status: 200 }) }))
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Rename ${mockMazeAlpha.name}` }))
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    expect(screen.queryByRole('dialog', { name: 'Rename Maze' })).not.toBeInTheDocument()
+    expect(putSpy).not.toHaveBeenCalled()
+  })
+
+  it('Rename shows validation error for empty name', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Rename ${mockMazeAlpha.name}` }))
+    const input = screen.getByRole('textbox')
+    await userEvent.clear(input)
+    await userEvent.click(screen.getByRole('button', { name: /^rename$/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/empty/i)
+    expect(screen.getByRole('dialog', { name: 'Rename Maze' })).toBeInTheDocument()
+  })
+
+  it('Rename shows validation error for duplicate name', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Rename ${mockMazeAlpha.name}` }))
+    const input = screen.getByRole('textbox')
+    await userEvent.clear(input)
+    await userEvent.type(input, mockMazeBeta.name)
+    await userEvent.click(screen.getByRole('button', { name: /^rename$/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/already exists/i)
+    expect(screen.getByRole('dialog', { name: 'Rename Maze' })).toBeInTheDocument()
+  })
+
+  it('confirming Rename updates the list', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Rename ${mockMazeAlpha.name}` }))
+    const input = screen.getByRole('textbox')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'AlphaRenamed')
+    await userEvent.click(screen.getByRole('button', { name: /^rename$/i }))
+
+    await waitFor(() => expect(screen.getByText('AlphaRenamed')).toBeInTheDocument())
+    expect(screen.queryByRole('dialog', { name: 'Rename Maze' })).not.toBeInTheDocument()
+  })
+
+  it('shows server error inside the Rename modal when update fails', async () => {
+    server.use(
+      http.put('/api/v1/mazes/:id', () => new HttpResponse('Name already taken', { status: 409 }))
+    )
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Rename ${mockMazeAlpha.name}` }))
+    const input = screen.getByRole('textbox')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'NewName')
+    await userEvent.click(screen.getByRole('button', { name: /^rename$/i }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(screen.getByRole('alert')).toHaveTextContent('Name already taken')
+    expect(screen.getByRole('dialog', { name: 'Rename Maze' })).toBeInTheDocument()
+  })
+
   it('shows server error message inside the modal when delete fails', async () => {
     server.use(
       http.delete('/api/v1/mazes/:id', () => new HttpResponse('Maze is locked', { status: 409 }))

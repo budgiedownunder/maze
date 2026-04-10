@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { PromptModal } from '../components/PromptModal'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import { useToken } from '../context/AuthContext'
-import { getMazes, deleteMaze } from '../api/client'
+import { getMazes, deleteMaze, updateMaze } from '../api/client'
 import type { Maze } from '../types/api'
 
 export function MazesPage() {
@@ -18,8 +19,14 @@ export function MazesPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshCount, setRefreshCount] = useState(0)
+
   const [mazeToDelete, setMazeToDelete] = useState<Maze | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const [mazeToRename, setMazeToRename] = useState<Maze | null>(null)
+  const [renameError, setRenameError] = useState<string | null>(null)
+  const [isRenaming, setIsRenaming] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -37,6 +44,8 @@ export function MazesPage() {
 
   async function handleConfirmDelete() {
     if (!mazeToDelete) return
+    setIsDeleting(true)
+    document.body.classList.add('is-busy')
     try {
       await deleteMaze(token!, mazeToDelete.id)
       setMazeToDelete(null)
@@ -44,7 +53,34 @@ export function MazesPage() {
       setRefreshCount(c => c + 1)
     } catch (ex: unknown) {
       setDeleteError((ex as { message?: string }).message ?? 'Failed to delete maze.')
+    } finally {
+      setIsDeleting(false)
+      document.body.classList.remove('is-busy')
     }
+  }
+
+  async function handleConfirmRename(name: string) {
+    if (!mazeToRename) return
+    setIsRenaming(true)
+    document.body.classList.add('is-busy')
+    try {
+      await updateMaze(token!, mazeToRename.id, { name, definition: mazeToRename.definition })
+      setMazeToRename(null)
+      setRenameError(null)
+      setRefreshCount(c => c + 1)
+    } catch (ex: unknown) {
+      setRenameError((ex as { message?: string }).message ?? 'Failed to rename maze.')
+    } finally {
+      setIsRenaming(false)
+      document.body.classList.remove('is-busy')
+    }
+  }
+
+  function validateRenameName(name: string): string | null {
+    const duplicate = mazes.some(
+      m => m.id !== mazeToRename?.id && m.name.toLowerCase() === name.toLowerCase()
+    )
+    return duplicate ? 'A maze with that name already exists.' : null
   }
 
   return (
@@ -55,9 +91,23 @@ export function MazesPage() {
           message={`Delete "${mazeToDelete.name}"? This cannot be undone.`}
           confirmLabel="Delete"
           isDangerous
+          isLoading={isDeleting}
           error={deleteError}
           onConfirm={handleConfirmDelete}
           onCancel={() => { setMazeToDelete(null); setDeleteError(null) }}
+        />
+      )}
+      {mazeToRename && (
+        <PromptModal
+          title="Rename Maze"
+          label="New name"
+          initialValue={mazeToRename.name}
+          confirmLabel="Rename"
+          validate={validateRenameName}
+          isLoading={isRenaming}
+          error={renameError}
+          onConfirm={handleConfirmRename}
+          onCancel={() => { setMazeToRename(null); setRenameError(null) }}
         />
       )}
       <header className="app-header">
@@ -114,6 +164,15 @@ export function MazesPage() {
                     <span className="maze-item-subtitle">{rows} {rows === 1 ? 'row' : 'rows'} × {cols} {cols === 1 ? 'column' : 'columns'}</span>
                   </div>
                   <div className="maze-item-actions">
+                    <button
+                      type="button"
+                      className="maze-item-action btn-secondary"
+                      onClick={e => { e.stopPropagation(); setMazeToRename(maze); setRenameError(null) }}
+                      aria-label={`Rename ${maze.name}`}
+                    >
+                      <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
+                      <span className="maze-item-action-label">Rename</span>
+                    </button>
                     <button
                       type="button"
                       className="maze-item-action btn-danger-outline"

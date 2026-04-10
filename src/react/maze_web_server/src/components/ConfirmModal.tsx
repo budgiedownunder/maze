@@ -4,6 +4,7 @@ interface Props {
   confirmLabel: string
   cancelLabel?: string
   isDangerous?: boolean
+  isLoading?: boolean
   error?: string | null
   onConfirm: () => void
   onCancel: () => void
@@ -15,12 +16,13 @@ export function ConfirmModal({
   confirmLabel,
   cancelLabel = 'Cancel',
   isDangerous = false,
+  isLoading = false,
   error,
   onConfirm,
   onCancel,
 }: Props) {
   return (
-    <div role="dialog" aria-modal="true" aria-label={title} className="modal-overlay" style={{ zIndex: 1200 }}>
+    <div role="dialog" aria-modal="true" aria-label={title} className="modal-overlay" style={{ zIndex: 1200, cursor: isLoading ? 'wait' : undefined }}>
       <div className="modal modal-sm">
         <h2 className="modal-title">{title}</h2>
         <p>{message}</p>

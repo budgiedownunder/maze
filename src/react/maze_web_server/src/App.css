@@ -62,9 +62,17 @@
   border: 1px solid var(--border-input);
 }
 
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  padding: 0.75rem 1rem;
+}
+
 .btn-secondary {
   background: none;
   border: 1px solid var(--border-input);
+  padding: 0.75rem 1rem;
 }
 
 .btn-gray {
@@ -180,6 +188,7 @@
 
 .modal-actions-row > button {
   flex: 1;
+  margin-top: 0;
 }
 
 .modal-actions-end {

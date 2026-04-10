@@ -34,6 +34,44 @@ test('maze list shows dimensions subtitle in correct format', async ({ page }) =
   }
 })
 
+test('Rename → modal pre-filled → enter new name → list updates', async ({ page }) => {
+  await login(page)
+
+  const items = page.locator('.maze-list-item')
+  await expect(items.first()).toBeVisible()
+
+  const firstName = await items.first().locator('.maze-item-name').textContent()
+
+  await items.first().getByRole('button', { name: /rename/i }).click()
+  const dialog = page.getByRole('dialog', { name: 'Rename Maze' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('textbox')).toHaveValue(firstName!)
+
+  await dialog.getByRole('textbox').fill('RenamedMaze')
+  await dialog.getByRole('button', { name: /^rename$/i }).click()
+
+  await expect(dialog).not.toBeVisible()
+  await expect(page.locator('.maze-item-name', { hasText: 'RenamedMaze' })).toBeVisible()
+  await expect(page.locator('.maze-item-name', { hasText: firstName! })).not.toBeVisible()
+})
+
+test('Rename → cancel → name unchanged', async ({ page }) => {
+  await login(page)
+
+  const items = page.locator('.maze-list-item')
+  await expect(items.first()).toBeVisible()
+
+  const firstName = await items.first().locator('.maze-item-name').textContent()
+
+  await items.first().getByRole('button', { name: /rename/i }).click()
+  await expect(page.getByRole('dialog', { name: 'Rename Maze' })).toBeVisible()
+
+  await page.getByRole('button', { name: /cancel/i }).click()
+
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(page.locator('.maze-item-name', { hasText: firstName! })).toBeVisible()
+})
+
 test('Delete → confirm → item removed from list', async ({ page }) => {
   await login(page)
 
