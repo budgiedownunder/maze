@@ -598,7 +598,7 @@
   position: relative;
   cursor: pointer;
   overflow: hidden;
-  background: #f5f5f5;
+  background: #fafafa;
 }
 
 .maze-cell img {
