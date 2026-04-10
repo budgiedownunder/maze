@@ -26,3 +26,28 @@ export interface ChangePasswordRequest {
   current_password: string
   new_password: string
 }
+
+export interface MazeDefinition {
+  grid: string[][]
+}
+
+export interface Maze {
+  id: string
+  name: string
+  definition: MazeDefinition
+}
+
+export interface SaveMazeRequest {
+  name: string
+  definition: MazeDefinition
+}
+
+export interface GenerateOptions {
+  rowCount: number
+  colCount: number
+  startRow: number     // 1-based (UI convention)
+  startCol: number     // 1-based
+  finishRow: number    // 1-based
+  finishCol: number    // 1-based
+  minSpineLength: number
+}

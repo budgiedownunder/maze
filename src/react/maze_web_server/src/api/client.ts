@@ -1,4 +1,4 @@
-import type { ChangePasswordRequest, LoginResponse, RenewResponse, UpdateProfileRequest, UserProfile } from '../types/api'
+import type { ChangePasswordRequest, LoginResponse, Maze, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -82,6 +82,42 @@ export function changePassword(token: string, body: ChangePasswordRequest): Prom
 
 export function deleteMe(token: string): Promise<void> {
   return requestEmpty('/users/me', {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+export function getMazes(token: string, includeDefinitions: boolean): Promise<Maze[]> {
+  const qs = includeDefinitions ? '?include_definitions=true' : ''
+  return request<Maze[]>(`/mazes${qs}`, {
+    headers: authHeaders(token),
+  })
+}
+
+export function getMaze(token: string, id: string): Promise<Maze> {
+  return request<Maze>(`/mazes/${encodeURIComponent(id)}`, {
+    headers: authHeaders(token),
+  })
+}
+
+export function createMaze(token: string, body: SaveMazeRequest): Promise<Maze> {
+  return request<Maze>('/mazes', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ id: '', ...body }),
+  })
+}
+
+export function updateMaze(token: string, id: string, body: SaveMazeRequest): Promise<Maze> {
+  return request<Maze>(`/mazes/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ id, ...body }),
+  })
+}
+
+export function deleteMaze(token: string, id: string): Promise<void> {
+  return requestEmpty(`/mazes/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: authHeaders(token),
   })
