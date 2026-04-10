@@ -88,11 +88,12 @@ export const handlers = [
 
   http.get(`${BASE}/mazes`, ({ request }) => {
     const url = new URL(request.url)
-    const includeDefinitions = url.searchParams.get('include_definitions') === 'true'
-    if (includeDefinitions) {
-      return HttpResponse.json(mockMazes)
-    }
-    return HttpResponse.json(mockMazes.map(({ id, name, definition }) => ({ id, name, definition })))
+    const includeDefinitions = url.searchParams.get('includeDefinitions') === 'true'
+    return HttpResponse.json(mockMazes.map(maze => ({
+      id: maze.id,
+      name: maze.name,
+      definition: includeDefinitions ? JSON.stringify(maze) : null,
+    })))
   }),
 
   http.get(`${BASE}/mazes/:id`, ({ params }) => {

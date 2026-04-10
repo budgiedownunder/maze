@@ -1,0 +1,118 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
+import { http, HttpResponse } from 'msw'
+import { ThemeProvider } from '../../src/context/ThemeContext'
+import { MazesPage } from '../../src/pages/MazesPage'
+import { mockMazeAlpha, mockMazeBeta, resetMockMazes } from '../../src/mocks/handlers'
+import { server } from '../../src/mocks/server'
+
+const mockNavigate = vi.fn()
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom')
+  return { ...actual, useNavigate: () => mockNavigate }
+})
+
+vi.mock('../../src/context/AuthContext', async () => {
+  const actual = await vi.importActual('../../src/context/AuthContext')
+  return {
+    ...actual,
+    useToken: () => 'test-token',
+    useAuth: () => ({
+      isLoading: false,
+      isAuthenticated: true,
+      profile: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+    }),
+  }
+})
+
+function renderMazesPage() {
+  return render(
+    <MemoryRouter>
+      <ThemeProvider>
+        <MazesPage />
+      </ThemeProvider>
+    </MemoryRouter>
+  )
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  resetMockMazes()
+})
+
+describe('MazesPage', () => {
+  it('shows loading indicator while fetching', async () => {
+    renderMazesPage()
+    expect(screen.getByLabelText('Loading')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByLabelText('Loading')).not.toBeInTheDocument())
+  })
+
+  it('renders maze names after loading', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+    expect(screen.getByText(mockMazeBeta.name)).toBeInTheDocument()
+  })
+
+  it('shows dimensions subtitle for each maze', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText('3 rows × 3 columns')).toBeInTheDocument())
+    expect(screen.getByText('5 rows × 5 columns')).toBeInTheDocument()
+  })
+
+  it('uses singular row/column when dimension is 1', async () => {
+    const singularMaze = { id: 'maze-0003', name: 'Tiny', definition: { grid: [['S']] } }
+    server.use(
+      http.get('/api/v1/mazes', () => HttpResponse.json(
+        [singularMaze].map(m => ({ id: m.id, name: m.name, definition: JSON.stringify(m) }))
+      ))
+    )
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText('1 row × 1 column')).toBeInTheDocument())
+  })
+
+  it('shows empty state when no mazes returned', async () => {
+    server.use(
+      http.get('/api/v1/mazes', () => HttpResponse.json([]))
+    )
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(/no mazes yet/i)).toBeInTheDocument())
+  })
+
+  it('shows error message when API fails', async () => {
+    server.use(
+      http.get('/api/v1/mazes', () => new HttpResponse('Server error', { status: 500 }))
+    )
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+  })
+
+  it('refresh button reloads the list', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    const extraMaze = { id: 'maze-0003', name: 'Gamma', definition: { grid: [['S', 'F']] } }
+    server.use(
+      http.get('/api/v1/mazes', () => HttpResponse.json(
+        [mockMazeAlpha, mockMazeBeta, extraMaze].map(m => ({
+          id: m.id, name: m.name, definition: JSON.stringify(m),
+        }))
+      ))
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /refresh/i }))
+    await waitFor(() => expect(screen.getByText('Gamma')).toBeInTheDocument())
+  })
+
+  it('clicking a maze item navigates to /mazes/:id', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByText(mockMazeAlpha.name))
+    expect(mockNavigate).toHaveBeenCalledWith(`/mazes/${mockMazeAlpha.id}`)
+  })
+})

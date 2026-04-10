@@ -1,6 +1,6 @@
 # maze_web_server — React Single Page Application (SPA)
 
-`React 18` + `TypeScript` + `Vite` web frontend for the Rust [`maze_web_server`](../../rust/maze_web_server/README.md).
+`React 19` + `TypeScript` + `Vite` web frontend for the Rust [`maze_web_server`](../../rust/maze_web_server/README.md).
 
 ## Prerequisites
 
@@ -26,7 +26,15 @@ Start the Vite dev server:
 npm run dev
 ```
 
-Mock Service Worker (MSW) intercepts all API calls automatically in dev mode, so the Rust server does not need to be running. If you want to test against the real Rust server instead, start it first (`cargo run` in `src/rust/maze_web_server/`) — the Vite dev server proxies `/api` to `https://localhost:8443`.
+To run against the real Rust server, start it first (`cargo run` in `src/rust/maze_web_server/`) — the Vite dev server proxies `/api` to `https://localhost:8443`.
+
+To run with Mock Service Worker (MSW) instead (no Rust server required), set `VITE_MSW=true`:
+
+```bash
+VITE_MSW=true npm run dev   # macOS/Linux
+set VITE_MSW=true && npm run dev   # Windows (cmd)
+$env:VITE_MSW="true"; npm run dev  # Windows (PowerShell)
+```
 
 ## Production build
 

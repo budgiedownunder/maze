@@ -1,4 +1,4 @@
-import type { ChangePasswordRequest, LoginResponse, Maze, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserProfile } from '../types/api'
+import type { ChangePasswordRequest, LoginResponse, Maze, MazeDefinition, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -87,11 +87,27 @@ export function deleteMe(token: string): Promise<void> {
   })
 }
 
-export function getMazes(token: string, includeDefinitions: boolean): Promise<Maze[]> {
-  const qs = includeDefinitions ? '?include_definitions=true' : ''
-  return request<Maze[]>(`/mazes${qs}`, {
+interface MazeListItem {
+  id: string
+  name: string
+  definition: string | null  // server returns definition as a JSON string, not a nested object
+}
+
+export async function getMazes(token: string, includeDefinitions: boolean): Promise<Maze[]> {
+  const qs = includeDefinitions ? '?includeDefinitions=true' : ''
+  const items = await request<MazeListItem[]>(`/mazes${qs}`, {
     headers: authHeaders(token),
   })
+  return items
+    .map(item => ({
+      id: item.id,
+      name: item.name,
+      // definition is the full Maze JSON string: {id, name, definition: {grid:[...]}}
+      definition: item.definition
+        ? (JSON.parse(item.definition) as { definition: MazeDefinition }).definition
+        : { grid: [] },
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export function getMaze(token: string, id: string): Promise<Maze> {
