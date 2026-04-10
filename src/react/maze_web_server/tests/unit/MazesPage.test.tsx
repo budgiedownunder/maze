@@ -163,6 +163,79 @@ describe('MazesPage', () => {
     expect(screen.getByText(mockMazeBeta.name)).toBeInTheDocument()
   })
 
+  it('each maze item has a Duplicate button', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    const duplicateButtons = screen.getAllByRole('button', { name: /^Duplicate /i })
+    expect(duplicateButtons).toHaveLength(2)
+  })
+
+  it('clicking Duplicate opens prompt modal pre-filled with "Copy of {name}"', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Duplicate ${mockMazeAlpha.name}` }))
+    const dialog = screen.getByRole('dialog', { name: 'Duplicate Maze' })
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByRole('textbox')).toHaveValue(`Copy of ${mockMazeAlpha.name}`)
+  })
+
+  it('Duplicate Cancel closes the modal without saving', async () => {
+    const postSpy = vi.fn()
+    server.use(http.post('/api/v1/mazes', () => { postSpy(); return new HttpResponse(null, { status: 201 }) }))
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Duplicate ${mockMazeAlpha.name}` }))
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    expect(screen.queryByRole('dialog', { name: 'Duplicate Maze' })).not.toBeInTheDocument()
+    expect(postSpy).not.toHaveBeenCalled()
+  })
+
+  it('Duplicate shows validation error for duplicate name', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Duplicate ${mockMazeAlpha.name}` }))
+    const input = screen.getByRole('textbox')
+    await userEvent.clear(input)
+    await userEvent.type(input, mockMazeBeta.name)
+    await userEvent.click(screen.getByRole('button', { name: /^duplicate$/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/already exists/i)
+    expect(screen.getByRole('dialog', { name: 'Duplicate Maze' })).toBeInTheDocument()
+  })
+
+  it('confirming Duplicate adds new maze to the list', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Duplicate ${mockMazeAlpha.name}` }))
+    await userEvent.click(screen.getByRole('button', { name: /^duplicate$/i }))
+
+    await waitFor(() => expect(screen.getByText(`Copy of ${mockMazeAlpha.name}`)).toBeInTheDocument())
+    expect(screen.queryByRole('dialog', { name: 'Duplicate Maze' })).not.toBeInTheDocument()
+  })
+
+  it('shows server error inside the Duplicate modal when create fails', async () => {
+    server.use(
+      http.post('/api/v1/mazes', () => new HttpResponse('Storage limit reached', { status: 507 }))
+    )
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Duplicate ${mockMazeAlpha.name}` }))
+    await userEvent.click(screen.getByRole('button', { name: /^duplicate$/i }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(screen.getByRole('alert')).toHaveTextContent('Storage limit reached')
+    expect(screen.getByRole('dialog', { name: 'Duplicate Maze' })).toBeInTheDocument()
+  })
+
   it('each maze item has a Rename button', async () => {
     renderMazesPage()
     await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())

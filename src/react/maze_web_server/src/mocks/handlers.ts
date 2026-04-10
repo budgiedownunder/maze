@@ -104,6 +104,8 @@ export const handlers = [
 
   http.post(`${BASE}/mazes`, async ({ request }) => {
     const body = await request.json() as Maze
+    const isDuplicate = mockMazes.some(m => m.name.toLowerCase() === body.name.toLowerCase())
+    if (isDuplicate) return new HttpResponse('A maze with that name already exists.', { status: 409 })
     const created: Maze = { ...body, id: `maze-${Date.now()}` }
     mockMazes = [...mockMazes, created]
     return HttpResponse.json(created, { status: 201 })
@@ -113,6 +115,8 @@ export const handlers = [
     const body = await request.json() as Maze
     const index = mockMazes.findIndex(m => m.id === params.id)
     if (index === -1) return new HttpResponse(null, { status: 404 })
+    const isDuplicate = mockMazes.some(m => m.id !== params.id && m.name.toLowerCase() === body.name.toLowerCase())
+    if (isDuplicate) return new HttpResponse('A maze with that name already exists.', { status: 409 })
     mockMazes = mockMazes.map((m, i) => i === index ? { ...m, ...body } : m)
     return HttpResponse.json(mockMazes[index])
   }),

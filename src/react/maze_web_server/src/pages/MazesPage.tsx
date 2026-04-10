@@ -6,7 +6,7 @@ import { PromptModal } from '../components/PromptModal'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import { useToken } from '../context/AuthContext'
-import { getMazes, deleteMaze, updateMaze } from '../api/client'
+import { getMazes, deleteMaze, updateMaze, createMaze } from '../api/client'
 import type { Maze } from '../types/api'
 
 export function MazesPage() {
@@ -27,6 +27,10 @@ export function MazesPage() {
   const [mazeToRename, setMazeToRename] = useState<Maze | null>(null)
   const [renameError, setRenameError] = useState<string | null>(null)
   const [isRenaming, setIsRenaming] = useState(false)
+
+  const [mazeToDuplicate, setMazeToDuplicate] = useState<Maze | null>(null)
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  const [isDuplicating, setIsDuplicating] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -76,11 +80,33 @@ export function MazesPage() {
     }
   }
 
+  function validateDuplicateName(name: string): string | null {
+    return mazes.some(m => m.name.toLowerCase() === name.toLowerCase())
+      ? 'A maze with that name already exists.'
+      : null
+  }
+
   function validateRenameName(name: string): string | null {
-    const duplicate = mazes.some(
-      m => m.id !== mazeToRename?.id && m.name.toLowerCase() === name.toLowerCase()
-    )
-    return duplicate ? 'A maze with that name already exists.' : null
+    return mazes.some(m => m.id !== mazeToRename?.id && m.name.toLowerCase() === name.toLowerCase())
+      ? 'A maze with that name already exists.'
+      : null
+  }
+
+  async function handleConfirmDuplicate(name: string) {
+    if (!mazeToDuplicate) return
+    setIsDuplicating(true)
+    document.body.classList.add('is-busy')
+    try {
+      await createMaze(token!, { name, definition: mazeToDuplicate.definition })
+      setMazeToDuplicate(null)
+      setDuplicateError(null)
+      setRefreshCount(c => c + 1)
+    } catch (ex: unknown) {
+      setDuplicateError((ex as { message?: string }).message ?? 'Failed to duplicate maze.')
+    } finally {
+      setIsDuplicating(false)
+      document.body.classList.remove('is-busy')
+    }
   }
 
   return (
@@ -95,6 +121,19 @@ export function MazesPage() {
           error={deleteError}
           onConfirm={handleConfirmDelete}
           onCancel={() => { setMazeToDelete(null); setDeleteError(null) }}
+        />
+      )}
+      {mazeToDuplicate && (
+        <PromptModal
+          title="Duplicate Maze"
+          label="Name"
+          initialValue={`Copy of ${mazeToDuplicate.name}`}
+          confirmLabel="Duplicate"
+          validate={validateDuplicateName}
+          isLoading={isDuplicating}
+          error={duplicateError}
+          onConfirm={handleConfirmDuplicate}
+          onCancel={() => { setMazeToDuplicate(null); setDuplicateError(null) }}
         />
       )}
       {mazeToRename && (
@@ -164,6 +203,15 @@ export function MazesPage() {
                     <span className="maze-item-subtitle">{rows} {rows === 1 ? 'row' : 'rows'} × {cols} {cols === 1 ? 'column' : 'columns'}</span>
                   </div>
                   <div className="maze-item-actions">
+                    <button
+                      type="button"
+                      className="maze-item-action btn-secondary"
+                      onClick={e => { e.stopPropagation(); setMazeToDuplicate(maze); setDuplicateError(null) }}
+                      aria-label={`Duplicate ${maze.name}`}
+                    >
+                      <img src="/images/icons/icon_duplicate.png" alt="" aria-hidden="true" />
+                      <span className="maze-item-action-label">Duplicate</span>
+                    </button>
                     <button
                       type="button"
                       className="maze-item-action btn-secondary"

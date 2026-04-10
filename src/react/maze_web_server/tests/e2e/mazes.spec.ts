@@ -22,16 +22,56 @@ test('maze list page loads after login', async ({ page }) => {
 test('maze list shows dimensions subtitle in correct format', async ({ page }) => {
   await login(page)
 
+  // Wait for loading to complete — either the list or the empty state must be visible
   const items = page.locator('.maze-list-item')
-  const count = await items.count()
+  const emptyState = page.getByText(/no mazes yet/i)
+  await expect(items.first().or(emptyState)).toBeVisible()
 
-  if (count > 0) {
+  if (await items.count() > 0) {
     // Each item should have a subtitle matching "N rows × M columns"
     const subtitle = items.first().locator('.maze-item-subtitle')
     await expect(subtitle).toHaveText(/\d+ rows × \d+ columns/)
   } else {
-    await expect(page.getByText(/no mazes yet/i)).toBeVisible()
+    await expect(emptyState).toBeVisible()
   }
+})
+
+test('Duplicate → "Copy of X" pre-filled → confirm → new item in list', async ({ page }) => {
+  await login(page)
+
+  const items = page.locator('.maze-list-item')
+  await expect(items.first()).toBeVisible()
+
+  const firstName = await items.first().locator('.maze-item-name').textContent()
+  const initialCount = await items.count()
+
+  await items.first().getByRole('button', { name: /duplicate/i }).click()
+  const dialog = page.getByRole('dialog', { name: 'Duplicate Maze' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('textbox')).toHaveValue(`Copy of ${firstName}`)
+
+  await dialog.getByRole('button', { name: /^duplicate$/i }).click()
+
+  await expect(dialog).not.toBeVisible()
+  await expect(items).toHaveCount(initialCount + 1)
+  await expect(page.locator('.maze-item-name', { hasText: `Copy of ${firstName}` })).toBeVisible()
+})
+
+test('Duplicate → cancel → list unchanged', async ({ page }) => {
+  await login(page)
+
+  const items = page.locator('.maze-list-item')
+  await expect(items.first()).toBeVisible()
+
+  const initialCount = await items.count()
+
+  await items.first().getByRole('button', { name: /duplicate/i }).click()
+  await expect(page.getByRole('dialog', { name: 'Duplicate Maze' })).toBeVisible()
+
+  await page.getByRole('button', { name: /cancel/i }).click()
+
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(items).toHaveCount(initialCount)
 })
 
 test('Rename → modal pre-filled → enter new name → list updates', async ({ page }) => {
