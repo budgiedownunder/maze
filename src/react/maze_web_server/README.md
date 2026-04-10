@@ -28,12 +28,10 @@ npm run dev
 
 To run against the real Rust server, start it first (`cargo run` in `src/rust/maze_web_server/`) — the Vite dev server proxies `/api` to `https://localhost:8443`.
 
-To run with Mock Service Worker (MSW) instead (no Rust server required), set `VITE_MSW=true`:
+To run with Mock Service Worker (MSW) instead (no Rust server required):
 
 ```bash
-VITE_MSW=true npm run dev   # macOS/Linux
-set VITE_MSW=true && npm run dev   # Windows (cmd)
-$env:VITE_MSW="true"; npm run dev  # Windows (PowerShell)
+npm run dev:mock
 ```
 
 ## Production build

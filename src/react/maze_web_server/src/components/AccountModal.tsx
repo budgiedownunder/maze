@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import * as api from '../api/client'
 import { useAuth, useToken } from '../context/AuthContext'
 import { ChangePasswordModal } from './ChangePasswordModal'
-import { DeleteAccountModal } from './DeleteAccountModal'
+import { ConfirmModal } from './ConfirmModal'
 import type { UserProfile } from '../types/api'
 
 interface Props {
@@ -91,7 +91,11 @@ export function AccountModal({ onClose }: Props) {
   return (
     <>
     {showDeleteConfirm && (
-      <DeleteAccountModal
+      <ConfirmModal
+        title="Delete Account"
+        message="Are you sure you want to permanently delete your account? This will also delete all your mazes and cannot be undone."
+        confirmLabel="Delete"
+        isDangerous
         onConfirm={handleDeleteConfirm}
         onCancel={() => setShowDeleteConfirm(false)}
       />

@@ -89,7 +89,9 @@
 }
 
 :root[data-theme="dark"] .btn-icon img,
-:root:not([data-theme="light"]) .btn-icon img {
+:root:not([data-theme="light"]) .btn-icon img,
+:root[data-theme="dark"] .maze-item-action img,
+:root:not([data-theme="light"]) .maze-item-action img {
   filter: invert(1);
 }
 
@@ -395,6 +397,33 @@
   background: var(--surface);
   cursor: pointer;
   user-select: none;
+}
+
+.maze-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.maze-item-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.maze-item-action img {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .maze-item-action-label {
+    display: none;
+  }
 }
 
 .maze-list-item:hover {

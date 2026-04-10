@@ -34,6 +34,44 @@ test('maze list shows dimensions subtitle in correct format', async ({ page }) =
   }
 })
 
+test('Delete → confirm → item removed from list', async ({ page }) => {
+  await login(page)
+
+  const items = page.locator('.maze-list-item')
+  await expect(items.first()).toBeVisible()
+
+  const firstName = await items.first().locator('.maze-item-name').textContent()
+  const initialCount = await items.count()
+
+  await items.first().getByRole('button', { name: /delete/i }).click()
+  await expect(page.getByRole('dialog', { name: 'Delete Maze' })).toBeVisible()
+  await expect(page.getByRole('dialog')).toContainText(firstName!)
+
+  await page.getByRole('dialog').getByRole('button', { name: /^delete$/i }).click()
+
+  await expect(items).toHaveCount(initialCount - 1)
+  await expect(page.locator('.maze-item-name', { hasText: firstName! })).not.toBeVisible()
+})
+
+test('Delete → cancel → item stays in list', async ({ page }) => {
+  await login(page)
+
+  const items = page.locator('.maze-list-item')
+  await expect(items.first()).toBeVisible()
+
+  const firstName = await items.first().locator('.maze-item-name').textContent()
+  const initialCount = await items.count()
+
+  await items.first().getByRole('button', { name: /delete/i }).click()
+  await expect(page.getByRole('dialog', { name: 'Delete Maze' })).toBeVisible()
+
+  await page.getByRole('button', { name: /cancel/i }).click()
+
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(items).toHaveCount(initialCount)
+  await expect(page.locator('.maze-item-name', { hasText: firstName! })).toBeVisible()
+})
+
 test('refresh button reloads the maze list', async ({ page }) => {
   await login(page)
 

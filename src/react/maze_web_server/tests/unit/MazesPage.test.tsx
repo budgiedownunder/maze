@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
@@ -114,5 +114,68 @@ describe('MazesPage', () => {
 
     await userEvent.click(screen.getByText(mockMazeAlpha.name))
     expect(mockNavigate).toHaveBeenCalledWith(`/mazes/${mockMazeAlpha.id}`)
+  })
+
+  it('each maze item has a Delete button', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    // aria-labels are "Delete Alpha" / "Delete Beta" — start with "Delete "
+    // li[role=button] accessible names start with the maze name, so /^Delete / excludes them
+    const deleteButtons = screen.getAllByRole('button', { name: /^Delete /i })
+    expect(deleteButtons).toHaveLength(2)
+  })
+
+  it('clicking Delete opens a confirmation modal with the maze name', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Delete ${mockMazeAlpha.name}` }))
+    const dialog = screen.getByRole('dialog', { name: 'Delete Maze' })
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByText(new RegExp(mockMazeAlpha.name))).toBeInTheDocument()
+  })
+
+  it('Cancel closes the modal without deleting', async () => {
+    const deleteSpy = vi.fn()
+    server.use(http.delete('/api/v1/mazes/:id', () => { deleteSpy(); return new HttpResponse(null, { status: 200 }) }))
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Delete ${mockMazeAlpha.name}` }))
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    expect(screen.queryByRole('dialog', { name: 'Delete Maze' })).not.toBeInTheDocument()
+    expect(deleteSpy).not.toHaveBeenCalled()
+    expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument()
+  })
+
+  it('confirming Delete removes the maze from the list', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Delete ${mockMazeAlpha.name}` }))
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+
+    await waitFor(() => expect(screen.queryByText(mockMazeAlpha.name)).not.toBeInTheDocument())
+    expect(screen.queryByRole('dialog', { name: 'Delete Maze' })).not.toBeInTheDocument()
+    expect(screen.getByText(mockMazeBeta.name)).toBeInTheDocument()
+  })
+
+  it('shows server error message inside the modal when delete fails', async () => {
+    server.use(
+      http.delete('/api/v1/mazes/:id', () => new HttpResponse('Maze is locked', { status: 409 }))
+    )
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Delete ${mockMazeAlpha.name}` }))
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    expect(screen.getByRole('alert')).toHaveTextContent('Maze is locked')
+    expect(screen.getByRole('dialog', { name: 'Delete Maze' })).toBeInTheDocument()
   })
 })

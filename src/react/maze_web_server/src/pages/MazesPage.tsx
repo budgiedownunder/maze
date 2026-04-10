@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { HamburgerMenu } from '../components/HamburgerMenu'
+import { ConfirmModal } from '../components/ConfirmModal'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import { useToken } from '../context/AuthContext'
-import { getMazes } from '../api/client'
+import { getMazes, deleteMaze } from '../api/client'
 import type { Maze } from '../types/api'
 
 export function MazesPage() {
@@ -17,6 +18,8 @@ export function MazesPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [refreshCount, setRefreshCount] = useState(0)
+  const [mazeToDelete, setMazeToDelete] = useState<Maze | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -32,8 +35,31 @@ export function MazesPage() {
       })
   }, [token, refreshCount])
 
+  async function handleConfirmDelete() {
+    if (!mazeToDelete) return
+    try {
+      await deleteMaze(token!, mazeToDelete.id)
+      setMazeToDelete(null)
+      setDeleteError(null)
+      setRefreshCount(c => c + 1)
+    } catch (ex: unknown) {
+      setDeleteError((ex as { message?: string }).message ?? 'Failed to delete maze.')
+    }
+  }
+
   return (
     <div>
+      {mazeToDelete && (
+        <ConfirmModal
+          title="Delete Maze"
+          message={`Delete "${mazeToDelete.name}"? This cannot be undone.`}
+          confirmLabel="Delete"
+          isDangerous
+          error={deleteError}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => { setMazeToDelete(null); setDeleteError(null) }}
+        />
+      )}
       <header className="app-header">
         <div className="header-actions">
           {menuVariant === 'hamburger' && <HamburgerMenu />}
@@ -86,6 +112,17 @@ export function MazesPage() {
                   <div className="maze-item-text">
                     <span className="maze-item-name">{maze.name}</span>
                     <span className="maze-item-subtitle">{rows} {rows === 1 ? 'row' : 'rows'} × {cols} {cols === 1 ? 'column' : 'columns'}</span>
+                  </div>
+                  <div className="maze-item-actions">
+                    <button
+                      type="button"
+                      className="maze-item-action btn-danger-outline"
+                      onClick={e => { e.stopPropagation(); setMazeToDelete(maze); setDeleteError(null) }}
+                      aria-label={`Delete ${maze.name}`}
+                    >
+                      <img src="/images/icons/icon_delete.png" alt="" aria-hidden="true" />
+                      <span className="maze-item-action-label">Delete</span>
+                    </button>
                   </div>
                 </li>
               )
