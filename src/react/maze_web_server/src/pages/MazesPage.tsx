@@ -206,20 +206,20 @@ export function MazesPage() {
                     <button
                       type="button"
                       className="maze-item-action btn-secondary"
-                      onClick={e => { e.stopPropagation(); setMazeToDuplicate(maze); setDuplicateError(null) }}
-                      aria-label={`Duplicate ${maze.name}`}
-                    >
-                      <img src="/images/icons/icon_duplicate.png" alt="" aria-hidden="true" />
-                      <span className="maze-item-action-label">Duplicate</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="maze-item-action btn-secondary"
                       onClick={e => { e.stopPropagation(); setMazeToRename(maze); setRenameError(null) }}
                       aria-label={`Rename ${maze.name}`}
                     >
                       <img src="/images/icons/icon_rename.png" alt="" aria-hidden="true" />
                       <span className="maze-item-action-label">Rename</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="maze-item-action btn-secondary"
+                      onClick={e => { e.stopPropagation(); setMazeToDuplicate(maze); setDuplicateError(null) }}
+                      aria-label={`Duplicate ${maze.name}`}
+                    >
+                      <img src="/images/icons/icon_duplicate.png" alt="" aria-hidden="true" />
+                      <span className="maze-item-action-label">Duplicate</span>
                     </button>
                     <button
                       type="button"
