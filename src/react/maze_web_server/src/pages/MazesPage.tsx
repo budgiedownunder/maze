@@ -110,7 +110,7 @@ export function MazesPage() {
   }
 
   return (
-    <div>
+    <div className="mazes-page">
       {mazeToDelete && (
         <ConfirmModal
           title="Delete Maze"
