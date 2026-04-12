@@ -16,7 +16,7 @@ export function MazesPage() {
   const navigate = useNavigate()
 
   const [mazes, setMazes] = useState<Maze[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshCount, setRefreshCount] = useState(0)
 
