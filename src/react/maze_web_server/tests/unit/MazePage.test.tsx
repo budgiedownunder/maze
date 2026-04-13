@@ -305,23 +305,23 @@ describe('MazePage toolbar', () => {
 
   it('clicking Insert Rows Before adds a row to the grid', async () => {
     await loadMazePage('/mazes/new')
-    // new maze is 7×7; click row 1 header then insert
+    // new maze is 5×5; click row 1 header then insert
     await userEvent.click(screen.getByLabelText('Row 1'))
     const toolbar = screen.getByLabelText('Maze editor toolbar')
     await userEvent.click(within(toolbar).getByRole('button', { name: 'Insert Rows Before' }))
-    // Should now have 8 row headers
-    expect(screen.getByLabelText('Row 8')).toBeInTheDocument()
+    // Should now have 6 row headers
+    expect(screen.getByLabelText('Row 6')).toBeInTheDocument()
   })
 
   it('clicking Delete removes a row when a row header is selected', async () => {
     await loadMazePage('/mazes/new')
-    // new maze is 7×7; click row 1 header then delete
+    // new maze is 5×5; click row 1 header then delete
     await userEvent.click(screen.getByLabelText('Row 1'))
     const toolbar = screen.getByLabelText('Maze editor toolbar')
     await userEvent.click(within(toolbar).getByRole('button', { name: 'Delete' }))
-    // Should now have only 6 row headers
-    expect(screen.queryByLabelText('Row 7')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Row 6')).toBeInTheDocument()
+    // Should now have only 4 row headers
+    expect(screen.queryByLabelText('Row 5')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Row 4')).toBeInTheDocument()
   })
 })
 

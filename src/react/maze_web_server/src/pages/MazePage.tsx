@@ -11,7 +11,7 @@ import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useMazeEditor } from '../hooks/useMazeEditor'
 import { getMaze, createMaze, updateMaze } from '../api/client'
 
-const BLANK_GRID = Array.from({ length: 7 }, () => Array<string>(7).fill(' '))
+const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
 
 export function MazePage() {
   const { id } = useParams<{ id?: string }>()
