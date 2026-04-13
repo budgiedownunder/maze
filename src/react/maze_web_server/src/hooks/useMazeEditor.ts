@@ -51,6 +51,12 @@ export function useMazeEditor() {
     [],
   )
 
+  const markSaved = useCallback((id: string, name: string) => {
+    setMazeId(id)
+    setMazeName(name)
+    setIsDirty(false)
+  }, [])
+
   // ── Derived selection rect ───────────────────────────────────
 
   const selectionRect = useMemo((): SelectionRect | null => {
@@ -440,6 +446,7 @@ export function useMazeEditor() {
     isRangeMode,
     selectionStatus,
     initFromDefinition,
+    markSaved,
     selectAll,
     activateCell,
     activateRow,

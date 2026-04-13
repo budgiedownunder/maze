@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { flushSync } from 'react-dom'
+import { useParams, useNavigate, useBlocker } from 'react-router-dom'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { MazeGrid } from '../components/MazeGrid'
+import { ConfirmModal } from '../components/ConfirmModal'
+import { PromptModal } from '../components/PromptModal'
 import { useToken } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useMazeEditor } from '../hooks/useMazeEditor'
-import { getMaze } from '../api/client'
+import { getMaze, createMaze, updateMaze } from '../api/client'
 
 const BLANK_GRID = Array.from({ length: 7 }, () => Array<string>(7).fill(' '))
 
 export function MazePage() {
   const { id } = useParams<{ id?: string }>()
   const token = useToken()
+  const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const menuVariant = useMenuVariant()
   const gridRef = useRef<HTMLDivElement>(null)
@@ -20,8 +24,9 @@ export function MazePage() {
   const isNew = id === undefined
 
   const {
-    grid, mazeName, activeCell, anchorCell, solution, isRangeMode, selectionStatus,
-    initFromDefinition,
+    grid, mazeName, mazeId, isDirty,
+    activeCell, anchorCell, solution, isRangeMode, selectionStatus,
+    initFromDefinition, markSaved,
     selectAll, activateCell, activateRow, activateCol,
     moveActive, moveActiveHome, moveActiveEnd,
     enableRangeMode, disableRangeMode,
@@ -32,6 +37,24 @@ export function MazePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
+
+  // Save state
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [showSaveNameModal, setShowSaveNameModal] = useState(false)
+
+  // Refresh state
+  const [showRefreshConfirm, setShowRefreshConfirm] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
+
+  const isBusy = isSaving || isRefreshing
+  const hasUnsavedWork = isDirty || (isNew && mazeId === null)
+  const canSave = hasUnsavedWork
+  const canRefresh = isDirty && mazeId !== null
+
+  const blocker = useBlocker(hasUnsavedWork)
+  const [showBlockerSaveModal, setShowBlockerSaveModal] = useState(false)
 
   useEffect(() => {
     if (isNew) {
@@ -56,6 +79,104 @@ export function MazePage() {
       })
       .finally(() => setIsLoading(false))
   }, [token, id, isNew, initFromDefinition])
+
+  async function handleSaveNew(name: string) {
+    if (!token) return
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      const saved = await createMaze(token, { name, definition: { grid } })
+      flushSync(() => {
+        setShowSaveNameModal(false)
+        markSaved(saved.id, saved.name)
+      })
+      navigate(`/mazes/${encodeURIComponent(saved.id)}`, { replace: true })
+    } catch (ex: unknown) {
+      setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleSaveExisting() {
+    if (!token || !mazeId) return
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      await updateMaze(token, mazeId, { name: mazeName, definition: { grid } })
+      markSaved(mazeId, mazeName)
+    } catch (ex: unknown) {
+      setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  function handleSaveClick() {
+    if (mazeId === null) {
+      setSaveError(null)
+      setShowSaveNameModal(true)
+    } else {
+      handleSaveExisting()
+    }
+  }
+
+  function handleBlockerSave() {
+    setSaveError(null)
+    if (mazeId === null) {
+      setShowBlockerSaveModal(true)
+    } else {
+      handleSaveExistingAndProceed()
+    }
+  }
+
+  async function handleSaveExistingAndProceed() {
+    if (!token || !mazeId) return
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      await updateMaze(token, mazeId, { name: mazeName, definition: { grid } })
+      markSaved(mazeId, mazeName)
+      blocker.proceed?.()
+    } catch (ex: unknown) {
+      setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleBlockerSaveNew(name: string) {
+    if (!token) return
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      const saved = await createMaze(token, { name, definition: { grid } })
+      flushSync(() => {
+        setShowBlockerSaveModal(false)
+        markSaved(saved.id, saved.name)
+      })
+      blocker.proceed?.()
+    } catch (ex: unknown) {
+      setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleConfirmRefresh() {
+    if (!token || !mazeId) return
+    setShowRefreshConfirm(false)
+    setIsRefreshing(true)
+    setRefreshError(null)
+    try {
+      const maze = await getMaze(token, mazeId)
+      initFromDefinition(maze.id, maze.name, maze.definition)
+    } catch (ex: unknown) {
+      setRefreshError((ex as { message?: string }).message ?? 'Failed to refresh.')
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     switch (e.key) {
@@ -108,12 +229,81 @@ export function MazePage() {
 
   return (
     <div className="maze-page">
+      {showSaveNameModal && (
+        <PromptModal
+          title="Save Maze"
+          label="Name"
+          initialValue=""
+          confirmLabel="Save"
+          isLoading={isSaving}
+          error={saveError}
+          onConfirm={handleSaveNew}
+          onCancel={() => { setShowSaveNameModal(false); setSaveError(null) }}
+        />
+      )}
+      {showRefreshConfirm && (
+        <ConfirmModal
+          title="Discard changes?"
+          message="Reloading will discard your unsaved changes."
+          confirmLabel="Reload"
+          isDangerous
+          isLoading={isRefreshing}
+          error={refreshError}
+          onConfirm={handleConfirmRefresh}
+          onCancel={() => { setShowRefreshConfirm(false); setRefreshError(null) }}
+        />
+      )}
+      {blocker.state === 'blocked' && !showBlockerSaveModal && (
+        <ConfirmModal
+          title="Unsaved Changes"
+          message="Do you want to save your changes?"
+          confirmLabel="Save"
+          isLoading={isSaving}
+          error={saveError}
+          secondaryAction={{ label: 'Discard', onClick: () => blocker.proceed(), isDangerous: true }}
+          onConfirm={handleBlockerSave}
+          onCancel={() => { blocker.reset(); setSaveError(null) }}
+        />
+      )}
+      {blocker.state === 'blocked' && showBlockerSaveModal && (
+        <PromptModal
+          title="Save Maze"
+          label="Name"
+          initialValue=""
+          confirmLabel="Save"
+          isLoading={isSaving}
+          error={saveError}
+          onConfirm={handleBlockerSaveNew}
+          onCancel={() => { setShowBlockerSaveModal(false); setSaveError(null); blocker.reset() }}
+        />
+      )}
+
       <header className="app-header">
         <div className="header-actions">
           {menuVariant === 'hamburger' && <HamburgerMenu />}
         </div>
         <span className="app-header-title">{headerTitle}</span>
         <div className="header-actions">
+          {!isNew && (
+            <button
+              className="btn-icon"
+              aria-label="Refresh"
+              title="Refresh"
+              disabled={!canRefresh || isBusy}
+              onClick={() => setShowRefreshConfirm(true)}
+            >
+              <img src="/images/maze/refresh.png" alt="" aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem' }} />
+            </button>
+          )}
+          <button
+            className="btn-icon"
+            aria-label="Save"
+            title="Save"
+            disabled={!canSave || isBusy}
+            onClick={handleSaveClick}
+          >
+            <img src="/images/icons/icon_save.png" alt="" aria-hidden="true" style={{ width: '1.1rem', height: '1.1rem' }} />
+          </button>
           <button
             className="theme-toggle"
             onClick={toggleTheme}
@@ -130,6 +320,12 @@ export function MazePage() {
         {!isLoading && notFound && <p>Maze not found.</p>}
         {!isLoading && error && (
           <p className="error-msg" role="alert">{error}</p>
+        )}
+        {saveError && !showSaveNameModal && (
+          <p className="error-msg" role="alert">{saveError}</p>
+        )}
+        {refreshError && (
+          <p className="error-msg" role="alert">{refreshError}</p>
         )}
         {activeCell !== null && (
           <div className="maze-toolbar" aria-label="Maze editor toolbar">

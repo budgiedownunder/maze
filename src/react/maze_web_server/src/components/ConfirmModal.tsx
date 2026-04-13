@@ -1,3 +1,9 @@
+interface SecondaryAction {
+  label: string
+  onClick: () => void
+  isDangerous?: boolean
+}
+
 interface Props {
   title: string
   message: string
@@ -6,6 +12,7 @@ interface Props {
   isDangerous?: boolean
   isLoading?: boolean
   error?: string | null
+  secondaryAction?: SecondaryAction
   onConfirm: () => void
   onCancel: () => void
 }
@@ -18,6 +25,7 @@ export function ConfirmModal({
   isDangerous = false,
   isLoading = false,
   error,
+  secondaryAction,
   onConfirm,
   onCancel,
 }: Props) {
@@ -29,7 +37,17 @@ export function ConfirmModal({
         {error && <p role="alert" className="error-msg">{error}</p>}
         <div className="modal-actions-row" style={{ marginTop: '1.5rem' }}>
           <button type="button" onClick={onCancel} className="btn-gray">{cancelLabel}</button>
-          <button type="button" onClick={onConfirm} className={isDangerous ? 'btn-danger' : 'btn-primary'}>{confirmLabel}</button>
+          {secondaryAction && (
+            <button
+              type="button"
+              onClick={secondaryAction.onClick}
+              className={secondaryAction.isDangerous ? 'btn-danger' : 'btn-gray'}
+              disabled={isLoading}
+            >
+              {secondaryAction.label}
+            </button>
+          )}
+          <button type="button" onClick={onConfirm} className={isDangerous ? 'btn-danger' : 'btn-primary'} disabled={isLoading}>{confirmLabel}</button>
         </div>
       </div>
     </div>

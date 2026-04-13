@@ -157,6 +157,14 @@ export function MazesPage() {
         <div className="header-actions">
           <button
             className="btn-icon"
+            onClick={() => navigate('/mazes/new')}
+            aria-label="New maze"
+            title="New maze"
+          >
+            <img src="/images/icons/icon_new.png" alt="New maze" style={{ width: '1.1rem', height: '1.1rem' }} />
+          </button>
+          <button
+            className="btn-icon"
             onClick={() => setRefreshCount(c => c + 1)}
             aria-label="Refresh"
             title="Refresh"

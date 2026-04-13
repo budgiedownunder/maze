@@ -97,6 +97,11 @@
   cursor: pointer;
 }
 
+.btn-icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 :root[data-theme="dark"] .btn-icon img,
 :root:not([data-theme="light"]) .btn-icon img,
 :root[data-theme="dark"] .maze-item-action img,
