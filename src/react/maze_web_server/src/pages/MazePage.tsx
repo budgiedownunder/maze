@@ -5,6 +5,9 @@ import { HamburgerMenu } from '../components/HamburgerMenu'
 import { MazeGrid } from '../components/MazeGrid'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
+import { GenerateMazeModal } from '../components/GenerateMazeModal'
+import { generateMaze } from '../wasm/mazeWasm'
+import type { GenerateOptions } from '../types/api'
 import { useToken } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useMenuVariant } from '../hooks/useMenuVariant'
@@ -32,6 +35,7 @@ export function MazePage() {
     enableRangeMode, disableRangeMode,
     setWall, setStart, setFinish, clearCell,
     insertRowsBefore, deleteRows, insertColsBefore, deleteCols,
+    applyGenerated,
   } = useMazeEditor()
 
   const [isLoading, setIsLoading] = useState(false)
@@ -48,7 +52,12 @@ export function MazePage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
 
-  const isBusy = isSaving || isRefreshing
+  // Generate state
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
+
+  const isBusy = isSaving || isRefreshing || isGenerating
   const hasUnsavedWork = isDirty || (isNew && mazeId === null)
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
@@ -160,6 +169,21 @@ export function MazePage() {
       setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  async function handleGenerate(options: GenerateOptions) {
+    setIsGenerating(true)
+    setGenerateError(null)
+    try {
+      await new Promise<void>(r => requestAnimationFrame(() => r()))
+      const definition = await generateMaze(options)
+      setShowGenerateModal(false)
+      applyGenerated(definition)
+    } catch (ex: unknown) {
+      setGenerateError((ex as { message?: string }).message ?? 'Generation failed.')
+    } finally {
+      setIsGenerating(false)
     }
   }
 
@@ -275,6 +299,16 @@ export function MazePage() {
           error={saveError}
           onConfirm={handleBlockerSaveNew}
           onCancel={() => { setShowBlockerSaveModal(false); setSaveError(null); blocker.reset() }}
+        />
+      )}
+
+      {showGenerateModal && (
+        <GenerateMazeModal
+          grid={grid}
+          isLoading={isGenerating}
+          error={generateError}
+          onGenerate={handleGenerate}
+          onCancel={() => { setShowGenerateModal(false); setGenerateError(null) }}
         />
       )}
 
@@ -398,6 +432,15 @@ export function MazePage() {
               }}
             >
               <img src="/images/maze/delete_button.png" alt="Delete" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Generate"
+              aria-label="Generate"
+              disabled={selectionStatus.hasSolution || isBusy}
+              onClick={() => { setGenerateError(null); setShowGenerateModal(true) }}
+            >
+              <img src="/images/maze/generate_button.png" alt="Generate" />
             </button>
             {!isRangeMode && (
               <button

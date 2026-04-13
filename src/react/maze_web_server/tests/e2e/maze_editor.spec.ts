@@ -555,3 +555,77 @@ test('saving from the navigate-away dialog on a new maze prompts for a name then
   await expect(page.getByRole('dialog', { name: 'Save Maze' })).not.toBeVisible()
   await expect(page).not.toHaveURL(/\/mazes\/new$/)
 })
+
+// ──────────────────────────────────────────────────────────────
+// Generate
+// ──────────────────────────────────────────────────────────────
+
+test('Generate button appears in toolbar when a cell is selected', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByLabel('Cell 1,1').click()
+  await expect(page.getByRole('button', { name: 'Generate' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Generate' })).toBeEnabled()
+})
+
+test('clicking Generate opens the Generate Maze dialog', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByLabel('Cell 1,1').click()
+  await page.getByRole('button', { name: 'Generate' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generate Maze' })).toBeVisible()
+})
+
+test('Generate Maze dialog has all expected fields', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByLabel('Cell 1,1').click()
+  await page.getByRole('button', { name: 'Generate' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Generate Maze' })
+  await expect(dialog.getByLabel('Rows')).toBeVisible()
+  await expect(dialog.getByLabel('Columns')).toBeVisible()
+  await expect(dialog.getByLabel('Start Row')).toBeVisible()
+  await expect(dialog.getByLabel('Start Column')).toBeVisible()
+  await expect(dialog.getByLabel('Finish Row')).toBeVisible()
+  await expect(dialog.getByLabel('Finish Column')).toBeVisible()
+  await expect(dialog.getByLabel('Min Solution Length')).toBeVisible()
+})
+
+test('Generate Maze dialog defaults reflect the current grid dimensions', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)  // Alpha is 3×3
+  await page.getByLabel('Cell 1,1').click()
+  await page.getByRole('button', { name: 'Generate' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Generate Maze' })
+  await expect(dialog.getByLabel('Rows')).toHaveValue('3')
+  await expect(dialog.getByLabel('Columns')).toHaveValue('3')
+})
+
+test('generating a maze replaces the grid with the new dimensions', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)  // Alpha is 3×3
+  await page.getByLabel('Cell 1,1').click()
+  await page.getByRole('button', { name: 'Generate' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Generate Maze' })
+  // Change to 5×5
+  await dialog.getByLabel('Rows').fill('5')
+  await dialog.getByLabel('Columns').fill('5')
+  await dialog.getByLabel('Finish Row').fill('5')
+  await dialog.getByLabel('Finish Column').fill('5')
+  await dialog.getByRole('button', { name: 'Generate' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generate Maze' })).not.toBeVisible()
+  await expect(page.getByLabel('Row 5')).toBeVisible()
+  await expect(page.getByLabel('Column 5')).toBeVisible()
+})
+
+test('cancelling Generate dialog leaves the grid unchanged', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)  // Alpha is 3×3
+  await page.getByLabel('Cell 1,1').click()
+  await page.getByRole('button', { name: 'Generate' }).click()
+  await page.getByRole('dialog', { name: 'Generate Maze' }).getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generate Maze' })).not.toBeVisible()
+  // Grid should still be 3 rows
+  await expect(page.getByLabel('Row 3')).toBeVisible()
+  await expect(page.getByLabel('Row 4')).not.toBeVisible()
+})

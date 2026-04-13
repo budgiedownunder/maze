@@ -57,6 +57,14 @@ export function useMazeEditor() {
     setIsDirty(false)
   }, [])
 
+  const applyGenerated = useCallback((definition: MazeDefinition) => {
+    setGrid(definition.grid)
+    setActiveCell(null)
+    setAnchorCell(null)
+    setSolutionState(null)
+    setIsDirty(true)
+  }, [])
+
   // ── Derived selection rect ───────────────────────────────────
 
   const selectionRect = useMemo((): SelectionRect | null => {
@@ -447,6 +455,7 @@ export function useMazeEditor() {
     selectionStatus,
     initFromDefinition,
     markSaved,
+    applyGenerated,
     selectAll,
     activateCell,
     activateRow,

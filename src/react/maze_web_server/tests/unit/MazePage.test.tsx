@@ -8,6 +8,14 @@ import { mockMazeAlpha, resetMockMazes } from '../../src/mocks/handlers'
 import { ThemeProvider } from '../../src/context/ThemeContext'
 import { MazePage } from '../../src/pages/MazePage'
 
+const { mockGenerateMaze } = vi.hoisted(() => ({
+  mockGenerateMaze: vi.fn(),
+}))
+
+vi.mock('../../src/wasm/mazeWasm', () => ({
+  generateMaze: mockGenerateMaze,
+}))
+
 vi.mock('../../src/context/AuthContext', async () => {
   const actual = await vi.importActual('../../src/context/AuthContext')
   return {
@@ -23,9 +31,19 @@ vi.mock('../../src/context/AuthContext', async () => {
   }
 })
 
+const generatedDefinition = {
+  grid: [
+    ['S', ' ', ' ', ' '],
+    [' ', 'W', ' ', ' '],
+    [' ', ' ', ' ', ' '],
+    [' ', ' ', ' ', 'F'],
+  ],
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   resetMockMazes()
+  mockGenerateMaze.mockResolvedValue(generatedDefinition)
 })
 
 function renderMazePage(path: string) {
@@ -481,5 +499,87 @@ describe('MazePage save and refresh', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Refresh' })).not.toBeDisabled()
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// Generate
+// ──────────────────────────────────────────────────────────────
+
+describe('MazePage generate', () => {
+  async function loadMazePage(path: string) {
+    renderMazePage(path)
+    if (path !== '/mazes/new') {
+      await waitFor(() => expect(screen.queryByLabelText('Loading')).not.toBeInTheDocument())
+    }
+  }
+
+  it('Generate button is visible and enabled after clicking a cell', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    const btn = screen.getByRole('button', { name: 'Generate' })
+    expect(btn).toBeInTheDocument()
+    expect(btn).not.toBeDisabled()
+  })
+
+  it('clicking Generate button opens the Generate Maze dialog', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    expect(screen.getByRole('dialog', { name: 'Generate Maze' })).toBeInTheDocument()
+  })
+
+  it('cancelling the Generate dialog closes it without calling generateMaze', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Generate Maze' })).not.toBeInTheDocument()
+    expect(mockGenerateMaze).not.toHaveBeenCalled()
+  })
+
+  it('successful generation closes dialog and updates grid', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    const dialog = screen.getByRole('dialog', { name: 'Generate Maze' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Generate' }))
+    await waitFor(() => expect(mockGenerateMaze).toHaveBeenCalled())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Generate Maze' })).not.toBeInTheDocument())
+    // generatedDefinition is 4×4; new grid should have 4 row headers
+    expect(screen.getByLabelText('Row 4')).toBeInTheDocument()
+  })
+
+  it('successful generation marks the maze dirty', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Generate Maze' })).getByRole('button', { name: 'Generate' }))
+    await waitFor(() => expect(mockGenerateMaze).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled())
+  })
+
+  it('WASM error keeps dialog open and shows error message', async () => {
+    mockGenerateMaze.mockRejectedValue(new Error('generation failed'))
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Generate Maze' })).getByRole('button', { name: 'Generate' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('generation failed'))
+    expect(screen.getByRole('dialog', { name: 'Generate Maze' })).toBeInTheDocument()
+  })
+
+  it('Generate button is disabled while generating', async () => {
+    let resolveGenerate!: (v: typeof generatedDefinition) => void
+    mockGenerateMaze.mockReturnValue(new Promise(r => { resolveGenerate = r }))
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Generate Maze' })).getByRole('button', { name: 'Generate' }))
+    // While pending the submit button inside the modal should be disabled (isLoading)
+    await waitFor(() =>
+      expect(within(screen.getByRole('dialog', { name: 'Generate Maze' })).getByRole('button', { name: 'Generate' })).toBeDisabled()
+    )
+    resolveGenerate(generatedDefinition)
   })
 })

@@ -14,6 +14,10 @@ export default defineConfig({
     proxy: isMswMode ? undefined : {
       '/api': { target: 'https://localhost:8443', changeOrigin: true, secure: false },
     },
+    fs: {
+      // Allow Vite to serve the maze_wasm pkg directory which is outside the project root
+      allow: ['..', '../../rust/maze_wasm/pkg'],
+    },
   },
   test: {
     globals: true,
