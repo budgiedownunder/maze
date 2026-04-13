@@ -331,6 +331,104 @@ export function useMazeEditor() {
     setIsDirty(true)
   }, [selectionRect])
 
+  // ── Structural editing ───────────────────────────────────────
+
+  const insertRowsBefore = useCallback(() => {
+    if (!selectionRect) return
+    const cols = grid.length > 0 ? grid[0].length : 0
+    const insertAt = selectionRect.minRow
+    const insertCount = selectionRect.maxRow - selectionRect.minRow + 1
+    setGrid(prev => {
+      const next = [...prev]
+      const newRows = Array.from({ length: insertCount }, () => Array<string>(cols).fill(' '))
+      next.splice(insertAt, 0, ...newRows)
+      return next
+    })
+    setActiveCell({ row: insertAt, col: 0 })
+    setAnchorCell({ row: insertAt + insertCount - 1, col: cols - 1 })
+    setSolutionState(null)
+    setIsDirty(true)
+  }, [selectionRect, grid])
+
+  const deleteRows = useCallback(() => {
+    if (!selectionRect) return
+    const { minRow, maxRow } = selectionRect
+    const deleteCount = maxRow - minRow + 1
+    const newRowCount = grid.length - deleteCount
+    setGrid(prev => {
+      const next = [...prev]
+      next.splice(minRow, deleteCount)
+      return next
+    })
+    if (newRowCount > 0) {
+      // Clamp each end of the selection to the new grid bounds, preserving columns and
+      // which end is active vs anchor (direction the user built the selection from).
+      const newActiveRow = Math.min(activeCell!.row, newRowCount - 1)
+      setActiveCell({ row: newActiveRow, col: activeCell!.col })
+      if (anchorCell) {
+        const newAnchorRow = Math.min(anchorCell.row, newRowCount - 1)
+        setAnchorCell({ row: newAnchorRow, col: anchorCell.col })
+      } else {
+        setAnchorCell(null)
+      }
+    } else {
+      setActiveCell(null)
+      setAnchorCell(null)
+    }
+    setSolutionState(null)
+    setIsDirty(true)
+  }, [selectionRect, grid])
+
+  const insertColsBefore = useCallback(() => {
+    if (!selectionRect) return
+    const rows = grid.length
+    const insertAt = selectionRect.minCol
+    const insertCount = selectionRect.maxCol - selectionRect.minCol + 1
+    setGrid(prev =>
+      prev.map(row => {
+        const next = [...row]
+        next.splice(insertAt, 0, ...Array<string>(insertCount).fill(' '))
+        return next
+      })
+    )
+    setActiveCell({ row: 0, col: insertAt })
+    setAnchorCell({ row: rows - 1, col: insertAt + insertCount - 1 })
+    setSolutionState(null)
+    setIsDirty(true)
+  }, [selectionRect, grid])
+
+  const deleteCols = useCallback(() => {
+    if (!selectionRect) return
+    const { minCol, maxCol } = selectionRect
+    const deleteCount = maxCol - minCol + 1
+    const rows = grid.length
+    const newColCount = (rows > 0 ? grid[0].length : 0) - deleteCount
+    setGrid(prev =>
+      prev.map(row => {
+        const next = [...row]
+        next.splice(minCol, deleteCount)
+        return next
+      })
+    )
+    if (rows > 0 && newColCount > 0) {
+      // Clamp each end of the selection to the new grid bounds, preserving rows and
+      // which end is active vs anchor (direction the user built the selection from).
+      const newActiveCol = Math.min(activeCell!.col, newColCount - 1)
+      setActiveCell({ row: activeCell!.row, col: newActiveCol })
+      if (anchorCell) {
+        const newAnchorCol = Math.min(anchorCell.col, newColCount - 1)
+        setAnchorCell({ row: anchorCell.row, col: newAnchorCol })
+      } else {
+        setAnchorCell(null)
+      }
+    } else {
+      setActiveCell(null)
+      setAnchorCell(null)
+    }
+    setSolutionState(null)
+    setIsDirty(true)
+  }, [selectionRect, grid])
+
   return {
     grid,
     mazeName,
@@ -355,5 +453,9 @@ export function useMazeEditor() {
     setStart,
     setFinish,
     clearCell,
+    insertRowsBefore,
+    deleteRows,
+    insertColsBefore,
+    deleteCols,
   }
 }

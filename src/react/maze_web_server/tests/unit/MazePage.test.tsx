@@ -247,4 +247,82 @@ describe('MazePage toolbar', () => {
     expect(within(toolbar).getByRole('button', { name: 'Select range' })).toBeInTheDocument()
     expect(screen.getByLabelText('Cell 2,2').className).toContain('maze-cell--anchor')
   })
+
+  // ── Structural editing button enable/disable ─────────────────
+
+  it('Insert Rows Before and Delete are enabled after clicking a row header', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Row 1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    expect(within(toolbar).getByRole('button', { name: 'Insert Rows Before' })).not.toBeDisabled()
+    expect(within(toolbar).getByRole('button', { name: 'Delete' })).not.toBeDisabled()
+  })
+
+  it('Insert Columns Before is disabled and Delete is enabled after clicking a row header', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Row 1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    expect(within(toolbar).getByRole('button', { name: 'Insert Columns Before' })).toBeDisabled()
+  })
+
+  it('Insert Columns Before and Delete are enabled after clicking a column header', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Column 1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    expect(within(toolbar).getByRole('button', { name: 'Insert Columns Before' })).not.toBeDisabled()
+    expect(within(toolbar).getByRole('button', { name: 'Delete' })).not.toBeDisabled()
+  })
+
+  it('Insert Rows Before is disabled after clicking a column header', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Column 1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    expect(within(toolbar).getByRole('button', { name: 'Insert Rows Before' })).toBeDisabled()
+  })
+
+  it('Insert Rows Before and Insert Columns Before are enabled after clicking the corner (select all)', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Select all'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    expect(within(toolbar).getByRole('button', { name: 'Insert Rows Before' })).not.toBeDisabled()
+    expect(within(toolbar).getByRole('button', { name: 'Insert Columns Before' })).not.toBeDisabled()
+  })
+
+  it('Delete is disabled after clicking the corner (select all — entire grid)', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Select all'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    expect(within(toolbar).getByRole('button', { name: 'Delete' })).toBeDisabled()
+  })
+
+  it('Insert Rows Before and Delete are enabled when full row selected via keyboard', async () => {
+    await loadMazePage('/mazes/new')
+    // Select first cell then Shift+End to span the full row
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    fireEvent.keyDown(screen.getByLabelText('Maze grid'), { key: 'End', shiftKey: true })
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    expect(within(toolbar).getByRole('button', { name: 'Insert Rows Before' })).not.toBeDisabled()
+    expect(within(toolbar).getByRole('button', { name: 'Delete' })).not.toBeDisabled()
+  })
+
+  it('clicking Insert Rows Before adds a row to the grid', async () => {
+    await loadMazePage('/mazes/new')
+    // new maze is 7×7; click row 1 header then insert
+    await userEvent.click(screen.getByLabelText('Row 1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    await userEvent.click(within(toolbar).getByRole('button', { name: 'Insert Rows Before' }))
+    // Should now have 8 row headers
+    expect(screen.getByLabelText('Row 8')).toBeInTheDocument()
+  })
+
+  it('clicking Delete removes a row when a row header is selected', async () => {
+    await loadMazePage('/mazes/new')
+    // new maze is 7×7; click row 1 header then delete
+    await userEvent.click(screen.getByLabelText('Row 1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    await userEvent.click(within(toolbar).getByRole('button', { name: 'Delete' }))
+    // Should now have only 6 row headers
+    expect(screen.queryByLabelText('Row 7')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Row 6')).toBeInTheDocument()
+  })
 })

@@ -266,6 +266,119 @@ test('End key moves active cell to end of row', async ({ page }) => {
 // Scroll-to-active-cell
 // ──────────────────────────────────────────────────────────────
 
+// ──────────────────────────────────────────────────────────────
+// Structural editing — Insert / Delete rows and columns
+// ──────────────────────────────────────────────────────────────
+
+test('clicking a row header enables Insert Rows Before and Delete; disables Insert Columns Before', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Row 1').click()
+
+  await expect(page.getByRole('button', { name: 'Insert Rows Before' })).not.toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Delete' })).not.toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Insert Columns Before' })).toBeDisabled()
+})
+
+test('clicking a column header enables Insert Columns Before and Delete; disables Insert Rows Before', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Column 1').click()
+
+  await expect(page.getByRole('button', { name: 'Insert Columns Before' })).not.toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Delete' })).not.toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Insert Rows Before' })).toBeDisabled()
+})
+
+test('clicking the corner header enables Insert Row/Column; disables Delete', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Select all').click()
+
+  await expect(page.getByRole('button', { name: 'Insert Rows Before' })).not.toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Insert Columns Before' })).not.toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Delete' })).toBeDisabled()
+})
+
+test('Insert Rows Before adds a row to the grid', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Alpha is 3×3; click row 1 header and insert
+  await page.getByLabel('Row 1').click()
+  await page.getByRole('button', { name: 'Insert Rows Before' }).click()
+
+  // Grid should now have 4 rows
+  await expect(page.getByLabel('Row 4')).toBeVisible()
+})
+
+test('Delete removes a row when a row header is selected', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Alpha is 3×3; click row 1 header and delete
+  await page.getByLabel('Row 1').click()
+  await page.getByRole('button', { name: 'Delete' }).click()
+
+  // Grid should now have 2 rows
+  await expect(page.getByLabel('Row 2')).toBeVisible()
+  await expect(page.getByLabel('Row 3')).not.toBeVisible()
+})
+
+test('Insert Rows Before inserts N rows when N rows are selected', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Alpha is 3×3; select rows 1–2 (shift-click row headers)
+  await page.getByLabel('Row 1').click()
+  await page.getByLabel('Row 2').click({ modifiers: ['Shift'] })
+  await page.getByRole('button', { name: 'Insert Rows Before' }).click()
+
+  // 2 rows inserted → 5 rows total
+  await expect(page.getByLabel('Row 5')).toBeVisible()
+})
+
+test('Insert Columns Before adds a column to the grid', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Alpha is 3×3; click column 1 header and insert
+  await page.getByLabel('Column 1').click()
+  await page.getByRole('button', { name: 'Insert Columns Before' }).click()
+
+  // Grid should now have 4 columns
+  await expect(page.getByLabel('Column 4')).toBeVisible()
+})
+
+test('Insert Columns Before inserts N columns when N columns are selected', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Alpha is 3×3; select cols 1–2 (shift-click column headers)
+  await page.getByLabel('Column 1').click()
+  await page.getByLabel('Column 2').click({ modifiers: ['Shift'] })
+  await page.getByRole('button', { name: 'Insert Columns Before' }).click()
+
+  // 2 cols inserted → 5 cols total
+  await expect(page.getByLabel('Column 5')).toBeVisible()
+})
+
+test('Delete removes a column when a column header is selected', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Alpha is 3×3; click column 1 header and delete
+  await page.getByLabel('Column 1').click()
+  await page.getByRole('button', { name: 'Delete' }).click()
+
+  // Grid should now have 2 columns
+  await expect(page.getByLabel('Column 2')).toBeVisible()
+  await expect(page.getByLabel('Column 3')).not.toBeVisible()
+})
+
 test('navigating off-screen scrolls the grid to reveal the active cell', async ({ page }) => {
   await login(page)
   await openFirstMaze(page)

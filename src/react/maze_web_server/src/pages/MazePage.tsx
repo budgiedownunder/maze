@@ -26,6 +26,7 @@ export function MazePage() {
     moveActive, moveActiveHome, moveActiveEnd,
     enableRangeMode, disableRangeMode,
     setWall, setStart, setFinish, clearCell,
+    insertRowsBefore, deleteRows, insertColsBefore, deleteCols,
   } = useMazeEditor()
 
   const [isLoading, setIsLoading] = useState(false)
@@ -167,6 +168,40 @@ export function MazePage() {
               onClick={() => { clearCell(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/clear_button.png" alt="Clear" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Insert Rows Before"
+              aria-label="Insert Rows Before"
+              disabled={!selectionStatus.allColumnsSelected || selectionStatus.hasSolution}
+              onClick={() => { insertRowsBefore(); gridRef.current?.focus() }}
+            >
+              <img src="/images/maze/insert_rows_button.png" alt="Insert Row Before" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Insert Columns Before"
+              aria-label="Insert Columns Before"
+              disabled={!selectionStatus.allRowsSelected || selectionStatus.hasSolution}
+              onClick={() => { insertColsBefore(); gridRef.current?.focus() }}
+            >
+              <img src="/images/maze/insert_columns_button.png" alt="Insert Column Before" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Delete"
+              aria-label="Delete"
+              disabled={
+                (!selectionStatus.allColumnsSelected && !selectionStatus.allRowsSelected) ||
+                (selectionStatus.allColumnsSelected && selectionStatus.allRowsSelected) ||
+                selectionStatus.hasSolution
+              }
+              onClick={() => {
+                selectionStatus.allColumnsSelected ? deleteRows() : deleteCols()
+                gridRef.current?.focus()
+              }}
+            >
+              <img src="/images/maze/delete_button.png" alt="Delete" />
             </button>
             {!isRangeMode && (
               <button

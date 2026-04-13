@@ -518,6 +518,380 @@ describe('selectionStatus', () => {
     act(() => result.current.setWall())
     expect(result.current.selectionStatus.hasSolution).toBe(false)
   })
+
+  it('allColumnsSelected is true after selectAll (corner click)', () => {
+    const result = setupHook(makeGrid(3, 4))
+    act(() => result.current.selectAll())
+    expect(result.current.selectionStatus.allColumnsSelected).toBe(true)
+  })
+
+  it('allRowsSelected is true after selectAll (corner click)', () => {
+    const result = setupHook(makeGrid(3, 4))
+    act(() => result.current.selectAll())
+    expect(result.current.selectionStatus.allRowsSelected).toBe(true)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// structural editing
+// ──────────────────────────────────────────────────────────────
+
+describe('insertRowsBefore', () => {
+  it('inserts one row when a single row is selected', () => {
+    const result = setupHook(makeGrid(3, 4))
+    act(() => result.current.activateRow(1, false))
+    act(() => result.current.insertRowsBefore())
+    expect(result.current.grid.length).toBe(4)
+  })
+
+  it('inserts N rows when N rows are selected', () => {
+    const result = setupHook(makeGrid(4, 3))
+    // Select rows 1–2 (2 rows)
+    act(() => result.current.activateRow(1, false))
+    act(() => result.current.activateRow(2, true))
+    act(() => result.current.insertRowsBefore())
+    expect(result.current.grid.length).toBe(6)
+  })
+
+  it('inserts blank rows at the correct index', () => {
+    const grid = makeGrid(3, 3)
+    grid[1][0] = 'W'
+    const result = setupHook(grid)
+    act(() => result.current.activateRow(1, false))
+    act(() => result.current.insertRowsBefore())
+    // New blank row at index 1; old row 1 shifts to index 2
+    expect(result.current.grid[1]).toEqual([' ', ' ', ' '])
+    expect(result.current.grid[2][0]).toBe('W')
+  })
+
+  it('inserts before the first row', () => {
+    const grid = makeGrid(3, 3)
+    grid[0][0] = 'S'
+    const result = setupHook(grid)
+    act(() => result.current.activateRow(0, false))
+    act(() => result.current.insertRowsBefore())
+    expect(result.current.grid[0]).toEqual([' ', ' ', ' '])
+    expect(result.current.grid[1][0]).toBe('S')
+  })
+
+  it('selects the newly inserted row(s) after single-row insert', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateRow(1, false))
+    act(() => result.current.insertRowsBefore())
+    expect(result.current.activeCell).toEqual({ row: 1, col: 0 })
+    expect(result.current.anchorCell).toEqual({ row: 1, col: 2 })
+    expect(result.current.selectionStatus.allColumnsSelected).toBe(true)
+  })
+
+  it('selects all newly inserted rows after multi-row insert', () => {
+    const result = setupHook(makeGrid(4, 3))
+    // Select rows 1–2
+    act(() => result.current.activateRow(1, false))
+    act(() => result.current.activateRow(2, true))
+    act(() => result.current.insertRowsBefore())
+    // 2 new rows inserted at index 1–2; selection should span rows 1–2
+    expect(result.current.activeCell).toEqual({ row: 1, col: 0 })
+    expect(result.current.anchorCell).toEqual({ row: 2, col: 2 })
+    expect(result.current.selectionStatus.allColumnsSelected).toBe(true)
+  })
+
+  it('marks maze as dirty', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateRow(0, false))
+    act(() => result.current.insertRowsBefore())
+    expect(result.current.isDirty).toBe(true)
+  })
+
+  it('clears solution', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateRow(0, false))
+    act(() => result.current.insertRowsBefore())
+    expect(result.current.selectionStatus.hasSolution).toBe(false)
+  })
+})
+
+describe('deleteRows', () => {
+  it('decreases row count by one when a single row is selected', () => {
+    const result = setupHook(makeGrid(3, 4))
+    act(() => result.current.activateRow(1, false))
+    act(() => result.current.deleteRows())
+    expect(result.current.grid.length).toBe(2)
+  })
+
+  it('removes the correct row content', () => {
+    const grid = makeGrid(3, 3)
+    grid[1][0] = 'W'
+    const result = setupHook(grid)
+    act(() => result.current.activateRow(1, false))
+    act(() => result.current.deleteRows())
+    // Row 1 (W row) gone; remaining rows are blank
+    for (let c = 0; c < 3; c++) {
+      expect(result.current.grid[0][c]).toBe(' ')
+      expect(result.current.grid[1][c]).toBe(' ')
+    }
+  })
+
+  it('decreases row count by selection size for multi-row delete', () => {
+    const result = setupHook(makeGrid(5, 3))
+    // Select rows 1–2 (shift)
+    act(() => result.current.activateRow(1, false))
+    act(() => result.current.activateRow(2, true))
+    act(() => result.current.deleteRows())
+    expect(result.current.grid.length).toBe(3)
+  })
+
+  it('selects the shifted rows spanning the same count when sufficient rows remain', () => {
+    // 7 rows (0–6), delete rows 0–2 → 4 remain; shifted rows fill positions 0–2
+    // activateRow(0)+activateRow(2,true) → active={row:2,col:2}, anchor={row:0,col:0}
+    const result = setupHook(makeGrid(7, 3))
+    act(() => result.current.activateRow(0, false))
+    act(() => result.current.activateRow(2, true))
+    act(() => result.current.deleteRows())
+    // Rows 0–2 still clamped correctly; active stays at row 2, anchor at row 0
+    expect(result.current.activeCell).toEqual({ row: 2, col: 2 })
+    expect(result.current.anchorCell).toEqual({ row: 0, col: 0 })
+    expect(result.current.selectionStatus.allColumnsSelected).toBe(true)
+  })
+
+  it('reduces selection when fewer shifted rows are available than deleted', () => {
+    // 5 rows (0–4), delete rows 2–4 → 2 remain at 0–1; only 2 shifted rows available
+    const result = setupHook(makeGrid(5, 3))
+    act(() => result.current.activateRow(2, false))
+    act(() => result.current.activateRow(4, true))
+    act(() => result.current.deleteRows())
+    // 2 rows remain; selection should be rows 1–1 (edge) since minRow=2 clamps to 1
+    expect(result.current.activeCell?.row).toBe(1)
+    expect(result.current.anchorCell?.row).toBe(1)
+    expect(result.current.selectionStatus.allColumnsSelected).toBe(true)
+  })
+
+  it('selects single edge row when no rows remain beyond the deleted range', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateRow(2, false))
+    act(() => result.current.deleteRows())
+    expect(result.current.activeCell?.row).toBe(1)
+    expect(result.current.anchorCell?.row).toBe(1)
+  })
+
+  it('selects the shifted single row when a single row in the middle is deleted', () => {
+    const result = setupHook(makeGrid(4, 3))
+    act(() => result.current.activateRow(1, false))
+    act(() => result.current.deleteRows())
+    expect(result.current.activeCell).toEqual({ row: 1, col: 0 })
+    expect(result.current.anchorCell).toEqual({ row: 1, col: 2 })
+    expect(result.current.selectionStatus.allColumnsSelected).toBe(true)
+  })
+
+  it('preserves active cell column after delete', () => {
+    // activateRow sets active at col 0, anchor at last col; verify cols preserved
+    const result = setupHook(makeGrid(4, 5))
+    act(() => result.current.activateRow(1, false))
+    act(() => result.current.deleteRows())
+    expect(result.current.activeCell?.col).toBe(0)
+    expect(result.current.anchorCell?.col).toBe(4)
+  })
+
+  it('preserves selection direction (active at bottom, anchor at top) after delete', () => {
+    // Shift+click from row 2 down to row 0 → active at row 2, anchor at row 0
+    const result = setupHook(makeGrid(5, 3))
+    act(() => result.current.activateRow(2, false))
+    act(() => result.current.activateRow(0, true))
+    // Now activeCell={row:0,col:2}, anchorCell={row:2,col:0} (activateRow extend logic)
+    act(() => result.current.deleteRows())
+    // After deleting rows 0–2, 2 rows remain; active clamps to row 0 (min(0,1)), anchor clamps to row 1 (min(2,1))
+    expect(result.current.activeCell?.col).toBe(2)
+    expect(result.current.anchorCell?.col).toBe(0)
+  })
+
+  it('marks maze as dirty', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateRow(0, false))
+    act(() => result.current.deleteRows())
+    expect(result.current.isDirty).toBe(true)
+  })
+
+  it('clears solution', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateRow(0, false))
+    act(() => result.current.deleteRows())
+    expect(result.current.selectionStatus.hasSolution).toBe(false)
+  })
+})
+
+describe('insertColsBefore', () => {
+  it('inserts one column when a single column is selected', () => {
+    const result = setupHook(makeGrid(3, 4))
+    act(() => result.current.activateCol(1, false))
+    act(() => result.current.insertColsBefore())
+    expect(result.current.grid[0].length).toBe(5)
+  })
+
+  it('inserts N columns when N columns are selected', () => {
+    const result = setupHook(makeGrid(3, 4))
+    // Select cols 1–2 (2 cols)
+    act(() => result.current.activateCol(1, false))
+    act(() => result.current.activateCol(2, true))
+    act(() => result.current.insertColsBefore())
+    expect(result.current.grid[0].length).toBe(6)
+  })
+
+  it('inserts blank columns at the correct index', () => {
+    const grid = makeGrid(3, 3)
+    grid[0][1] = 'W'
+    const result = setupHook(grid)
+    act(() => result.current.activateCol(1, false))
+    act(() => result.current.insertColsBefore())
+    // New blank col at index 1; old col 1 shifts to index 2
+    for (let r = 0; r < 3; r++) {
+      expect(result.current.grid[r][1]).toBe(' ')
+    }
+    expect(result.current.grid[0][2]).toBe('W')
+  })
+
+  it('selects the newly inserted column after single-col insert', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCol(1, false))
+    act(() => result.current.insertColsBefore())
+    expect(result.current.activeCell).toEqual({ row: 0, col: 1 })
+    expect(result.current.anchorCell).toEqual({ row: 2, col: 1 })
+    expect(result.current.selectionStatus.allRowsSelected).toBe(true)
+  })
+
+  it('selects all newly inserted columns after multi-col insert', () => {
+    const result = setupHook(makeGrid(3, 4))
+    // Select cols 1–2
+    act(() => result.current.activateCol(1, false))
+    act(() => result.current.activateCol(2, true))
+    act(() => result.current.insertColsBefore())
+    // 2 new cols inserted at index 1–2; selection should span cols 1–2
+    expect(result.current.activeCell).toEqual({ row: 0, col: 1 })
+    expect(result.current.anchorCell).toEqual({ row: 2, col: 2 })
+    expect(result.current.selectionStatus.allRowsSelected).toBe(true)
+  })
+
+  it('marks maze as dirty', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCol(0, false))
+    act(() => result.current.insertColsBefore())
+    expect(result.current.isDirty).toBe(true)
+  })
+
+  it('clears solution', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCol(0, false))
+    act(() => result.current.insertColsBefore())
+    expect(result.current.selectionStatus.hasSolution).toBe(false)
+  })
+})
+
+describe('deleteCols', () => {
+  it('decreases column count by one when a single column is selected', () => {
+    const result = setupHook(makeGrid(3, 4))
+    act(() => result.current.activateCol(1, false))
+    act(() => result.current.deleteCols())
+    expect(result.current.grid[0].length).toBe(3)
+  })
+
+  it('removes the correct column content', () => {
+    const grid = makeGrid(3, 3)
+    grid[0][1] = 'W'
+    const result = setupHook(grid)
+    act(() => result.current.activateCol(1, false))
+    act(() => result.current.deleteCols())
+    // Col 1 (W col) gone; 2 cols remain, both blank
+    for (let r = 0; r < 3; r++) {
+      expect(result.current.grid[r].length).toBe(2)
+      expect(result.current.grid[r][0]).toBe(' ')
+      expect(result.current.grid[r][1]).toBe(' ')
+    }
+  })
+
+  it('decreases column count by selection size for multi-col delete', () => {
+    const result = setupHook(makeGrid(3, 5))
+    // Select cols 1–2
+    act(() => result.current.activateCol(1, false))
+    act(() => result.current.activateCol(2, true))
+    act(() => result.current.deleteCols())
+    expect(result.current.grid[0].length).toBe(3)
+  })
+
+  it('selects the shifted cols spanning the same count when sufficient cols remain', () => {
+    // 7 cols (0–6), delete cols 0–2 → 4 remain; shifted cols fill positions 0–2
+    // activateCol(0)+activateCol(2,true) → active={row:2,col:2}, anchor={row:0,col:0}
+    const result = setupHook(makeGrid(3, 7))
+    act(() => result.current.activateCol(0, false))
+    act(() => result.current.activateCol(2, true))
+    act(() => result.current.deleteCols())
+    // Cols 0–2 still clamped correctly; active stays at col 2, anchor at col 0
+    expect(result.current.activeCell).toEqual({ row: 2, col: 2 })
+    expect(result.current.anchorCell).toEqual({ row: 0, col: 0 })
+    expect(result.current.selectionStatus.allRowsSelected).toBe(true)
+  })
+
+  it('reduces selection when fewer shifted cols are available than deleted', () => {
+    // 5 cols (0–4), delete cols 0–2 → 2 remain; only cols 0–1 available
+    // activateCol(0)+activateCol(2,true) → active={row:2,col:2}, anchor={row:0,col:0}
+    const result = setupHook(makeGrid(3, 5))
+    act(() => result.current.activateCol(0, false))
+    act(() => result.current.activateCol(2, true))
+    act(() => result.current.deleteCols())
+    // active col clamps to min(2,1)=1, anchor col clamps to min(0,1)=0
+    expect(result.current.activeCell?.col).toBe(1)
+    expect(result.current.anchorCell?.col).toBe(0)
+    expect(result.current.selectionStatus.allRowsSelected).toBe(true)
+  })
+
+  it('selects single edge column when no cols remain beyond the deleted range', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCol(2, false))
+    act(() => result.current.deleteCols())
+    expect(result.current.activeCell?.col).toBe(1)
+    expect(result.current.anchorCell?.col).toBe(1)
+  })
+
+  it('selects the shifted single column when a single col in the middle is deleted', () => {
+    const result = setupHook(makeGrid(3, 4))
+    act(() => result.current.activateCol(1, false))
+    act(() => result.current.deleteCols())
+    expect(result.current.activeCell).toEqual({ row: 0, col: 1 })
+    expect(result.current.anchorCell).toEqual({ row: 2, col: 1 })
+    expect(result.current.selectionStatus.allRowsSelected).toBe(true)
+  })
+
+  it('preserves active cell row after delete', () => {
+    // activateCol sets active at row 0, anchor at last row; verify rows preserved
+    const result = setupHook(makeGrid(5, 4))
+    act(() => result.current.activateCol(1, false))
+    act(() => result.current.deleteCols())
+    expect(result.current.activeCell?.row).toBe(0)
+    expect(result.current.anchorCell?.row).toBe(4)
+  })
+
+  it('preserves selection direction (active at right, anchor at left) after delete', () => {
+    // Shift+click from col 2 to col 0 → active at col 0, anchor at col 2
+    const result = setupHook(makeGrid(3, 6))
+    act(() => result.current.activateCol(2, false))
+    act(() => result.current.activateCol(0, true))
+    // activateCol extend: anchorCell={row:0,col:2}, activeCell={row:2,col:0}
+    act(() => result.current.deleteCols())
+    // After deleting cols 0–2, 3 remain; active clamps col to min(0,2)=0, anchor clamps col to min(2,2)=2
+    expect(result.current.activeCell?.col).toBe(0)
+    expect(result.current.anchorCell?.col).toBe(2)
+  })
+
+  it('marks maze as dirty', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCol(0, false))
+    act(() => result.current.deleteCols())
+    expect(result.current.isDirty).toBe(true)
+  })
+
+  it('clears solution', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCol(0, false))
+    act(() => result.current.deleteCols())
+    expect(result.current.selectionStatus.hasSolution).toBe(false)
+  })
 })
 
 // ──────────────────────────────────────────────────────────────
