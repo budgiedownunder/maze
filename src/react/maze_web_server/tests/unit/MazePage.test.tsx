@@ -127,12 +127,12 @@ describe('MazePage toolbar', () => {
     }
   }
 
-  it('toolbar is visible with all buttons disabled when no cell is selected', async () => {
+  it('toolbar is visible with editing buttons disabled when no cell is selected', async () => {
     await loadMazePage('/mazes/new')
     const toolbar = screen.getByLabelText('Maze editor toolbar')
     expect(toolbar).toBeInTheDocument()
     expect(within(toolbar).getByRole('button', { name: 'Set Wall' })).toBeDisabled()
-    expect(within(toolbar).getByRole('button', { name: 'Generate' })).toBeDisabled()
+    expect(within(toolbar).getByRole('button', { name: 'Generate' })).not.toBeDisabled()
   })
 
   it('toolbar buttons become enabled after clicking a cell', async () => {
@@ -544,8 +544,9 @@ describe('MazePage generate', () => {
     }
   }
 
-  it('Generate button is enabled after clicking a cell', async () => {
+  it('Generate button is enabled before and after clicking a cell', async () => {
     await loadMazePage('/mazes/new')
+    expect(screen.getByRole('button', { name: 'Generate' })).not.toBeDisabled()
     await userEvent.click(screen.getByLabelText('Cell 1,1'))
     expect(screen.getByRole('button', { name: 'Generate' })).not.toBeDisabled()
   })

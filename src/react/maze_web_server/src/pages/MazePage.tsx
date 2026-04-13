@@ -447,7 +447,7 @@ export function MazePage() {
               className="maze-toolbar-btn"
               title="Generate"
               aria-label="Generate"
-              disabled={activeCell === null || selectionStatus.hasSolution || isBusy}
+              disabled={selectionStatus.hasSolution || isBusy}
               onClick={() => { setGenerateError(null); setShowGenerateModal(true) }}
             >
               <img src="/images/maze/generate_button.png" alt="Generate" />
