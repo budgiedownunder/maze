@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { MazeGrid } from '../components/MazeGrid'
@@ -19,7 +19,13 @@ export function MazePage() {
 
   const isNew = id === undefined
 
-  const { grid, mazeName, activeCell, anchorCell, solution, initFromDefinition } = useMazeEditor()
+  const {
+    grid, mazeName, activeCell, anchorCell, solution, selectionStatus,
+    initFromDefinition,
+    selectAll, activateCell, activateRow, activateCol,
+    moveActive, moveActiveHome, moveActiveEnd,
+    setWall, setStart, setFinish, clearCell,
+  } = useMazeEditor()
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -48,6 +54,51 @@ export function MazePage() {
       })
       .finally(() => setIsLoading(false))
   }, [token, id, isNew, initFromDefinition])
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    switch (e.key) {
+      case 'ArrowUp':
+        e.preventDefault()
+        moveActive(-1, 0, e.shiftKey, e.ctrlKey || e.metaKey)
+        break
+      case 'ArrowDown':
+        e.preventDefault()
+        moveActive(1, 0, e.shiftKey, e.ctrlKey || e.metaKey)
+        break
+      case 'ArrowLeft':
+        e.preventDefault()
+        moveActive(0, -1, e.shiftKey, e.ctrlKey || e.metaKey)
+        break
+      case 'ArrowRight':
+        e.preventDefault()
+        moveActive(0, 1, e.shiftKey, e.ctrlKey || e.metaKey)
+        break
+      case 'Home':
+        e.preventDefault()
+        moveActiveHome(e.shiftKey, e.ctrlKey || e.metaKey)
+        break
+      case 'End':
+        e.preventDefault()
+        moveActiveEnd(e.shiftKey, e.ctrlKey || e.metaKey)
+        break
+      case 'w':
+      case 'W':
+        if (!selectionStatus.isAllWalls && !selectionStatus.hasSolution) setWall()
+        break
+      case 's':
+      case 'S':
+        if (selectionStatus.isSingleCell && !selectionStatus.isStart && !selectionStatus.hasSolution) setStart()
+        break
+      case 'f':
+      case 'F':
+        if (selectionStatus.isSingleCell && !selectionStatus.isFinish && !selectionStatus.hasSolution) setFinish()
+        break
+      case 'Delete':
+      case 'Backspace':
+        if (!selectionStatus.isEmpty && !selectionStatus.hasSolution) clearCell()
+        break
+    }
+  }, [moveActive, moveActiveHome, moveActiveEnd, setWall, setStart, setFinish, clearCell, selectionStatus])
 
   const headerTitle = isNew
     ? '(unsaved)'
@@ -78,6 +129,47 @@ export function MazePage() {
         {!isLoading && error && (
           <p className="error-msg" role="alert">{error}</p>
         )}
+        {activeCell !== null && (
+          <div className="maze-toolbar" aria-label="Maze editor toolbar">
+            <button
+              className="maze-toolbar-btn"
+              title="Set Wall"
+              aria-label="Set Wall"
+              disabled={selectionStatus.isAllWalls || selectionStatus.hasSolution}
+              onClick={() => { setWall(); gridRef.current?.focus() }}
+            >
+              <img src="/images/maze/wall_button.png" alt="Set Wall" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Set Start"
+              aria-label="Set Start"
+              disabled={!selectionStatus.isSingleCell || selectionStatus.isStart || selectionStatus.hasSolution}
+              onClick={() => { setStart(); gridRef.current?.focus() }}
+            >
+              <img src="/images/maze/start_button.png" alt="Set Start" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Set Finish"
+              aria-label="Set Finish"
+              disabled={!selectionStatus.isSingleCell || selectionStatus.isFinish || selectionStatus.hasSolution}
+              onClick={() => { setFinish(); gridRef.current?.focus() }}
+            >
+              <img src="/images/maze/finish_button.png" alt="Set Finish" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Clear"
+              aria-label="Clear"
+              disabled={selectionStatus.isEmpty || selectionStatus.hasSolution}
+              onClick={() => { clearCell(); gridRef.current?.focus() }}
+            >
+              <img src="/images/maze/clear_button.png" alt="Clear" />
+            </button>
+          </div>
+        )}
+
         {!isLoading && !notFound && !error && grid.length > 0 && (
           <MazeGrid
             ref={gridRef}
@@ -85,10 +177,13 @@ export function MazePage() {
             solution={solution}
             activeCell={activeCell}
             anchorCell={anchorCell}
+            onCellClick={(row, col, shift) => activateCell(row, col, shift)}
+            onRowHeaderClick={(row, shift) => activateRow(row, shift)}
+            onColHeaderClick={(col, shift) => activateCol(col, shift)}
+            onCornerClick={() => selectAll()}
+            onKeyDown={handleKeyDown}
           />
         )}
-        {/* empty toolbar — buttons added in Step 7 */}
-        <div className="maze-toolbar" />
       </main>
     </div>
   )

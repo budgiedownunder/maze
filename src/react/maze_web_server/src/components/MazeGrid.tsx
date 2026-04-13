@@ -1,4 +1,4 @@
-import { forwardRef, useMemo } from 'react'
+import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CellPoint } from '../hooks/useMazeEditor'
 
 export const CELL_SIZE = 32
@@ -12,6 +12,7 @@ interface MazeGridProps {
   onCellClick?: (row: number, col: number, shift: boolean) => void
   onRowHeaderClick?: (row: number, shift: boolean) => void
   onColHeaderClick?: (col: number, shift: boolean) => void
+  onCornerClick?: () => void
   onKeyDown?: (e: React.KeyboardEvent) => void
 }
 
@@ -58,7 +59,7 @@ function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
 
 export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
   function MazeGrid(
-    { grid, solution, activeCell, anchorCell, onCellClick, onRowHeaderClick, onColHeaderClick, onKeyDown },
+    { grid, solution, activeCell, anchorCell, onCellClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown },
     ref,
   ) {
     const rows = grid.length
@@ -82,15 +83,116 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       }
     }, [activeCell, anchorCell])
 
-    const frameStyle = useMemo(() => {
-      if (!selectionRect) return null
-      return {
-        top: HEADER_SIZE + selectionRect.minRow * CELL_SIZE,
-        left: HEADER_SIZE + selectionRect.minCol * CELL_SIZE,
-        width: (selectionRect.maxCol - selectionRect.minCol + 1) * CELL_SIZE,
-        height: (selectionRect.maxRow - selectionRect.minRow + 1) * CELL_SIZE,
+    // Internal ref for DOM measurement; merged with the forwarded ref below.
+    const containerRef = useRef<HTMLDivElement>(null)
+    const setContainerRef = useCallback(
+      (node: HTMLDivElement | null) => {
+        (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node
+        if (typeof ref === 'function') ref(node)
+        else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node
+      },
+      [ref],
+    )
+
+    // Frame position is measured from the DOM so it stays correct at any zoom level.
+    const [frameStyle, setFrameStyle] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
+
+    // Keep a ref so the stable measureFrame callback can read the latest selectionRect
+    // without being recreated every time it changes.
+    const selectionRectRef = useRef(selectionRect)
+    selectionRectRef.current = selectionRect
+
+    // Stable measurement function — no deps, safe to subscribe to window events.
+    const measureFrame = useCallback(() => {
+      const sr = selectionRectRef.current
+      if (!sr || !containerRef.current) {
+        setFrameStyle(null)
+        return
       }
-    }, [selectionRect])
+
+      const container = containerRef.current
+      const containerRect = container.getBoundingClientRect()
+
+      // JSDOM (unit tests) always returns zero-sized rects — fall back to calculated values.
+      if (containerRect.width === 0) {
+        setFrameStyle({
+          top: HEADER_SIZE + sr.minRow * CELL_SIZE,
+          left: HEADER_SIZE + sr.minCol * CELL_SIZE,
+          width: (sr.maxCol - sr.minCol + 1) * CELL_SIZE,
+          height: (sr.maxRow - sr.minRow + 1) * CELL_SIZE,
+        })
+        return
+      }
+
+      const tlCell = container.querySelector<HTMLElement>(
+        `td[aria-label="Cell ${sr.minRow + 1},${sr.minCol + 1}"]`,
+      )
+      const brCell = container.querySelector<HTMLElement>(
+        `td[aria-label="Cell ${sr.maxRow + 1},${sr.maxCol + 1}"]`,
+      )
+      if (!tlCell || !brCell) return
+
+      const tlRect = tlCell.getBoundingClientRect()
+      const brRect = brCell.getBoundingClientRect()
+
+      // getBoundingClientRect is viewport-relative (accounts for current scroll), but
+      // position:absolute is relative to the container's padding edge (inside its border,
+      // before scroll). Subtract border widths and add scroll to convert correctly.
+      setFrameStyle({
+        top: tlRect.top - containerRect.top - container.clientTop + container.scrollTop,
+        left: tlRect.left - containerRect.left - container.clientLeft + container.scrollLeft,
+        width: brRect.right - tlRect.left,
+        height: brRect.bottom - tlRect.top,
+      })
+    }, []) // stable — reads selectionRect via ref
+
+    // Re-measure whenever the selection changes.
+    useLayoutEffect(() => {
+      measureFrame()
+    }, [selectionRect, measureFrame])
+
+    // Re-measure on window resize (browser zoom fires resize), so the frame stays
+    // aligned after the user zooms without needing to reselect.
+    useEffect(() => {
+      window.addEventListener('resize', measureFrame)
+      return () => window.removeEventListener('resize', measureFrame)
+    }, [measureFrame])
+
+    // Scroll the active cell into view whenever it changes (arrow keys, Home/End, etc.).
+    //
+    // UP/LEFT — computed integers: scrollTop = cellTop - HEADER_SIZE.
+    //   "cellTop" is an exact integer (HEADER_SIZE + row * CELL_SIZE), so there is no
+    //   floating-point drift. scrollIntoView cannot be used here because it measures the
+    //   actual sub-pixel cell position (e.g. 24.5px at 110% zoom) and subtracts the
+    //   scroll-margin, producing a fractional scrollTop (e.g. 0.5 → rounds to 1).
+    //   That 1px offset puts the top ants line under the sticky header.
+    //
+    // DOWN/RIGHT — scrollIntoView({ block/inline: 'end' }): the browser uses the actual
+    //   rendered cell bottom/right, which accounts for sub-pixel accumulation across many
+    //   rows/cols at non-integer zoom levels. CSS scroll-margin-bottom/right: 2px ensures
+    //   the frame's ants line is never flush with (and clipped by) the container edge.
+    useLayoutEffect(() => {
+      if (!activeCell || !containerRef.current) return
+      const container = containerRef.current
+      if (container.clientWidth === 0) return // JSDOM — no layout
+
+      const cellTop  = HEADER_SIZE + activeCell.row * CELL_SIZE
+      const cellLeft = HEADER_SIZE + activeCell.col * CELL_SIZE
+
+      if (cellTop  < container.scrollTop  + HEADER_SIZE) container.scrollTop  = cellTop  - HEADER_SIZE
+      if (cellLeft < container.scrollLeft + HEADER_SIZE) container.scrollLeft = cellLeft - HEADER_SIZE
+
+      const needDown  = cellTop  + CELL_SIZE > container.scrollTop  + container.clientHeight
+      const needRight = cellLeft + CELL_SIZE > container.scrollLeft + container.clientWidth
+      if (needDown || needRight) {
+        container
+          .querySelector<HTMLElement>(`td[aria-label="Cell ${activeCell.row + 1},${activeCell.col + 1}"]`)
+          ?.scrollIntoView({
+            block:  needDown  ? 'end' : 'nearest',
+            inline: needRight ? 'end' : 'nearest',
+          })
+      }
+    }, [activeCell])
 
     function getCellClasses(row: number, col: number): string {
       const classes = ['maze-cell']
@@ -99,10 +201,12 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         const isActive = row === activeCell.row && col === activeCell.col
         const isAnchor = anchorCell != null && row === anchorCell.row && col === anchorCell.col
 
-        if (isActive) {
-          classes.push('maze-cell--active')
-        } else if (isAnchor) {
+        if (isAnchor) {
           classes.push('maze-cell--anchor')
+        } else if (isActive) {
+          // No anchor = single selection (acts as anchor origin) → yellow
+          // With anchor = moving end of range → in-range color
+          classes.push(anchorCell === null ? 'maze-cell--anchor' : 'maze-cell--active')
         } else if (
           selectionRect &&
           row >= selectionRect.minRow && row <= selectionRect.maxRow &&
@@ -119,10 +223,15 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       return classes.join(' ')
     }
 
+    const isAllSelected =
+      selectionRect !== null &&
+      selectionRect.minRow === 0 && selectionRect.maxRow === rows - 1 &&
+      selectionRect.minCol === 0 && selectionRect.maxCol === cols - 1
+
     return (
       <div
         className="maze-grid-container"
-        ref={ref}
+        ref={setContainerRef}
         tabIndex={0}
         onKeyDown={onKeyDown}
         aria-label="Maze grid"
@@ -130,26 +239,36 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         <table className="maze-grid">
           <thead>
             <tr>
-              <th className="maze-cell-corner" aria-hidden="true" />
-              {Array.from({ length: cols }, (_, c) => (
+              <th
+                className={`maze-cell-corner${isAllSelected ? ' maze-cell-corner--selected' : ''}`}
+                onClick={() => onCornerClick?.()}
+                aria-label="Select all"
+              />
+              {Array.from({ length: cols }, (_, c) => {
+                const isColSelected = selectionRect !== null &&
+                  c >= selectionRect.minCol && c <= selectionRect.maxCol
+                return (
                 <th
                   key={`col-${c}`}
                   scope="col"
-                  className="maze-cell-col-header"
+                  className={`maze-cell-col-header${isColSelected ? ' maze-cell-col-header--selected' : ''}`}
                   onClick={e => onColHeaderClick?.(c, e.shiftKey)}
                   aria-label={`Column ${c + 1}`}
                 >
                   {c + 1}
                 </th>
-              ))}
+              )})}
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: rows }, (_, r) => (
+            {Array.from({ length: rows }, (_, r) => {
+              const isRowSelected = selectionRect !== null &&
+                r >= selectionRect.minRow && r <= selectionRect.maxRow
+              return (
               <tr key={`row-${r}`}>
                 <th
                   scope="row"
-                  className="maze-cell-row-header"
+                  className={`maze-cell-row-header${isRowSelected ? ' maze-cell-row-header--selected' : ''}`}
                   onClick={e => onRowHeaderClick?.(r, e.shiftKey)}
                   aria-label={`Row ${r + 1}`}
                 >
@@ -174,7 +293,8 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   )
                 })}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
 

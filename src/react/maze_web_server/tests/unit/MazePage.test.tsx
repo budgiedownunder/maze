@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
@@ -95,5 +96,125 @@ describe('MazePage', () => {
     expect(screen.getByLabelText('Maze grid')).toBeInTheDocument()
     // No API call should have been made
     expect(getMazeSpy).not.toHaveBeenCalled()
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// Toolbar visibility and button states
+// ──────────────────────────────────────────────────────────────
+
+describe('MazePage toolbar', () => {
+  async function loadMazePage(path: string) {
+    renderMazePage(path)
+    if (path !== '/mazes/new') {
+      await waitFor(() => expect(screen.queryByLabelText('Loading')).not.toBeInTheDocument())
+    }
+  }
+
+  it('toolbar is hidden when no cell is selected', async () => {
+    await loadMazePage('/mazes/new')
+    expect(screen.queryByLabelText('Maze editor toolbar')).not.toBeInTheDocument()
+  })
+
+  it('toolbar appears after clicking a cell', async () => {
+    await loadMazePage('/mazes/new')
+    const cell = screen.getByLabelText('Cell 1,1')
+    await userEvent.click(cell)
+    expect(screen.getByLabelText('Maze editor toolbar')).toBeInTheDocument()
+  })
+
+  it('Set Wall is enabled on an empty cell', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    expect(screen.getByRole('button', { name: 'Set Wall' })).not.toBeDisabled()
+  })
+
+  it('Set Wall is disabled when selection is all walls', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // Cell (1,1) in Alpha is 'W'
+    await userEvent.click(screen.getByLabelText('Cell 2,2'))
+    const btn = screen.getByRole('button', { name: 'Set Wall' })
+    expect(btn).toBeDisabled()
+  })
+
+  it('Set Start is enabled on a single empty cell', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 2,2'))
+    expect(screen.getByRole('button', { name: 'Set Start' })).not.toBeDisabled()
+  })
+
+  it('Set Start is disabled when selected cell already contains S', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // Cell (0,0) in Alpha is 'S'
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    expect(screen.getByRole('button', { name: 'Set Start' })).toBeDisabled()
+  })
+
+  it('Set Start is disabled for multi-cell selection', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    fireEvent.click(screen.getByLabelText('Cell 2,2'), { shiftKey: true })
+    expect(screen.getByRole('button', { name: 'Set Start' })).toBeDisabled()
+  })
+
+  it('Set Finish is enabled on a single empty cell', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 2,2'))
+    expect(screen.getByRole('button', { name: 'Set Finish' })).not.toBeDisabled()
+  })
+
+  it('Set Finish is disabled when selected cell already contains F', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // Cell (2,2) in Alpha is 'F'
+    await userEvent.click(screen.getByLabelText('Cell 3,3'))
+    expect(screen.getByRole('button', { name: 'Set Finish' })).toBeDisabled()
+  })
+
+  it('Clear is disabled on an empty cell', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+  })
+
+  it('Clear is enabled on a wall cell', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // Cell (1,1) in Alpha is 'W'
+    await userEvent.click(screen.getByLabelText('Cell 2,2'))
+    expect(screen.getByRole('button', { name: 'Clear' })).not.toBeDisabled()
+  })
+
+  it('clicking Set Wall changes the cell and keeps toolbar visible', async () => {
+    await loadMazePage('/mazes/new')
+    const cell = screen.getByLabelText('Cell 1,1')
+    await userEvent.click(cell)
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    // Cell should now show wall image
+    const cellEl = screen.getByLabelText('Cell 1,1')
+    expect(within(cellEl).getByAltText('Wall')).toBeInTheDocument()
+    // Toolbar still visible
+    expect(screen.getByLabelText('Maze editor toolbar')).toBeInTheDocument()
+  })
+
+  it('clicking Set Start places S and clears previous S', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // Alpha has S at (0,0) — click cell (1,2) which is empty and set start there
+    await userEvent.click(screen.getByLabelText('Cell 2,3'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Start' }))
+    // Old start cell (0,0) should no longer show Start image; new cell should
+    const oldStartCell = screen.getByLabelText('Cell 1,1')
+    expect(within(oldStartCell).queryByAltText('Start')).not.toBeInTheDocument()
+    const newStartCell = screen.getByLabelText('Cell 2,3')
+    expect(within(newStartCell).getByAltText('Start')).toBeInTheDocument()
+  })
+
+  it('shift+click extends selection and disables Set Start / Set Finish', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    fireEvent.click(screen.getByLabelText('Cell 2,2'), { shiftKey: true })
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    expect(within(toolbar).getByRole('button', { name: 'Set Start' })).toBeDisabled()
+    expect(within(toolbar).getByRole('button', { name: 'Set Finish' })).toBeDisabled()
+    // Set Wall should still be enabled (not all walls)
+    expect(within(toolbar).getByRole('button', { name: 'Set Wall' })).not.toBeDisabled()
   })
 })

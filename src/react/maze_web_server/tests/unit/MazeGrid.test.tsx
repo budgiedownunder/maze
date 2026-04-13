@@ -30,9 +30,9 @@ describe('MazeGrid', () => {
 
   it('renders correct number of column headers', () => {
     renderGrid()
-    // <th scope="col"> — excludes the corner (aria-hidden)
+    // <th scope="col"> — 3 col headers + 1 corner <th> (aria-label="Select all")
     const colHeaders = screen.getAllByRole('columnheader')
-    expect(colHeaders).toHaveLength(3)
+    expect(colHeaders).toHaveLength(4)
   })
 
   it('renders correct number of row headers', () => {
@@ -75,10 +75,19 @@ describe('MazeGrid', () => {
     expect(screen.queryByAltText('Finish')).not.toBeInTheDocument()
   })
 
-  it('applies maze-cell--active class to the active cell', () => {
+  it('applies maze-cell--anchor class to a single active cell (no anchor)', () => {
+    // When anchorCell is null, the active cell is treated as the anchor origin → yellow
     renderGrid({ activeCell: { row: 0, col: 0 } })
     const activeEl = screen.getByLabelText('Cell 1,1')
+    expect(activeEl.className).toContain('maze-cell--anchor')
+  })
+
+  it('applies maze-cell--active class to the active cell when a separate anchor exists', () => {
+    // Active cell (0,0) is the range end; anchor (2,2) is origin → active gets in-range color
+    renderGrid({ activeCell: { row: 0, col: 0 }, anchorCell: { row: 2, col: 2 } })
+    const activeEl = screen.getByLabelText('Cell 1,1')
     expect(activeEl.className).toContain('maze-cell--active')
+    expect(activeEl.className).not.toContain('maze-cell--anchor')
   })
 
   it('applies maze-cell--anchor class to the anchor cell', () => {
@@ -157,8 +166,8 @@ describe('MazeGrid', () => {
     const { container } = renderGrid({ activeCell: { row: 1, col: 2 } })
     const frame = container.querySelector('.maze-selection-frame') as HTMLElement
     expect(frame).toBeInTheDocument()
-    // top = HEADER_SIZE + row * CELL_SIZE = 24 + 1*32 = 56
-    // left = HEADER_SIZE + col * CELL_SIZE = 24 + 2*32 = 88
+    // In JSDOM getBoundingClientRect returns zeros, so calculated fallback is used:
+    // top = HEADER_SIZE + row * CELL_SIZE, left = HEADER_SIZE + col * CELL_SIZE
     expect(frame.style.top).toBe(`${HEADER_SIZE + 1 * CELL_SIZE}px`)
     expect(frame.style.left).toBe(`${HEADER_SIZE + 2 * CELL_SIZE}px`)
     expect(frame.style.width).toBe(`${CELL_SIZE}px`)
@@ -172,7 +181,7 @@ describe('MazeGrid', () => {
     })
     const frame = container.querySelector('.maze-selection-frame') as HTMLElement
     expect(frame).toBeInTheDocument()
-    // minRow=0, minCol=0 → top=24, left=24
+    // minRow=0, minCol=0 → top = HEADER_SIZE + 0 = HEADER_SIZE, left = HEADER_SIZE
     // range spans 3×3 → width=3*32=96, height=3*32=96
     expect(frame.style.top).toBe(`${HEADER_SIZE}px`)
     expect(frame.style.left).toBe(`${HEADER_SIZE}px`)

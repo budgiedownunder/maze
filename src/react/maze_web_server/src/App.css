@@ -514,6 +514,40 @@
   align-items: center;
 }
 
+.maze-toolbar-btn {
+  background: var(--button-bg);
+  border: 1px solid var(--border-input);
+  border-radius: 0.25rem;
+  padding: 0.25rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+
+.maze-toolbar-btn img {
+  width: 32px;
+  height: 32px;
+  display: block;
+}
+
+.maze-toolbar-btn:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--surface-hover);
+}
+
+.maze-toolbar-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+:root[data-theme="dark"] .maze-toolbar-btn img,
+:root:not([data-theme="light"]) .maze-toolbar-btn img {
+  filter: invert(1);
+}
+
 /* ──────────────────────────────────────────────────────────
    MazeGrid component
 ────────────────────────────────────────────────────────── */
@@ -553,6 +587,10 @@
   box-sizing: border-box;
 }
 
+.maze-cell-corner--selected {
+  background: #E1E1E1;
+}
+
 /* Column headers — sticky top */
 .maze-cell-col-header {
   position: sticky;
@@ -574,6 +612,10 @@
 
 .maze-cell-col-header:hover {
   background: #dcdcdc;
+}
+
+.maze-cell-col-header--selected {
+  background: #E1E1E1;
 }
 
 /* Row headers — sticky left */
@@ -599,6 +641,10 @@
   background: #dcdcdc;
 }
 
+.maze-cell-row-header--selected {
+  background: #E1E1E1;
+}
+
 /* Data cells */
 .maze-cell {
   width: 32px;
@@ -610,6 +656,11 @@
   cursor: pointer;
   overflow: hidden;
   background: #fafafa;
+  user-select: none;
+  /* scroll-margin reserves clearance when scrollIntoView({block/inline:'nearest'}) is called:
+     top/left = HEADER_SIZE so the cell clears the sticky headers;
+     bottom/right = 2px so the selection-frame ants line is never clipped by the container edge. */
+  scroll-margin: 24px 2px 2px 24px;
 }
 
 .maze-cell img {
@@ -626,34 +677,43 @@
 }
 
 .maze-cell--active {
-  background: #ffe066;
+  background: #D3F0E0;
 }
 
 .maze-cell--anchor {
-  background: #ffa500;
+  background: #FFFF00;
 }
 
 .maze-cell--in-range {
-  background: rgba(255, 200, 0, 0.3);
+  background: #D3F0E0;
 }
 
 .maze-cell--solution {
   background: #90ee90;
 }
 
-/* Marching ants selection frame */
+/* Marching ants — 6px red dash / 4px white gap = 10px cycle, 1s linear (matches MAUI speed).
+   Color: red (#FF0000) with white gaps, per MazeGrid.cs SelectionFrameBorderColor = Colors.Red.
+   The background shorthand resolves `top`/`bottom` to 50%/50%, which corrupts animation; use
+   explicit separated properties so `background-position` starts exactly at 0 0 / 0 100%. */
 @keyframes marchingAnts {
-  to { background-position: 32px 0, -32px 100%, 0 -32px, 100% 32px; }
+  from { background-position: 0 0, 0 100%, 0 0, 100% 0; }
+  to   { background-position: 10px 0, -10px 100%, 0 -10px, 100% 10px; }
 }
 
 .maze-selection-frame {
   position: absolute;
   pointer-events: none;
-  z-index: 4;
-  background:
-    linear-gradient(90deg, var(--accent) 50%, transparent 50%) top / 8px 2px repeat-x,
-    linear-gradient(90deg, var(--accent) 50%, transparent 50%) bottom / 8px 2px repeat-x,
-    linear-gradient(0deg, var(--accent) 50%, transparent 50%) left / 2px 8px repeat-y,
-    linear-gradient(0deg, var(--accent) 50%, transparent 50%) right / 2px 8px repeat-y;
-  animation: marchingAnts 0.4s infinite linear;
+  /* 0 keeps the frame above cells (DOM order wins at the same stacking level)
+     but below sticky headers (z-index ≥ 1), so headers naturally cover the frame on scroll. */
+  z-index: 0;
+  background-image:
+    linear-gradient(90deg,  #FF0000 0 6px, white 6px 10px),
+    linear-gradient(90deg,  #FF0000 0 6px, white 6px 10px),
+    linear-gradient(180deg, #FF0000 0 6px, white 6px 10px),
+    linear-gradient(180deg, #FF0000 0 6px, white 6px 10px);
+  background-size:   10px 2px, 10px 2px, 2px 10px, 2px 10px;
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  animation: marchingAnts 1s infinite linear;
 }
