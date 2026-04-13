@@ -361,13 +361,14 @@ export function MazePage() {
         {refreshError && (
           <p className="error-msg" role="alert">{refreshError}</p>
         )}
-        {activeCell !== null && (
+        {!isLoading && !notFound && !error && grid.length > 0 && (
           <div className="maze-toolbar" aria-label="Maze editor toolbar">
+            {/* noSelection disables all editing buttons when no cell is selected */}
             <button
               className="maze-toolbar-btn"
               title="Set Wall"
               aria-label="Set Wall"
-              disabled={selectionStatus.isAllWalls || selectionStatus.hasSolution}
+              disabled={activeCell === null || selectionStatus.isAllWalls || selectionStatus.hasSolution}
               onClick={() => { setWall(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/wall_button.png" alt="Set Wall" />
@@ -376,7 +377,7 @@ export function MazePage() {
               className="maze-toolbar-btn"
               title="Set Start"
               aria-label="Set Start"
-              disabled={!selectionStatus.isSingleCell || selectionStatus.isStart || selectionStatus.hasSolution}
+              disabled={activeCell === null || !selectionStatus.isSingleCell || selectionStatus.isStart || selectionStatus.hasSolution}
               onClick={() => { setStart(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/start_button.png" alt="Set Start" />
@@ -385,7 +386,7 @@ export function MazePage() {
               className="maze-toolbar-btn"
               title="Set Finish"
               aria-label="Set Finish"
-              disabled={!selectionStatus.isSingleCell || selectionStatus.isFinish || selectionStatus.hasSolution}
+              disabled={activeCell === null || !selectionStatus.isSingleCell || selectionStatus.isFinish || selectionStatus.hasSolution}
               onClick={() => { setFinish(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/finish_button.png" alt="Set Finish" />
@@ -394,7 +395,7 @@ export function MazePage() {
               className="maze-toolbar-btn"
               title="Clear"
               aria-label="Clear"
-              disabled={selectionStatus.isEmpty || selectionStatus.hasSolution}
+              disabled={activeCell === null || selectionStatus.isEmpty || selectionStatus.hasSolution}
               onClick={() => { clearCell(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/clear_button.png" alt="Clear" />
@@ -403,7 +404,7 @@ export function MazePage() {
               className="maze-toolbar-btn"
               title="Insert Rows Before"
               aria-label="Insert Rows Before"
-              disabled={!selectionStatus.allColumnsSelected || selectionStatus.hasSolution}
+              disabled={activeCell === null || !selectionStatus.allColumnsSelected || selectionStatus.hasSolution}
               onClick={() => { insertRowsBefore(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/insert_rows_button.png" alt="Insert Row Before" />
@@ -412,7 +413,7 @@ export function MazePage() {
               className="maze-toolbar-btn"
               title="Insert Columns Before"
               aria-label="Insert Columns Before"
-              disabled={!selectionStatus.allRowsSelected || selectionStatus.hasSolution}
+              disabled={activeCell === null || !selectionStatus.allRowsSelected || selectionStatus.hasSolution}
               onClick={() => { insertColsBefore(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/insert_columns_button.png" alt="Insert Column Before" />
@@ -422,6 +423,7 @@ export function MazePage() {
               title="Delete"
               aria-label="Delete"
               disabled={
+                activeCell === null ||
                 (!selectionStatus.allColumnsSelected && !selectionStatus.allRowsSelected) ||
                 (selectionStatus.allColumnsSelected && selectionStatus.allRowsSelected) ||
                 selectionStatus.hasSolution
@@ -437,7 +439,7 @@ export function MazePage() {
               className="maze-toolbar-btn"
               title="Generate"
               aria-label="Generate"
-              disabled={selectionStatus.hasSolution || isBusy}
+              disabled={activeCell === null || selectionStatus.hasSolution || isBusy}
               onClick={() => { setGenerateError(null); setShowGenerateModal(true) }}
             >
               <img src="/images/maze/generate_button.png" alt="Generate" />
@@ -447,6 +449,7 @@ export function MazePage() {
                 className="maze-toolbar-btn maze-range-mode-btn"
                 title="Select range"
                 aria-label="Select range"
+                disabled={activeCell === null}
                 onClick={() => { enableRangeMode(); gridRef.current?.focus() }}
               >
                 <img src="/images/maze/select_range_button.png" alt="Select range" />

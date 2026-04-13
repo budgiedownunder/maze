@@ -59,19 +59,21 @@ test('maze grid contains expected cell images', async ({ page }) => {
 // Cell selection + toolbar
 // ──────────────────────────────────────────────────────────────
 
-test('toolbar is hidden before selecting a cell', async ({ page }) => {
+test('toolbar is visible with buttons disabled before selecting a cell', async ({ page }) => {
   await login(page)
   await openFirstMaze(page)
-  await expect(page.getByLabel('Maze editor toolbar')).not.toBeVisible()
+  await expect(page.getByLabel('Maze editor toolbar')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Set Wall' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Generate' })).toBeDisabled()
 })
 
-test('clicking a cell shows the toolbar', async ({ page }) => {
+test('clicking a cell enables the toolbar buttons', async ({ page }) => {
   await login(page)
   await openFirstMaze(page)
 
   await page.getByLabel('Cell 1,2').click()
 
-  await expect(page.getByLabel('Maze editor toolbar')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Set Wall' })).toBeEnabled()
 })
 
 test('Set Wall button is enabled on an empty cell', async ({ page }) => {
@@ -560,11 +562,10 @@ test('saving from the navigate-away dialog on a new maze prompts for a name then
 // Generate
 // ──────────────────────────────────────────────────────────────
 
-test('Generate button appears in toolbar when a cell is selected', async ({ page }) => {
+test('Generate button is enabled in toolbar when a cell is selected', async ({ page }) => {
   await login(page)
   await openFirstMaze(page)
   await page.getByLabel('Cell 1,1').click()
-  await expect(page.getByRole('button', { name: 'Generate' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Generate' })).toBeEnabled()
 })
 
