@@ -217,4 +217,34 @@ describe('MazePage toolbar', () => {
     // Set Wall should still be enabled (not all walls)
     expect(within(toolbar).getByRole('button', { name: 'Set Wall' })).not.toBeDisabled()
   })
+
+  it('Select range button is present in toolbar when cell is selected', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    expect(within(toolbar).getByRole('button', { name: 'Select range' })).toBeInTheDocument()
+  })
+
+  it('Select range button is replaced by Done button after clicking it', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    await userEvent.click(within(toolbar).getByRole('button', { name: 'Select range' }))
+    expect(within(toolbar).queryByRole('button', { name: 'Select range' })).not.toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: 'Done' })).toBeInTheDocument()
+  })
+
+  it('Done button restores Select range button and clears anchor', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    await userEvent.click(within(toolbar).getByRole('button', { name: 'Select range' }))
+    // Click another cell — should extend selection (anchor set)
+    await userEvent.click(screen.getByLabelText('Cell 2,2'))
+    expect(screen.getByLabelText('Cell 2,2').className).toContain('maze-cell--active')
+    // Click Done — anchor should be cleared, back to single cell
+    await userEvent.click(within(toolbar).getByRole('button', { name: 'Done' }))
+    expect(within(toolbar).getByRole('button', { name: 'Select range' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Cell 2,2').className).toContain('maze-cell--anchor')
+  })
 })

@@ -180,12 +180,12 @@ export function MazePage() {
             )}
             {isRangeMode && (
               <button
-                className="maze-toolbar-btn maze-range-mode-btn maze-range-mode-btn--done"
+                className="maze-toolbar-btn maze-range-mode-btn"
                 title="Done"
                 aria-label="Done"
                 onClick={() => { disableRangeMode(); gridRef.current?.focus() }}
               >
-                Done
+                <img src="/images/maze/done_select_range_button.png" alt="Done" />
               </button>
             )}
           </div>

@@ -519,3 +519,67 @@ describe('selectionStatus', () => {
     expect(result.current.selectionStatus.hasSolution).toBe(false)
   })
 })
+
+// ──────────────────────────────────────────────────────────────
+// isRangeMode / enableRangeMode / disableRangeMode
+// ──────────────────────────────────────────────────────────────
+
+describe('isRangeMode', () => {
+  it('starts as false', () => {
+    const result = setupHook(makeGrid(5, 5))
+    expect(result.current.isRangeMode).toBe(false)
+  })
+
+  it('enableRangeMode sets isRangeMode to true', () => {
+    const result = setupHook(makeGrid(5, 5))
+    act(() => result.current.enableRangeMode())
+    expect(result.current.isRangeMode).toBe(true)
+  })
+
+  it('disableRangeMode sets isRangeMode to false and clears anchor', () => {
+    const result = setupHook(makeGrid(5, 5))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.enableRangeMode())
+    act(() => result.current.activateCell(3, 3, false)) // extends range without shift
+    expect(result.current.anchorCell).not.toBeNull()
+    act(() => result.current.disableRangeMode())
+    expect(result.current.isRangeMode).toBe(false)
+    expect(result.current.anchorCell).toBeNull()
+  })
+
+  it('activateCell extends range without shift when isRangeMode is true', () => {
+    const result = setupHook(makeGrid(5, 5))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.enableRangeMode())
+    act(() => result.current.activateCell(3, 3, false))
+    expect(result.current.anchorCell).toEqual({ row: 1, col: 1 })
+    expect(result.current.activeCell).toEqual({ row: 3, col: 3 })
+  })
+
+  it('moveActive extends range without shift when isRangeMode is true', () => {
+    const result = setupHook(makeGrid(5, 5))
+    act(() => result.current.activateCell(2, 2, false))
+    act(() => result.current.enableRangeMode())
+    act(() => result.current.moveActive(1, 0, false, false))
+    expect(result.current.anchorCell).toEqual({ row: 2, col: 2 })
+    expect(result.current.activeCell).toEqual({ row: 3, col: 2 })
+  })
+
+  it('moveActiveHome extends range without shift when isRangeMode is true', () => {
+    const result = setupHook(makeGrid(5, 5))
+    act(() => result.current.activateCell(2, 4, false))
+    act(() => result.current.enableRangeMode())
+    act(() => result.current.moveActiveHome(false, false))
+    expect(result.current.anchorCell).toEqual({ row: 2, col: 4 })
+    expect(result.current.activeCell).toEqual({ row: 2, col: 0 })
+  })
+
+  it('moveActiveEnd extends range without shift when isRangeMode is true', () => {
+    const result = setupHook(makeGrid(5, 6))
+    act(() => result.current.activateCell(2, 0, false))
+    act(() => result.current.enableRangeMode())
+    act(() => result.current.moveActiveEnd(false, false))
+    expect(result.current.anchorCell).toEqual({ row: 2, col: 0 })
+    expect(result.current.activeCell).toEqual({ row: 2, col: 5 })
+  })
+})

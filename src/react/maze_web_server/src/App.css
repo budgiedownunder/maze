@@ -543,14 +543,6 @@
   cursor: default;
 }
 
-/* Done button is wider to fit text; explicit dark colour so it's visible on white in dark mode */
-.maze-range-mode-btn--done {
-  width: auto;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #111;
-}
 
 /* Range mode buttons are touch-only — hidden on pointer/keyboard devices */
 @media (hover: hover) and (pointer: fine) {
