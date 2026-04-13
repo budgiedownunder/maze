@@ -725,3 +725,18 @@
   background-position: 0 0, 0 100%, 0 0, 100% 0;
   animation: marchingAnts 1s infinite linear;
 }
+
+/* Single-cell selection: fixed solid red border instead of marching ants.
+   Uses the same inset background-gradient technique as the ants so the border
+   is drawn entirely inside the frame div and never clips behind sticky headers. */
+.maze-selection-frame--single {
+  animation: none;
+  background-image:
+    linear-gradient(#FF0000, #FF0000),
+    linear-gradient(#FF0000, #FF0000),
+    linear-gradient(#FF0000, #FF0000),
+    linear-gradient(#FF0000, #FF0000);
+  background-size:     100% 2px, 100% 2px, 2px 100%, 2px 100%;
+  background-repeat:   no-repeat;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+}

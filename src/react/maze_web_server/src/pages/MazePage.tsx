@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { useParams, useNavigate, useBlocker } from 'react-router-dom'
 import { HamburgerMenu } from '../components/HamburgerMenu'
@@ -25,6 +25,14 @@ export function MazePage() {
   const gridRef = useRef<HTMLDivElement>(null)
 
   const isNew = id === undefined
+
+  // Touch-only devices have no Shift key, so any existing multi-cell selection is
+  // treated as sticky: tapping a cell or header extends it rather than replacing it.
+  // On pointer/keyboard devices, Shift (or range mode) is required to extend.
+  const isTouchOnly = useMemo(
+    () => typeof window.matchMedia === 'function' && !window.matchMedia('(hover: hover) and (pointer: fine)').matches,
+    [],
+  )
 
   const {
     grid, mazeName, mazeId, isDirty,
@@ -444,7 +452,7 @@ export function MazePage() {
             >
               <img src="/images/maze/generate_button.png" alt="Generate" />
             </button>
-            {!isRangeMode && (
+            {!isRangeMode && anchorCell === null && (
               <button
                 className="maze-toolbar-btn maze-range-mode-btn"
                 title="Select range"
@@ -455,7 +463,7 @@ export function MazePage() {
                 <img src="/images/maze/select_range_button.png" alt="Select range" />
               </button>
             )}
-            {isRangeMode && (
+            {(isRangeMode || anchorCell !== null) && (
               <button
                 className="maze-toolbar-btn maze-range-mode-btn"
                 title="Done"
@@ -475,9 +483,10 @@ export function MazePage() {
             solution={solution}
             activeCell={activeCell}
             anchorCell={anchorCell}
-            onCellClick={(row, col, shift) => activateCell(row, col, shift)}
-            onRowHeaderClick={(row, shift) => activateRow(row, shift)}
-            onColHeaderClick={(col, shift) => activateCol(col, shift)}
+            isRangeMode={isRangeMode}
+            onCellClick={(row, col, shift) => activateCell(row, col, shift || (isTouchOnly && anchorCell !== null))}
+            onRowHeaderClick={(row, shift) => activateRow(row, shift || (isTouchOnly && anchorCell !== null))}
+            onColHeaderClick={(col, shift) => activateCol(col, shift || (isTouchOnly && anchorCell !== null))}
             onCornerClick={() => selectAll()}
             onKeyDown={handleKeyDown}
           />

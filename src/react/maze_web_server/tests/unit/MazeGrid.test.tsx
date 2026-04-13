@@ -188,4 +188,26 @@ describe('MazeGrid', () => {
     expect(frame.style.width).toBe(`${3 * CELL_SIZE}px`)
     expect(frame.style.height).toBe(`${3 * CELL_SIZE}px`)
   })
+
+  it('applies maze-selection-frame--single when a single cell is selected and range mode is off', () => {
+    const { container } = renderGrid({ activeCell: { row: 1, col: 1 } })
+    expect(container.querySelector('.maze-selection-frame--single')).toBeInTheDocument()
+  })
+
+  it('does not apply maze-selection-frame--single when range mode is on (even with single cell)', () => {
+    const { container } = renderGrid({ activeCell: { row: 1, col: 1 }, isRangeMode: true })
+    const frame = container.querySelector('.maze-selection-frame') as HTMLElement
+    expect(frame).toBeInTheDocument()
+    expect(frame.classList.contains('maze-selection-frame--single')).toBe(false)
+  })
+
+  it('does not apply maze-selection-frame--single when multiple cells are selected', () => {
+    const { container } = renderGrid({
+      activeCell: { row: 2, col: 2 },
+      anchorCell: { row: 0, col: 0 },
+    })
+    const frame = container.querySelector('.maze-selection-frame') as HTMLElement
+    expect(frame).toBeInTheDocument()
+    expect(frame.classList.contains('maze-selection-frame--single')).toBe(false)
+  })
 })

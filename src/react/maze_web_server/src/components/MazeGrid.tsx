@@ -9,6 +9,7 @@ interface MazeGridProps {
   solution: Array<CellPoint> | null
   activeCell: CellPoint | null
   anchorCell: CellPoint | null
+  isRangeMode?: boolean
   onCellClick?: (row: number, col: number, shift: boolean) => void
   onRowHeaderClick?: (row: number, shift: boolean) => void
   onColHeaderClick?: (col: number, shift: boolean) => void
@@ -59,7 +60,7 @@ function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
 
 export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
   function MazeGrid(
-    { grid, solution, activeCell, anchorCell, onCellClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown },
+    { grid, solution, activeCell, anchorCell, isRangeMode = false, onCellClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown },
     ref,
   ) {
     const rows = grid.length
@@ -300,7 +301,14 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
 
         {frameStyle && (
           <div
-            className="maze-selection-frame"
+            className={`maze-selection-frame${
+              !isRangeMode &&
+              selectionRect !== null &&
+              selectionRect.minRow === selectionRect.maxRow &&
+              selectionRect.minCol === selectionRect.maxCol
+                ? ' maze-selection-frame--single'
+                : ''
+            }`}
             style={frameStyle}
             aria-hidden="true"
           />

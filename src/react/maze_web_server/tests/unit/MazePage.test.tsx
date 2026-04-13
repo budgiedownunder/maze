@@ -267,6 +267,33 @@ describe('MazePage toolbar', () => {
     expect(screen.getByLabelText('Cell 2,2').className).toContain('maze-cell--anchor')
   })
 
+  it('Done button replaces Select range after clicking a row header', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Row 1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    expect(within(toolbar).queryByRole('button', { name: 'Select range' })).not.toBeInTheDocument()
+    expect(within(toolbar).getByRole('button', { name: 'Done' })).toBeInTheDocument()
+  })
+
+  it('clicking Done after row header click collapses to single-cell selection', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Row 1'))
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    await userEvent.click(within(toolbar).getByRole('button', { name: 'Done' }))
+    expect(within(toolbar).getByRole('button', { name: 'Select range' })).toBeInTheDocument()
+  })
+
+  it('shift-clicking a second row header extends the selection rather than replacing it', async () => {
+    await loadMazePage('/mazes/new')
+    // Click row 1 header — selects row 1
+    await userEvent.click(screen.getByLabelText('Row 1'))
+    // Shift-click row 3 header — should extend the selection to span rows 1–3
+    fireEvent.click(screen.getByLabelText('Row 3'), { shiftKey: true })
+    // Row 1 header should still appear highlighted (still in selection)
+    expect(screen.getByLabelText('Row 1').className).toContain('maze-cell-row-header--selected')
+    expect(screen.getByLabelText('Row 3').className).toContain('maze-cell-row-header--selected')
+  })
+
   // ── Structural editing button enable/disable ─────────────────
 
   it('Insert Rows Before and Delete are enabled after clicking a row header', async () => {
