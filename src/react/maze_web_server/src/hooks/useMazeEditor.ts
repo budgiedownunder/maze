@@ -36,6 +36,7 @@ export function useMazeEditor() {
   const [activeCell, setActiveCell] = useState<CellPoint | null>(null)
   const [anchorCell, setAnchorCell] = useState<CellPoint | null>(null)
   const [solution, setSolutionState] = useState<Array<CellPoint> | null>(null)
+  const [isRangeMode, setIsRangeMode] = useState(false)
 
   const initFromDefinition = useCallback(
     (id: string | null, name: string, definition: MazeDefinition) => {
@@ -121,10 +122,28 @@ export function useMazeEditor() {
     }
   }, [grid, selectionRect, solution])
 
+  // ── Range mode ───────────────────────────────────────────────
+
+  // Single unified test: multi-cell selection is active when isRangeMode is true.
+  // On desktop the Shift key feeds into the `shift` parameter of each navigation
+  // function; on mobile the Select/Done toolbar buttons set isRangeMode directly.
+  // All navigation functions use `effectiveShift = shift || isRangeMode` so both
+  // mechanisms drive identical behaviour.
+
+  const enableRangeMode = useCallback(() => {
+    setIsRangeMode(true)
+  }, [])
+
+  const disableRangeMode = useCallback(() => {
+    setIsRangeMode(false)
+    setAnchorCell(null)
+  }, [])
+
   // ── Navigation ───────────────────────────────────────────────
 
   const activateCell = useCallback((row: number, col: number, shift: boolean) => {
-    if (!shift) {
+    const effectiveShift = shift || isRangeMode
+    if (!effectiveShift) {
       setActiveCell({ row, col })
       setAnchorCell(null)
     } else {
@@ -132,7 +151,7 @@ export function useMazeEditor() {
       setAnchorCell(prev => prev ?? activeCell)
       setActiveCell({ row, col })
     }
-  }, [activeCell])
+  }, [activeCell, isRangeMode])
 
   // Select all cells (used by corner header click)
   const selectAll = useCallback(() => {
@@ -147,7 +166,8 @@ export function useMazeEditor() {
   const activateRow = useCallback((row: number, shift: boolean) => {
     const cols = grid.length > 0 ? grid[0].length : 0
     if (cols === 0) return
-    if (!shift || activeCell === null) {
+    const effectiveShift = shift || isRangeMode
+    if (!effectiveShift || activeCell === null) {
       setActiveCell({ row, col: 0 })
       setAnchorCell({ row, col: cols - 1 })
     } else {
@@ -156,13 +176,14 @@ export function useMazeEditor() {
       setAnchorCell({ row: anchor.row, col: 0 })
       setActiveCell({ row, col: cols - 1 })
     }
-  }, [grid, activeCell, anchorCell])
+  }, [grid, activeCell, anchorCell, isRangeMode])
 
   // Full-column selection (used by column header clicks)
   const activateCol = useCallback((col: number, shift: boolean) => {
     const rows = grid.length
     if (rows === 0) return
-    if (!shift || activeCell === null) {
+    const effectiveShift = shift || isRangeMode
+    if (!effectiveShift || activeCell === null) {
       setActiveCell({ row: 0, col })
       setAnchorCell({ row: rows - 1, col })
     } else {
@@ -171,7 +192,7 @@ export function useMazeEditor() {
       setAnchorCell({ row: 0, col: anchor.col })
       setActiveCell({ row: rows - 1, col })
     }
-  }, [grid, activeCell, anchorCell])
+  }, [grid, activeCell, anchorCell, isRangeMode])
 
   const moveActive = useCallback((
     dRow: number, dCol: number, shift: boolean, ctrl: boolean,
@@ -192,28 +213,30 @@ export function useMazeEditor() {
       newCol = Math.max(0, Math.min(cols - 1, activeCell.col + dCol))
     }
 
-    if (!shift) {
+    const effectiveShift = shift || isRangeMode
+    if (!effectiveShift) {
       setActiveCell({ row: newRow, col: newCol })
       setAnchorCell(null)
     } else {
       if (anchorCell === null) setAnchorCell(activeCell)
       setActiveCell({ row: newRow, col: newCol })
     }
-  }, [activeCell, anchorCell, grid])
+  }, [activeCell, anchorCell, grid, isRangeMode])
 
   const moveActiveHome = useCallback((shift: boolean, ctrl: boolean) => {
     if (!activeCell) return
     const newRow = ctrl ? 0 : activeCell.row
     const newCol = 0
 
-    if (!shift) {
+    const effectiveShift = shift || isRangeMode
+    if (!effectiveShift) {
       setActiveCell({ row: newRow, col: newCol })
       setAnchorCell(null)
     } else {
       if (anchorCell === null) setAnchorCell(activeCell)
       setActiveCell({ row: newRow, col: newCol })
     }
-  }, [activeCell, anchorCell])
+  }, [activeCell, anchorCell, isRangeMode])
 
   const moveActiveEnd = useCallback((shift: boolean, ctrl: boolean) => {
     if (!activeCell) return
@@ -222,14 +245,15 @@ export function useMazeEditor() {
     const newRow = ctrl ? rows - 1 : activeCell.row
     const newCol = cols - 1
 
-    if (!shift) {
+    const effectiveShift = shift || isRangeMode
+    if (!effectiveShift) {
       setActiveCell({ row: newRow, col: newCol })
       setAnchorCell(null)
     } else {
       if (anchorCell === null) setAnchorCell(activeCell)
       setActiveCell({ row: newRow, col: newCol })
     }
-  }, [activeCell, anchorCell, grid])
+  }, [activeCell, anchorCell, grid, isRangeMode])
 
   // ── Cell editing ─────────────────────────────────────────────
 
@@ -315,6 +339,7 @@ export function useMazeEditor() {
     activeCell,
     anchorCell,
     solution,
+    isRangeMode,
     selectionStatus,
     initFromDefinition,
     selectAll,
@@ -324,6 +349,8 @@ export function useMazeEditor() {
     moveActive,
     moveActiveHome,
     moveActiveEnd,
+    enableRangeMode,
+    disableRangeMode,
     setWall,
     setStart,
     setFinish,

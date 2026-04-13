@@ -20,10 +20,11 @@ export function MazePage() {
   const isNew = id === undefined
 
   const {
-    grid, mazeName, activeCell, anchorCell, solution, selectionStatus,
+    grid, mazeName, activeCell, anchorCell, solution, isRangeMode, selectionStatus,
     initFromDefinition,
     selectAll, activateCell, activateRow, activateCol,
     moveActive, moveActiveHome, moveActiveEnd,
+    enableRangeMode, disableRangeMode,
     setWall, setStart, setFinish, clearCell,
   } = useMazeEditor()
 
@@ -167,6 +168,26 @@ export function MazePage() {
             >
               <img src="/images/maze/clear_button.png" alt="Clear" />
             </button>
+            {!isRangeMode && (
+              <button
+                className="maze-toolbar-btn maze-range-mode-btn"
+                title="Select range"
+                aria-label="Select range"
+                onClick={() => { enableRangeMode(); gridRef.current?.focus() }}
+              >
+                <img src="/images/maze/select_range_button.png" alt="Select range" />
+              </button>
+            )}
+            {isRangeMode && (
+              <button
+                className="maze-toolbar-btn maze-range-mode-btn maze-range-mode-btn--done"
+                title="Done"
+                aria-label="Done"
+                onClick={() => { disableRangeMode(); gridRef.current?.focus() }}
+              >
+                Done
+              </button>
+            )}
           </div>
         )}
 

@@ -515,7 +515,7 @@
 }
 
 .maze-toolbar-btn {
-  background: var(--button-bg);
+  background: white;
   border: 1px solid var(--border-input);
   border-radius: 0.25rem;
   padding: 0.25rem;
@@ -535,7 +535,7 @@
 
 .maze-toolbar-btn:hover:not(:disabled) {
   border-color: var(--border);
-  background: var(--surface-hover);
+  background: #f3f4f6;
 }
 
 .maze-toolbar-btn:disabled {
@@ -543,9 +543,20 @@
   cursor: default;
 }
 
-:root[data-theme="dark"] .maze-toolbar-btn img,
-:root:not([data-theme="light"]) .maze-toolbar-btn img {
-  filter: invert(1);
+/* Done button is wider to fit text; explicit dark colour so it's visible on white in dark mode */
+.maze-range-mode-btn--done {
+  width: auto;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #111;
+}
+
+/* Range mode buttons are touch-only — hidden on pointer/keyboard devices */
+@media (hover: hover) and (pointer: fine) {
+  .maze-range-mode-btn {
+    display: none;
+  }
 }
 
 /* ──────────────────────────────────────────────────────────
