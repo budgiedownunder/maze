@@ -125,7 +125,7 @@ test('Clear button is disabled on an empty cell', async ({ page }) => {
   // Cell (0,1) in Alpha maze is empty
   await page.getByLabel('Cell 1,2').click()
 
-  await expect(page.getByRole('button', { name: 'Clear' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeDisabled()
 })
 
 test('Clear button is enabled on a wall cell', async ({ page }) => {
@@ -135,7 +135,7 @@ test('Clear button is enabled on a wall cell', async ({ page }) => {
   // Cell (1,1) in Alpha maze is 'W'
   await page.getByLabel('Cell 2,2').click()
 
-  await expect(page.getByRole('button', { name: 'Clear' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeEnabled()
 })
 
 test('clicking Set Wall places a wall image in the cell', async ({ page }) => {
@@ -171,7 +171,7 @@ test('clicking Clear removes a wall', async ({ page }) => {
 
   // Cell (1,1) is 'W' — select it and clear
   await page.getByLabel('Cell 2,2').click()
-  await page.getByRole('button', { name: 'Clear' }).click()
+  await page.getByRole('button', { name: 'Clear', exact: true }).click()
 
   // Wall image should be gone
   await expect(page.getByLabel('Cell 2,2').getByAltText('Wall')).not.toBeVisible()
@@ -630,4 +630,96 @@ test('cancelling Generate dialog leaves the grid unchanged', async ({ page }) =>
   // Grid should still be 3 rows
   await expect(page.getByLabel('Row 3')).toBeVisible()
   await expect(page.getByLabel('Row 4')).not.toBeVisible()
+})
+
+// ──────────────────────────────────────────────────────────────
+// Solve / Clear Solution
+// ──────────────────────────────────────────────────────────────
+
+test('Solve button is present and enabled when no solution is shown', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await expect(page.getByRole('button', { name: 'Solve' })).toBeEnabled()
+})
+
+test('Clear Solution button is disabled when no solution is shown', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+})
+
+test('clicking Solve on a solvable maze shows the solution overlay', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)  // Alpha has S and F
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeEnabled()
+})
+
+test('clicking Clear Solution removes the solution overlay', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Clear Solution' }).click()
+  await expect(page.locator('img[alt="Solution path"]')).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+})
+
+test('clicking Solve on an unsolvable maze shows an alert dialog', async ({ page }) => {
+  await login(page)
+  await page.goto('/mazes/new')  // blank grid has no S or F
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.getByRole('dialog', { name: 'Unable to solve maze' })).toBeVisible()
+  await page.getByRole('button', { name: 'OK' }).click()
+  await expect(page.getByRole('dialog', { name: 'Unable to solve maze' })).not.toBeVisible()
+})
+
+test('editing buttons and Solve are disabled while the solution is displayed', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Set Wall' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Generate' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Solve' })).toBeDisabled()
+})
+
+test('single active cell is retained after solving', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.locator('td[aria-label="Cell 1,1"]').click()
+  // Selection frame present with --single modifier before solving
+  await expect(page.locator('.maze-selection-frame--single')).toBeVisible()
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
+  // Selection frame still present after solving — active cell was retained
+  await expect(page.locator('.maze-selection-frame')).toBeVisible()
+})
+
+test('multi-cell selection is collapsed to the anchor cell after solving', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.locator('td[aria-label="Cell 1,1"]').click()
+  await page.locator('td[aria-label="Cell 2,2"]').click({ modifiers: ['Shift'] })
+  // Multi-cell range: frame exists but does NOT have --single modifier
+  await expect(page.locator('.maze-selection-frame')).toBeVisible()
+  await expect(page.locator('.maze-selection-frame--single')).not.toBeVisible()
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
+  // Range collapsed to single anchor cell — frame now has --single modifier
+  await expect(page.locator('.maze-selection-frame--single')).toBeVisible()
+})
+
+test('active cell is re-highlighted after clearing the solution', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.locator('td[aria-label="Cell 1,1"]').click()
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
+  await expect(page.locator('.maze-selection-frame')).toBeVisible()
+  await page.getByRole('button', { name: 'Clear Solution' }).click()
+  await expect(page.locator('img[alt="Solution path"]')).not.toBeVisible()
+  // Active cell still selected after clearing
+  await expect(page.locator('.maze-selection-frame--single')).toBeVisible()
 })

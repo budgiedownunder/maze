@@ -8,12 +8,14 @@ import { mockMazeAlpha, resetMockMazes } from '../../src/mocks/handlers'
 import { ThemeProvider } from '../../src/context/ThemeContext'
 import { MazePage } from '../../src/pages/MazePage'
 
-const { mockGenerateMaze } = vi.hoisted(() => ({
+const { mockGenerateMaze, mockSolveMaze } = vi.hoisted(() => ({
   mockGenerateMaze: vi.fn(),
+  mockSolveMaze: vi.fn(),
 }))
 
 vi.mock('../../src/wasm/mazeWasm', () => ({
   generateMaze: mockGenerateMaze,
+  solveMaze: mockSolveMaze,
 }))
 
 vi.mock('../../src/context/AuthContext', async () => {
@@ -40,10 +42,13 @@ const generatedDefinition = {
   ],
 }
 
+const solvePath = [{ row: 0, col: 0 }, { row: 1, col: 0 }, { row: 2, col: 0 }, { row: 2, col: 2 }]
+
 beforeEach(() => {
   vi.clearAllMocks()
   resetMockMazes()
   mockGenerateMaze.mockResolvedValue(generatedDefinition)
+  mockSolveMaze.mockResolvedValue(solvePath)
 })
 
 function renderMazePage(path: string) {
@@ -192,14 +197,14 @@ describe('MazePage toolbar', () => {
   it('Clear is disabled on an empty cell', async () => {
     await loadMazePage('/mazes/new')
     await userEvent.click(screen.getByLabelText('Cell 1,1'))
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Clear$/ })).toBeDisabled()
   })
 
   it('Clear is enabled on a wall cell', async () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     // Cell (1,1) in Alpha is 'W'
     await userEvent.click(screen.getByLabelText('Cell 2,2'))
-    expect(screen.getByRole('button', { name: 'Clear' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Clear$/ })).not.toBeDisabled()
   })
 
   it('clicking Set Wall changes the cell and keeps toolbar visible', async () => {
@@ -610,5 +615,110 @@ describe('MazePage generate', () => {
       expect(within(screen.getByRole('dialog', { name: 'Generate Maze' })).getByRole('button', { name: 'Generate' })).toBeDisabled()
     )
     resolveGenerate(generatedDefinition)
+  })
+})
+
+// ── Solve ────────────────────────────────────────────────────
+describe('MazePage solve', () => {
+  async function loadMazePage(path: string) {
+    renderMazePage(path)
+    if (path !== '/mazes/new') {
+      await waitFor(() => expect(screen.queryByLabelText('Loading')).not.toBeInTheDocument())
+    }
+  }
+
+  it('Solve button is present and enabled when no solution is shown', async () => {
+    await loadMazePage('/mazes/new')
+    expect(screen.getByRole('button', { name: 'Solve' })).not.toBeDisabled()
+  })
+
+  it('Clear Solution button is disabled when no solution is shown', async () => {
+    await loadMazePage('/mazes/new')
+    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+  })
+
+  it('clicking Solve calls solveMaze with the current grid', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
+    await waitFor(() => expect(mockSolveMaze).toHaveBeenCalledWith({ grid: mockMazeAlpha.definition.grid }))
+  })
+
+  it('on success the solution overlay appears and Clear Solution becomes enabled', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
+    await waitFor(() => expect(screen.getAllByAltText('Solution path').length).toBeGreaterThan(0))
+    expect(screen.getByRole('button', { name: 'Clear Solution' })).not.toBeDisabled()
+  })
+
+  it('on success a single-cell selection is retained as the active cell', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // Cell 1,3 (row:0,col:2) is not on the solution path
+    await userEvent.click(screen.getByLabelText('Cell 1,3'))
+    await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
+    await waitFor(() => expect(screen.getAllByAltText('Solution path').length).toBeGreaterThan(0))
+    // Active cell highlight should still be shown
+    expect(screen.getByLabelText('Cell 1,3').className).toContain('maze-cell--anchor')
+    // Range mode / Done button should be gone
+    expect(screen.queryByRole('button', { name: 'Done' })).not.toBeInTheDocument()
+  })
+
+  it('on success a multi-cell selection is collapsed to the anchor cell', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // Anchor: Cell 1,3 (row:0,col:2); extend to Cell 2,3 (row:1,col:2) — both off the solution path
+    await userEvent.click(screen.getByLabelText('Cell 1,3'))
+    fireEvent.click(screen.getByLabelText('Cell 2,3'), { shiftKey: true })
+    expect(screen.getByLabelText('Cell 1,3').className).toContain('maze-cell--anchor')
+    expect(screen.getByLabelText('Cell 2,3').className).toContain('maze-cell--active')
+    await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
+    await waitFor(() => expect(screen.getAllByAltText('Solution path').length).toBeGreaterThan(0))
+    // Anchor cell becomes the retained active cell; the range endpoint is gone
+    expect(screen.getByLabelText('Cell 1,3').className).toContain('maze-cell--anchor')
+    expect(screen.getByLabelText('Cell 2,3').className).not.toContain('maze-cell--active')
+    expect(screen.queryByRole('button', { name: 'Done' })).not.toBeInTheDocument()
+  })
+
+  it('on WASM error an alert dialog is shown with the capitalised message', async () => {
+    mockSolveMaze.mockRejectedValue(new Error('no solution found'))
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Unable to solve maze' })).toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: 'Unable to solve maze' })).toHaveTextContent('No solution found')
+  })
+
+  it('clicking OK on the error dialog dismisses it', async () => {
+    mockSolveMaze.mockRejectedValue(new Error('no solution found'))
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Unable to solve maze' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }))
+    expect(screen.queryByRole('dialog', { name: 'Unable to solve maze' })).not.toBeInTheDocument()
+  })
+
+  it('clicking Clear Solution removes the overlay and disables the button', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Clear Solution' })).not.toBeDisabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Solution' }))
+    expect(screen.queryByAltText('Solution path')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+  })
+
+  it('Solve button is disabled while solving', async () => {
+    let resolveSolve!: (v: typeof solvePath) => void
+    mockSolveMaze.mockReturnValue(new Promise(r => { resolveSolve = r }))
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Solve' })).toBeDisabled())
+    resolveSolve(solvePath)
+  })
+
+  it('editing buttons and Solve are disabled while the solution is displayed', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Clear Solution' })).not.toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Set Wall' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Clear$/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Generate' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Solve' })).toBeDisabled()
   })
 })

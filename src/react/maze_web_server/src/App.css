@@ -172,6 +172,11 @@
   margin-top: 0;
 }
 
+.modal-message {
+  margin: 0 0 1rem;
+  white-space: pre-line;
+}
+
 .modal-form {
   display: flex;
   flex-direction: column;

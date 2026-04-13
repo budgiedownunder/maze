@@ -110,24 +110,24 @@ describe('MazeGrid', () => {
     expect(screen.getByLabelText('Cell 1,2').className).not.toContain('maze-cell--solution')
   })
 
-  it('renders solution footstep images with correct directions', () => {
-    // path goes right then down
+  it('renders solution footstep images with correct directions, skipping S and F cells', () => {
+    // path: S(0,0) → right → (0,1) → down → (0,2) → down → F(1,2)
+    // only (0,1) and (0,2) should receive footstep images
     render(
       <MazeGrid
-        grid={[['S', ' '], [' ', 'F']]}
-        solution={[{ row: 0, col: 0 }, { row: 0, col: 1 }, { row: 1, col: 1 }]}
+        grid={[['S', ' ', ' '], [' ', ' ', 'F']]}
+        solution={[{ row: 0, col: 0 }, { row: 0, col: 1 }, { row: 0, col: 2 }, { row: 1, col: 2 }]}
         activeCell={null}
         anchorCell={null}
       />,
     )
     const footstepImgs = screen.getAllByAltText('Solution path')
-    expect(footstepImgs).toHaveLength(3)
-    // (0,0) → next is (0,1): going right
+    // S and F cells must not have footsteps
+    expect(footstepImgs).toHaveLength(2)
+    // (0,1) → next is (0,2): going right
     expect(footstepImgs[0]).toHaveAttribute('src', '/images/maze/footsteps_right.png')
-    // (0,1) → next is (1,1): going down
+    // (0,2) → next is (1,2): going down
     expect(footstepImgs[1]).toHaveAttribute('src', '/images/maze/footsteps_down.png')
-    // (1,1) → last: incoming direction was down
-    expect(footstepImgs[2]).toHaveAttribute('src', '/images/maze/footsteps_down.png')
   })
 
   it('fires onCellClick with correct row, col, shift=false on plain click', async () => {

@@ -6,7 +6,8 @@ import { MazeGrid } from '../components/MazeGrid'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
 import { GenerateMazeModal } from '../components/GenerateMazeModal'
-import { generateMaze } from '../wasm/mazeWasm'
+import { AlertModal } from '../components/AlertModal'
+import { generateMaze, solveMaze } from '../wasm/mazeWasm'
 import type { GenerateOptions } from '../types/api'
 import { useToken } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -43,7 +44,7 @@ export function MazePage() {
     enableRangeMode, disableRangeMode,
     setWall, setStart, setFinish, clearCell,
     insertRowsBefore, deleteRows, insertColsBefore, deleteCols,
-    applyGenerated,
+    applyGenerated, applySolution, clearSolution,
   } = useMazeEditor()
 
   const [isLoading, setIsLoading] = useState(false)
@@ -65,7 +66,11 @@ export function MazePage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
 
-  const isBusy = isSaving || isRefreshing || isGenerating
+  // Solve state
+  const [isSolving, setIsSolving] = useState(false)
+  const [solveError, setSolveError] = useState<string | null>(null)
+
+  const isBusy = isSaving || isRefreshing || isGenerating || isSolving
   const hasUnsavedWork = isDirty || (isNew && mazeId === null)
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
@@ -195,6 +200,25 @@ export function MazePage() {
     }
   }
 
+  async function handleSolve() {
+    setIsSolving(true)
+    setSolveError(null)
+    try {
+      await new Promise<void>(r => requestAnimationFrame(() => r()))
+      const path = await solveMaze({ grid })
+      applySolution(path)
+    } catch (ex: unknown) {
+      const msg = (ex as { message?: string }).message ?? 'Unknown error.'
+      setSolveError(msg.charAt(0).toUpperCase() + msg.slice(1))
+    } finally {
+      setIsSolving(false)
+    }
+  }
+
+  function handleClearSolution() {
+    clearSolution()
+  }
+
   async function handleConfirmRefresh() {
     if (!token || !mazeId) return
     setShowRefreshConfirm(false)
@@ -317,6 +341,13 @@ export function MazePage() {
           error={generateError}
           onGenerate={handleGenerate}
           onCancel={() => { setShowGenerateModal(false); setGenerateError(null) }}
+        />
+      )}
+      {solveError && (
+        <AlertModal
+          title="Unable to solve maze"
+          message={solveError}
+          onClose={() => setSolveError(null)}
         />
       )}
 
@@ -451,6 +482,24 @@ export function MazePage() {
               onClick={() => { setGenerateError(null); setShowGenerateModal(true) }}
             >
               <img src="/images/maze/generate_button.png" alt="Generate" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Solve"
+              aria-label="Solve"
+              disabled={selectionStatus.hasSolution || isBusy}
+              onClick={handleSolve}
+            >
+              <img src="/images/maze/solve_button.png" alt="Solve" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Clear Solution"
+              aria-label="Clear Solution"
+              disabled={!selectionStatus.hasSolution || isBusy}
+              onClick={handleClearSolution}
+            >
+              <img src="/images/maze/clear_solution_button.png" alt="Clear Solution" />
             </button>
             {!isRangeMode && anchorCell === null && (
               <button

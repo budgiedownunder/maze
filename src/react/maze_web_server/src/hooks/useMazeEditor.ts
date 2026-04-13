@@ -65,6 +65,17 @@ export function useMazeEditor() {
     setIsDirty(true)
   }, [])
 
+  const applySolution = useCallback((path: Array<CellPoint>) => {
+    if (anchorCell !== null) setActiveCell(anchorCell)
+    setAnchorCell(null)
+    setIsRangeMode(false)
+    setSolutionState(path)
+  }, [anchorCell])
+
+  const clearSolution = useCallback(() => {
+    setSolutionState(null)
+  }, [])
+
   // ── Derived selection rect ───────────────────────────────────
 
   const selectionRect = useMemo((): SelectionRect | null => {
@@ -456,6 +467,8 @@ export function useMazeEditor() {
     initFromDefinition,
     markSaved,
     applyGenerated,
+    applySolution,
+    clearSolution,
     selectAll,
     activateCell,
     activateRow,

@@ -27,23 +27,30 @@ async function ensureInit(): Promise<void> {
  * Generates a new maze using WASM. Options use 1-based row/col (UI convention);
  * conversion to 0-based is done internally before calling the WASM API.
  */
+function toError(ex: unknown): Error {
+  if (ex instanceof Error) return ex
+  return new Error(typeof ex === 'string' ? ex : 'Unknown error.')
+}
+
 export async function generateMaze(options: GenerateOptions): Promise<MazeDefinition> {
   await ensureInit()
   const maze = new MazeWasm()
   try {
-    maze.generate(
-      options.rowCount,
-      options.colCount,
-      GenerationAlgorithmWasm.RecursiveBacktracking,
-      options.startRow - 1,   // convert 1-based → 0-based
-      options.startCol - 1,
-      options.finishRow - 1,
-      options.finishCol - 1,
-      options.minSpineLength,
-      100,        // max_retries
-      undefined,  // branch_from_finish (use WASM default)
-      undefined   // seed (random)
-    )
+    try {
+      maze.generate(
+        options.rowCount,
+        options.colCount,
+        GenerationAlgorithmWasm.RecursiveBacktracking,
+        options.startRow - 1,   // convert 1-based → 0-based
+        options.startCol - 1,
+        options.finishRow - 1,
+        options.finishCol - 1,
+        options.minSpineLength,
+        100,        // max_retries
+        undefined,  // branch_from_finish (use WASM default)
+        undefined   // seed (random)
+      )
+    } catch (ex) { throw toError(ex) }
     const parsed = JSON.parse(maze.to_json()) as { definition: MazeDefinition }
     return parsed.definition
   } finally {
@@ -60,13 +67,15 @@ export async function solveMaze(definition: MazeDefinition): Promise<Array<{ row
   await ensureInit()
   const maze = new MazeWasm()
   try {
-    maze.from_json(JSON.stringify({ id: '', name: '', definition }))
-    const solution = maze.solve()
     try {
-      return solution.get_path_points() as Array<{ row: number; col: number }>
-    } finally {
-      solution.free()
-    }
+      maze.from_json(JSON.stringify({ id: '', name: '', definition }))
+      const solution = maze.solve()
+      try {
+        return solution.get_path_points() as Array<{ row: number; col: number }>
+      } finally {
+        solution.free()
+      }
+    } catch (ex) { throw toError(ex) }
   } finally {
     maze.free()
   }

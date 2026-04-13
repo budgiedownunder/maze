@@ -88,9 +88,9 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
     const containerRef = useRef<HTMLDivElement>(null)
     const setContainerRef = useCallback(
       (node: HTMLDivElement | null) => {
-        (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = node
+        (containerRef as React.RefObject<HTMLDivElement | null>).current = node
         if (typeof ref === 'function') ref(node)
-        else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node
+        else if (ref) (ref as React.RefObject<HTMLDivElement | null>).current = node
       },
       [ref],
     )
@@ -197,8 +197,11 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
 
     function getCellClasses(row: number, col: number): string {
       const classes = ['maze-cell']
+      const inSolution = solutionMap.has(`${row},${col}`)
 
-      if (activeCell) {
+      // Only apply selection highlights to cells not in the solution path —
+      // solution styling takes visual precedence over the active/range highlight.
+      if (activeCell && !inSolution) {
         const isActive = row === activeCell.row && col === activeCell.col
         const isAnchor = anchorCell != null && row === anchorCell.row && col === anchorCell.col
 
@@ -217,7 +220,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         }
       }
 
-      if (solutionMap.has(`${row},${col}`)) {
+      if (inSolution) {
         classes.push('maze-cell--solution')
       }
 
@@ -287,7 +290,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                       aria-label={`Cell ${r + 1},${c + 1}`}
                     >
                       {img && <img src={img.src} alt={img.alt} />}
-                      {solutionImgSrc && (
+                      {solutionImgSrc && cell !== 'S' && cell !== 'F' && (
                         <img src={solutionImgSrc} alt="Solution path" className="maze-cell-solution-img" />
                       )}
                     </td>
