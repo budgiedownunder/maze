@@ -409,3 +409,149 @@ test('navigating off-screen scrolls the grid to reveal the active cell', async (
   )
   expect(scrollTop).toBeGreaterThan(0)
 })
+
+// ──────────────────────────────────────────────────────────────
+// Save, Refresh, and New maze
+// ──────────────────────────────────────────────────────────────
+
+test('New maze button on mazes list navigates to blank editor', async ({ page }) => {
+  await login(page)
+  await page.getByRole('button', { name: 'New maze' }).click()
+  await expect(page).toHaveURL(/\/mazes\/new$/)
+  await expect(page.locator('.app-header-title')).toHaveText('(unsaved)')
+  await expect(page.locator('.maze-grid-container')).toBeVisible()
+})
+
+test('Save button is visible and disabled on an unedited existing maze', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+})
+
+test('Save button becomes enabled after editing a cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await expect(page.getByRole('button', { name: 'Save' })).not.toBeDisabled()
+})
+
+test('saving an existing maze calls the API and re-disables Save', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await page.getByRole('button', { name: 'Save' }).click()
+  // After successful save, Save button should be disabled again
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+})
+
+test('saving a new maze opens name prompt and navigates to /mazes/:id', async ({ page }) => {
+  await login(page)
+  await page.goto('/mazes/new')
+  await expect(page.locator('.maze-grid-container')).toBeVisible()
+  // Edit a cell to make the maze dirty before saving
+  await page.getByLabel('Cell 1,1').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('dialog', { name: 'Save Maze' })).toBeVisible()
+  await page.getByRole('textbox').fill('Brand New Maze')
+  await page.getByRole('dialog', { name: 'Save Maze' }).getByRole('button', { name: 'Save' }).click()
+  // Should navigate away from /mazes/new to /mazes/:id and show the name
+  await expect(page).not.toHaveURL(/\/mazes\/new$/)
+  await expect(page).toHaveURL(/\/mazes\/.+$/)
+  await expect(page.locator('.app-header-title')).toHaveText('Brand New Maze')
+})
+
+test('Refresh button is not shown on new maze', async ({ page }) => {
+  await login(page)
+  await page.goto('/mazes/new')
+  await expect(page.locator('.maze-grid-container')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Refresh' })).not.toBeVisible()
+})
+
+test('Refresh button is disabled on an unedited existing maze', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await expect(page.getByRole('button', { name: 'Refresh' })).toBeDisabled()
+})
+
+test('clicking Refresh on a dirty maze shows confirm dialog', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await page.getByRole('button', { name: 'Refresh' }).click()
+  await expect(page.getByRole('dialog', { name: 'Discard changes?' })).toBeVisible()
+})
+
+test('confirming Refresh reloads the maze and clears dirty state', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await page.getByRole('button', { name: 'Refresh' }).click()
+  await page.getByRole('button', { name: 'Reload' }).click()
+  // After reload, Save and Refresh should both be disabled again
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Refresh' })).toBeDisabled()
+})
+
+test('navigate away while dirty shows unsaved changes dialog', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await page.evaluate(() => window.history.back())
+  await expect(page.getByRole('dialog', { name: 'Unsaved Changes' })).toBeVisible()
+})
+
+test('navigate away from unedited new maze shows unsaved changes dialog', async ({ page }) => {
+  await login(page)
+  // Navigate through the app so history.back() returns to /mazes
+  await page.getByRole('button', { name: 'New maze' }).click()
+  await expect(page).toHaveURL(/\/mazes\/new$/)
+  await expect(page.locator('.maze-grid-container')).toBeVisible()
+  await page.evaluate(() => window.history.back())
+  await expect(page.getByRole('dialog', { name: 'Unsaved Changes' })).toBeVisible()
+})
+
+test('discarding changes allows navigation away', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await page.evaluate(() => window.history.back())
+  await page.getByRole('button', { name: 'Discard' }).click()
+  await expect(page).not.toHaveURL(/\/mazes\/[^/]+$/)
+})
+
+test('saving from the navigate-away dialog on an existing maze clears dirty and proceeds', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await page.evaluate(() => window.history.back())
+  await expect(page.getByRole('dialog', { name: 'Unsaved Changes' })).toBeVisible()
+  await page.getByRole('dialog', { name: 'Unsaved Changes' }).getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('dialog', { name: 'Unsaved Changes' })).not.toBeVisible()
+  await expect(page).not.toHaveURL(/\/mazes\/[^/]+$/)
+})
+
+test('saving from the navigate-away dialog on a new maze prompts for a name then proceeds', async ({ page }) => {
+  await login(page)
+  // Navigate through the app so history.back() returns to /mazes
+  await page.getByRole('button', { name: 'New maze' }).click()
+  await expect(page).toHaveURL(/\/mazes\/new$/)
+  await expect(page.locator('.maze-grid-container')).toBeVisible()
+  await page.evaluate(() => window.history.back())
+  await expect(page.getByRole('dialog', { name: 'Unsaved Changes' })).toBeVisible()
+  await page.getByRole('dialog', { name: 'Unsaved Changes' }).getByRole('button', { name: 'Save' }).click()
+  // Should show name prompt
+  await expect(page.getByRole('dialog', { name: 'Save Maze' })).toBeVisible()
+  await page.getByRole('textbox').fill('Blocker Test Maze')
+  await page.getByRole('dialog', { name: 'Save Maze' }).getByRole('button', { name: 'Save' }).click()
+  // Should navigate away after save
+  await expect(page.getByRole('dialog', { name: 'Save Maze' })).not.toBeVisible()
+  await expect(page).not.toHaveURL(/\/mazes\/new$/)
+})

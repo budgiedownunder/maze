@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
 import { mockMazeAlpha, resetMockMazes } from '../../src/mocks/handlers'
@@ -29,16 +29,14 @@ beforeEach(() => {
 })
 
 function renderMazePage(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <ThemeProvider>
-        <Routes>
-          <Route path="/mazes/new" element={<MazePage />} />
-          <Route path="/mazes/:id" element={<MazePage />} />
-        </Routes>
-      </ThemeProvider>
-    </MemoryRouter>,
+  const router = createMemoryRouter(
+    [
+      { path: '/mazes/new', element: <ThemeProvider><MazePage /></ThemeProvider> },
+      { path: '/mazes/:id', element: <ThemeProvider><MazePage /></ThemeProvider> },
+    ],
+    { initialEntries: [path] },
   )
+  return render(<RouterProvider router={router} />)
 }
 
 describe('MazePage', () => {
@@ -324,5 +322,164 @@ describe('MazePage toolbar', () => {
     // Should now have only 6 row headers
     expect(screen.queryByLabelText('Row 7')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Row 6')).toBeInTheDocument()
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// Save and Refresh
+// ──────────────────────────────────────────────────────────────
+
+describe('MazePage save and refresh', () => {
+  async function loadMazePage(path: string) {
+    renderMazePage(path)
+    if (path !== '/mazes/new') {
+      await waitFor(() => expect(screen.queryByLabelText('Loading')).not.toBeInTheDocument())
+    }
+  }
+
+  it('Save button is visible and enabled on a new maze before any edits', async () => {
+    await loadMazePage('/mazes/new')
+    const btn = screen.getByRole('button', { name: 'Save' })
+    expect(btn).toBeInTheDocument()
+    expect(btn).not.toBeDisabled()
+  })
+
+  it('Save button is visible on existing maze', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+  })
+
+  it('Save button is disabled on existing maze when not dirty', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+  })
+
+  it('Save button is enabled on existing maze after editing a cell', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled()
+  })
+
+  it('clicking Save on existing dirty maze calls updateMaze and clears dirty', async () => {
+    const updateSpy = vi.fn()
+    server.use(
+      http.put('/api/v1/mazes/:id', async ({ request }) => {
+        updateSpy()
+        const body = await request.json() as { name: string }
+        return HttpResponse.json({ ...mockMazeAlpha, name: body.name })
+      }),
+    )
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // Edit to make dirty
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(updateSpy).toHaveBeenCalled())
+    // Save button should be disabled again (isDirty cleared)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled())
+  })
+
+  it('clicking Save on new maze opens name prompt', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('dialog', { name: 'Save Maze' })).toBeInTheDocument()
+  })
+
+  it('save name modal calls createMaze and closes on success', async () => {
+    const createSpy = vi.fn()
+    server.use(
+      http.post('/api/v1/mazes', async ({ request }) => {
+        createSpy()
+        const body = await request.json() as { name: string; definition: unknown }
+        return HttpResponse.json({ id: 'new-maze-id', name: (body as { name: string }).name, definition: (body as { definition: unknown }).definition }, { status: 201 })
+      }),
+    )
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const dialog = screen.getByRole('dialog', { name: 'Save Maze' })
+    await userEvent.type(within(dialog).getByRole('textbox'), 'My New Maze')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(createSpy).toHaveBeenCalled())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Save Maze' })).not.toBeInTheDocument())
+  })
+
+  it('save name modal shows API error and stays open', async () => {
+    server.use(
+      http.post('/api/v1/mazes', () => new HttpResponse('A maze with that name already exists.', { status: 409 })),
+    )
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const dialog = screen.getByRole('dialog', { name: 'Save Maze' })
+    await userEvent.type(within(dialog).getByRole('textbox'), 'Alpha')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(within(dialog).getByRole('alert')).toBeInTheDocument())
+    // Modal still open
+    expect(screen.getByRole('dialog', { name: 'Save Maze' })).toBeInTheDocument()
+  })
+
+  it('Refresh button is not shown for new maze', async () => {
+    await loadMazePage('/mazes/new')
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
+  })
+
+  it('Refresh button is shown but disabled on existing maze when not dirty', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    const btn = screen.getByRole('button', { name: 'Refresh' })
+    expect(btn).toBeInTheDocument()
+    expect(btn).toBeDisabled()
+  })
+
+  it('Refresh button is enabled on existing maze after editing', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    expect(screen.getByRole('button', { name: 'Refresh' })).not.toBeDisabled()
+  })
+
+  it('clicking Refresh when dirty opens confirm dialog', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    expect(screen.getByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument()
+  })
+
+  it('confirming Refresh reloads the maze from the server', async () => {
+    const getSpy = vi.fn()
+    server.use(
+      http.get('/api/v1/mazes/:id', ({ params }) => {
+        getSpy()
+        const maze = params.id === mockMazeAlpha.id ? mockMazeAlpha : null
+        if (!maze) return new HttpResponse(null, { status: 404 })
+        return HttpResponse.json(maze)
+      }),
+    )
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    // initial load fired once already
+    const initialCalls = getSpy.mock.calls.length
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Reload' }))
+    await waitFor(() => expect(getSpy.mock.calls.length).toBeGreaterThan(initialCalls))
+    // Refresh button should be disabled again (isDirty cleared)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled())
+  })
+
+  it('cancelling Refresh dialog leaves the maze dirty', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh' })).not.toBeDisabled()
   })
 })

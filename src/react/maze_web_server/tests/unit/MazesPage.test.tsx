@@ -343,4 +343,11 @@ describe('MazesPage', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Maze is locked')
     expect(screen.getByRole('dialog', { name: 'Delete Maze' })).toBeInTheDocument()
   })
+
+  it('New maze button navigates to /mazes/new', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'New maze' }))
+    expect(mockNavigate).toHaveBeenCalledWith('/mazes/new')
+  })
 })

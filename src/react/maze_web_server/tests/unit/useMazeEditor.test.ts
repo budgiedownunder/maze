@@ -957,3 +957,43 @@ describe('isRangeMode', () => {
     expect(result.current.activeCell).toEqual({ row: 2, col: 5 })
   })
 })
+
+// ──────────────────────────────────────────────────────────────
+// markSaved
+// ──────────────────────────────────────────────────────────────
+
+describe('markSaved', () => {
+  it('clears isDirty and updates mazeId and mazeName', () => {
+    const result = setupHook(makeGrid(3, 3))
+    // Make the grid dirty by editing a cell
+    act(() => result.current.activateCell(0, 0, false))
+    act(() => result.current.setWall())
+    expect(result.current.isDirty).toBe(true)
+
+    act(() => result.current.markSaved('new-id', 'New Name'))
+
+    expect(result.current.isDirty).toBe(false)
+    expect(result.current.mazeId).toBe('new-id')
+    expect(result.current.mazeName).toBe('New Name')
+  })
+
+  it('updates mazeId from null when saving a new maze', () => {
+    const { result } = renderHook(() => useMazeEditor())
+    act(() => result.current.initFromDefinition(null, '', makeDefinition(makeGrid(3, 3))))
+    expect(result.current.mazeId).toBeNull()
+
+    act(() => result.current.markSaved('saved-id', 'My Maze'))
+
+    expect(result.current.mazeId).toBe('saved-id')
+    expect(result.current.mazeName).toBe('My Maze')
+    expect(result.current.isDirty).toBe(false)
+  })
+
+  it('does not clear active cell or anchor', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(1, 2, false))
+    act(() => result.current.markSaved('new-id', 'New Name'))
+    expect(result.current.activeCell).toEqual({ row: 1, col: 2 })
+    expect(result.current.anchorCell).toBeNull()
+  })
+})
