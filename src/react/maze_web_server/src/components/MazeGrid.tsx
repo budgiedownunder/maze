@@ -11,6 +11,7 @@ interface MazeGridProps {
   anchorCell: CellPoint | null
   isRangeMode?: boolean
   onCellClick?: (row: number, col: number, shift: boolean) => void
+  onCellDoubleClick?: (row: number, col: number) => void
   onRowHeaderClick?: (row: number, shift: boolean) => void
   onColHeaderClick?: (col: number, shift: boolean) => void
   onCornerClick?: () => void
@@ -60,7 +61,7 @@ function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
 
 export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
   function MazeGrid(
-    { grid, solution, activeCell, anchorCell, isRangeMode = false, onCellClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown },
+    { grid, solution, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown },
     ref,
   ) {
     const rows = grid.length
@@ -287,6 +288,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                       key={`cell-${r}-${c}`}
                       className={getCellClasses(r, c)}
                       onClick={e => onCellClick?.(r, c, e.shiftKey)}
+                      onDoubleClick={() => onCellDoubleClick?.(r, c)}
                       aria-label={`Cell ${r + 1},${c + 1}`}
                     >
                       {img && <img src={img.src} alt={img.alt} />}

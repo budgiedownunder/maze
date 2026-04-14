@@ -239,6 +239,16 @@ export function MazePage() {
     }
   }
 
+  const handleCellDoubleClick = useCallback((_row: number, _col: number) => {
+    if (!isTouchOnly) return
+    if (isRangeMode) {
+      disableRangeMode()
+    } else {
+      enableRangeMode()
+    }
+    gridRef.current?.focus()
+  }, [isTouchOnly, isRangeMode, enableRangeMode, disableRangeMode])
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     switch (e.key) {
       case 'ArrowUp':
@@ -540,6 +550,7 @@ export function MazePage() {
             anchorCell={anchorCell}
             isRangeMode={isRangeMode}
             onCellClick={(row, col, shift) => activateCell(row, col, shift || (isTouchOnly && anchorCell !== null))}
+            onCellDoubleClick={handleCellDoubleClick}
             onRowHeaderClick={(row, shift) => activateRow(row, shift || (isTouchOnly && anchorCell !== null))}
             onColHeaderClick={(col, shift) => activateCol(col, shift || (isTouchOnly && anchorCell !== null))}
             onCornerClick={() => selectAll()}
