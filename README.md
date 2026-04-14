@@ -111,14 +111,17 @@ The Maze MAUI application running on Windows, iOS, and Android, showing a solved
 
 The React SPA running in a desktop browser.
 
-**Maze list:**
+**Maze list**
+
+The mazes list page, showing the user's mazes. 
 
 | |
 |---|
 | <img src="./src/react/maze_web_server/screenshots/web-mazes.png" width="600"> |
 
-**Maze editor (solved):**
+**Maze editor:**
 
+The maze editor page, showing a solved maze.
 | |
 |---|
 | <img src="./src/react/maze_web_server/screenshots/web-solved.png" width="600"> |
