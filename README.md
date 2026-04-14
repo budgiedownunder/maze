@@ -115,16 +115,12 @@ The React SPA running in a desktop browser.
 
 The mazes list page, showing the user's mazes. 
 
-| |
-|---|
-| <img src="./src/react/maze_web_server/screenshots/web-mazes.png" width="600"> |
+<img src="./src/react/maze_web_server/screenshots/web-mazes.png" width="600">
 
-**Maze editor:**
+**Maze editor**
 
 The maze editor page, showing a solved maze.
-| |
-|---|
-| <img src="./src/react/maze_web_server/screenshots/web-solved.png" width="600"> |
+<img src="./src/react/maze_web_server/screenshots/web-solved.png" width="600">
 
 ## Getting Started
 
