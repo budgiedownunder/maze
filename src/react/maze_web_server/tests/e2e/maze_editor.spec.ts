@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page, devices } from '@playwright/test'
 
 async function login(page: Page) {
   await page.goto('/login')
@@ -463,6 +463,37 @@ test('saving a new maze opens name prompt and navigates to /mazes/:id', async ({
   await expect(page).not.toHaveURL(/\/mazes\/new$/)
   await expect(page).toHaveURL(/\/mazes\/.+$/)
   await expect(page.locator('.app-header-title')).toHaveText('Brand New Maze')
+})
+
+// ──────────────────────────────────────────────────────────────
+// Double-tap range mode (touch)
+// ──────────────────────────────────────────────────────────────
+
+test.describe('double-tap range mode', () => {
+  // Spread device settings but omit defaultBrowserType — Playwright disallows it inside a describe group.
+  const { defaultBrowserType: _ignored, ...pixel7 } = devices['Pixel 7']
+  test.use(pixel7)
+
+  test('double-clicking a cell enters range mode', async ({ page }) => {
+    await login(page)
+    await openFirstMaze(page)
+    // dblclick fires onDoubleClick → onCellDoubleClick → handleCellDoubleClick → enableRangeMode()
+    await page.getByLabel('Cell 2,2').dblclick()
+    await expect(page.getByRole('button', { name: 'Done' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Select range' })).not.toBeVisible()
+  })
+
+  test('double-clicking again exits range mode', async ({ page }) => {
+    await login(page)
+    await openFirstMaze(page)
+    // Enter range mode via first double-click
+    await page.getByLabel('Cell 2,2').dblclick()
+    await expect(page.getByRole('button', { name: 'Done' })).toBeVisible()
+    // Second double-click exits range mode
+    await page.getByLabel('Cell 2,2').dblclick()
+    await expect(page.getByRole('button', { name: 'Select range' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Done' })).not.toBeVisible()
+  })
 })
 
 test('Refresh button is not shown on new maze', async ({ page }) => {

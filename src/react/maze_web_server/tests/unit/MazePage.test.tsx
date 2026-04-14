@@ -733,3 +733,41 @@ describe('MazePage solve', () => {
     expect(screen.getByRole('button', { name: 'Solve' })).toBeDisabled()
   })
 })
+
+// ──────────────────────────────────────────────────────────────
+// Double-tap range mode (touch)
+// ──────────────────────────────────────────────────────────────
+
+describe('MazePage double-tap range mode (touch)', () => {
+  // vitest.setup.ts matchMedia stub returns { matches: false } for any query.
+  // isTouchOnly = !window.matchMedia('(hover: hover) and (pointer: fine)').matches = !false = true.
+  // No per-test override needed.
+
+  async function loadMazePage(path: string) {
+    renderMazePage(path)
+    if (path !== '/mazes/new') {
+      await waitFor(() => expect(screen.queryByLabelText('Loading')).not.toBeInTheDocument())
+    }
+  }
+
+  it('double-clicking a cell enters range mode', async () => {
+    await loadMazePage('/mazes/new')
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    // Double-click a cell — fires onClick twice then onDoubleClick → handleCellDoubleClick → enableRangeMode()
+    await userEvent.dblClick(screen.getByLabelText('Cell 1,1'))
+    expect(within(toolbar).getByRole('button', { name: 'Done' })).toBeInTheDocument()
+    expect(within(toolbar).queryByRole('button', { name: 'Select range' })).not.toBeInTheDocument()
+  })
+
+  it('double-clicking again exits range mode', async () => {
+    await loadMazePage('/mazes/new')
+    const toolbar = screen.getByLabelText('Maze editor toolbar')
+    // First double-click enters range mode
+    await userEvent.dblClick(screen.getByLabelText('Cell 1,1'))
+    expect(within(toolbar).getByRole('button', { name: 'Done' })).toBeInTheDocument()
+    // Second double-click exits range mode
+    await userEvent.dblClick(screen.getByLabelText('Cell 1,1'))
+    expect(within(toolbar).getByRole('button', { name: 'Select range' })).toBeInTheDocument()
+    expect(within(toolbar).queryByRole('button', { name: 'Done' })).not.toBeInTheDocument()
+  })
+})

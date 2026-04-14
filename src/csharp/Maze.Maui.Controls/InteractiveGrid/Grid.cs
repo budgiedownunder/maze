@@ -232,6 +232,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Boolean</returns>
         public bool IsExtendedSelectionMode { get; set; } = false;
         /// <summary>
+        /// When true (desktop), extended selection mode is automatically exited when a cell is
+        /// activated or the selection is moved without the Shift key held. When false (touch),
+        /// extended selection mode is sticky and must be explicitly cancelled.
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool ExitExtendedSelectionOnDeselect { get; set; } = false;
+        /// <summary>
         /// Indicates whether the grid has pan support enabled
         /// </summary>
         /// <returns>Boolean</returns>
@@ -1156,6 +1163,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void OnCornerHeaderTapped()
         {
+            if (!IsExtendedSelectionMode)
+            {
+                IsExtendedSelectionMode = true;
+                selectionFrame?.EnableDashAnimation(true);
+            }
             SelectCorner();
         }
 
@@ -1172,7 +1184,18 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="headerFrame">Header frame that was tapped</param>
         private void OnColumnHeaderTapped(HeaderFrame headerFrame)
         {
-            SelectColumn(headerFrame.DisplayIndex, IsExtendedSelectionMode || IsShiftKeyPressed());
+            bool wasInExtendedSelectionMode = IsExtendedSelectionMode;
+            if (!wasInExtendedSelectionMode)
+            {
+                IsExtendedSelectionMode = true;
+                selectionFrame?.EnableDashAnimation(true);
+            }
+            // Desktop: only Shift extends an existing selection; a plain tap always fresh-selects.
+            // Touch: already being in extended selection mode is enough to extend.
+            bool maintainSelection = ExitExtendedSelectionOnDeselect
+                ? IsShiftKeyPressed()
+                : (wasInExtendedSelectionMode || IsShiftKeyPressed());
+            SelectColumn(headerFrame.DisplayIndex, maintainSelection);
         }
 
         /*
@@ -1188,7 +1211,18 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="headerFrame">Header frame that was tapped</param>
         private void OnRowHeaderTapped(HeaderFrame headerFrame)
         {
-            SelectRow(headerFrame.DisplayIndex, IsExtendedSelectionMode || IsShiftKeyPressed());
+            bool wasInExtendedSelectionMode = IsExtendedSelectionMode;
+            if (!wasInExtendedSelectionMode)
+            {
+                IsExtendedSelectionMode = true;
+                selectionFrame?.EnableDashAnimation(true);
+            }
+            // Desktop: only Shift extends an existing selection; a plain tap always fresh-selects.
+            // Touch: already being in extended selection mode is enough to extend.
+            bool maintainSelection = ExitExtendedSelectionOnDeselect
+                ? IsShiftKeyPressed()
+                : (wasInExtendedSelectionMode || IsShiftKeyPressed());
+            SelectRow(headerFrame.DisplayIndex, maintainSelection);
         }
 
         /*
@@ -1205,7 +1239,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
         public virtual void OnCellTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            ActivateCell(cellFrame, IsExtendedSelectionMode || IsShiftKeyPressed());
+            bool shiftPressed = IsShiftKeyPressed();
+            if (ExitExtendedSelectionOnDeselect && IsExtendedSelectionMode && !shiftPressed)
+                ExitExtendedSelectionModeOnly();
+            ActivateCell(cellFrame, IsExtendedSelectionMode || shiftPressed);
+            SyncExtendedSelectionModeWithSelection();
         }
         /// <summary>
         /// Handles the cell double-tapped event
@@ -1214,7 +1252,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
         public virtual void OnCellDoubleTapped(CellFrame cellFrame, bool triggerEvents)
         {
-            ActivateCell(cellFrame, IsExtendedSelectionMode || IsShiftKeyPressed());
+            bool shiftPressed = IsShiftKeyPressed();
+            if (ExitExtendedSelectionOnDeselect && IsExtendedSelectionMode && !shiftPressed)
+                ExitExtendedSelectionModeOnly();
+            ActivateCell(cellFrame, IsExtendedSelectionMode || shiftPressed);
+            SyncExtendedSelectionModeWithSelection();
         }
         /// <summary>
         /// Handles the key down event
@@ -1227,6 +1269,16 @@ namespace Maze.Maui.Controls.InteractiveGrid
             bool shiftPressed = Keyboard.Utility.IsStateFlagSet(state, Keyboard.KeyState.Shift);
             bool ctrlPressed = Keyboard.Utility.IsStateFlagSet(state, Keyboard.KeyState.Ctrl);
             bool capsLockPressed = Keyboard.Utility.IsStateFlagSet(state, Keyboard.KeyState.CapsLock);
+
+            // On desktop, a movement key without Shift exits extended selection mode so the user
+            // returns to normal single-cell navigation.
+            if (ExitExtendedSelectionOnDeselect && IsExtendedSelectionMode && !shiftPressed)
+            {
+                if (key == Keyboard.Key.Left  || key == Keyboard.Key.Right ||
+                    key == Keyboard.Key.Up    || key == Keyboard.Key.Down  ||
+                    key == Keyboard.Key.Home  || key == Keyboard.Key.End)
+                    ExitExtendedSelectionModeOnly();
+            }
 
             switch (key)
             {
@@ -1263,6 +1315,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 default:
                     break;
             }
+            SyncExtendedSelectionModeWithSelection();
         }
         /// <summary>
         /// Activates a given cell based on a point definition
@@ -1338,19 +1391,22 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 if (maintainSelection && !hadAnchorCell)
                     MoveAnchorCell(activePoint.Row, activePoint.Column);
             }
-            else if (selectedCells is not null)
+            else
             {
-                int top = selectedCells.Top,
-                    bottom = selectedCells.Bottom;
+                // selectedCells may be null here when entering extended selection mode from a
+                // single-cell state (anchor set but no range yet). The initial top/bottom values
+                // from selectedCells are always overwritten by the anchor comparison below, so the
+                // null check was redundant.
+                int top, bottom;
                 if (displayRow > anchorCellPoint.Row)
                 {
                     top = anchorCellPoint.Row;
                     bottom = displayRow;
                 }
-                else if (displayRow <= anchorCellPoint.Row)
+                else
                 {
-                    bottom = anchorCellPoint.Row;
                     top = displayRow;
+                    bottom = anchorCellPoint.Row;
                 }
                 ClearSelectedCells();
                 SelectCells(top, 1, bottom, ColumnCount, false);
@@ -1375,19 +1431,22 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 if (maintainSelection && !hadAnchorCell)
                     MoveAnchorCell(activePoint.Row, activePoint.Column);
             }
-            else if (selectedCells is not null)
+            else
             {
-                int left = selectedCells.Left,
-                    right = selectedCells.Right;
+                // selectedCells may be null here when entering extended selection mode from a
+                // single-cell state (anchor set but no range yet). The initial left/right values
+                // from selectedCells are always overwritten by the anchor comparison below, so the
+                // null check was redundant.
+                int left, right;
                 if (displayCol > anchorCellPoint.Column)
                 {
                     left = anchorCellPoint.Column;
                     right = displayCol;
                 }
-                else if (displayCol <= anchorCellPoint.Column)
+                else
                 {
-                    right = anchorCellPoint.Column;
                     left = displayCol;
+                    right = anchorCellPoint.Column;
                 }
                 ClearSelectedCells();
                 SelectCells(1, left, RowCount, right, false);
@@ -1400,10 +1459,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
         public void EnableExtendedSelection()
         {
             if (IsExtendedSelectionMode) return;
-            if (anchorCell is null)
-                SetAnchorCellToActiveCell(true);
+            // Set flag and start animation before any operations that may fire SelectionChanged,
+            // so UpdateControls always sees the correct final state.
             IsExtendedSelectionMode = true;
             selectionFrame?.EnableDashAnimation(true);
+            if (anchorCell is null)
+                SetAnchorCellToActiveCell(true);
         }
         /// <summary>
         /// Cancels extended selection mode
@@ -1411,15 +1472,40 @@ namespace Maze.Maui.Controls.InteractiveGrid
         public void CancelExtendedSelection()
         {
             if (!IsExtendedSelectionMode) return;
+            // Clear flag and stop animation before any operations that may fire SelectionChanged,
+            // so UpdateControls always sees the correct final state.
+            IsExtendedSelectionMode = false;
+            selectionFrame?.EnableDashAnimation(false);
             if (anchorCell is not null)
                 SetActiveCellToAnchorCell(false);
             ClearAnchorCell(true);
             ClearSelectedCells();
             if (activeCell is not null)
                 activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
+            UpdateSelectionFrame(true);
+        }
+        /// <summary>
+        /// Exits extended selection mode and stops the animation without moving the active cell
+        /// back to the anchor. Used on desktop when a non-Shift action deselects.
+        /// </summary>
+        private void ExitExtendedSelectionModeOnly()
+        {
             IsExtendedSelectionMode = false;
             selectionFrame?.EnableDashAnimation(false);
-            UpdateSelectionFrame(true);
+        }
+        /// <summary>
+        /// On desktop, enables extended selection mode and the marching-ants animation whenever a
+        /// multi-cell selection exists but the mode flag is not yet set. A no-op on touch (where
+        /// extended selection mode is managed explicitly via EnableExtendedSelection / CancelExtendedSelection).
+        /// </summary>
+        private void SyncExtendedSelectionModeWithSelection()
+        {
+            if (!ExitExtendedSelectionOnDeselect) return;
+            if (!IsExtendedSelectionMode && selectedCells is not null)
+            {
+                IsExtendedSelectionMode = true;
+                selectionFrame?.EnableDashAnimation(true);
+            }
         }
         /// <summary>
         /// Resets the selection to the given selection

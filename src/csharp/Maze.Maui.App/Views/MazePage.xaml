@@ -65,10 +65,9 @@
                 <ImageButton x:Name="SelectRangeBtn" IsVisible="{Binding CanSelectRange}" Command="{Binding SelectRangeCommand}" Source="select_range_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
-                <Button x:Name="DoneBtn" IsVisible="{Binding CanShowDone}" Command="{Binding DoneCommand}" Text="Done"
-                        HeightRequest="32" MaximumHeightRequest="32" MinimumHeightRequest="32"
-                        FontAutoScalingEnabled="True"  FontAttributes="Bold" FontSize="12"  TextColor="Blue" BorderColor="DarkGray" BorderWidth="2"
-                        BackgroundColor="Transparent" Padding="0" HorizontalOptions="End"/>
+                <ImageButton x:Name="DoneBtn" IsVisible="{Binding CanShowDone}" Command="{Binding DoneCommand}" Source="done_select_range_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
             </StackLayout>
 
             <!-- Maze Grid with built-in frozen-pane scroll -->

@@ -101,6 +101,9 @@ namespace Maze.Maui.App
         public void Initialize(bool enablePanSupport, MazeItem? mazeItem)
         {
             IsPanSupportEnabled = enablePanSupport;
+            // On desktop (pan/pointer support enabled), exit extended selection when the user
+            // moves or clicks without Shift. On touch, extended selection is sticky.
+            ExitExtendedSelectionOnDeselect = enablePanSupport;
             this.mazeItem = mazeItem;
             RowCount    = (int)(mazeItem?.Definition?.RowCount   ?? DEFAULT_ROW_COUNT);
             ColumnCount = (int)(mazeItem?.Definition?.ColCount ?? DEFAULT_COLUMN_COUNT);

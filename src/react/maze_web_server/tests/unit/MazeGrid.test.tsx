@@ -130,6 +130,13 @@ describe('MazeGrid', () => {
     expect(footstepImgs[1]).toHaveAttribute('src', '/images/maze/footsteps_down.png')
   })
 
+  it('fires onCellDoubleClick with correct row and col on double-click', async () => {
+    const onCellDoubleClick = vi.fn()
+    renderGrid({ onCellDoubleClick })
+    await userEvent.dblClick(screen.getByLabelText('Cell 1,1'))
+    expect(onCellDoubleClick).toHaveBeenCalledWith(0, 0)
+  })
+
   it('fires onCellClick with correct row, col, shift=false on plain click', async () => {
     const onClick = vi.fn()
     renderGrid({ onCellClick: onClick })

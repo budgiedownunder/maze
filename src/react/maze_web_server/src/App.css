@@ -687,6 +687,7 @@
   overflow: hidden;
   background: #fafafa;
   user-select: none;
+  touch-action: manipulation; /* prevent browser double-tap zoom */
   /* scroll-margin reserves clearance when scrollIntoView({block/inline:'nearest'}) is called:
      top/left = HEADER_SIZE so the cell clears the sticky headers;
      bottom/right = 2px so the selection-frame ants line is never clipped by the container edge. */
