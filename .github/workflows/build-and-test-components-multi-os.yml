@@ -54,6 +54,7 @@ jobs:
     env:
       NET_BUILD_SOLUTION: ${{ matrix.os == 'windows-latest' && 'Build-Windows.sln' || 'Build-Non-Windows.sln' }}
       NET_MOBILE_FRAMEWORK_INCLUSION: ${{ matrix.os == 'windows-latest' && '-p:ExcludeMobileFrameworks=true' || '-p:ExcludeMobileFrameworks=true' }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       
     steps:
     - name: Checkout repository

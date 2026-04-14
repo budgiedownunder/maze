@@ -30,6 +30,7 @@ jobs:
     env:
       NET_BUILD_SOLUTION: 'Build-Windows.sln'
       NET_MOBILE_FRAMEWORK_INCLUSION: ${{ '-p:ExcludeMobileFrameworks=true' }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
     - name: Build Step
@@ -119,12 +120,12 @@ jobs:
        
     - name: Setup GitHub Pages
       id: pages
-      uses: actions/configure-pages@v4
+      uses: actions/configure-pages@v5
       with:
         enablement: true
 
     - name: Upload GitHub Pages artifact
-      uses: actions/upload-pages-artifact@v3
+      uses: actions/upload-pages-artifact@v4
       with:
         path: ./src/docfx/_site
 
@@ -137,4 +138,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
