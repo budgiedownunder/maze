@@ -561,6 +561,23 @@
   }
 }
 
+/* Keyboard shortcut hint bar — desktop only */
+.maze-shortcuts-hint {
+  display: none;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.25rem;
+  user-select: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .maze-shortcuts-hint {
+    display: block;
+  }
+}
+
 /* ──────────────────────────────────────────────────────────
    MazeGrid component
 ────────────────────────────────────────────────────────── */

@@ -405,7 +405,7 @@ export function MazePage() {
             {/* noSelection disables all editing buttons when no cell is selected */}
             <button
               className="maze-toolbar-btn"
-              title="Set Wall"
+              title="Set Wall [W]"
               aria-label="Set Wall"
               disabled={activeCell === null || selectionStatus.isAllWalls || selectionStatus.hasSolution}
               onClick={() => { setWall(); gridRef.current?.focus() }}
@@ -414,7 +414,7 @@ export function MazePage() {
             </button>
             <button
               className="maze-toolbar-btn"
-              title="Set Start"
+              title="Set Start [S]"
               aria-label="Set Start"
               disabled={activeCell === null || !selectionStatus.isSingleCell || selectionStatus.isStart || selectionStatus.hasSolution}
               onClick={() => { setStart(); gridRef.current?.focus() }}
@@ -423,7 +423,7 @@ export function MazePage() {
             </button>
             <button
               className="maze-toolbar-btn"
-              title="Set Finish"
+              title="Set Finish [F]"
               aria-label="Set Finish"
               disabled={activeCell === null || !selectionStatus.isSingleCell || selectionStatus.isFinish || selectionStatus.hasSolution}
               onClick={() => { setFinish(); gridRef.current?.focus() }}
@@ -432,7 +432,7 @@ export function MazePage() {
             </button>
             <button
               className="maze-toolbar-btn"
-              title="Clear"
+              title="Clear Cells [DEL]"
               aria-label="Clear"
               disabled={activeCell === null || selectionStatus.isEmpty || selectionStatus.hasSolution}
               onClick={() => { clearCell(); gridRef.current?.focus() }}
@@ -539,6 +539,17 @@ export function MazePage() {
             onCornerClick={() => selectAll()}
             onKeyDown={handleKeyDown}
           />
+        )}
+
+        {activeCell !== null && (
+          <div className="maze-shortcuts-hint">
+            [W]&nbsp;Wall&nbsp;&nbsp;&nbsp;
+            [S]&nbsp;Start&nbsp;&nbsp;&nbsp;
+            [F]&nbsp;Finish&nbsp;&nbsp;&nbsp;
+            [DEL]&nbsp;Clear&nbsp;&nbsp;&nbsp;
+            [&#x2190;&#x2191;&#x2192;&#x2193;]&nbsp;Move&nbsp;&nbsp;&nbsp;
+            [Shift]&nbsp;Range
+          </div>
         )}
       </main>
     </div>

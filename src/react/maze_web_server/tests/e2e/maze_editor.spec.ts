@@ -723,3 +723,30 @@ test('active cell is re-highlighted after clearing the solution', async ({ page 
   // Active cell still selected after clearing
   await expect(page.locator('.maze-selection-frame--single')).toBeVisible()
 })
+
+// ── Keyboard shortcut hint bar ────────────────────────────────
+
+test('shortcut hint bar is not visible before a cell is selected', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await expect(page.locator('.maze-shortcuts-hint')).not.toBeVisible()
+})
+
+test('shortcut hint bar appears after a cell is selected', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.locator('td[aria-label="Cell 1,1"]').click()
+  await expect(page.locator('.maze-shortcuts-hint')).toBeVisible()
+})
+
+test('shortcut hint bar contains expected shortcuts', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.locator('td[aria-label="Cell 1,1"]').click()
+  const hint = page.locator('.maze-shortcuts-hint')
+  await expect(hint).toContainText('[W]')
+  await expect(hint).toContainText('[S]')
+  await expect(hint).toContainText('[F]')
+  await expect(hint).toContainText('[DEL]')
+  await expect(hint).toContainText('[Shift] Range')
+})
