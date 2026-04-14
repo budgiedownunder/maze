@@ -115,7 +115,7 @@ The React SPA running in a desktop browser.
 
 <img src="./src/react/maze_web_server/screenshots/web-mazes.png" width="600">
 
-**Maze editor**
+**Maze editor (solved)**
 
 <img src="./src/react/maze_web_server/screenshots/web-solved.png" width="600">
 
