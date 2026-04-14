@@ -34,7 +34,7 @@ The app depends on the prebuilt `maze_wasm` package. Build it once before runnin
 
 ```bash
 # from src/rust/maze_wasm/
-wasm-pack build --target web --features "wasm-bindgen"
+wasm-pack build --target web -- --features "wasm-bindgen"
 ```
 
 See [`maze_wasm/README.md`](../../rust/maze_wasm/README.md) for full build instructions.

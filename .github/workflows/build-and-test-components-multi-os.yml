@@ -134,7 +134,7 @@ jobs:
       run: |
         cargo build --locked --verbose
         cd maze_wasm
-        wasm-pack build --target web --features "wasm-bindgen"
+        wasm-pack build --target web -- --features "wasm-bindgen"
         cargo build --locked --target wasm32-unknown-unknown --release --no-default-features --features "wasm-lite"
         pwd
 
