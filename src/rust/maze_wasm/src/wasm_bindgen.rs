@@ -1038,6 +1038,7 @@ impl MazeWasm {
     /// * `min_spine_length` - Minimum solution path length (undefined = default (row_count+col_count)/2)
     /// * `max_retries` - Maximum generation attempts (undefined = default 100)
     /// * `branch_from_finish` - Whether to branch from the finish cell (undefined = default false)
+    /// * `seed` - Seed (undefined = default random)
     ///
     /// # Returns
     ///

@@ -21,6 +21,7 @@ Experimental multi-language project exploring **Rust / C# / .NET 10 / WebAssembl
 ```
 src/rust/            # Rust workspace — all crates; Cargo.toml at workspace root
 src/csharp/          # .NET 10 libraries, MAUI app, tests; solution files at root of this dir
+src/react/           # React frontends; each subdirectory is a standalone npm project
 src/docfx/           # Combined documentation generator (DocFX + cargo doc + wasm-pack doc)
 docs/diagrams/       # PlantUML architecture source files
 .github/workflows/   # GitHub Actions CI
@@ -69,6 +70,7 @@ For build and test commands, see **`src/csharp/README.md`**.
 | C# / .NET | `src/csharp/README.md` |
 | Documentation | `src/docfx/README.md` |
 | Web server config & auth | `src/rust/maze_web_server/README.md` |
+| React web frontend | `src/react/maze_web_server/README.md` |
 
 Do not ask for confirmation before running tests.
 

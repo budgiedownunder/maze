@@ -39,7 +39,7 @@ To build all project crates and JavaScript APIs:
 cd src/rust
 cargo build
 cd maze_wasm
-wasm-pack build --target web --features "wasm-bindgen"
+wasm-pack build --target web -- --features "wasm-bindgen"
 cargo build --target wasm32-unknown-unknown --release --features "wasm-lite"
 ```
 

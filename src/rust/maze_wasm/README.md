@@ -23,7 +23,7 @@ To build the `maze_wasm` crate and related resources, you need to run commands f
 To build the JavaScript API wrapper in the `./pkg` sub-directory, run:
 
 ```
-wasm-pack build --target web --features "wasm-bindgen"
+wasm-pack build --target web -- --features "wasm-bindgen"
 ```
 
 To build the general Web Assembly `maze_wasm.wasm` (for use outside of JavaScript), run:

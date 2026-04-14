@@ -54,6 +54,7 @@ jobs:
     env:
       NET_BUILD_SOLUTION: ${{ matrix.os == 'windows-latest' && 'Build-Windows.sln' || 'Build-Non-Windows.sln' }}
       NET_MOBILE_FRAMEWORK_INCLUSION: ${{ matrix.os == 'windows-latest' && '-p:ExcludeMobileFrameworks=true' || '-p:ExcludeMobileFrameworks=true' }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       
     steps:
     - name: Checkout repository
@@ -82,11 +83,17 @@ jobs:
       with:
         version: 'latest'
     
+    - name: Setup Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: '24'
+
     - name: Install DocFX
       working-directory: ./
       run: dotnet tool install -g docfx
   
     - name: Install Redocly
+      if: runner.os == 'Windows'
       working-directory: ./
       run: npm install -g @redocly/cli
 
@@ -128,7 +135,7 @@ jobs:
       run: |
         cargo build --locked --verbose
         cd maze_wasm
-        wasm-pack build --target web --features "wasm-bindgen"
+        wasm-pack build --target web -- --features "wasm-bindgen"
         cargo build --locked --target wasm32-unknown-unknown --release --no-default-features --features "wasm-lite"
         pwd
 
@@ -187,6 +194,22 @@ jobs:
       working-directory: ./src/csharp 
       run: |
         dotnet test ${{ env.NET_BUILD_SOLUTION }} ${{ env.NET_MOBILE_FRAMEWORK_INCLUSION }}
+
+    - name: Install React dependencies
+      working-directory: ./src/react/maze_web_server
+      run: npm ci
+
+    - name: Run React unit tests
+      working-directory: ./src/react/maze_web_server
+      run: npm test
+
+    - name: Install Playwright browser
+      working-directory: ./src/react/maze_web_server
+      run: npx playwright install chromium --with-deps
+
+    - name: Run React E2E tests
+      working-directory: ./src/react/maze_web_server
+      run: npx playwright test
 
     - name: Build HTML documentation (Windows)
       if: runner.os == 'Windows'

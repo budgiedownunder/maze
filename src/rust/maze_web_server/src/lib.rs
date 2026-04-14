@@ -2,8 +2,10 @@ pub mod api;
 pub mod config;
 pub mod middleware;
 pub mod service;
+mod utils;
 
-use actix_web::{ App, middleware::Logger, HttpServer, web};
+use actix_files::{Files, NamedFile};
+use actix_web::{ App, HttpRequest, middleware::Logger, HttpServer, web};
 use auth::{config::PasswordHashConfig, hashing::hash_password};
 use config::app::AppConfig;
 use rustls::{ServerConfig, Certificate, PrivateKey};
@@ -75,6 +77,7 @@ fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Stor
 pub fn create_app(
     hash_config: &PasswordHashConfig,
     store: web::Data<SharedStore>,
+    static_dir: String,
 ) -> App<impl actix_service::ServiceFactory<
     actix_web::dev::ServiceRequest,
     Config = (),
@@ -83,7 +86,7 @@ pub fn create_app(
     InitError = (),
 >> {
     let auth_service = web::Data::new(AuthService::new(hash_config.clone()));
-  
+
     App::new()
         .app_data(auth_service)
         .app_data(store)
@@ -91,6 +94,47 @@ pub fn create_app(
         .service(api::register_redoc())
         .service(api::register_rapidoc())
         .service(api::register_swagger_ui())
+        .configure(move |cfg| {
+            if std::path::Path::new(&static_dir).is_dir() {
+                let index_path = format!("{}/index.html", static_dir);
+
+                // Register known SPA routes explicitly.
+                // This prevents actix-files from attempting to decode the URL path as
+                // a filesystem path — which rejects segments containing characters like
+                // '\' before the default_handler can fire.
+                let spa = {
+                    let path = index_path.clone();
+                    move |req: HttpRequest| {
+                        let path = path.clone();
+                        async move {
+                            NamedFile::open_async(&path)
+                                .await
+                                .map(|f| f.into_response(&req))
+                        }
+                    }
+                };
+                cfg.route("/login",        web::get().to(spa.clone()))
+                   .route("/signup",       web::get().to(spa.clone()))
+                   .route("/mazes",        web::get().to(spa.clone()))
+                   .route("/mazes/{tail}", web::get().to(spa.clone()))
+                   .service(
+                       Files::new("/", &static_dir)
+                           .index_file("index.html")
+                           .default_handler({
+                               web::get().to(move |req: HttpRequest| {
+                                   let path = index_path.clone();
+                                   async move {
+                                       NamedFile::open_async(&path)
+                                           .await
+                                           .map(|f| f.into_response(&req))
+                                   }
+                               })
+                           }),
+                   );
+            } else {
+                log::info!("static_dir '{}' does not exist — running as API-only", static_dir);
+            }
+        })
 }
 
 
@@ -99,9 +143,9 @@ pub fn create_app(
 /// for use in third party products such as `Swagger`. In addition, the server also publishes its own 
 /// Swagger-related endpoints that can be used to manually test the API in user-friendly web pages (e.g. `/api-docs/v1/swagger-ui/`). 
 pub async fn run_server() -> std::io::Result<()> {
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-
     let config = AppConfig::load().expect("Failed to load configuration settings");
+    utils::logger::init(&config.logging.log_dir, &config.logging.log_level, &config.logging.log_file_prefix)
+        .expect("Failed to initialise logger");
     config.log_config();
   
     let bind_address = construct_bind_address(config.port);
@@ -115,7 +159,7 @@ pub async fn run_server() -> std::io::Result<()> {
     let shared_store: SharedStore = Arc::new(RwLock::new(store));
 
     HttpServer::new(move || {
-        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()))
+        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()), config.static_dir.clone())
         .app_data(web::Data::new(config.clone()))
         .wrap(Logger::default())
     })

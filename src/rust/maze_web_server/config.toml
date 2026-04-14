@@ -3,6 +3,12 @@
 # Server port to listen on (default: 8443)
 port = 8443
 
+# Path to the built React app dist directory (relative to the server working directory,
+# or absolute). For local development with the React app, set to:
+#   ../../react/maze_web_server/dist
+# If the directory does not exist, the server runs as API-only (no frontend served).
+static_dir = "static"
+
 [security]
 # Path to TLS certificate file (default: "cert.pem")
 cert_file = "cert.pem"
@@ -29,4 +35,18 @@ lanes = 4
 # Desired length of password hash output in bytes (default: 32)
 # Common values: 32 (256-bit), 64 (512-bit)
 hash_length = 32
+
+[logging]
+# Directory to write log files to (default: "logs")
+# Relative to the server working directory
+log_dir = "logs"
+
+# Minimum log level to capture (default: "info")
+# Valid values: error, warn, info, debug, trace
+log_level = "info"
+
+# Prefix used verbatim at the start of each log file name, including any separator.
+# Log files are named {log_file_prefix}{YYYY-MM-DD}.log
+# e.g. "maze_web_server_" produces "maze_web_server_2026-04-09.log"
+log_file_prefix = "maze_web_server_"
 

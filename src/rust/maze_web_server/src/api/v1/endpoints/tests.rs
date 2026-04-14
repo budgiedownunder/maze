@@ -695,7 +695,7 @@ mod test_definitions {
 
         let (shared_mock_store, mock_users, api_key, login_id) = create_shared_mock_store(user_defs, caller_username, add_login);
         let app = test::init_service(
-            create_app(&config.security.password_hash, web::Data::new(shared_mock_store.clone()))
+            create_app(&config.security.password_hash, web::Data::new(shared_mock_store.clone()), ".".to_string())
             .app_data(web::Data::new(AppConfig::default().clone()))
         )
         .await;
