@@ -3,6 +3,7 @@ import type { GenerateOptions } from '../types/api'
 
 interface Props {
   grid: string[][]
+  initialMinSpineLength?: number
   isLoading?: boolean
   error?: string | null
   onGenerate: (options: GenerateOptions) => void
@@ -32,7 +33,7 @@ function defaultsFromGrid(grid: string[][]) {
   }
 }
 
-export function GenerateMazeModal({ grid, isLoading = false, error, onGenerate, onCancel }: Props) {
+export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = false, error, onGenerate, onCancel }: Props) {
   const defaults = defaultsFromGrid(grid)
   const [rows, setRows] = useState(defaults.rows)
   const [cols, setCols] = useState(defaults.cols)
@@ -40,7 +41,9 @@ export function GenerateMazeModal({ grid, isLoading = false, error, onGenerate, 
   const [startCol, setStartCol] = useState(defaults.startCol)
   const [finishRow, setFinishRow] = useState(defaults.finishRow)
   const [finishCol, setFinishCol] = useState(defaults.finishCol)
-  const [minSpineLength, setMinSpineLength] = useState(defaults.minSpineLength)
+  const [minSpineLength, setMinSpineLength] = useState(
+    initialMinSpineLength != null ? String(initialMinSpineLength) : defaults.minSpineLength,
+  )
   const [validationError, setValidationError] = useState<string | null>(null)
 
   function handleSubmit(e: React.FormEvent) {

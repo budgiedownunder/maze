@@ -632,6 +632,20 @@ test('cancelling Generate dialog leaves the grid unchanged', async ({ page }) =>
   await expect(page.getByLabel('Row 4')).not.toBeVisible()
 })
 
+test('Generate dialog remembers last used Min Solution Length within the session', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  // Open Generate dialog and set Min Solution Length to 5
+  await page.getByRole('button', { name: 'Generate' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Generate Maze' })
+  await dialog.getByLabel('Min Solution Length').fill('5')
+  await dialog.getByRole('button', { name: 'Generate' }).click()
+  await expect(dialog).not.toBeVisible()
+  // Reopen — should show 5, not 1
+  await page.getByRole('button', { name: 'Generate' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generate Maze' }).getByLabel('Min Solution Length')).toHaveValue('5')
+})
+
 // ──────────────────────────────────────────────────────────────
 // Solve / Clear Solution
 // ──────────────────────────────────────────────────────────────

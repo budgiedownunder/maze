@@ -68,6 +68,11 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Min Solution Length')).toHaveValue(1)
   })
 
+  it('uses initialMinSpineLength prop as the default Min Solution Length', () => {
+    renderModal({ initialMinSpineLength: 7 })
+    expect(screen.getByLabelText('Min Solution Length')).toHaveValue(7)
+  })
+
   it('defaults Start to row 1 col 1 when grid has no S', () => {
     renderModal({ grid: blankGrid })
     expect(screen.getByLabelText('Start Row')).toHaveValue(1)

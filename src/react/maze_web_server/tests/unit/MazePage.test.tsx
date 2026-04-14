@@ -593,6 +593,17 @@ describe('MazePage generate', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled())
   })
 
+  it('reopening Generate dialog shows last used Min Solution Length', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    const dialog = () => screen.getByRole('dialog', { name: 'Generate Maze' })
+    fireEvent.change(within(dialog()).getByLabelText('Min Solution Length'), { target: { value: '5' } })
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Generate' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Generate Maze' })).not.toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    expect(within(dialog()).getByLabelText('Min Solution Length')).toHaveValue(5)
+  })
+
   it('WASM error keeps dialog open and shows error message', async () => {
     mockGenerateMaze.mockRejectedValue(new Error('generation failed'))
     await loadMazePage('/mazes/new')

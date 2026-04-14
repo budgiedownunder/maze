@@ -65,6 +65,10 @@ export function MazePage() {
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
+  const [lastMinSpineLength, setLastMinSpineLength] = useState(1)
+
+  // Reset remembered min spine length when the maze changes
+  useEffect(() => { setLastMinSpineLength(1) }, [mazeId])
 
   // Solve state
   const [isSolving, setIsSolving] = useState(false)
@@ -191,6 +195,7 @@ export function MazePage() {
     try {
       await new Promise<void>(r => requestAnimationFrame(() => r()))
       const definition = await generateMaze(options)
+      setLastMinSpineLength(options.minSpineLength)
       setShowGenerateModal(false)
       applyGenerated(definition)
     } catch (ex: unknown) {
@@ -337,6 +342,7 @@ export function MazePage() {
       {showGenerateModal && (
         <GenerateMazeModal
           grid={grid}
+          initialMinSpineLength={lastMinSpineLength}
           isLoading={isGenerating}
           error={generateError}
           onGenerate={handleGenerate}
