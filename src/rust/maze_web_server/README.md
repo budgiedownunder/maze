@@ -81,6 +81,7 @@ The following configuration settings exist:
 | Logging  | `log_dir`          | Text    | `logs`            | `MAZE_WEB_SERVER_LOGGING_LOG_DIR`
 |          | `log_level`        | Text    | `info`            | `MAZE_WEB_SERVER_LOGGING_LOG_LEVEL`
 |          | `log_file_prefix`  | Text    | `maze_web_server_`| `MAZE_WEB_SERVER_LOGGING_LOG_FILE_PREFIX`
+| Features | `allow_signup`     | Boolean | `true`            | `MAZE_WEB_SERVER_FEATURES_ALLOW_SIGNUP`
 
 These can also be set in a local configuration file called `config.toml` as follows
 
@@ -94,6 +95,9 @@ key_file = "key.pem"
 [logging]
 log_dir = "logs"
 log_level = "info"
+
+[features]
+allow_signup = true
 ```
 
 Notes:
@@ -102,6 +106,7 @@ Notes:
 - `log_dir` is relative to the server working directory. Log files are named `{log_file_prefix}{YYYY-MM-DD}.log` and a new file is started each calendar day. Old log files are not deleted automatically.
 - `log_file_prefix` is used verbatim — include any desired separator as the final character (e.g. `"maze_web_server_"` produces `maze_web_server_2026-04-09.log`, while `"my-app-"` produces `my-app-2026-04-09.log`).
 - Valid `log_level` values are: `error`, `warn`, `info`, `debug`, `trace`.
+- `allow_signup` controls whether new users can self-register. Set to `false` to disable public registration.
 
 
 ## Web Frontend
