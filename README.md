@@ -44,7 +44,7 @@ At this stage, the following areas are covered:
   - Supports interactive documentation in the form of [RapiDoc](https://rapidocweb.com/), [Redoc](https://redocly.com/redoc) and [Swagger UI](https://swagger.io/tools/swagger-ui/)
   - Serves a React Single Page Application (SPA) from a configurable static directory
 
-- Implementing a `React`/`TypeScript` web frontend ([`maze_react_web`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API, with user account management and maze management, tested with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
+- Implementing a `React`/`TypeScript` web frontend ([`maze_react_web`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API including maze management and generation/solving (run entirely in-browser via the `maze_wasm` WebAssembly module). Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
 
 - Implementing a `.NET` to Web Assembly ([`maze_wasm`](./src/rust/maze_wasm/README.md)) interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) in `C#` that supports [Wasmtime](https://docs.wasmtime.dev/) (for `Windows` and `Android`), [Wasmer](https://wasmer.io/) (for `Android` and `iOS` simulator), and a native C library via [`maze_c`](./src/rust/maze_c/README.md) (for `iOS`simulator and physical device)
 
@@ -79,7 +79,7 @@ The following components are present:
 |                                | [`Maze.Maui.Services`](./src/csharp/Maze.Maui.Services/README.md)             | Custom [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) services
 |                                | [`Maze.Interop`](./src/csharp/Maze.Interop/README.md)               | .NET interop to `maze_wasm` web assembly
 |                                | [`Maze.Interop.Tests`](./src/csharp/Maze.Interop/README.md)         | .NET test library for [`Maze.Interop`](./src/csharp/Maze.Interop/README.md)
-| `src/react`                    | [`maze_web_server`](./src/react/maze_web_server/README.md)                    | React SPA frontend for `maze_web_server`
+| `src/react`                    | [`maze_web_server`](./src/react/maze_web_server/README.md)                    | React SPA frontend for Rust `maze_web_server`
 | `src/rust`                     | [`auth`](./src/rust/auth/README.md)                                           | Authentication library
 |                                | [`data_model`](./src/rust/data_model/README.md)                               | Data model library
 |                                | [`maze`](./src/rust/maze/README.md)                                           | Maze calculation library
@@ -99,11 +99,21 @@ The following components are present:
 
 ## Screenshots
 
+### MAUI app (Windows, iOS, Android)
+
 The Maze MAUI application running on Windows, iOS, and Android, showing a solved maze.
 
 | Windows | iOS | Android |
 |---------|-----|---------|
 | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-solved.png" width="250"> |
+
+### Web UI
+
+The React SPA running in a desktop browser, showing the maze list and editor.
+
+| Maze list | Maze editor |
+|-----------|-------------|
+| <img src="./src/react/maze_web_server/screenshots/web-mazes.png" width="400"> | <img src="./src/react/maze_web_server/screenshots/web-solved.png" width="400"> |
 
 ## Getting Started
 
