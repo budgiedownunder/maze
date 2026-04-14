@@ -105,7 +105,7 @@ describe('MazeGrid', () => {
 
   it('applies maze-cell--solution to solution path cells', () => {
     renderGrid({ solution: [{ row: 0, col: 0 }, { row: 1, col: 0 }] })
-    expect(screen.getByLabelText('Cell 1,1').className).toContain('maze-cell--solution')
+    expect(screen.getByLabelText('Cell 1,1').className).not.toContain('maze-cell--solution') // 'S' cell — no solution background
     expect(screen.getByLabelText('Cell 2,1').className).toContain('maze-cell--solution')
     expect(screen.getByLabelText('Cell 1,2').className).not.toContain('maze-cell--solution')
   })

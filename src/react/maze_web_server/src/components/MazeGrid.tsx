@@ -220,7 +220,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         }
       }
 
-      if (inSolution) {
+      if (inSolution && grid[row][col] !== 'S' && grid[row][col] !== 'F') {
         classes.push('maze-cell--solution')
       }
 
