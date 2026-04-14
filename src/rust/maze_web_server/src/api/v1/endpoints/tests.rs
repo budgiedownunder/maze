@@ -5,7 +5,7 @@ mod test_definitions {
     // **************************************************************************************************
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
-    use crate::{create_app, config::app::AppConfig};
+    use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, SharedFeatures};
     
     use actix_http;
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
@@ -694,8 +694,9 @@ mod test_definitions {
         set_valid_password_hashes(&config.security.password_hash, user_defs);
 
         let (shared_mock_store, mock_users, api_key, login_id) = create_shared_mock_store(user_defs, caller_username, add_login);
+        let shared_features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
         let app = test::init_service(
-            create_app(&config.security.password_hash, web::Data::new(shared_mock_store.clone()), ".".to_string())
+            create_app(&config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(shared_features), ".".to_string())
             .app_data(web::Data::new(AppConfig::default().clone()))
         )
         .await;

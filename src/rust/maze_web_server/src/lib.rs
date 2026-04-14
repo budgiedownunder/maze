@@ -7,7 +7,7 @@ mod utils;
 use actix_files::{Files, NamedFile};
 use actix_web::{ App, HttpRequest, middleware::Logger, HttpServer, web};
 use auth::{config::PasswordHashConfig, hashing::hash_password};
-use config::app::AppConfig;
+use config::app::{AppConfig, AppFeaturesConfig};
 use rustls::{ServerConfig, Certificate, PrivateKey};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use service::auth::AuthService;
@@ -15,6 +15,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::{fs::File, io::{self, BufReader}};
 use storage::{get_store, SharedStore, Store, Error as StoreError};
+
+pub type SharedFeatures = Arc<RwLock<AppFeaturesConfig>>;
 
 const DEFAULT_ADMIN_ACCOUNT_USERNAME:&str = "admin";
 const DEFAULT_ADMIN_ACCOUNT_PASSWORD:&str = "Admin1!";
@@ -77,6 +79,7 @@ fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Stor
 pub fn create_app(
     hash_config: &PasswordHashConfig,
     store: web::Data<SharedStore>,
+    shared_features: web::Data<SharedFeatures>,
     static_dir: String,
 ) -> App<impl actix_service::ServiceFactory<
     actix_web::dev::ServiceRequest,
@@ -90,6 +93,7 @@ pub fn create_app(
     App::new()
         .app_data(auth_service)
         .app_data(store)
+        .app_data(shared_features)
         .service(api::register_api())
         .service(api::register_redoc())
         .service(api::register_rapidoc())
@@ -157,9 +161,10 @@ pub async fn run_server() -> std::io::Result<()> {
 
     let max_workers = std::thread::available_parallelism()?;
     let shared_store: SharedStore = Arc::new(RwLock::new(store));
+    let shared_features: SharedFeatures = Arc::new(RwLock::new(config.features.clone()));
 
     HttpServer::new(move || {
-        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()), config.static_dir.clone())
+        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()), web::Data::new(shared_features.clone()), config.static_dir.clone())
         .app_data(web::Data::new(config.clone()))
         .wrap(Logger::default())
     })
