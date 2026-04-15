@@ -684,24 +684,32 @@ mod test_definitions {
         }    
     }
 
+    async fn create_test_app_with_config(
+        user_defs: &mut Vec<UserDefinition>,
+        caller_username: Option<&str>,
+        add_login: bool,
+        features: SharedFeatures,
+        app_config: AppConfig,
+    ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, SharedStore, HashMap<Uuid, MockUser>, Option<Uuid>, Option<Uuid>) {
+        set_valid_password_hashes(&app_config.security.password_hash, user_defs);
+
+        let (shared_mock_store, mock_users, api_key, login_id) = create_shared_mock_store(user_defs, caller_username, add_login);
+        let app = test::init_service(
+            create_app(&app_config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(features), ".".to_string())
+            .app_data(web::Data::new(app_config))
+        )
+        .await;
+
+        (app, shared_mock_store, mock_users, Some(api_key), login_id)
+    }
+
     async fn create_test_app_with_features(
         user_defs: &mut Vec<UserDefinition>,
         caller_username: Option<&str>,
         add_login: bool,
         features: SharedFeatures,
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, SharedStore, HashMap<Uuid, MockUser>, Option<Uuid>, Option<Uuid>) {
-        let config = AppConfig::default();
-
-        set_valid_password_hashes(&config.security.password_hash, user_defs);
-
-        let (shared_mock_store, mock_users, api_key, login_id) = create_shared_mock_store(user_defs, caller_username, add_login);
-        let app = test::init_service(
-            create_app(&config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(features), ".".to_string())
-            .app_data(web::Data::new(AppConfig::default().clone()))
-        )
-        .await;
-
-        (app, shared_mock_store, mock_users, Some(api_key), login_id)
+        create_test_app_with_config(user_defs, caller_username, add_login, features, AppConfig::default()).await
     }
 
     async fn create_test_app(
@@ -3570,5 +3578,86 @@ mod test_definitions {
         let req = create_test_get_request("/api/v1/features", None, None);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    // **************************************************************************************************
+    // Tests: PUT /api/v1/admin/features
+    // **************************************************************************************************
+
+    fn make_admin_features_config_toml(allow_signup: bool) -> (AppConfig, std::path::PathBuf) {
+        let temp_path = std::env::temp_dir().join(format!("maze_test_{}.toml", Uuid::new_v4()));
+        std::fs::write(&temp_path, format!("[features]\nallow_signup = {}\n", allow_signup)).unwrap();
+        let mut config = AppConfig::default();
+        config.config_path = temp_path.to_string_lossy().to_string();
+        (config, temp_path)
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_admin_features_with_non_admin_caller_with_api_key() {
+        let admin_username = &format!("{}1", ADMIN_USERNAME_PREFIX);
+        let non_admin_username = &format!("{}1", USERNAME_PREFIX);
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, _) = create_test_app(&mut user_defs, Some(non_admin_username), false).await;
+        let _ = admin_username;
+        let req = create_test_put_request("/api/v1/admin/features", api_key, None, &AppFeaturesResponse { allow_signup: false });
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_admin_features_with_non_admin_caller_with_login() {
+        let non_admin_username = &format!("{}1", USERNAME_PREFIX);
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, _, login_id) = create_test_app(&mut user_defs, Some(non_admin_username), true).await;
+        let req = create_test_put_request("/api/v1/admin/features", None, login_id, &AppFeaturesResponse { allow_signup: false });
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    async fn update_admin_features_updates_live_state() {
+        let admin_username = &format!("{}1", ADMIN_USERNAME_PREFIX);
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 0, MazeContent::Empty));
+        let (app_config, temp_path) = make_admin_features_config_toml(true);
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let (app, _, _, api_key, _) = create_test_app_with_config(&mut user_defs, Some(admin_username), false, features, app_config).await;
+
+        // Disable signup via admin PUT
+        let put_req = create_test_put_request("/api/v1/admin/features", api_key, None, &AppFeaturesResponse { allow_signup: false });
+        let put_resp = test::call_service(&app, put_req).await;
+        assert_eq!(put_resp.status(), StatusCode::OK);
+        let body = test::read_body(put_resp).await;
+        let response: AppFeaturesResponse = serde_json::from_slice(&body).expect("failed to deserialize response");
+        assert!(!response.allow_signup);
+
+        // GET /features now reflects the new value
+        let get_req = create_test_get_request("/api/v1/features", None, None);
+        let get_resp = test::call_service(&app, get_req).await;
+        let body = test::read_body(get_resp).await;
+        let features_response: AppFeaturesResponse = serde_json::from_slice(&body).expect("failed to deserialize features response");
+        assert!(!features_response.allow_signup);
+
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[actix_web::test]
+    async fn update_admin_features_persists_to_config_toml() {
+        let admin_username = &format!("{}1", ADMIN_USERNAME_PREFIX);
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 0, MazeContent::Empty));
+        let (app_config, temp_path) = make_admin_features_config_toml(true);
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let (app, _, _, api_key, _) = create_test_app_with_config(&mut user_defs, Some(admin_username), false, features, app_config).await;
+
+        let put_req = create_test_put_request("/api/v1/admin/features", api_key, None, &AppFeaturesResponse { allow_signup: false });
+        let put_resp = test::call_service(&app, put_req).await;
+        assert_eq!(put_resp.status(), StatusCode::OK);
+
+        // Verify the temp config file was updated on disk
+        let content = std::fs::read_to_string(&temp_path).expect("failed to read temp config file");
+        let parsed: toml::Table = content.parse().expect("failed to parse updated config toml");
+        let allow_signup = parsed["features"]["allow_signup"].as_bool().expect("allow_signup missing");
+        assert!(!allow_signup);
+
+        let _ = std::fs::remove_file(&temp_path);
     }
 }

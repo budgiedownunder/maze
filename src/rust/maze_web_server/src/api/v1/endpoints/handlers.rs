@@ -320,6 +320,65 @@ pub async fn get_features(
 }
 
 // **************************************************************************************************
+// Endpoint: PUT /api/v1/admin/features
+// Handler:  update_admin_features()
+// **************************************************************************************************
+
+fn update_features_in_config(config_path: &str, new_features: &AppFeaturesResponse) -> Result<(), Error> {
+    let content = std::fs::read_to_string(config_path).unwrap_or_default();
+    let mut doc = content.parse::<toml_edit::DocumentMut>().map_err(|e| {
+        ErrorInternalServerError(format!("Failed to parse config file: {}", e))
+    })?;
+    if doc.get("features").is_none() {
+        doc["features"] = toml_edit::table();
+    }
+    doc["features"]["allow_signup"] = toml_edit::value(new_features.allow_signup);
+    std::fs::write(config_path, doc.to_string()).map_err(|e| {
+        ErrorInternalServerError(format!("Failed to write config file: {}", e))
+    })?;
+    Ok(())
+}
+
+#[utoipa::path(
+    summary = "Update server application feature flags",
+    description = "Updates the server's active feature flags. Changes take effect immediately and are persisted to config.toml.",
+    put,
+    path = "/api/v1/admin/features",
+    request_body = AppFeaturesResponse,
+    responses(
+        (status = 200, description = "Features updated successfully", body = AppFeaturesResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("api_key" = []),
+        ("login_token" = [])
+    ),
+    tags = ["v1"]
+)]
+#[put("/admin/features")]
+pub async fn update_admin_features(
+    req: HttpRequest,
+    body: web::Json<AppFeaturesResponse>,
+    features: web::Data<SharedFeatures>,
+    config: web::Data<AppConfig>,
+) -> Result<HttpResponse, Error> {
+    get_authorized_user(&req, true)?;
+
+    let new_features = body.into_inner();
+    update_features_in_config(&config.config_path, &new_features)?;
+
+    let mut features_lock = features.write().map_err(|_| {
+        ErrorInternalServerError("Failed to acquire features write lock")
+    })?;
+    features_lock.allow_signup = new_features.allow_signup;
+
+    Ok(HttpResponse::Ok().json(AppFeaturesResponse {
+        allow_signup: features_lock.allow_signup,
+    }))
+}
+
+// **************************************************************************************************
 // Endpoint: POST /api/v1/signup
 // Handler:  signup()
 // **************************************************************************************************

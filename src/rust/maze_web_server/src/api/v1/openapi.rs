@@ -60,6 +60,7 @@ impl utoipa::Modify for LoginTokenAuth {
     paths(
         // Features
         crate::api::v1::endpoints::handlers::get_features,
+        crate::api::v1::endpoints::handlers::update_admin_features,
         // Login, logout, renew, signup
         crate::api::v1::endpoints::handlers::login,
         crate::api::v1::endpoints::handlers::logout,
