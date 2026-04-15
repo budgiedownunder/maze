@@ -1,6 +1,7 @@
 use crate::config::app::AppConfig;
 use crate::middleware::auth::{ApiKey, LoginId};
 use crate::service::auth::AuthService;
+use crate::SharedFeatures;
 
 
 use data_model::{Maze, User};
@@ -284,6 +285,40 @@ impl UserItem {
         }
     }    
 }
+// **************************************************************************************************
+// Endpoint: GET /api/v1/features
+// Handler:  get_features()
+// **************************************************************************************************
+/// Response body for `GET /api/v1/features`
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+pub struct AppFeaturesResponse {
+    /// Whether new users can self-register via the signup endpoint
+    pub allow_signup: bool,
+}
+
+#[utoipa::path(
+    summary = "Returns the server's active feature flags",
+    description = "Returns the feature flags that control which capabilities are available to users. No authentication required.",
+    get,
+    path = "/api/v1/features",
+    responses(
+        (status = 200, description = "Feature flags retrieved successfully", body = AppFeaturesResponse),
+        (status = 500, description = "Internal server error")
+    ),
+    tags = ["v1"]
+)]
+#[get("/features")]
+pub async fn get_features(
+    features: web::Data<SharedFeatures>,
+) -> Result<HttpResponse, Error> {
+    let features_lock = features.read().map_err(|_| {
+        ErrorInternalServerError("Failed to acquire features read lock")
+    })?;
+    Ok(HttpResponse::Ok().json(AppFeaturesResponse {
+        allow_signup: features_lock.allow_signup,
+    }))
+}
+
 // **************************************************************************************************
 // Endpoint: POST /api/v1/signup
 // Handler:  signup()

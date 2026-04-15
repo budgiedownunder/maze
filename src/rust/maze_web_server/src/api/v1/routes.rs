@@ -6,6 +6,7 @@ use crate::middleware::auth::auth_middleware;
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg
         // Unguarded routes
+        .service(handlers::get_features)
         .service(handlers::login)
         .service(handlers::signup)
         // Guarded routes

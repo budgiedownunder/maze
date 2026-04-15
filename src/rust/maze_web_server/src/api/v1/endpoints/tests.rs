@@ -4,7 +4,7 @@ mod test_definitions {
     // Unit tests for API and documentation endpoints, via injection of MockStore
     // **************************************************************************************************
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
-    use crate::api::v1::endpoints::handlers::{ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
+    use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, SharedFeatures};
     
     use actix_http;
@@ -684,24 +684,33 @@ mod test_definitions {
         }    
     }
 
-     async fn create_test_app(
+    async fn create_test_app_with_features(
         user_defs: &mut Vec<UserDefinition>,
         caller_username: Option<&str>,
         add_login: bool,
+        features: SharedFeatures,
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, SharedStore, HashMap<Uuid, MockUser>, Option<Uuid>, Option<Uuid>) {
         let config = AppConfig::default();
 
         set_valid_password_hashes(&config.security.password_hash, user_defs);
 
         let (shared_mock_store, mock_users, api_key, login_id) = create_shared_mock_store(user_defs, caller_username, add_login);
-        let shared_features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
         let app = test::init_service(
-            create_app(&config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(shared_features), ".".to_string())
+            create_app(&config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(features), ".".to_string())
             .app_data(web::Data::new(AppConfig::default().clone()))
         )
         .await;
 
         (app, shared_mock_store, mock_users, Some(api_key), login_id)
+    }
+
+    async fn create_test_app(
+        user_defs: &mut Vec<UserDefinition>,
+        caller_username: Option<&str>,
+        add_login: bool,
+    ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, SharedStore, HashMap<Uuid, MockUser>, Option<Uuid>, Option<Uuid>) {
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        create_test_app_with_features(user_defs, caller_username, add_login, features).await
     }
 
     fn get_invalid_user_name_or_password_error_str() -> String {
@@ -3522,5 +3531,44 @@ mod test_definitions {
     #[actix_web::test]
     async fn can_load_rapidoc_page() {
         run_get_url_test("/api-docs/v1/rapidoc").await;
+    }
+
+    // **************************************************************************************************
+    // Tests: GET /api/v1/features
+    // **************************************************************************************************
+    #[actix_web::test]
+    async fn get_features_returns_defaults() {
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let req = create_test_get_request("/api/v1/features", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let response: AppFeaturesResponse = serde_json::from_slice(&body).expect("failed to deserialize features response");
+        assert!(response.allow_signup);
+    }
+
+    #[actix_web::test]
+    async fn get_features_respects_config() {
+        let mut user_defs = vec![];
+        let features = AppFeaturesConfig { allow_signup: false };
+        let features: SharedFeatures = Arc::new(RwLock::new(features));
+        let (app, _, _, _, _) = create_test_app_with_features(&mut user_defs, None, false, features).await;
+        let req = create_test_get_request("/api/v1/features", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let response: AppFeaturesResponse = serde_json::from_slice(&body).expect("failed to deserialize features response");
+        assert!(!response.allow_signup);
+    }
+
+    #[actix_web::test]
+    async fn get_features_no_auth_required() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        // No api_key or login_id — endpoint must be accessible without authentication
+        let req = create_test_get_request("/api/v1/features", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 }
