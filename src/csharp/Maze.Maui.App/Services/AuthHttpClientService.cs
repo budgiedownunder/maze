@@ -95,9 +95,7 @@ namespace Maze.Maui.App.Services
         private const string TOKEN_STORAGE_KEY = "bearer_token";
         private const string TOKEN_EXPIRY_STORAGE_KEY = "bearer_token_expires_at";
         private const string HEADER_AUTHORIZATION = "Authorization";
-        private const double REQUEST_TIMEOUT_SECONDS = 30.0;
 
-        private readonly ConfigurationService _configurationService;
         private readonly HttpClient _httpClient;
 
         /// <summary>
@@ -106,22 +104,7 @@ namespace Maze.Maui.App.Services
         /// <param name="configurationService">Injected configuration service</param>
         public AuthHttpClientService(ConfigurationService configurationService)
         {
-            _configurationService = configurationService;
-            _httpClient = CreateHttpClient();
-        }
-
-        private HttpClient CreateHttpClient()
-        {
-            HttpClientHandler handler = new HttpClientHandler();
-
-            if (_configurationService.DisableStrictTLSCertificateValidation)
-                handler.ServerCertificateCustomValidationCallback = (message, cert, chain, sslPolicyErrors) => true;
-
-            return new HttpClient(handler)
-            {
-                BaseAddress = new Uri(_configurationService.ApiRootUri),
-                Timeout = TimeSpan.FromSeconds(REQUEST_TIMEOUT_SECONDS)
-            };
+            _httpClient = ApiHttpClientFactory.Create(configurationService);
         }
 
         /// <inheritdoc/>

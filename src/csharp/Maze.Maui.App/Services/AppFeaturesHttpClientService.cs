@@ -7,7 +7,6 @@ namespace Maze.Maui.App.Services
     /// </summary>
     public class AppFeaturesHttpClientService : IAppFeaturesService
     {
-        private const double REQUEST_TIMEOUT_SECONDS = 30.0;
         private readonly HttpClient _httpClient;
 
         /// <inheritdoc/>
@@ -19,14 +18,7 @@ namespace Maze.Maui.App.Services
         /// <param name="configurationService">Injected configuration service</param>
         public AppFeaturesHttpClientService(ConfigurationService configurationService)
         {
-            var handler = new HttpClientHandler();
-            if (configurationService.DisableStrictTLSCertificateValidation)
-                handler.ServerCertificateCustomValidationCallback = (_, _, _, _) => true;
-            _httpClient = new HttpClient(handler)
-            {
-                BaseAddress = new Uri(configurationService.ApiRootUri),
-                Timeout = TimeSpan.FromSeconds(REQUEST_TIMEOUT_SECONDS),
-            };
+            _httpClient = ApiHttpClientFactory.Create(configurationService);
         }
 
         /// <inheritdoc/>
