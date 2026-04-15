@@ -171,10 +171,10 @@ impl AppConfig {
     pub fn log_config(&self) {
         match serde_json::to_string_pretty(self) {
             Ok(json) => {
-                info!("Loaded AppConfig:\n{}", json);
+                info!("Loaded AppConfig:\n{json}");
             }
             Err(err) => {
-                log::error!("Failed to serialize AppConfig: {}", err);
+                log::error!("Failed to serialize AppConfig: {err}");
             }
         }
     }}
@@ -218,7 +218,7 @@ fn set_env_overrides(mut builder: ConfigBuilder<DefaultState>) -> Result<ConfigB
 
 /// Returns the applicaion environment name for a given setting
 fn get_app_env_name(setting_name: &str) -> String {
-    format!("MAZE_WEB_SERVER_{}", setting_name)
+    format!("MAZE_WEB_SERVER_{setting_name}")
 }
 
 #[cfg(test)]

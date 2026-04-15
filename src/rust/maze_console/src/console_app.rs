@@ -80,7 +80,7 @@ impl App for ConsoleApp {
 
 impl LinePrinter for ConsoleApp {
     fn print_line(&mut self, line: &str) -> Result<(), io::Error> {
-        println!("{}", line);
+        println!("{line}");
         Ok(())
     }
 }

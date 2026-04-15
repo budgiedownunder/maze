@@ -32,26 +32,26 @@ impl std::fmt::Display for Error {
         match self {
             Error::UserEmailExists() => write!(f, "The email is already taken"),
             Error::UserEmailInvalid() => write!(f, "The email address is invalid"),
-            Error::UserIdExists(id) => write!(f, "A user with id '{}' already exists", id),
+            Error::UserIdExists(id) => write!(f, "A user with id '{id}' already exists"),
             Error::UserIdMissing() => write!(f, "No id provided for the user"),
-            Error::UserIdNotFound(id) => write!(f, "A user with id '{}' was not found", id),
+            Error::UserIdNotFound(id) => write!(f, "A user with id '{id}' was not found"),
             Error::UserNameExists() => write!(f, "The username is already taken"),
             Error::UserNameMissing() => write!(f, "No username provided for the user"),
             Error::UserNotFound() => write!(f, "User not found"),
             Error::UserPasswordMissing() => write!(f, "No password provided for the user"),
-            Error::MazeError(e) => write!(f, "Maze error: {}", e),
+            Error::MazeError(e) => write!(f, "Maze error: {e}"),
             Error::MazeIdMissing() => write!(f, "No id provided for the maze"),
-            Error::MazeIdNotFound(id) => write!(f, "A maze with id '{}' was not found", id),
-            Error::MazeIdExists(id) => write!(f, "A maze with id '{}' already exists", id),
+            Error::MazeIdNotFound(id) => write!(f, "A maze with id '{id}' was not found"),
+            Error::MazeIdExists(id) => write!(f, "A maze with id '{id}' already exists"),
             Error::MazeNameMissing() => write!(f, "No name provided for the maze"),
-            Error::MazeNameNotFound(name) => write!(f, "A maze with the name '{}' was not found", name),
+            Error::MazeNameNotFound(name) => write!(f, "A maze with the name '{name}' was not found"),
             Error::MazeNameAlreadyExists(name) => {
-                write!(f, "A maze with the name '{}' already exists", name)
+                write!(f, "A maze with the name '{name}' already exists")
             }
-            Error::DataModelError(e) => write!(f, "Data model error: {}", e),
-            Error::Io(e) => write!(f, "I/O error: {}", e),
-            Error::SerdeJson(ref error) => write!(f, "{}", error),
-            Error::Other(msg) => write!(f, "Error: {}", msg),
+            Error::DataModelError(e) => write!(f, "Data model error: {e}"),
+            Error::Io(e) => write!(f, "I/O error: {e}"),
+            Error::SerdeJson(ref error) => write!(f, "{error}"),
+            Error::Other(msg) => write!(f, "Error: {msg}"),
         }
     }
 }
@@ -84,6 +84,6 @@ impl From<serde_json::Error> for Error {
 
 impl From<Error> for io::Error {
     fn from(err: Error) -> Self {
-        io::Error::new(io::ErrorKind::Other, err.to_string())
+        io::Error::other(err.to_string())
     }
 }

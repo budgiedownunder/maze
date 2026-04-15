@@ -168,7 +168,7 @@ mod tests {
         let path = MazePath { points: vec![] };
         let mut print_target = StdoutLinePrinter::new();
         if let Err(error) = maze.print(&mut print_target, path) {
-            panic!("Unexpected print() error: {}", error);
+            panic!("Unexpected print() error: {error}");
         }
     }
 
@@ -212,7 +212,7 @@ mod tests {
         let mut print_target = StdoutLinePrinter::new();
 
         if let Err(error) = maze.print(&mut print_target, path) {
-            panic!("Unexpected print() error: {}", error);
+            panic!("Unexpected print() error: {error}");
         }
     }
 
@@ -474,8 +474,7 @@ mod tests {
 
     fn panic_unexpected_solve_error(error: Error) {
         panic!(
-            "expected solve() to succeed but it returned the error {}",
-            error
+            "expected solve() to succeed but it returned the error {error}"
         );
     }
 

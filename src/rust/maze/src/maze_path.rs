@@ -16,7 +16,7 @@ impl fmt::Display for MazePath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut result = write!(f, "Points: {} =>", self.points.len());
         for pt in self.points.iter() {
-            result = write!(f, "\n> {}", pt);
+            result = write!(f, "\n> {pt}");
         }
         result
     }

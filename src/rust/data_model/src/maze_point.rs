@@ -26,7 +26,7 @@ mod tests {
     #[test]
     fn should_have_expected_display_format() {
         let pt = MazePoint { row: 1, col: 2 };
-        let s = format!("{}", pt);
+        let s = format!("{pt}");
         assert_eq!(s, "[1, 2]");
     }
 

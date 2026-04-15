@@ -58,7 +58,7 @@ mod test_definitions {
         }
 
         fn create_id_from_name(name: &str) -> String {
-            format!("{}.json", name)
+            format!("{name}.json")
         }
     }
 
@@ -401,8 +401,7 @@ mod test_definitions {
     }
 
     fn maze_items_from_map(from: &HashMap<String, MockMaze>, include_definitions: bool) -> Vec<MazeItem> {
-        from.iter()
-            .map(|(_key, value) | MazeItem {
+        from.values().map(|value| MazeItem {
                     id: value.id.clone(),
                     name: value.name.clone(),
                     definition: if include_definitions {
@@ -535,7 +534,7 @@ mod test_definitions {
     }
 
     fn new_email(username: &str) -> String {
-        format!("{}@company.com", username)
+        format!("{username}@company.com")
     }
 
     #[derive(Clone)]
@@ -550,7 +549,7 @@ mod test_definitions {
         let username_prefix = if is_admin { ADMIN_USERNAME_PREFIX } else { USERNAME_PREFIX};
         for i in 1..(num+1) {
             user_defs.push( UserDefinition {
-                username: format!("{}{}", username_prefix, i),
+                username: format!("{username_prefix}{i}"),
                 is_admin,
                 password_hash: password_hash.to_string(), 
                 mazes: mazes.clone(),
@@ -627,7 +626,7 @@ mod test_definitions {
             .uri(url);
 
         if let Some(login_id) = login_id {
-            req = req.insert_header(("Authorization", format!("Bearer {}", login_id)));
+            req = req.insert_header(("Authorization", format!("Bearer {login_id}")));
         }
         else if  let Some(api_key) = api_key {
             req = req.insert_header(("X-API-KEY", api_key.to_string()));
@@ -734,7 +733,7 @@ mod test_definitions {
     ) -> RwLockReadGuard<'_, Box<dyn Store>> {
         match shared_store.read() {
             Ok(store_lock) => store_lock,
-            Err(err) => panic!("Failed to acquire store read lock: {}", err),
+            Err(err) => panic!("Failed to acquire store read lock: {err}"),
         }
     }
 
@@ -745,11 +744,10 @@ mod test_definitions {
             Ok(user) => {
                 let presence = user.contains_valid_login(login_id);
                 if presence != expected_presence {
-                    panic!("{}", format!("User contains_login() returned an unexpected value (expected = {}, returned = {})", 
-                        expected_presence, presence));
+                    panic!("{}", format!("User contains_login() returned an unexpected value (expected = {expected_presence}, returned = {presence})"));
                 }
             },
-            Err(err) => panic!("{}", format!("Failed to locate user for login id = {} => {}", login_id, err))
+            Err(err) => panic!("{}", format!("Failed to locate user for login id = {login_id} => {err}"))
         }
     }
 
@@ -877,7 +875,7 @@ mod test_definitions {
         };
 
         CreateUserRequest::new(is_admin, username, 
-            &format!("{} full name", username), 
+            &format!("{username} full name"), 
             email_use, 
             &create_password(blank_password) 
         )    
@@ -916,7 +914,7 @@ mod test_definitions {
         let mut user_defs = create_user_defs(create_users_def);
         let (app, _, mock_users, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
         let id = MockStore::find_user_id_by_name_in_map(&mock_users, target_username, Uuid::nil());
-        let url = format!("/api/v1/users/{}", id);
+        let url = format!("/api/v1/users/{id}");
         let req = create_test_get_request(&url, api_key, login_id);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), expected_status_code);
@@ -966,7 +964,7 @@ mod test_definitions {
         };
 
         UpdateUserRequest::new(is_admin, username, 
-            &format!("Updated {} full name", username), 
+            &format!("Updated {username} full name"), 
             email_use
         )    
     }    
@@ -982,7 +980,7 @@ mod test_definitions {
         let mut user_defs = create_user_defs(create_users_def);
         let (app, _, mock_users, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
         let id = MockStore::find_user_id_by_name_in_map(&mock_users, target_username, Uuid::nil());
-        let url = format!("/api/v1/users/{}", id);
+        let url = format!("/api/v1/users/{id}");
         let req = create_test_put_request(&url, api_key, login_id, &update_req);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), expected_status_code);
@@ -1006,7 +1004,7 @@ mod test_definitions {
         let mut user_defs = create_user_defs(create_users_def);
         let (app, _, mock_users, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
         let id = MockStore::find_user_id_by_name_in_map(&mock_users, target_username, Uuid::nil());
-        let url = format!("/api/v1/users/{}", id);
+        let url = format!("/api/v1/users/{id}");
         let req = create_test_delete_request(&url, api_key, login_id);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), expected_status_code);
@@ -1017,7 +1015,7 @@ mod test_definitions {
             }
 
             // Confirm it has been deleted
-            let url2 = format!("/api/v1/users/{}", id);
+            let url2 = format!("/api/v1/users/{id}");
             let req2 = create_test_get_request(&url2, api_key, None);
             let resp2 = test::call_service(&app, req2).await;
             assert_eq!(resp2.status(), StatusCode::NOT_FOUND);
@@ -1033,7 +1031,7 @@ mod test_definitions {
     ) {
         let mut user_defs = create_user_defs(create_users_def);
         let (app, _, _, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
-        let path_str = format!("/api/v1/mazes?includeDefinitions={}", include_definitions);
+        let path_str = format!("/api/v1/mazes?includeDefinitions={include_definitions}");
         let req = create_test_get_request(&path_str, api_key, login_id);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
@@ -1078,7 +1076,7 @@ mod test_definitions {
     ) {
         let mut user_defs = create_user_defs(create_users_def);
         let (app, _, _, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
-        let url = format!("/api/v1/mazes/{}", id);
+        let url = format!("/api/v1/mazes/{id}");
         let req = create_test_get_request(&url, api_key, login_id);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), expected_status_code);
@@ -1104,7 +1102,7 @@ mod test_definitions {
     ) {
         let mut user_defs = create_user_defs(create_users_def);
         let (app, _, _, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
-        let url = format!("/api/v1/mazes/{}", id);
+        let url = format!("/api/v1/mazes/{id}");
         let req = create_test_put_request(&url,api_key, login_id, &maze);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), expected_status_code);
@@ -1125,14 +1123,14 @@ mod test_definitions {
     ) {
         let mut user_defs = create_user_defs(create_users_def);
         let (app, _, _, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
-        let url = format!("/api/v1/mazes/{}", id);
+        let url = format!("/api/v1/mazes/{id}");
         let req = create_test_delete_request(&url, api_key, login_id);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), expected_status_code);
 
         if expected_status_code == StatusCode::OK {
             // Confirm it has been deleted
-            let url2 = format!("/api/v1/mazes/{}", id);
+            let url2 = format!("/api/v1/mazes/{id}");
             let req2 = create_test_get_request(&url2, api_key, login_id);
             let resp2 = test::call_service(&app, req2).await;
             assert_eq!(resp2.status(), StatusCode::NOT_FOUND);
@@ -1154,7 +1152,7 @@ mod test_definitions {
             let solution: MazeSolution = serde_json::from_slice(&body).expect("failed to deserialize response");
              match expected_solution {
                 Some(value) => { assert_eq!(solution, value);}
-                None => { panic!("{}", format!("No maze solution comparison value provided for {} test!", context)); }
+                None => { panic!("{}", format!("No maze solution comparison value provided for {context} test!")); }
             }
         }
         else {
@@ -1165,7 +1163,7 @@ mod test_definitions {
                     let error_message = String::from_utf8(body.to_vec()).expect("Failed to parse body as UTF-8");
                     assert_eq!(error_message, value);
                 }
-                None => { panic!("{}", format!("No maze solution error message provided for {} test!", context)); }
+                None => { panic!("{}", format!("No maze solution error message provided for {context} test!")); }
             }
         }
     }
@@ -1193,7 +1191,7 @@ mod test_definitions {
     ) {
         let mut user_defs = create_user_defs(create_users_def);
         let (app, _, _, api_key, login_id) = create_test_app(&mut user_defs, caller_username, use_login).await;
-        let url = format!("/api/v1/mazes/{}/solution", id);
+        let url = format!("/api/v1/mazes/{id}/solution");
         let req = create_test_get_request(&url, api_key, login_id);
         let resp = test::call_service(&app, req).await;
 
@@ -1762,7 +1760,7 @@ mod test_definitions {
     async fn cannot_renew_with_api_key() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
         let (app, _, _, api_key, _) = create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
-        let renew_req = create_test_post_request("/api/v1/login/renew", api_key.map(|k| k), None, None::<&()>);
+        let renew_req = create_test_post_request("/api/v1/login/renew", api_key, None, None::<&()>);
         let renew_resp = test::call_service(&app, renew_req).await;
         assert_eq!(renew_resp.status(), StatusCode::UNAUTHORIZED);
     }
@@ -2532,20 +2530,19 @@ mod test_definitions {
                     assert_eq!(maze.definition.row_count(), rows);
                     assert_eq!(maze.definition.col_count(), cols);
                 }
-                _ => panic!("{}", format!("No maze dimension comparison values provided for {} test!", context)),
+                _ => panic!("{}", format!("No maze dimension comparison values provided for {context} test!")),
             }
             assert_eq!(maze.id, "", "{}: expected empty id", context);
             assert_eq!(maze.name, "", "{}: expected empty name", context);
-            maze.solve().expect(&format!("{}: generated maze must be solvable", context));
-        } else {
-            if let Some(value) = expected_err_message {
-                let body = test::read_body(resp).await;
-                let error_message = String::from_utf8(body.to_vec()).expect("Failed to parse body as UTF-8");
-                assert_eq!(error_message, value);
-            }
+            maze.solve().unwrap_or_else(|_| panic!("{context}: generated maze must be solvable"));
+        } else if let Some(value) = expected_err_message {
+            let body = test::read_body(resp).await;
+            let error_message = String::from_utf8(body.to_vec()).expect("Failed to parse body as UTF-8");
+            assert_eq!(error_message, value);
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn run_generate_maze_test(
         create_users_def: &CreateUsersDef,
         caller_username: Option<&str>,
@@ -2854,7 +2851,7 @@ mod test_definitions {
         let email_use = email.unwrap_or(&new_email(username)).to_string();
         SignupRequest::new(
             username,
-            &format!("{} full name", username),
+            &format!("{username} full name"),
             &email_use,
             &create_password(blank_password),
         )
@@ -2930,7 +2927,7 @@ mod test_definitions {
                 let store_lock = get_store_read_lock(&shared_store);
                 assert!(
                     store_lock.find_user_by_name(username).is_err(),
-                    "user '{}' should have been deleted but was still found", username
+                    "user '{username}' should have been deleted but was still found"
                 );
             }
         }
@@ -3177,7 +3174,7 @@ mod test_definitions {
 
     fn new_update_profile_request(username: &str, email: Option<&str>) -> UpdateProfileRequest {
         let email_use = email.unwrap_or(&new_email(username)).to_string();
-        UpdateProfileRequest::new(username, &format!("Updated {} full name", username), &email_use)
+        UpdateProfileRequest::new(username, &format!("Updated {username} full name"), &email_use)
     }
 
     async fn run_change_password_me_test(
@@ -3586,16 +3583,15 @@ mod test_definitions {
 
     fn make_admin_features_config_toml(allow_signup: bool) -> (AppConfig, std::path::PathBuf) {
         let temp_path = std::env::temp_dir().join(format!("maze_test_{}.toml", Uuid::new_v4()));
-        std::fs::write(&temp_path, format!("[features]\nallow_signup = {}\n", allow_signup)).unwrap();
-        let mut config = AppConfig::default();
-        config.config_path = temp_path.to_string_lossy().to_string();
+        std::fs::write(&temp_path, format!("[features]\nallow_signup = {allow_signup}\n")).unwrap();
+        let config = AppConfig { config_path: temp_path.to_string_lossy().to_string(), ..AppConfig::default() };
         (config, temp_path)
     }
 
     #[actix_web::test]
     async fn cannot_update_admin_features_with_non_admin_caller_with_api_key() {
-        let admin_username = &format!("{}1", ADMIN_USERNAME_PREFIX);
-        let non_admin_username = &format!("{}1", USERNAME_PREFIX);
+        let admin_username = &format!("{ADMIN_USERNAME_PREFIX}1");
+        let non_admin_username = &format!("{USERNAME_PREFIX}1");
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
         let (app, _, _, api_key, _) = create_test_app(&mut user_defs, Some(non_admin_username), false).await;
         let _ = admin_username;
@@ -3606,7 +3602,7 @@ mod test_definitions {
 
     #[actix_web::test]
     async fn cannot_update_admin_features_with_non_admin_caller_with_login() {
-        let non_admin_username = &format!("{}1", USERNAME_PREFIX);
+        let non_admin_username = &format!("{USERNAME_PREFIX}1");
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
         let (app, _, _, _, login_id) = create_test_app(&mut user_defs, Some(non_admin_username), true).await;
         let req = create_test_put_request("/api/v1/admin/features", None, login_id, &AppFeaturesResponse { allow_signup: false });
@@ -3616,7 +3612,7 @@ mod test_definitions {
 
     #[actix_web::test]
     async fn update_admin_features_updates_live_state() {
-        let admin_username = &format!("{}1", ADMIN_USERNAME_PREFIX);
+        let admin_username = &format!("{ADMIN_USERNAME_PREFIX}1");
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 0, MazeContent::Empty));
         let (app_config, temp_path) = make_admin_features_config_toml(true);
         let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
@@ -3642,7 +3638,7 @@ mod test_definitions {
 
     #[actix_web::test]
     async fn update_admin_features_persists_to_config_toml() {
-        let admin_username = &format!("{}1", ADMIN_USERNAME_PREFIX);
+        let admin_username = &format!("{ADMIN_USERNAME_PREFIX}1");
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 0, MazeContent::Empty));
         let (app_config, temp_path) = make_admin_features_config_toml(true);
         let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));

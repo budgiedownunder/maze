@@ -95,7 +95,7 @@ pub trait App: LinePrinter {
     }
 
     fn prompt_yes_no(&mut self, message: &str) -> Result<bool, Box<dyn Error>> {
-        self.print_line(&format!("{} (Y/N)", message))?;
+        self.print_line(&format!("{message} (Y/N)"))?;
         loop {
             match self.read_key()? {
                 Some(ch) => match ch.to_ascii_uppercase() {
@@ -106,7 +106,7 @@ pub trait App: LinePrinter {
                         return Ok(false);
                     }
                     _ => {
-                        self.print_line(&format!("Invalid response: '{}'", ch))?;
+                        self.print_line(&format!("Invalid response: '{ch}'"))?;
                     }
                 },
                 None => {
@@ -212,8 +212,7 @@ pub trait App: LinePrinter {
             (maze.definition.row_count(), maze.definition.col_count())
         };
         let message = format!(
-            "{} dimensions: {} row(s), {} column(s)",
-            prefix, num_rows, num_cols
+            "{prefix} dimensions: {num_rows} row(s), {num_cols} column(s)"
         );
         self.print_line(&message)?;
         Ok(())
@@ -309,12 +308,11 @@ pub trait App: LinePrinter {
 
     fn process_set_endpoint(&mut self, start: bool) -> Result<(), Box<dyn Error>> {
         let name = if start { "start" } else { "finish" };
-        self.print_line(&format!("Set {}", name))?;
+        self.print_line(&format!("Set {name}"))?;
         self.print_maze_dimensions("Current")?;
         if !self.maze_has_cells() {
             self.print_line(&format!(
-                "Maze has no cells - add some rows and columns first before setting the {} cell",
-                name
+                "Maze has no cells - add some rows and columns first before setting the {name} cell"
             ))?;
             return Ok(());
         }
@@ -398,8 +396,7 @@ pub trait App: LinePrinter {
             (maze.definition.row_count(), maze.definition.col_count())
         };
         let message = format!(
-            "Set maze to empty? [current dimensions: {} row(s), {} column(s)]",
-            rows, cols
+            "Set maze to empty? [current dimensions: {rows} row(s), {cols} column(s)]"
         );
         let choice = self.prompt_yes_no(&message)?;
         if choice {
@@ -422,7 +419,7 @@ pub trait App: LinePrinter {
         if maze.definition.is_empty() {
             print_target.print_line("Maze is empty")?;
         } else if let Err(error) = maze.print(print_target, path) {
-            print_target.print_line(&format!("Failed to print maze: {}", error))?;
+            print_target.print_line(&format!("Failed to print maze: {error}"))?;
         }
         Ok(())
     }
@@ -434,11 +431,11 @@ pub trait App: LinePrinter {
                 let maze = self.get_maze().clone();
                 let print_target = self.get_line_printer();
                 if let Err(error) = maze.print(print_target, solution.path) {
-                    print_target.print_line(&format!("Failed to print solved maze: {}", error))?;
+                    print_target.print_line(&format!("Failed to print solved maze: {error}"))?;
                 }
             }
             Err(error) => {
-                self.print_line(&format!("Failed to solve maze: {}", error))?;
+                self.print_line(&format!("Failed to solve maze: {error}"))?;
             }
         }
         Ok(())
@@ -457,8 +454,7 @@ pub trait App: LinePrinter {
         let id = maze.id.clone();
         *self.get_maze_mut() = maze;
         self.print_line(&format!(
-            "Maze '{}' successfully loaded from '{}'",
-            name, id
+            "Maze '{name}' successfully loaded from '{id}'"
         ))?;
         Ok(())
     }
@@ -491,8 +487,7 @@ pub trait App: LinePrinter {
         let name_exists = self.maze_name_exists(name);
         if prompt_overwrite && name_exists {
             let yes = self.prompt_yes_no(&format!(
-                "A maze with the name '{}' already exists. Overwrite it?",
-                name
+                "A maze with the name '{name}' already exists. Overwrite it?"
             ))?;
             if !yes {
                 self.print_line("Maze not saved")?;
@@ -511,7 +506,7 @@ pub trait App: LinePrinter {
             self.get_store().update_maze(&owner, &mut maze)?;
         }
         *self.get_maze_mut() = maze.clone();
-        self.print_line(&format!("Saved as '{}'", name))?;
+        self.print_line(&format!("Saved as '{name}'"))?;
         Ok(())
     }
 
@@ -547,8 +542,7 @@ pub trait App: LinePrinter {
         }
         let name = self.prompt_text("Enter name of maze to delete: ")?;
         let yes = self.prompt_yes_no(&format!(
-            "Are you sure you want to delete the maze '{}'?",
-            name
+            "Are you sure you want to delete the maze '{name}'?"
         ))?;
         if yes {
             self.delete_maze(name.trim())?;
@@ -570,8 +564,7 @@ pub trait App: LinePrinter {
         };
 
         let finish = if self.prompt_yes_no(&format!(
-            "Specify finish point [default: row {}, column {}]?",
-            rows, cols
+            "Specify finish point [default: row {rows}, column {cols}]?"
         ))? {
             let row = self.prompt_number("Finish row:", Some(1), Some(rows))? - 1;
             let col = self.prompt_number("Finish column:", Some(1), Some(cols))? - 1;
@@ -618,7 +611,7 @@ pub trait App: LinePrinter {
                 }
             }
             Err(error) => {
-                self.print_line(&format!("Failed to generate maze: {}", error))?;
+                self.print_line(&format!("Failed to generate maze: {error}"))?;
             }
         }
         Ok(())
@@ -651,12 +644,12 @@ pub trait App: LinePrinter {
                         return Ok(());
                     }
                     _ => {
-                        self.print_line(&format!("Unknown option selected: {}", ch))?;
+                        self.print_line(&format!("Unknown option selected: {ch}"))?;
                         continue;
                     }
                 };
                 if let Err(error) = result {
-                    self.print_line(&format!("Failed: {}", error))?;
+                    self.print_line(&format!("Failed: {error}"))?;
                 }
                 self.press_any_key()?;
                 self.print_menu()?;

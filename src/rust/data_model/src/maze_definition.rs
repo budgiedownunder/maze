@@ -288,8 +288,7 @@ impl MazeDefinition {
                         'W' => MazeCellState::Wall,
                         'S' | 'F' | ' ' => MazeCellState::Empty,
                         _ => panic!(
-                            "internal error - grid contains unsupported cell character: {}",
-                            value
+                            "internal error - grid contains unsupported cell character: {value}"
                         ),
                     })
                     .collect::<Vec<MazeCellState>>()
@@ -387,14 +386,12 @@ impl MazeDefinition {
         self.verify_not_empty()?;
         if start_col >= self.col_count() {
             return Err(Error::MazeValidation(format!(
-                "invalid 'start_col' index ({})",
-                start_col
+                "invalid 'start_col' index ({start_col})"
             )));
         }
         if start_col + count > self.col_count() {
             return Err(Error::MazeValidation(format!(
-                "invalid 'count' ({}) - too large",
-                count
+                "invalid 'count' ({count}) - too large"
             )));
         }
         for row in &mut self.grid {
@@ -434,8 +431,7 @@ impl MazeDefinition {
         self.verify_not_empty()?;
         if start_col > self.col_count() {
             return Err(Error::MazeValidation(format!(
-                "invalid 'start_col' index ({})",
-                start_col
+                "invalid 'start_col' index ({start_col})"
             )));
         }
         for row in &mut self.grid {
@@ -477,14 +473,12 @@ impl MazeDefinition {
         self.verify_not_empty()?;
         if start_row >= self.row_count() {
             return Err(Error::MazeValidation(format!(
-                "invalid 'start_row' index ({})",
-                start_row
+                "invalid 'start_row' index ({start_row})"
             )));
         }
         if start_row + count > self.row_count() {
             return Err(Error::MazeValidation(format!(
-                "invalid 'count' ({}) - too large",
-                count
+                "invalid 'count' ({count}) - too large"
             )));
         }
         self.grid.drain(start_row..(start_row + count));
@@ -522,8 +516,7 @@ impl MazeDefinition {
     pub fn insert_rows(&mut self, start_row: usize, count: usize) -> Result<(), Error> {
         if start_row > self.row_count() {
             return Err(Error::MazeValidation(format!(
-                "invalid 'start_row' index ({})",
-                start_row
+                "invalid 'start_row' index ({start_row})"
             )));
         }
         if count > 0 {
@@ -670,10 +663,10 @@ impl MazeDefinition {
     /// ```
     pub fn set_value(&mut self, from: MazePoint, to: MazePoint, value: char) -> Result<(), Error> {
         if !self.is_valid(&from) {
-            return Err(Error::MazeValidation(format!("invalid 'from' point {}", from)));
+            return Err(Error::MazeValidation(format!("invalid 'from' point {from}")));
         }
         if !self.is_valid(&to) {
-            return Err(Error::MazeValidation(format!("invalid 'to' point {}", to)));
+            return Err(Error::MazeValidation(format!("invalid 'to' point {to}")));
         }
         match value {
             'W' | ' ' => {
@@ -687,7 +680,7 @@ impl MazeDefinition {
                     }
                 }
             }
-            _ => return Err(Error::MazeValidation(format!("invalid 'value' ('{}')", value))),
+            _ => return Err(Error::MazeValidation(format!("invalid 'value' ('{value}')"))),
         }
         Ok(())
     }
@@ -704,7 +697,7 @@ impl MazeDefinition {
             .iter()
             .all(|inner_vec| inner_vec.len() == first_row_col_count);
         if !same_col_counts {
-            let msg = format!("grid vector contains rows with different numbers of columns (expected {} for all rows)", first_row_col_count).clone();
+            let msg = format!("grid vector contains rows with different numbers of columns (expected {first_row_col_count} for all rows)").clone();
             return Some(Error::MazeValidation(msg));
         }
         let mut num_starts = 0;
@@ -762,8 +755,7 @@ impl MazeDefinition {
         if let Some(new_pt) = new {
             if !self.is_valid(&new_pt) {
                 return Err(Error::MazeValidation(format!(
-                    "invalid '{}' point {}",
-                    name, new_pt
+                    "invalid '{name}' point {new_pt}"
                 )));
             }
             if let Some(current_pt) = current {
@@ -1381,7 +1373,7 @@ mod tests {
         ];
         let definition = MazeDefinition::from_vec(grid);
         if let Some(start) = definition.get_start() {
-            panic!("Unexpectedly found start at {}", start);
+            panic!("Unexpectedly found start at {start}");
         };
     }
 
@@ -1395,7 +1387,7 @@ mod tests {
         let mut definition = MazeDefinition::from_vec(grid);
         match definition.set_start(Some(MazePoint { row: 1, col: 0 })) {
             Err(error) => {
-                panic!("Failed to reset start: {}", error);
+                panic!("Failed to reset start: {error}");
             }
             _ => {
                 let new_start = definition.get_start().unwrap();
@@ -1445,7 +1437,7 @@ mod tests {
         ];
         let definition = MazeDefinition::from_vec(grid);
         if let Some(finish) = definition.get_finish() {
-            panic!("Unexpectedly found finish at {}", finish);
+            panic!("Unexpectedly found finish at {finish}");
         };
     }
 
@@ -1459,7 +1451,7 @@ mod tests {
         let mut definition = MazeDefinition::from_vec(grid);
         match definition.set_finish(Some(MazePoint { row: 0, col: 1 })) {
             Err(error) => {
-                panic!("Failed to reset finish: {}", error);
+                panic!("Failed to reset finish: {error}");
             }
             _ => {
                 let new_finish = definition.get_finish().unwrap();

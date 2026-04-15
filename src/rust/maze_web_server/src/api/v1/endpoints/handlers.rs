@@ -88,7 +88,7 @@ fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &AuthSe
     })?;
 
     let password_matches = auth_service.verify_password(&user.password_hash, password).map_err(|err| {
-        log::error!("Password verification failed: {:?}", err);
+        log::error!("Password verification failed: {err:?}");
         ErrorInternalServerError("Internal authentication error")
     })?;
 
@@ -125,23 +125,23 @@ fn user_id_from_str(value: &str) -> Result<Uuid, Error> {
 
 // Password-related errors
 fn get_hash_password_internal_error(err: &argon2::password_hash::Error) -> Error {
-    ErrorInternalServerError(format!("Error hashing password: {}", err))
+    ErrorInternalServerError(format!("Error hashing password: {err}"))
 }
 
 // User-related errors
 fn get_users_fetch_internal_error(err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error fetching users: {}", err))
+    ErrorInternalServerError(format!("Error fetching users: {err}"))
 }
 fn get_user_create_internal_error(err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error creating user: {}", err))
+    ErrorInternalServerError(format!("Error creating user: {err}"))
 }
 
 fn get_user_update_internal_error(err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error updating user: {}", err))
+    ErrorInternalServerError(format!("Error updating user: {err}"))
 }
 
 fn get_user_not_found_error(id: String) -> Error {
-    ErrorNotFound(format!("User with id '{}' not found", id))
+    ErrorNotFound(format!("User with id '{id}' not found"))
 }
 
 fn get_user_exists_error() -> Error {
@@ -149,7 +149,7 @@ fn get_user_exists_error() -> Error {
 }
 
 fn get_invalid_request_error(reason: &str) -> Error {
-    ErrorBadRequest(format!("Invalid request ({})", reason))
+    ErrorBadRequest(format!("Invalid request ({reason})"))
 }
 
 fn get_missing_username_request_error() -> Error {
@@ -184,7 +184,7 @@ fn get_invalid_email_request_error() -> Error {
 }
 
 fn get_user_fetch_internal_error(id: Uuid, err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error fetching user item with id '{}': {}", id, err))
+    ErrorInternalServerError(format!("Error fetching user item with id '{id}': {err}"))
 }
 
 fn get_cannot_delete_last_admin_error() -> Error {
@@ -198,31 +198,31 @@ fn is_last_admin(store_lock: &RwLockWriteGuard<'_, Box<dyn Store>>, user_id: Uui
 
 // Maze-related errors
 fn get_mazes_fetch_internal_error(err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error fetching maze items: {}", err))
+    ErrorInternalServerError(format!("Error fetching maze items: {err}"))
 }
 
 fn get_maze_create_internal_error(err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error creating maze: {}", err))
+    ErrorInternalServerError(format!("Error creating maze: {err}"))
 }
 
 fn get_maze_not_found_error(id: &str) -> Error {
-    ErrorNotFound(format!("Maze with id '{}' not found", id))
+    ErrorNotFound(format!("Maze with id '{id}' not found"))
 }
 
 fn get_maze_exists_error(id: &str) -> Error {
-    ErrorConflict(format!("Maze with id '{}' already exists", id))
+    ErrorConflict(format!("Maze with id '{id}' already exists"))
 }
 
 fn get_maze_fetch_internal_error(id: &str, err: &StoreError) -> Error {
-    ErrorInternalServerError(format!("Error fetching maze item with id '{}': {}", id, err))
+    ErrorInternalServerError(format!("Error fetching maze item with id '{id}': {err}"))
 }
 
 fn get_maze_id_mismatch_error(url_id: &str, maze_id: &str) -> Error {
-    ErrorBadRequest(format!("URL ID '{}' and body maze ID '{}' do not match", url_id, maze_id))
+    ErrorBadRequest(format!("URL ID '{url_id}' and body maze ID '{maze_id}' do not match"))
 }
 
 pub (crate) fn get_maze_solve_error_string(err: &MazeError) -> String {
-    format!("The maze could not be solved: {}", err)
+    format!("The maze could not be solved: {err}")
 }
 
 fn get_maze_solve_error(err: &MazeError) -> Error {
@@ -230,7 +230,7 @@ fn get_maze_solve_error(err: &MazeError) -> Error {
 }
 
 pub (crate) fn get_maze_generate_error_string(err: &MazeError) -> String {
-    format!("The maze could not be generated: {}", err)
+    format!("The maze could not be generated: {err}")
 }
 
 fn get_maze_generate_error(err: &MazeError) -> Error {
@@ -327,14 +327,14 @@ pub async fn get_features(
 fn update_features_in_config(config_path: &str, new_features: &AppFeaturesResponse) -> Result<(), Error> {
     let content = std::fs::read_to_string(config_path).unwrap_or_default();
     let mut doc = content.parse::<toml_edit::DocumentMut>().map_err(|e| {
-        ErrorInternalServerError(format!("Failed to parse config file: {}", e))
+        ErrorInternalServerError(format!("Failed to parse config file: {e}"))
     })?;
     if doc.get("features").is_none() {
         doc["features"] = toml_edit::table();
     }
     doc["features"]["allow_signup"] = toml_edit::value(new_features.allow_signup);
     std::fs::write(config_path, doc.to_string()).map_err(|e| {
-        ErrorInternalServerError(format!("Failed to write config file: {}", e))
+        ErrorInternalServerError(format!("Failed to write config file: {e}"))
     })?;
     Ok(())
 }
@@ -585,7 +585,7 @@ pub async fn change_password_me(
     let password_matches = auth_service
         .verify_password(&user.password_hash, &change_req_data.current_password)
         .map_err(|err| {
-            log::error!("Password verification failed: {:?}", err);
+            log::error!("Password verification failed: {err:?}");
             ErrorInternalServerError("Internal authentication error")
         })?;
 
@@ -657,7 +657,7 @@ pub async fn update_profile_me(
     let mut user = get_authorized_user(&req, false)?;
     let store_lock = get_store_write_lock(&store)?;
     update_req.into_inner().apply_to_store_user(&mut user);
-    update_store_user(store_lock, &mut user, |err| get_user_update_internal_error(err))
+    update_store_user(store_lock, &mut user, get_user_update_internal_error)
 }
 // **************************************************************************************************
 // Endpoint: GET /api/v1/login
@@ -1087,7 +1087,7 @@ pub async fn delete_user(
 
     match store_lock.delete_user(id) {
         Ok(()) => {
-            Ok(HttpResponse::Ok().body(format!("user with id '{}' deleted", id)))
+            Ok(HttpResponse::Ok().body(format!("user with id '{id}' deleted")))
         }    
         Err(err) => {
             match err {
@@ -1313,7 +1313,7 @@ pub async fn delete_maze(
 
     match store_lock.delete_maze(&user, &id) {
         Ok(()) => {
-            Ok(HttpResponse::Ok().body(format!("maze with id '{}' deleted", id)))
+            Ok(HttpResponse::Ok().body(format!("maze with id '{id}' deleted")))
         }    
         Err(err) => {
             match err {

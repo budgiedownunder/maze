@@ -38,9 +38,9 @@ impl std::fmt::Display for UserValidationError {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
-            Error::MazeValidation(ref message) => write!(f, "{}", message),
-            Error::Serialization(ref error) => write!(f, "{}", error),
-            Error::UserValidation(ref error) => write!(f, "{}", error),
+            Error::MazeValidation(ref message) => write!(f, "{message}"),
+            Error::Serialization(ref error) => write!(f, "{error}"),
+            Error::UserValidation(ref error) => write!(f, "{error}"),
         }
     }
 }

@@ -159,7 +159,7 @@ mod tests {
         let json = login_created.to_json().expect("Failed to serialize");
         let mut login_loaded  = UserLogin::new(0, Some("".to_string()), Some("".to_string()));
         if let Err(err) = login_loaded.from_json(&json) {
-            panic!("failed to deserialize: {}", err);
+            panic!("failed to deserialize: {err}");
         }
         assert_eq!(login_created, login_loaded);
     }

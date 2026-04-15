@@ -27,8 +27,8 @@ fn load_rustls_config(config: &AppConfig) -> io::Result<ServerConfig> {
     let cert_file_name = &config.security.cert_file;
     let key_file_name =  &config.security.key_file;
 
-    let mut cert_reader = BufReader::new(File::open(cert_file_name).unwrap_or_else(|_| panic!("Cannot open private key file '{}'", key_file_name)));
-    let key_reader = &mut BufReader::new(File::open(key_file_name).unwrap_or_else(|_| panic!("Cannot open private key file '{}'", key_file_name)));
+    let mut cert_reader = BufReader::new(File::open(cert_file_name).unwrap_or_else(|_| panic!("Cannot open private key file '{key_file_name}'")));
+    let key_reader = &mut BufReader::new(File::open(key_file_name).unwrap_or_else(|_| panic!("Cannot open private key file '{key_file_name}'")));
 
     let cert_chain = certs(&mut cert_reader)?
         .into_iter()
@@ -36,13 +36,13 @@ fn load_rustls_config(config: &AppConfig) -> io::Result<ServerConfig> {
         .collect::<Vec<_>>();
 
     if cert_chain.is_empty() {
-        panic!("{}", format!("No certificates found in '{}'! Ensure it's PKCS#8 format.", cert_file_name));
+        panic!("{}", format!("No certificates found in '{cert_file_name}'! Ensure it's PKCS#8 format."));
     }
     
     let mut keys = pkcs8_private_keys(key_reader)?;
 
     if keys.is_empty() {
-        panic!("{}", format!("No private keys found in '{}'! Ensure it's PKCS#8 format.", key_file_name));
+        panic!("{}", format!("No private keys found in '{key_file_name}'! Ensure it's PKCS#8 format."));
     }
 
     let key = PrivateKey(keys.remove(0));
@@ -51,14 +51,14 @@ fn load_rustls_config(config: &AppConfig) -> io::Result<ServerConfig> {
         .with_safe_defaults()
         .with_no_client_auth()
         .with_single_cert(cert_chain, key)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("TLS setup error: {:?}", e)))?;
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("TLS setup error: {e:?}")))?;
 
     Ok(config)
 }
 
 /// Constructs the server bind address on which the server will listen for requests
 fn construct_bind_address(port: u16) -> String {
-    format!("0.0.0.0:{}", port)
+    format!("0.0.0.0:{port}")
 }
 
 /// Adds the default admin account to the store if no users are registered
@@ -67,7 +67,7 @@ fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Stor
     if users.is_empty() {
         let password_hash = match hash_password(DEFAULT_ADMIN_ACCOUNT_PASSWORD, hash_config) {
             Ok(hash) => hash,
-            Err(error) => return Err(StoreError::Other(format!("{}", error))),
+            Err(error) => return Err(StoreError::Other(format!("{error}"))),
         };
         store.init_default_admin_user(DEFAULT_ADMIN_ACCOUNT_USERNAME, &password_hash)?;
     }
@@ -100,7 +100,7 @@ pub fn create_app(
         .service(api::register_swagger_ui())
         .configure(move |cfg| {
             if std::path::Path::new(&static_dir).is_dir() {
-                let index_path = format!("{}/index.html", static_dir);
+                let index_path = format!("{static_dir}/index.html");
 
                 // Register known SPA routes explicitly.
                 // This prevents actix-files from attempting to decode the URL path as
@@ -136,7 +136,7 @@ pub fn create_app(
                            }),
                    );
             } else {
-                log::info!("static_dir '{}' does not exist — running as API-only", static_dir);
+                log::info!("static_dir '{static_dir}' does not exist — running as API-only");
             }
         })
 }

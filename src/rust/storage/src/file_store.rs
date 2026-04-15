@@ -123,7 +123,7 @@ impl FileStore {
 
         match store.init() {
             Ok(_) => store,
-            Err(error) => panic!("Failed to initialize file store: {}", error),
+            Err(error) => panic!("Failed to initialize file store: {error}"),
         }
     }
 
@@ -141,8 +141,7 @@ impl FileStore {
         match fs::create_dir_all(normalized_path) {
             Ok(_) => Ok(dir.to_string()),
             Err(error) => Err(Error::Other(format!(
-                "Failed to create directory: {} - {}",
-                dir, error
+                "Failed to create directory: {dir} - {error}"
             ))),
         }
     }
@@ -317,7 +316,7 @@ impl FileStore {
 
     // Returns the maze id for a given maze name
     fn make_maze_id(&self, name: &str) -> String {
-        format!("{}.json", name)
+        format!("{name}.json")
     }
 
     // Returns the mazes directory for a given owner
@@ -557,7 +556,7 @@ impl UserStore for FileStore {
         delete_dir(&self.user_dir_path(id));
 
         if self.user_dir_exists(id) {
-            panic!("User directory {} still exists XXX", id);
+            panic!("User directory {id} still exists XXX");
         }
 
         Ok(())
@@ -1463,8 +1462,7 @@ impl Manage for FileStore {
         }
         if let Err(error) = self.init() {
             return Err(Error::Other(format!(
-                "Failed to reinitialize FileStore: {}",
-                error
+                "Failed to reinitialize FileStore: {error}"
             )));
         }
         Ok(())
@@ -1483,7 +1481,7 @@ mod tests {
     fn new_store() -> FileStore {
         let mut store = FileStore::new(&FileStoreConfig::default());
         if let Err(error) = store.empty() {
-            panic!("new_store() failed to empty content: {}", error);
+            panic!("new_store() failed to empty content: {error}");
         }
         store
     }
@@ -1568,7 +1566,7 @@ mod tests {
     fn cannot_create_user_without_name() {
         let mut store = new_store();
         let user = create_user(&mut store, false, "", "", "", "");
-        panic!("Successfully created user {:?} but did not expect to", user);
+        panic!("Successfully created user {user:?} but did not expect to");
     }
 
     #[test]
@@ -1576,7 +1574,7 @@ mod tests {
     fn cannot_create_user_with_invalid_email() {
         let mut store = new_store();
         let user = create_user(&mut store, false, "test", "", "bad_email_address", "");
-        panic!("Successfully created user {:?} but did not expect to", user);
+        panic!("Successfully created user {user:?} but did not expect to");
     }
 
     #[test]
@@ -1584,7 +1582,7 @@ mod tests {
     fn cannot_create_user_without_password() {
         let mut store = new_store();
         let user = create_user(&mut store, false, "test", "", "test@company.com", "");
-        panic!("Successfully created user {:?} but did not expect to", user);
+        panic!("Successfully created user {user:?} but did not expect to");
     }
 
     #[test]
@@ -1650,7 +1648,7 @@ mod tests {
                 }
             }
             Err(error) => {
-                panic!("Failed to load saved user: {}", error);
+                panic!("Failed to load saved user: {error}");
             }
         }
     }
@@ -1662,8 +1660,7 @@ mod tests {
         match store.get_user(id) {
             Ok(_) => {
                 panic!(
-                    "Loaded user content for id '{}' when did not expected to",
-                    id
+                    "Loaded user content for id '{id}' when did not expected to"
                 );
             }
             Err(error) => {
@@ -1671,8 +1668,7 @@ mod tests {
                 let err_msg_expected = Error::UserIdNotFound(id.to_string()).to_string();
                 if err_msg != err_msg_expected {
                     panic!(
-                        "Unexpected error returned: '{}', expected: '{}'",
-                        err_msg, err_msg_expected
+                        "Unexpected error returned: '{err_msg}', expected: '{err_msg_expected}'"
                     );
                 }
             }
@@ -1725,15 +1721,14 @@ mod tests {
 
         match store.delete_user(id) {
             Ok(()) => {
-                panic!("delete_user() suceeded for id {}", id);
+                panic!("delete_user() suceeded for id {id}");
             }
             Err(error) => {
                 let err_msg = error.to_string();
                 let err_msg_expected = Error::UserIdNotFound(id.to_string()).to_string();
                 if err_msg != err_msg_expected {
                     panic!(
-                        "Unexpected error returned: '{}', expected: '{}'",
-                        err_msg, err_msg_expected
+                        "Unexpected error returned: '{err_msg}', expected: '{err_msg_expected}'"
                     );
                 }
             }
@@ -1752,7 +1747,7 @@ mod tests {
             "password_hash",
         );
         if let Err(error) = store.update_user(&mut user) {
-            panic!("Failed to update user: '{}'", error);
+            panic!("Failed to update user: '{error}'");
         }
     }
 
@@ -1766,8 +1761,7 @@ mod tests {
             let err_msg_expected = Error::UserIdNotFound(user.id.to_string()).to_string();
             if err_msg != err_msg_expected {
                 panic!(
-                    "Unexpected error returned: '{}', expected: '{}'",
-                    err_msg, err_msg_expected
+                    "Unexpected error returned: '{err_msg}', expected: '{err_msg_expected}'"
                 );
             }
         }
@@ -1787,7 +1781,7 @@ mod tests {
         );
         user.id = Uuid::nil();
         if let Err(error) = store.update_user(&mut user) {
-            panic!("{}'", error);
+            panic!("{error}'");
         }
     }
 
@@ -1909,7 +1903,7 @@ mod tests {
             "password_hash",
         );
         if let Err(error) = store.find_user_by_name("test") {
-            panic!("Failed to find user by name: {}", error);
+            panic!("Failed to find user by name: {error}");
         }
     }
 
@@ -1942,7 +1936,7 @@ mod tests {
             "password_hash",
         );
         if let Err(error) = store.find_user_by_api_key(user.api_key) {
-            panic!("Failed to find user by api_key: {}", error);
+            panic!("Failed to find user by api_key: {error}");
         }
     }
 
@@ -2005,8 +1999,7 @@ mod tests {
                 let names: Vec<String> = users.iter().map(|p| p.username.clone()).collect();
                 if names != expected_names {
                     panic!(
-                        "Expected usernames: {:?} but got: {:?}",
-                        expected_names, names
+                        "Expected usernames: {expected_names:?} but got: {names:?}"
                     );
                 }
             }
@@ -2039,7 +2032,7 @@ mod tests {
 
         match store.write_maze_file(&owner, &mut maze, &id, true) {
             Ok(_) => {}
-            Err(error) => panic!("Failed to save to file: {}", error),
+            Err(error) => panic!("Failed to save to file: {error}"),
         }
     }
 
@@ -2062,8 +2055,7 @@ mod tests {
         match store.write_maze_file(&owner, &mut maze, &id, false) {
             Ok(_) => {
                 panic!(
-                    "Successfully saved to existing file: {} despite overwrite being false",
-                    path
+                    "Successfully saved to existing file: {path} despite overwrite being false"
                 );
             }
             Err(error) => {
@@ -2109,7 +2101,7 @@ mod tests {
 
         match store.create_maze(&owner, &mut maze) {
             Ok(_) => {}
-            Err(error) => panic!("Failed to create maze: {}", error),
+            Err(error) => panic!("Failed to create maze: {error}"),
         }
     }
 
@@ -2152,8 +2144,7 @@ mod tests {
         match store.create_maze(&owner, &mut maze) {
             Ok(_) => {
                 panic!(
-                    "Successfully created maze when file: {} existed, when should not have",
-                    path
+                    "Successfully created maze when file: {path} existed, when should not have"
                 );
             }
             Err(error) => {
@@ -2201,7 +2192,7 @@ mod tests {
 
         match store.update_maze(&owner, &mut maze) {
             Ok(_) => {
-                panic!("Successfully updated maze when file: {} did not exist", id);
+                panic!("Successfully updated maze when file: {id} did not exist");
             }
             Err(error) => {
                 panic!("{}", error);
@@ -2255,13 +2246,13 @@ mod tests {
                                 panic!("Maze file {} still exists after maze delete", maze.id);
                             }
                         }
-                        Err(error) => panic!("Failed to delete maze: {}", error),
+                        Err(error) => panic!("Failed to delete maze: {error}"),
                     }
                 } else {
                     panic!("Saved maze file not found prior to maze delete test");
                 }
             }
-            Err(error) => panic!("Failed to save maze to file: {}", error),
+            Err(error) => panic!("Failed to save maze to file: {error}"),
         }
     }
 
@@ -2309,11 +2300,11 @@ mod tests {
                     }
                 }
                 Err(error) => {
-                    panic!("Failed to load saved maze: {}", error);
+                    panic!("Failed to load saved maze: {error}");
                 }
             },
             Err(error) => {
-                panic!("Failed to create maze: {}", error);
+                panic!("Failed to create maze: {error}");
             }
         }
     }
