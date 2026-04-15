@@ -13,6 +13,7 @@ import { useToken } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useMazeEditor } from '../hooks/useMazeEditor'
+import { useWalkAnimation } from '../hooks/useWalkAnimation'
 import { getMaze, createMaze, updateMaze } from '../api/client'
 
 const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
@@ -74,7 +75,10 @@ export function MazePage() {
   const [isSolving, setIsSolving] = useState(false)
   const [solveError, setSolveError] = useState<string | null>(null)
 
-  const isBusy = isSaving || isRefreshing || isGenerating || isSolving
+  // Walk animation state
+  const { walkState, isWalking, startWalk, cancelWalk } = useWalkAnimation()
+
+  const isBusy = isSaving || isRefreshing || isGenerating || isSolving || isWalking
   const hasUnsavedWork = isDirty || (isNew && mazeId === null)
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
@@ -226,7 +230,23 @@ export function MazePage() {
     }
   }
 
+  async function handleWalkSolution() {
+    setIsSolving(true)
+    setSolveError(null)
+    try {
+      await new Promise<void>(r => requestAnimationFrame(() => r()))
+      const path = await solveMaze({ grid })
+      setIsSolving(false)
+      startWalk(path, () => applySolution(path))
+    } catch (ex: unknown) {
+      const msg = (ex as { message?: string }).message ?? 'Unknown error.'
+      setSolveError(msg.charAt(0).toUpperCase() + msg.slice(1))
+      setIsSolving(false)
+    }
+  }
+
   function handleClearSolution() {
+    cancelWalk()
     clearSolution()
   }
 
@@ -259,46 +279,46 @@ export function MazePage() {
     switch (e.key) {
       case 'ArrowUp':
         e.preventDefault()
-        moveActive(-1, 0, e.shiftKey, e.ctrlKey || e.metaKey)
+        if (!isBusy) moveActive(-1, 0, e.shiftKey, e.ctrlKey || e.metaKey)
         break
       case 'ArrowDown':
         e.preventDefault()
-        moveActive(1, 0, e.shiftKey, e.ctrlKey || e.metaKey)
+        if (!isBusy) moveActive(1, 0, e.shiftKey, e.ctrlKey || e.metaKey)
         break
       case 'ArrowLeft':
         e.preventDefault()
-        moveActive(0, -1, e.shiftKey, e.ctrlKey || e.metaKey)
+        if (!isBusy) moveActive(0, -1, e.shiftKey, e.ctrlKey || e.metaKey)
         break
       case 'ArrowRight':
         e.preventDefault()
-        moveActive(0, 1, e.shiftKey, e.ctrlKey || e.metaKey)
+        if (!isBusy) moveActive(0, 1, e.shiftKey, e.ctrlKey || e.metaKey)
         break
       case 'Home':
         e.preventDefault()
-        moveActiveHome(e.shiftKey, e.ctrlKey || e.metaKey)
+        if (!isBusy) moveActiveHome(e.shiftKey, e.ctrlKey || e.metaKey)
         break
       case 'End':
         e.preventDefault()
-        moveActiveEnd(e.shiftKey, e.ctrlKey || e.metaKey)
+        if (!isBusy) moveActiveEnd(e.shiftKey, e.ctrlKey || e.metaKey)
         break
       case 'w':
       case 'W':
-        if (!selectionStatus.isAllWalls && !selectionStatus.hasSolution) setWall()
+        if (!isBusy && !selectionStatus.isAllWalls && !selectionStatus.hasSolution) setWall()
         break
       case 's':
       case 'S':
-        if (selectionStatus.isSingleCell && !selectionStatus.isStart && !selectionStatus.hasSolution) setStart()
+        if (!isBusy && selectionStatus.isSingleCell && !selectionStatus.isStart && !selectionStatus.hasSolution) setStart()
         break
       case 'f':
       case 'F':
-        if (selectionStatus.isSingleCell && !selectionStatus.isFinish && !selectionStatus.hasSolution) setFinish()
+        if (!isBusy && selectionStatus.isSingleCell && !selectionStatus.isFinish && !selectionStatus.hasSolution) setFinish()
         break
       case 'Delete':
       case 'Backspace':
-        if (!selectionStatus.isEmpty && !selectionStatus.hasSolution) clearCell()
+        if (!isBusy && !selectionStatus.isEmpty && !selectionStatus.hasSolution) clearCell()
         break
     }
-  }, [moveActive, moveActiveHome, moveActiveEnd, setWall, setStart, setFinish, clearCell, selectionStatus])
+  }, [isBusy, moveActive, moveActiveHome, moveActiveEnd, setWall, setStart, setFinish, clearCell, selectionStatus])
 
   const headerTitle = isNew
     ? '(unsaved)'
@@ -516,9 +536,18 @@ export function MazePage() {
             </button>
             <button
               className="maze-toolbar-btn"
+              title="Walk Solution"
+              aria-label="Walk Solution"
+              disabled={selectionStatus.hasSolution || isBusy}
+              onClick={handleWalkSolution}
+            >
+              <img src="/images/maze/walk_solution_button.png" alt="Walk Solution" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
               title="Clear Solution"
               aria-label="Clear Solution"
-              disabled={!selectionStatus.hasSolution || isBusy}
+              disabled={(!selectionStatus.hasSolution && !isWalking) || isSaving || isRefreshing || isGenerating || isSolving}
               onClick={handleClearSolution}
             >
               <img src="/images/maze/clear_solution_button.png" alt="Clear Solution" />
@@ -552,14 +581,15 @@ export function MazePage() {
             ref={gridRef}
             grid={grid}
             solution={solution}
+            walkState={walkState}
             activeCell={activeCell}
             anchorCell={anchorCell}
             isRangeMode={isRangeMode}
-            onCellClick={(row, col, shift) => activateCell(row, col, shift || (isTouchOnly && anchorCell !== null))}
-            onCellDoubleClick={handleCellDoubleClick}
-            onRowHeaderClick={(row, shift) => activateRow(row, shift || (isTouchOnly && anchorCell !== null))}
-            onColHeaderClick={(col, shift) => activateCol(col, shift || (isTouchOnly && anchorCell !== null))}
-            onCornerClick={() => selectAll()}
+            onCellClick={isBusy ? undefined : (row, col, shift) => activateCell(row, col, shift || (isTouchOnly && anchorCell !== null))}
+            onCellDoubleClick={isBusy ? undefined : handleCellDoubleClick}
+            onRowHeaderClick={isBusy ? undefined : (row, shift) => activateRow(row, shift || (isTouchOnly && anchorCell !== null))}
+            onColHeaderClick={isBusy ? undefined : (col, shift) => activateCol(col, shift || (isTouchOnly && anchorCell !== null))}
+            onCornerClick={isBusy ? undefined : () => selectAll()}
             onKeyDown={handleKeyDown}
           />
         )}

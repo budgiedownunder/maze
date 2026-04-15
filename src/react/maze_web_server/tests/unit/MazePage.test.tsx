@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, within, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
@@ -625,7 +625,7 @@ describe('MazePage generate', () => {
     await waitFor(() =>
       expect(within(screen.getByRole('dialog', { name: 'Generate Maze' })).getByRole('button', { name: 'Generate' })).toBeDisabled()
     )
-    resolveGenerate(generatedDefinition)
+    await act(async () => { resolveGenerate(generatedDefinition) })
   })
 })
 
@@ -720,7 +720,7 @@ describe('MazePage solve', () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Solve' })).toBeDisabled())
-    resolveSolve(solvePath)
+    await act(async () => { resolveSolve(solvePath) })
   })
 
   it('editing buttons and Solve are disabled while the solution is displayed', async () => {
@@ -732,6 +732,122 @@ describe('MazePage solve', () => {
     expect(screen.getByRole('button', { name: 'Generate' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Solve' })).toBeDisabled()
   })
+})
+
+// ──────────────────────────────────────────────────────────────
+// Walk Solution
+// ──────────────────────────────────────────────────────────────
+
+describe('MazePage walk solution', () => {
+  async function loadMazePage(path: string) {
+    renderMazePage(path)
+    if (path !== '/mazes/new') {
+      await waitFor(() => expect(screen.queryByLabelText('Loading')).not.toBeInTheDocument())
+    }
+  }
+
+  it('Walk Solution button is present and enabled when no solution is shown', async () => {
+    await loadMazePage('/mazes/new')
+    expect(screen.getByRole('button', { name: 'Walk Solution' })).not.toBeDisabled()
+  })
+
+  it('Walk Solution button is disabled when a solution is already displayed', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Clear Solution' })).not.toBeDisabled())
+    expect(screen.getByRole('button', { name: 'Walk Solution' })).toBeDisabled()
+  })
+
+  it('Walk Solution button is disabled while solving', async () => {
+    let resolveSolve!: (v: typeof solvePath) => void
+    mockSolveMaze.mockReturnValue(new Promise(r => { resolveSolve = r }))
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Walk Solution' })).toBeDisabled())
+    resolveSolve(solvePath)
+  })
+
+  it('clicking Walk Solution calls solveMaze', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
+    await waitFor(() => expect(mockSolveMaze).toHaveBeenCalledWith({ grid: mockMazeAlpha.definition.grid }))
+  })
+
+  it('on WASM error an alert dialog is shown and walk does not start', async () => {
+    mockSolveMaze.mockRejectedValue(new Error('no path exists'))
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Unable to solve maze' })).toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: 'Unable to solve maze' })).toHaveTextContent('No path exists')
+    expect(screen.queryByAltText('Walker')).not.toBeInTheDocument()
+  })
+
+  it('walker image appears at the start cell during animation', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
+    // Walker GIF should appear before the animation completes
+    await waitFor(() => expect(screen.getByAltText('Walker')).toBeInTheDocument())
+  })
+
+  it('after walk completes the full solution overlay is displayed', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
+    // Wait for Walker to appear first, then disappear (final timer nulls walkState
+    // and calls applySolution in the same batch).
+    await waitFor(() => expect(screen.getByAltText('Walker')).toBeInTheDocument(), { timeout: 3000 })
+    await waitFor(() => expect(screen.queryByAltText('Walker')).not.toBeInTheDocument(), { timeout: 5000 })
+    expect(screen.getAllByAltText('Solution path').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Clear Solution' })).not.toBeDisabled()
+  }, 10000)
+
+  it('Clear Solution is enabled while walk is in progress', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
+    await waitFor(() => expect(screen.getByAltText('Walker')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Clear Solution' })).not.toBeDisabled()
+  })
+
+  it('clicking Clear Solution mid-walk cancels the walk and resets the grid', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
+    await waitFor(() => expect(screen.getByAltText('Walker')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Solution' }))
+    expect(screen.queryByAltText('Walker')).not.toBeInTheDocument()
+    expect(screen.queryByAltText('Solution path')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Walk Solution' })).not.toBeDisabled()
+  })
+
+  it('clicking a cell during walk does not change the active cell selection', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
+    await waitFor(() => expect(screen.getByAltText('Walker')).toBeInTheDocument())
+    // Cell 1,3 is a Wall — clicking it should have no effect while the walk is running
+    await userEvent.click(screen.getByLabelText('Cell 1,3'))
+    expect(screen.getByLabelText('Cell 1,3').className).not.toContain('maze-cell--anchor')
+  })
+
+  it('pressing W during walk does not set a wall', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    const wallsBefore = screen.getAllByAltText('Wall').length
+    await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
+    await waitFor(() => expect(screen.getByAltText('Walker')).toBeInTheDocument())
+    fireEvent.keyDown(screen.getByLabelText('Maze grid'), { key: 'W' })
+    expect(screen.getAllByAltText('Wall').length).toBe(wallsBefore)
+  })
+
+  it('Clear Solution after walk removes the overlay and re-enables editing', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
+    await waitFor(
+      () => expect(screen.getByRole('button', { name: 'Clear Solution' })).not.toBeDisabled(),
+      { timeout: 5000 },
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Solution' }))
+    expect(screen.queryByAltText('Solution path')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Walk Solution' })).not.toBeDisabled()
+  }, 10000)
 })
 
 // ──────────────────────────────────────────────────────────────

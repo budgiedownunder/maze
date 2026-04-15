@@ -218,3 +218,93 @@ describe('MazeGrid', () => {
     expect(frame.classList.contains('maze-selection-frame--single')).toBe(false)
   })
 })
+
+// ──────────────────────────────────────────────────────────────
+// Walk animation rendering
+// ──────────────────────────────────────────────────────────────
+
+const WALK_PATH = [
+  { row: 0, col: 0 }, // S
+  { row: 1, col: 0 },
+  { row: 2, col: 0 },
+  { row: 2, col: 2 }, // F
+]
+
+describe('MazeGrid walk animation', () => {
+  it('renders walker image at the current walk position', () => {
+    renderGrid({
+      walkState: { path: WALK_PATH, currentIndex: 1, isComplete: false },
+    })
+    expect(screen.getByAltText('Walker')).toBeInTheDocument()
+    // Walker is in cell (1,0) = Cell 2,1
+    const cell = screen.getByLabelText('Cell 2,1')
+    expect(cell.querySelector('img[alt="Walker"]')).toBeInTheDocument()
+  })
+
+  it('walker cell does not render normal cell image (wall/start/finish)', () => {
+    // Put walker on the Start cell (row 0, col 0)
+    renderGrid({
+      walkState: { path: WALK_PATH, currentIndex: 0, isComplete: false },
+    })
+    const startCell = screen.getByLabelText('Cell 1,1')
+    expect(startCell.querySelector('img[alt="Walker"]')).toBeInTheDocument()
+    expect(startCell.querySelector('img[alt="Start"]')).not.toBeInTheDocument()
+  })
+
+  it('walked cells show solution path images', () => {
+    // currentIndex=2: cells at indices 0 and 1 have been walked
+    renderGrid({
+      walkState: { path: WALK_PATH, currentIndex: 2, isComplete: false },
+    })
+    // index 0 = (0,0) = Start cell — S/F cells never get footstep overlay
+    // index 1 = (1,0) — empty cell should have footstep
+    const walkedCell = screen.getByLabelText('Cell 2,1')
+    expect(walkedCell.querySelector('img[alt="Solution path"]')).toBeInTheDocument()
+  })
+
+  it('walked cells receive maze-cell--solution class', () => {
+    renderGrid({
+      walkState: { path: WALK_PATH, currentIndex: 2, isComplete: false },
+    })
+    // Cell (1,0) = Cell 2,1 was walked
+    expect(screen.getByLabelText('Cell 2,1').className).toContain('maze-cell--solution')
+  })
+
+  it('walker cell receives maze-cell--solution class', () => {
+    renderGrid({
+      walkState: { path: WALK_PATH, currentIndex: 1, isComplete: false },
+    })
+    expect(screen.getByLabelText('Cell 2,1').className).toContain('maze-cell--solution')
+  })
+
+  it('unwalked cells render normally', () => {
+    renderGrid({
+      walkState: { path: WALK_PATH, currentIndex: 1, isComplete: false },
+    })
+    // Cell (2,2) = Cell 3,3 = Finish — not yet reached
+    const finishCell = screen.getByLabelText('Cell 3,3')
+    expect(finishCell.querySelector('img[alt="Finish"]')).toBeInTheDocument()
+    expect(finishCell.querySelector('img[alt="Walker"]')).not.toBeInTheDocument()
+  })
+
+  it('renders celebrate image when isComplete is true', () => {
+    renderGrid({
+      walkState: { path: WALK_PATH, currentIndex: WALK_PATH.length - 1, isComplete: true },
+    })
+    const walkerImg = screen.getByAltText('Walker')
+    expect(walkerImg).toHaveAttribute('src', '/images/maze/walker_celebrate.gif')
+  })
+
+  it('walker image src reflects direction of travel', () => {
+    // currentIndex=0, next is (1,0) so direction is 'down'
+    renderGrid({
+      walkState: { path: WALK_PATH, currentIndex: 0, isComplete: false },
+    })
+    expect(screen.getByAltText('Walker')).toHaveAttribute('src', '/images/maze/walker_down.gif')
+  })
+
+  it('no walker image when walkState is null', () => {
+    renderGrid()
+    expect(screen.queryByAltText('Walker')).not.toBeInTheDocument()
+  })
+})

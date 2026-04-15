@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CellPoint } from '../hooks/useMazeEditor'
+import type { WalkState } from '../hooks/useWalkAnimation'
 
 export const CELL_SIZE = 32
 export const HEADER_SIZE = 24
@@ -7,6 +8,7 @@ export const HEADER_SIZE = 24
 interface MazeGridProps {
   grid: string[][]
   solution: Array<CellPoint> | null
+  walkState?: WalkState | null
   activeCell: CellPoint | null
   anchorCell: CellPoint | null
   isRangeMode?: boolean
@@ -30,6 +32,44 @@ const FOOTSTEP_IMAGES: Record<string, string> = {
   down: '/images/maze/footsteps_down.png',
   left: '/images/maze/footsteps_left.png',
   right: '/images/maze/footsteps_right.png',
+}
+
+const WALKER_IMAGES: Record<string, string> = {
+  up: '/images/maze/walker_up.gif',
+  down: '/images/maze/walker_down.gif',
+  left: '/images/maze/walker_left.gif',
+  right: '/images/maze/walker_right.gif',
+}
+const WALKER_CELEBRATE_IMG = '/images/maze/walker_celebrate.gif'
+
+function directionBetween(from: CellPoint, to: CellPoint): string {
+  if (to.row < from.row) return 'up'
+  if (to.row > from.row) return 'down'
+  if (to.col < from.col) return 'left'
+  return 'right'
+}
+
+interface WalkInfo {
+  walkerKey: string
+  walkerImg: string
+  walkedMap: Map<string, string>
+}
+
+function buildWalkInfo(walkState: WalkState): WalkInfo {
+  const { path, currentIndex, isComplete } = walkState
+  const current = path[currentIndex]
+  const walkerKey = `${current.row},${current.col}`
+
+  let walkerImg: string
+  if (isComplete) {
+    walkerImg = WALKER_CELEBRATE_IMG
+  } else {
+    const next = path[currentIndex + 1]
+    walkerImg = WALKER_IMAGES[directionBetween(current, next)]
+  }
+
+  const walkedMap = buildSolutionMap(path.slice(0, currentIndex))
+  return { walkerKey, walkerImg, walkedMap }
 }
 
 function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
@@ -61,7 +101,7 @@ function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
 
 export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
   function MazeGrid(
-    { grid, solution, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown },
+    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown },
     ref,
   ) {
     const rows = grid.length
@@ -70,6 +110,11 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
     const solutionMap = useMemo(
       () => (solution ? buildSolutionMap(solution) : new Map<string, string>()),
       [solution],
+    )
+
+    const walkInfo = useMemo(
+      () => (walkState ? buildWalkInfo(walkState) : null),
+      [walkState],
     )
 
     const selectionRect = useMemo(() => {
@@ -196,13 +241,42 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       }
     }, [activeCell])
 
+    // Scroll the walker cell into view on every step, using the same logic as activeCell above.
+    useLayoutEffect(() => {
+      if (!walkState || !containerRef.current) return
+      const container = containerRef.current
+      if (container.clientWidth === 0) return // JSDOM — no layout
+
+      const { row, col } = walkState.path[walkState.currentIndex]
+      const cellTop  = HEADER_SIZE + row * CELL_SIZE
+      const cellLeft = HEADER_SIZE + col * CELL_SIZE
+
+      if (cellTop  < container.scrollTop  + HEADER_SIZE) container.scrollTop  = cellTop  - HEADER_SIZE
+      if (cellLeft < container.scrollLeft + HEADER_SIZE) container.scrollLeft = cellLeft - HEADER_SIZE
+
+      const needDown  = cellTop  + CELL_SIZE > container.scrollTop  + container.clientHeight
+      const needRight = cellLeft + CELL_SIZE > container.scrollLeft + container.clientWidth
+      if (needDown || needRight) {
+        container
+          .querySelector<HTMLElement>(`td[aria-label="Cell ${row + 1},${col + 1}"]`)
+          ?.scrollIntoView({
+            block:  needDown  ? 'end' : 'nearest',
+            inline: needRight ? 'end' : 'nearest',
+          })
+      }
+    }, [walkState])
+
     function getCellClasses(row: number, col: number): string {
       const classes = ['maze-cell']
-      const inSolution = solutionMap.has(`${row},${col}`)
+      const key = `${row},${col}`
+      const isWalker = walkInfo?.walkerKey === key
+      const inWalked = !isWalker && (walkInfo?.walkedMap.has(key) ?? false)
+      const inSolution = solutionMap.has(key)
+      const inSolutionOrWalk = inSolution || isWalker || inWalked
 
-      // Only apply selection highlights to cells not in the solution path —
+      // Only apply selection highlights to cells not in the solution/walk path —
       // solution styling takes visual precedence over the active/range highlight.
-      if (activeCell && !inSolution) {
+      if (activeCell && !inSolutionOrWalk) {
         const isActive = row === activeCell.row && col === activeCell.col
         const isAnchor = anchorCell != null && row === anchorCell.row && col === anchorCell.col
 
@@ -221,7 +295,10 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         }
       }
 
-      if (inSolution && grid[row][col] !== 'S' && grid[row][col] !== 'F') {
+      // Walker cell and walked cells get the solution highlight colour
+      if (isWalker || inWalked) {
+        classes.push('maze-cell--solution')
+      } else if (inSolution && grid[row][col] !== 'S' && grid[row][col] !== 'F') {
         classes.push('maze-cell--solution')
       }
 
@@ -281,8 +358,11 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                 </th>
                 {Array.from({ length: cols }, (_, c) => {
                   const cell = grid[r]?.[c] ?? ' '
-                  const img = cellImage(cell)
-                  const solutionImgSrc = solutionMap.get(`${r},${c}`)
+                  const key = `${r},${c}`
+                  const isWalker = walkInfo?.walkerKey === key
+                  const walkedImgSrc = !isWalker ? walkInfo?.walkedMap.get(key) : undefined
+                  const solutionImgSrc = solutionMap.get(key)
+                  const img = isWalker ? null : cellImage(cell)
                   return (
                     <td
                       key={`cell-${r}-${c}`}
@@ -291,8 +371,14 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                       onDoubleClick={() => onCellDoubleClick?.(r, c)}
                       aria-label={`Cell ${r + 1},${c + 1}`}
                     >
-                      {img && <img src={img.src} alt={img.alt} />}
-                      {solutionImgSrc && cell !== 'S' && cell !== 'F' && (
+                      {isWalker && (
+                        <img src={walkInfo!.walkerImg} alt="Walker" className="maze-cell-solution-img" />
+                      )}
+                      {!isWalker && img && <img src={img.src} alt={img.alt} />}
+                      {walkedImgSrc && cell !== 'S' && cell !== 'F' && (
+                        <img src={walkedImgSrc} alt="Solution path" className="maze-cell-solution-img" />
+                      )}
+                      {!isWalker && solutionImgSrc && cell !== 'S' && cell !== 'F' && (
                         <img src={solutionImgSrc} alt="Solution path" className="maze-cell-solution-img" />
                       )}
                     </td>
