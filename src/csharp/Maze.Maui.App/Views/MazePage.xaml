@@ -59,6 +59,9 @@
                 <ImageButton x:Name="SolveBtn" IsVisible="{Binding CanSolve}" Command="{Binding SolveCommand}" Source="solve_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <ImageButton x:Name="WalkSolutionBtn" IsVisible="{Binding CanWalkSolution}" Command="{Binding WalkSolutionCommand}" Source="walk_solution_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
                 <ImageButton x:Name="ClearSolutionBtn" IsVisible="{Binding CanClearSolution}" Command="{Binding ClearSolutionCommand}" Source="clear_solution_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>

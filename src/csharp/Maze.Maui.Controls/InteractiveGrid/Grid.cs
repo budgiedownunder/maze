@@ -282,6 +282,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>True if a cell is active</returns>
         public bool HasActiveCell => activeCellPoint.Row > 0;
         /// <summary>
+        /// When true, all tap interactions (cell taps, row/column/corner header taps) are ignored.
+        /// Set this during operations such as a walk animation where editing must be blocked.
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        public bool IsInteractionLocked { get; set; } = false;
+        /// <summary>
         /// The current selected cell range (if any)
         /// </summary>
         /// <returns>Selected cell range</returns>
@@ -1163,6 +1169,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void OnCornerHeaderTapped()
         {
+            if (IsInteractionLocked) return;
             if (!IsExtendedSelectionMode)
             {
                 IsExtendedSelectionMode = true;
@@ -1184,6 +1191,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="headerFrame">Header frame that was tapped</param>
         private void OnColumnHeaderTapped(HeaderFrame headerFrame)
         {
+            if (IsInteractionLocked) return;
             bool wasInExtendedSelectionMode = IsExtendedSelectionMode;
             if (!wasInExtendedSelectionMode)
             {
@@ -1211,6 +1219,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="headerFrame">Header frame that was tapped</param>
         private void OnRowHeaderTapped(HeaderFrame headerFrame)
         {
+            if (IsInteractionLocked) return;
             bool wasInExtendedSelectionMode = IsExtendedSelectionMode;
             if (!wasInExtendedSelectionMode)
             {
@@ -1239,6 +1248,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="triggerEvents">Flag indicating whether to trigger further events</param>
         public virtual void OnCellTapped(CellFrame cellFrame, bool triggerEvents)
         {
+            if (IsInteractionLocked) return;
             bool shiftPressed = IsShiftKeyPressed();
             if (ExitExtendedSelectionOnDeselect && IsExtendedSelectionMode && !shiftPressed)
                 ExitExtendedSelectionModeOnly();
@@ -1316,6 +1326,19 @@ namespace Maze.Maui.Controls.InteractiveGrid
                     break;
             }
             SyncExtendedSelectionModeWithSelection();
+        }
+        /// <summary>
+        /// Clears the active cell and any current selection, hiding the selection frame.
+        /// </summary>
+        public void ClearSelection()
+        {
+            if (activeCell is not null)
+                activeCell.BackgroundColor = this.CellBackgroundColor;
+            activeCell = null;
+            activeCellPoint.Clear();
+            ClearAnchorCell(true);
+            ClearSelectedCells();
+            ReinitializeSelectionFrame();
         }
         /// <summary>
         /// Activates a given cell based on a point definition
@@ -1840,7 +1863,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <param name="displayRow">1-based display row of the cell to scroll into view</param>
         /// <param name="displayCol">1-based display column of the cell to scroll into view</param>
-        private async void ScrollCellIntoView(int displayRow, int displayCol)
+        protected async void ScrollCellIntoView(int displayRow, int displayCol)
         {
             double cellLeftX   = (displayCol - 1) * CellWidth;
             double cellTopY    = (displayRow - 1) * CellHeight;

@@ -98,6 +98,11 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Event handler</returns>
         public event EventHandler? GenerateRequested;
         /// <summary>
+        /// Represents a walk solution requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? WalkSolutionRequested;
+        /// <summary>
         /// Indicates whether the view maze is stored
         /// </summary>
         /// <returns>Boolean value</returns>
@@ -191,6 +196,18 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Boolean value</returns>
         [ObservableProperty]
         protected bool canGenerate = false;
+        /// <summary>
+        /// Indicates whether the walk solution can be started
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool canWalkSolution = false;
+        /// <summary>
+        /// Indicates whether a walk solution animation is currently in progress
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool isWalking = false;
         /// <summary>
         /// Indicates whether the maze can be saved
         /// </summary>
@@ -367,6 +384,15 @@ namespace Maze.Maui.App.ViewModels
         private async Task GenerateAsync()
         {
             await RunRequest(GenerateRequested);
+        }
+        /// <summary>
+        /// Walk solution command
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        private async Task WalkSolutionAsync()
+        {
+            await RunRequest(WalkSolutionRequested);
         }
         /// <summary>
         /// Saves the given maze definition

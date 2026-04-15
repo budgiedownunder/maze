@@ -21,6 +21,8 @@ namespace Maze.Maui.App
         // 1-based positions of start/finish cells (-1 = not set)
         private int _startRow = -1, _startCol = -1;
         private int _finishRow = -1, _finishCol = -1;
+        // 1-based position of the current walker cell (-1 = no walker)
+        private int _walkerRow = -1, _walkerCol = -1;
 
         /// <summary>
         /// Cell tapped event handler delegate
@@ -693,11 +695,107 @@ namespace Maze.Maui.App
             return direction;
         }
         /// <summary>
+        /// Animates a walker character stepping through the given solution path one cell at a time.
+        /// Each visited cell receives a footstep overlay as the walker moves on. When the walk
+        /// completes (or is cancelled) the grid is left in a clean state; <see cref="DisplaySolution"/>
+        /// is called on successful completion to show the full solution overlay.
+        /// </summary>
+        /// <param name="solution">Maze solution</param>
+        /// <param name="stepMs">Milliseconds between steps</param>
+        /// <param name="ct">Cancellation token</param>
+        public async Task WalkSolutionAsync(Api.Solution solution, int stepMs, CancellationToken ct)
+        {
+            List<Api.Maze.Point> points = solution.GetPathPoints();
+            if (points.Count == 0) return;
+
+            // Pre-compute per-cell footstep directions (same logic as DisplaySolution)
+            var directions = new MazeCellContent.PathDirection[points.Count];
+            MazeCellContent.PathDirection prevDir = MazeCellContent.PathDirection.None;
+            for (int i = 0; i < points.Count; i++)
+            {
+                Api.Maze.Point? next = i + 1 < points.Count ? points[i + 1] : null;
+                directions[i] = GetCellPathDirection(prevDir, points[i], next);
+                prevDir = directions[i];
+            }
+
+            try
+            {
+                for (int i = 0; i < points.Count; i++)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    int row = (int)points[i].Row + 1;
+                    int col = (int)points[i].Column + 1;
+                    bool isLast = i == points.Count - 1;
+
+                    string walkerImage = isLast
+                        ? "walker_celebrate.gif"
+                        : GetWalkerDirectionImage(points[i], points[i + 1]);
+
+                    SetWalkerCell(row, col, walkerImage);
+
+                    // Mark the previous cell with its footstep overlay
+                    if (i > 0)
+                        SetSolutionCell((int)points[i - 1].Row + 1, (int)points[i - 1].Column + 1, directions[i - 1]);
+
+                    ScrollCellIntoView(row, col);
+
+                    await Task.Delay(stepMs, ct);
+                }
+            }
+            finally
+            {
+                ClearWalkerCell();
+            }
+
+            // Walk completed without cancellation — display the full solution
+            DisplaySolution(solution);
+        }
+        /// <summary>
+        /// Returns the walker GIF filename for movement from one point to the next
+        /// </summary>
+        private static string GetWalkerDirectionImage(Api.Maze.Point from, Api.Maze.Point to)
+        {
+            if (to.Row    < from.Row)    return "walker_up.gif";
+            if (to.Row    > from.Row)    return "walker_down.gif";
+            if (to.Column < from.Column) return "walker_left.gif";
+            return "walker_right.gif";
+        }
+        /// <summary>
+        /// Moves the walker visual to the given cell, restoring the previous walker cell to its normal state
+        /// </summary>
+        private void SetWalkerCell(int row, int col, string walkerImage)
+        {
+            // Restore previous walker cell
+            if (_walkerRow > 0)
+            {
+                MazeCellContent? prev = GetCellContent(_walkerRow, _walkerCol);
+                prev?.Update(_cellTypes[_walkerRow - 1, _walkerCol - 1], _solutionDirections[_walkerRow - 1, _walkerCol - 1]);
+            }
+            _walkerRow = row;
+            _walkerCol = col;
+            GetCellContent(row, col)?.SetWalker(walkerImage);
+        }
+        /// <summary>
+        /// Clears the walker visual and restores the cell to its normal state
+        /// </summary>
+        private void ClearWalkerCell()
+        {
+            if (_walkerRow > 0)
+            {
+                MazeCellContent? content = GetCellContent(_walkerRow, _walkerCol);
+                content?.Update(_cellTypes[_walkerRow - 1, _walkerCol - 1], _solutionDirections[_walkerRow - 1, _walkerCol - 1]);
+                _walkerRow = -1;
+                _walkerCol = -1;
+            }
+        }
+        /// <summary>
         /// Clears the last displayed solution
         /// </summary>
         /// <returns>Boolean</returns>
         public bool ClearLastSolution()
         {
+            ClearWalkerCell();
             if (haveSolutionCells)
             {
                 Array.Clear(_solutionDirections, 0, _solutionDirections.Length);
@@ -723,6 +821,8 @@ namespace Maze.Maui.App
             if (row >= 1 && row <= RowCount && column >= 1 && column <= ColumnCount)
             {
                 _solutionDirections[row - 1, column - 1] = direction;
+                if (direction != MazeCellContent.PathDirection.None)
+                    haveSolutionCells = true;
                 MazeCellContent? cellContent = GetCellContent(row, column);
                 if (cellContent is not null)
                     cellContent.SetSolutionPath(direction);
@@ -1070,6 +1170,28 @@ namespace Maze.Maui.App
                     Content = new Label();
                 Content.BackgroundColor = Colors.Transparent;
             }
+        }
+        /// <summary>
+        /// Displays a walker GIF in this cell, overriding the normal cell content
+        /// </summary>
+        /// <param name="source">Image filename (e.g. "walker_down.gif")</param>
+        public void SetWalker(string source)
+        {
+            if (Content is Image img)
+            {
+                img.Source = source;
+                img.IsAnimationPlaying = true;
+            }
+            else
+                Content = new Image
+                {
+                    Source = source,
+                    Aspect = Aspect.AspectFit,
+                    HorizontalOptions = LayoutOptions.Fill,
+                    VerticalOptions = LayoutOptions.Fill,
+                    IsAnimationPlaying = true
+                };
+            Content.BackgroundColor = SOLUTION_PATH_CELL_HIGHLIGHT_COLOR;
         }
         /// <summary>
         /// Sets the solution path direction in the cell
