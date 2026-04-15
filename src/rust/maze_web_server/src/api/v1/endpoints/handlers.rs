@@ -8,8 +8,8 @@ use data_model::{Maze, User};
 use maze::{Error as MazeError, Generator, GeneratorOptions, MazeSolution, MazeSolver};
 use storage::{Error as StoreError, MazeItem, Store, SharedStore};
 
-use actix_web::{delete, get, post, put, web, web::Query, HttpMessage, HttpRequest, HttpResponse, Error, 
-    error::{ErrorBadRequest, ErrorConflict, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized, ErrorUnprocessableEntity, InternalError}
+use actix_web::{delete, get, post, put, web, web::Query, HttpMessage, HttpRequest, HttpResponse, Error,
+    error::{ErrorBadRequest, ErrorConflict, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized, ErrorUnprocessableEntity, InternalError}
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -429,6 +429,7 @@ impl SignupRequest {
     responses(
         (status = 201, description = "User created successfully", body = UserItem),
         (status = 400, description = "Invalid request"),
+        (status = 403, description = "Signup is disabled on this server"),
         (status = 409, description = "User with the given username or email already exists")
     ),
     tags = ["v1"]
@@ -438,7 +439,16 @@ pub async fn signup(
     signup_req: web::Json<SignupRequest>,
     auth_service: web::Data<AuthService>,
     store: web::Data<SharedStore>,
+    features: web::Data<SharedFeatures>,
 ) -> Result<HttpResponse, Error> {
+    let features_lock = features.read().map_err(|_| {
+        ErrorInternalServerError("Failed to acquire features read lock")
+    })?;
+    if !features_lock.allow_signup {
+        return Err(ErrorForbidden("Signup is disabled on this server"));
+    }
+    drop(features_lock);
+
     let mut store_lock = get_store_write_lock(&store)?;
     let signup_req_data: SignupRequest = signup_req.into_inner();
     let mut store_user = signup_req_data.into_user(&auth_service)?;

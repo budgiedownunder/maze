@@ -3660,4 +3660,34 @@ mod test_definitions {
 
         let _ = std::fs::remove_file(&temp_path);
     }
+
+    #[actix_web::test]
+    async fn signup_blocked_when_allow_signup_disabled() {
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig { allow_signup: false }));
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app_with_features(&mut user_defs, None, false, features).await;
+        let req = create_test_post_request("/api/v1/signup", None, None, Some(&SignupRequest {
+            username: "newuser".to_string(),
+            full_name: "New User".to_string(),
+            email: "newuser@example.com".to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        }));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[actix_web::test]
+    async fn signup_allowed_when_allow_signup_enabled() {
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig { allow_signup: true }));
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app_with_features(&mut user_defs, None, false, features).await;
+        let req = create_test_post_request("/api/v1/signup", None, None, Some(&SignupRequest {
+            username: "newuser".to_string(),
+            full_name: "New User".to_string(),
+            email: "newuser@example.com".to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        }));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
 }
