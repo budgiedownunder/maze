@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { LoginResponse, Maze, RenewResponse, UpdateProfileRequest, UserProfile } from '../types/api'
+import type { AppFeatures, LoginResponse, Maze, RenewResponse, UpdateProfileRequest, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -49,6 +49,15 @@ export function resetMockMazes(): void {
 }
 
 export const handlers = [
+  http.get(`${BASE}/features`, () => {
+    return HttpResponse.json<AppFeatures>({ allow_signup: true })
+  }),
+
+  http.put(`${BASE}/admin/features`, async ({ request }) => {
+    const body = await request.json() as AppFeatures
+    return HttpResponse.json<AppFeatures>(body)
+  }),
+
   http.post(`${BASE}/login`, () => {
     return HttpResponse.json(mockLoginResponse)
   }),

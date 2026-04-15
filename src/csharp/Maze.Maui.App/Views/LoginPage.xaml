@@ -102,6 +102,7 @@
 
                 <Button Text="Sign Up"
                         Command="{Binding GoToSignUpCommand}"
+                        IsVisible="{Binding AllowSignUp}"
                         HorizontalOptions="Fill"
                         BackgroundColor="Transparent"
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />

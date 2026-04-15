@@ -79,6 +79,12 @@ export function MazePage() {
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
 
+  useEffect(() => {
+    if (isBusy) document.body.classList.add('is-busy')
+    else document.body.classList.remove('is-busy')
+    return () => document.body.classList.remove('is-busy')
+  }, [isBusy])
+
   const blocker = useBlocker(hasUnsavedWork)
   const [showBlockerSaveModal, setShowBlockerSaveModal] = useState(false)
 

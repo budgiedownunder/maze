@@ -221,8 +221,7 @@ impl Generator {
         // keeping it as an unambiguous dead end with exactly one inbound passage.
 
         let mut last_err = format!(
-            "solution length is less than minimum solution length {}",
-            min_spine
+            "solution length is less than minimum solution length {min_spine}"
         );
 
         for _ in 0..max_retries {
@@ -405,7 +404,7 @@ mod tests {
         let solver = Solver { maze: &maze };
         solver
             .solve()
-            .unwrap_or_else(|_| panic!("maze {}x{} should be solvable", rows, cols));
+            .unwrap_or_else(|_| panic!("maze {rows}x{cols} should be solvable"));
 
         // Perfect maze property: passable_count - 1 == adjacent_passable_pair_count
         let is_passable = |c: char| c != 'W';

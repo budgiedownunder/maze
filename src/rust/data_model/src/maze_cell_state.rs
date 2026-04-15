@@ -18,7 +18,7 @@ impl fmt::Display for MazeCellState {
         match self {
             MazeCellState::Empty => write!(f, "Empty"),
             MazeCellState::Wall => write!(f, "Wall"),
-            MazeCellState::SolutionStep { value } => write!(f, "Solution Step (value = {})", value),
+            MazeCellState::SolutionStep { value } => write!(f, "Solution Step (value = {value})"),
         }
     }
 }

@@ -39,7 +39,7 @@ impl LinePrinter for StdoutLinePrinter {
     /// print_target.print_line("Second line of text");
     /// ```
     fn print_line(&mut self, line: &str) -> Result<(), io::Error> {
-        println!("{}", line);
+        println!("{line}");
         Ok(())
     }
 }

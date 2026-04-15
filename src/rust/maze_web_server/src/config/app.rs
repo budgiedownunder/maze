@@ -70,6 +70,26 @@ impl Default for LoggingConfig {
     }
 }
 
+/// Feature flags that apply to all users equally.
+/// Controlled via the `[features]` section of `config.toml`, environment variables,
+/// or the admin API (`PUT /api/v1/admin/features`).
+///
+/// For future per-user feature gating, a separate `UserFeaturesConfig` type
+/// should be added (stored per user in the data store, not in `config.toml`).
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct AppFeaturesConfig {
+    /// Whether new users can self-register via the signup endpoint.
+    /// Can be overridden with `MAZE_WEB_SERVER_FEATURES_ALLOW_SIGNUP`.
+    #[serde(default = "default_features_allow_signup")]
+    pub allow_signup: bool,
+}
+
+impl Default for AppFeaturesConfig {
+    fn default() -> Self {
+        Self { allow_signup: default_features_allow_signup() }
+    }
+}
+
 /// Application configuration settings loaded from config.toml or environment variables.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AppConfig {
@@ -91,6 +111,15 @@ pub struct AppConfig {
     /// Can be overridden with `MAZE_WEB_SERVER_STATIC_DIR`.
     #[serde(default = "default_static_dir")]
     pub static_dir: String,
+
+    /// Feature flags controlling which capabilities are available to end users.
+    #[serde(default)]
+    pub features: AppFeaturesConfig,
+
+    /// Path to the config file that was loaded. Not read from the config file itself —
+    /// used by the admin API to persist runtime feature-flag changes back to disk.
+    #[serde(skip, default = "default_config_path")]
+    pub config_path: String,
 }
 
 impl Default for AppConfig {
@@ -100,6 +129,8 @@ impl Default for AppConfig {
             security: SecurityConfig::default(),
             logging: LoggingConfig::default(),
             static_dir: default_static_dir(),
+            features: AppFeaturesConfig::default(),
+            config_path: default_config_path(),
         }
     }
 }
@@ -108,12 +139,14 @@ impl Default for AppConfig {
 // Default values
 fn default_port() -> u16 { 8443 }
 fn default_static_dir() -> String { "static".to_string() }
+fn default_config_path() -> String { "config.toml".to_string() }
 fn default_security_cert_file() -> String { "cert.pem".to_string() }
 fn default_security_key_file() -> String { "key.pem".to_string() }
 fn default_security_login_expiry_hours() -> u32 { 24 }
 fn default_logging_log_dir() -> String { "logs".to_string() }
 fn default_logging_log_level() -> String { "info".to_string() }
 fn default_logging_log_file_prefix() -> String { "maze_web_server_".to_string() }
+fn default_features_allow_signup() -> bool { true }
 
 /// Application Configuration
 impl AppConfig {
@@ -126,6 +159,7 @@ impl AppConfig {
             .set_default("logging.log_level", default_logging_log_level())?
             .set_default("logging.log_file_prefix", default_logging_log_file_prefix())?
             .set_default("static_dir", default_static_dir())?
+            .set_default("features.allow_signup", default_features_allow_signup())?
             .add_source(File::with_name("config.toml").required(false));
 
         builder = set_env_overrides(builder)?;
@@ -137,10 +171,10 @@ impl AppConfig {
     pub fn log_config(&self) {
         match serde_json::to_string_pretty(self) {
             Ok(json) => {
-                info!("Loaded AppConfig:\n{}", json);
+                info!("Loaded AppConfig:\n{json}");
             }
             Err(err) => {
-                log::error!("Failed to serialize AppConfig: {}", err);
+                log::error!("Failed to serialize AppConfig: {err}");
             }
         }
     }}
@@ -175,12 +209,16 @@ fn set_env_overrides(mut builder: ConfigBuilder<DefaultState>) -> Result<ConfigB
         builder = builder.set_override("static_dir", static_dir)?;
     }
 
+    if let Ok(allow_signup) = std::env::var(get_app_env_name("FEATURES_ALLOW_SIGNUP")) {
+        builder = builder.set_override("features.allow_signup", allow_signup)?;
+    }
+
     Ok(builder)
 }
 
 /// Returns the applicaion environment name for a given setting
 fn get_app_env_name(setting_name: &str) -> String {
-    format!("MAZE_WEB_SERVER_{}", setting_name)
+    format!("MAZE_WEB_SERVER_{setting_name}")
 }
 
 #[cfg(test)]
@@ -230,5 +268,34 @@ mod tests {
     fn static_dir_uses_default_when_absent() {
         let cfg: AppConfig = toml::from_str("").unwrap();
         assert_eq!(cfg.static_dir, "static");
+    }
+
+    #[test]
+    fn app_features_config_deserialises_from_toml() {
+        let toml = r#"
+            [features]
+            allow_signup = false
+        "#;
+        let cfg: AppConfig = toml::from_str(toml).unwrap();
+        assert!(!cfg.features.allow_signup);
+    }
+
+    #[test]
+    fn app_features_config_uses_defaults_when_section_absent() {
+        let cfg: AppConfig = toml::from_str("").unwrap();
+        assert!(cfg.features.allow_signup);
+    }
+
+    #[test]
+    fn app_features_config_uses_defaults_when_field_absent() {
+        let cfg: AppConfig = toml::from_str("[features]").unwrap();
+        assert!(cfg.features.allow_signup);
+    }
+
+    #[test]
+    fn config_path_is_not_read_from_toml() {
+        // config_path is a meta field — it must never be populated from TOML
+        let cfg: AppConfig = toml::from_str("").unwrap();
+        assert_eq!(cfg.config_path, "config.toml");
     }
 }

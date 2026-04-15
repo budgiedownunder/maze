@@ -19,8 +19,8 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
             Error::Io(ref error) => write!(f, "{}", io_error_kind_to_string(error.kind())),
-            Error::Solve(ref message) => write!(f, "{}", message),
-            Error::Generate(ref message) => write!(f, "{}", message),
+            Error::Solve(ref message) => write!(f, "{message}"),
+            Error::Generate(ref message) => write!(f, "{message}"),
         }
     }
 }

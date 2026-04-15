@@ -50,3 +50,8 @@ log_level = "info"
 # e.g. "maze_web_server_" produces "maze_web_server_2026-04-09.log"
 log_file_prefix = "maze_web_server_"
 
+[features]
+# Whether new users can self-register via the signup endpoint (default: true).
+# Can also be changed at runtime via PUT /api/v1/admin/features (admin only).
+allow_signup = true
+

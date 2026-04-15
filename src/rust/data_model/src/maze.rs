@@ -352,29 +352,26 @@ mod tests {
                     ExpectedSerdeErrorKind::Data => {
                         if !serdejson_error.is_data() {
                             panic!(
-                                "Serde data error expected (got SerdeJson error: {})",
-                                serdejson_error
+                                "Serde data error expected (got SerdeJson error: {serdejson_error})"
                             );
                         }
                     }
                     ExpectedSerdeErrorKind::Syntax => {
                         if !serdejson_error.is_syntax() {
                             panic!(
-                                "Serde syntax error expected (got SerdeJson error: {})",
-                                serdejson_error
+                                "Serde syntax error expected (got SerdeJson error: {serdejson_error})"
                             );
                         }
                     }
                     ExpectedSerdeErrorKind::UnexpectedEof => {
                         if !serdejson_error.is_eof() {
                             panic!(
-                                "Serde unexpected EOF error expected (got SerdeJson error: {})",
-                                serdejson_error
+                                "Serde unexpected EOF error expected (got SerdeJson error: {serdejson_error})"
                             );
                         }
                     }
                 },
-                _ => panic!("Unxpected error encountered (got error: {})", error),
+                _ => panic!("Unxpected error encountered (got error: {error})"),
             },
         }
     }

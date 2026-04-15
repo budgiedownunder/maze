@@ -7,6 +7,7 @@ use utoipa::{
 };
 
 use crate::api::v1::endpoints::handlers::{
+    AppFeaturesResponse,
     LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
     ChangePasswordRequest, UpdateProfileRequest};
@@ -57,6 +58,9 @@ impl utoipa::Modify for LoginTokenAuth {
         )
     ),
     paths(
+        // Features
+        crate::api::v1::endpoints::handlers::get_features,
+        crate::api::v1::endpoints::handlers::update_admin_features,
         // Login, logout, renew, signup
         crate::api::v1::endpoints::handlers::login,
         crate::api::v1::endpoints::handlers::logout,
@@ -86,6 +90,7 @@ impl utoipa::Modify for LoginTokenAuth {
     ),
     components(
         schemas(
+            AppFeaturesResponse,
             LoginRequest, LoginResponse, RenewResponse,
             SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
             ChangePasswordRequest, UpdateProfileRequest,

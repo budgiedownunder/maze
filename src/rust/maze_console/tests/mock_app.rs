@@ -55,7 +55,7 @@ impl MockApp {
     }
 
     pub fn io_error(message: String) -> io::Error {
-        io::Error::new(io::ErrorKind::Other, message)
+        io::Error::other(message)
     }
 
     pub fn verify_output(&self, expected: &[String]) -> Result<(), io::Error> {
@@ -95,13 +95,13 @@ impl Default for MockApp {
                     Err(error) => {
                         panic!(
                             "{}",
-                            format!("Failed to initialize default admin user: {}", error)
+                            format!("Failed to initialize default admin user: {error}")
                         );
                     }
                 }
             }
             Err(error) => {
-                panic!("{}", format!("Failed to initialise default mock app status: {}", error));
+                panic!("{}", format!("Failed to initialise default mock app status: {error}"));
             }
         }
     }

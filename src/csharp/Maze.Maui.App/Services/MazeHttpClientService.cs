@@ -97,8 +97,6 @@ namespace Maze.Maui.App.Services
     /// </summary>
     public class MazeHttpClientService : IMazeService
     {
-        private const double REQUEST_TIMEOUT_SECONDS = 30.0;
-
         // Private properties
         ConfigurationService _configurationService;
         HttpClient _httpClient;
@@ -120,20 +118,9 @@ namespace Maze.Maui.App.Services
         /// <returns>HTTP client</returns>
         private HttpClient CreateHttpClient(IAuthService authService)
         {
-            string apiRootUri = _configurationService.ApiRootUri;
-
-            HttpClientHandler innerHandler = new HttpClientHandler();
-
-            if (_configurationService.DisableStrictTLSCertificateValidation)
-                innerHandler.ServerCertificateCustomValidationCallback = (message, cert, chain, sslPolicyErrors) => true;
-
-            BearerTokenHandler handler = new BearerTokenHandler(authService, _configurationService, innerHandler);
-
-            return new HttpClient(handler)
-            {
-                BaseAddress = new Uri(apiRootUri),
-                Timeout = TimeSpan.FromSeconds(REQUEST_TIMEOUT_SECONDS)
-            };
+            var innerHandler = ApiHttpClientFactory.CreateHandler(_configurationService);
+            var bearerHandler = new BearerTokenHandler(authService, _configurationService, innerHandler);
+            return ApiHttpClientFactory.Create(_configurationService, bearerHandler);
         }
         /// <summary>
         /// Loads the current list of maze items

@@ -75,7 +75,7 @@ pub struct MazeCGeneratorOptions {
 // ──────────────────────────────────────────────────────────────────────────────
 
 thread_local! {
-    static LAST_ERROR: RefCell<Option<CString>> = RefCell::new(None);
+    static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
 }
 
 fn set_last_error(msg: &str) {
@@ -152,6 +152,13 @@ pub extern "C" fn maze_c_get_last_error() -> *const c_char {
 /// Frees a `*mut c_char` string that was returned by a `maze_c_*` function
 /// (e.g. [`maze_c_maze_to_json`]).
 ///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer previously returned by a `maze_c_*` function
+/// that allocates a string (e.g. [`maze_c_maze_to_json`]).
+/// Calling this function twice on the same pointer is undefined behaviour.
+/// Passing a null pointer is safe and has no effect.
+///
 /// # Examples
 ///
 /// Serialise a maze to JSON, read the string, then free it.
@@ -169,11 +176,11 @@ pub extern "C" fn maze_c_get_last_error() -> *const c_char {
 /// let json = unsafe { CStr::from_ptr(json_ptr) }.to_string_lossy().into_owned();
 /// assert!(json.contains("grid"));
 ///
-/// maze_c_free_string(json_ptr);
+/// unsafe { maze_c_free_string(json_ptr) };
 /// maze_c_free_maze(ptr);
 /// ```
 #[no_mangle]
-pub extern "C" fn maze_c_free_string(ptr: *mut c_char) {
+pub unsafe extern "C" fn maze_c_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         unsafe {
             drop(CString::from_raw(ptr));
@@ -369,6 +376,11 @@ pub extern "C" fn maze_c_maze_get_col_count(ptr: *mut MazeC) -> u32 {
 /// Cell-type values mirror `MazeCellTypeWasm` in `maze_wasm`:
 /// `0` = Empty, `1` = Start, `2` = Finish, `3` = Wall.
 ///
+/// # Safety
+///
+/// `ptr` must be a valid non-null pointer to a `MazeC` previously returned by
+/// [`maze_c_new_maze`]. `out_cell_type` must be a valid writable pointer.
+///
 /// # Examples
 ///
 /// Resize a maze to 10 × 5 and assert that a cell is initially of type Empty (0).
@@ -399,11 +411,11 @@ pub unsafe extern "C" fn maze_c_maze_get_cell_type(
     let r = row as usize;
     let c = col as usize;
     if r >= mw.maze.definition.row_count() {
-        set_last_error(&format!("row index ({}) out of bounds", r));
+        set_last_error(&format!("row index ({r}) out of bounds"));
         return 0;
     }
     if c >= mw.maze.definition.col_count() {
-        set_last_error(&format!("column index ({}) out of bounds", c));
+        set_last_error(&format!("column index ({c}) out of bounds"));
         return 0;
     }
     let cell_type: u32 = match mw.maze.definition.grid[r][c] {
@@ -423,6 +435,11 @@ pub unsafe extern "C" fn maze_c_maze_get_cell_type(
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Sets the start cell. Returns `1` on success, `0` on error.
+///
+/// # Safety
+///
+/// `ptr` must be a valid non-null pointer to a `MazeC` previously returned by
+/// [`maze_c_new_maze`].
 ///
 /// # Examples
 ///
@@ -467,6 +484,12 @@ pub unsafe extern "C" fn maze_c_maze_set_start_cell(
 
 /// Gets the start cell, writing its row/col into `*out_row` / `*out_col`.
 /// Returns `1` on success, `0` if no start cell is defined.
+///
+/// # Safety
+///
+/// `ptr` must be a valid non-null pointer to a `MazeC` previously returned by
+/// [`maze_c_new_maze`]. `out_row` and `out_col` may be null; non-null pointers
+/// must be valid writable locations.
 ///
 /// # Examples
 ///
@@ -516,6 +539,11 @@ pub unsafe extern "C" fn maze_c_maze_get_start_cell(
 
 /// Sets the finish cell. Returns `1` on success, `0` on error.
 ///
+/// # Safety
+///
+/// `ptr` must be a valid non-null pointer to a `MazeC` previously returned by
+/// [`maze_c_new_maze`].
+///
 /// # Examples
 ///
 /// Resize a maze to 10 × 5, set the finish cell at (3, 4), and assert the
@@ -559,6 +587,12 @@ pub unsafe extern "C" fn maze_c_maze_set_finish_cell(
 
 /// Gets the finish cell, writing its row/col into `*out_row` / `*out_col`.
 /// Returns `1` on success, `0` if no finish cell is defined.
+///
+/// # Safety
+///
+/// `ptr` must be a valid non-null pointer to a `MazeC` previously returned by
+/// [`maze_c_new_maze`]. `out_row` and `out_col` may be null; non-null pointers
+/// must be valid writable locations.
 ///
 /// # Examples
 ///
@@ -956,6 +990,12 @@ pub extern "C" fn maze_c_maze_delete_cols(
 /// Reinitialises a maze from a null-terminated UTF-8 JSON string.
 /// Returns `1` on success, `0` on error.
 ///
+/// # Safety
+///
+/// `ptr` must be a valid non-null pointer to a `MazeC` previously returned by
+/// [`maze_c_new_maze`]. `json` must be a valid non-null pointer to a
+/// null-terminated UTF-8 string for the lifetime of the call.
+///
 /// # Examples
 ///
 /// Initialise a maze from a JSON string and assert the resulting dimensions.
@@ -1028,7 +1068,7 @@ pub unsafe extern "C" fn maze_c_maze_from_json(
 /// let json = unsafe { CStr::from_ptr(json_ptr) }.to_string_lossy().into_owned();
 /// assert!(json.contains("grid"));
 ///
-/// maze_c_free_string(json_ptr);
+/// unsafe { maze_c_free_string(json_ptr) };
 /// maze_c_free_maze(ptr);
 /// ```
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -1140,6 +1180,13 @@ pub extern "C" fn maze_c_free_maze_solution(ptr: *mut MazeSolution) {
 /// Returns a non-null pointer when `count > 0`, or `null` when the path is empty.
 /// The caller must free the returned array with [`maze_c_free_path_points`].
 ///
+/// # Safety
+///
+/// `solution_ptr` must be a valid non-null pointer to a `MazeSolution` previously returned by
+/// [`maze_c_maze_solve`]. `out_count` may be null; if non-null it must be a valid writable
+/// location. The returned pointer must be freed with [`maze_c_free_path_points`] using the
+/// same `count` value.
+///
 /// # Examples
 ///
 /// Solve a solvable 3 × 3 maze, get the path points, and assert the first point
@@ -1204,6 +1251,13 @@ pub unsafe extern "C" fn maze_c_maze_solution_get_path_points(
 /// Frees a path-points array returned by [`maze_c_maze_solution_get_path_points`].
 ///
 /// `count` must be the value written into `out_count` by that call.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer previously returned by
+/// [`maze_c_maze_solution_get_path_points`], and `count` must be the exact value
+/// written into `out_count` by that call. Calling this function twice on the same
+/// pointer, or with a mismatched `count`, is undefined behaviour.
 ///
 /// # Examples
 ///

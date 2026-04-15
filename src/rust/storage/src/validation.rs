@@ -59,7 +59,7 @@ mod tests {
 
     fn run_validation_test(user: &User) {
         if let Err(error) = validate_user_fields(user) {
-            panic!("{}'", error);
+            panic!("{error}'");
         }
     }
 

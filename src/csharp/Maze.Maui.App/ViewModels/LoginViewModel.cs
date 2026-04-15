@@ -12,6 +12,7 @@ namespace Maze.Maui.App.ViewModels
     public partial class LoginViewModel : BaseViewModel
     {
         private readonly IAuthService _authService;
+        private readonly IAppFeaturesService _appFeaturesService;
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SignInCommand))]
@@ -27,6 +28,9 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private bool showPassword = false;
 
+        [ObservableProperty]
+        private bool allowSignUp = true;
+
         [RelayCommand]
         private void ToggleShowPassword() => ShowPassword = !ShowPassword;
 
@@ -34,20 +38,26 @@ namespace Maze.Maui.App.ViewModels
         /// Constructor
         /// </summary>
         /// <param name="authService">Injected auth service</param>
-        public LoginViewModel(IAuthService authService)
+        /// <param name="appFeaturesService">Injected app features service</param>
+        public LoginViewModel(IAuthService authService, IAppFeaturesService appFeaturesService)
         {
             Title = "Sign In";
             _authService = authService;
+            _appFeaturesService = appFeaturesService;
         }
 
         /// <summary>
-        /// Attempts to restore an existing session by verifying the stored token against the server.
+        /// Refreshes server feature flags and attempts to restore an existing session by verifying
+        /// the stored token against the server.
         /// Returns true if the session is valid and the app should navigate to the main page.
         /// Returns false if there is no stored token or if the server cannot be reached, setting
         /// <see cref="ErrorMessage"/> with details of any connection failure.
         /// </summary>
         public async Task<bool> TryRestoreSessionAsync()
         {
+            await _appFeaturesService.RefreshAsync();
+            AllowSignUp = _appFeaturesService.Features.AllowSignUp;
+
             if (!await _authService.IsAuthenticatedAsync())
                 return false;
 

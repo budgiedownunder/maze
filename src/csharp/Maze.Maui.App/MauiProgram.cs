@@ -64,6 +64,7 @@ namespace Maze.Maui.App
 
             builder.Services.AddSingleton<ConfigurationService>();
             builder.Services.AddSingleton<IAuthService, AuthHttpClientService>();
+            builder.Services.AddSingleton<IAppFeaturesService, AppFeaturesHttpClientService>();
             if(useMockMazeService)
                 builder.Services.AddSingleton<IMazeService, MockMazeService>();
             else

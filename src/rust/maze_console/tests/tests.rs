@@ -18,14 +18,14 @@ fn new_mock_app() -> MockApp {
     match get_store(storage::StoreConfig::File(file_config)) {
         Ok(mut store) => {
             if let Err(error) = store.empty() {
-                panic!("new_mock_app() failed to empty store content: {}", error);
+                panic!("new_mock_app() failed to empty store content: {error}");
             }
             match store.init_default_admin_user("admin", "dummy_password_hash") {
                 Ok(user) => MockApp::new(store, &user),
                 Err(error) => {
                     panic!(
                         "{}",
-                        format!("new_mock_app() failed to initialize default admin user: {}", error)
+                        format!("new_mock_app() failed to initialize default admin user: {error}")
                     );
                 }
             }
@@ -33,7 +33,7 @@ fn new_mock_app() -> MockApp {
         Err(error) => {
             panic!(
                 "{}",
-                format!("new_mock_app() failed to initialize storage: {}", error)
+                format!("new_mock_app() failed to initialize storage: {error}")
             );
         }
     }
@@ -201,14 +201,13 @@ fn add_delete_maze_steps(
         expected_output.push("Enter name of maze to delete: ".to_string());
         app.add_input_line(name, false);
         expected_output.push(format!(
-            "Are you sure you want to delete the maze '{}'? (Y/N)",
-            name
+            "Are you sure you want to delete the maze '{name}'? (Y/N)"
         ));
         app.add_input_key('Y', false);
         if expect_exists {
             expected_output.push("Maze deleted".to_string());
         } else {
-            expected_output.push(format!("Failed: A maze with the name '{}' was not found", name));
+            expected_output.push(format!("Failed: A maze with the name '{name}' was not found"));
         }
     } else {
         expected_output.push("There are no mazes available to delete".to_string());
@@ -391,10 +390,9 @@ fn run_set_endpoint_test_in_empty_maze(
     name: &str,
 ) -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
-    let operation_message = format!("Set {}", name);
+    let operation_message = format!("Set {name}");
     let expected_error_message = format!(
-        "Maze has no cells - add some rows and columns first before setting the {} cell",
-        name
+        "Maze has no cells - add some rows and columns first before setting the {name} cell"
     );
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key(operation_key, true);
@@ -424,7 +422,7 @@ fn run_modify_endpoint_test(
 ) -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
     mock_app.current_maze = Maze::new(MazeDefinition::new(3, 5));
-    let modified_row = format!("░░{}░░", endpoint_char);
+    let modified_row = format!("░░{endpoint_char}░░");
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key(operation_key, true);
     expected_output.push(operation.to_string());
@@ -480,7 +478,7 @@ fn run_modify_walls_test(
 ) -> Result<(), Box<dyn Error>> {
     let mut mock_app = new_mock_app();
     mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
-    let modified_row = format!("░{}{}{}░", change_char, change_char, change_char);
+    let modified_row = format!("░{change_char}{change_char}{change_char}░");
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key(operation_key, true);
     expected_output.push(operation.to_string());
@@ -882,7 +880,7 @@ fn add_generate_point_steps(
     prompt_message: &str,
     config: &GeneratePointConfig,
 ) {
-    expected_output.push(format!("{} (Y/N)", prompt_message));
+    expected_output.push(format!("{prompt_message} (Y/N)"));
     if config.specify {
         app.add_input_key('Y', false);
         add_enter_number_steps(app, expected_output, config.row_config.as_ref().unwrap());
@@ -907,6 +905,7 @@ fn add_generate_optional_number_steps(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn add_generate_maze_steps(
     app: &mut MockApp,
     expected_output: &mut Vec<String>,
@@ -926,7 +925,7 @@ fn add_generate_maze_steps(
     add_generate_point_steps(app, expected_output,
         "Specify start point [default: row 1, column 1]?", start_config);
     add_generate_point_steps(app, expected_output,
-        &format!("Specify finish point [default: row {}, column {}]?", rows_val, cols_val),
+        &format!("Specify finish point [default: row {rows_val}, column {cols_val}]?"),
         finish_config);
     add_generate_optional_number_steps(app, expected_output,
         &format!("Specify minimum solution path length [default: {}]? (Y/N)", (rows_val + cols_val) / 2),

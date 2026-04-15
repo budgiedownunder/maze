@@ -1445,6 +1445,7 @@ dependencies = [
  "tokio",
  "tokio-macros",
  "toml 0.8.23",
+ "toml_edit",
  "urlencoding",
  "utoipa",
  "utoipa-rapidoc",

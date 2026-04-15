@@ -29,7 +29,7 @@ mod tests {
     fn should_be_able_to_create_openapi_json_file() -> Result<(), Box<dyn Error>> {
         run_generator("")?;
         let path = Path::new("openapi.json");
-        assert!(path.exists(), "The expected output file '{:?}' was not found", path);
+        assert!(path.exists(), "The expected output file '{path:?}' was not found");
         Ok(())
     }
 } 

@@ -38,6 +38,7 @@ docs/diagrams/       # PlantUML architecture source files
   - `wasm-lite` — Wasmtime/.NET-targeted WASM build (no JS runtime)
 - `maze_wasm` has **two distinct WASM build targets**: JS (via wasm-pack) and Wasmtime/.NET (via cargo direct).
 - **Always read a crate's own README before running its tests** — some crates require special flags (e.g. `storage`, `maze_c`, `maze_console` require `-- --test-threads=1` due to shared file system state).
+- **After any change to Rust code, run `cargo clippy --all-targets` from `src/rust` and fix all warnings before claiming the code change is complete.** Expected output: zero errors, zero warnings.
 
 For build and test commands, see **`src/rust/README.md`** and each crate's own `README.md`.
 

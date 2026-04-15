@@ -72,12 +72,11 @@ pub extern "C" fn maze_wasm_get_cell_type(maze_wasm: *mut MazeWasm, row: u32, co
     let row = row as usize;
     let col = col as usize;
     if row >= maze_wasm.maze.definition.row_count() {
-        return create_maze_wasm_error_result(Some(&format!("row index ({}) out of bounds", row)));
+        return create_maze_wasm_error_result(Some(&format!("row index ({row}) out of bounds")));
     }
     if col >= maze_wasm.maze.definition.col_count() {
         return create_maze_wasm_error_result(Some(&format!(
-            "column index ({}) out of bounds",
-            col
+            "column index ({col}) out of bounds"
         )));
     }
     create_maze_wasm_enum_result(to_cell_type_enum(maze_wasm.maze.definition.grid[row][col]) as u32)

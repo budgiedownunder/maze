@@ -109,7 +109,7 @@ pub mod test_setup {
         // Make sure any existing files and directories are cleared out
         let mut store = FileStore::new(&FileStoreConfig::default());
         if let Err(error) = store.empty() {
-            panic!("setup() failed to empty store: {}", error);
+            panic!("setup() failed to empty store: {error}");
         }
     }
 }

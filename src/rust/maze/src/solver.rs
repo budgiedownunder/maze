@@ -90,8 +90,7 @@ impl Solver<'_> {
                 }
                 if !found_neighbour {
                     return Err(Error::Solve(format!(
-                        "solution path not found (no path sequence neighbour exists for point {})",
-                        step_pt
+                        "solution path not found (no path sequence neighbour exists for point {step_pt})"
                     )));
                 }
             }

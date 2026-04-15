@@ -93,6 +93,16 @@ npm run test_api
 npm run test_help_examples
 ```
 
+### Linting
+To run Clippy across all crates and targets:
+
+```
+cd src/rust
+cargo clippy --all-targets
+```
+
+Expected: zero errors, zero warnings.
+
 ### Benchmarking
 To run benchmark tests (which are currently only configured for the `maze` crate):
 
