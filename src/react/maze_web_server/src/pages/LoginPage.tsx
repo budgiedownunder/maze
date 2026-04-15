@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { useAppFeatures } from '../context/AppFeaturesContext'
 import { PasswordInput } from '../components/PasswordInput'
 import appIcon from '../assets/app.png'
 
@@ -13,6 +14,7 @@ export function LoginPage() {
   const { login, isLoading } = useAuth()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
+  const { allow_signup } = useAppFeatures()
 
   const isBusy = isLoading || isSubmitting
   const submitDisabled = !username.trim() || !password || isBusy
@@ -65,9 +67,11 @@ export function LoginPage() {
         <button type="submit" disabled={submitDisabled} className="btn-submit">
           Sign In
         </button>
-        <button type="button" onClick={() => navigate('/signup')} disabled={isBusy} className="btn-link">
-          Sign Up
-        </button>
+        {allow_signup && (
+          <button type="button" onClick={() => navigate('/signup')} disabled={isBusy} className="btn-link">
+            Sign Up
+          </button>
+        )}
       </form>
     </div>
   )

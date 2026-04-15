@@ -42,6 +42,10 @@ export interface SaveMazeRequest {
   definition: MazeDefinition
 }
 
+export interface AppFeatures {
+  allow_signup: boolean
+}
+
 export interface GenerateOptions {
   rowCount: number
   colCount: number

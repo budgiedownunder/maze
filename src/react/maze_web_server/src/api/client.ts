@@ -1,4 +1,4 @@
-import type { ChangePasswordRequest, LoginResponse, Maze, MazeDefinition, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserProfile } from '../types/api'
+import type { AppFeatures, ChangePasswordRequest, LoginResponse, Maze, MazeDefinition, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -20,6 +20,18 @@ async function requestEmpty(path: string, options?: RequestInit): Promise<void> 
 
 function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+}
+
+export function getFeatures(): Promise<AppFeatures> {
+  return request<AppFeatures>('/features')
+}
+
+export function updateAdminFeatures(token: string, features: AppFeatures): Promise<AppFeatures> {
+  return request<AppFeatures>('/admin/features', {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify(features),
+  })
 }
 
 export function login(username: string, password: string): Promise<LoginResponse> {
