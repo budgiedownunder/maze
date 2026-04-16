@@ -29,18 +29,6 @@
         "walker_up/walker_up_05.png"
       ]
     },
-    "walker_left": {
-      "fps": 10,
-      "loop": true,
-      "frames": [
-        "walker_left/walker_left_00.png",
-        "walker_left/walker_left_01.png",
-        "walker_left/walker_left_02.png",
-        "walker_left/walker_left_03.png",
-        "walker_left/walker_left_04.png",
-        "walker_left/walker_left_05.png"
-      ]
-    },
     "walker_right": {
       "fps": 10,
       "loop": true,
@@ -51,6 +39,18 @@
         "walker_right/walker_right_03.png",
         "walker_right/walker_right_04.png",
         "walker_right/walker_right_05.png"
+      ]
+    },
+    "walker_left": {
+      "fps": 10,
+      "loop": true,
+      "frames": [
+        "walker_left/walker_left_00.png",
+        "walker_left/walker_left_01.png",
+        "walker_left/walker_left_02.png",
+        "walker_left/walker_left_03.png",
+        "walker_left/walker_left_04.png",
+        "walker_left/walker_left_05.png"
       ]
     },
     "walker_celebrate": {
