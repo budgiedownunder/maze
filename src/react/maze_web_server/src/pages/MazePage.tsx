@@ -77,8 +77,9 @@ export function MazePage() {
 
   // Walk animation state
   const { walkState, isWalking, startWalk, cancelWalk } = useWalkAnimation()
+  const isWalkInProgress = walkState !== null && !walkState.isComplete
 
-  const isBusy = isSaving || isRefreshing || isGenerating || isSolving || isWalking
+  const isBusy = isSaving || isRefreshing || isGenerating || isSolving || isWalkInProgress
   const hasUnsavedWork = isDirty || (isNew && mazeId === null)
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
@@ -237,7 +238,7 @@ export function MazePage() {
       await new Promise<void>(r => requestAnimationFrame(() => r()))
       const path = await solveMaze({ grid })
       setIsSolving(false)
-      startWalk(path, () => applySolution(path))
+      startWalk(path)
     } catch (ex: unknown) {
       const msg = (ex as { message?: string }).message ?? 'Unknown error.'
       setSolveError(msg.charAt(0).toUpperCase() + msg.slice(1))
@@ -520,7 +521,7 @@ export function MazePage() {
               className="maze-toolbar-btn"
               title="Generate"
               aria-label="Generate"
-              disabled={selectionStatus.hasSolution || isBusy}
+              disabled={selectionStatus.hasSolution || isBusy || isWalking}
               onClick={() => { setGenerateError(null); setShowGenerateModal(true) }}
             >
               <img src="/images/maze/generate_button.png" alt="Generate" />
@@ -529,7 +530,7 @@ export function MazePage() {
               className="maze-toolbar-btn"
               title="Solve"
               aria-label="Solve"
-              disabled={selectionStatus.hasSolution || isBusy}
+              disabled={selectionStatus.hasSolution || isBusy || isWalking}
               onClick={handleSolve}
             >
               <img src="/images/maze/solve_button.png" alt="Solve" />
@@ -538,7 +539,7 @@ export function MazePage() {
               className="maze-toolbar-btn"
               title="Walk Solution"
               aria-label="Walk Solution"
-              disabled={selectionStatus.hasSolution || isBusy}
+              disabled={selectionStatus.hasSolution || isBusy || isWalking}
               onClick={handleWalkSolution}
             >
               <img src="/images/maze/walk_solution_button.png" alt="Walk Solution" />

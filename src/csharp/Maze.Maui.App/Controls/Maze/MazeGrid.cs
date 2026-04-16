@@ -697,8 +697,9 @@ namespace Maze.Maui.App
         /// <summary>
         /// Animates a walker character stepping through the given solution path one cell at a time.
         /// Each visited cell receives a footstep overlay as the walker moves on. When the walk
-        /// completes (or is cancelled) the grid is left in a clean state; <see cref="DisplaySolution"/>
-        /// is called on successful completion to show the full solution overlay.
+        /// On successful completion the celebrate GIF remains visible until the caller clears the
+        /// solution. On cancellation the walker cell is cleaned up and the partial walk is left for
+        /// the caller to clear via <see cref="ClearLastSolution"/>.
         /// </summary>
         /// <param name="solution">Maze solution</param>
         /// <param name="stepMs">Milliseconds between steps</param>
@@ -742,14 +743,13 @@ namespace Maze.Maui.App
 
                     await Task.Delay(stepMs, ct);
                 }
+                // Walk completed — celebrate GIF stays visible until Clear Solution is pressed
             }
-            finally
+            catch (OperationCanceledException)
             {
                 ClearWalkerCell();
+                throw;
             }
-
-            // Walk completed without cancellation — display the full solution
-            DisplaySolution(solution);
         }
         /// <summary>
         /// Returns the walker GIF filename for movement from one point to the next

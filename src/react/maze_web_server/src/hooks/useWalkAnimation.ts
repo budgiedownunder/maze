@@ -12,21 +12,19 @@ export interface WalkState {
 interface UseWalkAnimationResult {
   walkState: WalkState | null
   isWalking: boolean
-  startWalk: (path: Array<CellPoint>, onComplete: () => void) => void
+  startWalk: (path: Array<CellPoint>) => void
   cancelWalk: () => void
 }
 
 export function useWalkAnimation(): UseWalkAnimationResult {
   const [walkState, setWalkState] = useState<WalkState | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onCompleteRef = useRef<(() => void) | null>(null)
 
   const cancelWalk = useCallback(() => {
     if (timerRef.current !== null) {
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
-    onCompleteRef.current = null
     setWalkState(null)
   }, [])
 
@@ -37,7 +35,7 @@ export function useWalkAnimation(): UseWalkAnimationResult {
     }
   }, [])
 
-  const startWalk = useCallback((path: Array<CellPoint>, onComplete: () => void) => {
+  const startWalk = useCallback((path: Array<CellPoint>) => {
     if (path.length === 0) return
 
     // Cancel any in-progress walk
@@ -46,26 +44,17 @@ export function useWalkAnimation(): UseWalkAnimationResult {
       timerRef.current = null
     }
 
-    onCompleteRef.current = onComplete
-
     const advance = (index: number) => {
       const isComplete = index === path.length - 1
 
       setWalkState({ path, currentIndex: index, isComplete })
 
-      if (isComplete) {
-        // Hold celebrate frame for one extra step, then hand off to caller
-        timerRef.current = setTimeout(() => {
-          timerRef.current = null
-          setWalkState(null)
-          onCompleteRef.current?.()
-          onCompleteRef.current = null
-        }, WALK_STEP_DURATION_MS)
-      } else {
+      if (!isComplete) {
         timerRef.current = setTimeout(() => {
           advance(index + 1)
         }, WALK_STEP_DURATION_MS)
       }
+      // When complete, hold the celebrate frame until cancelWalk() is called
     }
 
     advance(0)
