@@ -14,6 +14,8 @@ import { useTheme } from '../context/ThemeContext'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useMazeEditor } from '../hooks/useMazeEditor'
 import { useWalkAnimation } from '../hooks/useWalkAnimation'
+import { useWalkSpeed } from '../hooks/useWalkSpeed'
+import { WalkSpeedControl } from '../components/WalkSpeedControl'
 import { getMaze, createMaze, updateMaze } from '../api/client'
 
 const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
@@ -75,8 +77,11 @@ export function MazePage() {
   const [isSolving, setIsSolving] = useState(false)
   const [solveError, setSolveError] = useState<string | null>(null)
 
+  // Walk speed (persisted to localStorage)
+  const { speedRef, speedIndex, setSpeedIndex } = useWalkSpeed()
+
   // Walk animation state
-  const { walkState, isWalking, startWalk, cancelWalk } = useWalkAnimation()
+  const { walkState, isWalking, startWalk, cancelWalk } = useWalkAnimation(speedRef)
   const isWalkInProgress = walkState !== null && !walkState.isComplete
 
   const isBusy = isSaving || isRefreshing || isGenerating || isSolving || isWalkInProgress
@@ -553,6 +558,12 @@ export function MazePage() {
             >
               <img src="/images/maze/clear_solution_button.png" alt="Clear Solution" />
             </button>
+            {isWalking && (
+              <WalkSpeedControl
+                speedIndex={speedIndex}
+                onSpeedChange={setSpeedIndex}
+              />
+            )}
             {!isRangeMode && anchorCell === null && (
               <button
                 className="maze-toolbar-btn maze-range-mode-btn"

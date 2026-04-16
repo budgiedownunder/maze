@@ -16,7 +16,7 @@ interface UseWalkAnimationResult {
   cancelWalk: () => void
 }
 
-export function useWalkAnimation(): UseWalkAnimationResult {
+export function useWalkAnimation(speedRef: React.RefObject<number>): UseWalkAnimationResult {
   const [walkState, setWalkState] = useState<WalkState | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -52,13 +52,13 @@ export function useWalkAnimation(): UseWalkAnimationResult {
       if (!isComplete) {
         timerRef.current = setTimeout(() => {
           advance(index + 1)
-        }, WALK_STEP_DURATION_MS)
+        }, speedRef.current)
       }
       // When complete, hold the celebrate frame until cancelWalk() is called
     }
 
     advance(0)
-  }, [])
+  }, [speedRef])
 
   return {
     walkState,

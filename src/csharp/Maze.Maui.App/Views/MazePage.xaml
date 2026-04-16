@@ -65,6 +65,11 @@
                 <ImageButton x:Name="ClearSolutionBtn" IsVisible="{Binding CanClearSolution}" Command="{Binding ClearSolutionCommand}" Source="clear_solution_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
+                <Picker x:Name="WalkSpeedPicker"
+                        IsVisible="{Binding IsWalking}"
+                        SelectedIndexChanged="OnWalkSpeedPickerChanged"
+                        HeightRequest="32" MinimumWidthRequest="80"
+                        VerticalOptions="Center"/>
                 <ImageButton x:Name="SelectRangeBtn" IsVisible="{Binding CanSelectRange}" Command="{Binding SelectRangeCommand}" Source="select_range_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" HorizontalOptions="End"/>
