@@ -500,7 +500,8 @@ namespace Maze.Maui.App.Views
                 _walkCts = null;
                 _isWalking = false;
                 MazeGrid.IsInteractionLocked = false;
-                if (savedSelection is CellRange sel && sel.Top > 0)
+                // Only restore selection when cancelled — on success, stay at the finish cell
+                if (!IsSolutionDisplayed && savedSelection is CellRange sel && sel.Top > 0)
                     MazeGrid.ActivateCell(new CellPoint(sel.Top, sel.Left), false);
                 UpdateControls();
             }
@@ -635,7 +636,7 @@ namespace Maze.Maui.App.Views
         {
             bool showSelectRangeButtons = IsTouchOnlyDevice || MazeGrid.IsExtendedSelectionMode;
             bool haveSelection = MazeGrid.HasActiveCell;
-            bool showTopRowLayout = showSelectRangeButtons || haveSelection || _isWalking;
+            bool showTopRowLayout = showSelectRangeButtons || haveSelection || _isWalking || IsSolutionDisplayed;
             ShowMainGridRow(0, showTopRowLayout);
             if (showTopRowLayout)
             {
