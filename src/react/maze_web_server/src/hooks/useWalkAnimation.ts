@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import type { CellPoint } from './useMazeEditor'
 
-export const WALK_STEP_DURATION_MS = 250
+export const WALK_STEP_DURATION_MS = 500
 
 export interface WalkState {
   path: Array<CellPoint>

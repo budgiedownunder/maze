@@ -65,7 +65,7 @@ namespace Maze.Maui.App.Views
         CancellationTokenSource? _fallbackInitCts;
         CancellationTokenSource? _walkCts;
         bool _isWalking = false;
-        const int WALK_STEP_DURATION_MS = 250;
+        const int WALK_STEP_DURATION_MS = 500;
 
         /// <summary>
         /// Indicates whether the page is initlialized
