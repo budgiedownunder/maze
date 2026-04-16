@@ -500,7 +500,7 @@ namespace Maze.Maui.App.Views
                 _walkCts = null;
                 _isWalking = false;
                 MazeGrid.IsInteractionLocked = false;
-                if (!IsSolutionDisplayed && savedSelection is CellRange sel && sel.Top > 0)
+                if (savedSelection is CellRange sel && sel.Top > 0)
                     MazeGrid.ActivateCell(new CellPoint(sel.Top, sel.Left), false);
                 UpdateControls();
             }
