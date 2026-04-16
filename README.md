@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://budgiedownunder.github.io/maze/)
 
-A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, and **WebAssembly** interoperability. Built around a maze generation and solving domain, it demonstrates library crates, REST APIs, WASM bindings, OpenAPI, a cross-platform MAUI app, Node.js-based API testing, architecture diagramming with PlantUML, documentation generation with DocFX, and automated CI/CD across Windows, macOS, and Linux.
+A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **React.js**, **TypeScript** and **WebAssembly** interoperability. Built around a maze generation and solving domain, it demonstrates library crates, REST APIs, WASM bindings, OpenAPI, a cross-platform MAUI app, a React.js SPA, Node.js-based API testing, architecture diagramming with PlantUML, documentation generation with DocFX, and automated CI/CD across Windows, macOS, and Linux.
 
 ## Table of Contents
 - [Introduction](#introduction)
@@ -44,13 +44,13 @@ At this stage, the following areas are covered:
   - Supports interactive documentation in the form of [RapiDoc](https://rapidocweb.com/), [Redoc](https://redocly.com/redoc) and [Swagger UI](https://swagger.io/tools/swagger-ui/)
   - Serves a React Single Page Application (SPA) from a configurable static directory
 
-- Implementing a `React`/`TypeScript` web frontend ([`maze_react_web`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API including maze management and generation/solving (run entirely in-browser via the `maze_wasm` WebAssembly module). Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
+- Implementing a `React`/`TypeScript` web frontend ([`maze_web_server`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API including maze management, generate, solve and walk solution animation (run entirely in-browser via the `maze_wasm` WebAssembly module). Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
 
 - Implementing a `.NET` to Web Assembly ([`maze_wasm`](./src/rust/maze_wasm/README.md)) interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) in `C#` that supports [Wasmtime](https://docs.wasmtime.dev/) (for `Windows` and `Android`), [Wasmer](https://wasmer.io/) (for `Android` and `iOS` simulator), and a native C library via [`maze_c`](./src/rust/maze_c/README.md) (for `iOS`simulator and physical device)
 
 - Implementing automated `.NET` API testing with `xUnit` ([`Maze.Interop.Tests`](./src/csharp/Maze.Interop.Tests/README.md))
 
-- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, change password, delete account) and maze management (create, save, delete, rename, edit, solve, generate)
+- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, change password, delete account) and maze management (create, save, delete, rename, edit, generate, solve, walk solution)
 - Automating `C#` API documentation generation with `DocFX`
 
 - Combining `C#` and `Rust` documentation into a single HTML help system with use of `iFrame` containers
@@ -79,6 +79,7 @@ The following components are present:
 |                                | [`Maze.Maui.Services`](./src/csharp/Maze.Maui.Services/README.md)             | Custom [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) services
 |                                | [`Maze.Interop`](./src/csharp/Maze.Interop/README.md)               | .NET interop to `maze_wasm` web assembly
 |                                | [`Maze.Interop.Tests`](./src/csharp/Maze.Interop/README.md)         | .NET test library for [`Maze.Interop`](./src/csharp/Maze.Interop/README.md)
+| `src/graphics`                 | [`graphics`](./src/graphics/README.md)                                        | Source graphic assets (sprites, animation frames)
 | `src/react`                    | [`maze_web_server`](./src/react/maze_web_server/README.md)                    | React SPA frontend for Rust `maze_web_server`
 | `src/rust`                     | [`auth`](./src/rust/auth/README.md)                                           | Authentication library
 |                                | [`data_model`](./src/rust/data_model/README.md)                               | Data model library
@@ -103,9 +104,10 @@ The following components are present:
 
 The Maze MAUI application running on Windows, iOS, and Android, showing a solved maze.
 
-| Windows | iOS | Android |
-|---------|-----|---------|
-| <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-solved.png" width="250"> |
+| | Windows | iOS | Android |
+|---|---------|-----|---------|
+| **Solved** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-solved.png" width="250"> |
+| **Walk Solution** | <img src = "./src/csharp/Maze.Maui.App/Screenshots/windows-walk.png" width="250"> | <img src = "./src/csharp/Maze.Maui.App/Screenshots/ios-walk.png" width="250"> | <img src = "./src/csharp/Maze.Maui.App/Screenshots/android-walk.png" width="250"> |
 
 ### Web UI
 
@@ -120,7 +122,14 @@ The mazes list page, showing the user's mazes.
 **Maze editor**
 
 The maze editor page, showing a solved maze.
+
 <img src="./src/react/maze_web_server/screenshots/web-solved.png" width="600">
+
+**Walk Solution**
+
+The maze editor animating a step-by-step walk of the solution path.
+
+<img src="./src/react/maze_web_server/screenshots/web-walk.gif" width="600">
 
 ## Getting Started
 

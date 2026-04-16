@@ -12,6 +12,7 @@ namespace Maze.Maui.App.Views
     using CommunityToolkit.Maui.Core;
     using Maze.Maui.Controls.Pointer;
     using Maze.Maui.App.Extensions;
+    using Maze.Maui.Controls.InteractiveGrid;
 
     /// <summary>
     /// This class represents the maze page within the application. It provides
@@ -62,6 +63,9 @@ namespace Maze.Maui.App.Views
         IDeviceTypeService _deviceTypeService;
         uint? _lastMinSolutionLength;
         CancellationTokenSource? _fallbackInitCts;
+        CancellationTokenSource? _walkCts;
+        bool _isWalking = false;
+        const int WALK_STEP_DURATION_MS = 500;
 
         /// <summary>
         /// Indicates whether the page is initlialized
@@ -136,6 +140,7 @@ namespace Maze.Maui.App.Views
             _viewModel.SetFinishRequested += (s, e) => { ChangeSelectionToFinish(); };
             _viewModel.ClearRequested += (s, e) => { ClearSelection(); };
             _viewModel.SolveRequested += (s, e) => { Solve(); };
+            _viewModel.WalkSolutionRequested += async (s, e) => { await WalkSolution(); };
             _viewModel.ClearSolutionRequested += async (s, e) => { await ClearSolution(); };
             _viewModel.SaveRequested += async (s, e) => { await Save(); };
             _viewModel.RefreshRequested += async (s, e) => { await Refresh(); };
@@ -184,6 +189,7 @@ namespace Maze.Maui.App.Views
         /// <param name="e">Event arguments</param>
         private void OnMazeGridCellTapped(object sender, MazeGridCellTappedEventArgs e)
         {
+            if (_isWalking) return;
             Initialize();
             MazeGrid.OnCellTapped(e.Cell, false);
         }
@@ -210,6 +216,7 @@ namespace Maze.Maui.App.Views
         /// <param name="e">Event arguments</param>
         private void OnMazeGridKeyDown(object sender, MazeGridKeyDownEventArgs e)
         {
+            if (_isWalking) return;
             switch (e.Key)
             {
                 case Controls.Keyboard.Key.W:
@@ -464,10 +471,46 @@ namespace Maze.Maui.App.Views
             }
         }
         /// <summary>
+        /// Animates a walker character stepping through the solution path one cell at a time.
+        /// Blocks all editing for the duration of the walk. Clear Solution cancels the walk.
+        /// </summary>
+        private async Task WalkSolution()
+        {
+            _walkCts = new CancellationTokenSource();
+            _isWalking = true;
+            MazeGrid.IsInteractionLocked = true;
+            CellRange? savedSelection = MazeGrid.CurrentSelection;
+            MazeGrid.ClearSelection();
+            UpdateControls();
+            try
+            {
+                Maze maze = MazeGrid.ToMaze();
+                Solution solution = maze.Solve();
+                await MazeGrid.WalkSolutionAsync(solution, WALK_STEP_DURATION_MS, _walkCts.Token);
+                IsSolutionDisplayed = true;
+            }
+            catch (OperationCanceledException) { /* cancelled cleanly by ClearSolution */ }
+            catch (Exception ex)
+            {
+                await _dialogService.ShowAlert(APP_TITLE, $"Unable to solve maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
+            }
+            finally
+            {
+                _walkCts?.Dispose();
+                _walkCts = null;
+                _isWalking = false;
+                MazeGrid.IsInteractionLocked = false;
+                if (savedSelection is CellRange sel && sel.Top > 0)
+                    MazeGrid.ActivateCell(new CellPoint(sel.Top, sel.Left), false);
+                UpdateControls();
+            }
+        }
+        /// <summary>
         /// Clears the maze solution that is displayed (if any) and resets toolbar/buttons states appropriately
         /// </summary>
         private async Task ClearSolution()
         {
+            _walkCts?.Cancel();
             SetBusyIndicators(true, updateViewModel: false);
             await Task.Delay(50);
             try
@@ -518,10 +561,10 @@ namespace Maze.Maui.App.Views
         {
             CellStatus status = MazeGrid.GetCurrentSelectionStatus();
 
-            _viewModel.CanSetWall = !status.IsAllWalls && !IsSolutionDisplayed;
-            _viewModel.CanSetStart = status.IsSingleCell && !status.IsStart && !IsSolutionDisplayed;
-            _viewModel.CanSetFinish = status.IsSingleCell && !status.IsFinish && !IsSolutionDisplayed;
-            _viewModel.CanClear = !status.IsEmpty && !IsSolutionDisplayed;
+            _viewModel.CanSetWall = !status.IsAllWalls && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanSetStart = status.IsSingleCell && !status.IsStart && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanSetFinish = status.IsSingleCell && !status.IsFinish && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanClear = !status.IsEmpty && !IsSolutionDisplayed && !_isWalking;
         }
         /// <summary>
         /// Adjusts the row and column edit flags based on the cells that are selected
@@ -531,10 +574,10 @@ namespace Maze.Maui.App.Views
             bool allRowsSelected = MazeGrid.AllRowsSelected;
             bool allColumnsSelected = MazeGrid.AllColumnsSelected;
 
-            _viewModel.CanInsertRows = allColumnsSelected && !IsSolutionDisplayed;
-            _viewModel.CanDeleteRows = allColumnsSelected && !allRowsSelected && !IsSolutionDisplayed;
-            _viewModel.CanInsertColumns = allRowsSelected && !IsSolutionDisplayed;
-            _viewModel.CanDeleteColumns = allRowsSelected && !allColumnsSelected && !IsSolutionDisplayed;
+            _viewModel.CanInsertRows = allColumnsSelected && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanDeleteRows = allColumnsSelected && !allRowsSelected && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanInsertColumns = allRowsSelected && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanDeleteColumns = allRowsSelected && !allColumnsSelected && !IsSolutionDisplayed && !_isWalking;
         }
         /// <summary>
         /// Adjusts the select range visibility flags based on whether visibility is required and a solution is displayed
@@ -543,8 +586,8 @@ namespace Maze.Maui.App.Views
         private void ShowSelectRangeButtons(bool show)
         {
             bool touchOnly = IsTouchOnlyDevice;
-            bool showSelectRangeBtn = show && touchOnly && !IsSolutionDisplayed;
-            bool showDoneBtn = !show && touchOnly && !IsSolutionDisplayed;
+            bool showSelectRangeBtn = show && touchOnly && !IsSolutionDisplayed && !_isWalking;
+            bool showDoneBtn = !show && touchOnly && !IsSolutionDisplayed && !_isWalking;
 
             _viewModel.CanSelectRange = showSelectRangeBtn;
             _viewModel.CanShowDone = showDoneBtn;
@@ -554,15 +597,16 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private void ShowSolveButtons()
         {
-            _viewModel.CanSolve = IsSolveSupported && !IsSolutionDisplayed;
-            _viewModel.CanClearSolution = IsSolveSupported && IsSolutionDisplayed;
+            _viewModel.CanSolve = IsSolveSupported && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanWalkSolution = IsSolveSupported && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanClearSolution = IsSolveSupported && (IsSolutionDisplayed || _isWalking);
         }
         /// <summary>
         /// Adjusts the generate button visibility based on whether generation is supported and a solution is displayed
         /// </summary>
         private void ShowGenerateButton()
         {
-            _viewModel.CanGenerate = IsGenerationSupported && !IsSolutionDisplayed;
+            _viewModel.CanGenerate = IsGenerationSupported && !IsSolutionDisplayed && !_isWalking;
         }
         /// <summary>
         /// Handles the maze cell selection changed event
@@ -591,7 +635,7 @@ namespace Maze.Maui.App.Views
         {
             bool showSelectRangeButtons = IsTouchOnlyDevice || MazeGrid.IsExtendedSelectionMode;
             bool haveSelection = MazeGrid.HasActiveCell;
-            bool showTopRowLayout = showSelectRangeButtons || haveSelection;
+            bool showTopRowLayout = showSelectRangeButtons || haveSelection || _isWalking;
             ShowMainGridRow(0, showTopRowLayout);
             if (showTopRowLayout)
             {

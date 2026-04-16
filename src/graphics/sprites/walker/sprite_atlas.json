@@ -1,0 +1,317 @@
+{
+  "meta": {
+    "image": "walker_sprite_sheet.png",
+    "imageSize": {
+      "width": 192,
+      "height": 160
+    },
+    "frameSize": {
+      "width": 32,
+      "height": 32
+    }
+  },
+  "frames": {
+    "walker_down_0": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_down_1": {
+      "frame": {
+        "x": 32,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_down_2": {
+      "frame": {
+        "x": 64,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_down_3": {
+      "frame": {
+        "x": 96,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_down_4": {
+      "frame": {
+        "x": 128,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_down_5": {
+      "frame": {
+        "x": 160,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_up_0": {
+      "frame": {
+        "x": 0,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_up_1": {
+      "frame": {
+        "x": 32,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_up_2": {
+      "frame": {
+        "x": 64,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_up_3": {
+      "frame": {
+        "x": 96,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_up_4": {
+      "frame": {
+        "x": 128,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_up_5": {
+      "frame": {
+        "x": 160,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_right_0": {
+      "frame": {
+        "x": 0,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_right_1": {
+      "frame": {
+        "x": 32,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_right_2": {
+      "frame": {
+        "x": 64,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_right_3": {
+      "frame": {
+        "x": 96,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_right_4": {
+      "frame": {
+        "x": 128,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_right_5": {
+      "frame": {
+        "x": 160,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_left_0": {
+      "frame": {
+        "x": 0,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_left_1": {
+      "frame": {
+        "x": 32,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_left_2": {
+      "frame": {
+        "x": 64,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_left_3": {
+      "frame": {
+        "x": 96,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_left_4": {
+      "frame": {
+        "x": 128,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_left_5": {
+      "frame": {
+        "x": 160,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_celebrate_0": {
+      "frame": {
+        "x": 0,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_celebrate_1": {
+      "frame": {
+        "x": 32,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_celebrate_2": {
+      "frame": {
+        "x": 64,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_celebrate_3": {
+      "frame": {
+        "x": 96,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_celebrate_4": {
+      "frame": {
+        "x": 128,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      }
+    },
+    "walker_celebrate_5": {
+      "frame": {
+        "x": 160,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      }
+    }
+  },
+  "animations": {
+    "walker_down": {
+      "frames": [
+        "walker_down_0",
+        "walker_down_1",
+        "walker_down_2",
+        "walker_down_3",
+        "walker_down_4",
+        "walker_down_5"
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "walker_up": {
+      "frames": [
+        "walker_up_0",
+        "walker_up_1",
+        "walker_up_2",
+        "walker_up_3",
+        "walker_up_4",
+        "walker_up_5"
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "walker_right": {
+      "frames": [
+        "walker_right_0",
+        "walker_right_1",
+        "walker_right_2",
+        "walker_right_3",
+        "walker_right_4",
+        "walker_right_5"
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "walker_left": {
+      "frames": [
+        "walker_left_0",
+        "walker_left_1",
+        "walker_left_2",
+        "walker_left_3",
+        "walker_left_4",
+        "walker_left_5"
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "walker_celebrate": {
+      "frames": [
+        "walker_celebrate_0",
+        "walker_celebrate_1",
+        "walker_celebrate_2",
+        "walker_celebrate_3",
+        "walker_celebrate_4",
+        "walker_celebrate_5"
+      ],
+      "fps": 8,
+      "loop": true
+    }
+  }
+}

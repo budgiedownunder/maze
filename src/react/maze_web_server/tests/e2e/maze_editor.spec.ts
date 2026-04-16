@@ -795,3 +795,93 @@ test('shortcut hint bar contains expected shortcuts', async ({ page }) => {
   await expect(hint).toContainText('[DEL]')
   await expect(hint).toContainText('[Shift] Range')
 })
+
+// ──────────────────────────────────────────────────────────────
+// Walk Solution
+// ──────────────────────────────────────────────────────────────
+
+test('Walk Solution button is visible and enabled when no solution is shown', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await expect(page.getByRole('button', { name: 'Walk Solution' })).toBeEnabled()
+})
+
+test('Walk Solution button is disabled when a solution is already displayed', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Solve' }).click()
+  await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Walk Solution' })).toBeDisabled()
+})
+
+test('clicking Walk Solution on an unsolvable maze shows an alert dialog', async ({ page }) => {
+  await login(page)
+  await page.goto('/mazes/new')  // blank grid has no S or F
+  await page.getByRole('button', { name: 'Walk Solution' }).click()
+  await expect(page.getByRole('dialog', { name: 'Unable to solve maze' })).toBeVisible()
+  await page.getByRole('button', { name: 'OK' }).click()
+  await expect(page.getByRole('dialog', { name: 'Unable to solve maze' })).not.toBeVisible()
+})
+
+test('clicking Walk Solution shows walker image stepping through the maze', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Walk Solution' }).click()
+  // Walker GIF should appear during animation
+  await expect(page.locator('img[alt="Walker"]')).toBeVisible()
+})
+
+test('after Walk Solution completes the full solution is displayed', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Walk Solution' }).click()
+  // Wait for walk to finish: walker disappears and solution footsteps appear
+  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible({ timeout: 10000 })
+  await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Walk Solution' })).toBeDisabled()
+})
+
+test('Clear Solution button is enabled while walk is in progress', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Walk Solution' }).click()
+  await expect(page.locator('img[alt="Walker"]')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeEnabled()
+})
+
+test('clicking Clear Solution mid-walk cancels the animation and resets the grid', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Walk Solution' }).click()
+  await expect(page.locator('img[alt="Walker"]')).toBeVisible()
+  await page.getByRole('button', { name: 'Clear Solution' }).click()
+  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible()
+  await expect(page.locator('img[alt="Solution path"]')).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Walk Solution' })).toBeEnabled()
+})
+
+test('clicking a cell during walk does not produce a selection frame', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Walk Solution' }).click()
+  await expect(page.locator('img[alt="Walker"]')).toBeVisible()
+  await page.locator('td[aria-label="Cell 1,3"]').click()
+  await expect(page.locator('.maze-selection-frame')).not.toBeVisible()
+})
+
+test('Clear Solution after Walk Solution resets to normal editing state', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Walk Solution' }).click()
+  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible({ timeout: 10000 })
+  await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Clear Solution' }).click()
+  await expect(page.locator('img[alt="Solution path"]')).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Walk Solution' })).toBeEnabled()
+  // Generate and Solve don't require a cell selection — confirm editing is re-enabled
+  await expect(page.getByRole('button', { name: 'Generate' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Solve' })).toBeEnabled()
+})
