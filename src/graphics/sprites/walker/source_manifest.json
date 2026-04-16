@@ -1,0 +1,69 @@
+{
+  "format": "sprite-source-assets-v1",
+  "frameSize": {
+    "width": 32,
+    "height": 32
+  },
+  "animations": {
+    "walker_down": {
+      "fps": 10,
+      "loop": true,
+      "frames": [
+        "walker_down/walker_down_00.png",
+        "walker_down/walker_down_01.png",
+        "walker_down/walker_down_02.png",
+        "walker_down/walker_down_03.png",
+        "walker_down/walker_down_04.png",
+        "walker_down/walker_down_05.png"
+      ]
+    },
+    "walker_up": {
+      "fps": 10,
+      "loop": true,
+      "frames": [
+        "walker_up/walker_up_00.png",
+        "walker_up/walker_up_01.png",
+        "walker_up/walker_up_02.png",
+        "walker_up/walker_up_03.png",
+        "walker_up/walker_up_04.png",
+        "walker_up/walker_up_05.png"
+      ]
+    },
+    "walker_left": {
+      "fps": 10,
+      "loop": true,
+      "frames": [
+        "walker_left/walker_left_00.png",
+        "walker_left/walker_left_01.png",
+        "walker_left/walker_left_02.png",
+        "walker_left/walker_left_03.png",
+        "walker_left/walker_left_04.png",
+        "walker_left/walker_left_05.png"
+      ]
+    },
+    "walker_right": {
+      "fps": 10,
+      "loop": true,
+      "frames": [
+        "walker_right/walker_right_00.png",
+        "walker_right/walker_right_01.png",
+        "walker_right/walker_right_02.png",
+        "walker_right/walker_right_03.png",
+        "walker_right/walker_right_04.png",
+        "walker_right/walker_right_05.png"
+      ]
+    },
+    "walker_celebrate": {
+      "fps": 8,
+      "loop": true,
+      "frames": [
+        "walker_celebrate/walker_celebrate_00.png",
+        "walker_celebrate/walker_celebrate_01.png",
+        "walker_celebrate/walker_celebrate_02.png",
+        "walker_celebrate/walker_celebrate_03.png",
+        "walker_celebrate/walker_celebrate_04.png",
+        "walker_celebrate/walker_celebrate_05.png"
+      ]
+    }
+  }
+}

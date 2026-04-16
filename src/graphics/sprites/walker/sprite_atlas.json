@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "image": "sprite_sheet.png",
+    "frameSize": {
+      "w": 32,
+      "h": 32
+    }
+  },
+  "animations": {
+    "walker_down": {
+      "row": 0,
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "walker_up": {
+      "row": 1,
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "walker_left": {
+      "row": 2,
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "walker_right": {
+      "row": 3,
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 10,
+      "loop": true
+    },
+    "walker_celebrate": {
+      "row": 4,
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "fps": 8,
+      "loop": true
+    }
+  }
+}
