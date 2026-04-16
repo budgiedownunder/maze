@@ -295,8 +295,8 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         }
       }
 
-      // Walker cell and walked cells get the solution highlight colour
-      if (isWalker || inWalked) {
+      // Walked cells get the solution highlight colour; walker cell keeps normal background
+      if (inWalked) {
         classes.push('maze-cell--solution')
       } else if (inSolution && grid[row][col] !== 'S' && grid[row][col] !== 'F') {
         classes.push('maze-cell--solution')

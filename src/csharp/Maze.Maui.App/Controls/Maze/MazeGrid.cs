@@ -1191,7 +1191,7 @@ namespace Maze.Maui.App
                     VerticalOptions = LayoutOptions.Fill,
                     IsAnimationPlaying = true
                 };
-            Content.BackgroundColor = SOLUTION_PATH_CELL_HIGHLIGHT_COLOR;
+            Content.BackgroundColor = Colors.Transparent;
         }
         /// <summary>
         /// Sets the solution path direction in the cell
