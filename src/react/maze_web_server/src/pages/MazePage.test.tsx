@@ -117,3 +117,55 @@ describe('MazePage busy state', () => {
     resolveSolve(MOCK_SOLVE_PATH)
   })
 })
+
+describe('MazePage walk speed control', () => {
+  beforeEach(() => {
+    setupAuth()
+    localStorage.clear()
+    vi.mocked(solveMaze).mockResolvedValue(MOCK_SOLVE_PATH)
+  })
+
+  afterEach(() => {
+    sessionStorage.clear()
+    localStorage.clear()
+    vi.clearAllMocks()
+  })
+
+  async function startWalk() {
+    renderMazePage('maze-0001')
+    const walkBtn = await screen.findByRole('button', { name: 'Walk Solution' })
+    await waitFor(() => expect(walkBtn).not.toBeDisabled())
+    await userEvent.click(walkBtn)
+    return screen.findByRole('combobox', { name: 'Walk speed' })
+  }
+
+  it('speed select is not shown before a walk starts', async () => {
+    renderMazePage('maze-0001')
+    await screen.findByRole('button', { name: 'Walk Solution' })
+    expect(screen.queryByRole('combobox', { name: 'Walk speed' })).not.toBeInTheDocument()
+  })
+
+  it('speed select appears once a walk is in progress', async () => {
+    const select = await startWalk()
+    expect(select).toBeInTheDocument()
+  })
+
+  it('speed select defaults to Normal', async () => {
+    const select = await startWalk()
+    expect(select).toHaveValue('1') // index 1 = Normal
+  })
+
+  it('selecting a different speed persists to localStorage', async () => {
+    const select = await startWalk()
+    await userEvent.selectOptions(select, '3') // Fast
+    expect(localStorage.getItem('walkSpeed')).toBe('3')
+  })
+
+  it('speed select disappears after Clear Solution cancels the walk', async () => {
+    await startWalk()
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Solution' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('combobox', { name: 'Walk speed' })).not.toBeInTheDocument(),
+    )
+  })
+})
