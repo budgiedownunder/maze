@@ -789,13 +789,14 @@ describe('MazePage walk solution', () => {
     await waitFor(() => expect(screen.getByAltText('Walker')).toBeInTheDocument())
   })
 
-  it('after walk completes the full solution overlay is displayed', async () => {
+  it('after walk completes the celebrate GIF stays visible and Clear Solution remains enabled', async () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     await userEvent.click(screen.getByRole('button', { name: 'Walk Solution' }))
-    // Wait for Walker to appear first, then disappear (final timer nulls walkState
-    // and calls applySolution in the same batch).
-    await waitFor(() => expect(screen.getByAltText('Walker')).toBeInTheDocument(), { timeout: 3000 })
-    await waitFor(() => expect(screen.queryByAltText('Walker')).not.toBeInTheDocument(), { timeout: 5000 })
+    // Wait for the celebrate GIF to appear at the finish cell
+    await waitFor(() => expect(screen.getByAltText('Walker')).toHaveAttribute('src', '/images/maze/walker_celebrate.gif'), { timeout: 5000 })
+    // Celebrate GIF remains — walker does not disappear until Clear Solution
+    expect(screen.getByAltText('Walker')).toBeInTheDocument()
+    // Walked cells behind the walker show footstep overlays
     expect(screen.getAllByAltText('Solution path').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Clear Solution' })).not.toBeDisabled()
   }, 10000)

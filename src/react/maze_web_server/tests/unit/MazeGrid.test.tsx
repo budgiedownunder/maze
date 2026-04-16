@@ -270,11 +270,11 @@ describe('MazeGrid walk animation', () => {
     expect(screen.getByLabelText('Cell 2,1').className).toContain('maze-cell--solution')
   })
 
-  it('walker cell receives maze-cell--solution class', () => {
+  it('walker cell does not receive maze-cell--solution class', () => {
     renderGrid({
       walkState: { path: WALK_PATH, currentIndex: 1, isComplete: false },
     })
-    expect(screen.getByLabelText('Cell 2,1').className).toContain('maze-cell--solution')
+    expect(screen.getByLabelText('Cell 2,1').className).not.toContain('maze-cell--solution')
   })
 
   it('unwalked cells render normally', () => {
