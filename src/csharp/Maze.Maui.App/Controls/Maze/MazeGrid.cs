@@ -702,9 +702,9 @@ namespace Maze.Maui.App
         /// the caller to clear via <see cref="ClearLastSolution"/>.
         /// </summary>
         /// <param name="solution">Maze solution</param>
-        /// <param name="stepMs">Milliseconds between steps</param>
+        /// <param name="getStepMs">Returns the milliseconds to wait between steps; read at each step so speed changes take effect immediately</param>
         /// <param name="ct">Cancellation token</param>
-        public async Task WalkSolutionAsync(Api.Solution solution, int stepMs, CancellationToken ct)
+        public async Task WalkSolutionAsync(Api.Solution solution, Func<int> getStepMs, CancellationToken ct)
         {
             List<Api.Maze.Point> points = solution.GetPathPoints();
             if (points.Count == 0) return;
@@ -741,7 +741,7 @@ namespace Maze.Maui.App
 
                     ScrollCellIntoView(row, col);
 
-                    await Task.Delay(stepMs, ct);
+                    await Task.Delay(getStepMs(), ct);
                 }
                 // Walk completed — celebrate GIF stays visible until Clear Solution is pressed
             }

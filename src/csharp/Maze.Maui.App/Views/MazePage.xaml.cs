@@ -65,7 +65,13 @@ namespace Maze.Maui.App.Views
         CancellationTokenSource? _fallbackInitCts;
         CancellationTokenSource? _walkCts;
         bool _isWalking = false;
-        const int WALK_STEP_DURATION_MS = 500;
+        bool _walkSolutionDisplayed = false;
+        CellRange? _savedWalkSelection;
+        static readonly int[] WALK_SPEED_MS = [750, 500, 200, 20];
+        static readonly string[] WALK_SPEED_LABELS = ["Slow", "Normal", "Fast", "Turbo"];
+        const string WALK_SPEED_PREF_KEY = "walk_speed_index";
+        const int WALK_SPEED_DEFAULT_INDEX = 1; // Normal
+        int _walkSpeedIndex = WALK_SPEED_DEFAULT_INDEX;
 
         /// <summary>
         /// Indicates whether the page is initlialized
@@ -145,6 +151,9 @@ namespace Maze.Maui.App.Views
             _viewModel.SaveRequested += async (s, e) => { await Save(); };
             _viewModel.RefreshRequested += async (s, e) => { await Refresh(); };
             _viewModel.GenerateRequested += async (s, e) => { await Generate(); };
+            _walkSpeedIndex = Preferences.Default.Get(WALK_SPEED_PREF_KEY, WALK_SPEED_DEFAULT_INDEX);
+            if (_walkSpeedIndex < 0 || _walkSpeedIndex >= WALK_SPEED_MS.Length)
+                _walkSpeedIndex = WALK_SPEED_DEFAULT_INDEX;
         }
         /// <summary>
         /// Intializes the page 
@@ -167,6 +176,9 @@ namespace Maze.Maui.App.Views
             _viewModel.IsStored = MazeItem.ID != "";
             _viewModel.CanRefresh = false;
             _viewModel.CanSave = MazeItem.ID == "";
+
+            WalkSpeedPicker.ItemsSource = WALK_SPEED_LABELS;
+            WalkSpeedPicker.SelectedIndex = _walkSpeedIndex;
 
             UpdateControls();
 
@@ -479,15 +491,16 @@ namespace Maze.Maui.App.Views
             _walkCts = new CancellationTokenSource();
             _isWalking = true;
             MazeGrid.IsInteractionLocked = true;
-            CellRange? savedSelection = MazeGrid.CurrentSelection;
+            _savedWalkSelection = MazeGrid.CurrentSelection;
             MazeGrid.ClearSelection();
             UpdateControls();
             try
             {
                 Maze maze = MazeGrid.ToMaze();
                 Solution solution = maze.Solve();
-                await MazeGrid.WalkSolutionAsync(solution, WALK_STEP_DURATION_MS, _walkCts.Token);
+                await MazeGrid.WalkSolutionAsync(solution, () => WALK_SPEED_MS[_walkSpeedIndex], _walkCts.Token);
                 IsSolutionDisplayed = true;
+                _walkSolutionDisplayed = true;
             }
             catch (OperationCanceledException) { /* cancelled cleanly by ClearSolution */ }
             catch (Exception ex)
@@ -500,9 +513,14 @@ namespace Maze.Maui.App.Views
                 _walkCts = null;
                 _isWalking = false;
                 MazeGrid.IsInteractionLocked = false;
-                // Only restore selection when cancelled — on success, stay at the finish cell
-                if (!IsSolutionDisplayed && savedSelection is CellRange sel && sel.Top > 0)
-                    MazeGrid.ActivateCell(new CellPoint(sel.Top, sel.Left), false);
+                // Restore selection immediately when cancelled; on success, defer to ClearSolution
+                if (!IsSolutionDisplayed)
+                {
+                    _walkSolutionDisplayed = false;
+                    if (_savedWalkSelection is CellRange sel && sel.Top > 0)
+                        MazeGrid.ActivateCell(new CellPoint(sel.Top, sel.Left), false);
+                    _savedWalkSelection = null;
+                }
                 UpdateControls();
             }
         }
@@ -517,6 +535,11 @@ namespace Maze.Maui.App.Views
             try
             {
                 IsSolutionDisplayed = !MazeGrid.ClearLastSolution();
+                _walkSolutionDisplayed = false;
+                // Restore the selection that was saved when the walk started
+                if (_savedWalkSelection is CellRange sel && sel.Top > 0)
+                    MazeGrid.ActivateCell(new CellPoint(sel.Top, sel.Left), false);
+                _savedWalkSelection = null;
                 UpdateControls();
             }
             finally
@@ -601,6 +624,17 @@ namespace Maze.Maui.App.Views
             _viewModel.CanSolve = IsSolveSupported && !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanWalkSolution = IsSolveSupported && !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanClearSolution = IsSolveSupported && (IsSolutionDisplayed || _isWalking);
+            _viewModel.IsWalking = _isWalking || _walkSolutionDisplayed;
+        }
+        /// <summary>
+        /// Handles walk speed picker selection changes; saves the new preference
+        /// </summary>
+        private void OnWalkSpeedPickerChanged(object sender, EventArgs e)
+        {
+            int index = WalkSpeedPicker.SelectedIndex;
+            if (index < 0 || index >= WALK_SPEED_MS.Length) return;
+            _walkSpeedIndex = index;
+            Preferences.Default.Set(WALK_SPEED_PREF_KEY, _walkSpeedIndex);
         }
         /// <summary>
         /// Adjusts the generate button visibility based on whether generation is supported and a solution is displayed
