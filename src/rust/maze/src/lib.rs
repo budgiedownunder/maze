@@ -1,5 +1,6 @@
 // Re-export modules
 mod error;
+mod game;
 #[cfg(feature = "generation")]
 mod generation_algorithm;
 #[cfg(feature = "generation")]
@@ -13,6 +14,7 @@ mod solver;
 
 // Re-export traits and structs
 pub use error::Error;
+pub use game::{Direction, MazeGame, MoveResult};
 #[cfg(feature = "generation")]
 pub use generation_algorithm::GenerationAlgorithm;
 #[cfg(feature = "generation")]
