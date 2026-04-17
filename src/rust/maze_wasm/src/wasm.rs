@@ -1,6 +1,6 @@
-use crate::wasm_common::{new_maze, to_cell_type_enum, MazeWasm};
+use crate::wasm_common::{new_maze, new_maze_game, to_cell_type_enum, MazeGameWasm, MazeWasm};
 use data_model::MazePoint;
-use maze::{MazeSolver, MazeSolution};
+use maze::{MazeSolution, MazeSolver};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ptr;
 #[cfg(feature = "wasm-lite")]
@@ -871,6 +871,235 @@ pub extern "C" fn free_generator_options_wasm(ptr: *mut GeneratorOptionsWasm) {
             decrement_num_objects_allocated();
         }
     }
+}
+
+// ── MazeGameWasm wasm-lite exports ───────────────────────────────────────────
+//
+// Direction i32 encoding: 0=None 1=Up 2=Down 3=Left 4=Right
+// MoveResult i32 encoding: 0=None 1=Moved 2=Blocked 3=Complete; -1=null pointer
+//
+// NOTE: these integer encodings intentionally match the discriminant values of
+// DirectionWasm and MoveResultWasm in wasm_common.rs. If either enum is changed,
+// the encoding here must be updated to match.
+
+/// Converts an `i32` direction encoding to a [`maze::Direction`].
+///
+/// Encoding: `0`=None, `1`=Up, `2`=Down, `3`=Left, `4`=Right.
+///
+/// # Returns
+///
+/// `Some(Direction)` for a recognised value, or `None` for any other value.
+///
+fn game_direction_from_i32(dir: i32) -> Option<maze::Direction> {
+    match dir {
+        0 => Some(maze::Direction::None),
+        1 => Some(maze::Direction::Up),
+        2 => Some(maze::Direction::Down),
+        3 => Some(maze::Direction::Left),
+        4 => Some(maze::Direction::Right),
+        _ => None,
+    }
+}
+
+/// Converts a [`maze::Direction`] to its `i32` encoding.
+///
+/// Encoding: `0`=None, `1`=Up, `2`=Down, `3`=Left, `4`=Right.
+///
+/// # Returns
+///
+/// Direction as `i32`.
+///
+fn game_direction_to_i32(dir: maze::Direction) -> i32 {
+    match dir {
+        maze::Direction::None => 0,
+        maze::Direction::Up => 1,
+        maze::Direction::Down => 2,
+        maze::Direction::Left => 3,
+        maze::Direction::Right => 4,
+    }
+}
+
+/// Creates a [`MazeGameWasm`] from a length-prefixed JSON string in WASM linear memory.
+///
+/// `json_string_ptr` must point to sized memory allocated with [`allocate_sized_memory`].
+///
+/// # Returns
+///
+/// A non-null pointer on success, or a null pointer on error (invalid JSON or no start cell).
+/// The caller must free the pointer with [`free_maze_game_wasm`] when done.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn new_maze_game_wasm(json_string_ptr: *const u8) -> *mut MazeGameWasm {
+    let json_str = ptr_to_string(json_string_ptr);
+    match new_maze_game(&json_str) {
+        Ok(maze_game_wasm) => {
+            let boxed = Box::new(maze_game_wasm);
+            increment_num_objects_allocated();
+            Box::into_raw(boxed)
+        }
+        Err(_) => ptr::null_mut(),
+    }
+}
+
+/// Frees a [`MazeGameWasm`] pointer returned by [`new_maze_game_wasm`].
+///
+/// # Returns
+///
+/// Nothing
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn free_maze_game_wasm(maze_game_wasm: *mut MazeGameWasm) {
+    if !maze_game_wasm.is_null() {
+        unsafe {
+            let _ = Box::from_raw(maze_game_wasm); // This automatically frees the memory
+            decrement_num_objects_allocated();
+        }
+    }
+}
+
+/// Moves the player one cell in the given direction.
+///
+/// # Returns
+///
+/// `0`=None, `1`=Moved, `2`=Blocked, `3`=Complete,
+/// or `-1` for a null pointer or unknown `dir` value.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_move_player(maze_game_wasm: *mut MazeGameWasm, dir: i32) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &mut (*maze_game_wasm).game };
+    let direction = match game_direction_from_i32(dir) {
+        Some(d) => d,
+        None => return -1,
+    };
+    match game.move_player(direction) {
+        maze::MoveResult::None => 0,
+        maze::MoveResult::Moved => 1,
+        maze::MoveResult::Blocked => 2,
+        maze::MoveResult::Complete => 3,
+    }
+}
+
+/// Returns the player's current row (0-based).
+///
+/// # Returns
+///
+/// The row index, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_player_row(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.player_row() as i32
+}
+
+/// Returns the player's current column (0-based).
+///
+/// # Returns
+///
+/// The column index, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_player_col(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.player_col() as i32
+}
+
+/// Returns the player's current facing direction.
+///
+/// # Returns
+///
+/// `0`=None, `1`=Up, `2`=Down, `3`=Left, `4`=Right,
+/// or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_player_direction(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game_direction_to_i32(game.player_direction())
+}
+
+/// Returns whether the game is complete (the player has reached the finish cell).
+///
+/// # Returns
+///
+/// `1` if complete, `0` if not, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_is_complete(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    if game.is_complete() { 1 } else { 0 }
+}
+
+/// Returns the number of cells in the visited-cells list.
+///
+/// # Returns
+///
+/// The cell count, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_visited_cell_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.visited_cells().len() as i32
+}
+
+/// Retrieves a single visited cell by `index`.
+///
+/// Writes the cell's row and column into `row_out` and `col_out` (if non-null).
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_visited_cell(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    row_out: *mut i32,
+    col_out: *mut i32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let cells = game.visited_cells();
+    if index < 0 || index as usize >= cells.len() {
+        return -1;
+    }
+    let (row, col) = cells[index as usize];
+    unsafe {
+        if !row_out.is_null() {
+            *row_out = row as i32;
+        }
+        if !col_out.is_null() {
+            *col_out = col as i32;
+        }
+    }
+    0
 }
 
 /// Total sized memory currently allocated

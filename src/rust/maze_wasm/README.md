@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The `maze_wasm` crate is written in `Rust` and defines the Web Assembly library for defining, generating and solving mazes in consumer applications that support Web Assembly (WASM).
+The `maze_wasm` crate is written in `Rust` and defines the Web Assembly library for defining, generating, solving and playing mazes in consumer applications that support Web Assembly (WASM).
 
 The crate uses `wasm-pack` to generate a JavaScript API wrapper `maze_wasm.js` to the WASM, and uses `cargo` to build the general Web Assembly `maze_wasm.wasm` for use outside of JavaScript.
 
@@ -60,6 +60,55 @@ To generate documentation for the generalised Web Assembly API:
 ```
 cargo doc --open
 ```
+
+## MazeGameWasm API
+
+The `MazeGameWasm` type exposes an interactive game session: place a player at the start cell and move them through the maze one step at a time.
+
+### wasm-bindgen (JavaScript)
+
+```js
+import init, { DirectionWasm, MazeGameWasm, MoveResultWasm } from 'maze_wasm.js';
+await init();
+
+// JSON format: { "grid": [["S", " ", "F"], ...] }
+// Cells: "S" = start, "F" = finish, "W" = wall, " " = empty
+const game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+
+game.player_row();       // → number (0-based row index)
+game.player_col();       // → number (0-based column index)
+game.player_direction(); // → DirectionWasm (None=0, Up=1, Down=2, Left=3, Right=4)
+game.is_complete();      // → boolean
+
+// Returns MoveResultWasm (None=0, Moved=1, Blocked=2, Complete=3)
+const result = game.move_player(DirectionWasm.Right);
+
+// Array of { row: number, col: number } objects in visit order
+// Includes the start cell; only appended on successful moves
+const cells = game.visited_cells();
+```
+
+### wasm-lite (C FFI)
+
+For non-JS WASM hosts (Wasmtime, .NET, native via P/Invoke).
+
+```c
+// Direction encoding: 0=None, 1=Up, 2=Down, 3=Left, 4=Right
+// MoveResult encoding: 0=None, 1=Moved, 2=Blocked, 3=Complete, -1=null pointer
+
+MazeGameWasm* new_maze_game_wasm(const u8* json_string_ptr);  // returns null on error
+void          free_maze_game_wasm(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_move_player(MazeGameWasm* maze_game_wasm, i32 dir);
+i32           maze_game_wasm_player_row(MazeGameWasm* maze_game_wasm);       // -1 on null
+i32           maze_game_wasm_player_col(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_player_direction(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_is_complete(MazeGameWasm* maze_game_wasm);      // 1=true, 0=false, -1=null
+i32           maze_game_wasm_visited_cell_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_visited_cell(MazeGameWasm* maze_game_wasm, i32 index,
+                                              i32* row_out, i32* col_out);   // 0=ok, -1=error
+```
+
+The `json_string_ptr` argument must point to a length-prefixed string (4-byte little-endian length followed by UTF-8 bytes), allocated via `allocate_sized_memory`.
 
 ## WebAssembly Target Compatibility
 
