@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:Maze.Maui.App"
+             xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             x:DataType="viewmodel:MazeGameViewModel"
+             x:Class="Maze.Maui.App.Views.MazeGamePage"
+             Title="{Binding Title}">
+
+    <AbsoluteLayout>
+
+        <controls:MazeGrid x:Name="GameGrid"
+                           AbsoluteLayout.LayoutFlags="All"
+                           AbsoluteLayout.LayoutBounds="0,0,1,1" />
+
+        <Label Text="{Binding LoadStatus}"
+               AbsoluteLayout.LayoutFlags="PositionProportional"
+               AbsoluteLayout.LayoutBounds="0.5,0.5,AutoSize,AutoSize"
+               HorizontalOptions="Center"
+               VerticalOptions="Center"
+               IsVisible="{Binding HasLoadStatus}" />
+
+        <!-- D-pad overlay, bottom-centre — hidden on Windows (arrow keys used instead) -->
+        <Grid AbsoluteLayout.LayoutFlags="XProportional,YProportional"
+              AbsoluteLayout.LayoutBounds="0.5,1,160,160"
+              RowDefinitions="*,*,*" ColumnDefinitions="*,*,*"
+              Opacity="0.85"
+              IsVisible="{OnPlatform True, WinUI=False}">
+            <!-- D-pad buttons wired in Step 5.4 -->
+        </Grid>
+
+        <!-- Busy overlay — covers the grid while loading -->
+        <Border IsVisible="{Binding IsBusy}"
+                AbsoluteLayout.LayoutFlags="All"
+                AbsoluteLayout.LayoutBounds="0,0,1,1"
+                BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#303030}"
+                StrokeShape="RoundRectangle 8"
+                Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
+                Padding="20"
+                VerticalOptions="Center"
+                HorizontalOptions="Center">
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                               WidthRequest="50"
+                               HeightRequest="50" />
+        </Border>
+
+    </AbsoluteLayout>
+
+</ContentPage>

@@ -427,6 +427,19 @@ namespace Maze.Api
             return Interop.MazeToJson(_mazePtr);
         }
         /// <summary>
+        /// Returns the maze definition as a JSON string — the <c>{"grid":[...]}</c> portion only,
+        /// suitable for passing to <see cref="MazeGame.Create"/>.
+        /// </summary>
+        /// <returns>Definition JSON string</returns>
+        public string DefinitionToJson()
+        {
+            string json = ToJson();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("definition", out var defEl))
+                return defEl.GetRawText();
+            return json;
+        }
+        /// <summary>
         /// Solves a maze, else will throw an exception if the operation fails. 
         /// </summary>
         /// <returns>Maze solution</returns>

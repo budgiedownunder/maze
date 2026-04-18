@@ -122,6 +122,27 @@
                                                    TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
                                         </Grid>
                                     </SwipeItemView>
+                                    <SwipeItemView
+                                        WidthRequest="72"
+                                        CommandParameter="{Binding .}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlayCommand}">
+                                        <Grid VerticalOptions="Center" HorizontalOptions="Center"
+                                              RowDefinitions="Auto,Auto" RowSpacing="3">
+                                            <Border WidthRequest="56" HeightRequest="56"
+                                                    BackgroundColor="#2E7D32"
+                                                    StrokeThickness="0"
+                                                    StrokeShape="RoundRectangle 28"
+                                                    HorizontalOptions="Center">
+                                                <Label Text="▶"
+                                                       FontSize="22"
+                                                       TextColor="White"
+                                                       HorizontalOptions="Center"
+                                                       VerticalOptions="Center"/>
+                                            </Border>
+                                            <Label Grid.Row="1" Text="Play" FontSize="12" HorizontalOptions="Center"
+                                                   TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
+                                        </Grid>
+                                    </SwipeItemView>
                                 </SwipeItems>
                             </SwipeView.RightItems>
 
@@ -140,6 +161,10 @@
                                                         IconImageSource="icon_edit.png"
                                                         CommandParameter="{Binding .}"
                                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Play"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlayCommand}"/>
                                         <MenuFlyoutSeparator/>
                                         <MenuFlyoutItem Text="Duplicate..."
                                                         IconImageSource="icon_dupplicate.png"

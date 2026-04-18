@@ -195,6 +195,49 @@ namespace Maze.Maui.App.Views
             UpdateControls();
         }
         /// <summary>
+        /// Navigates to the game page with the current in-memory maze definition.
+        /// </summary>
+        /// <param name="sender">Sender</param>
+        /// <param name="e">Event arguments</param>
+        private async void OnPlayClicked(object sender, EventArgs e)
+        {
+            if (MazeItem is null) return;
+            if (_viewModel.IsBusy) return;
+
+            Maze currentMaze = MazeGrid.ToMaze();
+            try
+            {
+                currentMaze.Solve();
+            }
+            catch (Exception ex)
+            {
+                await _dialogService.ShowAlert(APP_TITLE, $"Cannot play maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
+                return;
+            }
+
+            var playItem = new Models.MazeItem
+            {
+                ID = MazeItem.ID,
+                Name = MazeItem.Name
+            };
+            playItem.Definition = currentMaze;
+
+            _viewModel.IsBusy = true;
+            try
+            {
+                await Shell.Current.GoToAsync($"{nameof(MazeGamePage)}", true,
+                    new Dictionary<string, object>
+                    {
+                        { "MazeItem", playItem }
+                    });
+                await Task.Delay(500);
+            }
+            finally
+            {
+                _viewModel.IsBusy = false;
+            }
+        }
+        /// <summary>
         /// Handles the maze grid cell tapped event
         /// </summary>
         /// <param name="sender">Sender</param>
@@ -670,7 +713,7 @@ namespace Maze.Maui.App.Views
         {
             bool showSelectRangeButtons = IsTouchOnlyDevice || MazeGrid.IsExtendedSelectionMode;
             bool haveSelection = MazeGrid.HasActiveCell;
-            bool showTopRowLayout = showSelectRangeButtons || haveSelection || _isWalking || IsSolutionDisplayed;
+            bool showTopRowLayout = showSelectRangeButtons || haveSelection || _isWalking || IsSolutionDisplayed || IsInitialized;
             ShowMainGridRow(0, showTopRowLayout);
             if (showTopRowLayout)
             {

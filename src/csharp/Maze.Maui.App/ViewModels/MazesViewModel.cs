@@ -112,6 +112,45 @@ namespace Maze.Maui.App.ViewModels
             }
         }
         /// <summary>
+        /// Navigates to the maze game page for the given maze item
+        /// </summary>
+        /// <param name="item">Maze item</param>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        async Task GoToPlayAsync(MazeItem item)
+        {
+            if (item?.Definition is null)
+                return;
+
+            if (IsBusy)
+                return;
+
+            try
+            {
+                item.Definition.Solve();
+            }
+            catch (Exception ex)
+            {
+                await _dialogService.ShowAlert("MAZE", $"Cannot play maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
+                return;
+            }
+
+            IsBusy = true;
+            try
+            {
+                await Shell.Current.GoToAsync($"{nameof(Views.MazeGamePage)}", true,
+                    new Dictionary<string, object>
+                    {
+                        {"MazeItem", item }
+                    });
+                await Task.Delay(500);
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+        /// <summary>
         /// Activates the maze (design) page for a new maze item
         /// </summary>
         /// <returns>Task</returns>
