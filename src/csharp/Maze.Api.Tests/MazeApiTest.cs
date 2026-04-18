@@ -73,8 +73,10 @@ namespace Maze.Api.Tests
         {
             UInt32 targetRowCount = 10;
             UInt32 targetColCount = 5;
-            Maze maze = new Maze(targetRowCount, targetColCount);
-            AssertColCount(maze.ColCount, targetColCount);
+            using (Maze maze = new Maze(targetRowCount, targetColCount))
+            {
+                AssertColCount(maze.ColCount, targetColCount);
+            }
         }
         /// <summary>
         /// Confirms that <see cref="Maze.Reset"/> removes all rows and columns
@@ -127,12 +129,14 @@ namespace Maze.Api.Tests
         [Fact]
         public void MazeInsertRows_FailsForInvalidStartRow()
         {
-            Maze maze = new Maze(0, 0);
-            var exception = Assert.ThrowsAny<Exception>(() =>
+            using (Maze maze = new Maze(0, 0))
             {
-                maze.InsertRows(1, 2);
-            });
-            Assert.Equal("invalid 'start_row' index (1)", exception.Message);
+                var exception = Assert.ThrowsAny<Exception>(() =>
+                {
+                    maze.InsertRows(1, 2);
+                });
+                Assert.Equal("invalid 'start_row' index (1)", exception.Message);
+            }
         }
         /// <summary>
         /// Confirms that <see cref="Maze.DeleteRows"/> fails for an empty maze
@@ -1181,7 +1185,7 @@ namespace Maze.Api.Tests
     ///  This class defines the [Wasmtime](https://docs.wasmtime.dev/) text fixture used by the [Maze.Api.Tests.MazeApiWasmtimeTest_Static](xref:Maze.Api.Tests.MazeApiWasmtimeTest_Static) and
     ///  [Maze.Api.Tests.MazeApiWasmtimeTest_NonStatic](xref:Maze.Api.Tests.MazeApiWasmtimeTest_NonStatic) classes
     /// </summary>
-    public class WasmtimeTestFixture
+    public class WasmtimeTestFixture : IDisposable
     {
         /// <summary>
         ///  Constructor for the [Wasmtime](https://docs.wasmtime.dev/) test fixture
@@ -1191,9 +1195,11 @@ namespace Maze.Api.Tests
             MazeInterop.Disconnect();
             MazeInterop.Initialize(MazeInterop.ConnectionType.Wasmtime, true);
         }
+        /// <summary>Explicitly disconnects the interop instance after all tests in this collection complete.</summary>
+        public void Dispose() { MazeInterop.Disconnect(); GC.SuppressFinalize(this); }
     }
     /// <summary>
-    ///  This class is used to apply [Wasmtime](https://docs.wasmtime.dev/) `[CollectionDefinition]` and `ICollectionFixture` to the [Maze.Api.Tests.MazeApiWasmtimeTest_Static](xref:Maze.Api.Tests.MazeApiWasmtimeTest_Static) and 
+    ///  This class is used to apply [Wasmtime](https://docs.wasmtime.dev/) `[CollectionDefinition]` and `ICollectionFixture` to the [Maze.Api.Tests.MazeApiWasmtimeTest_Static](xref:Maze.Api.Tests.MazeApiWasmtimeTest_Static) and
     ///  [Maze.Api.Tests.MazeApiWasmtimeTest_NonStatic](xref:Maze.Api.Tests.MazeApiWasmtimeTest_NonStatic) classes
     /// </summary>
     [CollectionDefinition("WasmtimeTestFixtureCollection")]
@@ -1203,11 +1209,11 @@ namespace Maze.Api.Tests
         // It is used to apply [CollectionDefinition] and ICollectionFixture
     }
     /// <summary>
-    ///  This class contains the static [Wasmtime](https://docs.wasmtime.dev/) [Maze.Interop.MazeInterop.ConnectionType](xref:Maze.Interop.MazeInterop.ConnectionType) [`xUnit`](https://xunit.net/) 
+    ///  This class contains the static [Wasmtime](https://docs.wasmtime.dev/) [Maze.Interop.MazeInterop.ConnectionType](xref:Maze.Interop.MazeInterop.ConnectionType) [`xUnit`](https://xunit.net/)
     ///  unit tests for the [Maze.Api](xref:Maze.Api) class
     /// </summary>
     [Collection("WasmtimeTestFixtureCollection")]
-    public class MazeApiWasmtimeTest_Static: MazeApiTestBase
+    public class MazeApiWasmtimeTest_Static : MazeApiTestBase
     {
         private readonly WasmtimeTestFixture _fixture;
         /// <summary>
@@ -1241,10 +1247,10 @@ namespace Maze.Api.Tests
     }
 #if WINDOWS
     /// <summary>
-    ///  This class defines the [Wasmer](https://wasmer.io/) text fixture used by the [Maze.Api.Tests.MazeApiWasmerTest_Static](xref:Maze.Api.Tests.MazeApiWasmerTest_Static) and 
+    ///  This class defines the [Wasmer](https://wasmer.io/) text fixture used by the [Maze.Api.Tests.MazeApiWasmerTest_Static](xref:Maze.Api.Tests.MazeApiWasmerTest_Static) and
     ///  [Maze.Api.Tests.MazeApiWasmerTest_NonStatic](xref:Maze.Api.Tests.MazeApiWasmerTest_NonStatic) classes
     /// </summary>
-    public class WasmerTestFixture
+    public class WasmerTestFixture : IDisposable
     {
         /// <summary>
         ///  Constructor for the [Wasmer](https://wasmer.io/) test fixture
@@ -1254,9 +1260,11 @@ namespace Maze.Api.Tests
             MazeInterop.Disconnect();
             MazeInterop.Initialize(MazeInterop.ConnectionType.Wasmer, true);
         }
+        /// <summary>Explicitly disconnects the interop instance after all tests in this collection complete.</summary>
+        public void Dispose() { MazeInterop.Disconnect(); GC.SuppressFinalize(this); }
     }
     /// <summary>
-    ///  This class is used to apply [Wasmer](https://wasmer.io/) `[CollectionDefinition]` and `ICollectionFixture` to  the[Maze.Api.Tests.MazeApiWasmerTest_Static](xref:Maze.Api.Tests.MazeApiWasmerTest_Static) and 
+    ///  This class is used to apply [Wasmer](https://wasmer.io/) `[CollectionDefinition]` and `ICollectionFixture` to  the[Maze.Api.Tests.MazeApiWasmerTest_Static](xref:Maze.Api.Tests.MazeApiWasmerTest_Static) and
     ///  [Maze.Api.Tests.MazeApiWasmerTest_NonStatic](xref:Maze.Api.Tests.MazeApiWasmerTest_NonStatic) classes
     /// </summary>
     [CollectionDefinition("WasmerTestFixtureCollection")]
