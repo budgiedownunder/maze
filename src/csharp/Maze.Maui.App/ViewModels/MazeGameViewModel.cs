@@ -91,7 +91,7 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="direction">Direction to move</param>
         public async void Move(MazeGameDirection direction)
         {
-            if (_game is null || _gameGrid is null || direction == MazeGameDirection.None)
+            if (_game is null || _gameGrid is null || direction == MazeGameDirection.None || _game.IsComplete)
                 return;
 
             int prevRow = _game.PlayerRow;

@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:controls="clr-namespace:Maze.Maui.App"
              xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
-             x:DataType="viewmodel:MazeGameViewModel"
+x:DataType="viewmodel:MazeGameViewModel"
              x:Class="Maze.Maui.App.Views.MazeGamePage"
              Title="{Binding Title}">
 
@@ -26,7 +26,10 @@
               RowDefinitions="*,*,*" ColumnDefinitions="*,*,*"
               Opacity="0.85"
               IsVisible="{OnPlatform True, WinUI=False}">
-            <!-- D-pad buttons wired in Step 5.4 -->
+            <Button Grid.Row="0" Grid.Column="1" Text="▲" Pressed="OnDpadUpPressed"    Released="OnDpadReleased"/>
+            <Button Grid.Row="1" Grid.Column="0" Text="◀" Pressed="OnDpadLeftPressed"  Released="OnDpadReleased"/>
+            <Button Grid.Row="1" Grid.Column="2" Text="▶" Pressed="OnDpadRightPressed" Released="OnDpadReleased"/>
+            <Button Grid.Row="2" Grid.Column="1" Text="▼" Pressed="OnDpadDownPressed"  Released="OnDpadReleased"/>
         </Grid>
 
         <!-- Busy overlay — covers the grid while loading -->
