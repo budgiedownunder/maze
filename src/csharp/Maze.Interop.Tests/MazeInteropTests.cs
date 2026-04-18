@@ -32,6 +32,10 @@ namespace Maze.Interop.Tests
         {
             GetInterop().FreeMaze(mazePtr);
         }
+        private void FreeMazeGame(UIntPtr gamePtr)
+        {
+            GetInterop().FreeMazeGame(gamePtr);
+        }
         private void AssertRowCount(UInt32 actual, UInt32 expected)
         {
             Assert.True(actual == expected, $"Expected rowCount to be {expected} but got {actual}");
@@ -1025,6 +1029,190 @@ namespace Maze.Interop.Tests
                 interop.FreeGeneratorOptions(optionsPtr);
                 interop.FreeMaze(mazePtr);
             }
+        }
+
+        // --- MazeGame tests ---
+
+        // Maze layout used for most game tests: 1 row, 3 cols — S[0,0]  [0,1]  F[0,2]
+        private const string SimpleGameJson = """{"grid":[["S"," ","F"]]}""";
+        // Maze with wall blocking movement: S[0,0]  W[0,1]  F[0,2]
+        private const string WalledGameJson = """{"grid":[["S","W","F"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewMazeGame"/> returns a non-zero pointer for valid JSON
+        /// </summary>
+        [Fact]
+        public void NewMazeGame_ShouldReturnNonZeroPointer()
+        {
+            UIntPtr gamePtr = GetInterop().NewMazeGame(SimpleGameJson);
+            if (gamePtr != UIntPtr.Zero) FreeMazeGame(gamePtr);
+            Assert.True(gamePtr != UIntPtr.Zero);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.NewMazeGame"/> throws for invalid JSON
+        /// </summary>
+        [Fact]
+        public void NewMazeGame_ShouldThrow_ForInvalidJson()
+        {
+            var exception = Assert.ThrowsAny<Exception>(() => GetInterop().NewMazeGame("{"));
+            Assert.Equal("Failed to create maze game session — invalid JSON or maze has no start cell", exception.Message);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.FreeMazeGame"/> succeeds without throwing
+        /// </summary>
+        [Fact]
+        public void FreeMazeGame_ShouldSucceed()
+        {
+            UIntPtr gamePtr = GetInterop().NewMazeGame(SimpleGameJson);
+            FreeMazeGame(gamePtr);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameMovePlayer"/> returns 0 when direction is None (0)
+        /// </summary>
+        [Fact]
+        public void MazeGameMovePlayer_ShouldReturn0_WhenDirectionIsNone()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int result = interop.MazeGameMovePlayer(gamePtr, 0);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, result);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameMovePlayer"/> returns 1 (Moved) for a clear path
+        /// </summary>
+        [Fact]
+        public void MazeGameMovePlayer_ShouldReturn1_WhenMoved()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int result = interop.MazeGameMovePlayer(gamePtr, 4); // Right
+            FreeMazeGame(gamePtr);
+            Assert.Equal(1, result);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameMovePlayer"/> returns 2 (Blocked) when a wall is ahead
+        /// </summary>
+        [Fact]
+        public void MazeGameMovePlayer_ShouldReturn2_WhenBlocked()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(WalledGameJson);
+            int result = interop.MazeGameMovePlayer(gamePtr, 4); // Right → wall
+            FreeMazeGame(gamePtr);
+            Assert.Equal(2, result);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameMovePlayer"/> returns 3 (Complete) when the finish cell is reached
+        /// </summary>
+        [Fact]
+        public void MazeGameMovePlayer_ShouldReturn3_WhenComplete()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → [0,1]
+            int result = interop.MazeGameMovePlayer(gamePtr, 4); // Right → [0,2] = F
+            FreeMazeGame(gamePtr);
+            Assert.Equal(3, result);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGamePlayerRow"/> returns the start row initially
+        /// </summary>
+        [Fact]
+        public void MazeGamePlayerRow_ShouldReturnStartRow()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int row = interop.MazeGamePlayerRow(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, row);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGamePlayerCol"/> returns the start column initially
+        /// </summary>
+        [Fact]
+        public void MazeGamePlayerCol_ShouldReturnStartCol()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int col = interop.MazeGamePlayerCol(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, col);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGamePlayerDirection"/> returns 0 (None) before the first move
+        /// </summary>
+        [Fact]
+        public void MazeGamePlayerDirection_ShouldReturn0_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int dir = interop.MazeGamePlayerDirection(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, dir);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameIsComplete"/> returns 0 before the finish cell is reached
+        /// </summary>
+        [Fact]
+        public void MazeGameIsComplete_ShouldReturn0_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int complete = interop.MazeGameIsComplete(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, complete);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameVisitedCellCount"/> returns 1 (start cell) before any moves
+        /// </summary>
+        [Fact]
+        public void MazeGameVisitedCellCount_ShouldBe1_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int count = interop.MazeGameVisitedCellCount(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(1, count);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetVisitedCell"/> returns the start cell at index 0
+        /// </summary>
+        [Fact]
+        public void MazeGameGetVisitedCell_ShouldReturnStartCell()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            bool ok = interop.MazeGameGetVisitedCell(gamePtr, 0, out int row, out int col);
+            FreeMazeGame(gamePtr);
+            Assert.True(ok);
+            Assert.Equal(0, row);
+            Assert.Equal(0, col);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeInterop.MazeGameGetVisitedCell"/> returns false for an out-of-range index
+        /// </summary>
+        [Fact]
+        public void MazeGameGetVisitedCell_ShouldReturnFalse_ForOutOfRangeIndex()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            bool ok = interop.MazeGameGetVisitedCell(gamePtr, 99, out int _, out int _);
+            FreeMazeGame(gamePtr);
+            Assert.False(ok);
         }
     }
     /// <summary>

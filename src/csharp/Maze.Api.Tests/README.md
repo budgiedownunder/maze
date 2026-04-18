@@ -4,10 +4,14 @@
 
 The `Maze.Api.Tests` .NET assembly incorporates the tests for the [`Maze.Api`](../Maze.Api/README.md) .NET assembly.
 
+Tests cover the three public types: `Maze`, `Solution`, and `MazeGame`.
+
+Each test is defined once in an abstract base class and run against both Wasmtime and Wasmer connector variants (Static and NonStatic interop), so the reported test count is a multiple of the number of active concrete fixture classes. `DisableTestParallelization = true` is set at the assembly level — all tests run sequentially.
+
 ## Getting Started
 
 ### Setup
-To setup the build environment, run the following from the `Maze.Api.Tests` directory:
+To set up the build environment, run the following from the `Maze.Api.Tests` directory:
 
 ```
 dotnet restore

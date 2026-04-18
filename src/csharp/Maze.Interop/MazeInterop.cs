@@ -623,5 +623,90 @@ namespace Maze.Interop
         {
             connector.FreeGeneratorOptions(optionsPtr);
         }
+        /// <summary>
+        /// Creates a new maze game session from a maze definition JSON string,
+        /// or will throw an exception if the operation fails.
+        /// </summary>
+        /// <param name="definitionJson">Maze definition JSON string ({"grid":[...]})</param>
+        /// <returns>Opaque game session pointer. Free with <see cref="FreeMazeGame(UIntPtr)">FreeMazeGame()</see> when done.</returns>
+        public UIntPtr NewMazeGame(string definitionJson)
+        {
+            return connector.NewMazeGame(definitionJson);
+        }
+        /// <summary>
+        /// Frees a game session pointer returned by <see cref="NewMazeGame(string)">NewMazeGame()</see>
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        public void FreeMazeGame(UIntPtr gamePtr)
+        {
+            connector.FreeMazeGame(gamePtr);
+        }
+        /// <summary>
+        /// Moves the player one cell in the given direction
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="dir">Direction: 0=None 1=Up 2=Down 3=Left 4=Right</param>
+        /// <returns>0=None 1=Moved 2=Blocked 3=Complete</returns>
+        public int MazeGameMovePlayer(UIntPtr gamePtr, int dir)
+        {
+            return connector.MazeGameMovePlayer(gamePtr, dir);
+        }
+        /// <summary>
+        /// Gets the player's current row (zero-based)
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Row index</returns>
+        public int MazeGamePlayerRow(UIntPtr gamePtr)
+        {
+            return connector.MazeGamePlayerRow(gamePtr);
+        }
+        /// <summary>
+        /// Gets the player's current column (zero-based)
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Column index</returns>
+        public int MazeGamePlayerCol(UIntPtr gamePtr)
+        {
+            return connector.MazeGamePlayerCol(gamePtr);
+        }
+        /// <summary>
+        /// Gets the player's current facing direction
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>0=None 1=Up 2=Down 3=Left 4=Right</returns>
+        public int MazeGamePlayerDirection(UIntPtr gamePtr)
+        {
+            return connector.MazeGamePlayerDirection(gamePtr);
+        }
+        /// <summary>
+        /// Returns whether the player has reached the finish cell
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>1 if complete, 0 otherwise</returns>
+        public int MazeGameIsComplete(UIntPtr gamePtr)
+        {
+            return connector.MazeGameIsComplete(gamePtr);
+        }
+        /// <summary>
+        /// Returns the number of cells visited by the player (including the start cell)
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Visited cell count</returns>
+        public int MazeGameVisitedCellCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameVisitedCellCount(gamePtr);
+        }
+        /// <summary>
+        /// Retrieves a visited cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the visited-cells list</param>
+        /// <param name="row">Receives the cell row on success</param>
+        /// <param name="col">Receives the cell column on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetVisitedCell(UIntPtr gamePtr, int index, out int row, out int col)
+        {
+            return connector.MazeGameGetVisitedCell(gamePtr, index, out row, out col);
+        }
     }
 }

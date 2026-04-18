@@ -307,6 +307,15 @@ namespace Maze.Interop
             generatorOptionsSetBranchFromFinish = ResolveFunction("generator_options_set_branch_from_finish");
             mazeGenerate = ResolveFunction("maze_wasm_generate");
             freeGeneratorOptions = ResolveFunction("free_generator_options_wasm");
+            newMazeGame              = ResolveFunction("new_maze_game_wasm");
+            freeMazeGame             = ResolveFunction("free_maze_game_wasm");
+            mazeGameMovePlayer       = ResolveFunction("maze_game_wasm_move_player");
+            mazeGamePlayerRow        = ResolveFunction("maze_game_wasm_player_row");
+            mazeGamePlayerCol        = ResolveFunction("maze_game_wasm_player_col");
+            mazeGamePlayerDirection  = ResolveFunction("maze_game_wasm_player_direction");
+            mazeGameIsComplete       = ResolveFunction("maze_game_wasm_is_complete");
+            mazeGameVisitedCellCount = ResolveFunction("maze_game_wasm_visited_cell_count");
+            mazeGameGetVisitedCell   = ResolveFunction("maze_game_wasm_get_visited_cell");
         }
         /// <summary>
         /// Locates a WebAssembly function. Will throw an exception if the function is not found.

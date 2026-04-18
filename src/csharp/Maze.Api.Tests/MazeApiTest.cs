@@ -1029,6 +1029,153 @@ namespace Maze.Api.Tests
             Assert.True(mazeA.ToJson() != mazeB.ToJson(),
                 $"Seeds {seedA} and {seedB} produced identical mazes — seed precision may be lost (ulong→float truncation)");
         }
+
+        // --- MazeGame tests ---
+
+        // 1 row, 3 cols: S[0,0]  [0,1]  F[0,2]
+        private const string SimpleGameJson = """{"grid":[["S"," ","F"]]}""";
+        // Wall blocks move right: S[0,0]  W[0,1]  F[0,2]
+        private const string WalledGameJson = """{"grid":[["S","W","F"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Create"/> throws for invalid JSON
+        /// </summary>
+        [Fact]
+        public void MazeGameCreate_ShouldThrow_ForInvalidJson()
+        {
+            var exception = Assert.ThrowsAny<Exception>(() => MazeGame.Create("{"));
+            Assert.Equal("Failed to create maze game session — invalid JSON or maze has no start cell", exception.Message);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Create"/> throws when the maze has no start cell
+        /// </summary>
+        [Fact]
+        public void MazeGameCreate_ShouldThrow_WhenNoStartCell()
+        {
+            var exception = Assert.ThrowsAny<Exception>(() => MazeGame.Create("""{"grid":[[" "," ","F"]]}"""));
+            Assert.Equal("Failed to create maze game session — invalid JSON or maze has no start cell", exception.Message);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Create"/> succeeds for valid maze JSON
+        /// </summary>
+        [Fact]
+        public void MazeGameCreate_ShouldSucceed()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.NotNull(game);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.MovePlayer"/> returns <see cref="MazeGameMoveResult.None"/> when direction is <see cref="MazeGameDirection.None"/>
+        /// </summary>
+        [Fact]
+        public void MazeGameMovePlayer_ShouldReturnNone_WhenDirectionIsNone()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.Equal(MazeGameMoveResult.None, game.MovePlayer(MazeGameDirection.None));
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.MovePlayer"/> returns <see cref="MazeGameMoveResult.Moved"/> when the path is clear
+        /// </summary>
+        [Fact]
+        public void MazeGameMovePlayer_ShouldReturnMoved_WhenPathIsClear()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.Equal(MazeGameMoveResult.Moved, game.MovePlayer(MazeGameDirection.Right));
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.MovePlayer"/> returns <see cref="MazeGameMoveResult.Blocked"/> when a wall is ahead
+        /// </summary>
+        [Fact]
+        public void MazeGameMovePlayer_ShouldReturnBlocked_WhenWallAhead()
+        {
+            using MazeGame game = MazeGame.Create(WalledGameJson);
+            Assert.Equal(MazeGameMoveResult.Blocked, game.MovePlayer(MazeGameDirection.Right));
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.MovePlayer"/> returns <see cref="MazeGameMoveResult.Complete"/> when the finish cell is reached
+        /// </summary>
+        [Fact]
+        public void MazeGameMovePlayer_ShouldReturnComplete_WhenFinishReached()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            game.MovePlayer(MazeGameDirection.Right); // → [0,1]
+            Assert.Equal(MazeGameMoveResult.Complete, game.MovePlayer(MazeGameDirection.Right)); // → [0,2] = F
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.PlayerRow"/> and <see cref="MazeGame.PlayerCol"/> are at the start cell initially
+        /// </summary>
+        [Fact]
+        public void MazeGamePlayerPosition_ShouldBeAtStartCell_Initially()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.Equal(0, game.PlayerRow);
+            Assert.Equal(0, game.PlayerCol);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.PlayerDirection"/> is <see cref="MazeGameDirection.None"/> before the first move
+        /// </summary>
+        [Fact]
+        public void MazeGamePlayerDirection_ShouldBeNone_Initially()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.Equal(MazeGameDirection.None, game.PlayerDirection);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.IsComplete"/> is false before the finish cell is reached
+        /// </summary>
+        [Fact]
+        public void MazeGameIsComplete_ShouldBeFalse_Initially()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.False(game.IsComplete);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.IsComplete"/> is true after the finish cell is reached
+        /// </summary>
+        [Fact]
+        public void MazeGameIsComplete_ShouldBeTrue_AfterReachingFinish()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            game.MovePlayer(MazeGameDirection.Right);
+            game.MovePlayer(MazeGameDirection.Right);
+            Assert.True(game.IsComplete);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.VisitedCells"/> contains only the start cell before any moves
+        /// </summary>
+        [Fact]
+        public void MazeGameVisitedCells_ShouldContainStartCell_Initially()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            var visited = game.VisitedCells;
+            Assert.Equal(1, visited.Count);
+            Assert.Equal(0, visited[0].Row);
+            Assert.Equal(0, visited[0].Col);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.VisitedCells"/> grows as the player moves through the maze
+        /// </summary>
+        [Fact]
+        public void MazeGameVisitedCells_ShouldGrowAsPlayerMoves()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            game.MovePlayer(MazeGameDirection.Right); // [0,1]
+            Assert.Equal(2, game.VisitedCells.Count);
+            game.MovePlayer(MazeGameDirection.Right); // [0,2] = F
+            Assert.Equal(3, game.VisitedCells.Count);
+        }
     }
     /// <summary>
     ///  This class defines the [Wasmtime](https://docs.wasmtime.dev/) text fixture used by the [Maze.Api.Tests.MazeApiWasmtimeTest_Static](xref:Maze.Api.Tests.MazeApiWasmtimeTest_Static) and
@@ -1071,6 +1218,7 @@ namespace Maze.Api.Tests
             _fixture = fixture;
             Maze.UseStaticInterop = true;
             Solution.UseStaticInterop = true;
+            MazeGame.UseStaticInterop = true;
         }
     }
     /// <summary>
@@ -1088,6 +1236,7 @@ namespace Maze.Api.Tests
             _fixture = fixture;
             Maze.UseStaticInterop = false;
             Solution.UseStaticInterop = false;
+            MazeGame.UseStaticInterop = false;
         }
     }
 #if WINDOWS
@@ -1131,6 +1280,7 @@ namespace Maze.Api.Tests
             _fixture = fixture;
             Maze.UseStaticInterop = true;
             Solution.UseStaticInterop = true;
+            MazeGame.UseStaticInterop = true;
         }
     }
     /// <summary>
@@ -1148,6 +1298,7 @@ namespace Maze.Api.Tests
             _fixture = fixture;
             Maze.UseStaticInterop = false;
             Solution.UseStaticInterop = false;
+            MazeGame.UseStaticInterop = false;
         }
     }
 #endif
