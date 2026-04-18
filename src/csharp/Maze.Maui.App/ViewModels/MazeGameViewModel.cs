@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Maze.Api;
 using Maze.Maui.App.Models;
+using Maze.Maui.App.Services;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -11,8 +12,19 @@ namespace Maze.Maui.App.ViewModels
     [QueryProperty("MazeItem", "MazeItem")]
     public partial class MazeGameViewModel : BaseViewModel
     {
+        private readonly IDialogService _dialogService;
         private MazeItem? _mazeItem;
         private MazeGame? _game;
+        private MazeGrid? _gameGrid;
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="dialogService">Injected dialog service</param>
+        public MazeGameViewModel(IDialogService dialogService)
+        {
+            _dialogService = dialogService;
+        }
 
         /// <summary>
         /// The maze item to play. Set via Shell navigation query property.
@@ -48,6 +60,7 @@ namespace Maze.Maui.App.ViewModels
         public void StartGame(MazeGrid gameGrid)
         {
             LoadStatus = "";
+            _gameGrid = gameGrid;
 
             if (_mazeItem?.Definition is null)
             {
@@ -59,6 +72,7 @@ namespace Maze.Maui.App.ViewModels
             _game = null;
 
             gameGrid.Initialize(false, _mazeItem);
+            gameGrid.IsInteractionLocked = true;
 
             try
             {
@@ -72,12 +86,44 @@ namespace Maze.Maui.App.ViewModels
         }
 
         /// <summary>
+        /// Attempts to move the player in the given direction.
+        /// </summary>
+        /// <param name="direction">Direction to move</param>
+        public async void Move(MazeGameDirection direction)
+        {
+            if (_game is null || _gameGrid is null || direction == MazeGameDirection.None)
+                return;
+
+            int prevRow = _game.PlayerRow;
+            int prevCol = _game.PlayerCol;
+
+            var result = _game.MovePlayer(direction);
+
+            if (result == MazeGameMoveResult.Moved || result == MazeGameMoveResult.Complete)
+            {
+                _gameGrid.SetVisitedDotAt(prevRow, prevCol);
+                _gameGrid.SetPlayerAt(_game.PlayerRow, _game.PlayerCol, _game.PlayerDirection);
+            }
+
+            if (result == MazeGameMoveResult.Complete)
+            {
+                _gameGrid.SetPlayerCelebrate(_game.PlayerRow, _game.PlayerCol);
+                await _dialogService.ShowAlert("MAZE", "Congratulations! You completed the maze!", "OK");
+            }
+        }
+
+        /// <summary>
         /// Disposes the active game session. Called by the page when navigating away.
         /// </summary>
         public void Cleanup()
         {
             _game?.Dispose();
             _game = null;
+            if (_gameGrid is not null)
+            {
+                _gameGrid.IsInteractionLocked = false;
+                _gameGrid = null;
+            }
         }
     }
 }

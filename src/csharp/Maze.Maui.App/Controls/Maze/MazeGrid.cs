@@ -820,6 +820,7 @@ namespace Maze.Maui.App
                 _ => throw new ArgumentOutOfRangeException(nameof(direction))
             };
             SetWalkerCell(row + 1, col + 1, image);
+            ScrollCellIntoView(row + 1, col + 1);
         }
         /// <summary>
         /// Shows the celebration sprite at the given 0-based cell.
@@ -847,6 +848,14 @@ namespace Maze.Maui.App
             };
             SetSolutionCell(row + 1, col + 1, dir);
         }
+        /// <summary>
+        /// Stamps a dot marker on a previously-visited 0-based cell (game mode).
+        /// </summary>
+        /// <param name="row">Row index (0-based)</param>
+        /// <param name="col">Column index (0-based)</param>
+        public void SetVisitedDotAt(int row, int col)
+            => SetSolutionCell(row + 1, col + 1, MazeCellContent.PathDirection.VisitedDot);
+
         /// <summary>
         /// Removes the player sprite and all footstep overlays.
         /// </summary>
@@ -1114,11 +1123,17 @@ namespace Maze.Maui.App
             /// Downwards from right
             /// </summary>
             /// <returns>Downwards from right</returns>
-            DownFromRight = 12
+            DownFromRight = 12,
+            /// <summary>
+            /// A visited-cell dot marker (used in game mode)
+            /// </summary>
+            /// <returns>Dot</returns>
+            VisitedDot = 13
         }
 
         static private Color SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR = Colors.White;
         static private Color SOLUTION_PATH_CELL_HIGHLIGHT_COLOR = Colors.LightGreen;
+        static private Color GAME_VISITED_CELL_HIGHLIGHT_COLOR = Colors.White;
 
         CellType cellType = CellType.Empty;
         PathDirection solutionPathDirection = PathDirection.None;
@@ -1291,9 +1306,10 @@ namespace Maze.Maui.App
         /// <returns>Highlight color</returns>
         private Color GetSolutionPathHighlightColor()
         {
-            return ContainsSolutionPath
-                ? IsStartOrFinish ? SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR : SOLUTION_PATH_CELL_HIGHLIGHT_COLOR
-                : Colors.Transparent;
+            if (!ContainsSolutionPath) return Colors.Transparent;
+            if (IsStartOrFinish) return SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR;
+            if (solutionPathDirection == PathDirection.VisitedDot) return GAME_VISITED_CELL_HIGHLIGHT_COLOR;
+            return SOLUTION_PATH_CELL_HIGHLIGHT_COLOR;
         }
         /// <summary>
         /// Gets the solution path image for the cell
@@ -1319,6 +1335,8 @@ namespace Maze.Maui.App
                 case PathDirection.DownFromLeft:
                 case PathDirection.DownFromRight:
                     return "footsteps_down.png";
+                case PathDirection.VisitedDot:
+                    return "visited_dot.png";
                 case PathDirection.None:
                 default:
                     return "";
