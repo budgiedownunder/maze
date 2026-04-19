@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { getMaze } from '../api/client'
 import { useToken } from '../context/AuthContext'
 import { useMazeGame, MazeGameDirection } from '../hooks/useMazeGame'
@@ -16,7 +16,6 @@ const KEY_MAP: Record<string, MazeGameDirection> = {
 
 export function MazeGamePage() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const token = useToken()
 
   const [maze, setMaze] = useState<Maze | null>(null)
@@ -53,7 +52,6 @@ export function MazeGamePage() {
   return (
     <div className="maze-game-page">
       <div className="maze-game-header">
-        <button type="button" className="maze-toolbar-btn" onClick={() => navigate(-1)}>← Back</button>
         <span className="maze-game-title">{maze.name}</span>
       </div>
 
