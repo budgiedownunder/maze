@@ -739,8 +739,6 @@ namespace Maze.Maui.App
                     if (i > 0)
                         SetFootstepAt((int)points[i - 1].Row, (int)points[i - 1].Column, PathDirectionToCardinal(directions[i - 1]));
 
-                    ScrollCellIntoView(r + 1, c + 1);
-
                     await Task.Delay(getStepMs(), ct);
                 }
                 // Walk completed — celebrate GIF stays visible until Clear Solution is pressed
@@ -820,7 +818,15 @@ namespace Maze.Maui.App
                 _ => throw new ArgumentOutOfRangeException(nameof(direction))
             };
             SetWalkerCell(row + 1, col + 1, image);
-            ScrollCellIntoView(row + 1, col + 1);
+            // Scroll one cell ahead so the player can see what's coming before reaching the edge
+            (int aheadRow, int aheadCol) = direction switch {
+                MazeGameDirection.Up    => (row - 1, col + 1),
+                MazeGameDirection.Down  => (row + 3, col + 1),
+                MazeGameDirection.Left  => (row + 1, col - 1),
+                MazeGameDirection.Right => (row + 1, col + 3),
+                _                       => (row + 1, col + 1)
+            };
+            ScrollCellIntoView(Math.Clamp(aheadRow, 1, RowCount), Math.Clamp(aheadCol, 1, ColumnCount));
         }
         /// <summary>
         /// Shows the celebration sprite at the given 0-based cell.
@@ -828,7 +834,10 @@ namespace Maze.Maui.App
         /// <param name="row">Row index (0-based)</param>
         /// <param name="col">Column index (0-based)</param>
         public void SetPlayerCelebrate(int row, int col)
-            => SetWalkerCell(row + 1, col + 1, "walker_celebrate.gif");
+        {
+            SetWalkerCell(row + 1, col + 1, "walker_celebrate.gif");
+            ScrollCellIntoView(row + 1, col + 1);
+        }
         /// <summary>
         /// Stamps a footstep overlay on a previously-visited 0-based cell.
         /// Pass <see cref="MazeGameDirection.None"/> to clear the overlay.
