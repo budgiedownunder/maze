@@ -2,8 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { MazeDefinition, GenerateOptions } from '../../src/wasm/mazeWasm'
 
 // Mock the maze_wasm package — WASM is not supported in jsdom.
-// We test that mazeWasm.ts calls the WASM API with the correct arguments,
-// handles return values, and frees resources in all cases.
+// These tests verify that mazeWasm.ts calls the WASM API with the correct
+// arguments, handles return values, and frees resources in all cases.
+// They do NOT test actual maze/game logic (e.g. that moving right in a
+// ['S',' ','F'] grid advances the player) — that is covered by the Rust
+// unit tests in maze_wasm. The mock return values simulate WASM outcomes
+// without executing any real WASM code.
 //
 // vi.hoisted() ensures ALL mock helpers are initialised before vi.mock()
 // hoists its factory to the top of the file.
@@ -215,28 +219,74 @@ describe('createMazeGame', () => {
   })
 })
 
+// Note: player position and visited cell state after a move are simulated via
+// pre-configured mock return values on player_row(), player_col(), etc.
+// The tests verify that moveMazeGamePlayer passes the direction through and
+// returns the result unchanged — not that the game logic itself is correct.
 describe('moveMazeGamePlayer', () => {
   it('calls move_player with the correct direction value', () => {
     moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Up)
     expect(mockMovePlayer).toHaveBeenCalledWith(MazeGameDirection.Up)
   })
 
-  it('returns Moved when the player advances', () => {
+  it('returns Moved and game reflects new position', () => {
     mockMovePlayer.mockReturnValue(MazeGamePlayerMoveResult.Moved)
-    expect(moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Right))
-      .toBe(MazeGamePlayerMoveResult.Moved)
+    mockPlayerRow.mockReturnValue(0)
+    mockPlayerCol.mockReturnValue(1)   // player advanced one col to the right
+
+    const result = moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Right)
+
+    expect(result).toBe(MazeGamePlayerMoveResult.Moved)
+    expect(mockGameInstance.player_row()).toBe(0)
+    expect(mockGameInstance.player_col()).toBe(1)
   })
 
-  it('returns Blocked when the move is invalid', () => {
+  it('returns Blocked and position is unchanged', () => {
     mockMovePlayer.mockReturnValue(MazeGamePlayerMoveResult.Blocked)
-    expect(moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Left))
-      .toBe(MazeGamePlayerMoveResult.Blocked)
+    mockPlayerRow.mockReturnValue(0)
+    mockPlayerCol.mockReturnValue(0)   // position did not change
+
+    const result = moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Left)
+
+    expect(result).toBe(MazeGamePlayerMoveResult.Blocked)
+    expect(mockGameInstance.player_row()).toBe(0)
+    expect(mockGameInstance.player_col()).toBe(0)
   })
 
-  it('returns Complete when the player reaches the finish', () => {
+  it('returns Complete and game.is_complete() is true', () => {
     mockMovePlayer.mockReturnValue(MazeGamePlayerMoveResult.Complete)
-    expect(moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Down))
-      .toBe(MazeGamePlayerMoveResult.Complete)
+    mockIsComplete.mockReturnValue(true)
+
+    const result = moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Right)
+
+    expect(result).toBe(MazeGamePlayerMoveResult.Complete)
+    expect(mockGameInstance.is_complete()).toBe(true)
+  })
+
+  it('visited_cells() grows by one after a Moved result', () => {
+    mockVisitedCells
+      .mockReturnValueOnce([])                        // before move
+      .mockReturnValueOnce([{ row: 0, col: 0 }])     // after move
+    mockMovePlayer.mockReturnValue(MazeGamePlayerMoveResult.Moved)
+
+    const before = mockGameInstance.visited_cells().length
+    moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Right)
+    const after = mockGameInstance.visited_cells().length
+
+    expect(after).toBe(before + 1)
+  })
+
+  it('visited_cells() grows by one after a Complete result', () => {
+    mockVisitedCells
+      .mockReturnValueOnce([{ row: 0, col: 0 }])                          // before
+      .mockReturnValueOnce([{ row: 0, col: 0 }, { row: 0, col: 1 }])     // after
+    mockMovePlayer.mockReturnValue(MazeGamePlayerMoveResult.Complete)
+
+    const before = mockGameInstance.visited_cells().length
+    moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Right)
+    const after = mockGameInstance.visited_cells().length
+
+    expect(after).toBe(before + 1)
   })
 })
 
