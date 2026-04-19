@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MazeGrid, CELL_SIZE, HEADER_SIZE } from '../../src/components/MazeGrid'
@@ -306,5 +306,114 @@ describe('MazeGrid walk animation', () => {
   it('no walker image when walkState is null', () => {
     renderGrid()
     expect(screen.queryByAltText('Walker')).not.toBeInTheDocument()
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// Game mode (game prop)
+// ──────────────────────────────────────────────────────────────
+
+// Grid where S is at (0,0), empty cells at (0,1) and (1,0)/(1,1), F at (1,1)
+const GAME_GRID = [
+  ['S', ' '],
+  [' ', 'F'],
+]
+
+function makeGameObj(overrides: Partial<{
+  player_row: () => number
+  player_col: () => number
+  player_direction: () => number
+  is_complete: () => boolean
+  visited_cells: () => Array<{ row: number; col: number }>
+}> = {}) {
+  return {
+    player_row:       vi.fn().mockReturnValue(0),
+    player_col:       vi.fn().mockReturnValue(0),
+    player_direction: vi.fn().mockReturnValue(0), // MazeGameDirection.None
+    is_complete:      vi.fn().mockReturnValue(false),
+    visited_cells:    vi.fn().mockReturnValue([]),
+    free:             vi.fn(),
+    ...overrides,
+  }
+}
+
+function renderGameGrid(game: ReturnType<typeof makeGameObj>, version = 0) {
+  return render(
+    <MazeGrid
+      grid={GAME_GRID}
+      solution={null}
+      activeCell={null}
+      anchorCell={null}
+      game={game as never}
+      version={version}
+    />,
+  )
+}
+
+describe('MazeGrid game mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders player walker at player cell', () => {
+    const game = makeGameObj({ player_row: vi.fn().mockReturnValue(0), player_col: vi.fn().mockReturnValue(0) })
+    renderGameGrid(game)
+    expect(screen.getByAltText('Player')).toBeInTheDocument()
+  })
+
+  it('walker_up.gif shown when player direction is Up (1)', () => {
+    const game = makeGameObj({ player_direction: vi.fn().mockReturnValue(1) }) // Up
+    renderGameGrid(game)
+    expect(screen.getByAltText('Player')).toHaveAttribute('src', '/images/maze/walker_up.gif')
+  })
+
+  it('walker_celebrate.gif shown when is_complete is true', () => {
+    const game = makeGameObj({
+      is_complete: vi.fn().mockReturnValue(true),
+      player_direction: vi.fn().mockReturnValue(1),
+    })
+    renderGameGrid(game)
+    expect(screen.getByAltText('Player')).toHaveAttribute('src', '/images/maze/walker_celebrate.gif')
+  })
+
+  it('visited non-S cell shows visited_dot.png', () => {
+    // Player at (1,0); visited cell is (0,1)
+    const game = makeGameObj({
+      player_row: vi.fn().mockReturnValue(1),
+      player_col: vi.fn().mockReturnValue(0),
+      visited_cells: vi.fn().mockReturnValue([{ row: 0, col: 1 }]),
+    })
+    renderGameGrid(game, 1)
+    expect(screen.getByAltText('')).toHaveAttribute('src', '/images/maze/visited_dot.png')
+  })
+
+  it('visited start cell (S) restores start_flag.png, not dot', () => {
+    // Player moved away from (0,0) — start cell is now in visitedSet
+    const game = makeGameObj({
+      player_row: vi.fn().mockReturnValue(1),
+      player_col: vi.fn().mockReturnValue(0),
+      visited_cells: vi.fn().mockReturnValue([{ row: 0, col: 0 }]),
+    })
+    renderGameGrid(game, 1)
+    // start_flag.png should appear (from visitedSet restore), NOT visited_dot
+    const startImgs = screen.getAllByAltText('Start')
+    expect(startImgs.length).toBeGreaterThan(0)
+    expect(screen.queryByAltText('')).not.toBeInTheDocument()
+  })
+
+  it('player cell not in visitedSet shows no dot', () => {
+    // Player at (0,0), visited_cells empty
+    const game = makeGameObj()
+    renderGameGrid(game)
+    expect(screen.queryByAltText('')).not.toBeInTheDocument()
+  })
+
+  it('cell click is suppressed when game is set', async () => {
+    const onCellClick = vi.fn()
+    const game = makeGameObj()
+    const { container } = renderGameGrid(game)
+    const cell = container.querySelector('td[aria-label="Cell 1,1"]')!
+    await userEvent.click(cell)
+    expect(onCellClick).not.toHaveBeenCalled()
   })
 })

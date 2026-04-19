@@ -1,6 +1,8 @@
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CellPoint } from '../hooks/useMazeEditor'
 import type { WalkState } from '../hooks/useWalkAnimation'
+import type { MazeGameWasm } from 'maze_wasm'
+import { MazeGameDirection } from '../wasm/mazeWasm'
 
 export const CELL_SIZE = 32
 export const HEADER_SIZE = 24
@@ -18,6 +20,8 @@ interface MazeGridProps {
   onColHeaderClick?: (col: number, shift: boolean) => void
   onCornerClick?: () => void
   onKeyDown?: (e: React.KeyboardEvent) => void
+  game?: MazeGameWasm | null
+  version?: number
 }
 
 function cellImage(cell: string): { src: string; alt: string } | null {
@@ -41,6 +45,21 @@ const WALKER_IMAGES: Record<string, string> = {
   right: '/images/maze/walker_right.gif',
 }
 const WALKER_CELEBRATE_IMG = '/images/maze/walker_celebrate.gif'
+
+const VISITED_DOT_IMG = '/images/maze/visited_dot.png'
+
+const GAME_WALKER_IMAGES: Record<number, string> = {
+  [MazeGameDirection.None]:  '/images/maze/walker_down.gif',
+  [MazeGameDirection.Up]:    '/images/maze/walker_up.gif',
+  [MazeGameDirection.Down]:  '/images/maze/walker_down.gif',
+  [MazeGameDirection.Left]:  '/images/maze/walker_left.gif',
+  [MazeGameDirection.Right]: '/images/maze/walker_right.gif',
+}
+
+function gameWalkerImg(dir: MazeGameDirection, isComplete: boolean): string {
+  if (isComplete) return WALKER_CELEBRATE_IMG
+  return GAME_WALKER_IMAGES[dir] ?? GAME_WALKER_IMAGES[MazeGameDirection.Down]
+}
 
 function directionBetween(from: CellPoint, to: CellPoint): string {
   if (to.row < from.row) return 'up'
@@ -101,11 +120,22 @@ function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
 
 export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
   function MazeGrid(
-    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown },
+    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version },
     ref,
   ) {
     const rows = grid.length
     const cols = rows > 0 ? grid[0].length : 0
+
+    const playerRow  = game?.player_row()       ?? -1
+    const playerCol  = game?.player_col()       ?? -1
+    const playerDir  = game?.player_direction() ?? MazeGameDirection.None
+    const isComplete = game?.is_complete()      ?? false
+
+    const visitedSet = useMemo(() => {
+      if (!game) return null
+      const cells = game.visited_cells() as unknown as Array<{ row: number; col: number }>
+      return new Set(cells.map(c => `${c.row},${c.col}`))
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const solutionMap = useMemo(
       () => (solution ? buildSolutionMap(solution) : new Map<string, string>()),
@@ -266,6 +296,26 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       }
     }, [walkState])
 
+    // Scroll a lookahead cell into view after each successful game move.
+    useEffect(() => {
+      if (!game || !containerRef.current) return
+      const container = containerRef.current
+      if (container.clientWidth === 0) return // JSDOM — no layout
+      const rowCount = grid.length
+      const colCount = grid[0]?.length ?? 0
+      let tr: number, tc: number
+      if      (playerDir === MazeGameDirection.Up)    { tr = playerRow - 1; tc = playerCol + 1 }
+      else if (playerDir === MazeGameDirection.Down)  { tr = playerRow + 3; tc = playerCol + 1 }
+      else if (playerDir === MazeGameDirection.Left)  { tr = playerRow + 1; tc = playerCol - 1 }
+      else if (playerDir === MazeGameDirection.Right) { tr = playerRow + 1; tc = playerCol + 3 }
+      else                                            { tr = playerRow + 1; tc = playerCol + 1 }
+      tr = Math.max(1, Math.min(rowCount, tr)) - 1
+      tc = Math.max(1, Math.min(colCount, tc)) - 1
+      container
+        .querySelector<HTMLElement>(`td[aria-label="Cell ${tr + 1},${tc + 1}"]`)
+        ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    }, [version, game, grid]) // eslint-disable-line react-hooks/exhaustive-deps
+
     function getCellClasses(row: number, col: number): string {
       const classes = ['maze-cell']
       const key = `${row},${col}`
@@ -305,6 +355,13 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       return classes.join(' ')
     }
 
+    const effectiveOnCellClick      = game ? undefined : onCellClick
+    const effectiveOnCellDoubleClick = game ? undefined : onCellDoubleClick
+    const effectiveOnRowHeaderClick = game ? undefined : onRowHeaderClick
+    const effectiveOnColHeaderClick = game ? undefined : onColHeaderClick
+    const effectiveOnCornerClick    = game ? undefined : onCornerClick
+    const effectiveOnKeyDown        = game ? undefined : onKeyDown
+
     const isAllSelected =
       selectionRect !== null &&
       selectionRect.minRow === 0 && selectionRect.maxRow === rows - 1 &&
@@ -315,7 +372,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         className="maze-grid-container"
         ref={setContainerRef}
         tabIndex={0}
-        onKeyDown={onKeyDown}
+        onKeyDown={effectiveOnKeyDown}
         aria-label="Maze grid"
       >
         <table className="maze-grid">
@@ -323,7 +380,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
             <tr>
               <th
                 className={`maze-cell-corner${isAllSelected ? ' maze-cell-corner--selected' : ''}`}
-                onClick={() => onCornerClick?.()}
+                onClick={() => effectiveOnCornerClick?.()}
                 aria-label="Select all"
               />
               {Array.from({ length: cols }, (_, c) => {
@@ -334,7 +391,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   key={`col-${c}`}
                   scope="col"
                   className={`maze-cell-col-header${isColSelected ? ' maze-cell-col-header--selected' : ''}`}
-                  onClick={e => onColHeaderClick?.(c, e.shiftKey)}
+                  onClick={e => effectiveOnColHeaderClick?.(c, e.shiftKey)}
                   aria-label={`Column ${c + 1}`}
                 >
                   {c + 1}
@@ -351,7 +408,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                 <th
                   scope="row"
                   className={`maze-cell-row-header${isRowSelected ? ' maze-cell-row-header--selected' : ''}`}
-                  onClick={e => onRowHeaderClick?.(r, e.shiftKey)}
+                  onClick={e => effectiveOnRowHeaderClick?.(r, e.shiftKey)}
                   aria-label={`Row ${r + 1}`}
                 >
                   {r + 1}
@@ -363,12 +420,13 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const walkedImgSrc = !isWalker ? walkInfo?.walkedMap.get(key) : undefined
                   const solutionImgSrc = solutionMap.get(key)
                   const img = isWalker ? null : cellImage(cell)
+                  const isGamePlayer = game !== null && game !== undefined && playerRow === r && playerCol === c
                   return (
                     <td
                       key={`cell-${r}-${c}`}
                       className={getCellClasses(r, c)}
-                      onClick={e => onCellClick?.(r, c, e.shiftKey)}
-                      onDoubleClick={() => onCellDoubleClick?.(r, c)}
+                      onClick={e => effectiveOnCellClick?.(r, c, e.shiftKey)}
+                      onDoubleClick={() => effectiveOnCellDoubleClick?.(r, c)}
                       aria-label={`Cell ${r + 1},${c + 1}`}
                     >
                       {isWalker && (
@@ -380,6 +438,17 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                       )}
                       {!isWalker && solutionImgSrc && cell !== 'S' && cell !== 'F' && (
                         <img src={solutionImgSrc} alt="Solution path" className="maze-cell-solution-img" />
+                      )}
+                      {game && visitedSet?.has(key) && (
+                        cell === 'S'
+                          ? <img src="/images/maze/start_flag.png" alt="Start"
+                                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                          : <img src={VISITED_DOT_IMG} alt="" aria-hidden
+                                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                      )}
+                      {isGamePlayer && (
+                        <img src={gameWalkerImg(playerDir, isComplete)} alt="Player"
+                             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
                       )}
                     </td>
                   )

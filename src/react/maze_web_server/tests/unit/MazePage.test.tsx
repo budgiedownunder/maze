@@ -16,6 +16,8 @@ const { mockGenerateMaze, mockSolveMaze } = vi.hoisted(() => ({
 vi.mock('../../src/wasm/mazeWasm', () => ({
   generateMaze: mockGenerateMaze,
   solveMaze: mockSolveMaze,
+  MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
+  MazeGamePlayerMoveResult: { None: 0, Moved: 1, Blocked: 2, Complete: 3 },
 }))
 
 vi.mock('../../src/context/AuthContext', async () => {
