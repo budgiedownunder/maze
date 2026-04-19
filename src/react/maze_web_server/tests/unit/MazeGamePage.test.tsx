@@ -204,10 +204,30 @@ describe('MazeGamePage', () => {
     expect(screen.queryByTestId('game-result-popup')).not.toBeInTheDocument()
   })
 
-  it('keyboard legend is present in the DOM', async () => {
+  it('keyboard legend has maze-shortcuts-hint class', async () => {
     renderPage()
     await waitForLoad()
-    expect(screen.getByText('↑ / W')).toBeInTheDocument()
-    expect(screen.getByText('Move up')).toBeInTheDocument()
+    const legend = document.querySelector('.maze-shortcuts-hint')
+    expect(legend).toBeInTheDocument()
+  })
+
+  it('keyboard legend shows all four directions', async () => {
+    renderPage()
+    await waitForLoad()
+    const legend = document.querySelector('.maze-shortcuts-hint')!
+    expect(legend.textContent).toMatch(/Up/)
+    expect(legend.textContent).toMatch(/Down/)
+    expect(legend.textContent).toMatch(/Left/)
+    expect(legend.textContent).toMatch(/Right/)
+  })
+
+  it('keyboard legend shows arrow and letter key hints', async () => {
+    renderPage()
+    await waitForLoad()
+    const legend = document.querySelector('.maze-shortcuts-hint')!
+    expect(legend.textContent).toMatch(/W/)
+    expect(legend.textContent).toMatch(/S/)
+    expect(legend.textContent).toMatch(/A/)
+    expect(legend.textContent).toMatch(/D/)
   })
 })

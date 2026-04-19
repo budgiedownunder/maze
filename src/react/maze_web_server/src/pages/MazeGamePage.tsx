@@ -81,13 +81,11 @@ export function MazeGamePage() {
         </button>
       </div>
 
-      <div className="game-keyboard-legend">
-        <table><tbody>
-          <tr><td>↑ / W</td><td>Move up</td></tr>
-          <tr><td>↓ / S</td><td>Move down</td></tr>
-          <tr><td>← / A</td><td>Move left</td></tr>
-          <tr><td>→ / D</td><td>Move right</td></tr>
-        </tbody></table>
+      <div className="maze-shortcuts-hint">
+        [&#x2191;/W]&nbsp;Up&nbsp;&nbsp;&nbsp;
+        [&#x2193;/S]&nbsp;Down&nbsp;&nbsp;&nbsp;
+        [&#x2190;/A]&nbsp;Left&nbsp;&nbsp;&nbsp;
+        [&#x2192;/D]&nbsp;Right
       </div>
 
       {showResult && (
