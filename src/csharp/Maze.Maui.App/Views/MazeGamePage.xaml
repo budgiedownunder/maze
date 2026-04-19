@@ -26,10 +26,10 @@ x:DataType="viewmodel:MazeGameViewModel"
               RowDefinitions="*,*,*" ColumnDefinitions="*,*,*"
               Opacity="0.85"
               IsVisible="{OnPlatform True, WinUI=False}">
-            <Button Grid.Row="0" Grid.Column="1" Text="▲" Pressed="OnDpadUpPressed"    Released="OnDpadReleased"/>
-            <Button Grid.Row="1" Grid.Column="0" Text="◀" Pressed="OnDpadLeftPressed"  Released="OnDpadReleased"/>
-            <Button Grid.Row="1" Grid.Column="2" Text="▶" Pressed="OnDpadRightPressed" Released="OnDpadReleased"/>
-            <Button Grid.Row="2" Grid.Column="1" Text="▼" Pressed="OnDpadDownPressed"  Released="OnDpadReleased"/>
+            <Button Grid.Row="0" Grid.Column="1" ImageSource="dpad_up.png"    Text="" Pressed="OnDpadUpPressed"    Released="OnDpadReleased"/>
+            <Button Grid.Row="1" Grid.Column="0" ImageSource="dpad_left.png"  Text="" Pressed="OnDpadLeftPressed"  Released="OnDpadReleased"/>
+            <Button Grid.Row="1" Grid.Column="2" ImageSource="dpad_right.png" Text="" Pressed="OnDpadRightPressed" Released="OnDpadReleased"/>
+            <Button Grid.Row="2" Grid.Column="1" ImageSource="dpad_down.png"  Text="" Pressed="OnDpadDownPressed"  Released="OnDpadReleased"/>
         </Grid>
 
         <!-- Busy overlay — covers the grid while loading -->
