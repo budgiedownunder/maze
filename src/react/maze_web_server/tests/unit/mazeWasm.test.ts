@@ -12,6 +12,9 @@ const {
   MockMazeWasm,
   mockMazeFree, mockToJson, mockFromJson, mockGenerate, mockSolve,
   mockSolutionFree, mockGetPathPoints, mockInit, mockMazeInstance,
+  MockMazeGameWasm,
+  mockGameFree, mockGameFromJson, mockMovePlayer, mockPlayerRow, mockPlayerCol,
+  mockPlayerDirection, mockIsComplete, mockVisitedCells, mockGameInstance,
 } = vi.hoisted(() => {
   const mockMazeFree = vi.fn()
   const mockToJson = vi.fn()
@@ -29,19 +32,45 @@ const {
     solve: mockSolve,
   }
   const MockMazeWasm = vi.fn().mockImplementation(function() { return mockMazeInstance })
-  return { MockMazeWasm, mockMazeFree, mockToJson, mockFromJson, mockGenerate, mockSolve,
-           mockSolutionFree, mockGetPathPoints, mockInit, mockMazeInstance }
+
+  const mockGameFree = vi.fn()
+  const mockGameFromJson = vi.fn()
+  const mockMovePlayer = vi.fn()
+  const mockPlayerRow = vi.fn()
+  const mockPlayerCol = vi.fn()
+  const mockPlayerDirection = vi.fn()
+  const mockIsComplete = vi.fn()
+  const mockVisitedCells = vi.fn()
+  const mockGameInstance = {
+    free: mockGameFree,
+    move_player: mockMovePlayer,
+    player_row: mockPlayerRow,
+    player_col: mockPlayerCol,
+    player_direction: mockPlayerDirection,
+    is_complete: mockIsComplete,
+    visited_cells: mockVisitedCells,
+  }
+  const MockMazeGameWasm = { from_json: mockGameFromJson }
+
+  return {
+    MockMazeWasm, mockMazeFree, mockToJson, mockFromJson, mockGenerate, mockSolve,
+    mockSolutionFree, mockGetPathPoints, mockInit, mockMazeInstance,
+    MockMazeGameWasm, mockGameFree, mockGameFromJson, mockMovePlayer, mockPlayerRow,
+    mockPlayerCol, mockPlayerDirection, mockIsComplete, mockVisitedCells, mockGameInstance,
+  }
 })
 
 vi.mock('maze_wasm', () => ({
   default: mockInit,
   MazeWasm: MockMazeWasm,
   GenerationAlgorithmWasm: { RecursiveBacktracking: 0 },
+  MazeGameWasm: MockMazeGameWasm,
+  DirectionWasm: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
 }))
 
 // Import after the mock is registered. The WASM singleton initialises once per
 // module lifetime; clearAllMocks() resets call counts without invalidating it.
-import { generateMaze, solveMaze } from '../../src/wasm/mazeWasm'
+import { generateMaze, solveMaze, createMazeGame, moveMazeGamePlayer, freeMazeGame, MazeGameDirection, MazeGamePlayerMoveResult } from '../../src/wasm/mazeWasm'
 
 const sampleDefinition: MazeDefinition = {
   grid: [
@@ -69,6 +98,14 @@ beforeEach(() => {
   mockToJson.mockReturnValue(JSON.stringify({ id: '', name: '', definition: sampleDefinition }))
   mockSolve.mockReturnValue({ get_path_points: mockGetPathPoints, free: mockSolutionFree })
   mockGetPathPoints.mockReturnValue([])
+  // Game defaults
+  mockGameFromJson.mockReturnValue(mockGameInstance)
+  mockMovePlayer.mockReturnValue(MazeGamePlayerMoveResult.Moved)
+  mockPlayerRow.mockReturnValue(0)
+  mockPlayerCol.mockReturnValue(0)
+  mockPlayerDirection.mockReturnValue(MazeGameDirection.None)
+  mockIsComplete.mockReturnValue(false)
+  mockVisitedCells.mockReturnValue([])
 })
 
 describe('generateMaze', () => {
@@ -157,5 +194,55 @@ describe('solveMaze', () => {
     mockSolve.mockImplementation(() => { throw new Error('maze has no solution') })
 
     await expect(solveMaze(sampleDefinition)).rejects.toThrow('maze has no solution')
+  })
+})
+
+describe('createMazeGame', () => {
+  it('calls MazeGameWasm.from_json with the definition JSON', async () => {
+    const json = '{"grid":[["S","F"]]}'
+    await createMazeGame(json)
+    expect(mockGameFromJson).toHaveBeenCalledWith(json)
+  })
+
+  it('returns the MazeGameWasm instance', async () => {
+    const game = await createMazeGame('{"grid":[["S","F"]]}')
+    expect(game).toBe(mockGameInstance)
+  })
+
+  it('throws a friendly error when from_json fails', async () => {
+    mockGameFromJson.mockImplementation(() => { throw new Error('invalid json') })
+    await expect(createMazeGame('bad')).rejects.toThrow('invalid json')
+  })
+})
+
+describe('moveMazeGamePlayer', () => {
+  it('calls move_player with the correct direction value', () => {
+    moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Up)
+    expect(mockMovePlayer).toHaveBeenCalledWith(MazeGameDirection.Up)
+  })
+
+  it('returns Moved when the player advances', () => {
+    mockMovePlayer.mockReturnValue(MazeGamePlayerMoveResult.Moved)
+    expect(moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Right))
+      .toBe(MazeGamePlayerMoveResult.Moved)
+  })
+
+  it('returns Blocked when the move is invalid', () => {
+    mockMovePlayer.mockReturnValue(MazeGamePlayerMoveResult.Blocked)
+    expect(moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Left))
+      .toBe(MazeGamePlayerMoveResult.Blocked)
+  })
+
+  it('returns Complete when the player reaches the finish', () => {
+    mockMovePlayer.mockReturnValue(MazeGamePlayerMoveResult.Complete)
+    expect(moveMazeGamePlayer(mockGameInstance as never, MazeGameDirection.Down))
+      .toBe(MazeGamePlayerMoveResult.Complete)
+  })
+})
+
+describe('freeMazeGame', () => {
+  it('calls free on the game instance', () => {
+    freeMazeGame(mockGameInstance as never)
+    expect(mockGameFree).toHaveBeenCalledOnce()
   })
 })

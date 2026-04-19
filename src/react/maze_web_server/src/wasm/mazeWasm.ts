@@ -1,4 +1,4 @@
-import init, { MazeWasm, GenerationAlgorithmWasm } from 'maze_wasm'
+import init, { MazeWasm, GenerationAlgorithmWasm, MazeGameWasm, DirectionWasm } from 'maze_wasm'
 
 export interface MazeDefinition {
   grid: string[][]
@@ -79,4 +79,49 @@ export async function solveMaze(definition: MazeDefinition): Promise<Array<{ row
   } finally {
     maze.free()
   }
+}
+
+// ── Game API ──────────────────────────────────────────────────────────────────
+
+// Integer values match Rust DirectionWasm / C# Direction exactly.
+export const MazeGameDirection = {
+  None:  0,
+  Up:    1,
+  Down:  2,
+  Left:  3,
+  Right: 4,
+} as const
+export type MazeGameDirection = typeof MazeGameDirection[keyof typeof MazeGameDirection]
+
+// Integer values match Rust MoveResultWasm / C# MoveResult exactly.
+export const MazeGamePlayerMoveResult = {
+  None:     0,
+  Moved:    1,
+  Blocked:  2,
+  Complete: 3,
+} as const
+export type MazeGamePlayerMoveResult = typeof MazeGamePlayerMoveResult[keyof typeof MazeGamePlayerMoveResult]
+
+export type { MazeGameWasm }
+
+/** Creates a new MazeGameWasm from a definition JSON string {"grid":[...]}. Caller must call freeMazeGame() on unmount. */
+export async function createMazeGame(definitionJson: string): Promise<MazeGameWasm> {
+  await ensureInit()
+  try {
+    return MazeGameWasm.from_json(definitionJson)
+  } catch (ex) { throw toError(ex) }
+}
+
+/**
+ * Moves the player one step. Returns MazeGamePlayerMoveResult.
+ * Blocked means the game object is unchanged. Moved or Complete means it has advanced.
+ */
+export function moveMazeGamePlayer(game: MazeGameWasm, dir: MazeGameDirection): MazeGamePlayerMoveResult {
+  // MazeGameDirection and DirectionWasm share identical integer values — cast is zero-cost.
+  return game.move_player(dir as unknown as DirectionWasm) as unknown as MazeGamePlayerMoveResult
+}
+
+/** Frees the WASM game object. Call on unmount or when definitionJson changes. */
+export function freeMazeGame(game: MazeGameWasm): void {
+  game.free()
 }
