@@ -121,6 +121,8 @@ pub fn create_app(
                    .route("/signup",       web::get().to(spa.clone()))
                    .route("/mazes",        web::get().to(spa.clone()))
                    .route("/mazes/{tail}", web::get().to(spa.clone()))
+                   .route("/play",         web::get().to(spa.clone()))
+                   .route("/play/{tail}",  web::get().to(spa.clone()))
                    .service(
                        Files::new("/", &static_dir)
                            .index_file("index.html")
