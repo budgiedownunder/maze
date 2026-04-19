@@ -20,12 +20,13 @@ x:DataType="viewmodel:MazeGameViewModel"
                VerticalOptions="Center"
                IsVisible="{Binding HasLoadStatus}" />
 
-        <!-- D-pad overlay, bottom-centre — hidden on Windows (arrow keys used instead) -->
-        <Grid AbsoluteLayout.LayoutFlags="XProportional,YProportional"
+        <!-- D-pad overlay, bottom-centre — hidden on Windows (arrow keys used instead); hidden until grid loads -->
+        <Grid x:Name="DpadGrid"
+              AbsoluteLayout.LayoutFlags="XProportional,YProportional"
               AbsoluteLayout.LayoutBounds="0.5,1,160,160"
               RowDefinitions="*,*,*" ColumnDefinitions="*,*,*"
               Opacity="0.85"
-              IsVisible="{OnPlatform True, WinUI=False}">
+              IsVisible="False">
             <Button Grid.Row="0" Grid.Column="1" ImageSource="dpad_up.png"    Text="" Pressed="OnDpadUpPressed"    Released="OnDpadReleased"/>
             <Button Grid.Row="1" Grid.Column="0" ImageSource="dpad_left.png"  Text="" Pressed="OnDpadLeftPressed"  Released="OnDpadReleased"/>
             <Button Grid.Row="1" Grid.Column="2" ImageSource="dpad_right.png" Text="" Pressed="OnDpadRightPressed" Released="OnDpadReleased"/>

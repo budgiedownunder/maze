@@ -40,6 +40,7 @@ namespace Maze.Maui.App.Views
             GameGrid.CellDoubleTapped += OnGameGridCellTapped;
             if (_gameStarted) return;
             _gameStarted = true;
+            DpadGrid.IsVisible = false;
             SetBusyIndicators(true);
             Dispatcher.Dispatch(async () =>
             {
@@ -51,6 +52,7 @@ namespace Maze.Maui.App.Views
                 finally
                 {
                     SetBusyIndicators(false);
+                    DpadGrid.IsVisible = DeviceInfo.Platform != DevicePlatform.WinUI;
                 }
             });
         }
@@ -80,6 +82,7 @@ namespace Maze.Maui.App.Views
             Shell.Current.Navigating -= OnShellNavigating;
             if (_viewModel.IsShowingResultPopup) return;
             _gameStarted = false;
+            DpadGrid.IsVisible = false;
             _viewModel.Cleanup();
         }
 
