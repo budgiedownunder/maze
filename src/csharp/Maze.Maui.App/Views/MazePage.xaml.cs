@@ -758,6 +758,15 @@ namespace Maze.Maui.App.Views
                     }
                 });
             }
+            else
+            {
+                SetBusyIndicators(true);
+                Dispatcher.Dispatch(async () =>
+                {
+                    await Task.Delay(300);
+                    SetBusyIndicators(false);
+                });
+            }
         }
         /// <summary>
         /// Handles the page appearing event

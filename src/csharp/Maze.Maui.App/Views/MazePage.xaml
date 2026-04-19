@@ -102,15 +102,16 @@
                     BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#303030}"
                     StrokeShape="RoundRectangle 8"
                     Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
-                    Padding="20"
-                    VerticalOptions="Center"
-                    HorizontalOptions="Center"
+                    VerticalOptions="Fill"
+                    HorizontalOptions="Fill"
                     Grid.RowSpan="3">
                 <ActivityIndicator x:Name="BusyIndicator"
                                    IsRunning="{Binding IsBusy}"
                                    Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
                                    WidthRequest="50"
-                                   HeightRequest="50" />
+                                   HeightRequest="50"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center" />
             </Border>
     </Grid>
 </ContentPage>

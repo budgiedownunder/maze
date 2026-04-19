@@ -14,6 +14,7 @@ namespace Maze.Maui.App.Views
         private const int MoveIntervalMs = 120;
 
         private readonly MazeGameViewModel _viewModel;
+        private bool _gameStarted = false;
         private IDispatcherTimer? _dpadTimer;
         private MazeGameDirection _dpadDirection = MazeGameDirection.None;
         private long _lastMoveTickMs = 0;
@@ -37,6 +38,8 @@ namespace Maze.Maui.App.Views
             GameGrid.KeyDown += OnGameGridKeyDown;
             GameGrid.CellTapped += OnGameGridCellTapped;
             GameGrid.CellDoubleTapped += OnGameGridCellTapped;
+            if (_gameStarted) return;
+            _gameStarted = true;
             SetBusyIndicators(true);
             Dispatcher.Dispatch(async () =>
             {
@@ -53,14 +56,42 @@ namespace Maze.Maui.App.Views
         }
 
         /// <inheritdoc/>
+        protected override void OnAppearing()
+        {
+            base.OnAppearing();
+            Shell.Current.Navigating += OnShellNavigating;
+        }
+
+        /// <inheritdoc/>
         protected override void OnNavigatedFrom(NavigatedFromEventArgs args)
         {
             base.OnNavigatedFrom(args);
+            if (_viewModel.IsShowingResultPopup) return;
             StopDpad();
             GameGrid.KeyDown -= OnGameGridKeyDown;
             GameGrid.CellTapped -= OnGameGridCellTapped;
             GameGrid.CellDoubleTapped -= OnGameGridCellTapped;
+        }
+
+        /// <inheritdoc/>
+        protected override void OnDisappearing()
+        {
+            base.OnDisappearing();
+            Shell.Current.Navigating -= OnShellNavigating;
+            if (_viewModel.IsShowingResultPopup) return;
+            _gameStarted = false;
             _viewModel.Cleanup();
+        }
+
+        private async void OnShellNavigating(object? sender, ShellNavigatingEventArgs e)
+        {
+            if (e.Source == ShellNavigationSource.Pop)
+            {
+                var deferral = e.GetDeferral();
+                SetBusyIndicators(true);
+                await Task.Delay(50);
+                deferral.Complete();
+            }
         }
 
         private void Move(MazeGameDirection direction)

@@ -51,18 +51,15 @@ namespace Maze.Maui.App.Services
         /// <summary>
         /// Displays a prompt to the user as a popup window with the intent to capture a single string value, together with `accept` and `cancel` buttons
         /// </summary>
-        /// <param name="title">Title</param>
         /// <param name="message">Message</param>
-        /// <param name="valueName">Value name</param>
-        /// <param name="accept">Text to display for `accept`</param>
-        /// <param name="cancel">Text to display for `cancel`</param>
-        /// <param name="placeholder">Placeholder text displayed if no value is entered</param>
-        /// <param name="maxlength">Maximum text length</param>
-        /// <param name="keyboard">Keyboard to use</param>
-        /// <param name="initialValue">Intial value to offer</param>
-        /// <param name="allowEmpty">Allow an empty value?</param>
-        /// <param name="trimResult">Trim the result of any leading/trailing blanks?</param>
-        /// <returns>A task that contains the user's choice as a string value which will be `null` if they chose to cancel</returns>
+        /// <returns>A task that completes when the popup is dismissed</returns>
+        public async Task ShowGameResult(string message)
+        {
+            var popup = new Views.GameResultPopup(message);
+            await Shell.Current.CurrentPage.ShowPopupAsync(popup);
+        }
+
+        /// <inheritdoc/>
         public async Task<string> DisplayPrompt(string title, string message, string valueName, string accept = "OK", string cancel = "Cancel",
             string? placeholder = null, int maxlength = -1, Keyboard? keyboard = null, string? initialValue = "", bool allowEmpty = false, bool trimResult = true)
         {

@@ -40,6 +40,12 @@ namespace Maze.Maui.App.ViewModels
         }
 
         /// <summary>
+        /// True while the game result popup is being displayed.
+        /// Used by the page to suppress lifecycle-driven cleanup during popup show/hide.
+        /// </summary>
+        public bool IsShowingResultPopup { get; private set; }
+
+        /// <summary>
         /// Status message shown on error. Empty when no message.
         /// </summary>
         [ObservableProperty]
@@ -108,7 +114,15 @@ namespace Maze.Maui.App.ViewModels
             if (result == MazeGameMoveResult.Complete)
             {
                 _gameGrid.SetPlayerCelebrate(_game.PlayerRow, _game.PlayerCol);
-                await _dialogService.ShowAlert("MAZE", "Congratulations! You completed the maze!", "OK");
+                IsShowingResultPopup = true;
+                try
+                {
+                    await _dialogService.ShowGameResult("You win!");
+                }
+                finally
+                {
+                    IsShowingResultPopup = false;
+                }
             }
         }
 
