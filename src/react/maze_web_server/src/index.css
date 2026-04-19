@@ -188,3 +188,32 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* ── MazeGamePage ──────────────────────────────────────────── */
+
+.game-dpad {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .game-dpad {
+    display: grid;
+    grid-template-areas: ". up ." "left down right";
+    gap: 4px;
+    margin-top: 12px;
+  }
+
+  .game-keyboard-legend {
+    display: none;
+  }
+}
+
+.game-keyboard-legend {
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: var(--text-muted, #888);
+}
+
+.game-keyboard-legend td {
+  padding: 2px 8px 2px 0;
+}
