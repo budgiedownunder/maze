@@ -49,6 +49,16 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         protected bool isRefreshing;
         /// <summary>
+        /// Indicates whether to use the abbreviated dimensions label
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(UseFullDimensions))]
+        protected bool useShortDimensions;
+        /// <summary>
+        /// Indicates whether to use the full dimensions label
+        /// </summary>
+        public bool UseFullDimensions => !UseShortDimensions;
+        /// <summary>
         /// Loads the maze list
         /// </summary>
         /// <returns>Task</returns>

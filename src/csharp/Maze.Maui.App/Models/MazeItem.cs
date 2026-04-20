@@ -70,6 +70,19 @@ namespace Maze.Maui.App.Models
             }
         }
         /// <summary>
+        /// Abbreviated dimensions summary for narrow layouts
+        /// </summary>
+        /// <returns>Short dimensions string e.g. "5r x 6c"</returns>
+        [JsonIgnore]
+        public string DimensionsSummaryShort
+        {
+            get {
+                if (Definition is not null)
+                    return $"{Definition.RowCount}r x {Definition.ColCount}c";
+                return "N/A";
+            }
+        }
+        /// <summary>
         /// Constructor
         /// </summary>
         public MazeItem() { 

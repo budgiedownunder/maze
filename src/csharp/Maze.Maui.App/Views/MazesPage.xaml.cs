@@ -68,6 +68,12 @@ public partial class MazesPage : ContentPage
     {
         InitializeComponent();
         BindingContext = this.viewModel = viewModel;
+        SizeChanged += OnSizeChanged;
+    }
+
+    private void OnSizeChanged(object? sender, EventArgs e)
+    {
+        viewModel.UseShortDimensions = Width < 300;
     }
 
     protected override void OnAppearing()

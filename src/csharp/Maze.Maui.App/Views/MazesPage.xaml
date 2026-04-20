@@ -197,7 +197,10 @@
                                             </Image>
                                             <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="Center">
                                                 <Label Text="{Binding Name}" FontSize="24"/>
-                                                <Label Text ="{Binding DimensionsSummary}" FontSize="12"/>
+                                                <Label Text="{Binding DimensionsSummary}" FontSize="12"
+                                                       IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=UseFullDimensions}"/>
+                                                <Label Text="{Binding DimensionsSummaryShort}" FontSize="12"
+                                                       IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=UseShortDimensions}"/>
                                             </VerticalStackLayout>
                                         </HorizontalStackLayout>
                                     </Grid>
