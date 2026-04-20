@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://budgiedownunder.github.io/maze/)
 
-A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **React.js**, **TypeScript** and **WebAssembly** interoperability. Built around a maze generation and solving domain, it demonstrates library crates, REST APIs, WASM bindings, OpenAPI, a cross-platform MAUI app, a React.js SPA, Node.js-based API testing, architecture diagramming with PlantUML, documentation generation with DocFX, and automated CI/CD across Windows, macOS, and Linux.
+A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **React.js**, **TypeScript** and **WebAssembly** interoperability. Built around a maze generation, solving and game play domain, it demonstrates library crates, REST APIs, WASM bindings, OpenAPI, a cross-platform MAUI app, a React.js SPA, Node.js-based API and E2E testing, architecture diagramming with PlantUML, documentation generation with DocFX, and automated CI/CD across Windows, macOS, and Linux.
 
 ## Table of Contents
 - [Introduction](#introduction)
@@ -143,21 +143,23 @@ Playing a maze — the player navigates using keyboard or D-pad, with visited ce
 ### Setup
 To setup the build and test environment, you first need to install:
 
-- [`.NET 10.0+`](https://dotnet.microsoft.com/en-us/download)
 - [`Rust`](https://www.rust-lang.org/tools/install) (latest stable)
 - [`Node.js 24+`](https://nodejs.org/en/learn/getting-started/how-to-install-nodejs)
-
-To setup the `C#` build environment, refer to the [README](src/csharp/README.md) in the `csharp` directory.
+- [`.NET 10.0+`](https://dotnet.microsoft.com/en-us/download)
 
 To setup the `Rust` build environment, refer to the [README](src/rust/README.md) in the `rust` directory.
 
-### Build
+To setup the `React` build environment, refer to the [README](src/react/README.md) in the `react` directory.
 
-- To build the `C#` (`.NET`) APIs, refer to the [README](src/csharp/README.md) in the `csharp` directory.
+To setup the `C#` build environment, refer to the [README](src/csharp/README.md) in the `csharp` directory.
+
+### Build
 
 - To build the `Rust` crates, refer to the [README](src/rust/README.md) in the `rust` directory.
 
 - To build the `React` web frontend, refer to the [README](src/react/README.md) in the `react` directory.
+
+- To build the `C#` (`.NET`) APIs, refer to the [README](src/csharp/README.md) in the `csharp` directory.
 
 ### Generating Documentation
 - To generate combined documentation for the `.NET` APIs and `Rust` crates, refer to the [README](src/docfx/README.md) in the `docfx` project.
