@@ -191,6 +191,20 @@ code {
 
 /* ── MazeGamePage ──────────────────────────────────────────── */
 
+@media (pointer: coarse) {
+  .maze-game-page .maze-grid-container .maze-cell,
+  .maze-game-page .maze-grid-container .maze-cell-col-header {
+    width: 60px;
+  }
+
+  .maze-game-page .maze-grid-container .maze-cell,
+  .maze-game-page .maze-grid-container .maze-cell-row-header {
+    height: 60px;
+  }
+}
+
+
+
 .game-dpad {
   display: none;
 }

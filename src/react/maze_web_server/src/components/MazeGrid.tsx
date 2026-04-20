@@ -22,6 +22,7 @@ interface MazeGridProps {
   onKeyDown?: (e: React.KeyboardEvent) => void
   game?: MazeGameWasm | null
   version?: number
+  cellSize?: number
 }
 
 function cellImage(cell: string): { src: string; alt: string } | null {
@@ -120,7 +121,7 @@ function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
 
 export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
   function MazeGrid(
-    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version },
+    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version, cellSize = CELL_SIZE },
     ref,
   ) {
     const rows = grid.length
@@ -193,10 +194,10 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       // JSDOM (unit tests) always returns zero-sized rects — fall back to calculated values.
       if (containerRect.width === 0) {
         setFrameStyle({
-          top: HEADER_SIZE + sr.minRow * CELL_SIZE,
-          left: HEADER_SIZE + sr.minCol * CELL_SIZE,
-          width: (sr.maxCol - sr.minCol + 1) * CELL_SIZE,
-          height: (sr.maxRow - sr.minRow + 1) * CELL_SIZE,
+          top: HEADER_SIZE + sr.minRow * cellSize,
+          left: HEADER_SIZE + sr.minCol * cellSize,
+          width: (sr.maxCol - sr.minCol + 1) * cellSize,
+          height: (sr.maxRow - sr.minRow + 1) * cellSize,
         })
         return
       }
@@ -253,14 +254,14 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       const container = containerRef.current
       if (container.clientWidth === 0) return // JSDOM — no layout
 
-      const cellTop  = HEADER_SIZE + activeCell.row * CELL_SIZE
-      const cellLeft = HEADER_SIZE + activeCell.col * CELL_SIZE
+      const cellTop  = HEADER_SIZE + activeCell.row * cellSize
+      const cellLeft = HEADER_SIZE + activeCell.col * cellSize
 
       if (cellTop  < container.scrollTop  + HEADER_SIZE) container.scrollTop  = cellTop  - HEADER_SIZE
       if (cellLeft < container.scrollLeft + HEADER_SIZE) container.scrollLeft = cellLeft - HEADER_SIZE
 
-      const needDown  = cellTop  + CELL_SIZE > container.scrollTop  + container.clientHeight
-      const needRight = cellLeft + CELL_SIZE > container.scrollLeft + container.clientWidth
+      const needDown  = cellTop  + cellSize > container.scrollTop  + container.clientHeight
+      const needRight = cellLeft + cellSize > container.scrollLeft + container.clientWidth
       if (needDown || needRight) {
         container
           .querySelector<HTMLElement>(`td[aria-label="Cell ${activeCell.row + 1},${activeCell.col + 1}"]`)
@@ -278,14 +279,14 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       if (container.clientWidth === 0) return // JSDOM — no layout
 
       const { row, col } = walkState.path[walkState.currentIndex]
-      const cellTop  = HEADER_SIZE + row * CELL_SIZE
-      const cellLeft = HEADER_SIZE + col * CELL_SIZE
+      const cellTop  = HEADER_SIZE + row * cellSize
+      const cellLeft = HEADER_SIZE + col * cellSize
 
       if (cellTop  < container.scrollTop  + HEADER_SIZE) container.scrollTop  = cellTop  - HEADER_SIZE
       if (cellLeft < container.scrollLeft + HEADER_SIZE) container.scrollLeft = cellLeft - HEADER_SIZE
 
-      const needDown  = cellTop  + CELL_SIZE > container.scrollTop  + container.clientHeight
-      const needRight = cellLeft + CELL_SIZE > container.scrollLeft + container.clientWidth
+      const needDown  = cellTop  + cellSize > container.scrollTop  + container.clientHeight
+      const needRight = cellLeft + cellSize > container.scrollLeft + container.clientWidth
       if (needDown || needRight) {
         container
           .querySelector<HTMLElement>(`td[aria-label="Cell ${row + 1},${col + 1}"]`)

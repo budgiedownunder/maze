@@ -31,6 +31,8 @@ export function MazeGamePage() {
     getMaze(token, id).then(setMaze).catch((e: Error) => setLoadError(e.message))
   }, [id, token])
 
+  const gameCellSize = window.matchMedia('(pointer: coarse)').matches ? 60 : 32
+
   const definitionJson = maze ? JSON.stringify(maze.definition) : null
   const [{ game, version, loading, error }, move] = useMazeGame(definitionJson)
 
@@ -104,6 +106,7 @@ export function MazeGamePage() {
               anchorCell={null}
               game={game}
               version={version}
+              cellSize={gameCellSize}
             />
 
             <div className="game-dpad" aria-label="D-pad">
