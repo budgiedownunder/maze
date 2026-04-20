@@ -77,6 +77,11 @@ export function MazePage() {
   const [isSolving, setIsSolving] = useState(false)
   const [solveError, setSolveError] = useState<string | null>(null)
 
+  // Play state
+  const [isCheckingPlay, setIsCheckingPlay] = useState(false)
+  const [playCheckError, setPlayCheckError] = useState<string | null>(null)
+  const [showPlayDirtyConfirm, setShowPlayDirtyConfirm] = useState(false)
+
   // Walk speed (persisted to localStorage)
   const { speedRef, speedIndex, setSpeedIndex } = useWalkSpeed()
 
@@ -84,7 +89,7 @@ export function MazePage() {
   const { walkState, isWalking, startWalk, cancelWalk } = useWalkAnimation(speedRef)
   const isWalkInProgress = walkState !== null && !walkState.isComplete
 
-  const isBusy = isSaving || isRefreshing || isGenerating || isSolving || isWalkInProgress
+  const isBusy = isSaving || isRefreshing || isGenerating || isSolving || isWalkInProgress || isCheckingPlay
   const hasUnsavedWork = isDirty || (isNew && mazeId === null)
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
@@ -256,6 +261,53 @@ export function MazePage() {
     clearSolution()
   }
 
+  async function handlePlayClick() {
+    if (mazeId && !isDirty) {
+      setIsCheckingPlay(true)
+      try {
+        await solveMaze({ grid })
+        navigate('/play/' + encodeURIComponent(mazeId))
+      } catch {
+        setPlayCheckError('The maze does not have a solution and so cannot be played.')
+      } finally {
+        setIsCheckingPlay(false)
+      }
+    } else if (mazeId && isDirty) {
+      setShowPlayDirtyConfirm(true)
+    } else {
+      // New/unsaved — open save modal; user clicks Play again after saving
+      setShowSaveNameModal(true)
+    }
+  }
+
+  async function handlePlayDirtyConfirm() {
+    if (!token || !mazeId) return
+    setShowPlayDirtyConfirm(false)
+    setIsSaving(true)
+    setSaveError(null)
+    let savedId: string | null = null
+    try {
+      await updateMaze(token, mazeId, { name: mazeName, definition: { grid } })
+      const id = mazeId
+      flushSync(() => { markSaved(id, mazeName) })
+      savedId = id
+    } catch (ex: unknown) {
+      setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
+    } finally {
+      setIsSaving(false)
+    }
+    if (!savedId) return
+    setIsCheckingPlay(true)
+    try {
+      await solveMaze({ grid })
+      navigate('/play/' + encodeURIComponent(savedId))
+    } catch {
+      setPlayCheckError('The maze does not have a solution and so cannot be played.')
+    } finally {
+      setIsCheckingPlay(false)
+    }
+  }
+
   async function handleConfirmRefresh() {
     if (!token || !mazeId) return
     setShowRefreshConfirm(false)
@@ -396,6 +448,24 @@ export function MazePage() {
           title="Unable to solve maze"
           message={solveError}
           onClose={() => setSolveError(null)}
+        />
+      )}
+      {showPlayDirtyConfirm && (
+        <ConfirmModal
+          title="Unsaved Changes"
+          message="You have unsaved changes. Save and play?"
+          confirmLabel="Save & Play"
+          isLoading={isSaving || isCheckingPlay}
+          error={saveError}
+          onConfirm={handlePlayDirtyConfirm}
+          onCancel={() => { setShowPlayDirtyConfirm(false); setSaveError(null) }}
+        />
+      )}
+      {playCheckError && (
+        <AlertModal
+          title="Cannot Play Maze"
+          message={playCheckError}
+          onClose={() => setPlayCheckError(null)}
         />
       )}
 
@@ -557,6 +627,16 @@ export function MazePage() {
               onClick={handleClearSolution}
             >
               <img src="/images/maze/clear_solution_button.png" alt="Clear Solution" />
+            </button>
+            <button
+              type="button"
+              className="maze-toolbar-btn"
+              title="Play"
+              aria-label="Play"
+              disabled={isBusy}
+              onClick={handlePlayClick}
+            >
+              <img src="/images/maze/play_button.png" alt="Play" />
             </button>
             {isWalking && (
               <WalkSpeedControl
