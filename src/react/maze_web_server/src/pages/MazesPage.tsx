@@ -7,6 +7,8 @@ import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import { useToken } from '../context/AuthContext'
 import { getMazes, deleteMaze, updateMaze, createMaze } from '../api/client'
+import { solveMaze } from '../wasm/mazeWasm'
+import { AlertModal } from '../components/AlertModal'
 import type { Maze } from '../types/api'
 
 export function MazesPage() {
@@ -31,6 +33,9 @@ export function MazesPage() {
   const [mazeToDuplicate, setMazeToDuplicate] = useState<Maze | null>(null)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [isDuplicating, setIsDuplicating] = useState(false)
+
+  const [playCheckError, setPlayCheckError] = useState<string | null>(null)
+  const [isCheckingPlay, setIsCheckingPlay] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -80,6 +85,21 @@ export function MazesPage() {
     }
   }
 
+  async function handlePlay(maze: Maze) {
+    setPlayCheckError(null)
+    setIsCheckingPlay(true)
+    document.body.classList.add('is-busy')
+    try {
+      await solveMaze(maze.definition)
+      navigate(`/play/${encodeURIComponent(maze.id)}`)
+    } catch {
+      setPlayCheckError(`The maze '${maze.name}' does not have a solution and so cannot be played.`)
+    } finally {
+      setIsCheckingPlay(false)
+      document.body.classList.remove('is-busy')
+    }
+  }
+
   function validateDuplicateName(name: string): string | null {
     return mazes.some(m => m.name.toLowerCase() === name.toLowerCase())
       ? 'A maze with that name already exists.'
@@ -111,6 +131,13 @@ export function MazesPage() {
 
   return (
     <div className="mazes-page">
+      {playCheckError && (
+        <AlertModal
+          title="Cannot Play Maze"
+          message={playCheckError}
+          onClose={() => setPlayCheckError(null)}
+        />
+      )}
       {mazeToDelete && (
         <ConfirmModal
           title="Delete Maze"
@@ -211,6 +238,16 @@ export function MazesPage() {
                     <span className="maze-item-subtitle">{rows} {rows === 1 ? 'row' : 'rows'} × {cols} {cols === 1 ? 'column' : 'columns'}</span>
                   </div>
                   <div className="maze-item-actions">
+                    <button
+                      type="button"
+                      className="maze-item-action btn-secondary"
+                      onClick={e => { e.stopPropagation(); void handlePlay(maze) }}
+                      aria-label={`Play ${maze.name}`}
+                      disabled={isCheckingPlay}
+                    >
+                      <img src="/images/maze/play_button.png" alt="" aria-hidden="true" />
+                      <span className="maze-item-action-label">Play</span>
+                    </button>
                     <button
                       type="button"
                       className="maze-item-action btn-secondary"

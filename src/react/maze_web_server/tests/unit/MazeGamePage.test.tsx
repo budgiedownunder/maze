@@ -191,7 +191,7 @@ describe('MazeGamePage', () => {
     mockGameInstance.is_complete.mockReturnValue(true)
     renderPage()
     await waitFor(() => expect(screen.getByTestId('game-result-popup')).toBeInTheDocument())
-    expect(screen.getByText('Congratulations! You completed the maze!')).toBeInTheDocument()
+    expect(screen.getByText('You win!')).toBeInTheDocument()
   })
 
   it('Close button on GameResultPopup dismisses it', async () => {

@@ -419,8 +419,8 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const isWalker = walkInfo?.walkerKey === key
                   const walkedImgSrc = !isWalker ? walkInfo?.walkedMap.get(key) : undefined
                   const solutionImgSrc = solutionMap.get(key)
-                  const img = isWalker ? null : cellImage(cell)
                   const isGamePlayer = game !== null && game !== undefined && playerRow === r && playerCol === c
+                  const img = (isWalker || isGamePlayer) ? null : cellImage(cell)
                   return (
                     <td
                       key={`cell-${r}-${c}`}
@@ -439,7 +439,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                       {!isWalker && solutionImgSrc && cell !== 'S' && cell !== 'F' && (
                         <img src={solutionImgSrc} alt="Solution path" className="maze-cell-solution-img" />
                       )}
-                      {game && visitedSet?.has(key) && (
+                      {game && visitedSet?.has(key) && !isGamePlayer && (
                         cell === 'S'
                           ? <img src="/images/maze/start_flag.png" alt="Start"
                                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />

@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { getMaze } from '../api/client'
 import { useToken } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { useMazeGame, MazeGameDirection } from '../hooks/useMazeGame'
+import { useMenuVariant } from '../hooks/useMenuVariant'
+import { HamburgerMenu } from '../components/HamburgerMenu'
 import { MazeGrid } from '../components/MazeGrid'
 import { GameResultPopup } from '../components/GameResultPopup'
 import type { Maze } from '../types/api'
@@ -17,6 +20,8 @@ const KEY_MAP: Record<string, MazeGameDirection> = {
 export function MazeGamePage() {
   const { id } = useParams<{ id: string }>()
   const token = useToken()
+  const menuVariant = useMenuVariant()
+  const { theme, toggleTheme } = useTheme()
 
   const [maze, setMaze] = useState<Maze | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -45,53 +50,75 @@ export function MazeGamePage() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [move, game])
 
-  if (loadError) return <p className="error-msg" role="alert">{loadError}</p>
-  if (!maze || loading) return <p aria-label="Loading">Loading…</p>
-  if (error) return <p className="error-msg" role="alert">{error}</p>
-
   return (
     <div className="maze-game-page">
-      <div className="maze-game-header">
-        <span className="maze-game-title">{maze.name}</span>
+      <header className="app-header">
+        <div className="header-actions">
+          {menuVariant === 'hamburger' && <HamburgerMenu />}
+        </div>
+        <span className="app-header-title">{maze?.name ?? ''}</span>
+        <div className="header-actions">
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? '☀' : '☾'}
+          </button>
+        </div>
+      </header>
+
+      <div className="maze-game-content">
+        {loadError && <p className="error-msg" role="alert">{loadError}</p>}
+        {error && <p className="error-msg" role="alert">{error}</p>}
+
+        {!loadError && !error && (!maze || !game || loading) && (
+          <p className="loading-msg" role="status" aria-label="Loading">Loading…</p>
+        )}
+
+        {maze && game && !loading && !loadError && !error && (
+          <>
+            <MazeGrid
+              grid={maze.definition.grid}
+              solution={null}
+              activeCell={null}
+              anchorCell={null}
+              game={game}
+              version={version}
+            />
+
+            <div className="game-dpad" aria-label="D-pad">
+              <button type="button" aria-label="Move up"    onClick={() => move(MazeGameDirection.Up)}    disabled={isComplete} style={{ gridArea: 'up' }}>
+                <img src="/images/maze/dpad_up.png" alt="" />
+              </button>
+              <button type="button" aria-label="Move left"  onClick={() => move(MazeGameDirection.Left)}  disabled={isComplete} style={{ gridArea: 'left' }}>
+                <img src="/images/maze/dpad_left.png" alt="" />
+              </button>
+              <button type="button" aria-label="Move down"  onClick={() => move(MazeGameDirection.Down)}  disabled={isComplete} style={{ gridArea: 'down' }}>
+                <img src="/images/maze/dpad_down.png" alt="" />
+              </button>
+              <button type="button" aria-label="Move right" onClick={() => move(MazeGameDirection.Right)} disabled={isComplete} style={{ gridArea: 'right' }}>
+                <img src="/images/maze/dpad_right.png" alt="" />
+              </button>
+            </div>
+
+            <div className="maze-shortcuts-hint">
+              [&#x2191;/W]&nbsp;Up&nbsp;&nbsp;&nbsp;
+              [&#x2193;/S]&nbsp;Down&nbsp;&nbsp;&nbsp;
+              [&#x2190;/A]&nbsp;Left&nbsp;&nbsp;&nbsp;
+              [&#x2192;/D]&nbsp;Right
+            </div>
+
+            {showResult && (
+              <GameResultPopup
+                message="You win!"
+                onClose={() => setShowResult(false)}
+              />
+            )}
+          </>
+        )}
       </div>
-
-      <MazeGrid
-        grid={maze.definition.grid}
-        solution={null}
-        activeCell={null}
-        anchorCell={null}
-        game={game}
-        version={version}
-      />
-
-      <div className="game-dpad" aria-label="D-pad">
-        <button type="button" aria-label="Move up"    onClick={() => move(MazeGameDirection.Up)}    disabled={isComplete} style={{ gridArea: 'up' }}>
-          <img src="/images/maze/dpad_up.png" alt="" />
-        </button>
-        <button type="button" aria-label="Move left"  onClick={() => move(MazeGameDirection.Left)}  disabled={isComplete} style={{ gridArea: 'left' }}>
-          <img src="/images/maze/dpad_left.png" alt="" />
-        </button>
-        <button type="button" aria-label="Move down"  onClick={() => move(MazeGameDirection.Down)}  disabled={isComplete} style={{ gridArea: 'down' }}>
-          <img src="/images/maze/dpad_down.png" alt="" />
-        </button>
-        <button type="button" aria-label="Move right" onClick={() => move(MazeGameDirection.Right)} disabled={isComplete} style={{ gridArea: 'right' }}>
-          <img src="/images/maze/dpad_right.png" alt="" />
-        </button>
-      </div>
-
-      <div className="maze-shortcuts-hint">
-        [&#x2191;/W]&nbsp;Up&nbsp;&nbsp;&nbsp;
-        [&#x2193;/S]&nbsp;Down&nbsp;&nbsp;&nbsp;
-        [&#x2190;/A]&nbsp;Left&nbsp;&nbsp;&nbsp;
-        [&#x2192;/D]&nbsp;Right
-      </div>
-
-      {showResult && (
-        <GameResultPopup
-          message="Congratulations! You completed the maze!"
-          onClose={() => setShowResult(false)}
-        />
-      )}
     </div>
   )
 }
