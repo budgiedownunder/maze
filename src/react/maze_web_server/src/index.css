@@ -201,6 +201,7 @@ code {
     grid-template-areas: ". up ." "left down right";
     gap: 4px;
     margin-top: 12px;
+    touch-action: none;
   }
 
   .game-dpad button {
@@ -209,9 +210,25 @@ code {
     border-radius: 8px;
     padding: 8px;
     cursor: pointer;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .game-dpad button:disabled {
+  .game-dpad button img {
+    display: block;
+    pointer-events: none;
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .game-dpad button[aria-disabled="true"] {
     opacity: 0.4;
+    cursor: default;
   }
 }

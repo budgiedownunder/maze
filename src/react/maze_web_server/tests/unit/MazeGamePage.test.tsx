@@ -177,14 +177,14 @@ describe('MazeGamePage', () => {
     expect(mockMove).toHaveBeenCalledWith(4)
   })
 
-  it('D-pad buttons are disabled when game is complete', async () => {
+  it('D-pad buttons are aria-disabled when game is complete', async () => {
     mockGameInstance.is_complete.mockReturnValue(true)
     renderPage()
     await waitForLoad()
-    expect(screen.getByRole('button', { name: /move up/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /move down/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /move left/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /move right/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /move up/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: /move down/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: /move left/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: /move right/i })).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('GameResultPopup appears when game becomes complete', async () => {
