@@ -335,9 +335,6 @@ namespace Maze.Maui.App.ViewModels
         async Task<bool> DeleteMaze(MazeItem item)
         {
             bool deleted = false;
-            if (IsBusy)
-                return deleted;
-
             try
             {
                 IsBusy = true;
