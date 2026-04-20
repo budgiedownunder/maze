@@ -202,4 +202,16 @@ code {
     gap: 4px;
     margin-top: 12px;
   }
+
+  .game-dpad button {
+    background: #ac99ea;
+    border: none;
+    border-radius: 8px;
+    padding: 8px;
+    cursor: pointer;
+  }
+
+  .game-dpad button:disabled {
+    opacity: 0.4;
+  }
 }
