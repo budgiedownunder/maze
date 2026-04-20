@@ -133,11 +133,10 @@
                                                     StrokeThickness="0"
                                                     StrokeShape="RoundRectangle 28"
                                                     HorizontalOptions="Center">
-                                                <Label Text="▶"
-                                                       FontSize="22"
-                                                       TextColor="White"
-                                                       HorizontalOptions="Center"
-                                                       VerticalOptions="Center"/>
+                                                <Image ClassId="white-tint"
+                                                       Source="{OnPlatform 'icon_play.png', iOS='icon_play_ios.png', MacCatalyst='icon_play_ios.png'}"
+                                                       WidthRequest="26" HeightRequest="26"
+                                                       HorizontalOptions="Center" VerticalOptions="Center"/>
                                             </Border>
                                             <Label Grid.Row="1" Text="Play" FontSize="12" HorizontalOptions="Center"
                                                    TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
