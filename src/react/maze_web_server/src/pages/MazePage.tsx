@@ -267,8 +267,9 @@ export function MazePage() {
       try {
         await solveMaze({ grid })
         navigate('/play/' + encodeURIComponent(mazeId))
-      } catch {
-        setPlayCheckError('The maze does not have a solution and so cannot be played.')
+      } catch (ex: unknown) {
+        const msg = (ex as { message?: string }).message ?? 'Unknown error.'
+        setPlayCheckError(msg.charAt(0).toUpperCase() + msg.slice(1))
       } finally {
         setIsCheckingPlay(false)
       }
@@ -301,8 +302,9 @@ export function MazePage() {
     try {
       await solveMaze({ grid })
       navigate('/play/' + encodeURIComponent(savedId))
-    } catch {
-      setPlayCheckError('The maze does not have a solution and so cannot be played.')
+    } catch (ex: unknown) {
+      const msg = (ex as { message?: string }).message ?? 'Unknown error.'
+      setPlayCheckError(msg.charAt(0).toUpperCase() + msg.slice(1))
     } finally {
       setIsCheckingPlay(false)
     }

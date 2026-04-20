@@ -931,11 +931,12 @@ describe('MazePage play', () => {
     await waitFor(() => expect(screen.getByTestId('play-page')).toBeInTheDocument())
   })
 
-  it('clean maze: unsolvable → AlertModal shown, no navigate', async () => {
+  it('clean maze: unsolvable → AlertModal shown with reason, no navigate', async () => {
     mockSolveMaze.mockRejectedValue(new Error('no solution'))
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     await userEvent.click(screen.getByRole('button', { name: 'Play' }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toHaveTextContent('No solution')
     expect(screen.queryByTestId('play-page')).not.toBeInTheDocument()
   })
 

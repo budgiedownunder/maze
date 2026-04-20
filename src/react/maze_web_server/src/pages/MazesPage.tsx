@@ -92,8 +92,9 @@ export function MazesPage() {
     try {
       await solveMaze(maze.definition)
       navigate(`/play/${encodeURIComponent(maze.id)}`)
-    } catch {
-      setPlayCheckError(`The maze '${maze.name}' does not have a solution and so cannot be played.`)
+    } catch (ex: unknown) {
+      const msg = (ex as { message?: string }).message ?? 'Unknown error.'
+      setPlayCheckError(msg.charAt(0).toUpperCase() + msg.slice(1))
     } finally {
       setIsCheckingPlay(false)
       document.body.classList.remove('is-busy')

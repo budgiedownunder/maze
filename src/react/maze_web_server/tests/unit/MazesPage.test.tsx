@@ -385,7 +385,8 @@ describe('MazesPage', () => {
     await userEvent.click(screen.getByRole('button', { name: `Play ${mockMazeAlpha.name}` }))
 
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toBeInTheDocument())
-    expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toHaveTextContent(mockMazeAlpha.name)
+    const dialog = screen.getByRole('dialog', { name: 'Cannot Play Maze' })
+    expect(dialog).toHaveTextContent('No solution found')
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
