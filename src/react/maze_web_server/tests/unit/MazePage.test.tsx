@@ -645,9 +645,9 @@ describe('MazePage solve', () => {
     expect(screen.getByRole('button', { name: 'Solve' })).not.toBeDisabled()
   })
 
-  it('Clear Solution button is disabled when no solution is shown', async () => {
+  it('Clear Solution button is hidden when no solution is shown', async () => {
     await loadMazePage('/mazes/new')
-    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Clear Solution' })).not.toBeInTheDocument()
   })
 
   it('clicking Solve calls solveMaze with the current grid', async () => {
@@ -707,13 +707,13 @@ describe('MazePage solve', () => {
     expect(screen.queryByRole('dialog', { name: 'Unable to solve maze' })).not.toBeInTheDocument()
   })
 
-  it('clicking Clear Solution removes the overlay and disables the button', async () => {
+  it('clicking Clear Solution removes the overlay and hides the button', async () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Clear Solution' })).not.toBeDisabled())
     await userEvent.click(screen.getByRole('button', { name: 'Clear Solution' }))
     expect(screen.queryByAltText('Solution path')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Clear Solution' })).not.toBeInTheDocument()
   })
 
   it('Solve button is disabled while solving', async () => {
@@ -817,7 +817,7 @@ describe('MazePage walk solution', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Clear Solution' }))
     expect(screen.queryByAltText('Walker')).not.toBeInTheDocument()
     expect(screen.queryByAltText('Solution path')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Clear Solution' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Walk Solution' })).not.toBeDisabled()
   })
 
@@ -848,7 +848,7 @@ describe('MazePage walk solution', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: 'Clear Solution' }))
     expect(screen.queryByAltText('Solution path')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Clear Solution' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Walk Solution' })).not.toBeDisabled()
   }, 10000)
 })

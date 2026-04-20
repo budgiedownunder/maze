@@ -687,10 +687,10 @@ test('Solve button is present and enabled when no solution is shown', async ({ p
   await expect(page.getByRole('button', { name: 'Solve' })).toBeEnabled()
 })
 
-test('Clear Solution button is disabled when no solution is shown', async ({ page }) => {
+test('Clear Solution button is hidden when no solution is shown', async ({ page }) => {
   await login(page)
   await openFirstMaze(page)
-  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).not.toBeVisible()
 })
 
 test('clicking Solve on a solvable maze shows the solution overlay', async ({ page }) => {
@@ -708,7 +708,7 @@ test('clicking Clear Solution removes the solution overlay', async ({ page }) =>
   await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
   await page.getByRole('button', { name: 'Clear Solution' }).click()
   await expect(page.locator('img[alt="Solution path"]')).not.toBeVisible()
-  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).not.toBeVisible()
 })
 
 test('clicking Solve on an unsolvable maze shows an alert dialog', async ({ page }) => {
@@ -858,7 +858,7 @@ test('clicking Clear Solution mid-walk cancels the animation and resets the grid
   await page.getByRole('button', { name: 'Clear Solution' }).click()
   await expect(page.locator('img[alt="Walker"]')).not.toBeVisible()
   await expect(page.locator('img[alt="Solution path"]')).not.toBeVisible()
-  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).not.toBeVisible()
   await expect(page.getByRole('button', { name: 'Walk Solution' })).toBeEnabled()
 })
 
@@ -879,7 +879,7 @@ test('Clear Solution after Walk Solution resets to normal editing state', async 
   await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
   await page.getByRole('button', { name: 'Clear Solution' }).click()
   await expect(page.locator('img[alt="Solution path"]')).not.toBeVisible()
-  await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Clear Solution' })).not.toBeVisible()
   await expect(page.getByRole('button', { name: 'Walk Solution' })).toBeEnabled()
   // Generate and Solve don't require a cell selection — confirm editing is re-enabled
   await expect(page.getByRole('button', { name: 'Generate' })).toBeEnabled()
