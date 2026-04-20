@@ -1576,6 +1576,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 else if (selectedCells.Right != prevSelection.Right)
                     activeCellPoint.Column = selectedCells.Right;
             }
+
+            SyncExtendedSelectionModeWithSelection();
         }
         /// <summary>
         /// Gets the current selection state
