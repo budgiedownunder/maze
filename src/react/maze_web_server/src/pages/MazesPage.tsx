@@ -236,7 +236,8 @@ export function MazesPage() {
                   <img src="/images/maze/maze.png" className="maze-item-icon" alt="" aria-hidden="true" />
                   <div className="maze-item-text">
                     <span className="maze-item-name">{maze.name}</span>
-                    <span className="maze-item-subtitle">{rows} {rows === 1 ? 'row' : 'rows'} × {cols} {cols === 1 ? 'column' : 'columns'}</span>
+                    <span className="maze-item-subtitle maze-item-dim-full">{rows} {rows === 1 ? 'row' : 'rows'} × {cols} {cols === 1 ? 'column' : 'columns'}</span>
+                    <span className="maze-item-subtitle maze-item-dim-short">{rows}r × {cols}c</span>
                   </div>
                   <div className="maze-item-actions">
                     <button

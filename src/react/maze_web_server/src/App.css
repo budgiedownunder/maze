@@ -451,12 +451,25 @@
   flex-shrink: 0;
 }
 
+.maze-item-dim-short {
+  display: none;
+}
+
 @media (max-width: 540px) {
   .maze-item-action-label {
     display: none;
   }
   .maze-item-icon {
     display: none;
+  }
+}
+
+@container (max-width: 110px) {
+  .maze-item-dim-full {
+    display: none;
+  }
+  .maze-item-dim-short {
+    display: block;
   }
 }
 
@@ -479,6 +492,7 @@
   text-align: left;
   flex: 1;
   min-width: 0;
+  container-type: inline-size;
 }
 
 .maze-item-name {
