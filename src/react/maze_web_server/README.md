@@ -10,8 +10,10 @@ Browser-based UI for the `maze_web_server` REST API. Features:
 - **Maze list** — create, rename, duplicate, delete, and open mazes
 - **Maze editor** — cell-by-cell editing (walls, start, finish), multi-cell range selection,
   structural editing (insert/delete rows and columns), keyboard shortcuts
-- **In-browser WASM** — maze generation and solving run locally via the `maze_wasm`
-  WebAssembly module with no server round-trip
+- **Maze game** — play a maze at `/play/:id` with keyboard (arrow keys / WASD) or
+  on-screen D-pad; visited cells are marked; completion shows a result popup
+- **In-browser WASM** — maze generation, solving, and game logic run locally via the
+  `maze_wasm` WebAssembly module with no server round-trip
 
 ## Tech stack
 

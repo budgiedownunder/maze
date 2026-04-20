@@ -6,7 +6,7 @@ The following `Rust` crates are present:
 
 | Folder | Crate | Description
 |--------|-----------|---------------
-| `src/rust` | [`maze`](./maze/README.md) | Maze definition, calculation, and game logic library
+| `src/rust` | [`maze`](./maze/README.md) | Maze definition, calculation, and gaming engine library
 |            | [`maze_c`](./maze_c/README.md) | Maze C API library
 |            | [`maze_console`](./maze_console/README.md) | Maze console application
 |            | [`maze_openapi_generator`](./maze_openapi_generator/README.md) | Maze OpenAPI generator console application
