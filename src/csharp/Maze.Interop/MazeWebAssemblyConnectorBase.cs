@@ -107,6 +107,15 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? generatorOptionsSetBranchFromFinish;
         protected IWebAssemblyFunction? mazeGenerate;
         protected IWebAssemblyFunction? freeGeneratorOptions;
+        protected IWebAssemblyFunction? newMazeGame;
+        protected IWebAssemblyFunction? freeMazeGame;
+        protected IWebAssemblyFunction? mazeGameMovePlayer;
+        protected IWebAssemblyFunction? mazeGamePlayerRow;
+        protected IWebAssemblyFunction? mazeGamePlayerCol;
+        protected IWebAssemblyFunction? mazeGamePlayerDirection;
+        protected IWebAssemblyFunction? mazeGameIsComplete;
+        protected IWebAssemblyFunction? mazeGameVisitedCellCount;
+        protected IWebAssemblyFunction? mazeGameGetVisitedCell;
         /// <summary>
         /// Creates a new, empty maze, or will throw an exception if the operation fails
         /// </summary>
@@ -635,6 +644,108 @@ namespace Maze.Interop
             byte[] utf8Bytes = Encoding.UTF8.GetBytes(value);
             memory.WriteBytes(strPtrOffset + 4, utf8Bytes);
             return strPtrOffset;
+        }
+        /// <summary>
+        /// Creates a new maze game session from a maze definition JSON string,
+        /// or will throw an exception if the operation fails.
+        /// </summary>
+        /// <param name="definitionJson">Maze definition JSON string ({"grid":[...]})</param>
+        /// <returns>Opaque game session pointer. Free with <see cref="FreeMazeGame(UIntPtr)">FreeMazeGame()</see> when done.</returns>
+        public UIntPtr NewMazeGame(string definitionJson)
+        {
+            var jsonStrPtr = ToStringPtr(definitionJson);
+            UIntPtr gamePtr = (UIntPtr)(uint)(int)(newMazeGame?.Invoke(jsonStrPtr) ?? 0);
+            FreeStringPtr(jsonStrPtr);
+            if (gamePtr == UIntPtr.Zero)
+                throw new Exception("Failed to create maze game session — invalid JSON or maze has no start cell");
+            return gamePtr;
+        }
+        /// <summary>
+        /// Frees a game session pointer returned by <see cref="NewMazeGame(string)">NewMazeGame()</see>
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        public void FreeMazeGame(UIntPtr gamePtr)
+        {
+            freeMazeGame?.Invoke((long)(uint)gamePtr);
+        }
+        /// <summary>
+        /// Moves the player one cell in the given direction
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="dir">Direction: 0=None 1=Up 2=Down 3=Left 4=Right</param>
+        /// <returns>0=None 1=Moved 2=Blocked 3=Complete</returns>
+        public int MazeGameMovePlayer(UIntPtr gamePtr, int dir)
+        {
+            return (int)(mazeGameMovePlayer?.Invoke((long)(uint)gamePtr, dir) ?? 0);
+        }
+        /// <summary>
+        /// Gets the player's current row (zero-based)
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Row index</returns>
+        public int MazeGamePlayerRow(UIntPtr gamePtr)
+        {
+            return (int)(mazeGamePlayerRow?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Gets the player's current column (zero-based)
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Column index</returns>
+        public int MazeGamePlayerCol(UIntPtr gamePtr)
+        {
+            return (int)(mazeGamePlayerCol?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Gets the player's current facing direction
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>0=None 1=Up 2=Down 3=Left 4=Right</returns>
+        public int MazeGamePlayerDirection(UIntPtr gamePtr)
+        {
+            return (int)(mazeGamePlayerDirection?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Returns whether the player has reached the finish cell
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>1 if complete, 0 otherwise</returns>
+        public int MazeGameIsComplete(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameIsComplete?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Returns the number of cells visited by the player (including the start cell)
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Visited cell count</returns>
+        public int MazeGameVisitedCellCount(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameVisitedCellCount?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Retrieves a visited cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the visited-cells list</param>
+        /// <param name="row">Receives the cell row on success</param>
+        /// <param name="col">Receives the cell column on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetVisitedCell(UIntPtr gamePtr, int index, out int row, out int col)
+        {
+            // Allocate 4-byte output slots in WASM linear memory.
+            // Pass offset+4 to skip the sized-memory header so the function writes into the data region.
+            UInt32 rowOutPtr = AllocateSizedMemory(4);
+            UInt32 colOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGameGetVisitedCell?.Invoke(
+                (long)(uint)gamePtr, index,
+                (long)(uint)(rowOutPtr + 4),
+                (long)(uint)(colOutPtr + 4)) ?? -1);
+            row = (int)memory.ReadUInt32(rowOutPtr + 4);
+            col = (int)memory.ReadUInt32(colOutPtr + 4);
+            FreeSizedMemory(rowOutPtr);
+            FreeSizedMemory(colOutPtr);
+            return result == 0;
         }
      }
 }

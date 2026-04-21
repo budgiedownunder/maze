@@ -1,4 +1,5 @@
 ﻿using static Maze.Api.Maze;
+using Maze.Api;
 using Maze.Maui.Controls.InteractiveGrid;
 using Maze.Maui.App.Models;
 using Maze.Maui.Controls.Keyboard;
@@ -725,21 +726,18 @@ namespace Maze.Maui.App
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    int row = (int)points[i].Row + 1;
-                    int col = (int)points[i].Column + 1;
+                    int r = (int)points[i].Row;
+                    int c = (int)points[i].Column;
                     bool isLast = i == points.Count - 1;
 
-                    string walkerImage = isLast
-                        ? "walker_celebrate.gif"
-                        : GetWalkerDirectionImage(points[i], points[i + 1]);
-
-                    SetWalkerCell(row, col, walkerImage);
+                    if (isLast)
+                        SetPlayerCelebrate(r, c);
+                    else
+                        SetPlayerAt(r, c, GetMovementDirection(points[i], points[i + 1]));
 
                     // Mark the previous cell with its footstep overlay
                     if (i > 0)
-                        SetSolutionCell((int)points[i - 1].Row + 1, (int)points[i - 1].Column + 1, directions[i - 1]);
-
-                    ScrollCellIntoView(row, col);
+                        SetFootstepAt((int)points[i - 1].Row, (int)points[i - 1].Column, PathDirectionToCardinal(directions[i - 1]));
 
                     await Task.Delay(getStepMs(), ct);
                 }
@@ -747,19 +745,9 @@ namespace Maze.Maui.App
             }
             catch (OperationCanceledException)
             {
-                ClearWalkerCell();
+                ClearPlayer();
                 throw;
             }
-        }
-        /// <summary>
-        /// Returns the walker GIF filename for movement from one point to the next
-        /// </summary>
-        private static string GetWalkerDirectionImage(Api.Maze.Point from, Api.Maze.Point to)
-        {
-            if (to.Row    < from.Row)    return "walker_up.gif";
-            if (to.Row    > from.Row)    return "walker_down.gif";
-            if (to.Column < from.Column) return "walker_left.gif";
-            return "walker_right.gif";
         }
         /// <summary>
         /// Moves the walker visual to the given cell, restoring the previous walker cell to its normal state
@@ -813,6 +801,105 @@ namespace Maze.Maui.App
             }
             return true;
         }
+        /// <summary>
+        /// Places the player sprite at the given 0-based cell facing the given direction.
+        /// </summary>
+        /// <param name="row">Row index (0-based)</param>
+        /// <param name="col">Column index (0-based)</param>
+        /// <param name="direction">Facing direction</param>
+        public void SetPlayerAt(int row, int col, MazeGameDirection direction)
+        {
+            string image = direction switch {
+                MazeGameDirection.Up    => "walker_up.gif",
+                MazeGameDirection.Down  => "walker_down.gif",
+                MazeGameDirection.Left  => "walker_left.gif",
+                MazeGameDirection.Right => "walker_right.gif",
+                MazeGameDirection.None  => "walker_down.gif",   // forward-facing before first move
+                _ => throw new ArgumentOutOfRangeException(nameof(direction))
+            };
+            SetWalkerCell(row + 1, col + 1, image);
+            // Scroll one cell ahead so the player can see what's coming before reaching the edge
+            (int aheadRow, int aheadCol) = direction switch {
+                MazeGameDirection.Up    => (row - 1, col + 1),
+                MazeGameDirection.Down  => (row + 3, col + 1),
+                MazeGameDirection.Left  => (row + 1, col - 1),
+                MazeGameDirection.Right => (row + 1, col + 3),
+                _                       => (row + 1, col + 1)
+            };
+            ScrollCellIntoView(Math.Clamp(aheadRow, 1, RowCount), Math.Clamp(aheadCol, 1, ColumnCount));
+        }
+        /// <summary>
+        /// Shows the celebration sprite at the given 0-based cell.
+        /// </summary>
+        /// <param name="row">Row index (0-based)</param>
+        /// <param name="col">Column index (0-based)</param>
+        public void SetPlayerCelebrate(int row, int col)
+        {
+            SetWalkerCell(row + 1, col + 1, "walker_celebrate.gif");
+            ScrollCellIntoView(row + 1, col + 1);
+        }
+        /// <summary>
+        /// Stamps a footstep overlay on a previously-visited 0-based cell.
+        /// Pass <see cref="MazeGameDirection.None"/> to clear the overlay.
+        /// </summary>
+        /// <param name="row">Row index (0-based)</param>
+        /// <param name="col">Column index (0-based)</param>
+        /// <param name="direction">Direction the player was moving when they left this cell</param>
+        public void SetFootstepAt(int row, int col, MazeGameDirection direction)
+        {
+            var dir = direction switch {
+                MazeGameDirection.Up    => MazeCellContent.PathDirection.Up,
+                MazeGameDirection.Down  => MazeCellContent.PathDirection.Down,
+                MazeGameDirection.Left  => MazeCellContent.PathDirection.Left,
+                MazeGameDirection.Right => MazeCellContent.PathDirection.Right,
+                MazeGameDirection.None  => MazeCellContent.PathDirection.None,
+                _ => throw new ArgumentOutOfRangeException(nameof(direction))
+            };
+            SetSolutionCell(row + 1, col + 1, dir);
+        }
+        /// <summary>
+        /// Stamps a dot marker on a previously-visited 0-based cell (game mode).
+        /// </summary>
+        /// <param name="row">Row index (0-based)</param>
+        /// <param name="col">Column index (0-based)</param>
+        public void SetVisitedDotAt(int row, int col)
+            => SetSolutionCell(row + 1, col + 1, MazeCellContent.PathDirection.VisitedDot);
+
+        /// <summary>
+        /// Removes the player sprite and all footstep overlays.
+        /// </summary>
+        public void ClearPlayer() => ClearLastSolution();
+        /// <summary>
+        /// Returns the movement direction from one maze point to the next.
+        /// </summary>
+        private static MazeGameDirection GetMovementDirection(Api.Maze.Point from, Api.Maze.Point to)
+        {
+            if (to.Row    < from.Row)    return MazeGameDirection.Up;
+            if (to.Row    > from.Row)    return MazeGameDirection.Down;
+            if (to.Column < from.Column) return MazeGameDirection.Left;
+            return MazeGameDirection.Right;
+        }
+        /// <summary>
+        /// Collapses a corner-aware <see cref="MazeCellContent.PathDirection"/> to its cardinal
+        /// <see cref="MazeGameDirection"/> equivalent. Corner variants were intended for diagonal
+        /// footstep images that were never implemented; all render identically to their cardinal form.
+        /// </summary>
+        private static MazeGameDirection PathDirectionToCardinal(MazeCellContent.PathDirection dir) =>
+            dir switch {
+                MazeCellContent.PathDirection.Up or
+                MazeCellContent.PathDirection.UpFromLeft or
+                MazeCellContent.PathDirection.UpFromRight   => MazeGameDirection.Up,
+                MazeCellContent.PathDirection.Down or
+                MazeCellContent.PathDirection.DownFromLeft or
+                MazeCellContent.PathDirection.DownFromRight => MazeGameDirection.Down,
+                MazeCellContent.PathDirection.Left or
+                MazeCellContent.PathDirection.LeftFromUp or
+                MazeCellContent.PathDirection.LeftFromDown  => MazeGameDirection.Left,
+                MazeCellContent.PathDirection.Right or
+                MazeCellContent.PathDirection.RightFromUp or
+                MazeCellContent.PathDirection.RightFromDown => MazeGameDirection.Right,
+                _                                           => MazeGameDirection.None
+            };
         /// <summary>
         /// Sets a solution cell direction in the logical model and updates the visible frame (if any)
         /// </summary>
@@ -1045,11 +1132,17 @@ namespace Maze.Maui.App
             /// Downwards from right
             /// </summary>
             /// <returns>Downwards from right</returns>
-            DownFromRight = 12
+            DownFromRight = 12,
+            /// <summary>
+            /// A visited-cell dot marker (used in game mode)
+            /// </summary>
+            /// <returns>Dot</returns>
+            VisitedDot = 13
         }
 
         static private Color SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR = Colors.White;
         static private Color SOLUTION_PATH_CELL_HIGHLIGHT_COLOR = Colors.LightGreen;
+        static private Color GAME_VISITED_CELL_HIGHLIGHT_COLOR = Colors.White;
 
         CellType cellType = CellType.Empty;
         PathDirection solutionPathDirection = PathDirection.None;
@@ -1222,9 +1315,10 @@ namespace Maze.Maui.App
         /// <returns>Highlight color</returns>
         private Color GetSolutionPathHighlightColor()
         {
-            return ContainsSolutionPath
-                ? IsStartOrFinish ? SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR : SOLUTION_PATH_CELL_HIGHLIGHT_COLOR
-                : Colors.Transparent;
+            if (!ContainsSolutionPath) return Colors.Transparent;
+            if (IsStartOrFinish) return SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR;
+            if (solutionPathDirection == PathDirection.VisitedDot) return GAME_VISITED_CELL_HIGHLIGHT_COLOR;
+            return SOLUTION_PATH_CELL_HIGHLIGHT_COLOR;
         }
         /// <summary>
         /// Gets the solution path image for the cell
@@ -1250,6 +1344,8 @@ namespace Maze.Maui.App
                 case PathDirection.DownFromLeft:
                 case PathDirection.DownFromRight:
                     return "footsteps_down.png";
+                case PathDirection.VisitedDot:
+                    return "visited_dot.png";
                 case PathDirection.None:
                 default:
                     return "";

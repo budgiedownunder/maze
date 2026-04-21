@@ -6,7 +6,7 @@ The following `Rust` crates are present:
 
 | Folder | Crate | Description
 |--------|-----------|---------------
-| `src/rust` | [`maze`](./maze/README.md) | Maze definition and calculation library
+| `src/rust` | [`maze`](./maze/README.md) | Maze definition, calculation, and gaming engine library
 |            | [`maze_c`](./maze_c/README.md) | Maze C API library
 |            | [`maze_console`](./maze_console/README.md) | Maze console application
 |            | [`maze_openapi_generator`](./maze_openapi_generator/README.md) | Maze OpenAPI generator console application
@@ -74,6 +74,7 @@ To test all `Rust` crates:
 cd src/rust
 cargo test --locked -p auth
 cargo test --locked -p data_model
+cargo test --locked -p maze
 cargo test --locked -p maze --features generation
 cargo test --locked -p maze_c -- --test-threads=1
 cargo test --locked -p maze_console -- --test-threads=1

@@ -49,6 +49,16 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         protected bool isRefreshing;
         /// <summary>
+        /// Indicates whether to use the abbreviated dimensions label
+        /// </summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(UseFullDimensions))]
+        protected bool useShortDimensions;
+        /// <summary>
+        /// Indicates whether to use the full dimensions label
+        /// </summary>
+        public bool UseFullDimensions => !UseShortDimensions;
+        /// <summary>
         /// Loads the maze list
         /// </summary>
         /// <returns>Task</returns>
@@ -104,6 +114,45 @@ namespace Maze.Maui.App.ViewModels
                     });
                 // Hold IsBusy for a further 500ms after navigation completes to block any
                 // buffered second taps (e.g. double-click) that arrive after GoToAsync returns
+                await Task.Delay(500);
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+        /// <summary>
+        /// Navigates to the maze game page for the given maze item
+        /// </summary>
+        /// <param name="item">Maze item</param>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        async Task GoToPlayAsync(MazeItem item)
+        {
+            if (item?.Definition is null)
+                return;
+
+            if (IsBusy)
+                return;
+
+            try
+            {
+                item.Definition.Solve();
+            }
+            catch (Exception ex)
+            {
+                await _dialogService.ShowAlert("MAZE", $"Cannot play maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
+                return;
+            }
+
+            IsBusy = true;
+            try
+            {
+                await Shell.Current.GoToAsync($"{nameof(Views.MazeGamePage)}", true,
+                    new Dictionary<string, object>
+                    {
+                        {"MazeItem", item }
+                    });
                 await Task.Delay(500);
             }
             finally
@@ -296,9 +345,6 @@ namespace Maze.Maui.App.ViewModels
         async Task<bool> DeleteMaze(MazeItem item)
         {
             bool deleted = false;
-            if (IsBusy)
-                return deleted;
-
             try
             {
                 IsBusy = true;

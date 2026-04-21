@@ -52,6 +52,15 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_max_retries(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_branch_from_finish(IntPtr ptr, byte value);
         [DllImport("__Internal")] private static extern byte maze_c_maze_generate(IntPtr mazePtr, IntPtr optsPtr);
+        [DllImport("__Internal")] private static extern IntPtr maze_c_new_maze_game([MarshalAs(UnmanagedType.LPStr)] string json);
+        [DllImport("__Internal")] private static extern void   maze_c_free_maze_game(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_move_player(IntPtr ptr, int dir);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_player_row(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_player_col(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_player_direction(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_is_complete(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_visited_cell_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_visited_cell(IntPtr ptr, int index, out int rowOut, out int colOut);
 
         // ── helpers ───────────────────────────────────────────────────────────
 
@@ -277,6 +286,55 @@ namespace Maze.Interop
         public void FreeGeneratorOptions(UIntPtr optionsPtr)
         {
             maze_c_free_generator_options((IntPtr)(ulong)optionsPtr);
+        }
+
+        public UIntPtr NewMazeGame(string definitionJson)
+        {
+            IntPtr ptr = maze_c_new_maze_game(definitionJson);
+            if (ptr == IntPtr.Zero)
+                throw new Exception($"maze_c_new_maze_game() failed: {GetLastErrorMessage()}");
+            return (UIntPtr)(ulong)ptr;
+        }
+
+        public void FreeMazeGame(UIntPtr gamePtr)
+        {
+            maze_c_free_maze_game((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGameMovePlayer(UIntPtr gamePtr, int dir)
+        {
+            return maze_c_maze_game_move_player((IntPtr)(ulong)gamePtr, dir);
+        }
+
+        public int MazeGamePlayerRow(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_player_row((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGamePlayerCol(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_player_col((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGamePlayerDirection(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_player_direction((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGameIsComplete(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_is_complete((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGameVisitedCellCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_visited_cell_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetVisitedCell(UIntPtr gamePtr, int index, out int row, out int col)
+        {
+            byte result = maze_c_maze_game_get_visited_cell((IntPtr)(ulong)gamePtr, index, out row, out col);
+            return result != 0;   // maze_c: 1 = success
         }
     }
 }

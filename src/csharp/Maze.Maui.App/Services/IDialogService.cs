@@ -50,5 +50,11 @@
         /// <returns>A task that contains the user's choice as a string value which will be `null` if they chose to cancel</returns>
         public Task<string> DisplayPrompt(string title, string message, string valueName, string accept = "OK", string cancel = "Cancel",
             string? placeholder = null, int maxlength = -1, Keyboard? keyboard = null, string? initialValue = "", bool allowEmpty = false, bool trimResult = true);
+        /// <summary>
+        /// Displays the game result popup with a celebration sprite and the given message.
+        /// </summary>
+        /// <param name="message">Result message to display</param>
+        /// <returns>A task that completes when the popup is dismissed</returns>
+        public Task ShowGameResult(string message);
     }
 }

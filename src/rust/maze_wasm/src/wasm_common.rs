@@ -1,4 +1,5 @@
 use data_model::{Maze, MazeDefinition};
+use maze::MazeGame;
 #[cfg(any(feature = "wasm-bindgen", feature = "wasm-lite"))]
 use maze::GenerationAlgorithm;
 #[cfg(feature = "wasm-bindgen")]
@@ -22,6 +23,19 @@ pub struct MazeWasm {
     pub maze: Maze,
 }
 
+#[cfg(feature = "wasm-bindgen")]
+#[wasm_bindgen]
+pub struct MazeGameWasm {
+    #[wasm_bindgen(skip)]
+    pub game: MazeGame,
+}
+
+#[cfg(not(feature = "wasm-bindgen"))]
+#[repr(C)]
+pub struct MazeGameWasm {
+    pub game: MazeGame,
+}
+
 impl Clone for MazeWasm {
     fn clone(&self) -> Self {
         MazeWasm {
@@ -30,6 +44,9 @@ impl Clone for MazeWasm {
     }
 }
 
+/// Identifies the type of a maze cell.
+///
+/// Returned by [`MazeWasm::get_cell_type`].
 #[cfg(feature = "wasm-bindgen")]
 #[wasm_bindgen]
 pub enum MazeCellTypeWasm {
@@ -39,6 +56,9 @@ pub enum MazeCellTypeWasm {
     Wall,
 }
 
+/// Identifies the type of a maze cell.
+///
+/// Returned by `maze_wasm_get_cell_type`.
 #[cfg(not(feature = "wasm-bindgen"))]
 #[repr(C)]
 pub enum MazeCellTypeWasm {
@@ -69,6 +89,54 @@ pub enum GenerationAlgorithmWasm {
     /// Generates a perfect maze using a single-pass iterative depth-first search from the start cell.
     /// See [Randomized depth-first search](https://en.wikipedia.org/wiki/Maze_generation_algorithm#Randomized_depth-first_search).
     RecursiveBacktracking = 0,
+}
+
+/// Direction for player movement in a [`MazeGameWasm`] session.
+///
+/// Passed as an argument to [`MazeGameWasm::move_player`].
+#[cfg(feature = "wasm-bindgen")]
+#[wasm_bindgen]
+pub enum DirectionWasm {
+    None  = 0,
+    Up    = 1,
+    Down  = 2,
+    Left  = 3,
+    Right = 4,
+}
+
+/// Direction for player movement in a [`MazeGameWasm`] session.
+///
+/// Passed as an argument to `maze_game_wasm_move_player`.
+#[cfg(not(feature = "wasm-bindgen"))]
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub enum DirectionWasm {
+    None  = 0,
+    Up    = 1,
+    Down  = 2,
+    Left  = 3,
+    Right = 4,
+}
+
+/// Result returned by [`MazeGameWasm::move_player`].
+#[cfg(feature = "wasm-bindgen")]
+#[wasm_bindgen]
+pub enum MoveResultWasm {
+    None     = 0,
+    Moved    = 1,
+    Blocked  = 2,
+    Complete = 3,
+}
+
+/// Result returned by `maze_game_wasm_move_player`.
+#[cfg(not(feature = "wasm-bindgen"))]
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub enum MoveResultWasm {
+    None     = 0,
+    Moved    = 1,
+    Blocked  = 2,
+    Complete = 3,
 }
 
 /// Converts a [`GenerationAlgorithmWasm`] value to the corresponding [`maze::GenerationAlgorithm`].
@@ -102,5 +170,15 @@ pub fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
 pub fn new_maze() -> Maze {
     let def = MazeDefinition::new(0, 0);
     Maze::new(def)
+}
+
+/// Creates a [`MazeGameWasm`] from a maze definition JSON string.
+///
+/// # Returns
+///
+/// `Ok(MazeGameWasm)` on success, or `Err(String)` if the JSON is invalid or has no start cell.
+///
+pub fn new_maze_game(json: &str) -> Result<MazeGameWasm, String> {
+    MazeGame::from_json(json).map(|game| MazeGameWasm { game })
 }
 

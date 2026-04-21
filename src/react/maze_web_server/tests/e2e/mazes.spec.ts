@@ -29,7 +29,7 @@ test('maze list shows dimensions subtitle in correct format', async ({ page }) =
 
   if (await items.count() > 0) {
     // Each item should have a subtitle matching "N rows × M columns"
-    const subtitle = items.first().locator('.maze-item-subtitle')
+    const subtitle = items.first().locator('.maze-item-dim-full')
     await expect(subtitle).toHaveText(/\d+ rows × \d+ columns/)
   } else {
     await expect(emptyState).toBeVisible()

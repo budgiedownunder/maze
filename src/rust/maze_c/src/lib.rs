@@ -3,6 +3,7 @@ use maze::{Generator, GenerationAlgorithm, GeneratorOptions, MazeSolution, MazeS
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::ptr;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Opaque object wrappers
@@ -68,6 +69,31 @@ pub struct MazeCGeneratorOptions {
     pub min_spine_length: u32,
     pub max_retries: u32,
     pub branch_from_finish: u8,
+}
+
+/// Opaque game session handle, exposed to C# via P/Invoke.
+///
+/// Created via [`maze_c_new_maze_game`] and freed via [`maze_c_free_maze_game`].
+/// All operations on a `MazeGameC` are performed through the `maze_c_maze_game_*`
+/// family of functions.
+///
+/// # Examples
+///
+/// Create a game session from a simple 1×3 maze and move the player to the finish.
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert!(!ptr.is_null());
+/// assert_eq!(maze_c_maze_game_player_row(ptr), 0);
+/// assert_eq!(maze_c_maze_game_player_col(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+pub struct MazeGameC {
+    game: maze::MazeGame,
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1603,6 +1629,339 @@ pub extern "C" fn maze_c_maze_generate(
 // Tests
 // ──────────────────────────────────────────────────────────────────────────────
 
+// ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — direction / move-result helpers
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Converts an `i32` to a [`maze::Direction`].
+///
+/// Encoding: `0`=None, `1`=Up, `2`=Down, `3`=Left, `4`=Right.
+/// Returns `None` for any other value.
+fn game_direction_from_i32(dir: i32) -> Option<maze::Direction> {
+    match dir {
+        0 => Some(maze::Direction::None),
+        1 => Some(maze::Direction::Up),
+        2 => Some(maze::Direction::Down),
+        3 => Some(maze::Direction::Left),
+        4 => Some(maze::Direction::Right),
+        _ => None,
+    }
+}
+
+/// Converts a [`maze::Direction`] to its `i32` encoding.
+///
+/// Encoding: `0`=None, `1`=Up, `2`=Down, `3`=Left, `4`=Right.
+fn game_direction_to_i32(dir: maze::Direction) -> i32 {
+    match dir {
+        maze::Direction::None => 0,
+        maze::Direction::Up => 1,
+        maze::Direction::Down => 2,
+        maze::Direction::Left => 3,
+        maze::Direction::Right => 4,
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — lifecycle
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Creates a maze game session from a JSON maze definition.
+///
+/// `json` must be a non-null, null-terminated UTF-8 string containing a
+/// `MazeDefinition` JSON object.
+///
+/// Returns a non-null pointer on success. The caller must free it with
+/// [`maze_c_free_maze_game`] when done.
+///
+/// On error (invalid JSON or no start cell), returns `null` and stores the
+/// error message for retrieval via [`maze_c_get_last_error`].
+///
+/// # Safety
+///
+/// `json` must be a non-null pointer to a valid null-terminated UTF-8 string.
+/// The pointer must remain valid for the duration of this call.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert!(!ptr.is_null());
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_new_maze_game(json: *const c_char) -> *mut MazeGameC {
+    clear_last_error();
+    if json.is_null() {
+        set_last_error("json pointer is null");
+        return ptr::null_mut();
+    }
+    let json_str = match CStr::from_ptr(json).to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e.to_string());
+            return ptr::null_mut();
+        }
+    };    
+    match maze::MazeGame::from_json(json_str) {
+        Ok(game) => {
+            let boxed = Box::new(MazeGameC { game });
+            increment_num_objects_allocated();
+            Box::into_raw(boxed)
+        }
+        Err(e) => {
+            set_last_error(&e);
+            ptr::null_mut()
+        }
+    }
+}
+
+/// Frees a [`MazeGameC`] pointer returned by [`maze_c_new_maze_game`].
+///
+/// Passing `null` is safe and has no effect.
+///
+/// # Safety
+///
+/// `ptr` must be either null or a non-null pointer previously returned by
+/// [`maze_c_new_maze_game`]. Calling this function twice on the same pointer
+/// is undefined behaviour.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_free_maze_game(ptr);
+///
+/// // Freeing null is a no-op.
+/// maze_c_free_maze_game(std::ptr::null_mut());
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_free_maze_game(ptr: *mut MazeGameC) {
+    if !ptr.is_null() {
+        unsafe {
+            drop(Box::from_raw(ptr));
+        }
+        decrement_num_objects_allocated();
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — movement
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Moves the player one cell in the given direction.
+///
+/// `dir` encoding: `0`=None, `1`=Up, `2`=Down, `3`=Left, `4`=Right.
+///
+/// Returns the move result: `0`=None, `1`=Moved, `2`=Blocked, `3`=Complete,
+/// or `-1` for an unknown `dir` value.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_move_player(ptr, 4), 1); // Right → Moved
+/// assert_eq!(maze_c_maze_game_move_player(ptr, 4), 3); // Right → Complete
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_move_player(ptr: *mut MazeGameC, dir: i32) -> i32 {
+    let game = unsafe { &mut (*ptr).game };
+    let direction = match game_direction_from_i32(dir) {
+        Some(d) => d,
+        None => return -1,
+    };
+    match game.move_player(direction) {
+        maze::MoveResult::None => 0,
+        maze::MoveResult::Moved => 1,
+        maze::MoveResult::Blocked => 2,
+        maze::MoveResult::Complete => 3,
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — state getters
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Returns the player's current row (0-based).
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_player_row(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_player_row(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.player_row() as i32
+}
+
+/// Returns the player's current column (0-based).
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_player_col(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_player_col(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.player_col() as i32
+}
+
+/// Returns the player's current facing direction.
+///
+/// Return encoding: `0`=None, `1`=Up, `2`=Down, `3`=Left, `4`=Right.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // move Right
+/// assert_eq!(maze_c_maze_game_player_direction(ptr), 4); // Right
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_player_direction(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game_direction_to_i32(game.player_direction())
+}
+
+/// Returns `1` if the player has reached the finish cell, `0` otherwise.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_is_complete(ptr), 0);
+/// maze_c_maze_game_move_player(ptr, 4); // Right
+/// maze_c_maze_game_move_player(ptr, 4); // Right → finish
+/// assert_eq!(maze_c_maze_game_is_complete(ptr), 1);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_is_complete(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    if game.is_complete() { 1 } else { 0 }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — visited cells
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Returns the number of cells the player has visited (including the start cell).
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_visited_cell_count(ptr), 1); // start cell
+/// maze_c_maze_game_move_player(ptr, 4);
+/// assert_eq!(maze_c_maze_game_visited_cell_count(ptr), 2);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_visited_cell_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.visited_cells().len() as i32
+}
+
+/// Retrieves a single visited cell by index.
+///
+/// Writes the cell's row and column into `row_out` and `col_out` respectively.
+/// Either output pointer may be null if that value is not needed.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// `row_out` and `col_out` must each be either null or a valid writable `i32`.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right
+/// let mut row: i32 = -1;
+/// let mut col: i32 = -1;
+/// let ok = unsafe { maze_c_maze_game_get_visited_cell(ptr, 0, &mut row, &mut col) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(row, 0);
+/// assert_eq!(col, 0); // start cell
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_visited_cell(
+    ptr: *mut MazeGameC,
+    index: i32,
+    row_out: *mut i32,
+    col_out: *mut i32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let cells = game.visited_cells();
+    if index < 0 || index as usize >= cells.len() {
+        return 0;
+    }
+    let (row, col) = cells[index as usize];
+    unsafe {
+        if !row_out.is_null() {
+            *row_out = row as i32;
+        }
+        if !col_out.is_null() {
+            *col_out = col as i32;
+        }
+    }
+    1
+}
+
 #[cfg(test)]
 #[allow(unused_unsafe)]
 mod tests {
@@ -2396,5 +2755,237 @@ mod tests {
             maze_c_free_maze(ptr1);
             maze_c_free_maze(ptr2);
         }
+    }
+
+    // ── MazeGameC helpers ─────────────────────────────────────────────────────
+
+    /// 1×3 maze: S _ F  (single row, player starts at col 0, finish at col 2)
+    fn simple_game_json() -> CString {
+        CString::new(
+            r#"{"grid":[["S"," ","F"]]}"#,
+        )
+        .unwrap()
+    }
+
+    /// 3×3 maze with walls:
+    ///   S  _  _
+    ///   W  W  _
+    ///   _  _  F
+    fn walled_game_json() -> CString {
+        CString::new(
+            r#"{"grid":[["S"," "," "],["W","W"," "],[" "," ","F"]]}"#,
+        )
+        .unwrap()
+    }
+
+    fn new_game(json: &CString) -> *mut MazeGameC {
+        unsafe { maze_c_new_maze_game(json.as_ptr()) }
+    }
+
+    // ── MazeGameC — lifecycle ─────────────────────────────────────────────────
+
+    #[test]
+    fn game_create_returns_non_null() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert!(!ptr.is_null());
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_create_invalid_json_returns_null_and_sets_error() {
+        let json = CString::new("{not valid json}").unwrap();
+        let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+        assert!(ptr.is_null());
+        assert!(last_error_str().is_some());
+    }
+
+    #[test]
+    fn game_free_null_is_safe() {
+        maze_c_free_maze_game(std::ptr::null_mut());
+    }
+
+    #[test]
+    fn game_create_increments_object_count() {
+        let before = maze_c_get_num_objects_allocated();
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_get_num_objects_allocated(), before + 1);
+        maze_c_free_maze_game(ptr);
+        assert_eq!(maze_c_get_num_objects_allocated(), before);
+    }
+
+    // ── MazeGameC — initial state ─────────────────────────────────────────────
+
+    #[test]
+    fn game_initial_player_position_is_start_cell() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_player_row(ptr), 0);
+        assert_eq!(maze_c_maze_game_player_col(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_initial_is_not_complete() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_is_complete(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_initial_visited_cell_count_is_one() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_visited_cell_count(ptr), 1);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_initial_visited_cell_is_start() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut row: i32 = -1;
+        let mut col: i32 = -1;
+        let ok = unsafe { maze_c_maze_game_get_visited_cell(ptr, 0, &mut row, &mut col) };
+        assert_eq!(ok, 1);
+        assert_eq!(row, 0);
+        assert_eq!(col, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — movement ──────────────────────────────────────────────────
+
+    #[test]
+    fn game_move_right_returns_moved() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let result = maze_c_maze_game_move_player(ptr, 4); // Right
+        assert_eq!(result, 1, "expected Moved (1)");
+        assert_eq!(maze_c_maze_game_player_col(ptr), 1);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_move_into_wall_returns_blocked() {
+        let json = walled_game_json();
+        let ptr = new_game(&json);
+        // Player is at (0,0). Down leads to (1,0) which is 'W'.
+        let result = maze_c_maze_game_move_player(ptr, 2); // Down
+        assert_eq!(result, 2, "expected Blocked (2)");
+        assert_eq!(maze_c_maze_game_player_row(ptr), 0); // unchanged
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_move_out_of_bounds_returns_blocked() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        // Player is at (0,0). Moving Up is out of bounds.
+        let result = maze_c_maze_game_move_player(ptr, 1); // Up
+        assert_eq!(result, 2, "expected Blocked (2)");
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_move_to_finish_returns_complete() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // Right → (0,1)
+        let result = maze_c_maze_game_move_player(ptr, 4); // Right → (0,2) = F
+        assert_eq!(result, 3, "expected Complete (3)");
+        assert_eq!(maze_c_maze_game_is_complete(ptr), 1);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_move_unknown_direction_returns_minus_one() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let result = maze_c_maze_game_move_player(ptr, 99);
+        assert_eq!(result, -1);
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — direction tracking ───────────────────────────────────────
+
+    #[test]
+    fn game_player_direction_updates_after_move() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // Right
+        assert_eq!(maze_c_maze_game_player_direction(ptr), 4); // Right
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — visited cells ─────────────────────────────────────────────
+
+    #[test]
+    fn game_visited_cells_accumulate() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // Right → (0,1)
+        assert_eq!(maze_c_maze_game_visited_cell_count(ptr), 2);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_visited_cell_out_of_range_returns_zero() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut row: i32 = -1;
+        let mut col: i32 = -1;
+        let ok = unsafe { maze_c_maze_game_get_visited_cell(ptr, 99, &mut row, &mut col) };
+        assert_eq!(ok, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_visited_cell_negative_index_returns_zero() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut row: i32 = -1;
+        let mut col: i32 = -1;
+        let ok = unsafe { maze_c_maze_game_get_visited_cell(ptr, -1, &mut row, &mut col) };
+        assert_eq!(ok, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_visited_cell_order_matches_movement() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // Right → (0,1)
+        maze_c_maze_game_move_player(ptr, 4); // Right → (0,2) = F
+
+        let mut row: i32 = -1;
+        let mut col: i32 = -1;
+
+        unsafe { maze_c_maze_game_get_visited_cell(ptr, 0, &mut row, &mut col) };
+        assert_eq!((row, col), (0, 0));
+
+        unsafe { maze_c_maze_game_get_visited_cell(ptr, 1, &mut row, &mut col) };
+        assert_eq!((row, col), (0, 1));
+
+        unsafe { maze_c_maze_game_get_visited_cell(ptr, 2, &mut row, &mut col) };
+        assert_eq!((row, col), (0, 2));
+
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — multiple independent sessions ─────────────────────────────
+
+    #[test]
+    fn multiple_independent_game_sessions() {
+        let json = simple_game_json();
+        let ptr1 = new_game(&json);
+        let ptr2 = new_game(&json);
+        maze_c_maze_game_move_player(ptr1, 4); // move ptr1 right
+        // ptr2 should be unaffected
+        assert_eq!(maze_c_maze_game_player_col(ptr1), 1);
+        assert_eq!(maze_c_maze_game_player_col(ptr2), 0);
+        maze_c_free_maze_game(ptr1);
+        maze_c_free_maze_game(ptr2);
     }
 }

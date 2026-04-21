@@ -1,7 +1,7 @@
 #[allow(unused_imports)] // MazeCellTypeWasm is referenced in doc comments as an intra-doc link
 use crate::wasm_common::{
-    new_maze, to_cell_type_enum, to_generation_algorithm, GenerationAlgorithmWasm, MazeCellTypeWasm,
-    MazeWasm,
+    new_maze, new_maze_game, to_cell_type_enum, to_generation_algorithm, DirectionWasm,
+    GenerationAlgorithmWasm, MazeCellTypeWasm, MazeGameWasm, MoveResultWasm, MazeWasm,
 };
 use data_model::MazePoint;
 use js_sys::{Array, Object, Reflect};
@@ -104,6 +104,240 @@ impl MazeSolutionWasm {
             path_points.push(&to_js_point_obj(point));
         }
         path_points
+    }
+}
+
+// ── MazeGameWasm helpers ──────────────────────────────────────────────────────────
+
+fn direction_from_wasm(dir: DirectionWasm) -> maze::Direction {
+    match dir {
+        DirectionWasm::None  => maze::Direction::None,
+        DirectionWasm::Up    => maze::Direction::Up,
+        DirectionWasm::Down  => maze::Direction::Down,
+        DirectionWasm::Left  => maze::Direction::Left,
+        DirectionWasm::Right => maze::Direction::Right,
+    }
+}
+
+fn direction_to_wasm(dir: maze::Direction) -> DirectionWasm {
+    match dir {
+        maze::Direction::None  => DirectionWasm::None,
+        maze::Direction::Up    => DirectionWasm::Up,
+        maze::Direction::Down  => DirectionWasm::Down,
+        maze::Direction::Left  => DirectionWasm::Left,
+        maze::Direction::Right => DirectionWasm::Right,
+    }
+}
+
+fn move_result_to_wasm(result: maze::MoveResult) -> MoveResultWasm {
+    match result {
+        maze::MoveResult::None     => MoveResultWasm::None,
+        maze::MoveResult::Moved    => MoveResultWasm::Moved,
+        maze::MoveResult::Blocked  => MoveResultWasm::Blocked,
+        maze::MoveResult::Complete => MoveResultWasm::Complete,
+    }
+}
+
+/// A running maze game session exposed to JavaScript.
+///
+/// Create with [`MazeGameWasm::from_json`]. The player starts at the `S` cell with
+/// direction [`DirectionWasm::None`]. Call [`MazeGameWasm::move_player`] with a
+/// [`DirectionWasm`] value to advance the game.
+#[wasm_bindgen]
+impl MazeGameWasm {
+    /// Creates a game session from a maze definition JSON string.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     try {
+    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         console.log("player_row() = ", game.player_row());
+    ///         console.log("player_col() = ", game.player_col());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns a `JsValue` error if the JSON is invalid or the maze has no start cell.
+    pub fn from_json(json: &str) -> Result<MazeGameWasm, JsValue> {
+        new_maze_game(json).map_err(|e| JsValue::from_str(&e))
+    }
+
+    /// Attempts to move the player one cell in `dir`.
+    ///
+    /// Returns a [`MoveResultWasm`] indicating the outcome.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm, DirectionWasm, MoveResultWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     try {
+    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         console.log("move_player(Right) = ", game.move_player(DirectionWasm.Right));
+    ///         console.log("player_col() = ", game.player_col());
+    ///         console.log("move_player(Right) = ", game.move_player(DirectionWasm.Right));
+    ///         console.log("player_col() = ", game.player_col());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn move_player(&mut self, dir: DirectionWasm) -> MoveResultWasm {
+        move_result_to_wasm(self.game.move_player(direction_from_wasm(dir)))
+    }
+
+    /// Returns the current player row (0-based).
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     try {
+    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         console.log("player_row() = ", game.player_row());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn player_row(&self) -> usize {
+        self.game.player_row()
+    }
+
+    /// Returns the current player column (0-based).
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     try {
+    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         console.log("player_col() = ", game.player_col());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn player_col(&self) -> usize {
+        self.game.player_col()
+    }
+
+    /// Returns the current player facing direction.
+    ///
+    /// The initial value is [`DirectionWasm::None`] until the first move.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm, DirectionWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     try {
+    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         console.log("player_direction() = ", game.player_direction());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn player_direction(&self) -> DirectionWasm {
+        direction_to_wasm(self.game.player_direction())
+    }
+
+    /// Returns `true` if the player has reached the finish cell.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm, DirectionWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     try {
+    ///         let game = MazeGameWasm.from_json('{"grid":[["S","F"]]}');
+    ///         console.log("is_complete() before move = ", game.is_complete());
+    ///         game.move_player(DirectionWasm.Right);
+    ///         console.log("is_complete() after move = ", game.is_complete());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn is_complete(&self) -> bool {
+        self.game.is_complete()
+    }
+
+    /// Returns all cells visited by the player (including start) in visit order,
+    /// as a JavaScript `Array` of `{row, col}` objects.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm, DirectionWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     try {
+    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         game.move_player(DirectionWasm.Right);
+    ///         console.log("visited_cells() = ", game.visited_cells());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn visited_cells(&self) -> Array {
+        let result = Array::new();
+        for &(row, col) in self.game.visited_cells() {
+            result.push(&to_js_point_obj(&MazePoint { row, col }));
+        }
+        result
     }
 }
 

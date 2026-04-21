@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -7,6 +7,11 @@ import { ThemeProvider } from '../../src/context/ThemeContext'
 import { MazesPage } from '../../src/pages/MazesPage'
 import { mockMazeAlpha, mockMazeBeta, resetMockMazes } from '../../src/mocks/handlers'
 import { server } from '../../src/mocks/server'
+import { solveMaze } from '../../src/wasm/mazeWasm'
+
+vi.mock('../../src/wasm/mazeWasm', () => ({
+  solveMaze: vi.fn(),
+}))
 
 const mockNavigate = vi.fn()
 
@@ -349,5 +354,52 @@ describe('MazesPage', () => {
     await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: 'New maze' }))
     expect(mockNavigate).toHaveBeenCalledWith('/mazes/new')
+  })
+
+  it('each maze item has a Play button', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    const playButtons = screen.getAllByRole('button', { name: /^Play /i })
+    expect(playButtons).toHaveLength(2)
+  })
+
+  it('clicking Play on a solvable maze navigates to /play/:id', async () => {
+    ;(solveMaze as Mock).mockResolvedValue([{ row: 0, col: 0 }])
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Play ${mockMazeAlpha.name}` }))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(`/play/${encodeURIComponent(mockMazeAlpha.id)}`))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows error alert and does not navigate when solveMaze throws', async () => {
+    ;(solveMaze as Mock).mockRejectedValue(new Error('No solution found'))
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Play ${mockMazeAlpha.name}` }))
+
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toBeInTheDocument())
+    const dialog = screen.getByRole('dialog', { name: 'Cannot Play Maze' })
+    expect(dialog).toHaveTextContent('No solution found')
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('play error dialog dismisses on OK', async () => {
+    ;(solveMaze as Mock).mockRejectedValueOnce(new Error('No solution')).mockResolvedValue([])
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Play ${mockMazeAlpha.name}` }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: /ok/i }))
+    expect(screen.queryByRole('dialog', { name: 'Cannot Play Maze' })).not.toBeInTheDocument()
   })
 })

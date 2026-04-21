@@ -7,6 +7,7 @@ import { LoginPage } from './pages/LoginPage'
 import { SignUpPage } from './pages/SignUpPage'
 import { MazesPage } from './pages/MazesPage'
 import { MazePage } from './pages/MazePage'
+import { MazeGamePage } from './pages/MazeGamePage'
 
 export function SignupRoute() {
   const { allow_signup } = useAppFeatures()
@@ -20,6 +21,7 @@ const router = createBrowserRouter([
   { path: '/mazes', element: <ProtectedRoute><MazesPage /></ProtectedRoute> },
   { path: '/mazes/new', element: <ProtectedRoute><MazePage /></ProtectedRoute> },
   { path: '/mazes/:id', element: <ProtectedRoute><MazePage /></ProtectedRoute> },
+  { path: '/play/:id', element: <ProtectedRoute><MazeGamePage /></ProtectedRoute> },
   { path: '*', element: <Navigate to="/login" replace /> },
 ])
 

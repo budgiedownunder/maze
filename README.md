@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://budgiedownunder.github.io/maze/)
 
-A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **React.js**, **TypeScript** and **WebAssembly** interoperability. Built around a maze generation and solving domain, it demonstrates library crates, REST APIs, WASM bindings, OpenAPI, a cross-platform MAUI app, a React.js SPA, Node.js-based API testing, architecture diagramming with PlantUML, documentation generation with DocFX, and automated CI/CD across Windows, macOS, and Linux.
+A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **React.js**, **TypeScript** and **WebAssembly** interoperability. Built around a maze generation, solving and game play domain, it demonstrates library crates, REST APIs, WASM bindings, OpenAPI, a cross-platform MAUI app, a React.js SPA, Node.js-based API and E2E testing, architecture diagramming with PlantUML, documentation generation with DocFX, and automated CI/CD across Windows, macOS, and Linux.
 
 ## Table of Contents
 - [Introduction](#introduction)
@@ -44,7 +44,7 @@ At this stage, the following areas are covered:
   - Supports interactive documentation in the form of [RapiDoc](https://rapidocweb.com/), [Redoc](https://redocly.com/redoc) and [Swagger UI](https://swagger.io/tools/swagger-ui/)
   - Serves a React Single Page Application (SPA) from a configurable static directory
 
-- Implementing a `React`/`TypeScript` web frontend ([`maze_web_server`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API including maze management, generate, solve and walk solution animation (run entirely in-browser via the `maze_wasm` WebAssembly module). Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
+- Implementing a `React`/`TypeScript` web frontend ([`maze_web_server`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API including maze management, generate, solve, walk solution animation, and interactive maze gameplay (run entirely in-browser via the `maze_wasm` WebAssembly module). Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
 
 - Implementing a `.NET` to Web Assembly ([`maze_wasm`](./src/rust/maze_wasm/README.md)) interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) in `C#` that supports [Wasmtime](https://docs.wasmtime.dev/) (for `Windows` and `Android`), [Wasmer](https://wasmer.io/) (for `Android` and `iOS` simulator), and a native C library via [`maze_c`](./src/rust/maze_c/README.md) (for `iOS`simulator and physical device)
 
@@ -83,7 +83,7 @@ The following components are present:
 | `src/react`                    | [`maze_web_server`](./src/react/maze_web_server/README.md)                    | React SPA frontend for Rust `maze_web_server`
 | `src/rust`                     | [`auth`](./src/rust/auth/README.md)                                           | Authentication library
 |                                | [`data_model`](./src/rust/data_model/README.md)                               | Data model library
-|                                | [`maze`](./src/rust/maze/README.md)                                           | Maze calculation library
+|                                | [`maze`](./src/rust/maze/README.md)                                           | Maze definition, calculation, and gaming engine library
 |                                | [`maze_c`](./src/rust/maze_c/README.md)                                       | Maze C API library
 |                                | [`maze_console`](./src/rust/maze_console/README.md)                           | Maze console application
 |                                | [`maze_openapi_generator`](./src/rust/maze_openapi_generator/README.md)       | Maze OpenAPI generator console application
@@ -102,12 +102,13 @@ The following components are present:
 
 ### MAUI app (Windows, iOS, Android)
 
-The Maze MAUI application running on Windows, iOS, and Android, showing a solved maze.
+The Maze MAUI application running on Windows, iOS, and Android.
 
 | | Windows | iOS | Android |
 |---|---------|-----|---------|
 | **Solved** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-solved.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-solved.png" width="250"> |
-| **Walk Solution** | <img src = "./src/csharp/Maze.Maui.App/Screenshots/windows-walk.png" width="250"> | <img src = "./src/csharp/Maze.Maui.App/Screenshots/ios-walk.png" width="250"> | <img src = "./src/csharp/Maze.Maui.App/Screenshots/android-walk.png" width="250"> |
+| **Walk Solution** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-walk.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-walk.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-walk.png" width="250"> |
+| **Game** | <img src="./src/csharp/Maze.Maui.App/Screenshots/windows-game.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/ios-game.png" width="250"> | <img src="./src/csharp/Maze.Maui.App/Screenshots/android-game.png" width="250"> |
 
 ### Web UI
 
@@ -131,26 +132,34 @@ The maze editor animating a step-by-step walk of the solution path.
 
 <img src="./src/react/maze_web_server/screenshots/web-walk.gif" width="600">
 
+**Maze Game**
+
+Playing a maze — the player navigates using keyboard or D-pad, with visited cells marked as they are left.
+
+<img src="./src/react/maze_web_server/screenshots/web-game.gif" width="600">
+
 ## Getting Started
 
 ### Setup
 To setup the build and test environment, you first need to install:
 
-- [`.NET 10.0+`](https://dotnet.microsoft.com/en-us/download)
 - [`Rust`](https://www.rust-lang.org/tools/install) (latest stable)
 - [`Node.js 24+`](https://nodejs.org/en/learn/getting-started/how-to-install-nodejs)
-
-To setup the `C#` build environment, refer to the [README](src/csharp/README.md) in the `csharp` directory.
+- [`.NET 10.0+`](https://dotnet.microsoft.com/en-us/download)
 
 To setup the `Rust` build environment, refer to the [README](src/rust/README.md) in the `rust` directory.
 
-### Build
+To setup the `React` build environment, refer to the [README](src/react/README.md) in the `react` directory.
 
-- To build the `C#` (`.NET`) APIs, refer to the [README](src/csharp/README.md) in the `csharp` directory.
+To setup the `C#` build environment, refer to the [README](src/csharp/README.md) in the `csharp` directory.
+
+### Build
 
 - To build the `Rust` crates, refer to the [README](src/rust/README.md) in the `rust` directory.
 
 - To build the `React` web frontend, refer to the [README](src/react/README.md) in the `react` directory.
+
+- To build the `C#` (`.NET`) APIs, refer to the [README](src/csharp/README.md) in the `csharp` directory.
 
 ### Generating Documentation
 - To generate combined documentation for the `.NET` APIs and `Rust` crates, refer to the [README](src/docfx/README.md) in the `docfx` project.

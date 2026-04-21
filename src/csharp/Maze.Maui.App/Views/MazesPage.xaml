@@ -122,6 +122,26 @@
                                                    TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
                                         </Grid>
                                     </SwipeItemView>
+                                    <SwipeItemView
+                                        WidthRequest="72"
+                                        CommandParameter="{Binding .}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlayCommand}">
+                                        <Grid VerticalOptions="Center" HorizontalOptions="Center"
+                                              RowDefinitions="Auto,Auto" RowSpacing="3">
+                                            <Border WidthRequest="56" HeightRequest="56"
+                                                    BackgroundColor="#2E7D32"
+                                                    StrokeThickness="0"
+                                                    StrokeShape="RoundRectangle 28"
+                                                    HorizontalOptions="Center">
+                                                <Image ClassId="white-tint"
+                                                       Source="{OnPlatform 'icon_play.png', iOS='icon_play_ios.png', MacCatalyst='icon_play_ios.png'}"
+                                                       WidthRequest="26" HeightRequest="26"
+                                                       HorizontalOptions="Center" VerticalOptions="Center"/>
+                                            </Border>
+                                            <Label Grid.Row="1" Text="Play" FontSize="12" HorizontalOptions="Center"
+                                                   TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
+                                        </Grid>
+                                    </SwipeItemView>
                                 </SwipeItems>
                             </SwipeView.RightItems>
 
@@ -140,6 +160,10 @@
                                                         IconImageSource="icon_edit.png"
                                                         CommandParameter="{Binding .}"
                                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Play"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlayCommand}"/>
                                         <MenuFlyoutSeparator/>
                                         <MenuFlyoutItem Text="Duplicate..."
                                                         IconImageSource="icon_dupplicate.png"
@@ -173,7 +197,10 @@
                                             </Image>
                                             <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="Center">
                                                 <Label Text="{Binding Name}" FontSize="24"/>
-                                                <Label Text ="{Binding DimensionsSummary}" FontSize="12"/>
+                                                <Label Text="{Binding DimensionsSummary}" FontSize="12"
+                                                       IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=UseFullDimensions}"/>
+                                                <Label Text="{Binding DimensionsSummaryShort}" FontSize="12"
+                                                       IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=UseShortDimensions}"/>
                                             </VerticalStackLayout>
                                         </HorizontalStackLayout>
                                     </Grid>

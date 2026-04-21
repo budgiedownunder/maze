@@ -11,6 +11,8 @@ import { solveMaze } from '../wasm/mazeWasm'
 vi.mock('../wasm/mazeWasm', () => ({
   solveMaze: vi.fn(),
   generateMaze: vi.fn(),
+  MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
+  MazeGamePlayerMoveResult: { None: 0, Moved: 1, Blocked: 2, Complete: 3 },
 }))
 
 // Path through mockMazeAlpha (S at 0,0 → F at 2,2)

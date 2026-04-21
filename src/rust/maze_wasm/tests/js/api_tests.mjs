@@ -2,7 +2,7 @@
 // the maze_wasm JavaScript API, using 'mocha' and 'chai'.
 // 
 import { readFile } from 'fs/promises';
-import init, { MazeWasm, MazeCellTypeWasm, GenerationAlgorithmWasm } from '../../pkg/maze_wasm.js';
+import init, { DirectionWasm, MazeGameWasm, MazeWasm, MazeCellTypeWasm, MoveResultWasm, GenerationAlgorithmWasm } from '../../pkg/maze_wasm.js';
 import Mocha from 'mocha';
 import { expect } from 'chai';
 
@@ -756,9 +756,135 @@ function registerMazeSolutionTests() {
     });
 }
 
+function registerMazeGameTests() {
+    describe('MazeGame API', function () {
+        // MazeGame::from_json()
+        it('should expect from_json() to throw on invalid JSON', function () {
+            expect(() => MazeGameWasm.from_json("")).to.throw();
+        });
+
+        it('should expect from_json() to throw on a maze with no start cell', function () {
+            expect(() => MazeGameWasm.from_json('{"grid":[[" "," ","F"]]}')).to.throw(/no start cell/);
+        });
+
+        it('should expect from_json() to succeed with a valid maze JSON string', function () {
+            expect(() => MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}')).to.not.throw();
+        });
+
+        // MazeGame::player_row()
+        it('should expect player_row() to return 0 after from_json()', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+            expect(game.player_row()).to.equal(0);
+        });
+
+        // MazeGame::player_col()
+        it('should expect player_col() to return 0 after from_json()', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+            expect(game.player_col()).to.equal(0);
+        });
+
+        // MazeGame::player_direction()
+        it('should expect player_direction() to return DirectionWasm.None after from_json()', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+            expect(game.player_direction()).to.equal(DirectionWasm.None);
+        });
+
+        // MazeGame::is_complete()
+        it('should expect is_complete() to return false after from_json()', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+            expect(game.is_complete()).to.equal(false);
+        });
+
+        // MazeGame::visited_cells()
+        it('should expect visited_cells() to contain only the start cell after from_json()', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+            expect(game.visited_cells()).to.deep.equal([{ row: 0, col: 0 }]);
+        });
+
+        // MazeGame::move_player() — move into empty cell
+        it('should expect move_player(DirectionWasm.Right) to return MoveResultWasm.Moved when moving into an empty cell', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+            expect(game.move_player(DirectionWasm.Right)).to.equal(MoveResultWasm.Moved);
+        });
+
+        // MazeGame::move_player() — move into wall
+        it('should expect move_player(DirectionWasm.Right) to return MoveResultWasm.Blocked when moving into a wall', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S","W","F"]]}');
+            expect(game.move_player(DirectionWasm.Right)).to.equal(MoveResultWasm.Blocked);
+        });
+
+        // MazeGame::move_player() — out-of-bounds move
+        it('should expect move_player(DirectionWasm.Up) to return MoveResultWasm.Blocked when moving out of bounds', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+            expect(game.move_player(DirectionWasm.Up)).to.equal(MoveResultWasm.Blocked);
+        });
+
+        // MazeGame::move_player() — reach finish
+        it('should expect move_player(DirectionWasm.Right) to return MoveResultWasm.Complete when moving into the finish cell', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S","F"]]}');
+            expect(game.move_player(DirectionWasm.Right)).to.equal(MoveResultWasm.Complete);
+        });
+
+        // MazeGame::move_player() — DirectionWasm.None
+        it('should expect move_player(DirectionWasm.None) to return MoveResultWasm.None', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+            expect(game.move_player(DirectionWasm.None)).to.equal(MoveResultWasm.None);
+        });
+
+        // MazeGame::player_direction() — updates after move
+        it('should expect player_direction() to return DirectionWasm.Right after moving right', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+            game.move_player(DirectionWasm.Right);
+            expect(game.player_direction()).to.equal(DirectionWasm.Right);
+        });
+
+        // MazeGame::player_direction() — updates even after blocked move
+        it('should expect player_direction() to update even after a blocked move', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S","W","F"]]}');
+            game.move_player(DirectionWasm.Right);
+            expect(game.player_direction()).to.equal(DirectionWasm.Right);
+        });
+
+        // MazeGame::visited_cells() — grows after successful move
+        it('should expect visited_cells() to grow after a successful move', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+            game.move_player(DirectionWasm.Right);
+            expect(game.visited_cells()).to.deep.equal([
+                { row: 0, col: 0 },
+                { row: 0, col: 1 }
+            ]);
+        });
+
+        // MazeGame::visited_cells() — unchanged after blocked move
+        it('should expect visited_cells() to not change after a blocked move', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S","W","F"]]}');
+            game.move_player(DirectionWasm.Right);
+            expect(game.visited_cells()).to.deep.equal([{ row: 0, col: 0 }]);
+        });
+
+        // MazeGame::visited_cells() — finish cell included on complete
+        it('should expect visited_cells() to include the finish cell when the game is complete', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S","F"]]}');
+            game.move_player(DirectionWasm.Right);
+            expect(game.visited_cells()).to.deep.equal([
+                { row: 0, col: 0 },
+                { row: 0, col: 1 }
+            ]);
+        });
+
+        // MazeGame::is_complete() — true after reaching finish
+        it('should expect is_complete() to return true after reaching the finish cell', function () {
+            let game = MazeGameWasm.from_json('{"grid":[["S","F"]]}');
+            game.move_player(DirectionWasm.Right);
+            expect(game.is_complete()).to.equal(true);
+        });
+    });
+}
+
 function registerTests() {
     registerMazeTests();
     registerMazeSolutionTests();
+    registerMazeGameTests();
 }
 
 async function run_tests() {

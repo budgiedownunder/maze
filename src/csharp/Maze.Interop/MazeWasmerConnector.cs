@@ -931,7 +931,16 @@ namespace Maze.Interop
                 { "generator_options_set_max_retries", () => ref this.generatorOptionsSetMaxRetries },
                 { "generator_options_set_branch_from_finish", () => ref this.generatorOptionsSetBranchFromFinish },
                 { "maze_wasm_generate", () => ref this.mazeGenerate },
-                { "free_generator_options_wasm", () => ref this.freeGeneratorOptions }
+                { "free_generator_options_wasm", () => ref this.freeGeneratorOptions },
+                { "new_maze_game_wasm",              () => ref this.newMazeGame },
+                { "free_maze_game_wasm",             () => ref this.freeMazeGame },
+                { "maze_game_wasm_move_player",      () => ref this.mazeGameMovePlayer },
+                { "maze_game_wasm_player_row",       () => ref this.mazeGamePlayerRow },
+                { "maze_game_wasm_player_col",       () => ref this.mazeGamePlayerCol },
+                { "maze_game_wasm_player_direction", () => ref this.mazeGamePlayerDirection },
+                { "maze_game_wasm_is_complete",      () => ref this.mazeGameIsComplete },
+                { "maze_game_wasm_visited_cell_count", () => ref this.mazeGameVisitedCellCount },
+                { "maze_game_wasm_get_visited_cell", () => ref this.mazeGameGetVisitedCell }
             };
         }
         /// <summary>

@@ -188,3 +188,61 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* ── MazeGamePage ──────────────────────────────────────────── */
+
+@media (pointer: coarse) {
+  .maze-game-page .maze-grid-container .maze-cell,
+  .maze-game-page .maze-grid-container .maze-cell-col-header {
+    width: 60px;
+  }
+
+  .maze-game-page .maze-grid-container .maze-cell,
+  .maze-game-page .maze-grid-container .maze-cell-row-header {
+    height: 60px;
+  }
+}
+
+
+
+.game-dpad {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .game-dpad {
+    display: grid;
+    grid-template-areas: ". up ." "left down right";
+    gap: 4px;
+    margin-top: 12px;
+    touch-action: none;
+  }
+
+  .game-dpad button {
+    background: #ac99ea;
+    border: none;
+    border-radius: 8px;
+    padding: 8px;
+    cursor: pointer;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .game-dpad button img {
+    display: block;
+    pointer-events: none;
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .game-dpad button[aria-disabled="true"] {
+    opacity: 0.4;
+    cursor: default;
+  }
+}

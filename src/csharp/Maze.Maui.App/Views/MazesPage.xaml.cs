@@ -1,4 +1,5 @@
 using Maze.Maui.App.ViewModels;
+using Maze.Maui.Controls.Pointer;
 
 namespace Maze.Maui.App.Views;
 
@@ -67,6 +68,12 @@ public partial class MazesPage : ContentPage
     {
         InitializeComponent();
         BindingContext = this.viewModel = viewModel;
+        SizeChanged += OnSizeChanged;
+    }
+
+    private void OnSizeChanged(object? sender, EventArgs e)
+    {
+        viewModel.UseShortDimensions = Width < 300;
     }
 
     protected override void OnAppearing()
@@ -74,5 +81,21 @@ public partial class MazesPage : ContentPage
         base.OnAppearing();
         if (!viewModel.IsDataLoaded)
             viewModel.GetMazesCommand.Execute(null);
+    }
+
+    protected override void OnNavigatedTo(NavigatedToEventArgs args)
+    {
+        base.OnNavigatedTo(args);
+        if (viewModel.IsDataLoaded)
+        {
+            Pointer.SetCursor(this, Icon.Wait);
+            viewModel.IsBusy = true;
+            Dispatcher.Dispatch(async () =>
+            {
+                await Task.Delay(300);
+                viewModel.IsBusy = false;
+                Pointer.SetCursor(this, Icon.Arrow);
+            });
+        }
     }
 }

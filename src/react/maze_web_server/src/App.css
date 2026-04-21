@@ -451,12 +451,25 @@
   flex-shrink: 0;
 }
 
+.maze-item-dim-short {
+  display: none;
+}
+
 @media (max-width: 540px) {
   .maze-item-action-label {
     display: none;
   }
   .maze-item-icon {
     display: none;
+  }
+}
+
+@container (max-width: 110px) {
+  .maze-item-dim-full {
+    display: none;
+  }
+  .maze-item-dim-short {
+    display: block;
   }
 }
 
@@ -479,6 +492,7 @@
   text-align: left;
   flex: 1;
   min-width: 0;
+  container-type: inline-size;
 }
 
 .maze-item-name {
@@ -495,6 +509,37 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ──────────────────────────────────────────────────────────
+   MazeGamePage layout
+────────────────────────────────────────────────────────── */
+
+.maze-game-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.maze-game-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  min-height: 0;
+}
+
+.maze-game-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.maze-game-title {
+  font-weight: bold;
+  font-size: 1.1rem;
 }
 
 /* ──────────────────────────────────────────────────────────

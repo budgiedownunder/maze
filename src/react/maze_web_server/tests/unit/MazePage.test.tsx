@@ -16,6 +16,8 @@ const { mockGenerateMaze, mockSolveMaze } = vi.hoisted(() => ({
 vi.mock('../../src/wasm/mazeWasm', () => ({
   generateMaze: mockGenerateMaze,
   solveMaze: mockSolveMaze,
+  MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
+  MazeGamePlayerMoveResult: { None: 0, Moved: 1, Blocked: 2, Complete: 3 },
 }))
 
 vi.mock('../../src/context/AuthContext', async () => {
@@ -643,9 +645,9 @@ describe('MazePage solve', () => {
     expect(screen.getByRole('button', { name: 'Solve' })).not.toBeDisabled()
   })
 
-  it('Clear Solution button is disabled when no solution is shown', async () => {
+  it('Clear Solution button is hidden when no solution is shown', async () => {
     await loadMazePage('/mazes/new')
-    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Clear Solution' })).not.toBeInTheDocument()
   })
 
   it('clicking Solve calls solveMaze with the current grid', async () => {
@@ -705,13 +707,13 @@ describe('MazePage solve', () => {
     expect(screen.queryByRole('dialog', { name: 'Unable to solve maze' })).not.toBeInTheDocument()
   })
 
-  it('clicking Clear Solution removes the overlay and disables the button', async () => {
+  it('clicking Clear Solution removes the overlay and hides the button', async () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
     await userEvent.click(screen.getByRole('button', { name: 'Solve' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Clear Solution' })).not.toBeDisabled())
     await userEvent.click(screen.getByRole('button', { name: 'Clear Solution' }))
     expect(screen.queryByAltText('Solution path')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Clear Solution' })).not.toBeInTheDocument()
   })
 
   it('Solve button is disabled while solving', async () => {
@@ -815,7 +817,7 @@ describe('MazePage walk solution', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Clear Solution' }))
     expect(screen.queryByAltText('Walker')).not.toBeInTheDocument()
     expect(screen.queryByAltText('Solution path')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Clear Solution' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Walk Solution' })).not.toBeDisabled()
   })
 
@@ -846,7 +848,7 @@ describe('MazePage walk solution', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: 'Clear Solution' }))
     expect(screen.queryByAltText('Solution path')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Clear Solution' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Clear Solution' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Walk Solution' })).not.toBeDisabled()
   }, 10000)
 })
@@ -886,5 +888,101 @@ describe('MazePage double-tap range mode (touch)', () => {
     await userEvent.dblClick(screen.getByLabelText('Cell 1,1'))
     expect(within(toolbar).getByRole('button', { name: 'Select range' })).toBeInTheDocument()
     expect(within(toolbar).queryByRole('button', { name: 'Done' })).not.toBeInTheDocument()
+  })
+})
+
+// ── Play ─────────────────────────────────────────────────────
+describe('MazePage play', () => {
+  // Use a router that includes /play/:id so we can detect navigation by checking
+  // that the placeholder renders — no need to mock useNavigate.
+  function renderWithPlay(path: string) {
+    const router = createMemoryRouter(
+      [
+        { path: '/mazes/new', element: <ThemeProvider><MazePage /></ThemeProvider> },
+        { path: '/mazes/:id', element: <ThemeProvider><MazePage /></ThemeProvider> },
+        { path: '/play/:id', element: <div data-testid="play-page">Play Page</div> },
+      ],
+      { initialEntries: [path] },
+    )
+    return render(<RouterProvider router={router} />)
+  }
+
+  async function loadMazePage(path: string) {
+    renderWithPlay(path)
+    if (path !== '/mazes/new') {
+      await waitFor(() => expect(screen.queryByLabelText('Loading')).not.toBeInTheDocument())
+    }
+  }
+
+  it('Play button is present and enabled for a loaded maze', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    expect(screen.getByRole('button', { name: 'Play' })).not.toBeDisabled()
+  })
+
+  it('Play button is present for a new maze', async () => {
+    await loadMazePage('/mazes/new')
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument()
+  })
+
+  it('clean maze: Play calls solveMaze then navigates to /play/:id', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+    await waitFor(() => expect(mockSolveMaze).toHaveBeenCalledWith({ grid: mockMazeAlpha.definition.grid }))
+    await waitFor(() => expect(screen.getByTestId('play-page')).toBeInTheDocument())
+  })
+
+  it('clean maze: unsolvable → AlertModal shown with reason, no navigate', async () => {
+    mockSolveMaze.mockRejectedValue(new Error('no solution'))
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toHaveTextContent('No solution')
+    expect(screen.queryByTestId('play-page')).not.toBeInTheDocument()
+  })
+
+  it('clean maze: dismissing Cannot Play Maze alert closes it', async () => {
+    mockSolveMaze.mockRejectedValue(new Error('no solution'))
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'OK' }))
+    expect(screen.queryByRole('dialog', { name: 'Cannot Play Maze' })).not.toBeInTheDocument()
+  })
+
+  it('dirty maze: Play opens Unsaved Changes confirm modal', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+    expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toHaveTextContent('Save and play?')
+  })
+
+  it('dirty maze: Cancel on confirm modal closes it without navigating', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Unsaved Changes' })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('play-page')).not.toBeInTheDocument()
+  })
+
+  it('dirty maze: Save & Play saves, solve-checks, then navigates to /play/:id', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Save & Play' }))
+    await waitFor(() => expect(mockSolveMaze).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByTestId('play-page')).toBeInTheDocument())
+  })
+
+  it('new maze: Play opens the save-name modal', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByRole('button', { name: 'Play' }))
+    expect(screen.getByRole('dialog', { name: 'Save Maze' })).toBeInTheDocument()
   })
 })

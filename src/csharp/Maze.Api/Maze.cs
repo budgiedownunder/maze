@@ -166,31 +166,39 @@ namespace Maze.Api
         public static Maze Generate(GenerationOptions options)
         {
             Maze maze = new Maze(0, 0);
-            MazeGenerationAlgorithm mazeAlgorithm = (MazeGenerationAlgorithm)(byte)options.Algorithm;
-            UIntPtr optionsPtr = maze.Interop.NewGeneratorOptions(
-                options.RowCount,
-                options.ColCount,
-                mazeAlgorithm,
-                options.Seed);
             try
             {
-                if (options.StartRow.HasValue && options.StartCol.HasValue)
-                    maze.Interop.GeneratorOptionsSetStart(optionsPtr, options.StartRow.Value, options.StartCol.Value);
-                if (options.FinishRow.HasValue && options.FinishCol.HasValue)
-                    maze.Interop.GeneratorOptionsSetFinish(optionsPtr, options.FinishRow.Value, options.FinishCol.Value);
-                if (options.MinSpineLength.HasValue)
-                    maze.Interop.GeneratorOptionsSetMinSpineLength(optionsPtr, options.MinSpineLength.Value);
-                if (options.MaxRetries.HasValue)
-                    maze.Interop.GeneratorOptionsSetMaxRetries(optionsPtr, options.MaxRetries.Value);
-                if (options.BranchFromFinish.HasValue)
-                    maze.Interop.GeneratorOptionsSetBranchFromFinish(optionsPtr, options.BranchFromFinish.Value ? (byte)1 : (byte)0);
-                maze.Interop.MazeGenerate(maze._mazePtr, optionsPtr);
+                MazeGenerationAlgorithm mazeAlgorithm = (MazeGenerationAlgorithm)(byte)options.Algorithm;
+                UIntPtr optionsPtr = maze.Interop.NewGeneratorOptions(
+                    options.RowCount,
+                    options.ColCount,
+                    mazeAlgorithm,
+                    options.Seed);
+                try
+                {
+                    if (options.StartRow.HasValue && options.StartCol.HasValue)
+                        maze.Interop.GeneratorOptionsSetStart(optionsPtr, options.StartRow.Value, options.StartCol.Value);
+                    if (options.FinishRow.HasValue && options.FinishCol.HasValue)
+                        maze.Interop.GeneratorOptionsSetFinish(optionsPtr, options.FinishRow.Value, options.FinishCol.Value);
+                    if (options.MinSpineLength.HasValue)
+                        maze.Interop.GeneratorOptionsSetMinSpineLength(optionsPtr, options.MinSpineLength.Value);
+                    if (options.MaxRetries.HasValue)
+                        maze.Interop.GeneratorOptionsSetMaxRetries(optionsPtr, options.MaxRetries.Value);
+                    if (options.BranchFromFinish.HasValue)
+                        maze.Interop.GeneratorOptionsSetBranchFromFinish(optionsPtr, options.BranchFromFinish.Value ? (byte)1 : (byte)0);
+                    maze.Interop.MazeGenerate(maze._mazePtr, optionsPtr);
+                }
+                finally
+                {
+                    maze.Interop.FreeGeneratorOptions(optionsPtr);
+                }
+                return maze;
             }
-            finally
+            catch
             {
-                maze.Interop.FreeGeneratorOptions(optionsPtr);
+                maze.Dispose();
+                throw;
             }
-            return maze;
         }
         /// <summary>
         /// Handles object disposal, releasing managed and unmanaged [Maze.Interop](xref:Maze.Interop) resources and marking
@@ -417,6 +425,19 @@ namespace Maze.Api
         public string ToJson()
         {
             return Interop.MazeToJson(_mazePtr);
+        }
+        /// <summary>
+        /// Returns the maze definition as a JSON string — the <c>{"grid":[...]}</c> portion only,
+        /// suitable for passing to <see cref="MazeGame.Create"/>.
+        /// </summary>
+        /// <returns>Definition JSON string</returns>
+        public string DefinitionToJson()
+        {
+            string json = ToJson();
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("definition", out var defEl))
+                return defEl.GetRawText();
+            return json;
         }
         /// <summary>
         /// Solves a maze, else will throw an exception if the operation fails. 

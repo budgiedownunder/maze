@@ -1,7 +1,7 @@
 // This file exports a single function run_tests() which runs the tests for each
 // JavaScript example confirming that they work
 import { readFile } from 'fs/promises';
-import init, { MazeWasm, MazeCellTypeWasm, GenerationAlgorithmWasm } from '../../pkg/maze_wasm.js';
+import init, { DirectionWasm, MazeGameWasm, MazeWasm, MazeCellTypeWasm, MoveResultWasm, GenerationAlgorithmWasm } from '../../pkg/maze_wasm.js';
 import util from 'util';
 
 // Custom function to handle loading WASM in Node.js
@@ -639,6 +639,151 @@ function testMazeSolutionGetPathPointsExpectedOutput() {
     ];
 }
 
+// Test MazeGameWasm::from_json() example
+function testMazeGameFromJson() {
+    try {
+        let json = '{"grid":[["S"," ","F"]]}';
+        let game = MazeGameWasm.from_json(json);
+        console.log("player_row() = ", game.player_row());
+        console.log("player_col() = ", game.player_col());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    }
+}
+
+function testMazeGameFromJsonExpectedOutput() {
+    return [
+        "player_row() =  0",
+        "player_col() =  0"
+    ];
+}
+
+// Test MazeGameWasm::move_player() example
+function testMazeGameMovePlayer() {
+    try {
+        let json = '{"grid":[["S"," ","F"]]}';
+        let game = MazeGameWasm.from_json(json);
+        console.log("move_player(Right) = ", game.move_player(DirectionWasm.Right));
+        console.log("player_col() = ", game.player_col());
+        console.log("move_player(Right) = ", game.move_player(DirectionWasm.Right));
+        console.log("player_col() = ", game.player_col());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    }
+}
+
+function testMazeGameMovePlayerExpectedOutput() {
+    return [
+        "move_player(Right) =  1",
+        "player_col() =  1",
+        "move_player(Right) =  3",
+        "player_col() =  2"
+    ];
+}
+
+// Test MazeGameWasm::player_row() example
+function testMazeGamePlayerRow() {
+    try {
+        let json = '{"grid":[["S"," ","F"]]}';
+        let game = MazeGameWasm.from_json(json);
+        console.log("player_row() = ", game.player_row());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    }
+}
+
+function testMazeGamePlayerRowExpectedOutput() {
+    return [
+        "player_row() =  0"
+    ];
+}
+
+// Test MazeGameWasm::player_col() example
+function testMazeGamePlayerCol() {
+    try {
+        let json = '{"grid":[["S"," ","F"]]}';
+        let game = MazeGameWasm.from_json(json);
+        console.log("player_col() = ", game.player_col());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    }
+}
+
+function testMazeGamePlayerColExpectedOutput() {
+    return [
+        "player_col() =  0"
+    ];
+}
+
+// Test MazeGameWasm::player_direction() example
+function testMazeGamePlayerDirection() {
+    try {
+        let json = '{"grid":[["S"," ","F"]]}';
+        let game = MazeGameWasm.from_json(json);
+        console.log("player_direction() = ", game.player_direction());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    }
+}
+
+function testMazeGamePlayerDirectionExpectedOutput() {
+    return [
+        "player_direction() =  0"
+    ];
+}
+
+// Test MazeGameWasm::is_complete() example
+function testMazeGameIsComplete() {
+    try {
+        let json = '{"grid":[["S","F"]]}';
+        let game = MazeGameWasm.from_json(json);
+        console.log("is_complete() before move = ", game.is_complete());
+        game.move_player(DirectionWasm.Right);
+        console.log("is_complete() after move = ", game.is_complete());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    }
+}
+
+function testMazeGameIsCompleteExpectedOutput() {
+    return [
+        "is_complete() before move =  false",
+        "is_complete() after move =  true"
+    ];
+}
+
+// Test MazeGameWasm::visited_cells() example
+function testMazeGameVisitedCells() {
+    try {
+        let json = '{"grid":[["S"," ","F"]]}';
+        let game = MazeGameWasm.from_json(json);
+        game.move_player(DirectionWasm.Right);
+        console.log("visited_cells() = ", game.visited_cells());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    }
+}
+
+function testMazeGameVisitedCellsExpectedOutput() {
+    return [
+        "visited_cells() =  [ { row: 0, col: 0 }, { row: 0, col: 1 } ]"
+    ];
+}
+
 // Tests
 const tests = [
     { name: "MazeWasm:new() example", testFunction: testMazeNew, expectedOutput: testMazeNewExpectedOutput },
@@ -664,6 +809,13 @@ const tests = [
     { name: "MazeWasm:generate() example", testFunction: testMazeGenerate, expectedOutput: testMazeGenerateExpectedOutput },
     { name: "MazeWasm:generate() example (seeded)", testFunction: testMazeGenerateSeeded, expectedOutput: testMazeGenerateSeededExpectedOutput },
     { name: "MazeSolutionWasm:get_path_points() example", testFunction: testMazeSolutionGetPathPoints, expectedOutput: testMazeSolutionGetPathPointsExpectedOutput },
+    { name: "MazeGameWasm:from_json() example", testFunction: testMazeGameFromJson, expectedOutput: testMazeGameFromJsonExpectedOutput },
+    { name: "MazeGameWasm:move_player() example", testFunction: testMazeGameMovePlayer, expectedOutput: testMazeGameMovePlayerExpectedOutput },
+    { name: "MazeGameWasm:player_row() example", testFunction: testMazeGamePlayerRow, expectedOutput: testMazeGamePlayerRowExpectedOutput },
+    { name: "MazeGameWasm:player_col() example", testFunction: testMazeGamePlayerCol, expectedOutput: testMazeGamePlayerColExpectedOutput },
+    { name: "MazeGameWasm:player_direction() example", testFunction: testMazeGamePlayerDirection, expectedOutput: testMazeGamePlayerDirectionExpectedOutput },
+    { name: "MazeGameWasm:is_complete() example", testFunction: testMazeGameIsComplete, expectedOutput: testMazeGameIsCompleteExpectedOutput },
+    { name: "MazeGameWasm:visited_cells() example", testFunction: testMazeGameVisitedCells, expectedOutput: testMazeGameVisitedCellsExpectedOutput },
 ];
 
 const errorTemplate = (test, i, expected, logRows) =>
