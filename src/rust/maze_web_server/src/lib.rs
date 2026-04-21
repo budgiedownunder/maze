@@ -18,8 +18,9 @@ use storage::{get_store, SharedStore, Store, Error as StoreError};
 
 pub type SharedFeatures = Arc<RwLock<AppFeaturesConfig>>;
 
-const DEFAULT_ADMIN_ACCOUNT_USERNAME:&str = "admin";
-const DEFAULT_ADMIN_ACCOUNT_PASSWORD:&str = "Admin1!";
+const DEFAULT_ADMIN_ACCOUNT_USERNAME: &str = "admin";
+const DEFAULT_ADMIN_ACCOUNT_EMAIL: &str = "admin@maze.local";
+const DEFAULT_ADMIN_ACCOUNT_PASSWORD: &str = "Admin1!";
 
 /// Loads the rust_ls configuration for the server session (see: https://docs.rs/rustls/latest/rustls/server/struct.ServerConfig.html)
 fn load_rustls_config(config: &AppConfig) -> io::Result<ServerConfig> {
@@ -69,7 +70,7 @@ fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Stor
             Ok(hash) => hash,
             Err(error) => return Err(StoreError::Other(format!("{error}"))),
         };
-        store.init_default_admin_user(DEFAULT_ADMIN_ACCOUNT_USERNAME, &password_hash)?;
+        store.init_default_admin_user(DEFAULT_ADMIN_ACCOUNT_USERNAME, DEFAULT_ADMIN_ACCOUNT_EMAIL, &password_hash)?;
     }
     Ok(())    
 }

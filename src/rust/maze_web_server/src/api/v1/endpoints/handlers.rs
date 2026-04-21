@@ -72,17 +72,17 @@ fn get_logout_details(req: &HttpRequest) -> Result<(User, uuid::Uuid), Error> {
 }
 
 fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &AuthService,
-    username: &str, password: &str) -> Result<User, Error> {
+    email: &str, password: &str) -> Result<User, Error> {
 
-    if username.trim().is_empty() || password.trim().is_empty() {
-        return Err(ErrorUnprocessableEntity("Username and password must be provided"));
+    if email.trim().is_empty() || password.trim().is_empty() {
+        return Err(ErrorUnprocessableEntity("Email and password must be provided"));
     }
 
     let store_lock = get_store_read_lock(store)?;
 
-    let user = store_lock.find_user_by_name(username).map_err(|err| {
+    let user = store_lock.find_user_by_email(email).map_err(|err| {
         match err {
-            StoreError::UserNotFound() => ErrorUnauthorized( "Invalid username or password"),
+            StoreError::UserNotFound() => ErrorUnauthorized("Invalid email or password"),
             _ => ErrorInternalServerError("Failed to process login request"),
         }
     })?;
@@ -93,7 +93,7 @@ fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &AuthSe
     })?;
 
     if !password_matches {
-        return Err(ErrorUnauthorized( "Invalid username or password"));
+        return Err(ErrorUnauthorized("Invalid email or password"));
     }
 
     Ok(user)
@@ -183,6 +183,10 @@ fn get_invalid_email_request_error() -> Error {
     get_invalid_request_error("invalid email")
 }
 
+fn get_missing_email_request_error() -> Error {
+    get_invalid_request_error("missing email")
+}
+
 fn get_user_fetch_internal_error(id: Uuid, err: &StoreError) -> Error {
     ErrorInternalServerError(format!("Error fetching user item with id '{id}': {err}"))
 }
@@ -252,6 +256,7 @@ where
                 StoreError::UserEmailExists() | StoreError::UserNameExists()  => Err(get_user_exists_error()),
                 StoreError::UserNameMissing() => Err(get_missing_username_request_error()),
                 StoreError::UserEmailInvalid() => Err(get_invalid_email_request_error()),
+                StoreError::UserEmailMissing() => Err(get_missing_email_request_error()),
                 _ => Err(handle_internal_error(&err))
             }    
         }
@@ -666,9 +671,9 @@ pub async fn update_profile_me(
 /// Login request
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
 pub struct LoginRequest {
-    /// Username
-    pub username: String,
-    /// Full name 
+    /// Email address
+    pub email: String,
+    /// Password
     pub password: String,
 }
 /// Login response
@@ -684,7 +689,7 @@ pub struct LoginResponse {
 }
 #[utoipa::path(
     summary = "Login",
-    description = "This endpoint attempts to login a user by username + password",
+    description = "This endpoint attempts to login a user by email + password",
     post,
     path = "/api/v1/login",
     request_body = LoginRequest,
@@ -703,7 +708,7 @@ pub async fn login(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let mut user = verify_user_credentials(&store, &auth_service, &login_req.username, &login_req.password)?;
+    let mut user = verify_user_credentials(&store, &auth_service, &login_req.email, &login_req.password)?;
     let login_expiry_hours = config.security.login_expiry_hours;
     let login = user.create_login(login_expiry_hours, get_caller_ip_address(&req), get_caller_device_info(&req));
     let store_lock = get_store_write_lock(&store)?;
