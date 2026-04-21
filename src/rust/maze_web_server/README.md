@@ -173,6 +173,9 @@ On first run, if no admin user exists in the data store, the server automaticall
 | Field | Value |
 |:------|:------|
 | Username | `admin` |
+| Email | `admin@maze.local` |
 | Password | `Admin1!` |
 
-> **Important:** The default password is intentionally simple. **Change it immediately after first login** using the self-service endpoint (`PUT /api/v1/users/me/password`) or the admin user-management API (`PUT /api/v1/users/{id}`).
+Sign in using the **email address** and password. The username is used for display purposes only.
+
+> **Important:** The default password is intentionally simple. **Change it immediately after first sign-in** using the self-service endpoint (`PUT /api/v1/users/me/password`) or the admin user-management API (`PUT /api/v1/users/{id}`).
