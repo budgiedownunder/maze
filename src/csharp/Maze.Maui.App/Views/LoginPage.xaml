@@ -56,12 +56,12 @@
                     </Grid.RowDefinitions>
 
                     <Label Grid.Row="0" Grid.Column="0"
-                           Text="Username"
+                           Text="Email"
                            VerticalOptions="Center" />
                     <Entry Grid.Row="0" Grid.Column="1"
-                           Text="{Binding Username}"
+                           Text="{Binding Email}"
                            ReturnType="Next"
-                           Keyboard="Plain"
+                           Keyboard="Email"
                            MinimumWidthRequest="150" />
 
                     <Label Grid.Row="1" Grid.Column="0"

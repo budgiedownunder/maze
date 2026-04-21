@@ -11,8 +11,8 @@ namespace Maze.Maui.App.Services
     /// </summary>
     internal class LoginRequest
     {
-        [JsonPropertyName("username")]
-        public string Username { get; set; } = "";
+        [JsonPropertyName("email")]
+        public string Email { get; set; } = "";
 
         [JsonPropertyName("password")]
         public string Password { get; set; } = "";
@@ -119,9 +119,9 @@ namespace Maze.Maui.App.Services
             => await SecureStorage.Default.GetAsync(TOKEN_STORAGE_KEY);
 
         /// <inheritdoc/>
-        public async Task<UserProfile> SignInAsync(string username, string password)
+        public async Task<UserProfile> SignInAsync(string email, string password)
         {
-            var body = JsonSerializer.Serialize(new LoginRequest { Username = username, Password = password });
+            var body = JsonSerializer.Serialize(new LoginRequest { Email = email, Password = password });
             var content = new StringContent(body, Encoding.UTF8, "application/json");
             var response = await _httpClient.PostAsync("login", content);
             await EnsureSuccessAsync(response, "Sign in failed");

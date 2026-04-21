@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
 using System.Net;
+using System.Text.RegularExpressions;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -16,7 +17,7 @@ namespace Maze.Maui.App.ViewModels
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SignInCommand))]
-        private string username = "";
+        private string email = "";
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SignInCommand))]
@@ -86,18 +87,23 @@ namespace Maze.Maui.App.ViewModels
         }
 
         private bool CanSignIn() =>
-            !string.IsNullOrWhiteSpace(Username) &&
+            !string.IsNullOrWhiteSpace(Email) &&
             !string.IsNullOrWhiteSpace(Password) &&
             !IsBusy;
 
         [RelayCommand(CanExecute = nameof(CanSignIn))]
         private async Task SignIn()
         {
+            if (!Regex.IsMatch(Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            {
+                ErrorMessage = "Please enter a valid email address";
+                return;
+            }
             IsBusy = true;
             ErrorMessage = "";
             try
             {
-                await _authService.SignInAsync(Username, Password);
+                await _authService.SignInAsync(Email, Password);
                 await Shell.Current.GoToAsync("//MainPage");
             }
             catch (Exception ex)

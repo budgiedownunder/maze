@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
 using System.Net;
+using System.Text.RegularExpressions;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -100,6 +101,7 @@ namespace Maze.Maui.App.ViewModels
         private bool CanSaveProfile() =>
             !IsBusy &&
             !string.IsNullOrWhiteSpace(Username) &&
+            !string.IsNullOrWhiteSpace(Email) &&
             (Username != _loadedUsername || FullName != _loadedFullName || Email != _loadedEmail);
 
         /// <summary>
@@ -108,6 +110,11 @@ namespace Maze.Maui.App.ViewModels
         [RelayCommand(CanExecute = nameof(CanSaveProfile))]
         private async Task SaveProfile()
         {
+            if (!Regex.IsMatch(Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            {
+                ErrorMessage = "Please enter a valid email address";
+                return;
+            }
             IsBusy = true;
             ErrorMessage = "";
             try
