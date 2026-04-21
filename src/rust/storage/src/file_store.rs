@@ -241,7 +241,7 @@ impl FileStore {
         if self.user_name_exists(&user.username, ignore_id) {
             return Err(Error::UserNameExists());
         }
-        if !user.email.is_empty() && self.user_email_exists(&user.email, ignore_id) {
+        if self.user_email_exists(&user.email, ignore_id) {
             return Err(Error::UserEmailExists());
         }
         Ok(())
@@ -401,7 +401,7 @@ impl UserStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Create the default admin user within the file store if needed
-    /// match store.init_default_admin_user("admin", "my_password_hash") {
+    /// match store.init_default_admin_user("admin", "admin@maze.local", "my_password_hash") {
     ///     Ok(user) => {
     ///         println!(
     ///             "Successfully intiialized default admin user with id {} in the file store",
@@ -419,6 +419,7 @@ impl UserStore for FileStore {
     fn init_default_admin_user(
         &mut self,
         username: &str,
+        email: &str,
         password_hash: &str,
     ) -> Result<User, Error> {
         match self.find_user_by_name(username) {
@@ -427,6 +428,7 @@ impl UserStore for FileStore {
                 Error::UserNotFound() => {
                     let mut user = User::default();
                     user.username = username.to_string();
+                    user.email = email.to_string();
                     user.is_admin = true;
                     user.password_hash = password_hash.to_string();
                     self.create_user(&mut user)?;
@@ -749,6 +751,66 @@ impl UserStore for FileStore {
     /// ```
     fn find_user_by_name(&self, name: &str) -> Result<User, Error> {
         self.find_user_by_string_field("username", name, Uuid::nil())
+    }
+    /// Locates a user by their email address within the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then locate a user from within a file store by email
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use data_model::User;
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    /// };
+    ///
+    /// // Create the user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to find it again by email and display the results
+    ///         match store.find_user_by_email(&user.email) {
+    ///             Ok(user_found) => {
+    ///                 println!("Successfully found user within the file store => {:?}", user_found);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to find user => {}",
+    ///                      error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn find_user_by_email(&self, email: &str) -> Result<User, Error> {
+        self.find_user_by_string_field("email", email, Uuid::nil())
     }
     /// Locates a user by their api key within the store
     ///
@@ -1804,6 +1866,24 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "No email address provided for the user")]
+    fn cannot_update_existing_user_without_email() {
+        let mut store = new_store();
+        let mut user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
+        user.email = "".to_string();
+        if let Err(error) = store.update_user(&mut user) {
+            panic!("{}", error.to_string());
+        }
+    }
+
+    #[test]
     #[should_panic(expected = "The email address is invalid")]
     fn cannot_update_existing_user_with_invalid_email() {
         let mut store = new_store();
@@ -1812,10 +1892,10 @@ mod tests {
             false,
             "test",
             "",
-            "bad_email_address",
+            "test@company.com",
             "password_hash",
         );
-        user.email = "".to_string();
+        user.email = "bad_email_address".to_string();
         if let Err(error) = store.update_user(&mut user) {
             panic!("{}", error.to_string());
         }
@@ -1920,6 +2000,39 @@ mod tests {
             "password_hash",
         );
         if let Err(error) = store.find_user_by_name("unknown") {
+            panic!("{}", error.to_string());
+        }
+    }
+
+    #[test]
+    fn can_find_existing_user_by_email() {
+        let mut store = new_store();
+        let user = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
+        if let Err(error) = store.find_user_by_email(&user.email) {
+            panic!("Failed to find user by email: {error}");
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "User not found")]
+    fn cannot_find_non_existent_user_by_email() {
+        let mut store = new_store();
+        let _ = create_user(
+            &mut store,
+            false,
+            "test",
+            "",
+            "test@company.com",
+            "password_hash",
+        );
+        if let Err(error) = store.find_user_by_email("unknown@company.com") {
             panic!("{}", error.to_string());
         }
     }

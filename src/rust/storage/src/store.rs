@@ -7,8 +7,8 @@ use uuid::Uuid;
 
 /// Represents a store for holding users
 pub trait UserStore {
-    /// Adds the default admin user to the store if it doesn't already exist, else returns it 
-    fn init_default_admin_user(&mut self, username: &str, password_hash: &str) -> Result<User, Error>;
+    /// Adds the default admin user to the store if it doesn't already exist, else returns it
+    fn init_default_admin_user(&mut self, username: &str, email: &str, password_hash: &str) -> Result<User, Error>;
     /// Adds a new user to the store and sets the allocated `id` within the user object
     fn create_user(&mut self, user: &mut User) -> Result<(), Error>;
     /// Deletes a user from the store
@@ -19,6 +19,8 @@ pub trait UserStore {
     fn get_user(&self, id: Uuid) -> Result<User, Error>;
     /// Locates a user by their username within the store
     fn find_user_by_name(&self, name: &str) -> Result<User, Error>;
+    /// Locates a user by their email address within the store
+    fn find_user_by_email(&self, email: &str) -> Result<User, Error>;
     /// Locates a user by their api key within the store
     fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error>;
     /// Locates a user by their login id within the store

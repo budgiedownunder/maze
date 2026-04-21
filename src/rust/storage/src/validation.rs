@@ -30,6 +30,7 @@ pub fn validate_user_fields(user: &User) -> Result<(), Error> {
     if let Err(DataModelError::UserValidation(error)) = user.validate() {
         match error {
             UserValidationError::EmailInvalid => return Err(Error::UserEmailInvalid()),
+            UserValidationError::EmailMissing => return Err(Error::UserEmailMissing()),
             UserValidationError::IdMissing => return Err(Error::UserIdMissing()),
             UserValidationError::PasswordMissing => return Err(Error::UserPasswordMissing()),
             UserValidationError::UsernameMissing => return Err(Error::UserNameMissing()),
@@ -94,7 +95,8 @@ mod tests {
     }
 
     #[test]
-    fn validation_should_succeed_for_empty_email() {
+    #[should_panic(expected = "No email address provided for the user")]
+    fn validation_should_fail_for_missing_email() {
         let mut user = init_valid_user();
         user.email = "".to_string();
         run_validation_test(&user);
