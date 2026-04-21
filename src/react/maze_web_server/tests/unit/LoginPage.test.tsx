@@ -50,7 +50,7 @@ describe('LoginPage', () => {
 
   it('enables Sign In button when both fields are filled', async () => {
     renderLoginPage()
-    await userEvent.type(screen.getByLabelText(/username/i), 'testuser')
+    await userEvent.type(screen.getByLabelText(/email/i), 'test@example.com')
     await userEvent.type(screen.getByLabelText('Password'), 'Password1!')
     expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled()
   })
@@ -58,7 +58,7 @@ describe('LoginPage', () => {
   it('navigates to /mazes on successful login', async () => {
     mockLogin.mockResolvedValue(undefined)
     renderLoginPage()
-    await userEvent.type(screen.getByLabelText(/username/i), 'testuser')
+    await userEvent.type(screen.getByLabelText(/email/i), 'test@example.com')
     await userEvent.type(screen.getByLabelText('Password'), 'Password1!')
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/mazes', { replace: true }))
@@ -67,9 +67,9 @@ describe('LoginPage', () => {
   it('shows error message on 401', async () => {
     mockLogin.mockRejectedValue(Object.assign(new Error('Unauthorized'), { status: 401 }))
     renderLoginPage()
-    await userEvent.type(screen.getByLabelText(/username/i), 'testuser')
+    await userEvent.type(screen.getByLabelText(/email/i), 'test@example.com')
     await userEvent.type(screen.getByLabelText('Password'), 'wrongpass')
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }))
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/invalid username or password/i))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/invalid email or password/i))
   })
 })

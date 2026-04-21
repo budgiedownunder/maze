@@ -34,11 +34,11 @@ export function updateAdminFeatures(token: string, features: AppFeatures): Promi
   })
 }
 
-export function login(username: string, password: string): Promise<LoginResponse> {
+export function login(email: string, password: string): Promise<LoginResponse> {
   return request<LoginResponse>('/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ email, password }),
   })
 }
 

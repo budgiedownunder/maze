@@ -50,7 +50,7 @@ export function AccountModal({ onClose }: Props) {
     fullName !== saved.full_name ||
     email !== saved.email
   )
-  const saveDisabled = isSaving || isLoading || !hasChanges || !username.trim()
+  const saveDisabled = isSaving || isLoading || !hasChanges || !username.trim() || !email.trim()
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -116,6 +116,7 @@ export function AccountModal({ onClose }: Props) {
 
             <label htmlFor="acc-email">Email</label>
             <input id="acc-email" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={isSaving} />
+            {!email.trim() && !isLoading && <p role="alert" className="error-msg">Email is required</p>}
 
             {saved?.is_admin && (
               <span className="badge-admin">Administrator</span>
