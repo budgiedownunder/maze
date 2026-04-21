@@ -1163,7 +1163,7 @@ namespace Maze.Api.Tests
         {
             using MazeGame game = MazeGame.Create(SimpleGameJson);
             var visited = game.VisitedCells;
-            Assert.Equal(1, visited.Count);
+            Assert.Single(visited);
             Assert.Equal(0, visited[0].Row);
             Assert.Equal(0, visited[0].Col);
         }
