@@ -34,6 +34,19 @@ impl Default for PasswordHashConfig {
     }
 }
 
+impl PasswordHashConfig {
+    /// Returns a minimal-cost configuration suitable for use in tests only.
+    /// Never use this in production — the parameters provide no real security.
+    pub fn for_testing() -> Self {
+        Self {
+            mem_cost: 8,
+            time_cost: 1,
+            lanes: 1,
+            hash_length: default_hash_length(),
+        }
+    }
+}
+
 const DEFAULT_MEM_COST:u32 = 65536;
 const DEFAULT_TIME_COST:u32 = 3;
 const DEFAULT_LANES:u32 = 4;
