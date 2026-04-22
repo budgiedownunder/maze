@@ -272,10 +272,11 @@ impl FileStore {
         let search = UniCase::new(search_value);
         for id in ids {
             if id != ignore_id {
-                let user = self.get_user(id)?;
-                if let Some(user_value) = user.get_string_field(field_name) {
-                    if UniCase::new(user_value) == search {
-                        return Ok(user);
+                if let Some(user) = self.load_user_if_present(id)? {
+                    if let Some(user_value) = user.get_string_field(field_name) {
+                        if UniCase::new(user_value) == search {
+                            return Ok(user);
+                        }
                     }
                 }
             }
@@ -293,6 +294,19 @@ impl FileStore {
     fn user_email_exists(&self, email: &str, ignore_id: Uuid) -> bool {
         self.find_user_by_string_field("email", email, ignore_id)
             .is_ok()
+    }
+
+    // Loads a user by id, returning None (with a warning) if the user directory exists
+    // but user.json is missing or unreadable, and Err for all other failures.
+    fn load_user_if_present(&self, id: Uuid) -> Result<Option<User>, Error> {
+        match self.get_user(id) {
+            Ok(user) => Ok(Some(user)),
+            Err(Error::UserIdNotFound(_)) => {
+                log::warn!("Skipping user directory '{id}': user.json is missing or unreadable");
+                Ok(None)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     // Returns the list of user ids associated with the file store
@@ -872,9 +886,10 @@ impl UserStore for FileStore {
     fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error> {
         let ids = self.get_user_ids()?;
         for id in ids {
-            let user = self.get_user(id)?;
-            if user.api_key == api_key {
-                return Ok(user);
+            if let Some(user) = self.load_user_if_present(id)? {
+                if user.api_key == api_key {
+                    return Ok(user);
+                }
             }
         }
         Err(Error::UserNotFound())
@@ -944,9 +959,10 @@ impl UserStore for FileStore {
     fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, Error>{
         let ids = self.get_user_ids()?;
         for id in ids {
-            let user = self.get_user(id)?;
-            if user.contains_valid_login(login_id) {
-                return Ok(user);
+            if let Some(user) = self.load_user_if_present(id)? {
+                if user.contains_valid_login(login_id) {
+                    return Ok(user);
+                }
             }
         }
         Err(Error::UserNotFound())
@@ -1013,7 +1029,9 @@ impl UserStore for FileStore {
         let ids = self.get_user_ids()?;
         let mut users: Vec<User> = Vec::new();
         for id in ids {
-            users.push(self.get_user(id)?);
+            if let Some(user) = self.load_user_if_present(id)? {
+                users.push(user);
+            }
         }
         users.sort_by(|a, b| a.username.cmp(&b.username));
         Ok(users)
@@ -1080,9 +1098,10 @@ impl UserStore for FileStore {
         let ids = self.get_user_ids()?;
         let mut admins: Vec<User> = Vec::new();
         for id in ids {
-            let user = self.get_user(id)?;
-            if user.is_admin {
-                admins.push(user);
+            if let Some(user) = self.load_user_if_present(id)? {
+                if user.is_admin {
+                    admins.push(user);
+                }
             }
         }
         Ok(admins)
@@ -2127,6 +2146,43 @@ mod tests {
             panic!("{}", error.to_string());
         }
     }
+
+    #[test]
+    fn get_users_skips_orphaned_user_directory() {
+        let mut store = new_store();
+        let _ = create_user(&mut store, false, "valid", "", "valid@company.com", "hash");
+        let orphan_id = Uuid::new_v4();
+        std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
+            .expect("failed to create orphan directory");
+        let users = store.get_users().expect("get_users should succeed despite orphaned directory");
+        assert_eq!(users.len(), 1);
+        assert_eq!(users[0].username, "valid");
+    }
+
+    #[test]
+    fn find_user_by_email_skips_orphaned_user_directory() {
+        let mut store = new_store();
+        let _ = create_user(&mut store, false, "valid", "", "valid@company.com", "hash");
+        let orphan_id = Uuid::new_v4();
+        std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
+            .expect("failed to create orphan directory");
+        store.find_user_by_email("valid@company.com").expect("find_user_by_email should succeed despite orphaned directory");
+    }
+
+    #[test]
+    fn find_user_by_login_id_skips_orphaned_user_directory() {
+        let mut store = new_store();
+        let mut user = init_test_user(false, "valid", "", "valid@company.com", "hash");
+        let login = data_model::UserLogin::new(24, None, None);
+        let login_id = login.id;
+        user.logins.push(login);
+        store.create_user(&mut user).expect("failed to create user");
+        let orphan_id = Uuid::new_v4();
+        std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
+            .expect("failed to create orphan directory");
+        store.find_user_by_login_id(login_id).expect("find_user_by_login_id should succeed despite orphaned directory");
+    }
+
     //****************************************************************
     // Maze tests
     //****************************************************************

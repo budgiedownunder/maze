@@ -2231,6 +2231,7 @@ name = "storage"
 version = "0.1.0"
 dependencies = [
  "data_model",
+ "log",
  "maze",
  "serde",
  "serde_json",

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 data_model = { path = "../data_model" }
+log = "0.4"
 maze = { path = "../maze" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
