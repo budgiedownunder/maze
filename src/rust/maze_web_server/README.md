@@ -140,7 +140,7 @@ The following endpoints manage user identity:
 
 | Method | Path | Auth required | Description |
 |:-------|:-----|:--------------|:------------|
-| `POST` | `/api/v1/signup` | None | Register a new (non-admin) user account |
+| `POST` | `/api/v1/signup` | None | Register a new (non-admin) user account; requires email and password only — username is auto-generated from the email local part |
 | `POST` | `/api/v1/login` | None | Sign in; returns a bearer token |
 | `POST` | `/api/v1/logout` | Bearer | Invalidate the current bearer token |
 | `GET` | `/api/v1/users/me` | Either | Return the signed-in user's profile |
