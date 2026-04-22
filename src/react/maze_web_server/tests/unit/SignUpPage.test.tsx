@@ -15,15 +15,11 @@ vi.mock('react-router-dom', async () => {
 
 async function fillForm(overrides: Partial<Record<string, string>> = {}) {
   const fields = {
-    username: 'newuser',
-    fullName: 'New User',
     email: 'new@example.com',
     password: 'Password1!',
     confirmPassword: 'Password1!',
     ...overrides,
   }
-  if (fields.username) await userEvent.type(screen.getByLabelText(/username/i), fields.username)
-  if (fields.fullName) await userEvent.type(screen.getByLabelText(/full name/i), fields.fullName)
   if (fields.email) await userEvent.type(screen.getByLabelText(/email/i), fields.email)
   const passwordInputs = screen.getAllByLabelText(/password/i)
   if (fields.password) await userEvent.type(passwordInputs[0], fields.password)

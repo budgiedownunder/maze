@@ -4,8 +4,6 @@ import { validateChangePasswordForm } from '../../src/components/ChangePasswordM
 
 describe('validateSignupForm', () => {
   const valid = {
-    username: 'testuser',
-    fullName: 'Test User',
     email: 'test@example.com',
     password: 'Password1!',
     confirmPassword: 'Password1!',
@@ -16,8 +14,6 @@ describe('validateSignupForm', () => {
   })
 
   it('requires all fields', () => {
-    expect(validateSignupForm({ ...valid, username: '' })).not.toBeNull()
-    expect(validateSignupForm({ ...valid, fullName: '' })).not.toBeNull()
     expect(validateSignupForm({ ...valid, email: '' })).not.toBeNull()
     expect(validateSignupForm({ ...valid, password: '' })).not.toBeNull()
     expect(validateSignupForm({ ...valid, confirmPassword: '' })).not.toBeNull()

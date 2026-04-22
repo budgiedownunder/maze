@@ -5,8 +5,6 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('mismatched passwords shows error and does not navigate', async ({ page }) => {
-  await page.getByLabel('Username').fill('newuser')
-  await page.getByLabel('Full Name').fill('New User')
   await page.getByLabel('Email').fill('new@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password1!')
   await page.getByLabel('Confirm Password', { exact: true }).fill('Different1!')
@@ -16,8 +14,6 @@ test('mismatched passwords shows error and does not navigate', async ({ page }) 
 })
 
 test('weak password shows validation error', async ({ page }) => {
-  await page.getByLabel('Username').fill('newuser')
-  await page.getByLabel('Full Name').fill('New User')
   await page.getByLabel('Email').fill('new@example.com')
   await page.getByLabel('Password', { exact: true }).fill('weak')
   await page.getByLabel('Confirm Password', { exact: true }).fill('weak')
@@ -27,8 +23,6 @@ test('weak password shows validation error', async ({ page }) => {
 })
 
 test('valid signup navigates to /login', async ({ page }) => {
-  await page.getByLabel('Username').fill('newuser')
-  await page.getByLabel('Full Name').fill('New User')
   await page.getByLabel('Email').fill('new@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password1!')
   await page.getByLabel('Confirm Password', { exact: true }).fill('Password1!')

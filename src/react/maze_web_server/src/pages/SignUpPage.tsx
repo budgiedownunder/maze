@@ -6,13 +6,11 @@ import { PasswordInput } from '../components/PasswordInput'
 import appIcon from '../assets/app.png'
 
 export function validateSignupForm(fields: {
-  username: string
-  fullName: string
   email: string
   password: string
   confirmPassword: string
 }): string | null {
-  if (!fields.username.trim() || !fields.fullName.trim() || !fields.email.trim() || !fields.password || !fields.confirmPassword) {
+  if (!fields.email.trim() || !fields.password || !fields.confirmPassword) {
     return 'All fields are required'
   }
   if (fields.password !== fields.confirmPassword) {
@@ -29,8 +27,6 @@ export function validateSignupForm(fields: {
 }
 
 export function SignUpPage() {
-  const [username, setUsername] = useState('')
-  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -39,22 +35,22 @@ export function SignUpPage() {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
 
-  const allFilled = username.trim() && fullName.trim() && email.trim() && password && confirmPassword
+  const allFilled = email.trim() && password && confirmPassword
   const submitDisabled = !allFilled || isLoading
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const err = validateSignupForm({ username, fullName, email, password, confirmPassword })
+    const err = validateSignupForm({ email, password, confirmPassword })
     if (err) { setError(err); return }
 
     setIsLoading(true)
     setError(null)
     try {
-      await api.signup(username, fullName, email, password)
+      await api.signup(email, password)
       navigate('/login', { replace: true })
     } catch (ex: unknown) {
       const status = (ex as { status?: number }).status
-      setError(status === 409 ? 'Username or email already in use' : 'Sign up failed. Please try again.')
+      setError(status === 409 ? 'Email already in use' : 'Sign up failed. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -75,12 +71,6 @@ export function SignUpPage() {
       <h1 className="auth-title auth-title--solo">Create Account</h1>
 
       <form onSubmit={handleSubmit} className="auth-form">
-        <label htmlFor="su-username">Username</label>
-        <input id="su-username" value={username} onChange={e => setUsername(e.target.value)} disabled={isLoading} autoComplete="username" />
-
-        <label htmlFor="su-fullname">Full Name</label>
-        <input id="su-fullname" value={fullName} onChange={e => setFullName(e.target.value)} disabled={isLoading} autoComplete="name" />
-
         <label htmlFor="su-email">Email</label>
         <input id="su-email" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={isLoading} autoComplete="email" />
 
