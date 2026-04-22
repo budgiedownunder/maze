@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Maze.Maui.App.Services;
+using System.Net;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -84,9 +85,13 @@ namespace Maze.Maui.App.ViewModels
                 await _authService.SignUpAsync(Email, Password);
                 await Shell.Current.GoToAsync("..");
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
             {
-                ErrorMessage = ex.Message;
+                ErrorMessage = "Email already in use";
+            }
+            catch
+            {
+                ErrorMessage = "Sign up failed. Please try again.";
             }
             finally
             {

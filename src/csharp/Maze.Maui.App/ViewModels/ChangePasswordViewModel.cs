@@ -91,9 +91,9 @@ namespace Maze.Maui.App.ViewModels
             {
                 ErrorMessage = "Current password is incorrect";
             }
-            catch (Exception ex)
+            catch
             {
-                ErrorMessage = ex.Message;
+                ErrorMessage = "Failed to change password. Please try again.";
             }
             finally
             {

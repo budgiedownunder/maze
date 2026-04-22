@@ -75,9 +75,9 @@ namespace Maze.Maui.App.ViewModels
                 IsAdmin = profile.IsAdmin;
                 LoadStatus = "";
             }
-            catch (Exception ex)
+            catch
             {
-                ErrorMessage = ex.Message;
+                ErrorMessage = "Failed to load profile. Please try again.";
             }
             finally
             {
@@ -133,9 +133,9 @@ namespace Maze.Maui.App.ViewModels
             {
                 ErrorMessage = "Username or email is already in use by another account";
             }
-            catch (Exception ex)
+            catch
             {
-                ErrorMessage = ex.Message;
+                ErrorMessage = "Failed to save profile. Please try again.";
             }
             finally
             {
@@ -177,9 +177,9 @@ namespace Maze.Maui.App.ViewModels
                 ClearProfile();
                 await Shell.Current.GoToAsync("//LoginPage");
             }
-            catch (Exception ex)
+            catch
             {
-                ErrorMessage = ex.Message;
+                ErrorMessage = "Failed to delete account. Please try again.";
             }
             finally
             {

@@ -106,9 +106,13 @@ namespace Maze.Maui.App.ViewModels
                 await _authService.SignInAsync(Email, Password);
                 await Shell.Current.GoToAsync("//MainPage");
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
             {
-                ErrorMessage = ex.Message;
+                ErrorMessage = "Invalid email or password";
+            }
+            catch
+            {
+                ErrorMessage = "Sign in failed. Please try again.";
             }
             finally
             {
