@@ -74,12 +74,6 @@ namespace Maze.Maui.App.Services
     /// </summary>
     internal class SignupRequest
     {
-        [JsonPropertyName("username")]
-        public string Username { get; set; } = "";
-
-        [JsonPropertyName("full_name")]
-        public string FullName { get; set; } = "";
-
         [JsonPropertyName("email")]
         public string Email { get; set; } = "";
 
@@ -160,12 +154,10 @@ namespace Maze.Maui.App.Services
         }
 
         /// <inheritdoc/>
-        public async Task<UserProfile> SignUpAsync(string username, string fullName, string email, string password)
+        public async Task<UserProfile> SignUpAsync(string email, string password)
         {
             var body = JsonSerializer.Serialize(new SignupRequest
             {
-                Username = username,
-                FullName = fullName,
                 Email = email,
                 Password = password
             });

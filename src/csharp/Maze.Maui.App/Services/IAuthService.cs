@@ -41,7 +41,7 @@ namespace Maze.Maui.App.Services
         Task SignOutAsync();
 
         /// <summary>Registers a new account. Does not auto sign-in.</summary>
-        Task<UserProfile> SignUpAsync(string username, string fullName, string email, string password);
+        Task<UserProfile> SignUpAsync(string email, string password);
 
         /// <summary>Returns the profile for the currently authenticated user.</summary>
         Task<UserProfile> GetMyProfileAsync();

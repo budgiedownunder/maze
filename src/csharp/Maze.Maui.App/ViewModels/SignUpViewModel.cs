@@ -13,14 +13,6 @@ namespace Maze.Maui.App.ViewModels
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SignUpCommand))]
-        private string username = "";
-
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(SignUpCommand))]
-        private string fullName = "";
-
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(SignUpCommand))]
         private string email = "";
 
         [ObservableProperty]
@@ -57,7 +49,7 @@ namespace Maze.Maui.App.ViewModels
         }
 
         private bool CanSignUp() =>
-            !string.IsNullOrWhiteSpace(Username) &&
+            !string.IsNullOrWhiteSpace(Email) &&
             !string.IsNullOrWhiteSpace(Password) &&
             !string.IsNullOrWhiteSpace(ConfirmPassword) &&
             !IsBusy;
@@ -85,7 +77,7 @@ namespace Maze.Maui.App.ViewModels
             ErrorMessage = "";
             try
             {
-                await _authService.SignUpAsync(Username, FullName, Email, Password);
+                await _authService.SignUpAsync(Email, Password);
                 await Shell.Current.GoToAsync("..");
             }
             catch (Exception ex)
