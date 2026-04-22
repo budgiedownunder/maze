@@ -390,10 +390,6 @@ pub async fn update_admin_features(
 /// Signup request
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
 pub struct SignupRequest {
-    /// Username
-    pub username: String,
-    /// Full name
-    pub full_name: String,
     /// Email address
     pub email: String,
     /// Password
@@ -414,8 +410,8 @@ impl SignupRequest {
             User {
                 id: Uuid::nil(),
                 is_admin: false,
-                username: self.username.clone(),
-                full_name: self.full_name.clone(),
+                username: "".to_string(),
+                full_name: "".to_string(),
                 email: self.email.clone(),
                 password_hash,
                 api_key: Uuid::nil(),
@@ -425,9 +421,22 @@ impl SignupRequest {
     }
 }
 
+/// Derives a candidate username from an email address local part.
+/// Keeps alphanumeric and underscore characters (lowercased), replaces everything else with `_`,
+/// then trims leading/trailing underscores. Falls back to `"user"` if the result is empty.
+fn generate_username_from_email(email: &str) -> String {
+    let local = email.split('@').next().unwrap_or("user");
+    let sanitized: String = local
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '_' { c.to_ascii_lowercase() } else { '_' })
+        .collect();
+    let trimmed = sanitized.trim_matches('_');
+    if trimmed.is_empty() { "user".to_string() } else { trimmed.to_string() }
+}
+
 #[utoipa::path(
     summary = "Sign up as a new user",
-    description = "This endpoint registers a new (non-admin) user account",
+    description = "This endpoint registers a new (non-admin) user account. A username is auto-generated from the email address and can be personalised later via the profile endpoint.",
     post,
     path = "/api/v1/signup",
     request_body = SignupRequest,
@@ -435,7 +444,7 @@ impl SignupRequest {
         (status = 201, description = "User created successfully", body = UserItem),
         (status = 400, description = "Invalid request"),
         (status = 403, description = "Signup is disabled on this server"),
-        (status = 409, description = "User with the given username or email already exists")
+        (status = 409, description = "User with the given email already exists")
     ),
     tags = ["v1"]
 )]
@@ -457,22 +466,29 @@ pub async fn signup(
     let mut store_lock = get_store_write_lock(&store)?;
     let signup_req_data: SignupRequest = signup_req.into_inner();
     let mut store_user = signup_req_data.into_user(&auth_service)?;
+    let base_username = generate_username_from_email(&signup_req_data.email);
 
-    match store_lock.create_user(&mut store_user) {
-        Ok(()) => Ok(
-            HttpResponse::Created()
-            .insert_header(("Location", "/api/v1/users/me"))
-            .json(UserItem::from_store_user(&store_user))
-        ),
-        Err(err) => {
-            match err {
+    for attempt in 0u8..=5 {
+        store_user.username = if attempt == 0 {
+            base_username.clone()
+        } else {
+            format!("{}_{}", base_username, &Uuid::new_v4().to_string().replace('-', "")[..6])
+        };
+        match store_lock.create_user(&mut store_user) {
+            Ok(()) => return Ok(
+                HttpResponse::Created()
+                .insert_header(("Location", "/api/v1/users/me"))
+                .json(UserItem::from_store_user(&store_user))
+            ),
+            Err(StoreError::UserNameExists()) if attempt < 5 => continue,
+            Err(err) => return match err {
                 StoreError::UserEmailExists() | StoreError::UserNameExists() => Err(get_user_exists_error()),
-                StoreError::UserNameMissing() => Err(get_missing_username_request_error()),
                 StoreError::UserPasswordMissing() => Err(get_missing_password_request_error()),
                 _ => Err(get_user_create_internal_error(&err))
             }
         }
     }
+    unreachable!()
 }
 // **************************************************************************************************
 // Endpoint: GET /api/v1/users/me

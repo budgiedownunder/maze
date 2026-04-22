@@ -2857,25 +2857,11 @@ mod test_definitions {
     // signup / get_me / delete_me helpers
     // **************************************************************************************************
 
-    impl SignupRequest {
-        pub fn new(username: &str, full_name: &str, email: &str, password: &str) -> SignupRequest {
-            SignupRequest {
-                username: username.to_string(),
-                full_name: full_name.to_string(),
-                email: email.to_string(),
-                password: password.to_string(),
-            }
+    fn new_signup_request(email: &str, blank_password: bool) -> SignupRequest {
+        SignupRequest {
+            email: email.to_string(),
+            password: create_password(blank_password),
         }
-    }
-
-    fn new_signup_request(username: &str, email: Option<&str>, blank_password: bool) -> SignupRequest {
-        let email_use = email.unwrap_or(&new_email(username)).to_string();
-        SignupRequest::new(
-            username,
-            &format!("{username} full name"),
-            &email_use,
-            &create_password(blank_password),
-        )
     }
 
     async fn run_signup_test(
@@ -2896,8 +2882,7 @@ mod test_definitions {
             let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize signup response");
             // is_admin must always be false regardless of what the caller sends
             assert!(!response_user.is_admin, "signup must never create an admin user");
-            assert_eq!(response_user.username, signup_req.username);
-            assert_eq!(response_user.full_name, signup_req.full_name);
+            assert!(!response_user.username.is_empty(), "auto-generated username must not be empty");
             assert_eq!(response_user.email, signup_req.email);
             assert_ne!(response_user.id, Uuid::nil());
         }
@@ -2962,7 +2947,7 @@ mod test_definitions {
     async fn signup_with_valid_details_succeeds() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &new_signup_request(NEW_USERNAME_1, None, false),
+            &new_signup_request(&new_email(NEW_USERNAME_1), false),
             StatusCode::CREATED,
         ).await;
     }
@@ -2972,25 +2957,31 @@ mod test_definitions {
         // Even if an attacker crafts a request with is_admin, SignupRequest has no such field
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password1!"),
+            &new_signup_request(&new_email(NEW_USERNAME_1), false),
             StatusCode::CREATED,
         ).await;
     }
 
     #[actix_web::test]
-    async fn signup_with_duplicate_username_fails() {
-        run_signup_test(
-            &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &new_signup_request(VALID_USERNAME_1, None, false),
-            StatusCode::CONFLICT,
-        ).await;
+    async fn can_signup_and_username_is_generated_from_email() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let req = create_test_post_request("/api/v1/signup", None, None, Some(&SignupRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        }));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = test::read_body(resp).await;
+        let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize signup response");
+        assert!(response_user.username.starts_with(VALID_USERNAME_1), "expected username to start with '{}', got '{}'", VALID_USERNAME_1, response_user.username);
     }
 
     #[actix_web::test]
     async fn signup_with_duplicate_email_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &new_signup_request(NEW_USERNAME_1, Some(&new_email(VALID_USERNAME_1)), false),
+            &new_signup_request(&new_email(VALID_USERNAME_1), false),
             StatusCode::CONFLICT,
         ).await;
     }
@@ -2999,7 +2990,7 @@ mod test_definitions {
     async fn signup_with_blank_password_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &new_signup_request(NEW_USERNAME_1, None, true),
+            &new_signup_request(&new_email(NEW_USERNAME_1), true),
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -3008,7 +2999,7 @@ mod test_definitions {
     async fn signup_with_short_password_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Abc1!"),
+            &SignupRequest { email: new_email(NEW_USERNAME_1), password: "Abc1!".to_string() },
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -3017,7 +3008,7 @@ mod test_definitions {
     async fn signup_with_no_uppercase_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "password1!"),
+            &SignupRequest { email: new_email(NEW_USERNAME_1), password: "password1!".to_string() },
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -3026,7 +3017,7 @@ mod test_definitions {
     async fn signup_with_no_lowercase_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "PASSWORD1!"),
+            &SignupRequest { email: new_email(NEW_USERNAME_1), password: "PASSWORD1!".to_string() },
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -3035,7 +3026,7 @@ mod test_definitions {
     async fn signup_with_no_digit_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password!"),
+            &SignupRequest { email: new_email(NEW_USERNAME_1), password: "Password!".to_string() },
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -3044,7 +3035,7 @@ mod test_definitions {
     async fn signup_with_no_special_character_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password1"),
+            &SignupRequest { email: new_email(NEW_USERNAME_1), password: "Password1".to_string() },
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -3684,9 +3675,7 @@ mod test_definitions {
         let mut user_defs = vec![];
         let (app, _, _, _, _) = create_test_app_with_features(&mut user_defs, None, false, features).await;
         let req = create_test_post_request("/api/v1/signup", None, None, Some(&SignupRequest {
-            username: "newuser".to_string(),
-            full_name: "New User".to_string(),
-            email: "newuser@example.com".to_string(),
+            email: VALID_USER_EMAIL_1.to_string(),
             password: VALID_USER_PASSWORD.to_string(),
         }));
         let resp = test::call_service(&app, req).await;
@@ -3699,9 +3688,7 @@ mod test_definitions {
         let mut user_defs = vec![];
         let (app, _, _, _, _) = create_test_app_with_features(&mut user_defs, None, false, features).await;
         let req = create_test_post_request("/api/v1/signup", None, None, Some(&SignupRequest {
-            username: "newuser".to_string(),
-            full_name: "New User".to_string(),
-            email: "newuser@example.com".to_string(),
+            email: VALID_USER_EMAIL_1.to_string(),
             password: VALID_USER_PASSWORD.to_string(),
         }));
         let resp = test::call_service(&app, req).await;
