@@ -33,5 +33,7 @@
     <MenuItem Text="About"
               IconImageSource="{OnPlatform 'icon_about.png', iOS='icon_about_ios.png', MacCatalyst='icon_about_ios.png'}"
               Clicked="OnAboutMenuItemClicked" />
+    <MenuItem Text="3D Demo"
+              Clicked="On3dDemoMenuItemClicked" />
 
 </Shell>
