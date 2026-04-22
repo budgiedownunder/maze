@@ -118,12 +118,30 @@ pub fn create_app(
                         }
                     }
                 };
+                let game_path = format!("{static_dir}/game/index.html");
+                let game = {
+                    let path = game_path.clone();
+                    move |req: HttpRequest| {
+                        let path = path.clone();
+                        async move {
+                            NamedFile::open_async(&path)
+                                .await
+                                .map(|f| f.into_response(&req))
+                        }
+                    }
+                };
                 cfg.route("/login",        web::get().to(spa.clone()))
                    .route("/signup",       web::get().to(spa.clone()))
                    .route("/mazes",        web::get().to(spa.clone()))
                    .route("/mazes/{tail}", web::get().to(spa.clone()))
                    .route("/play",         web::get().to(spa.clone()))
                    .route("/play/{tail}",  web::get().to(spa.clone()))
+                   .route("/game",         web::get().to(|| async {
+                       actix_web::HttpResponse::PermanentRedirect()
+                           .insert_header(("Location", "/game/"))
+                           .finish()
+                   }))
+                   .route("/game/",        web::get().to(game.clone()))
                    .service(
                        Files::new("/", &static_dir)
                            .index_file("index.html")

@@ -6,13 +6,14 @@ The `maze_web_server` crate is written in `Rust` and is a web server console app
 
 It leverages the `Rust` library crates for calculation and generation ([`maze`](../maze/README.md)) and storage ([`storage`](../storage/README.md)). It then exposes them using [`actix`](https://actix.rs/) to serve the API and [`utoipa`](https://docs.rs/utoipa/latest/utoipa/) to publish it as an [`OpenAPI`](https://www.openapis.org/)-compliant interface for use in third party products such as [`Swagger`](https://swagger.io/). 
 
-In addition to the API interfaces, it also supports the following documentation endpoints:
+In addition to the API interfaces, it also supports the following documentation and game endpoints:
 
 | EndPoint                  | Description
 |:--------------------------|:------------
 | `/api-docs/v1/rapidoc`    | [RapiDoc](https://rapidocweb.com/) 
 | `/api-docs/v1/redoc`      | [ReDoc](https://redocly.com/)
 | `/api-docs/v1/swagger-ui/`| [Swagger UI](https://swagger.io/tools/swagger-ui/)
+| `/game/`                  | Bevy WASM game (title screen)
 
 These pages provide interactive documentation and, in the case of the `RapiDoc` and `Swagger UI` interfaces, the ability to manually tests the API as well.
 

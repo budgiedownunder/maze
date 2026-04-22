@@ -10,6 +10,7 @@ The following `Rust` crates are present:
 |            | [`maze_c`](./maze_c/README.md) | Maze C API library
 |            | [`maze_console`](./maze_console/README.md) | Maze console application
 |            | [`maze_game_bevy`](./maze_game_bevy/README.md) | Maze game Bevy application (native binary and shared library)
+|            | [`maze_game_bevy_wasm`](./maze_game_bevy_wasm/README.md) | Maze game Bevy WASM target for the browser
 |            | [`maze_openapi_generator`](./maze_openapi_generator/README.md) | Maze OpenAPI generator console application
 |            | [`maze_wasm`](./maze_wasm/README.md) | Maze WebAssembly API library
 |            | [`maze_web_server`](./maze_web_server/README.md) | Maze web server console application
@@ -42,13 +43,8 @@ cargo build
 cd maze_wasm
 wasm-pack build --target web -- --features "wasm-bindgen"
 cargo build --target wasm32-unknown-unknown --release --features "wasm-lite"
-```
-
-To build the `maze_game_bevy` native binary:
-
-```
-cd src/rust
-cargo build -p maze_game_bevy
+cd ../maze_game_bevy_wasm
+wasm-pack build --target web --no-typescript --out-dir ../../react/maze_web_server/public/game
 ```
 
 ### Run
@@ -87,18 +83,19 @@ To test all `Rust` crates:
 
 ```
 cd src/rust
-cargo test --locked -p auth
+cargo test --locked -p utils
 cargo test --locked -p data_model
+cargo test --locked -p auth
+cargo test --locked -p maze_openapi_generator
+cargo test --locked -p maze_game_bevy
 cargo test --locked -p maze
 cargo test --locked -p maze --features generation
-cargo test --locked -p maze_c -- --test-threads=1
-cargo test --locked -p maze_console -- --test-threads=1
+cargo test --locked -p maze_game_bevy_wasm
 cargo test --locked -p storage -- --test-threads=1
+cargo test --locked -p maze_c -- --test-threads=1
 cargo test --locked -p maze_wasm
+cargo test --locked -p maze_console -- --test-threads=1
 cargo test --locked -p maze_web_server
-cargo test --locked -p maze_openapi_generator
-cargo test --locked -p utils
-cargo test --locked -p maze_game_bevy
 ```
 
 #### 2. JavaScript APIs
