@@ -98,6 +98,10 @@ namespace Maze.Maui.App.ViewModels
             LoadStatus = "Loading profile...";
         }
 
+        partial void OnUsernameChanged(string value) => ErrorMessage = "";
+        partial void OnFullNameChanged(string value) => ErrorMessage = "";
+        partial void OnEmailChanged(string value) => ErrorMessage = "";
+
         private bool CanSaveProfile() =>
             !IsBusy &&
             !string.IsNullOrWhiteSpace(Username) &&
