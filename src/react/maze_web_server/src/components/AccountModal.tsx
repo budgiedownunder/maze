@@ -5,6 +5,7 @@ import { useAuth, useToken } from '../context/AuthContext'
 import { ChangePasswordModal } from './ChangePasswordModal'
 import { ConfirmModal } from './ConfirmModal'
 import type { UserProfile } from '../types/api'
+import { isValidEmail } from '../utils/validation'
 
 interface Props {
   onClose: () => void
@@ -50,7 +51,8 @@ export function AccountModal({ onClose }: Props) {
     fullName !== saved.full_name ||
     email !== saved.email
   )
-  const saveDisabled = isSaving || isLoading || !hasChanges || !username.trim() || !email.trim()
+  const emailValid = isValidEmail(email)
+  const saveDisabled = isSaving || isLoading || !hasChanges || !username.trim() || !emailValid
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -63,8 +65,8 @@ export function AccountModal({ onClose }: Props) {
       setFullName(updated.full_name)
       setEmail(updated.email)
     } catch (ex: unknown) {
-      const status = (ex as { status?: number }).status
-      setError(status === 409 ? 'Username or email already in use' : 'Failed to save profile')
+      const err = ex as { status?: number; message?: string }
+      setError(err.status === 409 ? 'Username or email already in use' : (err.message ?? 'Failed to save profile'))
     } finally {
       setIsSaving(false)
     }
@@ -116,7 +118,9 @@ export function AccountModal({ onClose }: Props) {
 
             <label htmlFor="acc-email">Email</label>
             <input id="acc-email" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={isSaving} />
-            {!email.trim() && !isLoading && <p role="alert" className="error-msg">Email is required</p>}
+            {!isLoading && !emailValid && (
+              <p role="alert" className="error-msg">{email.trim() ? 'Please enter a valid email address' : 'Email is required'}</p>
+            )}
 
             {saved?.is_admin && (
               <span className="badge-admin">Administrator</span>

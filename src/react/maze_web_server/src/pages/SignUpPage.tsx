@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as api from '../api/client'
+import { isValidEmail } from '../utils/validation'
 import { useTheme } from '../context/ThemeContext'
 import { PasswordInput } from '../components/PasswordInput'
 import appIcon from '../assets/app.png'
@@ -12,6 +13,9 @@ export function validateSignupForm(fields: {
 }): string | null {
   if (!fields.email.trim() || !fields.password || !fields.confirmPassword) {
     return 'All fields are required'
+  }
+  if (!isValidEmail(fields.email)) {
+    return 'Please enter a valid email address'
   }
   if (fields.password !== fields.confirmPassword) {
     return 'Passwords do not match'
@@ -35,7 +39,10 @@ export function SignUpPage() {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
 
-  const allFilled = email.trim() && password && confirmPassword
+  useEffect(() => { setError(null) }, [email, password, confirmPassword])
+
+  const emailValid = isValidEmail(email)
+  const allFilled = emailValid && password && confirmPassword
   const submitDisabled = !allFilled || isLoading
 
   async function handleSubmit(e: React.FormEvent) {

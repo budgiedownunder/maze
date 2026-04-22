@@ -19,6 +19,10 @@ describe('validateSignupForm', () => {
     expect(validateSignupForm({ ...valid, confirmPassword: '' })).not.toBeNull()
   })
 
+  it('requires a valid email address', () => {
+    expect(validateSignupForm({ ...valid, email: 'mytest@x' })).toMatch(/valid email/i)
+  })
+
   it('requires passwords to match', () => {
     expect(validateSignupForm({ ...valid, confirmPassword: 'Different1!' })).toMatch(/match/)
   })
