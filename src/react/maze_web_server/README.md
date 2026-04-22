@@ -69,7 +69,7 @@ To run with Mock Service Worker (MSW) instead (no Rust server required):
 npm run dev:mock
 ```
 
-In mock mode the login handler accepts any username and password.
+In mock mode the login handler accepts any email address and password.
 
 ## Production build
 

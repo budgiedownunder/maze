@@ -23,16 +23,18 @@ mod test_definitions {
     const ADMIN_USERNAME_PREFIX:&str = "admin_";
     const USERNAME_PREFIX:&str = "user_";
     const VALID_USER_PASSWORD: &str = "Password1!";
-    const INVALID_USERNAME:&str = "INVALID_USERNAME";
-    const INVALID_USER_PASSWORD:&str = "BAD PASSWORD";
+    const INVALID_USERNAME: &str = "INVALID_USERNAME";
+    const INVALID_EMAIL: &str = "invalid@example.com";
+    const INVALID_USER_PASSWORD: &str = "BAD PASSWORD";
 
     const NEW_ADMIN_USERNAME_1: &str = "new_admin_1";
     const NEW_USERNAME_1: &str = "new_user_1";
 
-    const VALID_ADMIN_USERNAME_1:&str = "admin_1";
-    const VALID_ADMIN_USERNAME_2:&str = "admin_2";
-    const VALID_USERNAME_1:&str = "user_1";
-    const VALID_USERNAME_2:&str = "user_2";
+    const VALID_ADMIN_USERNAME_1: &str = "admin_1";
+    const VALID_ADMIN_USERNAME_2: &str = "admin_2";
+    const VALID_USERNAME_1: &str = "user_1";
+    const VALID_USERNAME_2: &str = "user_2";
+    const VALID_USER_EMAIL_1: &str = "user_1@company.com";
 
     /**************/
     /* Mock maze  */
@@ -213,7 +215,7 @@ mod test_definitions {
             if self.user_name_exists(&user.username, ignore_id) {
                 return Err(StoreError::UserNameExists());
             }
-            if !user.email.is_empty() && self.user_email_exists(&user.email, ignore_id) {
+            if self.user_email_exists(&user.email, ignore_id) {
                 return Err(StoreError::UserEmailExists());
             }
             Ok(())
@@ -289,7 +291,7 @@ mod test_definitions {
 
     impl UserStore for MockStore {
         /// Adds the default admin user to the store if it doesn't already exist, else returns it
-        fn init_default_admin_user(&mut self, _username: &str, _password_hash: &str) -> Result<User, StoreError> {
+        fn init_default_admin_user(&mut self, _username: &str, _email: &str, _password_hash: &str) -> Result<User, StoreError> {
             Err(StoreError::Other("init_default_admin_user() not implemented for MockStore".to_string()))
         }
         /// Adds a new user to the store and sets the allocated `id` within the user object
@@ -325,6 +327,10 @@ mod test_definitions {
         /// Locates a user by their username within the store
         fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
             MockStore::find_user_by_name_in_map(&self.users, name, Uuid::nil())
+        }
+        /// Locates a user by their email address within the store
+        fn find_user_by_email(&self, email: &str) -> Result<User, StoreError> {
+            self.find_user_by_email(email, Uuid::nil())
         }
         /// Locates a user by their api key within the store
         fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
@@ -708,7 +714,9 @@ mod test_definitions {
         add_login: bool,
         features: SharedFeatures,
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, SharedStore, HashMap<Uuid, MockUser>, Option<Uuid>, Option<Uuid>) {
-        create_test_app_with_config(user_defs, caller_username, add_login, features, AppConfig::default()).await
+        let mut config = AppConfig::default();
+        config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        create_test_app_with_config(user_defs, caller_username, add_login, features, config).await
     }
 
     async fn create_test_app(
@@ -720,12 +728,12 @@ mod test_definitions {
         create_test_app_with_features(user_defs, caller_username, add_login, features).await
     }
 
-    fn get_invalid_user_name_or_password_error_str() -> String {
-        "Invalid username or password".to_string()
+    fn get_invalid_email_or_password_error_str() -> String {
+        "Invalid email or password".to_string()
     }
 
-    fn get_user_name_and_password_must_be_provided_error_str() -> String {
-        "Username and password must be provided".to_string()
+    fn get_email_and_password_must_be_provided_error_str() -> String {
+        "Email and password must be provided".to_string()
     }
 
     fn get_store_read_lock(
@@ -737,10 +745,10 @@ mod test_definitions {
         }
     }
 
-    fn verify_user_login_presence(shared_store: &Arc<RwLock<Box<dyn Store>>>, username: &str, login_id: Uuid, expected_presence: bool) {
+    fn verify_user_login_presence(shared_store: &Arc<RwLock<Box<dyn Store>>>, email: &str, login_id: Uuid, expected_presence: bool) {
         let store_lock = get_store_read_lock(shared_store);
         // Confirm login id associated with user
-        match store_lock.find_user_by_name(username) {
+        match store_lock.find_user_by_email(email) {
             Ok(user) => {
                 let presence = user.contains_valid_login(login_id);
                 if presence != expected_presence {
@@ -754,7 +762,7 @@ mod test_definitions {
     #[allow(clippy::too_many_arguments)]
     async fn run_login_logout_test(
         create_users_def: &CreateUsersDef,
-        username: &str,
+        email: &str,
         password: &str,
         expected_login_status_code: StatusCode,
         expected_login_err_message: Option<String>,
@@ -766,7 +774,7 @@ mod test_definitions {
         let (app, shared_store, _, _, _) = create_test_app(&mut user_defs, None, false).await;
         let login_url = "/api/v1/login".to_string();
         let login_request = LoginRequest {
-            username: username.to_string(), 
+            email: email.to_string(),
             password: password.to_string(),
         };
         let login_req = create_test_post_request(&login_url, None, None, Some(&login_request));
@@ -782,7 +790,7 @@ mod test_definitions {
             assert_ne!(login_response.login_token_expires_at, DateTime::<Utc>::default());
 
             if run_logout_test {
-                verify_user_login_presence(&shared_store, username, login_id, true);
+                verify_user_login_presence(&shared_store, email, login_id, true);
 
                 // Logout
                 let logout_url = "/api/v1/logout".to_string();
@@ -793,7 +801,7 @@ mod test_definitions {
                 if let Some(expected_logout_status_code) = expected_logout_status_code {
                     assert_eq!(logout_resp.status(), expected_logout_status_code);
                     if expected_logout_status_code == StatusCode::NO_CONTENT {
-                        verify_user_login_presence(&shared_store, username, login_id, false);
+                        verify_user_login_presence(&shared_store, email, login_id, false);
                     }    
                 }
             } 
@@ -1620,10 +1628,10 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_login_if_no_users_exist() {
         run_login_logout_test(&CreateUsersDef::new(0, 0, MazeContent::Empty),
-            INVALID_USERNAME,
+            INVALID_EMAIL,
             INVALID_USER_PASSWORD,
             StatusCode::UNAUTHORIZED,
-            Some(get_invalid_user_name_or_password_error_str()),
+            Some(get_invalid_email_or_password_error_str()),
             false,
             false,
             None 
@@ -1631,12 +1639,12 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn cannot_login_if_no_username() {
+    async fn cannot_login_if_no_email() {
         run_login_logout_test(&CreateUsersDef::new(1, 1, MazeContent::Empty),
             "",
             INVALID_USER_PASSWORD,
             StatusCode::UNPROCESSABLE_ENTITY,
-            Some(get_user_name_and_password_must_be_provided_error_str()),
+            Some(get_email_and_password_must_be_provided_error_str()),
             false,
             false,
             None
@@ -1646,10 +1654,10 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_login_if_no_password() {
         run_login_logout_test(&CreateUsersDef::new(1, 1, MazeContent::Empty),
-            INVALID_USERNAME,
+            INVALID_EMAIL,
             "",
             StatusCode::UNPROCESSABLE_ENTITY,
-            Some(get_user_name_and_password_must_be_provided_error_str()),
+            Some(get_email_and_password_must_be_provided_error_str()),
             false,
             false,
             None
@@ -1657,12 +1665,12 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn cannot_login_if_username_does_not_exist() {
+    async fn cannot_login_if_email_does_not_exist() {
         run_login_logout_test(&CreateUsersDef::new(1, 1, MazeContent::Empty),
-            INVALID_USERNAME,
+            INVALID_EMAIL,
             INVALID_USER_PASSWORD,
             StatusCode::UNAUTHORIZED,
-            Some(get_invalid_user_name_or_password_error_str()),
+            Some(get_invalid_email_or_password_error_str()),
             false,
             false,
             None
@@ -1670,12 +1678,25 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn cannot_login_if_username_exists_and_bad_password() {
+    async fn cannot_login_if_email_format_is_invalid() {
         run_login_logout_test(&CreateUsersDef::new(1, 1, MazeContent::Empty),
-            VALID_USERNAME_1,
+            "notanemail",
             INVALID_USER_PASSWORD,
             StatusCode::UNAUTHORIZED,
-            Some(get_invalid_user_name_or_password_error_str()),
+            Some(get_invalid_email_or_password_error_str()),
+            false,
+            false,
+            None
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_login_if_email_exists_and_bad_password() {
+        run_login_logout_test(&CreateUsersDef::new(1, 1, MazeContent::Empty),
+            VALID_USER_EMAIL_1,
+            INVALID_USER_PASSWORD,
+            StatusCode::UNAUTHORIZED,
+            Some(get_invalid_email_or_password_error_str()),
             false,
             false,
             None
@@ -1685,7 +1706,7 @@ mod test_definitions {
     #[actix_web::test]
     async fn can_login_with_valid_credentials() {
         run_login_logout_test(&CreateUsersDef::new(1, 1, MazeContent::Empty),
-            VALID_USERNAME_1,
+            VALID_USER_EMAIL_1,
             VALID_USER_PASSWORD,
             StatusCode::OK,
             None,
@@ -1698,7 +1719,7 @@ mod test_definitions {
     #[actix_web::test]
     async fn can_login_and_logout_with_valid_credentials() {
         run_login_logout_test(&CreateUsersDef::new(1, 1, MazeContent::Empty),
-            VALID_USERNAME_1,
+            VALID_USER_EMAIL_1,
             VALID_USER_PASSWORD,
             StatusCode::OK,
             None,
@@ -1712,7 +1733,7 @@ mod test_definitions {
     #[should_panic(expected = "Unauthorized request")]
     async fn cannot_logout_if_login_id_not_set_in_logout_header() {
         run_login_logout_test(&CreateUsersDef::new(1, 1, MazeContent::Empty),
-            VALID_USERNAME_1,
+            VALID_USER_EMAIL_1,
             VALID_USER_PASSWORD,
             StatusCode::OK,
             None,
@@ -1730,7 +1751,7 @@ mod test_definitions {
         let (app, shared_store, _, _, _) = create_test_app(&mut user_defs, None, false).await;
 
         // Log in first
-        let login_request = LoginRequest { username: VALID_USERNAME_1.to_string(), password: VALID_USER_PASSWORD.to_string() };
+        let login_request = LoginRequest { email: VALID_USER_EMAIL_1.to_string(), password: VALID_USER_PASSWORD.to_string() };
         let login_req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
         let login_resp = test::call_service(&app, login_req).await;
         assert_eq!(login_resp.status(), StatusCode::OK);
@@ -1753,7 +1774,7 @@ mod test_definitions {
         // Expiry is extended
         assert!(renew_response.login_token_expires_at >= original_expiry);
         // Login still present in store
-        verify_user_login_presence(&shared_store, VALID_USERNAME_1, login_id, true);
+        verify_user_login_presence(&shared_store, VALID_USER_EMAIL_1, login_id, true);
     }
 
     #[actix_web::test]
@@ -2107,12 +2128,12 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn can_downgrade_admin_user_to_non_admin_with_admin_calle_with_api_key() {
+    async fn can_downgrade_admin_user_to_non_admin_with_admin_caller_with_api_key() {
         run_can_downgrade_admin_user_to_non_admin_with_admin_caller(false).await;
     }
 
     #[actix_web::test]
-    async fn can_downgrade_admin_user_to_non_admin_with_admin_calle_with_login() {
+    async fn can_downgrade_admin_user_to_non_admin_with_admin_caller_with_login() {
         run_can_downgrade_admin_user_to_non_admin_with_admin_caller(true).await;
     }
 
@@ -2836,25 +2857,11 @@ mod test_definitions {
     // signup / get_me / delete_me helpers
     // **************************************************************************************************
 
-    impl SignupRequest {
-        pub fn new(username: &str, full_name: &str, email: &str, password: &str) -> SignupRequest {
-            SignupRequest {
-                username: username.to_string(),
-                full_name: full_name.to_string(),
-                email: email.to_string(),
-                password: password.to_string(),
-            }
+    fn new_signup_request(email: &str, blank_password: bool) -> SignupRequest {
+        SignupRequest {
+            email: email.to_string(),
+            password: create_password(blank_password),
         }
-    }
-
-    fn new_signup_request(username: &str, email: Option<&str>, blank_password: bool) -> SignupRequest {
-        let email_use = email.unwrap_or(&new_email(username)).to_string();
-        SignupRequest::new(
-            username,
-            &format!("{username} full name"),
-            &email_use,
-            &create_password(blank_password),
-        )
     }
 
     async fn run_signup_test(
@@ -2875,8 +2882,7 @@ mod test_definitions {
             let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize signup response");
             // is_admin must always be false regardless of what the caller sends
             assert!(!response_user.is_admin, "signup must never create an admin user");
-            assert_eq!(response_user.username, signup_req.username);
-            assert_eq!(response_user.full_name, signup_req.full_name);
+            assert!(!response_user.username.is_empty(), "auto-generated username must not be empty");
             assert_eq!(response_user.email, signup_req.email);
             assert_ne!(response_user.id, Uuid::nil());
         }
@@ -2941,7 +2947,7 @@ mod test_definitions {
     async fn signup_with_valid_details_succeeds() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &new_signup_request(NEW_USERNAME_1, None, false),
+            &new_signup_request(&new_email(NEW_USERNAME_1), false),
             StatusCode::CREATED,
         ).await;
     }
@@ -2951,25 +2957,31 @@ mod test_definitions {
         // Even if an attacker crafts a request with is_admin, SignupRequest has no such field
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password1!"),
+            &new_signup_request(&new_email(NEW_USERNAME_1), false),
             StatusCode::CREATED,
         ).await;
     }
 
     #[actix_web::test]
-    async fn signup_with_duplicate_username_fails() {
-        run_signup_test(
-            &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &new_signup_request(VALID_USERNAME_1, None, false),
-            StatusCode::CONFLICT,
-        ).await;
+    async fn can_signup_and_username_is_generated_from_email() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let req = create_test_post_request("/api/v1/signup", None, None, Some(&SignupRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        }));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = test::read_body(resp).await;
+        let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize signup response");
+        assert!(response_user.username.starts_with(VALID_USERNAME_1), "expected username to start with '{}', got '{}'", VALID_USERNAME_1, response_user.username);
     }
 
     #[actix_web::test]
     async fn signup_with_duplicate_email_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &new_signup_request(NEW_USERNAME_1, Some(&new_email(VALID_USERNAME_1)), false),
+            &new_signup_request(&new_email(VALID_USERNAME_1), false),
             StatusCode::CONFLICT,
         ).await;
     }
@@ -2978,7 +2990,7 @@ mod test_definitions {
     async fn signup_with_blank_password_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &new_signup_request(NEW_USERNAME_1, None, true),
+            &new_signup_request(&new_email(NEW_USERNAME_1), true),
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -2987,7 +2999,7 @@ mod test_definitions {
     async fn signup_with_short_password_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Abc1!"),
+            &SignupRequest { email: new_email(NEW_USERNAME_1), password: "Abc1!".to_string() },
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -2996,7 +3008,7 @@ mod test_definitions {
     async fn signup_with_no_uppercase_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "password1!"),
+            &SignupRequest { email: new_email(NEW_USERNAME_1), password: "password1!".to_string() },
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -3005,7 +3017,7 @@ mod test_definitions {
     async fn signup_with_no_lowercase_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "PASSWORD1!"),
+            &SignupRequest { email: new_email(NEW_USERNAME_1), password: "PASSWORD1!".to_string() },
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -3014,7 +3026,7 @@ mod test_definitions {
     async fn signup_with_no_digit_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password!"),
+            &SignupRequest { email: new_email(NEW_USERNAME_1), password: "Password!".to_string() },
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -3023,7 +3035,7 @@ mod test_definitions {
     async fn signup_with_no_special_character_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            &SignupRequest::new(NEW_USERNAME_1, "Full Name", &new_email(NEW_USERNAME_1), "Password1"),
+            &SignupRequest { email: new_email(NEW_USERNAME_1), password: "Password1".to_string() },
             StatusCode::BAD_REQUEST,
         ).await;
     }
@@ -3663,9 +3675,7 @@ mod test_definitions {
         let mut user_defs = vec![];
         let (app, _, _, _, _) = create_test_app_with_features(&mut user_defs, None, false, features).await;
         let req = create_test_post_request("/api/v1/signup", None, None, Some(&SignupRequest {
-            username: "newuser".to_string(),
-            full_name: "New User".to_string(),
-            email: "newuser@example.com".to_string(),
+            email: VALID_USER_EMAIL_1.to_string(),
             password: VALID_USER_PASSWORD.to_string(),
         }));
         let resp = test::call_service(&app, req).await;
@@ -3678,9 +3688,7 @@ mod test_definitions {
         let mut user_defs = vec![];
         let (app, _, _, _, _) = create_test_app_with_features(&mut user_defs, None, false, features).await;
         let req = create_test_post_request("/api/v1/signup", None, None, Some(&SignupRequest {
-            username: "newuser".to_string(),
-            full_name: "New User".to_string(),
-            email: "newuser@example.com".to_string(),
+            email: VALID_USER_EMAIL_1.to_string(),
             password: VALID_USER_PASSWORD.to_string(),
         }));
         let resp = test::call_service(&app, req).await;

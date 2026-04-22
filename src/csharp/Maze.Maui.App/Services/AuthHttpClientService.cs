@@ -11,8 +11,8 @@ namespace Maze.Maui.App.Services
     /// </summary>
     internal class LoginRequest
     {
-        [JsonPropertyName("username")]
-        public string Username { get; set; } = "";
+        [JsonPropertyName("email")]
+        public string Email { get; set; } = "";
 
         [JsonPropertyName("password")]
         public string Password { get; set; } = "";
@@ -74,12 +74,6 @@ namespace Maze.Maui.App.Services
     /// </summary>
     internal class SignupRequest
     {
-        [JsonPropertyName("username")]
-        public string Username { get; set; } = "";
-
-        [JsonPropertyName("full_name")]
-        public string FullName { get; set; } = "";
-
         [JsonPropertyName("email")]
         public string Email { get; set; } = "";
 
@@ -119,9 +113,9 @@ namespace Maze.Maui.App.Services
             => await SecureStorage.Default.GetAsync(TOKEN_STORAGE_KEY);
 
         /// <inheritdoc/>
-        public async Task<UserProfile> SignInAsync(string username, string password)
+        public async Task<UserProfile> SignInAsync(string email, string password)
         {
-            var body = JsonSerializer.Serialize(new LoginRequest { Username = username, Password = password });
+            var body = JsonSerializer.Serialize(new LoginRequest { Email = email, Password = password });
             var content = new StringContent(body, Encoding.UTF8, "application/json");
             var response = await _httpClient.PostAsync("login", content);
             await EnsureSuccessAsync(response, "Sign in failed");
@@ -160,12 +154,10 @@ namespace Maze.Maui.App.Services
         }
 
         /// <inheritdoc/>
-        public async Task<UserProfile> SignUpAsync(string username, string fullName, string email, string password)
+        public async Task<UserProfile> SignUpAsync(string email, string password)
         {
             var body = JsonSerializer.Serialize(new SignupRequest
             {
-                Username = username,
-                FullName = fullName,
                 Email = email,
                 Password = password
             });

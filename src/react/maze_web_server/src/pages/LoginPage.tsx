@@ -7,7 +7,7 @@ import { PasswordInput } from '../components/PasswordInput'
 import appIcon from '../assets/app.png'
 
 export function LoginPage() {
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -17,18 +17,18 @@ export function LoginPage() {
   const { allow_signup } = useAppFeatures()
 
   const isBusy = isLoading || isSubmitting
-  const submitDisabled = !username.trim() || !password || isBusy
+  const submitDisabled = !email.trim() || !password || isBusy
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setIsSubmitting(true)
     try {
-      await login(username, password)
+      await login(email, password)
       navigate('/mazes', { replace: true })
     } catch (ex: unknown) {
       const status = (ex as { status?: number }).status
-      setError(status === 401 ? 'Invalid username or password' : 'Login failed. Please try again.')
+      setError(status === 401 ? 'Invalid email or password' : 'Login failed. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -50,13 +50,14 @@ export function LoginPage() {
       <p className="auth-subtitle">Sign in to your account</p>
 
       <form onSubmit={handleSubmit} className="auth-form">
-        <label htmlFor="username">Username</label>
+        <label htmlFor="email">Email</label>
         <input
-          id="username"
-          value={username}
-          onChange={e => setUsername(e.target.value)}
+          type="email"
+          id="email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
           disabled={isBusy}
-          autoComplete="username"
+          autoComplete="email"
         />
 
         <label htmlFor="password">Password</label>

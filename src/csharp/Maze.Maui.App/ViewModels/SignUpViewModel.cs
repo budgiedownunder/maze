@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Maze.Maui.App.Services;
+using System.Net;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -10,14 +11,6 @@ namespace Maze.Maui.App.ViewModels
     public partial class SignUpViewModel : BaseViewModel
     {
         private readonly IAuthService _authService;
-
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(SignUpCommand))]
-        private string username = "";
-
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(SignUpCommand))]
-        private string fullName = "";
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SignUpCommand))]
@@ -40,6 +33,10 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private bool showConfirmPassword = false;
 
+        partial void OnEmailChanged(string value) => ErrorMessage = "";
+        partial void OnPasswordChanged(string value) => ErrorMessage = "";
+        partial void OnConfirmPasswordChanged(string value) => ErrorMessage = "";
+
         [RelayCommand]
         private void ToggleShowPassword() => ShowPassword = !ShowPassword;
 
@@ -57,7 +54,7 @@ namespace Maze.Maui.App.ViewModels
         }
 
         private bool CanSignUp() =>
-            !string.IsNullOrWhiteSpace(Username) &&
+            !string.IsNullOrWhiteSpace(Email) &&
             !string.IsNullOrWhiteSpace(Password) &&
             !string.IsNullOrWhiteSpace(ConfirmPassword) &&
             !IsBusy;
@@ -85,12 +82,16 @@ namespace Maze.Maui.App.ViewModels
             ErrorMessage = "";
             try
             {
-                await _authService.SignUpAsync(Username, FullName, Email, Password);
+                await _authService.SignUpAsync(Email, Password);
                 await Shell.Current.GoToAsync("..");
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
             {
-                ErrorMessage = ex.Message;
+                ErrorMessage = "Email already in use";
+            }
+            catch
+            {
+                ErrorMessage = "Sign up failed. Please try again.";
             }
             finally
             {

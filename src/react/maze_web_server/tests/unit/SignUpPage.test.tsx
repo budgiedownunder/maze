@@ -15,15 +15,11 @@ vi.mock('react-router-dom', async () => {
 
 async function fillForm(overrides: Partial<Record<string, string>> = {}) {
   const fields = {
-    username: 'newuser',
-    fullName: 'New User',
     email: 'new@example.com',
     password: 'Password1!',
     confirmPassword: 'Password1!',
     ...overrides,
   }
-  if (fields.username) await userEvent.type(screen.getByLabelText(/username/i), fields.username)
-  if (fields.fullName) await userEvent.type(screen.getByLabelText(/full name/i), fields.fullName)
   if (fields.email) await userEvent.type(screen.getByLabelText(/email/i), fields.email)
   const passwordInputs = screen.getAllByLabelText(/password/i)
   if (fields.password) await userEvent.type(passwordInputs[0], fields.password)
@@ -46,6 +42,12 @@ describe('SignUpPage', () => {
     expect(screen.getByRole('button', { name: /sign up/i })).toBeDisabled()
   })
 
+  it('disables Sign Up button when email has no domain dot', async () => {
+    renderSignUpPage()
+    await fillForm({ email: 'mytest@x' })
+    expect(screen.getByRole('button', { name: /sign up/i })).toBeDisabled()
+  })
+
   it('shows validation error for mismatched passwords before API call', async () => {
     renderSignUpPage()
     await fillForm({ confirmPassword: 'Different1!' })
@@ -58,6 +60,18 @@ describe('SignUpPage', () => {
     await fillForm({ password: 'weak', confirmPassword: 'weak' })
     await userEvent.click(screen.getByRole('button', { name: /sign up/i }))
     expect(screen.getByRole('alert')).toBeInTheDocument()
+  })
+
+  it('clears API error when a field is edited', async () => {
+    server.use(
+      http.post('/api/v1/signup', () => HttpResponse.json(null, { status: 409 })),
+    )
+    renderSignUpPage()
+    await fillForm()
+    await userEvent.click(screen.getByRole('button', { name: /sign up/i }))
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+    await userEvent.type(screen.getByLabelText(/email/i), 'x')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('navigates to /login on successful signup', async () => {

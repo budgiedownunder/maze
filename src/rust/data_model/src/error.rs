@@ -4,6 +4,7 @@ use std::error::Error as StdError;
 /// Represents a user validation error
 pub enum UserValidationError {
     EmailInvalid,
+    EmailMissing,
     IdMissing,
     UsernameMissing,
     PasswordMissing
@@ -27,6 +28,7 @@ impl std::fmt::Display for UserValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
             UserValidationError::EmailInvalid => write!(f, "Invalid email address"),
+            UserValidationError::EmailMissing => write!(f, "No email address provided for the user"),
             UserValidationError::IdMissing => write!(f, "No id provided for the user"),
             UserValidationError::UsernameMissing => write!(f, "No username provided for the user"),
             UserValidationError::PasswordMissing => write!(f, "No password provided for the user"),

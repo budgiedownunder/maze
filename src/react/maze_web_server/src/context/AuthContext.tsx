@@ -50,7 +50,7 @@ interface AuthContextValue {
   isLoading: boolean
   isAuthenticated: boolean
   profile: UserProfile | null
-  login: (username: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -125,8 +125,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return stopRenewalInterval
   }, [])
 
-  async function login(username: string, password: string) {
-    const response = await api.login(username, password)
+  async function login(email: string, password: string) {
+    const response = await api.login(email, password)
     const state: AuthState = {
       token: response.login_token_id,
       issuedAt: new Date().toISOString(),

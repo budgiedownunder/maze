@@ -34,14 +34,14 @@ namespace Maze.Maui.App.Services
         /// <summary>Returns the stored bearer token, or null if not authenticated.</summary>
         Task<string?> GetBearerTokenAsync();
 
-        /// <summary>Signs in with username and password. Stores the returned bearer token. Returns the user profile.</summary>
-        Task<UserProfile> SignInAsync(string username, string password);
+        /// <summary>Signs in with email and password. Stores the returned bearer token. Returns the user profile.</summary>
+        Task<UserProfile> SignInAsync(string email, string password);
 
         /// <summary>Signs out, removing the stored bearer token.</summary>
         Task SignOutAsync();
 
         /// <summary>Registers a new account. Does not auto sign-in.</summary>
-        Task<UserProfile> SignUpAsync(string username, string fullName, string email, string password);
+        Task<UserProfile> SignUpAsync(string email, string password);
 
         /// <summary>Returns the profile for the currently authenticated user.</summary>
         Task<UserProfile> GetMyProfileAsync();

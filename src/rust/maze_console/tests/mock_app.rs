@@ -90,7 +90,7 @@ impl Default for MockApp {
         let file_config = storage::FileStoreConfig::default();
         match get_store(storage::StoreConfig::File(file_config)) {
             Ok(mut store) => {
-                match store.init_default_admin_user("admin", "dummy_password_hash") {
+                match store.init_default_admin_user("admin", "admin@maze.local", "dummy_password_hash") {
                     Ok(user) => MockApp::new(store, &user),
                     Err(error) => {
                         panic!(

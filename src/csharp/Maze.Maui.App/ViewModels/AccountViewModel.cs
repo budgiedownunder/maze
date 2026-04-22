@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
 using System.Net;
+using System.Text.RegularExpressions;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -74,9 +75,9 @@ namespace Maze.Maui.App.ViewModels
                 IsAdmin = profile.IsAdmin;
                 LoadStatus = "";
             }
-            catch (Exception ex)
+            catch
             {
-                ErrorMessage = ex.Message;
+                ErrorMessage = "Failed to load profile. Please try again.";
             }
             finally
             {
@@ -97,9 +98,14 @@ namespace Maze.Maui.App.ViewModels
             LoadStatus = "Loading profile...";
         }
 
+        partial void OnUsernameChanged(string value) => ErrorMessage = "";
+        partial void OnFullNameChanged(string value) => ErrorMessage = "";
+        partial void OnEmailChanged(string value) => ErrorMessage = "";
+
         private bool CanSaveProfile() =>
             !IsBusy &&
             !string.IsNullOrWhiteSpace(Username) &&
+            !string.IsNullOrWhiteSpace(Email) &&
             (Username != _loadedUsername || FullName != _loadedFullName || Email != _loadedEmail);
 
         /// <summary>
@@ -108,6 +114,11 @@ namespace Maze.Maui.App.ViewModels
         [RelayCommand(CanExecute = nameof(CanSaveProfile))]
         private async Task SaveProfile()
         {
+            if (!Regex.IsMatch(Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+            {
+                ErrorMessage = "Please enter a valid email address";
+                return;
+            }
             IsBusy = true;
             ErrorMessage = "";
             try
@@ -122,9 +133,9 @@ namespace Maze.Maui.App.ViewModels
             {
                 ErrorMessage = "Username or email is already in use by another account";
             }
-            catch (Exception ex)
+            catch
             {
-                ErrorMessage = ex.Message;
+                ErrorMessage = "Failed to save profile. Please try again.";
             }
             finally
             {
@@ -166,9 +177,9 @@ namespace Maze.Maui.App.ViewModels
                 ClearProfile();
                 await Shell.Current.GoToAsync("//LoginPage");
             }
-            catch (Exception ex)
+            catch
             {
-                ErrorMessage = ex.Message;
+                ErrorMessage = "Failed to delete account. Please try again.";
             }
             finally
             {

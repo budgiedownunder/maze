@@ -34,11 +34,11 @@ export function updateAdminFeatures(token: string, features: AppFeatures): Promi
   })
 }
 
-export function login(username: string, password: string): Promise<LoginResponse> {
+export function login(email: string, password: string): Promise<LoginResponse> {
   return request<LoginResponse>('/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ email, password }),
   })
 }
 
@@ -57,16 +57,11 @@ export function renewToken(token: string): Promise<RenewResponse> {
   })
 }
 
-export function signup(
-  username: string,
-  full_name: string,
-  email: string,
-  password: string,
-): Promise<void> {
+export function signup(email: string, password: string): Promise<void> {
   return requestEmpty('/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, full_name, email, password }),
+    body: JSON.stringify({ email, password }),
   })
 }
 

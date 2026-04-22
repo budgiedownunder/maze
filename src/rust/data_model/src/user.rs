@@ -1,9 +1,18 @@
 use crate::{Error, wrappers::{generate_now, generate_uuid}, UserLogin, UserValidationError};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-/// Represents a user of the system 
+// Checks that email has the shape local@domain.tld with no whitespace in any part.
+fn is_valid_email_format(email: &str) -> bool {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").expect("Invalid email regex"));
+    re.is_match(email)
+}
+
+/// Represents a user of the system
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
 pub struct User {
     #[schema(value_type = String)] // Treat as string during serlialization
@@ -178,7 +187,7 @@ impl User {
     ///
     /// # Examples
     ///
-    /// Initialize a user with an invalid email address (missing @) and validate it
+    /// Initialize a user with an invalid email address and validate it
     /// ```
     /// use data_model::User;
     /// let user = User {
@@ -209,7 +218,10 @@ impl User {
         if self.username.is_empty() {
             return Err(Error::UserValidation(UserValidationError::UsernameMissing));
         }
-        if !self.email.is_empty() && !self.email.contains("@") {
+        if self.email.trim().is_empty() {
+            return Err(Error::UserValidation(UserValidationError::EmailMissing));
+        }
+        if !is_valid_email_format(&self.email) {
             return Err(Error::UserValidation(UserValidationError::EmailInvalid));
         }
         if self.password_hash.is_empty() {
@@ -557,12 +569,26 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Invalid email address"
-    )]    
+    #[should_panic(expected = "No email address provided for the user")]
+    fn user_validation_should_fail_with_missing_email() {
+        let mut user = create_valid_user();
+        user.email = "".to_string();
+        validate_user(&user);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid email address")]
     fn user_validation_should_fail_with_bad_email() {
         let mut user = create_valid_user();
         user.email = "bad_email".to_string();
+        validate_user(&user);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid email address")]
+    fn user_validation_should_fail_with_email_missing_tld() {
+        let mut user = create_valid_user();
+        user.email = "x@y".to_string();
         validate_user(&user);
     }
 

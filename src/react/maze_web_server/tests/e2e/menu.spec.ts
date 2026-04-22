@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 test.beforeEach(async ({ page }) => {
   // Log in to reach the mazes page
   await page.goto('/login')
-  await page.getByLabel('Username').fill('testuser')
+  await page.getByLabel('Email').fill('test@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password1!')
   await page.getByRole('button', { name: /sign in/i }).click()
   await expect(page).toHaveURL(/\/mazes/)

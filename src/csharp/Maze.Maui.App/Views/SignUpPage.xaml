@@ -43,46 +43,26 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <Label Grid.Row="0" Grid.Column="0"
-                           Text="Username"
-                           VerticalOptions="Center" />
-                    <Entry Grid.Row="0" Grid.Column="1"
-                           Text="{Binding Username}"
-                           ReturnType="Next"
-                           Keyboard="Plain"
-                           MinimumWidthRequest="150" />
-
-                    <Label Grid.Row="1" Grid.Column="0"
-                           Text="Full Name"
-                           VerticalOptions="Center" />
-                    <Entry Grid.Row="1" Grid.Column="1"
-                           Text="{Binding FullName}"
-                           ReturnType="Next"
-                           Keyboard="Text"
-                           MinimumWidthRequest="150" />
-
-                    <Label Grid.Row="2" Grid.Column="0"
                            Text="Email"
                            VerticalOptions="Center" />
-                    <Entry Grid.Row="2" Grid.Column="1"
+                    <Entry Grid.Row="0" Grid.Column="1"
                            Text="{Binding Email}"
                            ReturnType="Next"
                            Keyboard="Email"
                            MinimumWidthRequest="150" />
 
-                    <Label Grid.Row="3" Grid.Column="0"
+                    <Label Grid.Row="1" Grid.Column="0"
                            Text="Password"
                            VerticalOptions="Center" />
-                    <Entry Grid.Row="3" Grid.Column="1"
+                    <Entry Grid.Row="1" Grid.Column="1"
                            Text="{Binding Password}"
                            IsPassword="{Binding ShowPassword, Converter={StaticResource InvertBoolConverter}}"
                            ReturnType="Next"
                            MinimumWidthRequest="150" />
-                    <ImageButton Grid.Row="3" Grid.Column="2"
+                    <ImageButton Grid.Row="1" Grid.Column="2"
                                  Source="icon_show_password.png"
                                  Command="{Binding ToggleShowPasswordCommand}"
                                  BackgroundColor="Transparent"
@@ -99,16 +79,16 @@
                         </ImageButton.Triggers>
                     </ImageButton>
 
-                    <Label Grid.Row="4" Grid.Column="0"
+                    <Label Grid.Row="2" Grid.Column="0"
                            Text="Confirm Password"
                            VerticalOptions="Center" />
-                    <Entry Grid.Row="4" Grid.Column="1"
+                    <Entry Grid.Row="2" Grid.Column="1"
                            Text="{Binding ConfirmPassword}"
                            IsPassword="{Binding ShowConfirmPassword, Converter={StaticResource InvertBoolConverter}}"
                            ReturnType="Go"
                            ReturnCommand="{Binding SignUpCommand}"
                            MinimumWidthRequest="150" />
-                    <ImageButton Grid.Row="4" Grid.Column="2"
+                    <ImageButton Grid.Row="2" Grid.Column="2"
                                  Source="icon_show_password.png"
                                  Command="{Binding ToggleShowConfirmPasswordCommand}"
                                  BackgroundColor="Transparent"

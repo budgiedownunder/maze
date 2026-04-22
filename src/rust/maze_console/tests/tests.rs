@@ -20,7 +20,7 @@ fn new_mock_app() -> MockApp {
             if let Err(error) = store.empty() {
                 panic!("new_mock_app() failed to empty store content: {error}");
             }
-            match store.init_default_admin_user("admin", "dummy_password_hash") {
+            match store.init_default_admin_user("admin", "admin@maze.local", "dummy_password_hash") {
                 Ok(user) => MockApp::new(store, &user),
                 Err(error) => {
                     panic!(
