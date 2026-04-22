@@ -1,0 +1,26 @@
+[package]
+name = "maze_game_bevy"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "maze_game_bevy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "maze_game_bevy"
+path = "src/main.rs"
+
+[dependencies]
+bevy = { version = "0.18", default-features = false, features = [
+    "bevy_asset",
+    "bevy_color",
+    "bevy_core_pipeline",
+    "bevy_render",
+    "bevy_sprite",
+    "bevy_sprite_render",
+    "bevy_text",
+    "bevy_winit",
+    "default_font",
+    "multi_threaded",
+] }
