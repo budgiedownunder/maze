@@ -7,6 +7,8 @@ The `maze_game_bevy` crate is written in `Rust` and provides the [Bevy](https://
 - The **library** owns all Bevy systems and app setup
 - The **binary** runs the game as a native desktop application
 
+On launch the app displays a layered gold title screen ("MAZE GAME") for 1.5 seconds, then transitions to a first-person 3D maze world rendered via Bevy PBR. Wall panels are spawned on the exposed faces of passable cells, ensuring boundary walls are always visible even when the maze data has no explicit outer wall row.
+
 ## Getting Started
 
 ### Build
