@@ -15,12 +15,14 @@ The `maze_game_bevy` crate is written in `Rust` and provides the [Bevy](https://
 
 ### Controls
 
-| Key | Action |
-|-----|--------|
+| Input | Action |
+|-------|--------|
 | `←` / `A` | Turn left |
 | `→` / `D` | Turn right |
 | `↑` / `W` | Move forward |
 | `Escape` | Quit |
+
+On touch devices (browser and MAUI WebView) a D-pad overlay replaces keyboard input: three buttons for turn left, move forward, and turn right. The overlay is shown automatically when `pointer: coarse` is detected and hidden on desktop.
 
 ### Visual features
 

@@ -6,15 +6,103 @@
   <title>Maze Game</title>
   <style>
     * { margin: 0; padding: 0; }
-    body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
-    canvas { width: 100%; height: 100%; touch-action: none; }
+    body {
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
+    }
+    #game-wrap {
+      flex: 1;
+      min-height: 0;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    #controls { display: none; }
+    .game-dpad { display: none; }
+
+    @media (pointer: coarse) {
+      #controls {
+        display: flex;
+        justify-content: center;
+        background: #111;
+        padding: 8px;
+      }
+      .game-dpad {
+        display: grid;
+        grid-template-areas: ". up ." "left . right";
+        gap: 4px;
+        touch-action: none;
+      }
+      .game-dpad button {
+        background: #ac99ea;
+        border: none;
+        border-radius: 8px;
+        padding: 8px;
+        cursor: pointer;
+        touch-action: none;
+        -webkit-touch-callout: none;
+        user-select: none;
+        -webkit-user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .game-dpad button img {
+        display: block;
+        pointer-events: none;
+        -webkit-touch-callout: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+    }
   </style>
 </head>
 <body>
-  <canvas id="bevy-canvas"></canvas>
+  <div id="game-wrap">
+    <canvas id="bevy-canvas"></canvas>
+  </div>
+  <div id="controls">
+    <div class="game-dpad" aria-label="D-pad">
+      <button type="button" tabindex="-1" style="grid-area:up"    aria-label="Move forward">
+        <img src="/images/maze/dpad_up.png"    alt="" draggable="false">
+      </button>
+      <button type="button" tabindex="-1" style="grid-area:left"  aria-label="Turn left">
+        <img src="/images/maze/dpad_left.png"  alt="" draggable="false">
+      </button>
+      <button type="button" tabindex="-1" style="grid-area:right" aria-label="Turn right">
+        <img src="/images/maze/dpad_right.png" alt="" draggable="false">
+      </button>
+    </div>
+  </div>
   <script type="module">
     import init from './maze_game_bevy_wasm.js';
     await init();
+
+    const canvas = document.getElementById('bevy-canvas');
+    canvas.focus({ preventScroll: true });
+
+    function fire(key, type) {
+      canvas.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
+    }
+    const btnDefs = [
+      { label: 'Move forward', key: 'ArrowUp' },
+      { label: 'Turn left',    key: 'ArrowLeft' },
+      { label: 'Turn right',   key: 'ArrowRight' },
+    ];
+    for (const { label, key } of btnDefs) {
+      const btn = document.querySelector(`[aria-label="${label}"]`);
+      btn.addEventListener('pointerdown',   e => { e.preventDefault(); fire(key, 'keydown'); });
+      btn.addEventListener('pointerup',     e => { e.preventDefault(); fire(key, 'keyup'); });
+      btn.addEventListener('pointerleave',  () => fire(key, 'keyup'));
+      btn.addEventListener('pointercancel', () => fire(key, 'keyup'));
+      btn.addEventListener('contextmenu',   e => e.preventDefault());
+    }
   </script>
 </body>
 </html>
