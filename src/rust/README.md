@@ -73,8 +73,8 @@ cargo run
 To run the `maze_game_bevy` application:
 
 ```
-cd src/rust/maze_game_bevy
-cargo run
+cd src/rust
+cargo run -p maze_game_bevy
 ```
 
 ### Testing
