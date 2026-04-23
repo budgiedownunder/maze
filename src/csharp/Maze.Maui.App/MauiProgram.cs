@@ -37,6 +37,7 @@ namespace Maze.Maui.App
                         Android.Graphics.Color.White,
                         Android.Graphics.PorterDuff.Mode.SrcIn!);
             });
+
 #elif IOS || MACCATALYST
             // Same limitation applies on iOS — IconTintColorBehavior does not tint inside SwipeItemView.
             Microsoft.Maui.Handlers.ImageHandler.Mapper.AppendToMapping("SwipeItemWhiteTint", (handler, view) =>
@@ -59,6 +60,10 @@ namespace Maze.Maui.App
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
+
+            GameWebViewHandler.IgnoreSslErrors = new ConfigurationService().DisableStrictTLSCertificateValidation;
+            builder.ConfigureMauiHandlers(handlers =>
+                handlers.AddHandler<WebView, GameWebViewHandler>());
 
             InitializeMazeInterop();
 
