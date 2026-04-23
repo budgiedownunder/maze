@@ -20,6 +20,7 @@ The `maze_game_bevy` crate is written in `Rust` and provides the [Bevy](https://
 | `←` / `A` | Turn left |
 | `→` / `D` | Turn right |
 | `↑` / `W` | Move forward |
+| `Escape` | Quit |
 
 ### Visual features
 
@@ -27,6 +28,7 @@ The `maze_game_bevy` crate is written in `Rust` and provides the [Bevy](https://
 - Floor grid lines at cell boundaries for orientation feedback.
 - Start cell highlighted green; finish cell highlighted white.
 - Minimap overlay (top-right corner) — fixed 7×7 viewport centred on the player with fog of war; only explored cells and their immediate neighbours are revealed. Player position shown as a directional arrow.
+- Win overlay — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen.
 
 ## Getting Started
 

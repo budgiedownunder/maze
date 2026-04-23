@@ -59,6 +59,9 @@ struct FloorLine;
 struct FinishOrb;
 
 #[derive(Component)]
+struct WinOverlay;
+
+#[derive(Component)]
 struct MinimapCamera;
 
 #[derive(Component)]
@@ -146,6 +149,7 @@ struct GameState {
     visual_yaw: f32,
     anim: Option<Animation>,
     explored: HashSet<(usize, usize)>,
+    won: bool,
 }
 
 pub fn build_app(app: &mut App) {
@@ -158,7 +162,8 @@ pub fn build_app(app: &mut App) {
         .add_systems(OnEnter(AppState::Playing), spawn_world)
         .add_systems(Update, movement_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap_system.run_if(in_state(AppState::Playing)))
-        .add_systems(Update, orb_system.run_if(in_state(AppState::Playing)));
+        .add_systems(Update, orb_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, quit_system);
 }
 
 fn setup_title(mut commands: Commands) {
@@ -231,6 +236,7 @@ fn spawn_world(
         visual_yaw: PI,
         anim: None,
         explored,
+        won: false,
     });
 
     // Camera at start cell, facing South (yaw = PI, looking into the maze interior)
@@ -541,6 +547,7 @@ fn spawn_world(
 }
 
 fn movement_system(
+    mut commands: Commands,
     time: Res<Time>,
     keys: Option<Res<ButtonInput<KeyCode>>>,
     mut state: ResMut<GameState>,
@@ -559,6 +566,29 @@ fn movement_system(
         let anim = state.anim.take().unwrap();
         state.visual_pos = anim.target_pos;
         state.visual_yaw = anim.target_yaw;
+
+        // Check whether the player just arrived at the finish cell
+        let (r, c) = (state.game.player_row(), state.game.player_col());
+        if !state.won && state.grid[r][c] == 'F' {
+            state.won = true;
+            commands.spawn((WinOverlay, Sprite {
+                color: Color::srgba(0.0, 0.0, 0.0, 0.75),
+                custom_size: Some(Vec2::new(340.0, 130.0)),
+                ..default()
+            }, Transform::from_xyz(0.0, 0.0, 10.0)));
+            commands.spawn((WinOverlay,
+                Text2d::new("You Win!"),
+                TextFont { font_size: 72.0, ..default() },
+                TextColor(Color::srgb(1.0, 0.8, 0.1)),
+                Transform::from_xyz(0.0, 16.0, 11.0),
+            ));
+            commands.spawn((WinOverlay,
+                Text2d::new("Maze complete"),
+                TextFont { font_size: 24.0, ..default() },
+                TextColor(Color::WHITE),
+                Transform::from_xyz(0.0, -36.0, 11.0),
+            ));
+        }
     } else if state.anim.is_some() {
         let pos = state.anim.as_ref().unwrap().current_pos();
         let yaw = state.anim.as_ref().unwrap().current_yaw();
@@ -566,8 +596,8 @@ fn movement_system(
         state.visual_yaw = yaw;
     }
 
-    // Process input only when idle and input is available (absent in headless tests)
-    if state.anim.is_none() {
+    // Process input only when idle, game not won, and input is available (absent in headless tests)
+    if state.anim.is_none() && !state.won {
         let Some(keys) = keys else { return; };
         let left = keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::KeyA);
         let right = keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::KeyD);
@@ -660,6 +690,17 @@ fn minimap_system(
     if let Ok(mut t) = player_q.single_mut() {
         t.translation = Vec3::new(config.center_x, config.center_y, 1.0);
         t.rotation = Quat::from_rotation_z(state.visual_yaw);
+    }
+}
+
+fn quit_system(
+    keys: Option<Res<ButtonInput<KeyCode>>>,
+    mut exit: bevy::ecs::message::MessageWriter<AppExit>,
+) {
+    if let Some(keys) = keys {
+        if keys.just_pressed(KeyCode::Escape) {
+            exit.write(AppExit::Success);
+        }
     }
 }
 
