@@ -40,6 +40,18 @@ struct TitleTimer(Timer);
 #[derive(Component)]
 struct TitleEntity;
 
+#[derive(Component, PartialEq)]
+enum TitleTextKind { Shadow, Gold, Sub }
+
+#[derive(Component)]
+struct WinMainText;
+
+#[derive(Component)]
+struct WinSubText;
+
+#[derive(Component)]
+struct WinBackground;
+
 #[derive(Component)]
 struct WallCell;
 
@@ -158,9 +170,11 @@ pub fn build_app(app: &mut App) {
         .insert_resource(ClearColor(Color::BLACK))
         .add_systems(OnEnter(AppState::TitleScreen), setup_title)
         .add_systems(Update, tick_title.run_if(in_state(AppState::TitleScreen)))
+        .add_systems(Update, title_resize_system.run_if(in_state(AppState::TitleScreen)))
         .add_systems(OnExit(AppState::TitleScreen), teardown_title)
         .add_systems(OnEnter(AppState::Playing), spawn_world)
         .add_systems(Update, movement_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, win_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, quit_system);
@@ -168,13 +182,14 @@ pub fn build_app(app: &mut App) {
 
 fn setup_title(mut commands: Commands) {
     commands.spawn((Camera2d, TitleEntity));
-    // Shadow layer — offset down-right to create depth illusion
+    // Shadow layer — offset down-right; font size updated reactively by title_resize_system
     commands.spawn((
         Text2d::new("MAZE GAME"),
         TextFont { font_size: 96.0, ..default() },
         TextColor(Color::srgb(0.25, 0.15, 0.0)),
         Transform::from_translation(Vec3::new(4.0, -4.0, -0.1)),
         TitleEntity,
+        TitleTextKind::Shadow,
     ));
     // Main gold layer
     commands.spawn((
@@ -182,6 +197,7 @@ fn setup_title(mut commands: Commands) {
         TextFont { font_size: 96.0, ..default() },
         TextColor(Color::srgb(1.0, 0.75, 0.1)),
         TitleEntity,
+        TitleTextKind::Gold,
     ));
     // Subtitle
     commands.spawn((
@@ -190,7 +206,39 @@ fn setup_title(mut commands: Commands) {
         TextColor(Color::WHITE),
         Transform::from_translation(Vec3::new(0.0, -80.0, 0.0)),
         TitleEntity,
+        TitleTextKind::Sub,
     ));
+}
+
+fn title_resize_system(
+    window: Query<&Window>,
+    mut last_width: Local<f32>,
+    mut texts: Query<(&mut TextFont, &mut Transform, &TitleTextKind)>,
+) {
+    let width = window.single().map(|w| w.width()).unwrap_or(1280.0);
+    if (width - *last_width).abs() < 0.5 { return; }
+    *last_width = width;
+
+    let font_size = (width / 5.5).min(96.0);
+    let shadow_off = font_size / 24.0;
+    let subtitle_size = (font_size / 4.0).max(14.0);
+    let subtitle_y = -(font_size * 0.85);
+
+    for (mut font, mut t, kind) in &mut texts {
+        match kind {
+            TitleTextKind::Sub => {
+                font.font_size = subtitle_size;
+                t.translation = Vec3::new(0.0, subtitle_y, 0.0);
+            }
+            TitleTextKind::Shadow => {
+                font.font_size = font_size;
+                t.translation = Vec3::new(shadow_off, -shadow_off, -0.1);
+            }
+            TitleTextKind::Gold => {
+                font.font_size = font_size;
+            }
+        }
+    }
 }
 
 fn tick_title(
@@ -546,6 +594,31 @@ fn spawn_world(
     }
 }
 
+fn win_resize_system(
+    window: Query<&Window>,
+    mut last_width: Local<f32>,
+    mut win_texts: Query<(&mut TextFont, &mut Transform, Option<&WinMainText>), With<WinOverlay>>,
+    mut win_sprites: Query<&mut Sprite, With<WinBackground>>,
+) {
+    let width = window.single().map(|w| w.width()).unwrap_or(1280.0);
+    if (width - *last_width).abs() < 0.5 { return; }
+    *last_width = width;
+
+    let scale = (width / 5.5).min(96.0) / 96.0;
+    for (mut font, mut t, is_main) in &mut win_texts {
+        if is_main.is_some() {
+            font.font_size = 72.0 * scale;
+            t.translation = Vec3::new(0.0, 16.0 * scale, 11.0);
+        } else {
+            font.font_size = (24.0 * scale).max(14.0);
+            t.translation = Vec3::new(0.0, -36.0 * scale, 11.0);
+        }
+    }
+    for mut sprite in &mut win_sprites {
+        sprite.custom_size = Some(Vec2::new(340.0 * scale, 130.0 * scale));
+    }
+}
+
 fn movement_system(
     mut commands: Commands,
     time: Res<Time>,
@@ -571,18 +644,18 @@ fn movement_system(
         let (r, c) = (state.game.player_row(), state.game.player_col());
         if !state.won && state.grid[r][c] == 'F' {
             state.won = true;
-            commands.spawn((WinOverlay, Sprite {
+            commands.spawn((WinOverlay, WinBackground, Sprite {
                 color: Color::srgba(0.0, 0.0, 0.0, 0.75),
                 custom_size: Some(Vec2::new(340.0, 130.0)),
                 ..default()
             }, Transform::from_xyz(0.0, 0.0, 10.0)));
-            commands.spawn((WinOverlay,
+            commands.spawn((WinOverlay, WinMainText,
                 Text2d::new("You Win!"),
                 TextFont { font_size: 72.0, ..default() },
                 TextColor(Color::srgb(1.0, 0.8, 0.1)),
                 Transform::from_xyz(0.0, 16.0, 11.0),
             ));
-            commands.spawn((WinOverlay,
+            commands.spawn((WinOverlay, WinSubText,
                 Text2d::new("Maze complete"),
                 TextFont { font_size: 24.0, ..default() },
                 TextColor(Color::WHITE),
