@@ -7,7 +7,7 @@ import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import { useToken } from '../context/AuthContext'
 import { getMazes, deleteMaze, updateMaze, createMaze } from '../api/client'
-import { solveMaze } from '../wasm/mazeWasm'
+import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { AlertModal } from '../components/AlertModal'
 import type { Maze } from '../types/api'
 
@@ -34,8 +34,7 @@ export function MazesPage() {
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [isDuplicating, setIsDuplicating] = useState(false)
 
-  const [playCheckError, setPlayCheckError] = useState<string | null>(null)
-  const [isCheckingPlay, setIsCheckingPlay] = useState(false)
+  const { play, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } = usePlayMaze()
 
   useEffect(() => {
     if (!token) return
@@ -85,22 +84,6 @@ export function MazesPage() {
     }
   }
 
-  async function handlePlay(maze: Maze) {
-    setPlayCheckError(null)
-    setIsCheckingPlay(true)
-    document.body.classList.add('is-busy')
-    try {
-      await solveMaze(maze.definition)
-      navigate(`/play/${encodeURIComponent(maze.id)}`)
-    } catch (ex: unknown) {
-      const msg = (ex as { message?: string }).message ?? 'Unknown error.'
-      setPlayCheckError(msg.charAt(0).toUpperCase() + msg.slice(1))
-    } finally {
-      setIsCheckingPlay(false)
-      document.body.classList.remove('is-busy')
-    }
-  }
-
   function validateDuplicateName(name: string): string | null {
     return mazes.some(m => m.name.toLowerCase() === name.toLowerCase())
       ? 'A maze with that name already exists.'
@@ -136,7 +119,7 @@ export function MazesPage() {
         <AlertModal
           title="Cannot Play Maze"
           message={playCheckError}
-          onClose={() => setPlayCheckError(null)}
+          onClose={clearPlayCheckError}
         />
       )}
       {mazeToDelete && (
@@ -243,12 +226,23 @@ export function MazesPage() {
                     <button
                       type="button"
                       className="maze-item-action btn-secondary"
-                      onClick={e => { e.stopPropagation(); void handlePlay(maze) }}
+                      onClick={e => { e.stopPropagation(); void play(maze, GameType.TwoD) }}
                       aria-label={`Play ${maze.name}`}
                       disabled={isCheckingPlay}
                     >
                       <img src="/images/maze/play_button.png" alt="" aria-hidden="true" />
                       <span className="maze-item-action-label">Play</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="maze-item-action btn-secondary"
+                      onClick={e => { e.stopPropagation(); void play(maze, GameType.ThreeD) }}
+                      aria-label={`Play in 3D ${maze.name}`}
+                      title="Play in 3D"
+                      disabled={isCheckingPlay}
+                    >
+                      <img src="/images/maze/play_3d_button.svg" alt="" aria-hidden="true" />
+                      <span className="maze-item-action-label">Play 3D</span>
                     </button>
                     <button
                       type="button"

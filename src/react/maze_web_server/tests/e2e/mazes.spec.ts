@@ -150,6 +150,15 @@ test('Delete → cancel → item stays in list', async ({ page }) => {
   await expect(page.locator('.maze-item-name', { hasText: firstName! })).toBeVisible()
 })
 
+test('each maze list item has a Play in 3D button', async ({ page }) => {
+  await login(page)
+
+  const items = page.locator('.maze-list-item')
+  await expect(items.first()).toBeVisible()
+
+  await expect(items.first().getByRole('button', { name: /play in 3d/i })).toBeVisible()
+})
+
 test('refresh button reloads the maze list', async ({ page }) => {
   await login(page)
 

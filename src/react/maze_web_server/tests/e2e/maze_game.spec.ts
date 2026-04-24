@@ -43,7 +43,7 @@ test.describe('MazeGamePage', () => {
     await page.goto('/mazes')
     await page.locator('.maze-list-item').first().locator('.maze-item-text').click()
     await expect(page.locator('.maze-grid-container')).toBeVisible()
-    await page.getByRole('button', { name: 'Play' }).click()
+    await page.getByRole('button', { name: 'Play', exact: true }).click()
     await expect(page).toHaveURL(/\/play\//)
     await expect(page.getByAltText('Player')).toBeVisible()
   })
@@ -108,6 +108,13 @@ test.describe('MazeGamePage', () => {
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(page.getByRole('dialog')).toBeVisible()
+  })
+
+  test('MazePage toolbar shows a Play in 3D button', async ({ page }) => {
+    await page.goto('/mazes')
+    await page.locator('.maze-list-item').first().locator('.maze-item-text').click()
+    await expect(page.locator('.maze-grid-container')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Play in 3D' })).toBeVisible()
   })
 })
 

@@ -47,6 +47,7 @@ function renderMazesPage() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.unstubAllGlobals()
   resetMockMazes()
 })
 
@@ -360,8 +361,43 @@ describe('MazesPage', () => {
     renderMazesPage()
     await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
 
-    const playButtons = screen.getAllByRole('button', { name: /^Play /i })
+    const playButtons = screen.getAllByRole('button', { name: /^Play (?!in 3D)/i })
     expect(playButtons).toHaveLength(2)
+  })
+
+  it('each maze item has a Play in 3D button', async () => {
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    const play3dButtons = screen.getAllByRole('button', { name: /^Play in 3D /i })
+    expect(play3dButtons).toHaveLength(2)
+  })
+
+  it('clicking Play in 3D on solvable maze sets window.location.href to /game/?id=...', async () => {
+    ;(solveMaze as Mock).mockResolvedValue([{ row: 0, col: 0 }])
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    const locationStub = { href: '' }
+    vi.stubGlobal('location', locationStub)
+
+    await userEvent.click(screen.getByRole('button', { name: `Play in 3D ${mockMazeAlpha.name}` }))
+
+    await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('shows error alert when Play in 3D clicked on unsolvable maze', async () => {
+    ;(solveMaze as Mock).mockRejectedValue(new Error('No solution found'))
+
+    renderMazesPage()
+    await waitFor(() => expect(screen.getByText(mockMazeAlpha.name)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: `Play in 3D ${mockMazeAlpha.name}` }))
+
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Cannot Play Maze' })).toBeInTheDocument())
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 
   it('clicking Play on a solvable maze navigates to /play/:id', async () => {

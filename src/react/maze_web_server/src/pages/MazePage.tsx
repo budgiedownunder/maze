@@ -15,6 +15,7 @@ import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useMazeEditor } from '../hooks/useMazeEditor'
 import { useWalkAnimation } from '../hooks/useWalkAnimation'
 import { useWalkSpeed } from '../hooks/useWalkSpeed'
+import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { WalkSpeedControl } from '../components/WalkSpeedControl'
 import { getMaze, createMaze, updateMaze } from '../api/client'
 
@@ -78,9 +79,9 @@ export function MazePage() {
   const [solveError, setSolveError] = useState<string | null>(null)
 
   // Play state
-  const [isCheckingPlay, setIsCheckingPlay] = useState(false)
-  const [playCheckError, setPlayCheckError] = useState<string | null>(null)
+  const { play: playMaze, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } = usePlayMaze()
   const [showPlayDirtyConfirm, setShowPlayDirtyConfirm] = useState(false)
+  const [pendingPlayGameType, setPendingPlayGameType] = useState<GameType>(GameType.TwoD)
 
   // Walk speed (persisted to localStorage)
   const { speedRef, speedIndex, setSpeedIndex } = useWalkSpeed()
@@ -261,19 +262,11 @@ export function MazePage() {
     clearSolution()
   }
 
-  async function handlePlayClick() {
+  function handlePlayClick(gameType: GameType) {
     if (mazeId && !isDirty) {
-      setIsCheckingPlay(true)
-      try {
-        await solveMaze({ grid })
-        navigate('/play/' + encodeURIComponent(mazeId))
-      } catch (ex: unknown) {
-        const msg = (ex as { message?: string }).message ?? 'Unknown error.'
-        setPlayCheckError(msg.charAt(0).toUpperCase() + msg.slice(1))
-      } finally {
-        setIsCheckingPlay(false)
-      }
+      void playMaze({ id: mazeId, name: mazeName, definition: { grid } }, gameType)
     } else if (mazeId && isDirty) {
+      setPendingPlayGameType(gameType)
       setShowPlayDirtyConfirm(true)
     } else {
       // New/unsaved — open save modal; user clicks Play again after saving
@@ -298,16 +291,7 @@ export function MazePage() {
       setIsSaving(false)
     }
     if (!savedId) return
-    setIsCheckingPlay(true)
-    try {
-      await solveMaze({ grid })
-      navigate('/play/' + encodeURIComponent(savedId))
-    } catch (ex: unknown) {
-      const msg = (ex as { message?: string }).message ?? 'Unknown error.'
-      setPlayCheckError(msg.charAt(0).toUpperCase() + msg.slice(1))
-    } finally {
-      setIsCheckingPlay(false)
-    }
+    void playMaze({ id: savedId, name: mazeName, definition: { grid } }, pendingPlayGameType)
   }
 
   async function handleConfirmRefresh() {
@@ -467,7 +451,7 @@ export function MazePage() {
         <AlertModal
           title="Cannot Play Maze"
           message={playCheckError}
-          onClose={() => setPlayCheckError(null)}
+          onClose={clearPlayCheckError}
         />
       )}
 
@@ -645,9 +629,19 @@ export function MazePage() {
               title="Play"
               aria-label="Play"
               disabled={isBusy}
-              onClick={handlePlayClick}
+              onClick={() => handlePlayClick(GameType.TwoD)}
             >
               <img src="/images/maze/play_button.png" alt="Play" />
+            </button>
+            <button
+              type="button"
+              className="maze-toolbar-btn"
+              title="Play in 3D"
+              aria-label="Play in 3D"
+              disabled={isBusy}
+              onClick={() => handlePlayClick(GameType.ThreeD)}
+            >
+              <img src="/images/maze/play_3d_button.svg" alt="Play in 3D" />
             </button>
             {!isRangeMode && anchorCell === null && (
               <button
