@@ -230,7 +230,7 @@ export function MazesPage() {
                       aria-label={`Play ${maze.name}`}
                       disabled={isCheckingPlay}
                     >
-                      <img src="/images/maze/play_button.png" alt="" aria-hidden="true" />
+                      <img src="/images/icons/icon_play.png" alt="" aria-hidden="true" />
                       <span className="maze-item-action-label">Play</span>
                     </button>
                     <button
@@ -241,7 +241,7 @@ export function MazesPage() {
                       title="Play in 3D"
                       disabled={isCheckingPlay}
                     >
-                      <img src="/images/maze/play_3d_button.png" alt="" aria-hidden="true" />
+                      <img src="/images/icons/icon_play_3d.png" alt="" aria-hidden="true" />
                       <span className="maze-item-action-label">Play 3D</span>
                     </button>
                     <button
