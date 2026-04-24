@@ -24,7 +24,7 @@ const LINE_H: f32 = 0.01;
 const LINE_Y: f32 = 0.015;
 const MAP_CELL_PX: f32 = 10.0;
 const MAP_MARGIN: f32 = 12.0;
-const MAP_RADIUS: i32 = 3;                      // cells visible in each direction from player
+const MAP_RADIUS: i32 = 5;                      // cells visible in each direction from player
 const MAP_VIEW: i32 = MAP_RADIUS * 2 + 1;       // total cells per side (7)
 
 #[derive(States, Default, Clone, Copy, Eq, PartialEq, Hash, Debug)]
