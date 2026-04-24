@@ -56,6 +56,16 @@ struct WinSubText;
 struct WinBackground;
 
 #[derive(Component)]
+struct WinLeaf {
+    x: f32,
+    y: f32,
+    vel_x: f32,
+    vel_y: f32,
+    rot: f32,
+    rot_speed: f32,
+}
+
+#[derive(Component)]
 struct WallCell;
 
 #[derive(Component)]
@@ -188,6 +198,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(OnEnter(AppState::Playing), spawn_world)
         .add_systems(Update, movement_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win_resize_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, leaf_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, quit_system);
@@ -643,6 +654,62 @@ fn win_resize_system(
     }
 }
 
+fn leaf_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    window: Query<&Window>,
+    state: Res<GameState>,
+    mut leaves: Query<(Entity, &mut WinLeaf, &mut Transform)>,
+    mut rng: Local<u64>,
+    mut timer: Local<f32>,
+) {
+    let Ok(win) = window.single() else { return; };
+    let half_w = win.width() / 2.0;
+    let half_h = win.height() / 2.0;
+    let dt = time.delta_secs();
+
+    for (entity, mut leaf, mut transform) in &mut leaves {
+        leaf.x   += leaf.vel_x * dt;
+        leaf.y   += leaf.vel_y * dt;
+        leaf.rot += leaf.rot_speed * dt;
+        transform.translation.x = leaf.x;
+        transform.translation.y = leaf.y;
+        transform.rotation = Quat::from_rotation_z(leaf.rot);
+        if leaf.y < -(half_h + 20.0) {
+            commands.entity(entity).despawn();
+        }
+    }
+
+    if !state.won { return; }
+
+    if *rng == 0 {
+        *rng = time.elapsed_secs_f64().to_bits() | 1;
+    }
+
+    *timer += dt;
+    while *timer >= 0.1 {
+        *timer -= 0.1;
+        for _ in 0..4 {
+            let x         = lcg(&mut rng) * 2.0 * half_w - half_w;
+            let vx        = (lcg(&mut rng) - 0.5) * 80.0;
+            let vy        = -(100.0 + lcg(&mut rng) * 100.0);
+            let rot       = lcg(&mut rng) * 2.0 * PI;
+            let rot_speed = (lcg(&mut rng) - 0.5) * 6.0;
+            let hue       = lcg(&mut rng);
+            commands.spawn((
+                WinLeaf { x, y: half_h + 10.0, vel_x: vx, vel_y: vy, rot, rot_speed },
+                Sprite {
+                    color: Color::srgba(1.0, 0.65 + hue * 0.35, 0.0, 0.85),
+                    custom_size: Some(Vec2::new(12.0, 5.0)),
+                    ..default()
+                },
+                Transform::from_xyz(x, half_h + 10.0, 9.0)
+                    .with_rotation(Quat::from_rotation_z(rot)),
+            ));
+        }
+    }
+}
+
 fn movement_system(
     mut commands: Commands,
     time: Res<Time>,
@@ -932,6 +999,11 @@ fn grid_to_json(grid: &[Vec<char>]) -> String {
         })
         .collect();
     format!("{{\"grid\":[{}]}}", rows.join(","))
+}
+
+fn lcg(state: &mut u64) -> f32 {
+    *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    ((*state >> 32) as f32) / 4294967296.0
 }
 
 // Cycles S→E→N→W and returns the first direction with an open neighbour.
