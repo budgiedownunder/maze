@@ -118,6 +118,11 @@ test.describe('MazeGamePage', () => {
   })
 })
 
+test('unauthenticated visit to /game/ redirects to login', async ({ page }) => {
+  await page.goto('/game/')
+  await expect(page).not.toHaveURL(/\/game\//)
+})
+
 // ──────────────────────────────────────────────────────────────
 // Mobile / touch (Pixel 7 — coarse pointer)
 // ──────────────────────────────────────────────────────────────

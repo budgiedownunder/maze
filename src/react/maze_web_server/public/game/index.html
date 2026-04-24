@@ -108,6 +108,14 @@
       </button>
     </div>
   </div>
+  <script>
+    (function() {
+      var auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
+      var token = auth && auth.token;
+      if (!token) token = new URLSearchParams(location.search).get('t');
+      if (!token) { location.replace('/'); }
+    })();
+  </script>
   <script type="module">
     import init from './maze_game_bevy_wasm.js';
 
