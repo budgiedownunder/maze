@@ -166,7 +166,7 @@ struct GameState {
 
 pub fn build_app(app: &mut App) {
     app.init_state::<AppState>()
-        .insert_resource(TitleTimer(Timer::from_seconds(3.0, TimerMode::Once)))
+        .insert_resource(TitleTimer(Timer::from_seconds(2.0, TimerMode::Once)))
         .insert_resource(ClearColor(Color::BLACK))
         .add_systems(OnEnter(AppState::TitleScreen), setup_title)
         .add_systems(Update, tick_title.run_if(in_state(AppState::TitleScreen)))
@@ -201,7 +201,7 @@ fn setup_title(mut commands: Commands) {
     ));
     // Subtitle
     commands.spawn((
-        Text2d::new("Loading..."),
+        Text2d::new("Starting..."),
         TextFont { font_size: 24.0, ..default() },
         TextColor(Color::WHITE),
         Transform::from_translation(Vec3::new(0.0, -80.0, 0.0)),

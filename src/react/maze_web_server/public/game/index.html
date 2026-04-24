@@ -92,7 +92,7 @@
     <canvas id="bevy-canvas"></canvas>
     <div id="loading">
       <div class="spinner"></div>
-      <p>Downloading game… (<span id="elapsed">0s</span>)</p>
+      <p>Loading game… (<span id="elapsed">0s</span>)</p>
     </div>
   </div>
   <div id="controls">
@@ -110,11 +110,22 @@
   </div>
   <script type="module">
     import init from './maze_game_bevy_wasm.js';
+
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm';
+
     let secs = 0;
     const timer = setInterval(() => {
       document.getElementById('elapsed').textContent = `${++secs}s`;
     }, 1000);
-    await init();
+
+    const t0 = performance.now();
+    const response = await fetch(WASM_URL);
+    const t1 = performance.now();
+    console.log(`[game] fetch: ${((t1 - t0) / 1000).toFixed(2)}s`);
+    await init({ module_or_path: response });
+    const t2 = performance.now();
+    console.log(`[game] compile+init: ${((t2 - t1) / 1000).toFixed(2)}s`);
+    console.log(`[game] total: ${((t2 - t0) / 1000).toFixed(2)}s`);
     clearInterval(timer);
     document.getElementById('loading').remove();
 
