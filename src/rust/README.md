@@ -2,6 +2,9 @@
 
 
 ## Introduction
+
+The `Rust` workspace contains library crates, console applications, a web server, and a first-person 3D maze game built on the [`Bevy`](https://bevyengine.org/) engine (with a browser-targeted WASM wrapper).
+
 The following `Rust` crates are present:
 
 | Folder | Crate | Description

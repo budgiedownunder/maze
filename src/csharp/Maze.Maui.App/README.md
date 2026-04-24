@@ -13,7 +13,8 @@ At the moment, it allows the user to:
 - Construct mazes containing start, finish and wall cells
 - Generate mazes automatically using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly, with configurable dimensions, start/finish positions and minimum spine length
 - Attempt to solve mazes using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly
-- Play mazes and animate walk throughs 
+- Play mazes and animate walk throughs (2D)
+- Play mazes in first-person **3D**, powered by a [`Bevy`](https://bevyengine.org/) WebAssembly game ([`maze_game_bevy_wasm`](../../rust/maze_game_bevy_wasm/README.md)) embedded in a `WebView`
 
 It  has been tested on `Windows` desktop and `Android`/`iOS` devices. The screenshots below show it running on `Windows` desktop:  
 
@@ -26,6 +27,12 @@ and these screenshots show it running on `Android` and `iOS` mobile devices:
 | Android     | iOS 
 |-------------|-------------
 |<img src = "Screenshots/android-solved.png" width="250"> | <img src = "Screenshots/ios-solved.png" width="250">
+
+The following screenshots show first-person 3D gameplay on each platform:
+
+| Windows | iOS | Android |
+|---------|-----|---------|
+|<img src = "Screenshots/windows-3d-game.png" width="250"> | <img src = "Screenshots/ios-3d-game.png" width="250"> | <img src = "Screenshots/android-3d-game.png" width="250">
 
 ## Navigation
 
@@ -94,6 +101,8 @@ In addition to mouse/pointer support on the desktop, the following keyboard shor
 | `Ctrl`+ `↓`     | Jump to bottom row 
 | `Ctrl`+ `End`   | Jump to last cell 
 | `Ctrl`+ `Home`  | Jump to first cell 
+
+> When the 3D game is launched, input is handled inside the embedded Bevy WebView rather than by MAUI — see the [`maze_game_bevy` controls](../../rust/maze_game_bevy/README.md#controls) for in-game keyboard and touch D-pad bindings.
 
 ## Getting Started
 

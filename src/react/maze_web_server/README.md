@@ -12,6 +12,10 @@ Browser-based UI for the `maze_web_server` REST API. Features:
   structural editing (insert/delete rows and columns), keyboard shortcuts
 - **Maze game** — play a maze at `/play/:id` with keyboard (arrow keys / WASD) or
   on-screen D-pad; visited cells are marked; completion shows a result popup
+- **3D maze game** — a "Play 3D" button on the maze list and maze editor pages
+  navigates the browser to `/game/?id={mazeId}` on the Rust server, which serves the
+  [`Bevy`](https://bevyengine.org/) WebAssembly module ([`maze_game_bevy_wasm`](../../rust/maze_game_bevy_wasm/README.md))
+  that runs the first-person 3D game entirely in-browser
 - **In-browser WASM** — maze generation, solving, and game logic run locally via the
   `maze_wasm` WebAssembly module with no server round-trip
 

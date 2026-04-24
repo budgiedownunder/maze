@@ -13,7 +13,7 @@ In addition to the API interfaces, it also supports the following documentation 
 | `/api-docs/v1/rapidoc`    | [RapiDoc](https://rapidocweb.com/) 
 | `/api-docs/v1/redoc`      | [ReDoc](https://redocly.com/)
 | `/api-docs/v1/swagger-ui/`| [Swagger UI](https://swagger.io/tools/swagger-ui/)
-| `/game/`                  | Bevy WASM game — first-person 3D maze (touch D-pad on mobile)
+| `/game/`                  | First-person 3D maze game — [`Bevy`](https://bevyengine.org/) WASM binary compiled from [`maze_game_bevy_wasm`](../maze_game_bevy_wasm/README.md); loads maze via `/api/v1/mazes/{id}` with bearer token; touch D-pad on mobile
 
 These pages provide interactive documentation and, in the case of the `RapiDoc` and `Swagger UI` interfaces, the ability to manually tests the API as well.
 

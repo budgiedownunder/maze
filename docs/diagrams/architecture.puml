@@ -1,5 +1,5 @@
 
-@startuml
+@startuml architecture
 
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
@@ -14,6 +14,8 @@ Container(html_help, "", "", "HTML help pages")
 Container(maze, "maze", "Rust", "Maze library")
 Container(maze_c, "maze_c", "Rust", "C API")
 Container(maze_console, "maze_console", "Rust", "Console application")
+Container(maze_game_bevy, "maze_game_bevy", "Rust / Bevy", "First-person 3D maze game")
+Container(maze_game_bevy_wasm, "maze_game_bevy_wasm", "Rust / Bevy / WASM", "Browser build of the 3D game")
 Container(maze_maui_app_net, "Maze.Maui.App", "C#", ".NET maze application (MAUI)")
 Container(maze_openapi_generator, "maze_openapi_generator", "Rust", "Console application")
 Container(maze_wasm, "maze_wasm", "Rust", "WebAssembly API")
@@ -41,5 +43,10 @@ Rel(api, maze_web_server, "Uses")
 Rel(maze_web_server, maze_wasm, "Uses")
 Rel(maze_web_server, auth, "Uses")
 Rel(maze_web_server, storage, "Uses")
+Rel(maze_game_bevy, maze, "Uses")
+Rel(maze_game_bevy_wasm, maze_game_bevy, "Wraps")
+Rel(maze_web_server, maze_game_bevy_wasm, "Serves at /game/")
+Rel(browser, maze_game_bevy_wasm, "Loads")
+Rel(maze_maui_app_net, maze_game_bevy_wasm, "Embeds via WebView")
 
 @enduml
