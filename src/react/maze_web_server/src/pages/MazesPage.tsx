@@ -241,7 +241,7 @@ export function MazesPage() {
                       title="Play in 3D"
                       disabled={isCheckingPlay}
                     >
-                      <img src="/images/maze/play_3d_button.svg" alt="" aria-hidden="true" />
+                      <img src="/images/maze/play_3d_button.png" alt="" aria-hidden="true" />
                       <span className="maze-item-action-label">Play 3D</span>
                     </button>
                     <button

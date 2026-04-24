@@ -641,7 +641,7 @@ export function MazePage() {
               disabled={isBusy}
               onClick={() => handlePlayClick(GameType.ThreeD)}
             >
-              <img src="/images/maze/play_3d_button.svg" alt="Play in 3D" />
+              <img src="/images/maze/play_3d_button.png" alt="Play in 3D" />
             </button>
             {!isRangeMode && anchorCell === null && (
               <button
