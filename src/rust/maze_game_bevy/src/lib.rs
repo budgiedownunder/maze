@@ -129,6 +129,15 @@ impl GridFacing {
             Self::West => Direction::Left,
         }
     }
+
+    fn to_yaw(self) -> f32 {
+        match self {
+            Self::North => 0.0,
+            Self::East  => PI + PI / 2.0,
+            Self::South => PI,
+            Self::West  => PI / 2.0,
+        }
+    }
 }
 
 struct Animation {
@@ -286,6 +295,8 @@ fn spawn_world(
     let start_row = game.player_row();
     let start_col = game.player_col();
     let start_pos = cell_centre(start_row, start_col);
+    let facing = initial_facing(&grid, start_row, start_col);
+    let start_yaw = facing.to_yaw();
 
     let mut explored = HashSet::new();
     explore_cell(&mut explored, &grid, start_row, start_col);
@@ -293,18 +304,17 @@ fn spawn_world(
     commands.insert_resource(GameState {
         game,
         grid: grid.clone(),
-        facing: GridFacing::South,
+        facing,
         visual_pos: start_pos,
-        visual_yaw: PI,
+        visual_yaw: start_yaw,
         anim: None,
         explored,
         won: false,
     });
 
-    // Camera at start cell, facing South (yaw = PI, looking into the maze interior)
     commands.spawn((
         Camera3d::default(),
-        Transform::from_translation(start_pos).with_rotation(Quat::from_rotation_y(PI)),
+        Transform::from_translation(start_pos).with_rotation(Quat::from_rotation_y(start_yaw)),
     ));
 
     commands.spawn(AmbientLight { brightness: 300.0, ..default() });
@@ -924,6 +934,23 @@ fn grid_to_json(grid: &[Vec<char>]) -> String {
     format!("{{\"grid\":[{}]}}", rows.join(","))
 }
 
+// Cycles S→E→N→W and returns the first direction with an open neighbour.
+fn initial_facing(grid: &[Vec<char>], row: usize, col: usize) -> GridFacing {
+    let rows = grid.len() as isize;
+    let cols = if grid.is_empty() { 0 } else { grid[0].len() as isize };
+    let r = row as isize;
+    let c = col as isize;
+    let open = |dr: isize, dc: isize| -> bool {
+        let (nr, nc) = (r + dr, c + dc);
+        nr >= 0 && nc >= 0 && nr < rows && nc < cols && grid[nr as usize][nc as usize] != 'W'
+    };
+    if open( 1,  0) { return GridFacing::South; }
+    if open( 0,  1) { return GridFacing::East;  }
+    if open(-1,  0) { return GridFacing::North; }
+    if open( 0, -1) { return GridFacing::West;  }
+    GridFacing::South
+}
+
 fn cell_centre(row: usize, col: usize) -> Vec3 {
     Vec3::new(
         col as f32 * CELL_SIZE + 1.0,
@@ -1047,6 +1074,52 @@ mod tests {
         let state = app.world().resource::<GameState>();
         assert_eq!(state.grid.len(), 7);
         assert_eq!(state.grid[0].len(), 7);
+    }
+
+    #[test]
+    fn initial_facing_prefers_south_when_open() {
+        // S at (0,0): south neighbour (1,0) = ' ' → South
+        let grid = demo_grid();
+        assert_eq!(initial_facing(&grid, 0, 0), GridFacing::South);
+    }
+
+    #[test]
+    fn initial_facing_skips_south_wall_picks_east() {
+        let grid = vec![
+            vec!['S', ' '],
+            vec!['W', 'W'],
+        ];
+        assert_eq!(initial_facing(&grid, 0, 0), GridFacing::East);
+    }
+
+    #[test]
+    fn initial_facing_skips_south_east_picks_north() {
+        // (1,1): south=(2,1)=W, east=(1,2)=W, north=(0,1)=' ' → North
+        let grid = vec![
+            vec!['W', ' ', 'W'],
+            vec!['W', 'S', 'W'],
+            vec!['W', 'W', 'W'],
+        ];
+        assert_eq!(initial_facing(&grid, 1, 1), GridFacing::North);
+    }
+
+    #[test]
+    fn initial_facing_skips_south_east_north_picks_west() {
+        // (0,1): south=W, east=OOB, north=OOB, west=(0,0)=' ' → West
+        let grid = vec![
+            vec![' ', 'S'],
+            vec!['W', 'W'],
+        ];
+        assert_eq!(initial_facing(&grid, 0, 1), GridFacing::West);
+    }
+
+    #[test]
+    fn initial_facing_all_walls_falls_back_to_south() {
+        let grid = vec![
+            vec!['W', 'S', 'W'],
+            vec!['W', 'W', 'W'],
+        ];
+        assert_eq!(initial_facing(&grid, 0, 1), GridFacing::South);
     }
 
     #[test]
