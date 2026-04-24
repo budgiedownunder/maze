@@ -142,6 +142,26 @@
                                                    TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
                                         </Grid>
                                     </SwipeItemView>
+                                    <SwipeItemView
+                                        WidthRequest="72"
+                                        CommandParameter="{Binding .}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlay3dGameCommand}">
+                                        <Grid VerticalOptions="Center" HorizontalOptions="Center"
+                                              RowDefinitions="Auto,Auto" RowSpacing="3">
+                                            <Border WidthRequest="56" HeightRequest="56"
+                                                    BackgroundColor="#1565C0"
+                                                    StrokeThickness="0"
+                                                    StrokeShape="RoundRectangle 28"
+                                                    HorizontalOptions="Center">
+                                                <Image ClassId="white-tint"
+                                                       Source="play_3d_button.svg"
+                                                       WidthRequest="26" HeightRequest="26"
+                                                       HorizontalOptions="Center" VerticalOptions="Center"/>
+                                            </Border>
+                                            <Label Grid.Row="1" Text="Play 3D" FontSize="12" HorizontalOptions="Center"
+                                                   TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
+                                        </Grid>
+                                    </SwipeItemView>
                                 </SwipeItems>
                             </SwipeView.RightItems>
 
@@ -164,6 +184,10 @@
                                         <MenuFlyoutItem Text="Play"
                                                         CommandParameter="{Binding .}"
                                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlayCommand}"/>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Play 3D"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlay3dGameCommand}"/>
                                         <MenuFlyoutSeparator/>
                                         <MenuFlyoutItem Text="Duplicate..."
                                                         IconImageSource="icon_dupplicate.png"

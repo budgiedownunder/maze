@@ -106,14 +106,22 @@ pub fn create_app(
             let fut = srv.call(req);
             async move {
                 let mut res = fut.await?;
-                // /assets/ = Vite content-hashed bundles; /game/*.wasm|js = wasm-pack output (versioned separately)
-                let is_immutable = (path.starts_with("/game/")
-                    && (path.ends_with(".wasm") || path.ends_with(".js")))
-                    || path.starts_with("/assets/");
-                if is_immutable {
+                // /assets/   = Vite content-hashed filenames         → immutable
+                // /game/*.wasm = fetched via versioned WASM_URL (?v=N)  → immutable
+                //   Increment ?v=N in index.html after each wasm-pack rebuild to bust this cache.
+                // /game/*.js = wasm-bindgen wrapper, fixed filename     → no-cache
+                //   Always fresh so new exports are picked up without a forced cache clear.
+                if path.starts_with("/assets/")
+                    || (path.starts_with("/game/") && path.ends_with(".wasm"))
+                {
                     res.headers_mut().insert(
                         CACHE_CONTROL,
                         HeaderValue::from_static("public, max-age=31536000, immutable"),
+                    );
+                } else if path.starts_with("/game/") && path.ends_with(".js") {
+                    res.headers_mut().insert(
+                        CACHE_CONTROL,
+                        HeaderValue::from_static("no-cache"),
                     );
                 }
                 // Cross-origin isolation for /game/ — enables WebAssembly.Module storage in IndexedDB
