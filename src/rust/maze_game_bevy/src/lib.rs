@@ -35,6 +35,9 @@ enum AppState {
 }
 
 #[derive(Resource)]
+struct PendingMazeJson(Option<String>);
+
+#[derive(Resource)]
 struct TitleTimer(Timer);
 
 #[derive(Component)]
@@ -164,8 +167,9 @@ struct GameState {
     won: bool,
 }
 
-pub fn build_app(app: &mut App) {
-    app.init_state::<AppState>()
+pub fn build_app(app: &mut App, maze_json: Option<&str>) {
+    app.insert_resource(PendingMazeJson(maze_json.map(String::from)))
+        .init_state::<AppState>()
         .insert_resource(TitleTimer(Timer::from_seconds(2.0, TimerMode::Once)))
         .insert_resource(ClearColor(Color::BLACK))
         .add_systems(OnEnter(AppState::TitleScreen), setup_title)
@@ -259,15 +263,25 @@ fn teardown_title(mut commands: Commands, query: Query<Entity, With<TitleEntity>
 
 fn spawn_world(
     mut commands: Commands,
+    pending: Res<PendingMazeJson>,
     mut meshes: Option<ResMut<Assets<Mesh>>>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut color_materials: Option<ResMut<Assets<ColorMaterial>>>,
     mut images: Option<ResMut<Assets<Image>>>,
     window: Query<&Window>,
 ) {
-    let grid = demo_grid();
-    let json = grid_to_json(&grid);
-    let game = MazeGame::from_json(&json).expect("valid demo maze");
+    let (game, grid) = match pending.0.as_deref() {
+        Some(json) => {
+            let game = MazeGame::from_json(json).expect("maze JSON was validated by the REST API");
+            let grid = game.grid().to_vec();
+            (game, grid)
+        }
+        None => {
+            let grid = demo_grid();
+            let json = grid_to_json(&grid);
+            (MazeGame::from_json(&json).expect("demo grid is hardcoded and always valid"), grid)
+        }
+    };
 
     let start_row = game.player_row();
     let start_col = game.player_col();
@@ -926,7 +940,7 @@ mod tests {
     fn make_title_app() -> App {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, StatesPlugin));
-        build_app(&mut app);
+        build_app(&mut app, None);
         app.update();
         app
     }
@@ -934,7 +948,7 @@ mod tests {
     fn make_playing_app() -> App {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, StatesPlugin));
-        build_app(&mut app);
+        build_app(&mut app, None);
         app.update(); // OnEnter(TitleScreen) runs
         app.world_mut()
             .resource_mut::<NextState<AppState>>()
@@ -1025,5 +1039,29 @@ mod tests {
                 assert_ne!(dirs[i], dirs[j], "facing {i} and {j} map to the same direction");
             }
         }
+    }
+
+    #[test]
+    fn build_app_with_none_uses_demo_grid() {
+        let app = make_playing_app();
+        let state = app.world().resource::<GameState>();
+        assert_eq!(state.grid.len(), 7);
+        assert_eq!(state.grid[0].len(), 7);
+    }
+
+    #[test]
+    fn build_app_with_maze_json_uses_provided_grid() {
+        let json = r#"{"grid":[["S"," "," "],[" ","W"," "],[" "," ","F"]]}"#;
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        build_app(&mut app, Some(json));
+        app.update();
+        app.world_mut().resource_mut::<NextState<AppState>>().set(AppState::Playing);
+        app.update();
+        let state = app.world().resource::<GameState>();
+        assert_eq!(state.grid.len(), 3);
+        assert_eq!(state.grid[0].len(), 3);
+        assert_eq!(state.game.player_row(), 0);
+        assert_eq!(state.game.player_col(), 0);
     }
 }

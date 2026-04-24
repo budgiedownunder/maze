@@ -88,7 +88,7 @@ pub struct MazeGame {
 impl MazeGame {
     /// Creates a game session from a `MazeDefinition` JSON string, placing the
     /// player at the start cell `S`. The initial facing direction is
-    /// [`Direction::Right`].
+    /// [`Direction::None`].
     ///
     /// # Errors
     ///
@@ -266,6 +266,23 @@ impl MazeGame {
     /// ```
     pub fn visited_cells(&self) -> &[(usize, usize)] {
         &self.visited
+    }
+
+    /// Returns the maze grid as a 2-D slice of characters.
+    ///
+    /// Each character is one of `'S'` (start), `'F'` (finish), `'W'` (wall), or `' '` (open).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::MazeGame;
+    /// let json = r#"{"grid":[["S"," ","F"]]}"#;
+    /// let game = MazeGame::from_json(json).unwrap();
+    /// assert_eq!(game.grid()[0][0], 'S');
+    /// assert_eq!(game.grid()[0][2], 'F');
+    /// ```
+    pub fn grid(&self) -> &[Vec<char>] {
+        &self.grid
     }
 }
 
@@ -474,5 +491,12 @@ mod tests {
         game.move_player(Direction::Right); // (0,1)
         game.move_player(Direction::Down);  // (1,1)
         assert_eq!(game.visited_cells(), &[(0, 0), (0, 1), (1, 1)]);
+    }
+
+    #[test]
+    fn grid_returns_parsed_grid() {
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.grid(), &[vec!['S', ' ', 'F']]);
     }
 }

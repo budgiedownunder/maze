@@ -116,6 +116,16 @@ test.describe('MazeGamePage', () => {
     await expect(page.locator('.maze-grid-container')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Play in 3D' })).toBeVisible()
   })
+
+  test('3D play button on Mazes list navigates to /game/?id=...', async ({ page }) => {
+    await page.route(/\/game\//, route => route.fulfill({
+      contentType: 'text/html',
+      body: '<html><body>stub</body></html>',
+    }))
+    await page.goto('/mazes')
+    await page.getByRole('button', { name: /play in 3d/i }).first().click()
+    await page.waitForURL(/\/game\/\?id=/)
+  })
 })
 
 test('unauthenticated visit to /game/ redirects to login', async ({ page }) => {

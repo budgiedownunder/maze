@@ -117,7 +117,7 @@
     })();
   </script>
   <script type="module">
-    import init from './maze_game_bevy_wasm.js';
+    import { start, start_with_maze, default as init } from './maze_game_bevy_wasm.js';
 
     const WASM_URL = './maze_game_bevy_wasm_bg.wasm';
 
@@ -134,11 +134,31 @@
     const t2 = performance.now();
     console.log(`[game] compile+init: ${((t2 - t1) / 1000).toFixed(2)}s`);
     console.log(`[game] total: ${((t2 - t0) / 1000).toFixed(2)}s`);
-    clearInterval(timer);
-    document.getElementById('loading').remove();
 
     const canvas = document.getElementById('bevy-canvas');
-    canvas.focus({ preventScroll: true });
+    const params = new URLSearchParams(location.search);
+    const mazeId = params.get('id');
+
+    if (mazeId) {
+      const auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
+      const token = (auth && auth.token) || params.get('t');
+      clearInterval(timer);
+      document.getElementById('loading').querySelector('p').textContent = 'Loading maze…';
+      const res = await fetch(`/api/v1/mazes/${encodeURIComponent(mazeId)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to load maze');
+      const maze = await res.json();
+      const mazeJson = JSON.stringify(maze.definition);
+      document.getElementById('loading').remove();
+      canvas.focus({ preventScroll: true });
+      start_with_maze(mazeJson);
+    } else {
+      clearInterval(timer);
+      document.getElementById('loading').remove();
+      canvas.focus({ preventScroll: true });
+      start();
+    }
 
     function fire(key, type) {
       canvas.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));

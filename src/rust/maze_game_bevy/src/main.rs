@@ -9,6 +9,6 @@ fn main() {
         }),
         ..default()
     }));
-    maze_game_bevy::build_app(&mut app);
+    maze_game_bevy::build_app(&mut app, None);
     app.run();
 }
