@@ -59,7 +59,7 @@
       }
       .game-dpad {
         display: grid;
-        grid-template-areas: ". up ." "left . right";
+        grid-template-areas: "tiltup up tiltdown" "left . right";
         gap: 4px;
         touch-action: none;
       }
@@ -84,6 +84,17 @@
         user-select: none;
         -webkit-user-select: none;
       }
+      .game-dpad button.tilt {
+        opacity: 0.7;
+        width: 42px;
+        height: 42px;
+        align-self: center;
+        justify-self: center;
+      }
+      .game-dpad button.tilt img {
+        width: 24px;
+        height: 24px;
+      }
     }
   </style>
 </head>
@@ -97,6 +108,9 @@
   </div>
   <div id="controls">
     <div class="game-dpad" aria-label="D-pad">
+      <button type="button" tabindex="-1" class="tilt" style="grid-area:tiltup"   aria-label="Tilt up">
+        <img src="/images/maze/dpad_up.png"    alt="" draggable="false">
+      </button>
       <button type="button" tabindex="-1" style="grid-area:up"    aria-label="Move forward">
         <img src="/images/maze/dpad_up.png"    alt="" draggable="false">
       </button>
@@ -105,6 +119,9 @@
       </button>
       <button type="button" tabindex="-1" style="grid-area:right" aria-label="Turn right">
         <img src="/images/maze/dpad_right.png" alt="" draggable="false">
+      </button>
+      <button type="button" tabindex="-1" class="tilt" style="grid-area:tiltdown" aria-label="Tilt down">
+        <img src="/images/maze/dpad_down.png"  alt="" draggable="false">
       </button>
     </div>
   </div>
@@ -164,9 +181,11 @@
       canvas.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
     }
     const btnDefs = [
-      { label: 'Move forward', key: 'ArrowUp' },
-      { label: 'Turn left',    key: 'ArrowLeft' },
+      { label: 'Move forward', key: 'ArrowUp'    },
+      { label: 'Turn left',    key: 'ArrowLeft'  },
       { label: 'Turn right',   key: 'ArrowRight' },
+      { label: 'Tilt up',      key: 'KeyQ'       },
+      { label: 'Tilt down',    key: 'KeyE'       },
     ];
     for (const { label, key } of btnDefs) {
       const btn = document.querySelector(`[aria-label="${label}"]`);

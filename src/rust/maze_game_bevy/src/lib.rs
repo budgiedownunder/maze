@@ -17,8 +17,11 @@ const BORDER_GAP: f32 = 0.01;
 const PANEL_W: f32 = CELL_SIZE - 2.0 * BORDER_GAP;
 const PANEL_H: f32 = WALL_HEIGHT - BORDER_GAP;
 const PANEL_Y: f32 = (WALL_HEIGHT + BORDER_GAP) / 2.0;
-const TURN_DUR: f32 = 0.12;
-const MOVE_DUR: f32 = 0.18;
+const TURN_DUR:   f32 = 0.12;
+const MOVE_DUR:   f32 = 0.18;
+const PITCH_RATE: f32 = PI / 3.0;  // rad/s — reaches ±30° in 0.5 s
+const MAX_PITCH_DOWN:  f32 = PI / 2.0;        // 90° — straight down
+const MAX_PITCH_UP:  f32 = PI * 45.0/180.0;   // 45° — half-way up
 const LINE_W: f32 = 0.06;
 const LINE_H: f32 = 0.01;
 const LINE_Y: f32 = 0.015;
@@ -181,6 +184,7 @@ struct GameState {
     facing: GridFacing,
     visual_pos: Vec3,
     visual_yaw: f32,
+    visual_pitch: f32,
     anim: Option<Animation>,
     explored: HashSet<(usize, usize)>,
     won: bool,
@@ -318,6 +322,7 @@ fn spawn_world(
         facing,
         visual_pos: start_pos,
         visual_yaw: start_yaw,
+        visual_pitch: 0.0,
         anim: None,
         explored,
         won: false,
@@ -760,7 +765,19 @@ fn movement_system(
         state.visual_yaw = yaw;
     }
 
-    // Process input only when idle, game not won, and input is available (absent in headless tests)
+    // Pitch — active even during movement animation, disabled after win
+    if !state.won {
+        if let Some(ref keys) = keys {
+            if keys.pressed(KeyCode::KeyQ) {
+                state.visual_pitch = (state.visual_pitch + PITCH_RATE * dt).min(MAX_PITCH_UP);
+            }
+            if keys.pressed(KeyCode::KeyE) {
+                state.visual_pitch = (state.visual_pitch - PITCH_RATE * dt).max(-MAX_PITCH_DOWN);
+            }
+        }
+    }
+
+    // Movement — only when idle and not won
     if state.anim.is_none() && !state.won {
         let Some(keys) = keys else { return; };
         let left = keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::KeyA);
@@ -814,7 +831,8 @@ fn movement_system(
     // Update camera transform every frame
     if let Ok(mut transform) = camera.single_mut() {
         transform.translation = state.visual_pos;
-        transform.rotation = Quat::from_rotation_y(state.visual_yaw);
+        transform.rotation = Quat::from_rotation_y(state.visual_yaw)
+                           * Quat::from_rotation_x(state.visual_pitch);
     }
 }
 
@@ -1192,6 +1210,12 @@ mod tests {
             vec!['W', 'W', 'W'],
         ];
         assert_eq!(initial_facing(&grid, 0, 1), GridFacing::South);
+    }
+
+    #[test]
+    fn initial_pitch_is_zero() {
+        let app = make_playing_app();
+        assert_eq!(app.world().resource::<GameState>().visual_pitch, 0.0);
     }
 
     #[test]
