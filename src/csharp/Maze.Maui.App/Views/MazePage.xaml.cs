@@ -194,48 +194,37 @@ namespace Maze.Maui.App.Views
             MazeGrid.ActivateCell(1, 1, false);
             UpdateControls();
         }
-        /// <summary>
-        /// Navigates to the game page with the current in-memory maze definition.
-        /// </summary>
-        /// <param name="sender">Sender</param>
-        /// <param name="e">Event arguments</param>
-        private async void OnPlayClicked(object sender, EventArgs e)
+        private void OnPlayClicked(object sender, EventArgs e) => _ = PlayAsync(Models.GameType.TwoD);
+        private void OnPlay3dClicked(object sender, EventArgs e) => _ = PlayAsync(Models.GameType.ThreeD);
+
+        private async Task PlayAsync(Models.GameType gameType)
         {
             if (MazeItem is null) return;
             if (_viewModel.IsBusy) return;
 
             Maze currentMaze = MazeGrid.ToMaze();
-            try
-            {
-                currentMaze.Solve();
-            }
+            try { currentMaze.Solve(); }
             catch (Exception ex)
             {
                 await _dialogService.ShowAlert(APP_TITLE, $"Cannot play maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
                 return;
             }
 
-            var playItem = new Models.MazeItem
-            {
-                ID = MazeItem.ID,
-                Name = MazeItem.Name
-            };
-            playItem.Definition = currentMaze;
+            // 2D: pass in-memory definition directly (MazeGamePage renders from it)
+            // 3D: pass the saved MazeItem by ID (Play3dGamePage fetches from server)
+            Models.MazeItem navigationItem = gameType == Models.GameType.ThreeD
+                ? MazeItem
+                : new Models.MazeItem { ID = MazeItem.ID, Name = MazeItem.Name, Definition = currentMaze };
 
             _viewModel.IsBusy = true;
             try
             {
-                await Shell.Current.GoToAsync($"{nameof(MazeGamePage)}", true,
-                    new Dictionary<string, object>
-                    {
-                        { "MazeItem", playItem }
-                    });
+                var route = gameType == Models.GameType.ThreeD ? nameof(Play3dGamePage) : nameof(MazeGamePage);
+                await Shell.Current.GoToAsync(route, true,
+                    new Dictionary<string, object> { { "MazeItem", navigationItem } });
                 await Task.Delay(500);
             }
-            finally
-            {
-                _viewModel.IsBusy = false;
-            }
+            finally { _viewModel.IsBusy = false; }
         }
         /// <summary>
         /// Handles the maze grid cell tapped event

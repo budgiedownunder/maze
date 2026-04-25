@@ -2,6 +2,9 @@
 
 
 ## Introduction
+
+The `Rust` workspace contains library crates, console applications, a web server, and a first-person 3D maze game built on the [`Bevy`](https://bevyengine.org/) engine (with a browser-targeted WASM wrapper).
+
 The following `Rust` crates are present:
 
 | Folder | Crate | Description
@@ -9,6 +12,8 @@ The following `Rust` crates are present:
 | `src/rust` | [`maze`](./maze/README.md) | Maze definition, calculation, and gaming engine library
 |            | [`maze_c`](./maze_c/README.md) | Maze C API library
 |            | [`maze_console`](./maze_console/README.md) | Maze console application
+|            | [`maze_game_bevy`](./maze_game_bevy/README.md) | Maze game Bevy application (native binary and shared library)
+|            | [`maze_game_bevy_wasm`](./maze_game_bevy_wasm/README.md) | Maze game Bevy WASM target for the browser
 |            | [`maze_openapi_generator`](./maze_openapi_generator/README.md) | Maze OpenAPI generator console application
 |            | [`maze_wasm`](./maze_wasm/README.md) | Maze WebAssembly API library
 |            | [`maze_web_server`](./maze_web_server/README.md) | Maze web server console application
@@ -41,6 +46,8 @@ cargo build
 cd maze_wasm
 wasm-pack build --target web -- --features "wasm-bindgen"
 cargo build --target wasm32-unknown-unknown --release --features "wasm-lite"
+cd ../maze_game_bevy_wasm
+wasm-pack build --target web --no-typescript --out-dir ../../react/maze_web_server/public/game
 ```
 
 ### Run
@@ -66,23 +73,32 @@ cd src/rust/maze_openapi_generator
 cargo run
 ```
 
+To run the `maze_game_bevy` application:
+
+```
+cd src/rust
+cargo run -p maze_game_bevy
+```
+
 ### Testing
 #### 1. Rust Crates
 To test all `Rust` crates:
 
 ```
 cd src/rust
-cargo test --locked -p auth
+cargo test --locked -p utils
 cargo test --locked -p data_model
+cargo test --locked -p auth
+cargo test --locked -p maze_openapi_generator
+cargo test --locked -p maze_game_bevy
 cargo test --locked -p maze
 cargo test --locked -p maze --features generation
-cargo test --locked -p maze_c -- --test-threads=1
-cargo test --locked -p maze_console -- --test-threads=1
+cargo test --locked -p maze_game_bevy_wasm
 cargo test --locked -p storage -- --test-threads=1
+cargo test --locked -p maze_c -- --test-threads=1
 cargo test --locked -p maze_wasm
+cargo test --locked -p maze_console -- --test-threads=1
 cargo test --locked -p maze_web_server
-cargo test --locked -p maze_openapi_generator
-cargo test --locked -p utils
 ```
 
 #### 2. JavaScript APIs

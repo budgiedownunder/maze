@@ -48,6 +48,7 @@ const solvePath = [{ row: 0, col: 0 }, { row: 1, col: 0 }, { row: 2, col: 0 }, {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.unstubAllGlobals()
   resetMockMazes()
   mockGenerateMaze.mockResolvedValue(generatedDefinition)
   mockSolveMaze.mockResolvedValue(solvePath)
@@ -984,5 +985,31 @@ describe('MazePage play', () => {
     await loadMazePage('/mazes/new')
     await userEvent.click(screen.getByRole('button', { name: 'Play' }))
     expect(screen.getByRole('dialog', { name: 'Save Maze' })).toBeInTheDocument()
+  })
+
+  it('Play in 3D button is present for a loaded maze', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    expect(screen.getByRole('button', { name: 'Play in 3D' })).toBeInTheDocument()
+  })
+
+  it('clean maze: Play in 3D sets window.location.href to /game/?id=...', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+
+    const locationStub = { href: '' }
+    vi.stubGlobal('location', locationStub)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
+
+    await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
+    expect(mockSolveMaze).toHaveBeenCalled()
+  })
+
+  it('dirty maze: Play in 3D opens Unsaved Changes confirm modal', async () => {
+    await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
+    expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toHaveTextContent('Save and play?')
   })
 })

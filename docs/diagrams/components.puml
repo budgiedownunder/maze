@@ -1,5 +1,5 @@
 
-@startuml
+@startuml components
 
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
@@ -17,6 +17,8 @@ System_Boundary(c2, "Maze Project") {
     Container(data_model, "data_model", "Rust", "Data model")
     Container(docfx, "docfx", "", "HTML help generation")
     Container(maze, "maze", "Rust", "Maze library")
+    Container(maze_game_bevy, "maze_game_bevy", "Rust / Bevy", "First-person 3D maze game (library + native binary)")
+    Container(maze_game_bevy_wasm, "maze_game_bevy_wasm", "Rust / Bevy / WASM", "Browser build of the 3D game")
     Container(maze_maui_app_net, "Maze.Maui.App", "C#", ".NET maze application (MAUI)")
     Container(maze_maui_controls_net, "Maze.Maui.Controls", "C#", ".NET custom controls and definitions (MAUI)")
     Container(maze_maui_services_net, "Maze.Maui.Services", "C#", ".NET custom services (MAUI)")
@@ -79,5 +81,10 @@ Rel(storage, maze, "Uses")
 Rel(storage, utils, "Uses")
 Rel(maze, data_model, "Uses")
 Rel(maze, utils, "Uses")
+Rel(maze_game_bevy, maze, "Uses")
+Rel(maze_game_bevy_wasm, maze_game_bevy, "Wraps")
+Rel(maze_web_server, maze_game_bevy_wasm, "Serves at /game/")
+Rel(browser, maze_game_bevy_wasm, "Loads")
+Rel(maze_maui_app_net, maze_game_bevy_wasm, "Embeds via WebView")
 
 @enduml

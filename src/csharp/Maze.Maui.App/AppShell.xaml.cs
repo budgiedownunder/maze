@@ -33,6 +33,7 @@ namespace Maze.Maui.App
             InitializeComponent();
             Routing.RegisterRoute(nameof(MazePage), typeof(MazePage));
             Routing.RegisterRoute(nameof(MazeGamePage), typeof(MazeGamePage));
+            Routing.RegisterRoute(nameof(Play3dGamePage), typeof(Play3dGamePage));
             Routing.RegisterRoute(nameof(SignUpPage), typeof(SignUpPage));
             Routing.RegisterRoute(nameof(ChangePasswordPage), typeof(ChangePasswordPage));
         }
@@ -97,6 +98,15 @@ namespace Maze.Maui.App
         {
             FlyoutIsPresented = false;
             await CurrentPage.ShowPopupAsync(new AboutPopup());
+        }
+
+        /// <summary>
+        /// Navigates to the 3D Bevy game page.
+        /// </summary>
+        private async void On3dDemoMenuItemClicked(object sender, EventArgs e)
+        {
+            FlyoutIsPresented = false;
+            await GoToAsync(nameof(Play3dGamePage));
         }
     }
 }

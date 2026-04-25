@@ -127,18 +127,22 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="item">Maze item</param>
         /// <returns>Task</returns>
         [RelayCommandAttribute]
-        async Task GoToPlayAsync(MazeItem item)
+        Task GoToPlayAsync(MazeItem item) => GoToGameAsync(item, GameType.TwoD);
+
+        /// <summary>
+        /// Navigates to the 3D maze game page for the given maze item
+        /// </summary>
+        /// <param name="item">Maze item</param>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        Task GoToPlay3dGameAsync(MazeItem item) => GoToGameAsync(item, GameType.ThreeD);
+
+        private async Task GoToGameAsync(MazeItem item, GameType gameType)
         {
-            if (item?.Definition is null)
-                return;
+            if (item?.Definition is null) return;
+            if (IsBusy) return;
 
-            if (IsBusy)
-                return;
-
-            try
-            {
-                item.Definition.Solve();
-            }
+            try { item.Definition.Solve(); }
             catch (Exception ex)
             {
                 await _dialogService.ShowAlert("MAZE", $"Cannot play maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
@@ -148,17 +152,14 @@ namespace Maze.Maui.App.ViewModels
             IsBusy = true;
             try
             {
-                await Shell.Current.GoToAsync($"{nameof(Views.MazeGamePage)}", true,
-                    new Dictionary<string, object>
-                    {
-                        {"MazeItem", item }
-                    });
+                var route = gameType == GameType.ThreeD
+                    ? nameof(Views.Play3dGamePage)
+                    : nameof(Views.MazeGamePage);
+                await Shell.Current.GoToAsync(route, true,
+                    new Dictionary<string, object> { { "MazeItem", item } });
                 await Task.Delay(500);
             }
-            finally
-            {
-                IsBusy = false;
-            }
+            finally { IsBusy = false; }
         }
         /// <summary>
         /// Activates the maze (design) page for a new maze item

@@ -5,7 +5,9 @@ pub mod service;
 mod utils;
 
 use actix_files::{Files, NamedFile};
+use actix_service::Service;
 use actix_web::{ App, HttpRequest, middleware::Logger, HttpServer, web};
+use actix_web::http::header::{CACHE_CONTROL, HeaderName, HeaderValue};
 use auth::{config::PasswordHashConfig, hashing::hash_password};
 use config::app::{AppConfig, AppFeaturesConfig};
 use rustls::{ServerConfig, Certificate, PrivateKey};
@@ -99,6 +101,47 @@ pub fn create_app(
         .service(api::register_redoc())
         .service(api::register_rapidoc())
         .service(api::register_swagger_ui())
+        .wrap_fn(|req, srv| {
+            let path = req.path().to_owned();
+            let fut = srv.call(req);
+            async move {
+                let mut res = fut.await?;
+                // /assets/   = Vite content-hashed filenames         → immutable
+                // /game/*.wasm = fetched via versioned WASM_URL (?v=N)  → immutable
+                //   Increment ?v=N in index.html after each wasm-pack rebuild to bust this cache.
+                // /game/*.js = wasm-bindgen wrapper, fixed filename     → no-cache
+                //   Always fresh so new exports are picked up without a forced cache clear.
+                if path.starts_with("/assets/")
+                    || (path.starts_with("/game/") && path.ends_with(".wasm"))
+                {
+                    res.headers_mut().insert(
+                        CACHE_CONTROL,
+                        HeaderValue::from_static("public, max-age=31536000, immutable"),
+                    );
+                } else if path.starts_with("/game/") && path.ends_with(".js") {
+                    res.headers_mut().insert(
+                        CACHE_CONTROL,
+                        HeaderValue::from_static("no-cache"),
+                    );
+                }
+                // Cross-origin isolation for /game/ — enables WebAssembly.Module storage in IndexedDB
+                if path == "/game/" {
+                    res.headers_mut().insert(
+                        CACHE_CONTROL,
+                        HeaderValue::from_static("no-cache"),
+                    );
+                    res.headers_mut().insert(
+                        HeaderName::from_static("cross-origin-opener-policy"),
+                        HeaderValue::from_static("same-origin"),
+                    );
+                    res.headers_mut().insert(
+                        HeaderName::from_static("cross-origin-embedder-policy"),
+                        HeaderValue::from_static("require-corp"),
+                    );
+                }
+                Ok(res)
+            }
+        })
         .configure(move |cfg| {
             if std::path::Path::new(&static_dir).is_dir() {
                 let index_path = format!("{static_dir}/index.html");
@@ -118,12 +161,30 @@ pub fn create_app(
                         }
                     }
                 };
+                let game_path = format!("{static_dir}/game/index.html");
+                let game = {
+                    let path = game_path.clone();
+                    move |req: HttpRequest| {
+                        let path = path.clone();
+                        async move {
+                            NamedFile::open_async(&path)
+                                .await
+                                .map(|f| f.into_response(&req))
+                        }
+                    }
+                };
                 cfg.route("/login",        web::get().to(spa.clone()))
                    .route("/signup",       web::get().to(spa.clone()))
                    .route("/mazes",        web::get().to(spa.clone()))
                    .route("/mazes/{tail}", web::get().to(spa.clone()))
                    .route("/play",         web::get().to(spa.clone()))
                    .route("/play/{tail}",  web::get().to(spa.clone()))
+                   .route("/game",         web::get().to(|| async {
+                       actix_web::HttpResponse::PermanentRedirect()
+                           .insert_header(("Location", "/game/"))
+                           .finish()
+                   }))
+                   .route("/game/",        web::get().to(game.clone()))
                    .service(
                        Files::new("/", &static_dir)
                            .index_file("index.html")

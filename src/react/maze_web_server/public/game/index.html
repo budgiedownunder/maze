@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maze Game</title>
+  <style>
+    * { margin: 0; padding: 0; }
+    body {
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
+    }
+    #game-wrap {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: #000;
+      color: #fff;
+      font-family: sans-serif;
+      font-size: 1rem;
+      z-index: 10;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #333;
+      border-top-color: #ac99ea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    #controls { display: none; }
+    .game-dpad { display: none; }
+
+    @media (pointer: coarse) {
+      #controls {
+        display: flex;
+        justify-content: center;
+        background: #111;
+        padding: 16px 8px 8px;
+      }
+      .game-dpad {
+        display: grid;
+        grid-template-areas: "tiltdown up tiltup" "left . right";
+        gap: 4px;
+        touch-action: none;
+      }
+      .game-dpad button {
+        background: #ac99ea;
+        border: none;
+        border-radius: 8px;
+        padding: 8px;
+        cursor: pointer;
+        touch-action: none;
+        -webkit-touch-callout: none;
+        user-select: none;
+        -webkit-user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .game-dpad button img {
+        display: block;
+        pointer-events: none;
+        -webkit-touch-callout: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .game-dpad button.tilt {
+        opacity: 0.7;
+        width: 42px;
+        height: 42px;
+        align-self: center;
+        justify-self: center;
+      }
+      .game-dpad button.tilt img {
+        width: 24px;
+        height: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-wrap">
+    <canvas id="bevy-canvas"></canvas>
+    <div id="loading">
+      <div class="spinner"></div>
+      <p>Loading game… (<span id="elapsed">0s</span>)</p>
+    </div>
+  </div>
+  <div id="controls">
+    <div class="game-dpad" aria-label="D-pad">
+      <button type="button" tabindex="-1" class="tilt" style="grid-area:tiltup"   aria-label="Tilt up">
+        <img src="/images/maze/tilt_up.png"    alt="" draggable="false">
+      </button>
+      <button type="button" tabindex="-1" style="grid-area:up"    aria-label="Move forward">
+        <img src="/images/maze/dpad_up.png"    alt="" draggable="false">
+      </button>
+      <button type="button" tabindex="-1" style="grid-area:left"  aria-label="Turn left">
+        <img src="/images/maze/dpad_left.png"  alt="" draggable="false">
+      </button>
+      <button type="button" tabindex="-1" style="grid-area:right" aria-label="Turn right">
+        <img src="/images/maze/dpad_right.png" alt="" draggable="false">
+      </button>
+      <button type="button" tabindex="-1" class="tilt" style="grid-area:tiltdown" aria-label="Tilt down">
+        <img src="/images/maze/tilt_down.png"  alt="" draggable="false">
+      </button>
+    </div>
+  </div>
+  <script>
+    (function() {
+      var auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
+      var token = auth && auth.token;
+      if (!token) token = new URLSearchParams(location.search).get('t');
+      if (!token) { location.replace('/'); }
+    })();
+  </script>
+  <script type="module">
+    import { start, start_with_maze, default as init } from './maze_game_bevy_wasm.js';
+
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=1';
+
+    let secs = 0;
+    const timer = setInterval(() => {
+      document.getElementById('elapsed').textContent = `${++secs}s`;
+    }, 1000);
+
+    const t0 = performance.now();
+    const response = await fetch(WASM_URL);
+    const t1 = performance.now();
+    console.log(`[game] fetch: ${((t1 - t0) / 1000).toFixed(2)}s`);
+    await init({ module_or_path: response });
+    const t2 = performance.now();
+    console.log(`[game] compile+init: ${((t2 - t1) / 1000).toFixed(2)}s`);
+    console.log(`[game] total: ${((t2 - t0) / 1000).toFixed(2)}s`);
+
+    const canvas = document.getElementById('bevy-canvas');
+    const params = new URLSearchParams(location.search);
+    const mazeId = params.get('id');
+
+    if (mazeId) {
+      const auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
+      const token = (auth && auth.token) || params.get('t');
+      clearInterval(timer);
+      document.getElementById('loading').querySelector('p').textContent = 'Loading maze…';
+      const res = await fetch(`/api/v1/mazes/${encodeURIComponent(mazeId)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to load maze');
+      const maze = await res.json();
+      const mazeJson = JSON.stringify(maze.definition);
+      document.getElementById('loading').remove();
+      canvas.focus({ preventScroll: true });
+      start_with_maze(mazeJson);
+    } else {
+      clearInterval(timer);
+      document.getElementById('loading').remove();
+      canvas.focus({ preventScroll: true });
+      start();
+    }
+
+    function fire(key, type) {
+      canvas.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
+    }
+    const btnDefs = [
+      { label: 'Move forward', key: 'ArrowUp'    },
+      { label: 'Turn left',    key: 'ArrowLeft'  },
+      { label: 'Turn right',   key: 'ArrowRight' },
+      { label: 'Tilt up',      key: 'KeyQ'       },
+      { label: 'Tilt down',    key: 'KeyE'       },
+    ];
+    for (const { label, key } of btnDefs) {
+      const btn = document.querySelector(`[aria-label="${label}"]`);
+      btn.addEventListener('pointerdown',   e => { e.preventDefault(); fire(key, 'keydown'); });
+      btn.addEventListener('pointerup',     e => { e.preventDefault(); fire(key, 'keyup'); });
+      btn.addEventListener('pointerleave',  () => fire(key, 'keyup'));
+      btn.addEventListener('pointercancel', () => fire(key, 'keyup'));
+      btn.addEventListener('contextmenu',   e => e.preventDefault());
+    }
+  </script>
+</body>
+</html>

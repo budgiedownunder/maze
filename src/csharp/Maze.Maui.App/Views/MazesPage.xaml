@@ -43,102 +43,122 @@
                             <SwipeView.RightItems>
                                 <SwipeItems>
                                     <SwipeItemView
-                                        WidthRequest="72"
+                                        WidthRequest="56"
                                         CommandParameter="{Binding .}"
                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=DeleteCommand}">
                                         <Grid VerticalOptions="Center" HorizontalOptions="Center"
                                               RowDefinitions="Auto,Auto" RowSpacing="3">
-                                            <Border WidthRequest="56" HeightRequest="56"
+                                            <Border WidthRequest="44" HeightRequest="44"
                                                     BackgroundColor="#C62828"
                                                     StrokeThickness="0"
-                                                    StrokeShape="RoundRectangle 28"
+                                                    StrokeShape="RoundRectangle 22"
                                                     HorizontalOptions="Center">
                                                 <Image ClassId="white-tint"
                                                        Source="{OnPlatform 'icon_delete.png', iOS='icon_delete_ios.png', MacCatalyst='icon_delete_ios.png'}"
-                                                       WidthRequest="26" HeightRequest="26"
+                                                       WidthRequest="20" HeightRequest="20"
                                                        HorizontalOptions="Center" VerticalOptions="Center"/>
                                             </Border>
-                                            <Label Grid.Row="1" Text="Delete" FontSize="12" HorizontalOptions="Center"
+                                            <Label Grid.Row="1" Text="Delete" FontSize="10" HorizontalOptions="Center"
                                                    TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
                                         </Grid>
                                     </SwipeItemView>
                                     <SwipeItemView
-                                        WidthRequest="72"
+                                        WidthRequest="56"
                                         CommandParameter="{Binding .}"
                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=DuplicateCommand}">
                                         <Grid VerticalOptions="Center" HorizontalOptions="Center"
                                               RowDefinitions="Auto,Auto" RowSpacing="3">
-                                            <Border WidthRequest="56" HeightRequest="56"
+                                            <Border WidthRequest="44" HeightRequest="44"
                                                     BackgroundColor="#00838F"
                                                     StrokeThickness="0"
-                                                    StrokeShape="RoundRectangle 28"
+                                                    StrokeShape="RoundRectangle 22"
                                                     HorizontalOptions="Center">
                                                 <Image ClassId="white-tint"
                                                        Source="{OnPlatform 'icon_duplicate.png', iOS='icon_duplicate_ios.png', MacCatalyst='icon_duplicate_ios.png'}"
-                                                       WidthRequest="26" HeightRequest="26"
+                                                       WidthRequest="20" HeightRequest="20"
                                                        HorizontalOptions="Center" VerticalOptions="Center"/>
                                             </Border>
-                                            <Label Grid.Row="1" Text="Duplicate" FontSize="12" HorizontalOptions="Center"
+                                            <Label Grid.Row="1" Text="Duplicate" FontSize="10" HorizontalOptions="Center"
                                                    TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
                                         </Grid>
                                     </SwipeItemView>
                                     <SwipeItemView
-                                        WidthRequest="72"
+                                        WidthRequest="56"
                                         CommandParameter="{Binding .}"
                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=RenameCommand}">
                                         <Grid VerticalOptions="Center" HorizontalOptions="Center"
                                               RowDefinitions="Auto,Auto" RowSpacing="3">
-                                            <Border WidthRequest="56" HeightRequest="56"
+                                            <Border WidthRequest="44" HeightRequest="44"
                                                     BackgroundColor="#E65100"
                                                     StrokeThickness="0"
-                                                    StrokeShape="RoundRectangle 28"
+                                                    StrokeShape="RoundRectangle 22"
                                                     HorizontalOptions="Center">
                                                 <Image ClassId="white-tint"
                                                        Source="{OnPlatform 'icon_rename.png', iOS='icon_rename_ios.png', MacCatalyst='icon_rename_ios.png'}"
-                                                       WidthRequest="26" HeightRequest="26"
+                                                       WidthRequest="20" HeightRequest="20"
                                                        HorizontalOptions="Center" VerticalOptions="Center"/>
                                             </Border>
-                                            <Label Grid.Row="1" Text="Rename" FontSize="12" HorizontalOptions="Center"
+                                            <Label Grid.Row="1" Text="Rename" FontSize="10" HorizontalOptions="Center"
                                                    TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
                                         </Grid>
                                     </SwipeItemView>
                                     <SwipeItemView
-                                        WidthRequest="72"
+                                        WidthRequest="56"
                                         CommandParameter="{Binding .}"
                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}">
                                         <Grid VerticalOptions="Center" HorizontalOptions="Center"
                                               RowDefinitions="Auto,Auto" RowSpacing="3">
-                                            <Border WidthRequest="56" HeightRequest="56"
+                                            <Border WidthRequest="44" HeightRequest="44"
                                                     BackgroundColor="#512BD4"
                                                     StrokeThickness="0"
-                                                    StrokeShape="RoundRectangle 28"
+                                                    StrokeShape="RoundRectangle 22"
                                                     HorizontalOptions="Center">
                                                 <Image ClassId="white-tint"
                                                        Source="{OnPlatform 'icon_edit.png', iOS='icon_edit_ios.png', MacCatalyst='icon_edit_ios.png'}"
-                                                       WidthRequest="26" HeightRequest="26"
+                                                       WidthRequest="20" HeightRequest="20"
                                                        HorizontalOptions="Center" VerticalOptions="Center"/>
                                             </Border>
-                                            <Label Grid.Row="1" Text="Edit" FontSize="12" HorizontalOptions="Center"
+                                            <Label Grid.Row="1" Text="Edit" FontSize="10" HorizontalOptions="Center"
                                                    TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
                                         </Grid>
                                     </SwipeItemView>
                                     <SwipeItemView
-                                        WidthRequest="72"
+                                        WidthRequest="56"
                                         CommandParameter="{Binding .}"
                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlayCommand}">
                                         <Grid VerticalOptions="Center" HorizontalOptions="Center"
                                               RowDefinitions="Auto,Auto" RowSpacing="3">
-                                            <Border WidthRequest="56" HeightRequest="56"
+                                            <Border WidthRequest="44" HeightRequest="44"
                                                     BackgroundColor="#2E7D32"
                                                     StrokeThickness="0"
-                                                    StrokeShape="RoundRectangle 28"
+                                                    StrokeShape="RoundRectangle 22"
                                                     HorizontalOptions="Center">
                                                 <Image ClassId="white-tint"
                                                        Source="{OnPlatform 'icon_play.png', iOS='icon_play_ios.png', MacCatalyst='icon_play_ios.png'}"
-                                                       WidthRequest="26" HeightRequest="26"
+                                                       WidthRequest="20" HeightRequest="20"
                                                        HorizontalOptions="Center" VerticalOptions="Center"/>
                                             </Border>
-                                            <Label Grid.Row="1" Text="Play" FontSize="12" HorizontalOptions="Center"
+                                            <Label Grid.Row="1" Text="Play" FontSize="10" HorizontalOptions="Center"
+                                                   TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
+                                        </Grid>
+                                    </SwipeItemView>
+                                    <SwipeItemView
+                                        WidthRequest="56"
+                                        CommandParameter="{Binding .}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlay3dGameCommand}">
+                                        <Grid VerticalOptions="Center" HorizontalOptions="Center"
+                                              RowDefinitions="Auto,Auto" RowSpacing="3">
+                                            <Border WidthRequest="44" HeightRequest="44"
+                                                    BackgroundColor="#1565C0"
+                                                    StrokeThickness="0"
+                                                    StrokeShape="RoundRectangle 22"
+                                                    HorizontalOptions="Center">
+                                                <Image ClassId="white-tint"
+                                                       Source="{OnPlatform 'icon_play_3d.png', iOS='icon_play_3d_ios.png', MacCatalyst='icon_play_3d_ios.png'}"
+                                                       WidthRequest="20" HeightRequest="20"
+                                                       HorizontalOptions="Center" VerticalOptions="Center"/>
+                                            </Border>
+                                            <Label Grid.Row="1" Text="Play 3D" FontSize="10" HorizontalOptions="Center"
                                                    TextColor="{AppThemeBinding Light=Black, Dark=White}"/>
                                         </Grid>
                                     </SwipeItemView>
@@ -164,6 +184,10 @@
                                         <MenuFlyoutItem Text="Play"
                                                         CommandParameter="{Binding .}"
                                                         Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlayCommand}"/>
+                                        <MenuFlyoutSeparator/>
+                                        <MenuFlyoutItem Text="Play 3D"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToPlay3dGameCommand}"/>
                                         <MenuFlyoutSeparator/>
                                         <MenuFlyoutItem Text="Duplicate..."
                                                         IconImageSource="icon_dupplicate.png"

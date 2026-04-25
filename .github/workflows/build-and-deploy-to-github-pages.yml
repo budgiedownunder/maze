@@ -44,6 +44,11 @@ jobs:
       with:
         version: 'latest'
 
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
     - name: Install DocFX
       working-directory: ./
       run: dotnet tool install -g docfx

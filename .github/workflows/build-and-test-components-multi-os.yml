@@ -64,6 +64,19 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: echo "Running on Ubuntu"
 
+    - name: Install Linux system dependencies for Bevy/winit
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libx11-dev \
+          libxcursor-dev \
+          libxi-dev \
+          libxrandr-dev \
+          libxkbcommon-dev \
+          libudev-dev \
+          pkg-config
+
     - name: Handle Mac OS-specifics
       if: matrix.os == 'macos-latest'
       run: echo "Running on Mac OS"
@@ -82,7 +95,12 @@ jobs:
       uses: jetli/wasm-pack-action@v0.4.0
       with:
         version: 'latest'
-    
+
+    - name: Set up Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-unknown-unknown
+
     - name: Setup Node.js
       uses: actions/setup-node@v5
       with:
@@ -156,17 +174,20 @@ jobs:
     - name: Run Rust Component Tests
       working-directory: ./src/rust 
       run: |
-        cargo test --locked -p auth
-        cargo test --locked -p data_model
-        cargo test --locked -p maze --features generation
-        cargo test --locked -p maze_c -- --test-threads=1
-        cargo test --locked -p maze_console -- --test-threads=1
-        cargo test --locked -p storage -- --test-threads=1
-        cargo test --locked -p maze_wasm
-        cargo test --locked -p maze_web_server
-        cargo test --locked -p maze_openapi_generator
         cargo test --locked -p utils
-
+        cargo test --locked -p data_model
+        cargo test --locked -p auth
+        cargo test --locked -p maze_openapi_generator
+        cargo test --locked -p maze_game_bevy
+        cargo test --locked -p maze
+        cargo test --locked -p maze --features generation
+        cargo test --locked -p maze_game_bevy_wasm
+        cargo test --locked -p storage -- --test-threads=1
+        cargo test --locked -p maze_c -- --test-threads=1
+        cargo test --locked -p maze_wasm
+        cargo test --locked -p maze_console -- --test-threads=1
+        cargo test --locked -p maze_web_server
+        
     - name: Run Rust JavaScript API Tests
       working-directory: ./src/rust 
       run: |
