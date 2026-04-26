@@ -2,6 +2,7 @@ use auth::config::PasswordHashConfig;
 use config::{Config, ConfigBuilder, File,  builder::DefaultState};
 use log::info;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Security configuration including TLS certificate paths and password hashing parameters.
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -90,6 +91,226 @@ impl Default for AppFeaturesConfig {
     }
 }
 
+/// Selects which `OAuthConnector` implementation the server uses.
+///
+/// New connectors (e.g. `Auth0`) become valid values once their implementation
+/// lands. `Internal` is the default and the only connector implemented today.
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ConnectorKind {
+    #[default]
+    Internal,
+    Auth0,
+}
+
+/// Configuration for one OAuth provider exposed by the internal connector.
+///
+/// `client_secret` is not read from `config.toml`; it is resolved at load time
+/// from the environment variable named by `client_secret_env`. This keeps the
+/// secret out of any committed file.
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct InternalProviderConfig {
+    /// Whether this provider is enabled. Disabled providers are not surfaced
+    /// to the front end and the server will not initiate a flow against them.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Human-readable label rendered on the front-end button (e.g. "Google").
+    #[serde(default)]
+    pub display_name: String,
+
+    /// OAuth/OIDC client id issued by the provider.
+    #[serde(default)]
+    pub client_id: String,
+
+    /// Name of the environment variable that holds the client secret.
+    /// e.g. "MAZE_OAUTH_GOOGLE_SECRET".
+    #[serde(default)]
+    pub client_secret_env: String,
+
+    /// The server's own callback URL the provider redirects to. Must be
+    /// registered in the provider's developer console.
+    #[serde(default)]
+    pub redirect_uri: String,
+
+    /// Resolved client secret. Populated by `OAuthConfig::resolve_and_validate`
+    /// from the env var named in `client_secret_env`. Never read from the toml
+    /// file or written to the serialised form.
+    #[serde(skip)]
+    pub client_secret: String,
+}
+
+/// Configuration for the built-in OAuth connector that speaks OAuth/OIDC
+/// directly to each provider.
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct InternalConnectorConfig {
+    /// Per-provider configuration keyed by canonical provider name
+    /// ("google", "github", etc.).
+    #[serde(default)]
+    pub providers: HashMap<String, InternalProviderConfig>,
+}
+
+/// Placeholder configuration for the (future) Auth0 connector. Held as
+/// `Option<Auth0ConnectorConfig>` on `OAuthConfig` so that the section can be
+/// present in `config.toml` without forcing the connector to exist yet.
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct Auth0ConnectorConfig {
+    #[serde(default)]
+    pub domain: String,
+    #[serde(default)]
+    pub client_id: String,
+    #[serde(default)]
+    pub client_secret_env: String,
+    #[serde(default)]
+    pub audience: String,
+    #[serde(skip)]
+    pub client_secret: String,
+}
+
+/// OAuth configuration. The top-level `[oauth]` table selects which connector
+/// implementation is used and is the entry point for everything else.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct OAuthConfig {
+    /// Master switch. When false, OAuth buttons are hidden in the front ends
+    /// regardless of any per-provider config below, and no validation is run
+    /// against the selected connector's section.
+    #[serde(default = "default_oauth_enabled")]
+    pub enabled: bool,
+
+    /// Which connector implementation to use. "internal" is the default and
+    /// the only one shipping today; "auth0" is reserved for a future drop-in.
+    #[serde(default)]
+    pub connector: ConnectorKind,
+
+    /// URL scheme the MAUI app uses as its OAuth redirect target. Lives on
+    /// the top-level [oauth] table because every connector ends the flow the
+    /// same way: by handing the app a bearer token via this scheme.
+    #[serde(default = "default_mobile_redirect_scheme")]
+    pub mobile_redirect_scheme: String,
+
+    /// Internal-connector configuration. Required when `enabled = true` and
+    /// `connector = Internal`; ignored otherwise.
+    #[serde(default)]
+    pub internal: Option<InternalConnectorConfig>,
+
+    /// Auth0-connector configuration placeholder. Not consumed by any code in
+    /// v1; future connector implementation will read it.
+    #[serde(default)]
+    pub auth0: Option<Auth0ConnectorConfig>,
+}
+
+impl Default for OAuthConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_oauth_enabled(),
+            connector: ConnectorKind::default(),
+            mobile_redirect_scheme: default_mobile_redirect_scheme(),
+            internal: None,
+            auth0: None,
+        }
+    }
+}
+
+impl OAuthConfig {
+    /// Validates the config and resolves any environment-backed secrets into
+    /// `client_secret` fields. Idempotent, so safe to call from tests.
+    ///
+    /// Errors when `enabled = true` and:
+    /// - the section required by the selected connector is missing or has no
+    ///   enabled providers, or
+    /// - any enabled provider names a `client_secret_env` whose env var is not
+    ///   set (a typo or missed deployment step that would otherwise show up
+    ///   only on the first user sign-in attempt).
+    ///
+    /// When `enabled = false`, returns Ok without inspecting anything.
+    pub fn resolve_and_validate(&mut self) -> Result<(), String> {
+        if !self.enabled {
+            return Ok(());
+        }
+        match self.connector {
+            ConnectorKind::Internal => {
+                let internal = self.internal.as_mut().ok_or_else(|| {
+                    "[oauth] enabled = true with connector = \"internal\" requires an [oauth.internal] section with at least one enabled provider".to_string()
+                })?;
+
+                // Walk every enabled provider, collecting *all* issues. Reporting
+                // one error at a time forces a fix-restart-fix-restart loop;
+                // batching lets the operator see the full diagnostic in one shot.
+                let mut issues: Vec<String> = Vec::new();
+                let mut enabled_count = 0;
+                for (name, provider) in internal.providers.iter_mut() {
+                    if !provider.enabled {
+                        continue;
+                    }
+                    enabled_count += 1;
+
+                    if provider.client_id.trim().is_empty() {
+                        issues.push(format!(
+                            "[oauth.internal.providers.{name}] is enabled but client_id is empty"
+                        ));
+                    }
+                    if provider.redirect_uri.trim().is_empty() {
+                        issues.push(format!(
+                            "[oauth.internal.providers.{name}] is enabled but redirect_uri is empty"
+                        ));
+                    }
+
+                    // Resolve the secret. We always check whether the env var is
+                    // populated, even if client_secret_env itself is empty — it
+                    // is more useful for the operator to learn that the field
+                    // is empty *and* (separately) that the named env var would
+                    // also need setting, rather than chaining the diagnostic.
+                    if provider.client_secret_env.trim().is_empty() {
+                        issues.push(format!(
+                            "[oauth.internal.providers.{name}] is enabled but client_secret_env is empty"
+                        ));
+                    } else {
+                        match std::env::var(&provider.client_secret_env) {
+                            Ok(secret) if secret.is_empty() => {
+                                issues.push(format!(
+                                    "[oauth.internal.providers.{name}] env var \"{}\" is set but empty",
+                                    provider.client_secret_env
+                                ));
+                            }
+                            Ok(secret) => {
+                                provider.client_secret = secret;
+                            }
+                            Err(_) => {
+                                issues.push(format!(
+                                    "[oauth.internal.providers.{name}] client_secret_env=\"{}\" is not set in the environment",
+                                    provider.client_secret_env
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                if enabled_count == 0 {
+                    return Err(
+                        "[oauth] enabled = true with connector = \"internal\" requires at least one enabled provider in [oauth.internal.providers.*]"
+                            .to_string(),
+                    );
+                }
+                if !issues.is_empty() {
+                    let mut msg = String::from("OAuth configuration is invalid:");
+                    for issue in &issues {
+                        msg.push_str("\n  - ");
+                        msg.push_str(issue);
+                    }
+                    return Err(msg);
+                }
+            }
+            ConnectorKind::Auth0 => {
+                return Err(
+                    "[oauth] connector = \"auth0\" is not yet implemented; use connector = \"internal\" or set [oauth].enabled = false"
+                        .to_string(),
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Application configuration settings loaded from config.toml or environment variables.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AppConfig {
@@ -116,6 +337,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub features: AppFeaturesConfig,
 
+    /// OAuth configuration: connector selection plus per-connector settings.
+    #[serde(default)]
+    pub oauth: OAuthConfig,
+
     /// Path to the config file that was loaded. Not read from the config file itself —
     /// used by the admin API to persist runtime feature-flag changes back to disk.
     #[serde(skip, default = "default_config_path")]
@@ -130,6 +355,7 @@ impl Default for AppConfig {
             logging: LoggingConfig::default(),
             static_dir: default_static_dir(),
             features: AppFeaturesConfig::default(),
+            oauth: OAuthConfig::default(),
             config_path: default_config_path(),
         }
     }
@@ -147,6 +373,8 @@ fn default_logging_log_dir() -> String { "logs".to_string() }
 fn default_logging_log_level() -> String { "info".to_string() }
 fn default_logging_log_file_prefix() -> String { "maze_web_server_".to_string() }
 fn default_features_allow_signup() -> bool { true }
+fn default_oauth_enabled() -> bool { false }
+fn default_mobile_redirect_scheme() -> String { "maze-app".to_string() }
 
 /// Application Configuration
 impl AppConfig {
@@ -160,11 +388,20 @@ impl AppConfig {
             .set_default("logging.log_file_prefix", default_logging_log_file_prefix())?
             .set_default("static_dir", default_static_dir())?
             .set_default("features.allow_signup", default_features_allow_signup())?
+            .set_default("oauth.enabled", default_oauth_enabled())?
+            .set_default("oauth.connector", "internal")?
+            .set_default("oauth.mobile_redirect_scheme", default_mobile_redirect_scheme())?
             .add_source(File::with_name("config.toml").required(false));
 
         builder = set_env_overrides(builder)?;
         let settings = builder.build()?;
-        settings.try_deserialize().or_else(|_| Ok(AppConfig::default()))
+        let mut cfg: AppConfig = settings
+            .try_deserialize()
+            .or_else(|_| Ok::<_, config::ConfigError>(AppConfig::default()))?;
+        cfg.oauth
+            .resolve_and_validate()
+            .map_err(config::ConfigError::Message)?;
+        Ok(cfg)
     }
 
     /// Logs the configuration using the `log` crate at `info` level.
@@ -211,6 +448,18 @@ fn set_env_overrides(mut builder: ConfigBuilder<DefaultState>) -> Result<ConfigB
 
     if let Ok(allow_signup) = std::env::var(get_app_env_name("FEATURES_ALLOW_SIGNUP")) {
         builder = builder.set_override("features.allow_signup", allow_signup)?;
+    }
+
+    if let Ok(enabled) = std::env::var(get_app_env_name("OAUTH_ENABLED")) {
+        builder = builder.set_override("oauth.enabled", enabled)?;
+    }
+
+    if let Ok(connector) = std::env::var(get_app_env_name("OAUTH_CONNECTOR")) {
+        builder = builder.set_override("oauth.connector", connector)?;
+    }
+
+    if let Ok(scheme) = std::env::var(get_app_env_name("OAUTH_MOBILE_REDIRECT_SCHEME")) {
+        builder = builder.set_override("oauth.mobile_redirect_scheme", scheme)?;
     }
 
     Ok(builder)
@@ -297,5 +546,230 @@ mod tests {
         // config_path is a meta field — it must never be populated from TOML
         let cfg: AppConfig = toml::from_str("").unwrap();
         assert_eq!(cfg.config_path, "config.toml");
+    }
+
+    // -------- OAuth config --------
+
+    #[test]
+    fn oauth_defaults_to_disabled_internal_when_section_absent() {
+        let cfg: AppConfig = toml::from_str("").unwrap();
+        assert!(!cfg.oauth.enabled);
+        assert_eq!(cfg.oauth.connector, ConnectorKind::Internal);
+        assert_eq!(cfg.oauth.mobile_redirect_scheme, "maze-app");
+        assert!(cfg.oauth.internal.is_none());
+    }
+
+    #[test]
+    fn oauth_connector_defaults_to_internal_when_omitted() {
+        let toml = r#"
+            [oauth]
+            enabled = false
+        "#;
+        let cfg: AppConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.oauth.connector, ConnectorKind::Internal);
+    }
+
+    #[test]
+    fn oauth_connector_kind_deserialises_lowercase() {
+        let toml = r#"
+            [oauth]
+            connector = "auth0"
+        "#;
+        let cfg: AppConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.oauth.connector, ConnectorKind::Auth0);
+    }
+
+    #[test]
+    fn oauth_internal_provider_section_deserialises() {
+        let toml = r#"
+            [oauth]
+            enabled = true
+
+            [oauth.internal.providers.google]
+            enabled = true
+            display_name = "Google"
+            client_id = "google-client-id"
+            client_secret_env = "MAZE_OAUTH_GOOGLE_SECRET_TEST_DESER"
+            redirect_uri = "https://maze.example.com/api/v1/auth/oauth/google/callback"
+        "#;
+        let cfg: AppConfig = toml::from_str(toml).unwrap();
+        let internal = cfg.oauth.internal.expect("internal section");
+        let google = internal.providers.get("google").expect("google provider");
+        assert!(google.enabled);
+        assert_eq!(google.display_name, "Google");
+        assert_eq!(google.client_id, "google-client-id");
+        assert_eq!(google.client_secret_env, "MAZE_OAUTH_GOOGLE_SECRET_TEST_DESER");
+        assert_eq!(
+            google.redirect_uri,
+            "https://maze.example.com/api/v1/auth/oauth/google/callback"
+        );
+        // client_secret is never read from toml
+        assert!(google.client_secret.is_empty());
+    }
+
+    #[test]
+    fn resolve_and_validate_is_noop_when_oauth_disabled() {
+        let mut cfg = OAuthConfig::default();
+        // No internal section at all — validation must still pass because
+        // enabled is false.
+        assert!(cfg.resolve_and_validate().is_ok());
+    }
+
+    #[test]
+    fn resolve_and_validate_errors_when_internal_section_missing() {
+        let mut cfg = OAuthConfig {
+            enabled: true,
+            connector: ConnectorKind::Internal,
+            internal: None,
+            ..OAuthConfig::default()
+        };
+        let err = cfg.resolve_and_validate().unwrap_err();
+        assert!(err.contains("[oauth.internal]"), "error message should reference the missing section: {err}");
+    }
+
+    #[test]
+    fn resolve_and_validate_errors_when_no_enabled_providers() {
+        let mut providers = HashMap::new();
+        providers.insert(
+            "google".to_string(),
+            InternalProviderConfig {
+                enabled: false,
+                display_name: "Google".to_string(),
+                client_id: "id".to_string(),
+                client_secret_env: "X".to_string(),
+                redirect_uri: "https://example.com/cb".to_string(),
+                client_secret: String::new(),
+            },
+        );
+        let mut cfg = OAuthConfig {
+            enabled: true,
+            connector: ConnectorKind::Internal,
+            internal: Some(InternalConnectorConfig { providers }),
+            ..OAuthConfig::default()
+        };
+        let err = cfg.resolve_and_validate().unwrap_err();
+        assert!(err.contains("at least one enabled provider"), "got: {err}");
+    }
+
+    #[test]
+    fn resolve_and_validate_errors_when_secret_env_var_unset() {
+        let env_var = "MAZE_OAUTH_TEST_UNSET_SECRET_VAR_DO_NOT_SET";
+        unsafe { std::env::remove_var(env_var); }
+        let mut providers = HashMap::new();
+        providers.insert(
+            "google".to_string(),
+            InternalProviderConfig {
+                enabled: true,
+                display_name: "Google".to_string(),
+                client_id: "id".to_string(),
+                client_secret_env: env_var.to_string(),
+                redirect_uri: "https://example.com/cb".to_string(),
+                client_secret: String::new(),
+            },
+        );
+        let mut cfg = OAuthConfig {
+            enabled: true,
+            connector: ConnectorKind::Internal,
+            internal: Some(InternalConnectorConfig { providers }),
+            ..OAuthConfig::default()
+        };
+        let err = cfg.resolve_and_validate().unwrap_err();
+        assert!(err.contains(env_var), "error should name the env var: {err}");
+    }
+
+    #[test]
+    fn resolve_and_validate_resolves_secret_from_env_var() {
+        let env_var = "MAZE_OAUTH_TEST_RESOLVE_SECRET_VAR";
+        unsafe { std::env::set_var(env_var, "the-resolved-secret"); }
+        let mut providers = HashMap::new();
+        providers.insert(
+            "google".to_string(),
+            InternalProviderConfig {
+                enabled: true,
+                display_name: "Google".to_string(),
+                client_id: "id".to_string(),
+                client_secret_env: env_var.to_string(),
+                redirect_uri: "https://example.com/cb".to_string(),
+                client_secret: String::new(),
+            },
+        );
+        let mut cfg = OAuthConfig {
+            enabled: true,
+            connector: ConnectorKind::Internal,
+            internal: Some(InternalConnectorConfig { providers }),
+            ..OAuthConfig::default()
+        };
+        cfg.resolve_and_validate().expect("should resolve cleanly");
+        let google = cfg.internal.unwrap().providers.remove("google").unwrap();
+        assert_eq!(google.client_secret, "the-resolved-secret");
+        unsafe { std::env::remove_var(env_var); }
+    }
+
+    #[test]
+    fn resolve_and_validate_errors_for_auth0_connector() {
+        let mut cfg = OAuthConfig {
+            enabled: true,
+            connector: ConnectorKind::Auth0,
+            ..OAuthConfig::default()
+        };
+        let err = cfg.resolve_and_validate().unwrap_err();
+        assert!(err.contains("auth0"), "got: {err}");
+        assert!(err.contains("not yet implemented"), "got: {err}");
+    }
+
+    #[test]
+    fn resolve_and_validate_reports_all_issues_in_one_error() {
+        // The case the operator typically hits: they enabled a provider but
+        // never filled in client_id / redirect_uri / set the secret env var.
+        // The error must name every problem so they can fix them in one pass.
+        let env_var = "MAZE_OAUTH_TEST_BATCH_SECRET_DO_NOT_SET";
+        unsafe { std::env::remove_var(env_var); }
+        let mut providers = HashMap::new();
+        providers.insert(
+            "google".to_string(),
+            InternalProviderConfig {
+                enabled: true,
+                display_name: "Google".to_string(),
+                client_id: String::new(),
+                client_secret_env: env_var.to_string(),
+                redirect_uri: String::new(),
+                client_secret: String::new(),
+            },
+        );
+        let mut cfg = OAuthConfig {
+            enabled: true,
+            connector: ConnectorKind::Internal,
+            internal: Some(InternalConnectorConfig { providers }),
+            ..OAuthConfig::default()
+        };
+        let err = cfg.resolve_and_validate().unwrap_err();
+        assert!(err.contains("client_id is empty"), "missing client_id error: {err}");
+        assert!(err.contains("redirect_uri is empty"), "missing redirect_uri error: {err}");
+        assert!(err.contains(env_var), "missing env var name in error: {err}");
+        assert!(err.contains("is not set in the environment"), "missing env-unset diagnostic: {err}");
+    }
+
+    #[test]
+    fn resolve_and_validate_errors_when_enabled_provider_has_empty_client_id() {
+        let mut providers = HashMap::new();
+        providers.insert(
+            "google".to_string(),
+            InternalProviderConfig {
+                enabled: true,
+                display_name: "Google".to_string(),
+                client_id: String::new(),
+                client_secret_env: "X".to_string(),
+                redirect_uri: "https://example.com/cb".to_string(),
+                client_secret: String::new(),
+            },
+        );
+        let mut cfg = OAuthConfig {
+            enabled: true,
+            connector: ConnectorKind::Internal,
+            internal: Some(InternalConnectorConfig { providers }),
+            ..OAuthConfig::default()
+        };
+        let err = cfg.resolve_and_validate().unwrap_err();
+        assert!(err.contains("client_id is empty"), "got: {err}");
     }
 }
