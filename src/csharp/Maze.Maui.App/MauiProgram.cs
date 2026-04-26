@@ -68,6 +68,16 @@ namespace Maze.Maui.App
             InitializeMazeInterop();
 
             builder.Services.AddSingleton<ConfigurationService>();
+
+            // The OAuth browser-flow broker is platform-specific; MAUI's built-in
+            // WebAuthenticator throws PlatformNotSupportedException on Windows
+            // (see https://github.com/microsoft/WindowsAppSDK/issues/441), so we
+            // use WinUIEx there and the MAUI implementation everywhere else.
+#if WINDOWS
+            builder.Services.AddSingleton<IWebAuthenticatorBroker, WindowsWebAuthenticatorBroker>();
+#else
+            builder.Services.AddSingleton<IWebAuthenticatorBroker, DefaultWebAuthenticatorBroker>();
+#endif
             builder.Services.AddSingleton<IAuthService, AuthHttpClientService>();
             builder.Services.AddSingleton<IAppFeaturesService, AppFeaturesHttpClientService>();
             if(useMockMazeService)

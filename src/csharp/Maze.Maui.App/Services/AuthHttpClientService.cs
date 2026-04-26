@@ -90,15 +90,35 @@ namespace Maze.Maui.App.Services
         private const string TOKEN_EXPIRY_STORAGE_KEY = "bearer_token_expires_at";
         private const string HEADER_AUTHORIZATION = "Authorization";
 
+        // Custom URL scheme registered on each platform; the server redirects
+        // the platform browser to "{scheme}://oauth-callback?token=...&expires_at=..."
+        // and WebAuthenticator's URL-scheme handler picks it up.
+        internal const string OAUTH_CALLBACK_URL = "maze-app://oauth-callback";
+
+        // Upper bound on how long we wait for the user to complete an OAuth flow
+        // in the platform browser. Without this, cancelling the Windows
+        // "Open Maze" protocol-activation prompt leaves AuthenticateAsync
+        // blocked forever — the broker has no way to detect that the user
+        // refused the activation. Five minutes is generous enough for any
+        // realistic consent screen but short enough that a stuck flow
+        // self-heals.
+        private static readonly TimeSpan OAUTH_FLOW_TIMEOUT = TimeSpan.FromMinutes(5);
+
         private readonly HttpClient _httpClient;
+        private readonly ConfigurationService _configurationService;
+        private readonly IWebAuthenticatorBroker _webAuthenticator;
 
         /// <summary>
-        /// Constructor
+        /// Constructor. The broker is platform-specific: on Windows MAUI's
+        /// built-in WebAuthenticator throws <see cref="PlatformNotSupportedException"/>,
+        /// so DI registers a WinUIEx-backed broker on that platform and the
+        /// MAUI broker on every other.
         /// </summary>
-        /// <param name="configurationService">Injected configuration service</param>
-        public AuthHttpClientService(ConfigurationService configurationService)
+        public AuthHttpClientService(ConfigurationService configurationService, IWebAuthenticatorBroker webAuthenticator)
         {
             _httpClient = ApiHttpClientFactory.Create(configurationService);
+            _configurationService = configurationService;
+            _webAuthenticator = webAuthenticator;
         }
 
         /// <inheritdoc/>
@@ -129,6 +149,33 @@ namespace Maze.Maui.App.Services
 
             await SecureStorage.Default.SetAsync(TOKEN_STORAGE_KEY, loginResponse.LoginTokenId);
             await SecureStorage.Default.SetAsync(TOKEN_EXPIRY_STORAGE_KEY, loginResponse.LoginTokenExpiresAt.ToString("O"));
+
+            return await GetMyProfileAsync();
+        }
+
+        /// <inheritdoc/>
+        public async Task<UserProfile> SignInWithOAuthAsync(string providerName)
+        {
+            if (string.IsNullOrWhiteSpace(providerName))
+                throw new ArgumentException("Provider name must be supplied", nameof(providerName));
+
+            var startUrl = new Uri(new Uri(_configurationService.ApiRootUri),
+                $"auth/oauth/{Uri.EscapeDataString(providerName)}/start?origin=mobile");
+            var callbackUrl = new Uri(OAUTH_CALLBACK_URL);
+
+            // .WaitAsync turns "stuck waiting forever" into a TimeoutException
+            // the ViewModel can translate into a friendly cancellation message.
+            var result = await _webAuthenticator
+                .AuthenticateAsync(startUrl, callbackUrl)
+                .WaitAsync(OAUTH_FLOW_TIMEOUT);
+
+            if (!result.Properties.TryGetValue("token", out var token) || string.IsNullOrEmpty(token))
+                throw new Exception("OAuth response did not include a bearer token");
+            if (!result.Properties.TryGetValue("expires_at", out var expiresAt) || string.IsNullOrEmpty(expiresAt))
+                throw new Exception("OAuth response did not include a token expiry");
+
+            await SecureStorage.Default.SetAsync(TOKEN_STORAGE_KEY, token);
+            await SecureStorage.Default.SetAsync(TOKEN_EXPIRY_STORAGE_KEY, expiresAt);
 
             return await GetMyProfileAsync();
         }

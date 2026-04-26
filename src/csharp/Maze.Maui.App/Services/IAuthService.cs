@@ -37,6 +37,15 @@ namespace Maze.Maui.App.Services
         /// <summary>Signs in with email and password. Stores the returned bearer token. Returns the user profile.</summary>
         Task<UserProfile> SignInAsync(string email, string password);
 
+        /// <summary>
+        /// Signs in via the named OAuth provider (e.g. "google", "github") using the platform's
+        /// browser. The server runs the full OAuth flow and redirects the platform browser to
+        /// <c>maze-app://oauth-callback?token=...&amp;expires_at=...</c>; the WebAuthenticator
+        /// captures it. The token is then stored and the user profile fetched.
+        /// </summary>
+        /// <param name="providerName">Canonical provider name as exposed by <see cref="IAppFeaturesService"/>.</param>
+        Task<UserProfile> SignInWithOAuthAsync(string providerName);
+
         /// <summary>Signs out, removing the stored bearer token.</summary>
         Task SignOutAsync();
 

@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
+using System.Collections.ObjectModel;
 using System.Net;
 using System.Text.RegularExpressions;
 
@@ -32,6 +33,14 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private bool allowSignUp = true;
 
+        /// <summary>OAuth providers exposed by the server. Drives the per-provider
+        /// button list on <see cref="LoginPage"/>; empty when OAuth is disabled.</summary>
+        public ObservableCollection<OAuthProviderPublic> OAuthProviders { get; } = new();
+
+        /// <summary>True when at least one OAuth provider is enabled — used to show/hide
+        /// the divider and the OAuth section on the login form.</summary>
+        public bool HasOAuthProviders => OAuthProviders.Count > 0;
+
         [RelayCommand]
         private void ToggleShowPassword() => ShowPassword = !ShowPassword;
 
@@ -58,6 +67,7 @@ namespace Maze.Maui.App.ViewModels
         {
             await _appFeaturesService.RefreshAsync();
             AllowSignUp = _appFeaturesService.Features.AllowSignUp;
+            SyncOAuthProviders(_appFeaturesService.Features.OAuthProviders);
 
             if (!await _authService.IsAuthenticatedAsync())
                 return false;
@@ -124,6 +134,51 @@ namespace Maze.Maui.App.ViewModels
         private async Task GoToSignUp()
         {
             await Shell.Current.GoToAsync(nameof(SignUpPage));
+        }
+
+        [RelayCommand]
+        private async Task SignInWithOAuth(string? providerName)
+        {
+            if (string.IsNullOrWhiteSpace(providerName)) return;
+            IsBusy = true;
+            ErrorMessage = "";
+            try
+            {
+                await _authService.SignInWithOAuthAsync(providerName);
+                await Shell.Current.GoToAsync("//MainPage");
+            }
+            catch (TimeoutException)
+            {
+                // The OAuth flow exceeded its timeout — typically because the
+                // user cancelled the Windows "Open Maze" protocol-activation
+                // prompt, or closed the browser before completing consent.
+                ErrorMessage = "Sign-in was cancelled or did not complete in time. Please try again.";
+            }
+            catch (TaskCanceledException)
+            {
+                // Broker reported a clean cancellation (e.g. iOS user dismissed the auth sheet).
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                ErrorMessage = "Sign in failed. Please try again.";
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"OAuth sign-in failed: {ex}");
+                ErrorMessage = $"Sign in with {providerName} failed. Please try again.";
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+
+        private void SyncOAuthProviders(IEnumerable<OAuthProviderPublic> providers)
+        {
+            OAuthProviders.Clear();
+            foreach (var p in providers)
+                OAuthProviders.Add(p);
+            OnPropertyChanged(nameof(HasOAuthProviders));
         }
     }
 }

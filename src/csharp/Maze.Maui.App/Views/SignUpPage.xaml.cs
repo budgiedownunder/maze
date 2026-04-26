@@ -38,6 +38,8 @@ namespace Maze.Maui.App.Views;
 /// </summary>
 public partial class SignUpPage : ContentPage
 {
+    private readonly SignUpViewModel _viewModel;
+
     /// <summary>
     /// Constructor
     /// </summary>
@@ -45,6 +47,13 @@ public partial class SignUpPage : ContentPage
     public SignUpPage(SignUpViewModel viewModel)
     {
         InitializeComponent();
-        BindingContext = viewModel;
+        BindingContext = _viewModel = viewModel;
+    }
+
+    /// <inheritdoc/>
+    protected override async void OnAppearing()
+    {
+        base.OnAppearing();
+        await _viewModel.RefreshOAuthProvidersAsync();
     }
 }
