@@ -6,8 +6,8 @@
 
 Browser-based UI for the `maze_web_server` REST API. Features:
 
-- **User accounts** — sign up, sign in, sign out, edit profile, change password, delete account
-- **Maze list** — create, rename, duplicate, delete, and open mazes
+- **User accounts** — sign up/in/out, edit profile, change password, delete account, plus OAuth sign-in (Google, GitHub) rendered when the [`maze_web_server`](../../rust/maze_web_server/README.md) has those providers configured
+- **Maze list** — create, open, rename, duplicate, delete, and play mazes
 - **Maze editor** — cell-by-cell editing (walls, start, finish), multi-cell range selection,
   structural editing (insert/delete rows and columns), keyboard shortcuts
 - **Maze game** — play a maze at `/play/:id` with keyboard (arrow keys / WASD) or
@@ -18,6 +18,10 @@ Browser-based UI for the `maze_web_server` REST API. Features:
   that runs the first-person 3D game entirely in-browser
 - **In-browser WASM** — maze generation, solving, and game logic run locally via the
   `maze_wasm` WebAssembly module with no server round-trip
+
+## OAuth integration
+
+The SPA never sees client secrets. The Rust [`maze_web_server`](../../rust/maze_web_server/README.md) runs the full OAuth flow and, on success, redirects to `/oauth/callback#token=...&expires_at=...`. The `OAuthCallbackPage` component reads the fragment, hands the token to `AuthContext.setAuthFromTokenResponse`, then clears the fragment from the URL via `history.replaceState` so the token is not retained in browser history, referer headers, or shared URLs. The list of provider buttons rendered on `/login` and `/signup` is server-driven via `GET /api/v1/features` — no client rebuild needed when a provider is added or toggled server-side.
 
 ## Tech stack
 

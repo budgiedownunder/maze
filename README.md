@@ -24,9 +24,7 @@ This is an experimental project that has been created for exploring various prog
 
 At this stage, the following areas are covered:
 
-- Creating library crates in `Rust`
-
-- Creating a `Rust` console application ([`maze_console`](./src/rust/maze_console/README.md)) that leverages `Rust` library crates for calculation ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md))
+- Creating a simple `Rust` console application ([`maze_console`](./src/rust/maze_console/README.md)) that leverages `Rust` library crates for maze management/generate/solve  ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md))
 
 - Implementing automated unit and mock testing (dependency injection) in `Rust` 
 
@@ -45,10 +43,11 @@ At this stage, the following areas are covered:
   - Uses [`actix`](https://actix.rs/) to serve the `HTTPS` API and [`utoipa`](https://docs.rs/utoipa/latest/utoipa/) to publish it as an [`OpenAPI`](https://www.openapis.org/)-compliant interface for use in third party products such as [`Swagger`](https://swagger.io/)
   - Supports interactive documentation in the form of [RapiDoc](https://rapidocweb.com/), [Redoc](https://redocly.com/redoc) and [Swagger UI](https://swagger.io/tools/swagger-ui/)
   - Serves a React Single Page Application (SPA) from a configurable static directory
+  - Supports OAuth / OIDC sign-in via a pluggable `OAuthConnector` (Google and GitHub built-in)
 
-- Implementing a `React`/`TypeScript` web frontend ([`maze_web_server`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API including maze management, generate, solve, walk solution animation, and interactive maze gameplay (run entirely in-browser via the `maze_wasm` WebAssembly module). Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
+- Implementing a `React`/`TypeScript` web frontend ([`maze_web_server`](./src/react/maze_web_server/README.md)) that provides a browser-based UI for the `maze_web_server` REST API including maze management, generate, solve, walk solution animation, and interactive maze gameplay (run entirely in-browser via the `maze_wasm` WebAssembly module), OAuth sign-in buttons (Google, GitHub) when enabled. Testing with [Vitest](https://vitest.dev/), [React Testing Library](https://testing-library.com/), [Mock Service Worker](https://mswjs.io/), and [Playwright](https://playwright.dev/)
 
-- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, change password, delete account) and maze management (create, save, delete, rename, edit, generate, solve, walk solution)
+- Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, change password, delete account); OAuth sign-in (Google, GitHub) when enabled; maze management (create, save, delete, rename, edit, generate, solve, walk solution, play)
 - Automating `C#` API documentation generation with `DocFX`
 
 - Implementing a first-person **3D maze game** in `Rust` using the [`Bevy`](https://bevyengine.org/) engine ([`maze_game_bevy`](./src/rust/maze_game_bevy/README.md)) — PBR rendering, procedural textures, minimap, camera tilt, gold-leaf rain on win, and a touch D-pad for mobile
