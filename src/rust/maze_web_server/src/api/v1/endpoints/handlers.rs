@@ -416,6 +416,7 @@ impl SignupRequest {
                 password_hash,
                 api_key: Uuid::nil(),
                 logins: vec![],
+                oauth_identities: vec![],
             }
         )
     }
@@ -899,8 +900,9 @@ impl CreateUserRequest {
                 password_hash,
                 api_key: Uuid::nil(),
                 logins: vec![],
+                oauth_identities: vec![],
             }
-        )  
+        )
     }
 }
 

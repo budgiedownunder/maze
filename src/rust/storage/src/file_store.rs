@@ -480,6 +480,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -533,6 +534,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -604,6 +606,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -673,6 +676,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -733,6 +737,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -793,6 +798,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -853,6 +859,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -926,6 +933,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins,
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -967,6 +975,86 @@ impl UserStore for FileStore {
         }
         Err(Error::UserNotFound())
     }
+    /// Locates a user by an OAuth identity `(provider, provider_user_id)` pair.
+    /// `provider` is matched case-insensitively (canonical providers are stored
+    /// lowercase: "google", "github"); `provider_user_id` is matched exactly (it
+    /// is an opaque stable id from the identity provider).
+    ///
+    /// # Examples
+    ///
+    /// Try to create a user with a linked Google identity and then locate it by
+    /// its OAuth identity within a file store
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    ///
+    /// use data_model::{OAuthIdentity, User};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    ///
+    /// // Create the user definition with a linked Google identity
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![OAuthIdentity::new(
+    ///         "google".to_string(),
+    ///         "google-sub-jsmith".to_string(),
+    ///         Some("jsmith@company.com".to_string()),
+    ///     )],
+    /// };
+    ///
+    /// // Create the user within the file store
+    /// match store.create_user(&mut user) {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the file store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to find it again by its OAuth identity and display the results
+    ///         match store.find_user_by_oauth_identity("google", "google-sub-jsmith") {
+    ///             Ok(user_found) => {
+    ///                 println!("Successfully found user within the file store => {:?}", user_found);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to find user => {}",
+    ///                      error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// ```
+    fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, Error> {
+        let ids = self.get_user_ids()?;
+        for id in ids {
+            if let Some(user) = self.load_user_if_present(id)? {
+                if user.oauth_identities.iter().any(|identity| {
+                    identity.provider.eq_ignore_ascii_case(provider)
+                        && identity.provider_user_id == provider_user_id
+                }) {
+                    return Ok(user);
+                }
+            }
+        }
+        Err(Error::UserNotFound())
+    }
     /// Returns the list of users within the store, sorted
     /// alphabetically by username in ascending order
     ///
@@ -995,6 +1083,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Create the user within the file store
@@ -1064,6 +1153,7 @@ impl UserStore for FileStore {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Create the admin user within the file store
@@ -1584,6 +1674,7 @@ mod tests {
             password_hash: password_hash.to_string(),
             api_key: User::new_api_key(),
             logins: vec![],
+            oauth_identities: vec![],
         }
     }
 
@@ -2167,6 +2258,96 @@ mod tests {
         std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
             .expect("failed to create orphan directory");
         store.find_user_by_email("valid@company.com").expect("find_user_by_email should succeed despite orphaned directory");
+    }
+
+    #[test]
+    fn can_find_user_by_oauth_identity() {
+        use data_model::OAuthIdentity;
+        let mut store = new_store();
+        let mut alice = init_test_user(false, "alice", "Alice", "alice@example.com", "hash");
+        alice.oauth_identities.push(OAuthIdentity::new(
+            "google".to_string(),
+            "google-sub-alice".to_string(),
+            Some("alice@example.com".to_string()),
+        ));
+        store.create_user(&mut alice).expect("create alice");
+
+        let mut bob = init_test_user(false, "bob", "Bob", "bob@example.com", "hash");
+        bob.oauth_identities.push(OAuthIdentity::new(
+            "github".to_string(),
+            "12345".to_string(),
+            Some("bob@example.com".to_string()),
+        ));
+        store.create_user(&mut bob).expect("create bob");
+
+        let found = store.find_user_by_oauth_identity("google", "google-sub-alice")
+            .expect("alice should be found by google identity");
+        assert_eq!(found.id, alice.id);
+
+        let found = store.find_user_by_oauth_identity("github", "12345")
+            .expect("bob should be found by github identity");
+        assert_eq!(found.id, bob.id);
+
+        // Provider name is matched case-insensitively (canonical form is lowercase).
+        let found = store.find_user_by_oauth_identity("GOOGLE", "google-sub-alice")
+            .expect("provider name should match case-insensitively");
+        assert_eq!(found.id, alice.id);
+
+        // provider_user_id is matched exactly (case-sensitive).
+        assert!(store.find_user_by_oauth_identity("google", "GOOGLE-SUB-ALICE").is_err());
+
+        // Wrong provider for an existing provider_user_id must not match.
+        assert!(store.find_user_by_oauth_identity("github", "google-sub-alice").is_err());
+
+        // Unknown identity returns UserNotFound.
+        assert!(store.find_user_by_oauth_identity("google", "no-such-sub").is_err());
+    }
+
+    #[test]
+    fn find_user_by_oauth_identity_supports_multiple_providers_per_user() {
+        // Locks in the multi-provider-per-user invariant: a single user with both
+        // Google and GitHub identities is found by either lookup, returning the
+        // same User.id.
+        use data_model::OAuthIdentity;
+        let mut store = new_store();
+        let mut alice = init_test_user(false, "alice", "Alice", "alice@example.com", "hash");
+        alice.oauth_identities.push(OAuthIdentity::new(
+            "google".to_string(),
+            "google-sub-alice".to_string(),
+            Some("alice@example.com".to_string()),
+        ));
+        alice.oauth_identities.push(OAuthIdentity::new(
+            "github".to_string(),
+            "67890".to_string(),
+            Some("alice@example.com".to_string()),
+        ));
+        store.create_user(&mut alice).expect("create alice");
+
+        let by_google = store.find_user_by_oauth_identity("google", "google-sub-alice")
+            .expect("found via google");
+        let by_github = store.find_user_by_oauth_identity("github", "67890")
+            .expect("found via github");
+        assert_eq!(by_google.id, alice.id);
+        assert_eq!(by_github.id, alice.id);
+        assert_eq!(by_google.id, by_github.id);
+    }
+
+    #[test]
+    fn find_user_by_oauth_identity_skips_orphaned_user_directory() {
+        use data_model::OAuthIdentity;
+        let mut store = new_store();
+        let mut alice = init_test_user(false, "valid", "", "valid@company.com", "hash");
+        alice.oauth_identities.push(OAuthIdentity::new(
+            "google".to_string(),
+            "sub-1".to_string(),
+            Some("valid@company.com".to_string()),
+        ));
+        store.create_user(&mut alice).expect("create user");
+        let orphan_id = Uuid::new_v4();
+        std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
+            .expect("failed to create orphan directory");
+        store.find_user_by_oauth_identity("google", "sub-1")
+            .expect("find_user_by_oauth_identity should succeed despite orphaned directory");
     }
 
     #[test]

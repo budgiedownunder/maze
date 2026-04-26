@@ -91,7 +91,17 @@ pub fn hash_password(password: &str, cfg: &PasswordHashConfig) -> Result<String,
 /// assert!(!is_valid);
 /// ```
 pub fn verify_password(hash: &str, password: &str) -> Result<bool, argon2::password_hash::Error> {
-    let parsed_hash = PasswordHash::new(hash)?;
+    // OAuth-only users carry an empty password_hash; treat that (and any other
+    // string that is not a valid PHC-format Argon2 hash) as a non-match rather
+    // than a parse error, so the login endpoint returns "invalid credentials"
+    // instead of a 500.
+    if hash.is_empty() {
+        return Ok(false);
+    }
+    let parsed_hash = match PasswordHash::new(hash) {
+        Ok(h) => h,
+        Err(_) => return Ok(false),
+    };
     let argon2 = Argon2::default();
 
     Ok(argon2.verify_password(password.as_bytes(), &parsed_hash).is_ok())
@@ -134,6 +144,25 @@ mod tests {
         let bad_password = "wrong_password";
         let is_valid = verify_password(&hash, bad_password).expect("Password verification generated an unexpected error");
         assert!(!is_valid, "Password verification succeeded (but failure was expected");
+    }
+
+    #[test]
+    fn verify_password_rejects_empty_hash() {
+        // OAuth-only users have password_hash = "" — must never match any password.
+        let is_valid = verify_password("", "any_password").expect("verify should not error on empty hash");
+        assert!(!is_valid);
+        let is_valid = verify_password("", "").expect("verify should not error on empty hash and empty password");
+        assert!(!is_valid);
+    }
+
+    #[test]
+    fn verify_password_rejects_non_argon2_hash() {
+        let is_valid = verify_password("not-an-argon2-string", "any_password")
+            .expect("verify should not error on non-PHC hash");
+        assert!(!is_valid);
+        let is_valid = verify_password("$bcrypt$something", "any_password")
+            .expect("verify should not error on non-Argon2 PHC-shaped hash");
+        assert!(!is_valid);
     }
 
 }    

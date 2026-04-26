@@ -350,6 +350,17 @@ mod test_definitions {
             }
             Err(StoreError::UserNotFound())
         }
+
+        fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, StoreError> {
+            for v in self.users.values() {
+                if v.user.oauth_identities.iter().any(|i| {
+                    i.provider.eq_ignore_ascii_case(provider) && i.provider_user_id == provider_user_id
+                }) {
+                    return Ok(v.user.clone());
+                }
+            }
+            Err(StoreError::UserNotFound())
+        }
         /// Returns the list of users within the store, sorted
         /// alphabetically by username in ascending order
         fn get_users(&self) -> Result<Vec<User>, StoreError> {
