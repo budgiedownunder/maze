@@ -1,5 +1,8 @@
 use crate::config::app::AppConfig;
 use crate::middleware::auth::{ApiKey, LoginId};
+use crate::oauth::{
+    account, state as oauth_state, FlowOrigin, OAuthConnector, OAuthError, OAuthProviderPublic,
+};
 use crate::service::auth::AuthService;
 use crate::SharedFeatures;
 
@@ -8,7 +11,7 @@ use data_model::{Maze, User};
 use maze::{Error as MazeError, Generator, GeneratorOptions, MazeSolution, MazeSolver};
 use storage::{Error as StoreError, MazeItem, Store, SharedStore};
 
-use actix_web::{delete, get, post, put, web, web::Query, HttpMessage, HttpRequest, HttpResponse, Error,
+use actix_web::{cookie::{Cookie, SameSite, time::Duration as CookieDuration}, delete, get, post, put, web, web::Query, HttpMessage, HttpRequest, HttpResponse, Error,
     error::{ErrorBadRequest, ErrorConflict, ErrorForbidden, ErrorInternalServerError, ErrorNotFound, ErrorUnauthorized, ErrorUnprocessableEntity, InternalError}
 };
 use chrono::{DateTime, Utc};
@@ -294,11 +297,28 @@ impl UserItem {
 // Endpoint: GET /api/v1/features
 // Handler:  get_features()
 // **************************************************************************************************
-/// Response body for `GET /api/v1/features`
-#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+/// Response body for `GET /api/v1/features`. Also accepted as the request body
+/// for `PUT /api/v1/admin/features`; only `allow_signup` is mutable from there
+/// and `oauth_providers` is sourced from the live connector at response time.
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone, Default)]
 pub struct AppFeaturesResponse {
     /// Whether new users can self-register via the signup endpoint
     pub allow_signup: bool,
+    /// OAuth providers currently enabled on this server. Empty when
+    /// `[oauth].enabled = false` or no providers are configured. Read-only on
+    /// the admin update endpoint.
+    #[serde(default)]
+    pub oauth_providers: Vec<OAuthProviderPublic>,
+}
+
+fn build_features_response(
+    allow_signup: bool,
+    connector: &dyn OAuthConnector,
+) -> AppFeaturesResponse {
+    AppFeaturesResponse {
+        allow_signup,
+        oauth_providers: connector.enabled_providers(),
+    }
 }
 
 #[utoipa::path(
@@ -315,13 +335,15 @@ pub struct AppFeaturesResponse {
 #[get("/features")]
 pub async fn get_features(
     features: web::Data<SharedFeatures>,
+    connector: web::Data<crate::oauth::SharedOAuthConnector>,
 ) -> Result<HttpResponse, Error> {
     let features_lock = features.read().map_err(|_| {
         ErrorInternalServerError("Failed to acquire features read lock")
     })?;
-    Ok(HttpResponse::Ok().json(AppFeaturesResponse {
-        allow_signup: features_lock.allow_signup,
-    }))
+    Ok(HttpResponse::Ok().json(build_features_response(
+        features_lock.allow_signup,
+        connector.as_ref().as_ref(),
+    )))
 }
 
 // **************************************************************************************************
@@ -367,6 +389,7 @@ pub async fn update_admin_features(
     body: web::Json<AppFeaturesResponse>,
     features: web::Data<SharedFeatures>,
     config: web::Data<AppConfig>,
+    connector: web::Data<crate::oauth::SharedOAuthConnector>,
 ) -> Result<HttpResponse, Error> {
     get_authorized_user(&req, true)?;
 
@@ -378,9 +401,10 @@ pub async fn update_admin_features(
     })?;
     features_lock.allow_signup = new_features.allow_signup;
 
-    Ok(HttpResponse::Ok().json(AppFeaturesResponse {
-        allow_signup: features_lock.allow_signup,
-    }))
+    Ok(HttpResponse::Ok().json(build_features_response(
+        features_lock.allow_signup,
+        connector.as_ref().as_ref(),
+    )))
 }
 
 // **************************************************************************************************
@@ -491,6 +515,354 @@ pub async fn signup(
     }
     unreachable!()
 }
+// **************************************************************************************************
+// Endpoints: GET /api/v1/auth/oauth/{provider}/start
+//            GET /api/v1/auth/oauth/{provider}/callback
+// Handlers:  oauth_start, oauth_callback
+// **************************************************************************************************
+
+#[derive(Deserialize, Debug)]
+pub struct OAuthStartQuery {
+    /// Where the flow originated. "web" → SPA fragment redirect; "mobile" →
+    /// custom URL-scheme redirect for the MAUI WebAuthenticator.
+    pub origin: FlowOrigin,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct OAuthCallbackQuery {
+    pub code: Option<String>,
+    pub state: Option<String>,
+    pub error: Option<String>,
+    pub error_description: Option<String>,
+}
+
+#[derive(Serialize, ToSchema, Debug)]
+pub struct OAuthStartMobileResponse {
+    /// URL the mobile client should send the user's browser to. The server
+    /// is the only party holding the client_secret; the mobile app simply
+    /// follows this redirect via WebAuthenticator.
+    pub authorize_url: String,
+}
+
+const STATE_COOKIE_PATH: &str = "/api/v1/auth/oauth";
+
+fn build_state_cookie<'a>(value: String) -> Cookie<'a> {
+    Cookie::build(oauth_state::COOKIE_NAME, value)
+        .path(STATE_COOKIE_PATH)
+        .http_only(true)
+        .secure(true)
+        .same_site(SameSite::Lax)
+        .max_age(CookieDuration::seconds(oauth_state::TTL_SECONDS))
+        .finish()
+}
+
+fn clear_state_cookie<'a>() -> Cookie<'a> {
+    Cookie::build(oauth_state::COOKIE_NAME, "")
+        .path(STATE_COOKIE_PATH)
+        .http_only(true)
+        .secure(true)
+        .same_site(SameSite::Lax)
+        .max_age(CookieDuration::seconds(0))
+        .finish()
+}
+
+fn oauth_error_to_actix(err: OAuthError) -> Error {
+    match err {
+        OAuthError::UnknownOrDisabledProvider(_) => ErrorNotFound(err.to_string()),
+        OAuthError::InvalidState(_) => ErrorBadRequest(err.to_string()),
+        OAuthError::ProviderResponse(_) | OAuthError::ProviderTransport(_) => {
+            log::warn!("OAuth provider error: {err}");
+            ErrorInternalServerError("OAuth provider error")
+        }
+        OAuthError::Misconfigured(_) => {
+            log::error!("OAuth misconfiguration: {err}");
+            ErrorInternalServerError("OAuth misconfiguration")
+        }
+    }
+}
+
+fn web_callback_url(token_id: Uuid, expires_at: DateTime<Utc>) -> String {
+    format!(
+        "/oauth/callback#token={}&expires_at={}",
+        token_id,
+        encode(&expires_at.to_rfc3339()),
+    )
+}
+
+fn mobile_callback_url(scheme: &str, token_id: Uuid, expires_at: DateTime<Utc>) -> String {
+    format!(
+        "{scheme}://oauth-callback?token={}&expires_at={}",
+        token_id,
+        encode(&expires_at.to_rfc3339()),
+    )
+}
+
+fn web_error_url(reason: &str) -> String {
+    format!("/login?error={}", encode(reason))
+}
+
+fn mobile_error_url(scheme: &str, reason: &str) -> String {
+    format!("{scheme}://oauth-error?reason={}", encode(reason))
+}
+
+#[utoipa::path(
+    summary = "Begin an OAuth sign-in flow",
+    description = "Generates a provider authorize URL with state + PKCE, sets a short-lived CSRF cookie, and either 302-redirects (origin=web) or returns the URL as JSON (origin=mobile) so the MAUI WebAuthenticator can follow it.",
+    get,
+    path = "/api/v1/auth/oauth/{provider}/start",
+    params(
+        ("provider" = String, Path, description = "Canonical provider name, e.g. 'google' or 'github'"),
+        ("origin" = String, Query, description = "'web' or 'mobile'")
+    ),
+    responses(
+        (status = 200, description = "Mobile origin: JSON with authorize_url", body = OAuthStartMobileResponse),
+        (status = 302, description = "Web origin: redirect to provider authorize URL"),
+        (status = 400, description = "Invalid origin or provider"),
+        (status = 404, description = "Unknown or disabled provider"),
+        (status = 500, description = "Internal error")
+    ),
+    tags = ["v1"]
+)]
+#[get("/auth/oauth/{provider}/start")]
+pub async fn oauth_start(
+    path: web::Path<String>,
+    query: web::Query<OAuthStartQuery>,
+    connector: web::Data<crate::oauth::SharedOAuthConnector>,
+) -> Result<HttpResponse, Error> {
+    let provider = path.into_inner();
+    let begin = connector
+        .as_ref()
+        .as_ref()
+        .begin(&provider, query.origin)
+        .await
+        .map_err(oauth_error_to_actix)?;
+    let cookie_value = oauth_state::encode(&begin.persisted)
+        .map_err(|e| ErrorInternalServerError(format!("oauth state encode: {e}")))?;
+    let cookie = build_state_cookie(cookie_value);
+
+    Ok(match query.origin {
+        FlowOrigin::Web => HttpResponse::Found()
+            .insert_header(("Location", begin.authorize_url))
+            .cookie(cookie)
+            .finish(),
+        FlowOrigin::Mobile => HttpResponse::Ok()
+            .cookie(cookie)
+            .json(OAuthStartMobileResponse { authorize_url: begin.authorize_url }),
+    })
+}
+
+#[utoipa::path(
+    summary = "Complete an OAuth sign-in flow",
+    description = "The provider redirects here after consent. The handler validates the CSRF cookie + state, exchanges the code via the connector, resolves or creates the user, mints a bearer token, then redirects to the SPA (web) or the app's URL scheme (mobile) with the token in the URL.",
+    get,
+    path = "/api/v1/auth/oauth/{provider}/callback",
+    params(
+        ("provider" = String, Path, description = "Canonical provider name"),
+        ("code" = Option<String>, Query, description = "Authorization code from the provider"),
+        ("state" = Option<String>, Query, description = "CSRF state nonce echoed by the provider"),
+        ("error" = Option<String>, Query, description = "Provider-side error code (if the user denied consent, etc.)")
+    ),
+    responses(
+        (status = 302, description = "Redirects to the SPA or the app URL scheme with the bearer token"),
+        (status = 400, description = "Invalid or expired state cookie"),
+        (status = 404, description = "Unknown or disabled provider"),
+        (status = 500, description = "Internal error")
+    ),
+    tags = ["v1"]
+)]
+#[get("/auth/oauth/{provider}/callback")]
+pub async fn oauth_callback(
+    req: HttpRequest,
+    path: web::Path<String>,
+    query: web::Query<OAuthCallbackQuery>,
+    connector: web::Data<crate::oauth::SharedOAuthConnector>,
+    config: web::Data<AppConfig>,
+    features: web::Data<SharedFeatures>,
+    store: web::Data<SharedStore>,
+) -> Result<HttpResponse, Error> {
+    let provider_path = path.into_inner();
+    let scheme = config.oauth.mobile_redirect_scheme.clone();
+
+    // Decode the cookie first so we know whether to redirect-with-error to web
+    // or mobile. Without it we have no recoverable origin and must fall back.
+    let cookie_str = req
+        .cookie(oauth_state::COOKIE_NAME)
+        .map(|c| c.value().to_string());
+    let persisted = match cookie_str.as_ref().map(|v| oauth_state::decode(v)) {
+        Some(Ok(p)) => p,
+        _ => {
+            return Ok(redirect_with_clear(
+                FlowOrigin::Web,
+                &scheme,
+                &web_error_url("invalid_state"),
+                &mobile_error_url(&scheme, "invalid_state"),
+            ));
+        }
+    };
+    let now_unix = Utc::now().timestamp();
+    if oauth_state::is_expired(&persisted, now_unix) {
+        return Ok(redirect_with_clear(
+            persisted.origin,
+            &scheme,
+            &web_error_url("state_expired"),
+            &mobile_error_url(&scheme, "state_expired"),
+        ));
+    }
+    if !persisted.provider.eq_ignore_ascii_case(&provider_path) {
+        return Ok(redirect_with_clear(
+            persisted.origin,
+            &scheme,
+            &web_error_url("provider_mismatch"),
+            &mobile_error_url(&scheme, "provider_mismatch"),
+        ));
+    }
+    let returned_state = match query.state.as_deref() {
+        Some(s) => s,
+        None => {
+            return Ok(redirect_with_clear(
+                persisted.origin,
+                &scheme,
+                &web_error_url("missing_state"),
+                &mobile_error_url(&scheme, "missing_state"),
+            ));
+        }
+    };
+    if returned_state != persisted.state {
+        return Ok(redirect_with_clear(
+            persisted.origin,
+            &scheme,
+            &web_error_url("state_mismatch"),
+            &mobile_error_url(&scheme, "state_mismatch"),
+        ));
+    }
+    if let Some(provider_error) = query.error.as_deref() {
+        let reason = format!("provider_error:{provider_error}");
+        return Ok(redirect_with_clear(
+            persisted.origin,
+            &scheme,
+            &web_error_url(&reason),
+            &mobile_error_url(&scheme, &reason),
+        ));
+    }
+    let code = match query.code.as_deref() {
+        Some(c) => c,
+        None => {
+            return Ok(redirect_with_clear(
+                persisted.origin,
+                &scheme,
+                &web_error_url("missing_code"),
+                &mobile_error_url(&scheme, "missing_code"),
+            ));
+        }
+    };
+
+    let identity = match connector
+        .as_ref()
+        .as_ref()
+        .complete(&provider_path, code, &persisted)
+        .await
+    {
+        Ok(id) => id,
+        Err(err) => {
+            log::warn!("oauth complete failed: {err}");
+            return Ok(redirect_with_clear(
+                persisted.origin,
+                &scheme,
+                &web_error_url("provider_response"),
+                &mobile_error_url(&scheme, "provider_response"),
+            ));
+        }
+    };
+
+    // Resolve to a user (or create one), inside the store write lock.
+    let allow_signup = features
+        .read()
+        .map_err(|_| ErrorInternalServerError("features lock"))?
+        .allow_signup;
+    let mut store_lock = get_store_write_lock(&store)?;
+    let outcome = {
+        // Trait upcast Store → UserStore so the connector-agnostic resolver
+        // doesn't need to know about MazeStore / Manage.
+        let user_store: &mut dyn storage::UserStore = &mut **store_lock;
+        account::resolve(user_store, &identity, allow_signup)
+    };
+    let outcome = match outcome {
+        Ok(o) => o,
+        Err(account::ResolveError::SignupDisabled) => {
+            return Ok(redirect_with_clear(
+                persisted.origin,
+                &scheme,
+                &web_error_url("signup_disabled"),
+                &mobile_error_url(&scheme, "signup_disabled"),
+            ));
+        }
+        Err(account::ResolveError::EmailNotVerified) => {
+            return Ok(redirect_with_clear(
+                persisted.origin,
+                &scheme,
+                &web_error_url("email_not_verified"),
+                &mobile_error_url(&scheme, "email_not_verified"),
+            ));
+        }
+        Err(account::ResolveError::MissingEmail) => {
+            return Ok(redirect_with_clear(
+                persisted.origin,
+                &scheme,
+                &web_error_url("missing_email"),
+                &mobile_error_url(&scheme, "missing_email"),
+            ));
+        }
+        Err(account::ResolveError::Store(e)) => {
+            log::error!("oauth resolve store error: {e}");
+            return Ok(redirect_with_clear(
+                persisted.origin,
+                &scheme,
+                &web_error_url("store_error"),
+                &mobile_error_url(&scheme, "store_error"),
+            ));
+        }
+    };
+
+    let mut user = match outcome {
+        account::ResolveOutcome::SignedIn(u) | account::ResolveOutcome::Created(u) => u,
+    };
+    let new_login = user.create_login(
+        config.security.login_expiry_hours,
+        get_caller_ip_address(&req),
+        get_caller_device_info(&req),
+    );
+    store_lock
+        .update_user(&mut user)
+        .map_err(|e| get_user_update_internal_error(&e))?;
+    drop(store_lock);
+
+    let token_id = new_login.id;
+    let expires_at = new_login.expires_at;
+    let location = match persisted.origin {
+        FlowOrigin::Web => web_callback_url(token_id, expires_at),
+        FlowOrigin::Mobile => mobile_callback_url(&scheme, token_id, expires_at),
+    };
+
+    Ok(HttpResponse::Found()
+        .insert_header(("Location", location))
+        .cookie(clear_state_cookie())
+        .finish())
+}
+
+/// Helper: 302 to `web_url` or `mobile_url` based on `origin`, clearing the
+/// state cookie on the way out. Used for both success-and-error redirects so
+/// callers don't have to remember to clear.
+fn redirect_with_clear(origin: FlowOrigin, _scheme: &str, web_url: &str, mobile_url: &str) -> HttpResponse {
+    let url = match origin {
+        FlowOrigin::Web => web_url,
+        FlowOrigin::Mobile => mobile_url,
+    };
+    HttpResponse::Found()
+        .insert_header(("Location", url))
+        .cookie(clear_state_cookie())
+        .finish()
+}
+
 // **************************************************************************************************
 // Endpoint: GET /api/v1/users/me
 // Handler:  get_me()

@@ -14,7 +14,13 @@ pub mod state;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::Arc;
 use utoipa::ToSchema;
+
+/// Shared, ref-counted, type-erased connector handle. Built once at server
+/// startup from `AppConfig`, cloned cheaply into per-request handlers via
+/// `actix_web::web::Data`.
+pub type SharedOAuthConnector = Arc<dyn OAuthConnector>;
 
 // ---- Public types shared across connectors ----------------------------------
 
@@ -160,6 +166,29 @@ pub trait OAuthConnector: Send + Sync {
         code: &str,
         cookie_state: &PersistedState,
     ) -> Result<NormalisedIdentity, OAuthError>;
+}
+
+/// Connector used when `[oauth] enabled = false`. Reports zero providers and
+/// rejects every flow with `UnknownOrDisabledProvider`. Lets the rest of the
+/// app treat the connector as always-present without `Option` plumbing.
+pub struct NoOpConnector;
+
+#[async_trait]
+impl OAuthConnector for NoOpConnector {
+    fn enabled_providers(&self) -> Vec<OAuthProviderPublic> { Vec::new() }
+
+    async fn begin(&self, provider: &str, _origin: FlowOrigin) -> Result<BeginFlow, OAuthError> {
+        Err(OAuthError::UnknownOrDisabledProvider(provider.to_string()))
+    }
+
+    async fn complete(
+        &self,
+        provider: &str,
+        _code: &str,
+        _cookie_state: &PersistedState,
+    ) -> Result<NormalisedIdentity, OAuthError> {
+        Err(OAuthError::UnknownOrDisabledProvider(provider.to_string()))
+    }
 }
 
 #[cfg(test)]

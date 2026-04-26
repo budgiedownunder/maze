@@ -9,6 +9,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(handlers::get_features)
         .service(handlers::login)
         .service(handlers::signup)
+        // OAuth (unguarded — the cookie + state nonce are the CSRF protection)
+        .service(handlers::oauth_start)
+        .service(handlers::oauth_callback)
         // Guarded routes
         .service(
             web::scope("")

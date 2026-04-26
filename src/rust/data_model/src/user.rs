@@ -234,7 +234,12 @@ impl User {
         if !is_valid_email_format(&self.email) {
             return Err(Error::UserValidation(UserValidationError::EmailInvalid));
         }
-        if self.password_hash.is_empty() {
+        // OAuth-only users carry an empty password_hash. Require a password
+        // hash *only* when the user has no OAuth identity attached, so that
+        // password-only and OAuth-only accounts both validate, while a
+        // password-only user with no hash still fails (catches a real bug
+        // where signup writes an empty password).
+        if self.password_hash.is_empty() && self.oauth_identities.is_empty() {
             return Err(Error::UserValidation(UserValidationError::PasswordMissing));
         }
         Ok(())
@@ -644,10 +649,24 @@ mod tests {
     #[test]
     #[should_panic(
         expected = "No password provided for the user"
-    )]    
+    )]
     fn user_validation_should_fail_with_missing_password_hash() {
         let mut user = create_valid_user();
         user.password_hash = "".to_string();
+        validate_user(&user);
+    }
+
+    #[test]
+    fn user_validation_should_pass_for_oauth_only_user_without_password() {
+        // OAuth-only users carry an empty password_hash. As long as they have
+        // at least one OAuth identity attached, validation must succeed.
+        let mut user = create_valid_user();
+        user.password_hash = "".to_string();
+        user.oauth_identities.push(OAuthIdentity::new(
+            "google".to_string(),
+            "sub-x".to_string(),
+            Some(user.email.clone()),
+        ));
         validate_user(&user);
     }
 
