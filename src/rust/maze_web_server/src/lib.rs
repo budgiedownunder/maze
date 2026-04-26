@@ -1,6 +1,7 @@
 pub mod api;
 pub mod config;
 pub mod middleware;
+pub mod oauth;
 pub mod service;
 mod utils;
 

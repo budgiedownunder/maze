@@ -183,7 +183,7 @@ pub struct OAuthConfig {
     pub connector: ConnectorKind,
 
     /// URL scheme the MAUI app uses as its OAuth redirect target. Lives on
-    /// the top-level [oauth] table because every connector ends the flow the
+    /// the top-level `[oauth]` table because every connector ends the flow the
     /// same way: by handing the app a bearer token via this scheme.
     #[serde(default = "default_mobile_redirect_scheme")]
     pub mobile_redirect_scheme: String,
