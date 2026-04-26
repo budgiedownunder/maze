@@ -526,6 +526,12 @@ pub struct OAuthStartQuery {
     /// Where the flow originated. "web" → SPA fragment redirect; "mobile" →
     /// custom URL-scheme redirect for the MAUI WebAuthenticator.
     pub origin: FlowOrigin,
+    /// Optional opaque client-supplied state. Echoed back unchanged on the
+    /// final mobile-redirect URL. Used by Windows WinUIEx WebAuthenticator
+    /// (and similar URL-scheme brokers) to correlate the in-flight
+    /// AuthenticateAsync task with the eventual app activation. The server
+    /// does not interpret this value.
+    pub state: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -534,14 +540,6 @@ pub struct OAuthCallbackQuery {
     pub state: Option<String>,
     pub error: Option<String>,
     pub error_description: Option<String>,
-}
-
-#[derive(Serialize, ToSchema, Debug)]
-pub struct OAuthStartMobileResponse {
-    /// URL the mobile client should send the user's browser to. The server
-    /// is the only party holding the client_secret; the mobile app simply
-    /// follows this redirect via WebAuthenticator.
-    pub authorize_url: String,
 }
 
 const STATE_COOKIE_PATH: &str = "/api/v1/auth/oauth";
@@ -589,12 +587,23 @@ fn web_callback_url(token_id: Uuid, expires_at: DateTime<Utc>) -> String {
     )
 }
 
-fn mobile_callback_url(scheme: &str, token_id: Uuid, expires_at: DateTime<Utc>) -> String {
-    format!(
+fn mobile_callback_url(
+    scheme: &str,
+    token_id: Uuid,
+    expires_at: DateTime<Utc>,
+    client_state: Option<&str>,
+) -> String {
+    let mut url = format!(
         "{scheme}://oauth-callback?token={}&expires_at={}",
         token_id,
         encode(&expires_at.to_rfc3339()),
-    )
+    );
+    if let Some(s) = client_state {
+        // The OAuth standard query-parameter name for this is `state`; the
+        // server treats it as opaque, so URL-encode it on the way out.
+        url.push_str(&format!("&state={}", encode(s)));
+    }
+    url
 }
 
 fn web_error_url(reason: &str) -> String {
@@ -607,7 +616,7 @@ fn mobile_error_url(scheme: &str, reason: &str) -> String {
 
 #[utoipa::path(
     summary = "Begin an OAuth sign-in flow",
-    description = "Generates a provider authorize URL with state + PKCE, sets a short-lived CSRF cookie, and either 302-redirects (origin=web) or returns the URL as JSON (origin=mobile) so the MAUI WebAuthenticator can follow it.",
+    description = "Generates a provider authorize URL with state + PKCE, sets a short-lived CSRF cookie, and 302-redirects to the provider. Identical response shape for both origin=web and origin=mobile; the origin only controls where the *callback* redirects at the end of the flow. Returning a redirect (rather than JSON) on mobile is what lets the platform browser carry the state cookie through the round trip.",
     get,
     path = "/api/v1/auth/oauth/{provider}/start",
     params(
@@ -615,8 +624,7 @@ fn mobile_error_url(scheme: &str, reason: &str) -> String {
         ("origin" = String, Query, description = "'web' or 'mobile'")
     ),
     responses(
-        (status = 200, description = "Mobile origin: JSON with authorize_url", body = OAuthStartMobileResponse),
-        (status = 302, description = "Web origin: redirect to provider authorize URL"),
+        (status = 302, description = "Redirect to provider authorize URL"),
         (status = 400, description = "Invalid origin or provider"),
         (status = 404, description = "Unknown or disabled provider"),
         (status = 500, description = "Internal error")
@@ -630,25 +638,24 @@ pub async fn oauth_start(
     connector: web::Data<crate::oauth::SharedOAuthConnector>,
 ) -> Result<HttpResponse, Error> {
     let provider = path.into_inner();
-    let begin = connector
+    let mut begin = connector
         .as_ref()
         .as_ref()
         .begin(&provider, query.origin)
         .await
         .map_err(oauth_error_to_actix)?;
+    // Capture the client-supplied state (if any) into the cookie so we can
+    // echo it back unchanged on the final mobile-redirect URL. WinUIEx
+    // WebAuthenticator on Windows needs this for activation correlation.
+    begin.persisted.client_state = query.state.clone();
     let cookie_value = oauth_state::encode(&begin.persisted)
         .map_err(|e| ErrorInternalServerError(format!("oauth state encode: {e}")))?;
     let cookie = build_state_cookie(cookie_value);
 
-    Ok(match query.origin {
-        FlowOrigin::Web => HttpResponse::Found()
-            .insert_header(("Location", begin.authorize_url))
-            .cookie(cookie)
-            .finish(),
-        FlowOrigin::Mobile => HttpResponse::Ok()
-            .cookie(cookie)
-            .json(OAuthStartMobileResponse { authorize_url: begin.authorize_url }),
-    })
+    Ok(HttpResponse::Found()
+        .insert_header(("Location", begin.authorize_url))
+        .cookie(cookie)
+        .finish())
 }
 
 #[utoipa::path(
@@ -840,7 +847,12 @@ pub async fn oauth_callback(
     let expires_at = new_login.expires_at;
     let location = match persisted.origin {
         FlowOrigin::Web => web_callback_url(token_id, expires_at),
-        FlowOrigin::Mobile => mobile_callback_url(&scheme, token_id, expires_at),
+        FlowOrigin::Mobile => mobile_callback_url(
+            &scheme,
+            token_id,
+            expires_at,
+            persisted.client_state.as_deref(),
+        ),
     };
 
     Ok(HttpResponse::Found()

@@ -67,6 +67,14 @@ pub struct PersistedState {
     pub provider: String,
     /// When the flow started. Used to enforce the 10-minute TTL.
     pub created_at_unix: i64,
+    /// Opaque client-supplied state captured from the start URL's `?state=`
+    /// query parameter and echoed back unchanged on the final mobile-redirect
+    /// URL. The server never interprets this. Used by Windows
+    /// `WinUIEx.WebAuthenticator` (and other URL-scheme brokers) to correlate
+    /// an in-flight `AuthenticateAsync` task with the eventual activation.
+    /// `None` for the web origin (no broker in play).
+    #[serde(default)]
+    pub client_state: Option<String>,
 }
 
 /// Result of [`OAuthConnector::begin`]: the authorize URL the front end (or

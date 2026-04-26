@@ -8,7 +8,7 @@ use utoipa::{
 
 use crate::api::v1::endpoints::handlers::{
     AppFeaturesResponse,
-    LoginRequest, LoginResponse, OAuthStartMobileResponse, RenewResponse,
+    LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
     ChangePasswordRequest, UpdateProfileRequest};
 use crate::oauth::OAuthProviderPublic;
@@ -94,7 +94,7 @@ impl utoipa::Modify for LoginTokenAuth {
     ),
     components(
         schemas(
-            AppFeaturesResponse, OAuthProviderPublic, OAuthStartMobileResponse,
+            AppFeaturesResponse, OAuthProviderPublic,
             LoginRequest, LoginResponse, RenewResponse,
             SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
             ChangePasswordRequest, UpdateProfileRequest,

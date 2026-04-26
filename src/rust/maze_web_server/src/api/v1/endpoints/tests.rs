@@ -3760,6 +3760,7 @@ mod test_definitions {
                     origin,
                     provider: provider.to_string(),
                     created_at_unix: chrono::Utc::now().timestamp(),
+                    client_state: None,
                 },
             })
         }
@@ -3822,18 +3823,28 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn oauth_start_mobile_origin_returns_json() {
+    async fn oauth_start_mobile_origin_redirects_with_state_cookie() {
+        // Same response shape as web origin (302 + Set-Cookie). Returning a
+        // redirect — rather than JSON for the mobile client to dispatch — is
+        // what lets the platform browser carry the state cookie through the
+        // round trip; a JSON-then-fetch design would land the cookie in the
+        // mobile client's HTTP cookie jar instead of the system browser's.
         let connector = Arc::new(FakeConnector::google_only());
         let app = create_test_app_with_oauth_connector(connector).await;
         let req = test::TestRequest::get()
             .uri("/api/v1/auth/oauth/google/start?origin=mobile")
             .to_request();
         let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK);
-        let body = test::read_body(resp).await;
-        let body_str = std::str::from_utf8(&body).unwrap();
-        assert!(body_str.contains("authorize_url"));
-        assert!(body_str.contains("https://provider.example.com/authorize?fake=1"));
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let location = resp.headers().get("Location").expect("Location header").to_str().unwrap();
+        assert_eq!(location, "https://provider.example.com/authorize?fake=1");
+        let cookie = resp
+            .headers()
+            .get_all("set-cookie")
+            .find_map(|h| h.to_str().ok().filter(|s| s.starts_with("maze_oauth_state=")))
+            .expect("state cookie present");
+        assert!(cookie.contains("HttpOnly"), "cookie must be HttpOnly: {cookie}");
+        assert!(cookie.contains("Secure"), "cookie must be Secure: {cookie}");
     }
 
     #[actix_web::test]
@@ -3872,6 +3883,7 @@ mod test_definitions {
             origin: FlowOrigin::Web,
             provider: "google".into(),
             created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: None,
         };
         let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
 
@@ -3897,6 +3909,7 @@ mod test_definitions {
             origin: FlowOrigin::Web,
             provider: "google".into(),
             created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: None,
         };
         let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
 
@@ -3929,6 +3942,7 @@ mod test_definitions {
             origin: FlowOrigin::Web,
             provider: "google".into(),
             created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: None,
         };
         let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
 
@@ -3948,6 +3962,48 @@ mod test_definitions {
             .find_map(|h| h.to_str().ok().filter(|s| s.starts_with("maze_oauth_state=")))
             .expect("state cookie present (cleared)");
         assert!(cookie.contains("Max-Age=0"), "cleared cookie should set Max-Age=0: {cookie}");
+    }
+
+    #[actix_web::test]
+    async fn oauth_callback_mobile_origin_echoes_client_state_on_redirect() {
+        // WinUIEx WebAuthenticator (and similar URL-scheme brokers) need their
+        // client-supplied `state` echoed back on the maze-app:// callback so
+        // they can correlate the activation with the in-flight task.
+        let mut connector = FakeConnector::google_only();
+        connector.identity = Some(NormalisedIdentity {
+            provider: "google".into(),
+            provider_user_id: "google-sub-mobile".into(),
+            email: Some("mobile_user@example.com".into()),
+            email_verified: true,
+            display_name: None,
+        });
+        let connector: Arc<dyn OAuthConnector> = Arc::new(connector);
+        let app = create_test_app_with_oauth_connector(connector).await;
+
+        let persisted = PersistedState {
+            state: "real-state".into(),
+            pkce_verifier: "v".into(),
+            origin: FlowOrigin::Mobile,
+            provider: "google".into(),
+            created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: Some(r#"{"appInstanceId":"","signinId":"abc-123"}"#.to_string()),
+        };
+        let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=real-state")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
+        assert!(location.starts_with("maze-app://oauth-callback?token="), "got: {location}");
+        assert!(location.contains("&expires_at="), "got: {location}");
+        // Critical: client_state must be present and percent-encoded.
+        assert!(
+            location.contains("&state=%7B%22appInstanceId%22%3A%22%22%2C%22signinId%22%3A%22abc-123%22%7D"),
+            "client_state must be echoed back url-encoded: {location}"
+        );
     }
 
     #[actix_web::test]
@@ -3998,6 +4054,7 @@ mod test_definitions {
             origin: FlowOrigin::Web,
             provider: "google".into(),
             created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: None,
         };
         let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
 

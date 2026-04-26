@@ -136,6 +136,7 @@ impl OAuthConnector for InternalOAuthConnector {
                 origin,
                 provider: provider.to_ascii_lowercase(),
                 created_at_unix: Utc::now().timestamp(),
+                client_state: None,
             },
         })
     }

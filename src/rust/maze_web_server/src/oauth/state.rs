@@ -56,6 +56,7 @@ mod tests {
             origin: FlowOrigin::Web,
             provider: "google".to_string(),
             created_at_unix: now,
+            client_state: None,
         }
     }
 
