@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { PasswordInput } from '../components/PasswordInput'
+import { OAuthButtons } from '../components/OAuthButtons'
 import appIcon from '../assets/app.png'
 
 export function LoginPage() {
@@ -14,7 +15,7 @@ export function LoginPage() {
   const { login, isLoading } = useAuth()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
-  const { allow_signup } = useAppFeatures()
+  const { allow_signup, oauth_providers } = useAppFeatures()
 
   const isBusy = isLoading || isSubmitting
   const submitDisabled = !email.trim() || !password || isBusy
@@ -73,6 +74,8 @@ export function LoginPage() {
             Sign Up
           </button>
         )}
+
+        <OAuthButtons providers={oauth_providers} disabled={isBusy} />
       </form>
     </div>
   )

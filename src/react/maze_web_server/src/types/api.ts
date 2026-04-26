@@ -42,8 +42,14 @@ export interface SaveMazeRequest {
   definition: MazeDefinition
 }
 
+export interface OAuthProviderPublic {
+  name: string         // canonical: "google" | "github" | ...
+  display_name: string // user-facing label rendered on the button
+}
+
 export interface AppFeatures {
   allow_signup: boolean
+  oauth_providers: OAuthProviderPublic[]
 }
 
 export interface GenerateOptions {
