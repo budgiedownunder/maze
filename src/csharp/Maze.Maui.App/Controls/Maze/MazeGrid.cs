@@ -227,6 +227,30 @@ namespace Maze.Maui.App
             return new MazeCellContent(gridInitializing ? _cellTypes[row, column] : CellType.Empty);
         }
         /// <summary>
+        /// Provides the label content for header cells with an explicit black
+        /// text colour. The base class default leaves <c>TextColor</c> unset,
+        /// so on Windows the platform-native renderer flips the text to the
+        /// OS theme's foreground (white in dark mode), which then sits
+        /// invisibly on the light-grey header background. Pinning the colour
+        /// here is the surgical fix: dark-mode users see the same readable
+        /// "black on light grey" header strip as light-mode users (the
+        /// spreadsheet idiom most apps follow regardless of theme).
+        /// </summary>
+        /// <param name="type">Header type</param>
+        /// <param name="index">Header cell index</param>
+        /// <returns>Header cell label</returns>
+        public override View GetHeaderCellContent(HeaderType type, int index)
+        {
+            return new Label
+            {
+                Text = type != HeaderType.Corner ? $"{index + 1}" : "",
+                FontAttributes = FontAttributes.Bold,
+                HorizontalOptions = LayoutOptions.Center,
+                VerticalOptions = LayoutOptions.Center,
+                TextColor = Colors.Black,
+            };
+        }
+        /// <summary>
         /// Populates the content of a cell frame from the logical model.
         /// Called by the base class whenever a cell enters the visible viewport.
         /// Row and column are 0-based.
