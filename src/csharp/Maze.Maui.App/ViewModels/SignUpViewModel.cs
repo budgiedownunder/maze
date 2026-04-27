@@ -141,6 +141,10 @@ namespace Maze.Maui.App.ViewModels
                 await _authService.SignInWithOAuthAsync(providerName);
                 await Shell.Current.GoToAsync("//MainPage");
             }
+            catch (OAuthFlowFailedException ex)
+            {
+                ErrorMessage = OAuthErrorMessages.FromReason(ex.Reason);
+            }
             catch (TimeoutException)
             {
                 ErrorMessage = "Sign-in was cancelled or did not complete in time. Please try again.";

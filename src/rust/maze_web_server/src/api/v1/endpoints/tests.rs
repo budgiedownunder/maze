@@ -3965,6 +3965,47 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn oauth_callback_mobile_origin_uses_same_host_for_errors_with_reason_and_state() {
+        // The MAUI WebAuthenticator (and WinUIEx) filter incoming custom-scheme
+        // activations by host of the registered CallbackUrl. Errors must
+        // therefore use the SAME host as success, distinguished by a `reason`
+        // query parameter, with `client_state` echoed so WinUIEx can correlate.
+        let connector: Arc<dyn OAuthConnector> = Arc::new(FakeConnector::google_only());
+        let app = create_test_app_with_oauth_connector(connector).await;
+
+        // Build a cookie whose state DOES NOT match the callback's `state` query.
+        let persisted = PersistedState {
+            state: "real-state".into(),
+            pkce_verifier: "v".into(),
+            origin: FlowOrigin::Mobile,
+            provider: "google".into(),
+            created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: Some(r#"{"appInstanceId":"","signinId":"abc-123"}"#.to_string()),
+        };
+        let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=DIFFERENT")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
+        // SAME host as success (oauth-callback), not a different oauth-error host.
+        assert!(
+            location.starts_with("maze-app://oauth-callback?"),
+            "error must use same host as success: {location}"
+        );
+        // Reason instead of token.
+        assert!(location.contains("reason=state_mismatch"), "got: {location}");
+        // client_state echoed back so WinUIEx can correlate.
+        assert!(
+            location.contains("&state=%7B%22appInstanceId%22%3A%22%22%2C%22signinId%22%3A%22abc-123%22%7D"),
+            "client_state must be echoed url-encoded: {location}"
+        );
+    }
+
+    #[actix_web::test]
     async fn oauth_callback_mobile_origin_echoes_client_state_on_redirect() {
         // WinUIEx WebAuthenticator (and similar URL-scheme brokers) need their
         // client-supplied `state` echoed back on the maze-app:// callback so

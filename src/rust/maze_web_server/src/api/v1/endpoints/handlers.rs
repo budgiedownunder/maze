@@ -610,8 +610,19 @@ fn web_error_url(reason: &str) -> String {
     format!("/login?error={}", encode(reason))
 }
 
-fn mobile_error_url(scheme: &str, reason: &str) -> String {
-    format!("{scheme}://oauth-error?reason={}", encode(reason))
+/// Mobile error URL — uses the SAME host (`oauth-callback`) as the success
+/// redirect, distinguished by the `reason` query parameter. The MAUI
+/// `WebAuthenticator` (and `WinUIEx` on Windows) filters incoming
+/// URL-scheme activations by callback URL host, so the error path must share
+/// the success path's host or the in-flight `AuthenticateAsync` will never
+/// resolve. Echoes `client_state` for the same reason `mobile_callback_url`
+/// does — WinUIEx correlates the activation via the original signinId.
+fn mobile_error_url(scheme: &str, reason: &str, client_state: Option<&str>) -> String {
+    let mut url = format!("{scheme}://oauth-callback?reason={}", encode(reason));
+    if let Some(s) = client_state {
+        url.push_str(&format!("&state={}", encode(s)));
+    }
+    url
 }
 
 #[utoipa::path(
@@ -698,11 +709,14 @@ pub async fn oauth_callback(
     let persisted = match cookie_str.as_ref().map(|v| oauth_state::decode(v)) {
         Some(Ok(p)) => p,
         _ => {
+            // No cookie / corrupt cookie → we have no persisted client_state to
+            // echo. WinUIEx may not be able to correlate the activation in this
+            // path; the broker's TTL fallback handles it.
             return Ok(redirect_with_clear(
                 FlowOrigin::Web,
                 &scheme,
                 &web_error_url("invalid_state"),
-                &mobile_error_url(&scheme, "invalid_state"),
+                &mobile_error_url(&scheme, "invalid_state", None),
             ));
         }
     };
@@ -712,7 +726,7 @@ pub async fn oauth_callback(
             persisted.origin,
             &scheme,
             &web_error_url("state_expired"),
-            &mobile_error_url(&scheme, "state_expired"),
+            &mobile_error_url(&scheme, "state_expired", persisted.client_state.as_deref()),
         ));
     }
     if !persisted.provider.eq_ignore_ascii_case(&provider_path) {
@@ -720,7 +734,7 @@ pub async fn oauth_callback(
             persisted.origin,
             &scheme,
             &web_error_url("provider_mismatch"),
-            &mobile_error_url(&scheme, "provider_mismatch"),
+            &mobile_error_url(&scheme, "provider_mismatch", persisted.client_state.as_deref()),
         ));
     }
     let returned_state = match query.state.as_deref() {
@@ -730,7 +744,7 @@ pub async fn oauth_callback(
                 persisted.origin,
                 &scheme,
                 &web_error_url("missing_state"),
-                &mobile_error_url(&scheme, "missing_state"),
+                &mobile_error_url(&scheme, "missing_state", persisted.client_state.as_deref()),
             ));
         }
     };
@@ -739,7 +753,7 @@ pub async fn oauth_callback(
             persisted.origin,
             &scheme,
             &web_error_url("state_mismatch"),
-            &mobile_error_url(&scheme, "state_mismatch"),
+            &mobile_error_url(&scheme, "state_mismatch", persisted.client_state.as_deref()),
         ));
     }
     if let Some(provider_error) = query.error.as_deref() {
@@ -748,7 +762,7 @@ pub async fn oauth_callback(
             persisted.origin,
             &scheme,
             &web_error_url(&reason),
-            &mobile_error_url(&scheme, &reason),
+            &mobile_error_url(&scheme, &reason, persisted.client_state.as_deref()),
         ));
     }
     let code = match query.code.as_deref() {
@@ -758,7 +772,7 @@ pub async fn oauth_callback(
                 persisted.origin,
                 &scheme,
                 &web_error_url("missing_code"),
-                &mobile_error_url(&scheme, "missing_code"),
+                &mobile_error_url(&scheme, "missing_code", persisted.client_state.as_deref()),
             ));
         }
     };
@@ -776,7 +790,7 @@ pub async fn oauth_callback(
                 persisted.origin,
                 &scheme,
                 &web_error_url("provider_response"),
-                &mobile_error_url(&scheme, "provider_response"),
+                &mobile_error_url(&scheme, "provider_response", persisted.client_state.as_deref()),
             ));
         }
     };
@@ -800,7 +814,7 @@ pub async fn oauth_callback(
                 persisted.origin,
                 &scheme,
                 &web_error_url("signup_disabled"),
-                &mobile_error_url(&scheme, "signup_disabled"),
+                &mobile_error_url(&scheme, "signup_disabled", persisted.client_state.as_deref()),
             ));
         }
         Err(account::ResolveError::EmailNotVerified) => {
@@ -808,7 +822,7 @@ pub async fn oauth_callback(
                 persisted.origin,
                 &scheme,
                 &web_error_url("email_not_verified"),
-                &mobile_error_url(&scheme, "email_not_verified"),
+                &mobile_error_url(&scheme, "email_not_verified", persisted.client_state.as_deref()),
             ));
         }
         Err(account::ResolveError::MissingEmail) => {
@@ -816,7 +830,7 @@ pub async fn oauth_callback(
                 persisted.origin,
                 &scheme,
                 &web_error_url("missing_email"),
-                &mobile_error_url(&scheme, "missing_email"),
+                &mobile_error_url(&scheme, "missing_email", persisted.client_state.as_deref()),
             ));
         }
         Err(account::ResolveError::Store(e)) => {
@@ -825,7 +839,7 @@ pub async fn oauth_callback(
                 persisted.origin,
                 &scheme,
                 &web_error_url("store_error"),
-                &mobile_error_url(&scheme, "store_error"),
+                &mobile_error_url(&scheme, "store_error", persisted.client_state.as_deref()),
             ));
         }
     };

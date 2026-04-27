@@ -147,6 +147,13 @@ namespace Maze.Maui.App.ViewModels
                 await _authService.SignInWithOAuthAsync(providerName);
                 await Shell.Current.GoToAsync("//MainPage");
             }
+            catch (OAuthFlowFailedException ex)
+            {
+                // Server-side recoverable error (e.g. signup_disabled,
+                // email_not_verified, provider_error:access_denied) — show
+                // a friendly per-code message.
+                ErrorMessage = OAuthErrorMessages.FromReason(ex.Reason);
+            }
             catch (TimeoutException)
             {
                 // The OAuth flow exceeded its timeout — typically because the

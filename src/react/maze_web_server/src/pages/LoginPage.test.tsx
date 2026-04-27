@@ -7,12 +7,12 @@ import { AppFeaturesContext } from '../context/AppFeaturesContext'
 import { LoginPage } from './LoginPage'
 import type { AppFeatures } from '../types/api'
 
-function renderLoginPage(features: AppFeatures) {
+function renderLoginPage(features: AppFeatures, initialEntry: string = '/login') {
   return render(
     <AppFeaturesContext.Provider value={features}>
       <ThemeProvider>
         <AuthProvider>
-          <MemoryRouter>
+          <MemoryRouter initialEntries={[initialEntry]}>
             <LoginPage />
           </MemoryRouter>
         </AuthProvider>
@@ -47,5 +47,30 @@ describe('LoginPage', () => {
   it('hides the OAuth section when no providers are configured', () => {
     renderLoginPage({ allow_signup: true, oauth_providers: [] })
     expect(screen.queryByRole('button', { name: /continue with/i })).not.toBeInTheDocument()
+  })
+
+  it('surfaces ?error=signup_disabled to the user as a friendly alert', async () => {
+    // Locks in the fix for the silent-failure bug when allow_signup=false and
+    // a Google sign-in tries to create a new user. The server redirects to
+    // /login?error=signup_disabled; the page must show, not swallow.
+    renderLoginPage(
+      { allow_signup: false, oauth_providers: [{ name: 'google', display_name: 'Google' }] },
+      '/login?error=signup_disabled',
+    )
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/sign-up is disabled/i)
+  })
+
+  it('surfaces ?error=email_not_verified', async () => {
+    renderLoginPage({ allow_signup: true, oauth_providers: [] }, '/login?error=email_not_verified')
+    expect(await screen.findByRole('alert')).toHaveTextContent(/verified email/i)
+  })
+
+  it('shows nothing for unknown error codes that look intentional but are not echoed raw', async () => {
+    renderLoginPage({ allow_signup: true, oauth_providers: [] }, '/login?error=made_up_code')
+    const alert = await screen.findByRole('alert')
+    // The raw code must NOT leak into the UI.
+    expect(alert).not.toHaveTextContent(/made_up_code/)
+    expect(alert).toHaveTextContent(/could not sign you in/i)
   })
 })

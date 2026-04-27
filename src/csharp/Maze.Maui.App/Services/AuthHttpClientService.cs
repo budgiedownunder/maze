@@ -169,6 +169,14 @@ namespace Maze.Maui.App.Services
                 .AuthenticateAsync(startUrl, callbackUrl)
                 .WaitAsync(OAUTH_FLOW_TIMEOUT);
 
+            // Server-side recoverable errors (signup disabled, email not
+            // verified, etc.) come back via `reason=<code>` on the same
+            // callback URL — surface them as a typed exception so the
+            // ViewModel can show a friendly per-code message instead of a
+            // generic "Sign in failed" toast.
+            if (result.Properties.TryGetValue("reason", out var reason) && !string.IsNullOrEmpty(reason))
+                throw new OAuthFlowFailedException(reason);
+
             if (!result.Properties.TryGetValue("token", out var token) || string.IsNullOrEmpty(token))
                 throw new Exception("OAuth response did not include a bearer token");
             if (!result.Properties.TryGetValue("expires_at", out var expiresAt) || string.IsNullOrEmpty(expiresAt))

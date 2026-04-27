@@ -1,5 +1,50 @@
 import { describe, it, expect } from 'vitest'
-import { parseCallbackHash } from '../utils/oauth'
+import { parseCallbackHash, getOAuthErrorMessage } from '../utils/oauth'
+
+describe('getOAuthErrorMessage', () => {
+  it('returns null for null / empty input', () => {
+    expect(getOAuthErrorMessage(null)).toBeNull()
+    expect(getOAuthErrorMessage('')).toBeNull()
+  })
+
+  it('explains signup_disabled in user-friendly terms', () => {
+    // The original bug this fixes: with allow_signup=false, the server
+    // redirects to /login?error=signup_disabled but the user saw nothing.
+    const msg = getOAuthErrorMessage('signup_disabled')
+    expect(msg).toMatch(/sign-up is disabled/i)
+    expect(msg).toMatch(/existing users/i)
+  })
+
+  it('explains email_not_verified', () => {
+    expect(getOAuthErrorMessage('email_not_verified')).toMatch(/verified email/i)
+  })
+
+  it('coalesces all state-related codes into one message', () => {
+    const message = getOAuthErrorMessage('invalid_state')
+    expect(getOAuthErrorMessage('missing_state')).toBe(message)
+    expect(getOAuthErrorMessage('state_mismatch')).toBe(message)
+    expect(getOAuthErrorMessage('state_expired')).toBe(message)
+    expect(getOAuthErrorMessage('provider_mismatch')).toBe(message)
+    expect(message).toMatch(/expired|invalid/i)
+  })
+
+  it('handles provider_error:access_denied as a clean cancellation message', () => {
+    expect(getOAuthErrorMessage('provider_error:access_denied'))
+      .toMatch(/cancel/i)
+  })
+
+  it('echoes other provider_error codes back in a friendly wrapper', () => {
+    const msg = getOAuthErrorMessage('provider_error:something_unexpected')!
+    expect(msg).toMatch(/something_unexpected/)
+  })
+
+  it('falls back to a generic message for unknown codes', () => {
+    const msg = getOAuthErrorMessage('completely_made_up_code')!
+    // Must NOT echo the raw code back to the user.
+    expect(msg).not.toMatch(/completely_made_up_code/)
+    expect(msg).toMatch(/could not sign you in/i)
+  })
+})
 
 describe('parseCallbackHash', () => {
   it('extracts token and expires_at from a hash with leading #', () => {

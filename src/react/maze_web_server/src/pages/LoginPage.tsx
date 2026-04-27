@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { PasswordInput } from '../components/PasswordInput'
 import { OAuthButtons } from '../components/OAuthButtons'
+import { getOAuthErrorMessage } from '../utils/oauth'
 import appIcon from '../assets/app.png'
 
 export function LoginPage() {
@@ -16,6 +17,22 @@ export function LoginPage() {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const { allow_signup, oauth_providers } = useAppFeatures()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Surface OAuth-flow errors that the server (or the OAuthCallbackPage)
+  // delivers via `?error=<code>` on this URL. Strip the query param after
+  // reading so a refresh or a follow-up successful sign-in doesn't keep the
+  // stale error visible.
+  useEffect(() => {
+    const code = searchParams.get('error')
+    const message = getOAuthErrorMessage(code)
+    if (message) {
+      setError(message)
+      const next = new URLSearchParams(searchParams)
+      next.delete('error')
+      setSearchParams(next, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const isBusy = isLoading || isSubmitting
   const submitDisabled = !email.trim() || !password || isBusy
