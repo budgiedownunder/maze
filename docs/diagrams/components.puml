@@ -4,9 +4,18 @@
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
 LAYOUT_TOP_DOWN()
+HIDE_STEREOTYPE()
 skinparam linetype ortho
 skinparam nodesep 60
 skinparam ranksep 80
+
+UpdateElementStyle("container", $bgColor="#cccccc", $fontColor="#222222", $borderColor="#888888")
+
+AddElementTag("rust",   $bgColor="#dea584", $fontColor="#000000", $legendText="Rust")
+AddElementTag("csharp", $bgColor="#9b4f96", $fontColor="#ffffff", $legendText="C# / .NET")
+AddElementTag("ts",     $bgColor="#3178c6", $fontColor="#ffffff", $legendText="TypeScript / React")
+AddElementTag("wasm",   $bgColor="#654ff0", $fontColor="#ffffff", $legendText="WebAssembly")
+AddElementTag("doc",    $bgColor="#bdbdbd", $fontColor="#000000", $legendText="Documentation")
 
 title Component Diagram for Maze
 
@@ -19,48 +28,48 @@ System_Boundary(c1, "Browser") {
 Container(maze_web_api, "", "http", "Maze Web API")
 
 System_Boundary(b_rust_core, "Rust core") {
-    Container(maze, "maze", "Rust", "Maze library")
-    Container(data_model, "data_model", "Rust", "Data model")
-    Container(utils, "utils", "Rust", "Utility functions")
-    Container(auth, "auth", "Rust", "Authentication library")
-    Container(storage, "storage", "Rust", "Data storage")
+    Container(maze, "maze", "Rust", "Maze library", $tags="rust")
+    Container(data_model, "data_model", "Rust", "Data model", $tags="rust")
+    Container(utils, "utils", "Rust", "Utility functions", $tags="rust")
+    Container(auth, "auth", "Rust", "Authentication library", $tags="rust")
+    Container(storage, "storage", "Rust", "Data storage", $tags="rust")
 }
 
 System_Boundary(b_rust_bins, "Rust binaries") {
-    Container(maze_web_server, "maze_web_server", "Rust", "Console application")
-    Container(maze_console, "maze_console", "Rust", "Console application")
-    Container(maze_openapi_generator, "maze_openapi_generator", "Rust", "Console application")
+    Container(maze_web_server, "maze_web_server", "Rust", "Console application", $tags="rust")
+    Container(maze_console, "maze_console", "Rust", "Console application", $tags="rust")
+    Container(maze_openapi_generator, "maze_openapi_generator", "Rust", "Console application", $tags="rust")
 }
 
 System_Boundary(b_interop, "Interop layer") {
-    Container(maze_wasm, "maze_wasm", "Rust", "Maze WebAssembly API library")
-    Container(maze_wasm_js, "maze_wasm.js", "Javascipt", "Maze Javascript API library")
-    Container(maze_c, "maze_c", "Rust", "Maze C API library")
+    Container(maze_wasm, "maze_wasm", "Rust", "Maze WebAssembly API library", $tags="wasm")
+    Container(maze_wasm_js, "maze_wasm.js", "Javascipt", "Maze Javascript API library", $tags="wasm")
+    Container(maze_c, "maze_c", "Rust", "Maze C API library", $tags="rust")
 }
 
 System_Boundary(b_dotnet, ".NET") {
-    Container(maze_maui_app_net, "Maze.Maui.App", "C#", ".NET maze application (MAUI)")
-    Container(maze_maui_controls_net, "Maze.Maui.Controls", "C#", ".NET custom controls and definitions (MAUI)")
-    Container(maze_maui_services_net, "Maze.Maui.Services", "C#", ".NET custom services (MAUI)")
-    Container(maze_api_net, "Maze.Api", "C#", "Maze API .NET assembly")
-    Container(maze_api_net_tests, "Maze.Api.Tests", "C#", "Maze.Api tests")
-    Container(maze_interop_net, "Maze.Interop", "C#", "Maze interop .NET assembly")
-    Container(maze_interop_net_tests, "Maze.Interop.Tests", "C#", "Maze.Interop tests")
+    Container(maze_maui_app_net, "Maze.Maui.App", "C#", ".NET maze application (MAUI)", $tags="csharp")
+    Container(maze_maui_controls_net, "Maze.Maui.Controls", "C#", ".NET custom controls and definitions (MAUI)", $tags="csharp")
+    Container(maze_maui_services_net, "Maze.Maui.Services", "C#", ".NET custom services (MAUI)", $tags="csharp")
+    Container(maze_api_net, "Maze.Api", "C#", "Maze API .NET assembly", $tags="csharp")
+    Container(maze_api_net_tests, "Maze.Api.Tests", "C#", "Maze.Api tests", $tags="csharp")
+    Container(maze_interop_net, "Maze.Interop", "C#", "Maze interop .NET assembly", $tags="csharp")
+    Container(maze_interop_net_tests, "Maze.Interop.Tests", "C#", "Maze.Interop tests", $tags="csharp")
 }
 
 System_Boundary(b_web, "Web frontend") {
-    Container(maze_react_web, "maze_react_web", "React/TypeScript", "Web frontend")
+    Container(maze_react_web, "maze_react_web", "React/TypeScript", "Web frontend", $tags="ts")
 }
 
 System_Boundary(b_game, "3D game") {
-    Container(maze_game_bevy, "maze_game_bevy", "Rust / Bevy", "First-person 3D maze game (library + native binary)")
-    Container(maze_game_bevy_wasm, "maze_game_bevy_wasm", "Rust / Bevy / WASM", "Browser build of the 3D game")
+    Container(maze_game_bevy, "maze_game_bevy", "Rust / Bevy", "First-person 3D maze game (library + native binary)", $tags="rust")
+    Container(maze_game_bevy_wasm, "maze_game_bevy_wasm", "Rust / Bevy / WASM", "Browser build of the 3D game", $tags="wasm")
 }
 
 System_Boundary(b_docs, "Documentation") {
-    Container(docfx, "docfx", "", "HTML help generation")
-    Container(html_help, "", "", "HTML help pages")
-    Container(openapi_json, "openapi.json", "", "JSON file")
+    Container(docfx, "docfx", "", "HTML help generation", $tags="doc")
+    Container(html_help, "", "", "HTML help pages", $tags="doc")
+    Container(openapi_json, "openapi.json", "", "JSON file", $tags="doc")
 }
 
 Rel(user, browser, "Uses")
