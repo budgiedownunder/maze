@@ -78,6 +78,24 @@ namespace Maze.Maui.App.ViewModels
             OnPropertyChanged(nameof(HasOAuthProviders));
         }
 
+        /// <summary>
+        /// Force-rerenders the OAuth provider buttons. Used when the OS theme
+        /// changes at runtime: the GitHub icon path that
+        /// <c>OAuthProviderIconConverter</c> returns is theme-dependent and
+        /// the converter is captured at bind time, so we clear and re-add
+        /// the collection — which triggers <c>BindableLayout</c> to recreate
+        /// each item's <c>Button</c>, re-running the converter under the new
+        /// theme.
+        /// </summary>
+        public void RefreshOAuthProviderItems()
+        {
+            if (OAuthProviders.Count == 0) return;
+            var snapshot = OAuthProviders.ToList();
+            OAuthProviders.Clear();
+            foreach (var p in snapshot)
+                OAuthProviders.Add(p);
+        }
+
         private bool CanSignUp() =>
             !string.IsNullOrWhiteSpace(Email) &&
             !string.IsNullOrWhiteSpace(Password) &&
