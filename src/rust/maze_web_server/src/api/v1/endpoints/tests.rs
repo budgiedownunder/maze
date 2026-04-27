@@ -4006,6 +4006,65 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn oauth_callback_new_user_flag_reflects_account_resolve_outcome() {
+        // The post-Step-7 polish item #1 needs the client to know whether an
+        // OAuth flow created a new user (so the Account UI can be opened with
+        // a welcome banner) or signed in an existing one (no banner). The
+        // server signals this via `&new_user=true` on the redirect URL when
+        // and only when account::resolve returns `Created`. This test calls
+        // the callback twice for the same identity:
+        //   1. First call → empty store → branch 3 → Created → new_user=true.
+        //   2. Second call → identity now exists → branch 1 → SignedIn → no flag.
+        let mut connector = FakeConnector::google_only();
+        connector.identity = Some(NormalisedIdentity {
+            provider: "google".into(),
+            provider_user_id: "google-sub-flag".into(),
+            email: Some("flag_user@example.com".into()),
+            email_verified: true,
+            display_name: None,
+        });
+        let connector: Arc<dyn OAuthConnector> = Arc::new(connector);
+        let app = create_test_app_with_oauth_connector(connector).await;
+
+        let persisted = PersistedState {
+            state: "s".into(),
+            pkce_verifier: "v".into(),
+            origin: FlowOrigin::Web,
+            provider: "google".into(),
+            created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: None,
+        };
+        let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
+
+        // First callback: account::resolve creates a new user.
+        let first = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=s")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let first_resp = test::call_service(&app, first).await;
+        assert_eq!(first_resp.status(), StatusCode::FOUND);
+        let first_location = first_resp.headers().get("Location").unwrap().to_str().unwrap();
+        assert!(
+            first_location.contains("&new_user=true"),
+            "first sign-in (Created) must flag new_user: {first_location}"
+        );
+
+        // Second callback for the same identity: account::resolve finds the
+        // existing user via (provider, provider_user_id) → SignedIn → no flag.
+        let second = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=s")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let second_resp = test::call_service(&app, second).await;
+        assert_eq!(second_resp.status(), StatusCode::FOUND);
+        let second_location = second_resp.headers().get("Location").unwrap().to_str().unwrap();
+        assert!(
+            !second_location.contains("new_user"),
+            "returning user (SignedIn) must not flag new_user: {second_location}"
+        );
+    }
+
+    #[actix_web::test]
     async fn oauth_callback_mobile_origin_echoes_client_state_on_redirect() {
         // WinUIEx WebAuthenticator (and similar URL-scheme brokers) need their
         // client-supplied `state` echoed back on the maze-app:// callback so

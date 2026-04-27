@@ -13,6 +13,7 @@ namespace Maze.Maui.App.ViewModels
     {
         private readonly IAuthService _authService;
         private readonly IAppFeaturesService _appFeaturesService;
+        private readonly AccountViewModel _accountViewModel;
 
         /// <summary>OAuth providers exposed by the server. Same data as on the login
         /// form — both screens render the same OAuth buttons because the server does
@@ -58,11 +59,15 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         /// <param name="authService">Injected auth service</param>
         /// <param name="appFeaturesService">Injected app features service</param>
-        public SignUpViewModel(IAuthService authService, IAppFeaturesService appFeaturesService)
+        /// <param name="accountViewModel">Injected (singleton) account view model — used to flip
+        /// <see cref="AccountViewModel.IsWelcomeMode"/> when an OAuth sign-up creates a brand-new
+        /// user, so the Account popup auto-opens with a welcome banner on the next page.</param>
+        public SignUpViewModel(IAuthService authService, IAppFeaturesService appFeaturesService, AccountViewModel accountViewModel)
         {
             Title = "Sign Up";
             _authService = authService;
             _appFeaturesService = appFeaturesService;
+            _accountViewModel = accountViewModel;
         }
 
         /// <summary>
@@ -156,7 +161,11 @@ namespace Maze.Maui.App.ViewModels
             ErrorMessage = "";
             try
             {
-                await _authService.SignInWithOAuthAsync(providerName);
+                var result = await _authService.SignInWithOAuthAsync(providerName);
+                // Flip the singleton AccountViewModel's IsWelcomeMode flag *before*
+                // navigating: AppShell.OnNavigated will read it on arrival at the
+                // main page and auto-open the Account popup with a welcome banner.
+                _accountViewModel.IsWelcomeMode = result.IsNewUser;
                 await Shell.Current.GoToAsync("//MainPage");
             }
             catch (OAuthFlowFailedException ex)

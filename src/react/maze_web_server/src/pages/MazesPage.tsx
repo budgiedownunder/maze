@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { HamburgerMenu } from '../components/HamburgerMenu'
+import { AccountModal } from '../components/AccountModal'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
 import { useMenuVariant } from '../hooks/useMenuVariant'
@@ -16,6 +17,22 @@ export function MazesPage() {
   const { theme, toggleTheme } = useTheme()
   const token = useToken()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Auto-open the My Account modal with a welcome banner when this page is
+  // entered with `state.showWelcome === true` — set by `OAuthCallbackPage`
+  // for first-time OAuth signups so users notice their auto-generated
+  // username and can edit it before doing anything else.
+  const [showWelcomeAccount, setShowWelcomeAccount] = useState(false)
+  useEffect(() => {
+    const navState = location.state as { showWelcome?: boolean } | null
+    if (navState?.showWelcome) {
+      setShowWelcomeAccount(true)
+      // Clear the navigation state so a refresh doesn't re-trigger the auto-open.
+      window.history.replaceState({}, '', location.pathname + location.search)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [mazes, setMazes] = useState<Maze[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -278,6 +295,13 @@ export function MazesPage() {
           </ul>
         )}
       </main>
+
+      {showWelcomeAccount && (
+        <AccountModal
+          welcome
+          onClose={() => setShowWelcomeAccount(false)}
+        />
+      )}
     </div>
   )
 }

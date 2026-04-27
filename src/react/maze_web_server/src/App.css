@@ -91,6 +91,18 @@
   padding: 0.75rem 1rem;
 }
 
+/* Welcome banner shown on the My Account modal when it's auto-opened after
+   the user's first OAuth sign-up. */
+.account-welcome-banner {
+  background: var(--accent-soft, rgba(120, 160, 240, 0.12));
+  border: 1px solid var(--accent, #5b8def);
+  color: var(--text, inherit);
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+}
+
 /* OAuth provider buttons rendered below the password form on Login/SignUp. */
 .oauth-buttons {
   display: flex;

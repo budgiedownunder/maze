@@ -22,7 +22,7 @@ export function OAuthCallbackPage() {
     window.history.replaceState(null, '', window.location.pathname + window.location.search)
 
     setAuthFromTokenResponse(parsed.token, parsed.expiresAt)
-      .then(() => navigate('/mazes', { replace: true }))
+      .then(() => navigate('/mazes', { replace: true, state: { showWelcome: parsed.newUser } }))
       .catch(() => navigate('/login?error=oauth_session_init_failed', { replace: true }))
   }, [navigate, setAuthFromTokenResponse])
 

@@ -24,6 +24,19 @@ namespace Maze.Maui.App.Services
     }
 
     /// <summary>
+    /// Result of a successful OAuth sign-in. <see cref="IsNewUser"/> is true
+    /// when the server's <c>account::resolve</c> created a brand-new user
+    /// (the OAuth flow's branch 3) — used by the ViewModel layer to open the
+    /// Account UI with a welcome banner so the user can set their username
+    /// and full name immediately.
+    /// </summary>
+    public class OAuthSignInResult
+    {
+        public UserProfile Profile { get; init; } = new();
+        public bool IsNewUser { get; init; }
+    }
+
+    /// <summary>
     /// Represents a service for managing user authentication
     /// </summary>
     public interface IAuthService
@@ -40,11 +53,13 @@ namespace Maze.Maui.App.Services
         /// <summary>
         /// Signs in via the named OAuth provider (e.g. "google", "github") using the platform's
         /// browser. The server runs the full OAuth flow and redirects the platform browser to
-        /// <c>maze-app://oauth-callback?token=...&amp;expires_at=...</c>; the WebAuthenticator
-        /// captures it. The token is then stored and the user profile fetched.
+        /// <c>maze-app://oauth-callback?token=...&amp;expires_at=...&amp;new_user=true</c> (the
+        /// <c>new_user</c> flag is present only on first-time sign-ups); the WebAuthenticator
+        /// captures it. The token is stored, the user profile is fetched, and the
+        /// <c>IsNewUser</c> flag is forwarded to the caller.
         /// </summary>
         /// <param name="providerName">Canonical provider name as exposed by <see cref="IAppFeaturesService"/>.</param>
-        Task<UserProfile> SignInWithOAuthAsync(string providerName);
+        Task<OAuthSignInResult> SignInWithOAuthAsync(string providerName);
 
         /// <summary>Signs out, removing the stored bearer token.</summary>
         Task SignOutAsync();

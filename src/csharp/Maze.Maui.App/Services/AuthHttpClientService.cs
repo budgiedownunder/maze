@@ -154,7 +154,7 @@ namespace Maze.Maui.App.Services
         }
 
         /// <inheritdoc/>
-        public async Task<UserProfile> SignInWithOAuthAsync(string providerName)
+        public async Task<OAuthSignInResult> SignInWithOAuthAsync(string providerName)
         {
             if (string.IsNullOrWhiteSpace(providerName))
                 throw new ArgumentException("Provider name must be supplied", nameof(providerName));
@@ -182,10 +182,17 @@ namespace Maze.Maui.App.Services
             if (!result.Properties.TryGetValue("expires_at", out var expiresAt) || string.IsNullOrEmpty(expiresAt))
                 throw new Exception("OAuth response did not include a token expiry");
 
+            // The server emits `new_user=true` on the redirect URL only when
+            // account::resolve created a brand-new user; the ViewModel layer
+            // uses this to open the Account UI with a welcome banner.
+            bool isNewUser = result.Properties.TryGetValue("new_user", out var newUserRaw)
+                             && string.Equals(newUserRaw, "true", StringComparison.Ordinal);
+
             await SecureStorage.Default.SetAsync(TOKEN_STORAGE_KEY, token);
             await SecureStorage.Default.SetAsync(TOKEN_EXPIRY_STORAGE_KEY, expiresAt);
 
-            return await GetMyProfileAsync();
+            var profile = await GetMyProfileAsync();
+            return new OAuthSignInResult { Profile = profile, IsNewUser = isNewUser };
         }
 
         /// <inheritdoc/>

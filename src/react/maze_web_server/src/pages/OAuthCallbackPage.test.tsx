@@ -49,12 +49,12 @@ describe('getOAuthErrorMessage', () => {
 describe('parseCallbackHash', () => {
   it('extracts token and expires_at from a hash with leading #', () => {
     const result = parseCallbackHash('#token=abc-123&expires_at=2026-04-26T12:00:00Z')
-    expect(result).toEqual({ token: 'abc-123', expiresAt: '2026-04-26T12:00:00Z' })
+    expect(result).toEqual({ token: 'abc-123', expiresAt: '2026-04-26T12:00:00Z', newUser: false })
   })
 
   it('accepts a hash without leading #', () => {
     const result = parseCallbackHash('token=abc-123&expires_at=2026-04-26T12:00:00Z')
-    expect(result).toEqual({ token: 'abc-123', expiresAt: '2026-04-26T12:00:00Z' })
+    expect(result).toEqual({ token: 'abc-123', expiresAt: '2026-04-26T12:00:00Z', newUser: false })
   })
 
   it('decodes percent-encoded expires_at', () => {
@@ -73,5 +73,23 @@ describe('parseCallbackHash', () => {
 
   it('returns null for an empty hash', () => {
     expect(parseCallbackHash('')).toBeNull()
+  })
+
+  it('flags newUser=true when the server emits new_user=true', () => {
+    // Set by the Rust callback handler when account::resolve returned `Created`
+    // (first-time OAuth user). Triggers the welcome-banner auto-open in the SPA.
+    const result = parseCallbackHash('#token=abc&expires_at=2026-04-26T12:00:00Z&new_user=true')
+    expect(result?.newUser).toBe(true)
+  })
+
+  it('returns newUser=false when the server omits new_user (returning user)', () => {
+    const result = parseCallbackHash('#token=abc&expires_at=2026-04-26T12:00:00Z')
+    expect(result?.newUser).toBe(false)
+  })
+
+  it('returns newUser=false for any value other than the literal string "true"', () => {
+    expect(parseCallbackHash('#token=a&expires_at=z&new_user=1')?.newUser).toBe(false)
+    expect(parseCallbackHash('#token=a&expires_at=z&new_user=yes')?.newUser).toBe(false)
+    expect(parseCallbackHash('#token=a&expires_at=z&new_user=false')?.newUser).toBe(false)
   })
 })

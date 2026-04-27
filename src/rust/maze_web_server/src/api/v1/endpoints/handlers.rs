@@ -579,12 +579,16 @@ fn oauth_error_to_actix(err: OAuthError) -> Error {
     }
 }
 
-fn web_callback_url(token_id: Uuid, expires_at: DateTime<Utc>) -> String {
-    format!(
+fn web_callback_url(token_id: Uuid, expires_at: DateTime<Utc>, is_new_user: bool) -> String {
+    let mut url = format!(
         "/oauth/callback#token={}&expires_at={}",
         token_id,
         encode(&expires_at.to_rfc3339()),
-    )
+    );
+    if is_new_user {
+        url.push_str("&new_user=true");
+    }
+    url
 }
 
 fn mobile_callback_url(
@@ -592,6 +596,7 @@ fn mobile_callback_url(
     token_id: Uuid,
     expires_at: DateTime<Utc>,
     client_state: Option<&str>,
+    is_new_user: bool,
 ) -> String {
     let mut url = format!(
         "{scheme}://oauth-callback?token={}&expires_at={}",
@@ -602,6 +607,9 @@ fn mobile_callback_url(
         // The OAuth standard query-parameter name for this is `state`; the
         // server treats it as opaque, so URL-encode it on the way out.
         url.push_str(&format!("&state={}", encode(s)));
+    }
+    if is_new_user {
+        url.push_str("&new_user=true");
     }
     url
 }
@@ -844,8 +852,9 @@ pub async fn oauth_callback(
         }
     };
 
-    let mut user = match outcome {
-        account::ResolveOutcome::SignedIn(u) | account::ResolveOutcome::Created(u) => u,
+    let (mut user, is_new_user) = match outcome {
+        account::ResolveOutcome::SignedIn(u) => (u, false),
+        account::ResolveOutcome::Created(u) => (u, true),
     };
     let new_login = user.create_login(
         config.security.login_expiry_hours,
@@ -860,12 +869,13 @@ pub async fn oauth_callback(
     let token_id = new_login.id;
     let expires_at = new_login.expires_at;
     let location = match persisted.origin {
-        FlowOrigin::Web => web_callback_url(token_id, expires_at),
+        FlowOrigin::Web => web_callback_url(token_id, expires_at, is_new_user),
         FlowOrigin::Mobile => mobile_callback_url(
             &scheme,
             token_id,
             expires_at,
             persisted.client_state.as_deref(),
+            is_new_user,
         ),
     };
 

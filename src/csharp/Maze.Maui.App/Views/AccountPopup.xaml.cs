@@ -55,6 +55,19 @@ namespace Maze.Maui.App.Views
                 / DeviceDisplay.Current.MainDisplayInfo.Density;
             WidthRequest = Math.Min(screenWidth * 0.85, 400);
             viewModel.LoadProfileCommand.Execute(null);
+
+            // Clear the welcome-banner flag once the popup is closed (by either
+            // path — Close button or tap-outside — both fire Closed). Subsequent
+            // burger-menu opens of the Account UI then render without the
+            // banner. Keeping the flag set during the popup's lifetime is what
+            // makes the banner visible in the first place.
+            Closed += OnPopupClosed;
+        }
+
+        private void OnPopupClosed(object? sender, EventArgs e)
+        {
+            _viewModel.IsWelcomeMode = false;
+            Closed -= OnPopupClosed;
         }
 
         /// <summary>

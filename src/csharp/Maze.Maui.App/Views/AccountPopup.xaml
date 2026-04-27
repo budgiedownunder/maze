@@ -30,6 +30,19 @@
                            HorizontalOptions="Center"
                            Margin="0,0,0,4" />
 
+                    <!-- Welcome banner shown only when the popup was auto-opened
+                         after a brand-new OAuth sign-up. Cleared on popup dismiss. -->
+                    <Border IsVisible="{Binding IsWelcomeMode}"
+                            Padding="10,8"
+                            StrokeShape="RoundRectangle 4"
+                            Stroke="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                            StrokeThickness="1"
+                            BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource Gray600}}">
+                        <Label Text="Welcome to Maze! Take a moment to set your username and full name."
+                               LineBreakMode="WordWrap"
+                               TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
+                    </Border>
+
                     <Label Text="{Binding LoadStatus}"
                            IsVisible="{Binding IsBusy}"
                            HorizontalOptions="Center"

@@ -1,15 +1,19 @@
-/** Parses `#token=…&expires_at=…` from a URL fragment. Returns null if either
- *  field is missing — the OAuth callback page treats that as a flow failure.
+/** Parses `#token=…&expires_at=…[&new_user=true]` from a URL fragment.
+ *  Returns null if `token` or `expires_at` is missing — the OAuth callback
+ *  page treats that as a flow failure. `newUser` is `true` only when the
+ *  server explicitly emitted `new_user=true`; absent or any other value
+ *  means an existing user signed in.
  *
  *  Lives in utils (not on the page component) so the page file exports only
  *  components, keeping `react-refresh/only-export-components` happy. */
-export function parseCallbackHash(hash: string): { token: string; expiresAt: string } | null {
+export function parseCallbackHash(hash: string): { token: string; expiresAt: string; newUser: boolean } | null {
   const fragment = hash.startsWith('#') ? hash.slice(1) : hash
   const params = new URLSearchParams(fragment)
   const token = params.get('token')
   const expiresAt = params.get('expires_at')
+  const newUser = params.get('new_user') === 'true'
   if (!token || !expiresAt) return null
-  return { token, expiresAt }
+  return { token, expiresAt, newUser }
 }
 
 /** Maps an OAuth error code (the value of `?error=…` on /login) to a friendly
