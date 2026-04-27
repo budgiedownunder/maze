@@ -81,14 +81,6 @@
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
 	</ItemGroup>
 
-	<!-- WinUIEx provides a Windows-native WebAuthenticator shim. MAUI's
-	     built-in Microsoft.Maui.Authentication.WebAuthenticator throws
-	     PlatformNotSupportedException on Windows
-	     (see https://github.com/microsoft/WindowsAppSDK/issues/441). -->
-	<ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
-		<PackageReference Include="WinUIEx" Version="2.5.1" />
-	</ItemGroup>
-
 	<ItemGroup>
 		<ProjectCapability Remove="TestContainer" />
 	</ItemGroup>

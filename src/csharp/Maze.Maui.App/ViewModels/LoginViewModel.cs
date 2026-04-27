@@ -165,14 +165,14 @@ namespace Maze.Maui.App.ViewModels
             }
             catch (TimeoutException)
             {
-                // The OAuth flow exceeded its timeout — typically because the
-                // user cancelled the Windows "Open Maze" protocol-activation
-                // prompt, or closed the browser before completing consent.
+                // The OAuth flow exceeded its 5-minute upper bound — typically
+                // because the user walked away from the consent screen.
                 ErrorMessage = "Sign-in was cancelled or did not complete in time. Please try again.";
             }
             catch (TaskCanceledException)
             {
-                // Broker reported a clean cancellation (e.g. iOS user dismissed the auth sheet).
+                // Broker reported a clean cancellation: iOS user dismissed
+                // the auth sheet, or Windows user closed the WebView2 popup.
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
             {

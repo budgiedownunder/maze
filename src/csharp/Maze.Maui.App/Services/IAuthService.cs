@@ -52,11 +52,11 @@ namespace Maze.Maui.App.Services
 
         /// <summary>
         /// Signs in via the named OAuth provider (e.g. "google", "github") using the platform's
-        /// browser. The server runs the full OAuth flow and redirects the platform browser to
-        /// <c>maze-app://oauth-callback?token=...&amp;expires_at=...&amp;new_user=true</c> (the
-        /// <c>new_user</c> flag is present only on first-time sign-ups); the WebAuthenticator
-        /// captures it. The token is stored, the user profile is fetched, and the
-        /// <c>IsNewUser</c> flag is forwarded to the caller.
+        /// browser flow. The server runs the full OAuth flow and redirects the browser to
+        /// <c>maze-app://oauth-callback#token=...&amp;expires_at=...&amp;new_user=true</c> (params
+        /// in the fragment; the <c>new_user</c> flag is present only on first-time sign-ups);
+        /// the platform broker captures it. The token is stored, the user profile is fetched,
+        /// and the <c>IsNewUser</c> flag is forwarded to the caller.
         /// </summary>
         /// <param name="providerName">Canonical provider name as exposed by <see cref="IAppFeaturesService"/>.</param>
         Task<OAuthSignInResult> SignInWithOAuthAsync(string providerName);

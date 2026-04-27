@@ -16,12 +16,6 @@ namespace Maze.Maui.App.WinUI
         /// </summary>
         public App()
         {
-            // WinUIEx's WebAuthenticator needs this call early in app startup so it can
-            // detect when the current activation came from a maze-app:// URL (i.e. the
-            // OS reactivated us with an OAuth callback). Without it, AuthenticateAsync
-            // throws "OAuth redirection check on app activation was not detected."
-            WinUIEx.WebAuthenticator.CheckOAuthRedirectionActivation();
-
             this.InitializeComponent();
         }
         /// <summary>

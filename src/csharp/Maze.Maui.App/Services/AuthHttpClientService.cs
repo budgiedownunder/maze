@@ -90,18 +90,22 @@ namespace Maze.Maui.App.Services
         private const string TOKEN_EXPIRY_STORAGE_KEY = "bearer_token_expires_at";
         private const string HEADER_AUTHORIZATION = "Authorization";
 
-        // Custom URL scheme registered on each platform; the server redirects
-        // the platform browser to "{scheme}://oauth-callback?token=...&expires_at=..."
-        // and WebAuthenticator's URL-scheme handler picks it up.
+        // Custom URL scheme used as the OAuth-callback sentinel. The server
+        // redirects the platform browser flow to
+        // "{scheme}://oauth-callback#token=...&expires_at=..." (params in the
+        // fragment, see `mobile_callback_url` in the Rust handlers) and the
+        // platform broker — Windows WebView2 popup or MAUI WebAuthenticator
+        // on other platforms — intercepts that navigation and parses the
+        // params. The scheme does not need to be a real OS-registered
+        // protocol handler on Windows because the WebView2 broker sees the
+        // navigation request internally.
         internal const string OAUTH_CALLBACK_URL = "maze-app://oauth-callback";
 
-        // Upper bound on how long we wait for the user to complete an OAuth flow
-        // in the platform browser. Without this, cancelling the Windows
-        // "Open Maze" protocol-activation prompt leaves AuthenticateAsync
-        // blocked forever — the broker has no way to detect that the user
-        // refused the activation. Five minutes is generous enough for any
-        // realistic consent screen but short enough that a stuck flow
-        // self-heals.
+        // Upper bound on how long we wait for the user to complete an OAuth
+        // flow in the platform browser. Five minutes is generous enough for
+        // any realistic consent screen but short enough that a stuck flow
+        // self-heals. The timeout produces a TimeoutException the ViewModel
+        // translates into a friendly cancellation message.
         private static readonly TimeSpan OAUTH_FLOW_TIMEOUT = TimeSpan.FromMinutes(5);
 
         private readonly HttpClient _httpClient;
@@ -111,8 +115,8 @@ namespace Maze.Maui.App.Services
         /// <summary>
         /// Constructor. The broker is platform-specific: on Windows MAUI's
         /// built-in WebAuthenticator throws <see cref="PlatformNotSupportedException"/>,
-        /// so DI registers a WinUIEx-backed broker on that platform and the
-        /// MAUI broker on every other.
+        /// so DI registers a WebView2-popup-backed broker on that platform
+        /// and the MAUI broker on every other.
         /// </summary>
         public AuthHttpClientService(ConfigurationService configurationService, IWebAuthenticatorBroker webAuthenticator)
         {
