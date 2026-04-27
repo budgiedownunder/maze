@@ -5,7 +5,9 @@
                x:Class="Maze.Maui.App.Views.AboutPopup"
                CanBeDismissedByTappingOutsideOfPopup="True">
 
-    <Grid RowDefinitions="Auto, Auto" Padding="16">
+    <Grid RowDefinitions="Auto, Auto"
+          Padding="16"
+          BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource OffBlack}}">
 
         <ScrollView Grid.Row="0">
             <VerticalStackLayout Spacing="12" HorizontalOptions="Fill">
@@ -26,15 +28,20 @@
                        FontAttributes="Bold"
                        Text="Maze Application v1.0"
                        LineBreakMode="WordWrap"
-                       HorizontalOptions="Center" />
+                       HorizontalOptions="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
                 <Label FontSize="14"
                        FontAttributes="None"
                        Text="© BudgieDownUnder, 2026"
-                       HorizontalOptions="Center" />
+                       HorizontalOptions="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
 
-                <BoxView HeightRequest="1" BackgroundColor="Gray" HorizontalOptions="Fill" />
+                <BoxView HeightRequest="1"
+                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray400}, Dark={StaticResource Gray500}}"
+                         HorizontalOptions="Fill" />
                 <Label Text="An app for designing and solving mazes"
-                       HorizontalOptions="Center" />
+                       HorizontalOptions="Center"
+                       TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
 
             </VerticalStackLayout>
         </ScrollView>
