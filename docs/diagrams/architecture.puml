@@ -3,6 +3,11 @@
 
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
+LAYOUT_TOP_DOWN()
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 80
+
 title Architecture Diagram for Maze
 
 Person(user, "User", "A user of the system")
