@@ -5,6 +5,7 @@ import { ThemeProvider } from './context/ThemeContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { LoginPage } from './pages/LoginPage'
 import { SignUpPage } from './pages/SignUpPage'
+import { OAuthCallbackPage } from './pages/OAuthCallbackPage'
 import { MazesPage } from './pages/MazesPage'
 import { MazePage } from './pages/MazePage'
 import { MazeGamePage } from './pages/MazeGamePage'
@@ -18,6 +19,7 @@ export function SignupRoute() {
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/signup', element: <SignupRoute /> },
+  { path: '/oauth/callback', element: <OAuthCallbackPage /> },
   { path: '/mazes', element: <ProtectedRoute><MazesPage /></ProtectedRoute> },
   { path: '/mazes/new', element: <ProtectedRoute><MazePage /></ProtectedRoute> },
   { path: '/mazes/:id', element: <ProtectedRoute><MazePage /></ProtectedRoute> },

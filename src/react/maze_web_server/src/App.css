@@ -91,6 +91,63 @@
   padding: 0.75rem 1rem;
 }
 
+/* Welcome banner shown on the My Account modal when it's auto-opened after
+   the user's first OAuth sign-up. */
+.account-welcome-banner {
+  background: var(--accent-soft, rgba(120, 160, 240, 0.12));
+  border: 1px solid var(--accent, #5b8def);
+  color: var(--text, inherit);
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+/* OAuth provider buttons rendered below the password form on Login/SignUp. */
+.oauth-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--text-muted, #888);
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+}
+.oauth-divider::before,
+.oauth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border, #ccc);
+}
+.oauth-divider span { padding: 0 0.6rem; }
+
+.btn-oauth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--text, inherit);
+  cursor: pointer;
+  font: inherit;
+}
+.btn-oauth:hover:not(:disabled) {
+  background: var(--surface-hover, #f5f5f5);
+}
+.btn-oauth:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-icon {
   background: none;
   border: none;

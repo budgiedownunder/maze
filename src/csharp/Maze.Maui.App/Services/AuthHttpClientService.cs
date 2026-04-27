@@ -90,15 +90,39 @@ namespace Maze.Maui.App.Services
         private const string TOKEN_EXPIRY_STORAGE_KEY = "bearer_token_expires_at";
         private const string HEADER_AUTHORIZATION = "Authorization";
 
+        // Custom URL scheme used as the OAuth-callback sentinel. The server
+        // redirects the platform browser flow to
+        // "{scheme}://oauth-callback#token=...&expires_at=..." (params in the
+        // fragment, see `mobile_callback_url` in the Rust handlers) and the
+        // platform broker — Windows WebView2 popup or MAUI WebAuthenticator
+        // on other platforms — intercepts that navigation and parses the
+        // params. The scheme does not need to be a real OS-registered
+        // protocol handler on Windows because the WebView2 broker sees the
+        // navigation request internally.
+        internal const string OAUTH_CALLBACK_URL = "maze-app://oauth-callback";
+
+        // Upper bound on how long we wait for the user to complete an OAuth
+        // flow in the platform browser. Five minutes is generous enough for
+        // any realistic consent screen but short enough that a stuck flow
+        // self-heals. The timeout produces a TimeoutException the ViewModel
+        // translates into a friendly cancellation message.
+        private static readonly TimeSpan OAUTH_FLOW_TIMEOUT = TimeSpan.FromMinutes(5);
+
         private readonly HttpClient _httpClient;
+        private readonly ConfigurationService _configurationService;
+        private readonly IWebAuthenticatorBroker _webAuthenticator;
 
         /// <summary>
-        /// Constructor
+        /// Constructor. The broker is platform-specific: on Windows MAUI's
+        /// built-in WebAuthenticator throws <see cref="PlatformNotSupportedException"/>,
+        /// so DI registers a WebView2-popup-backed broker on that platform
+        /// and the MAUI broker on every other.
         /// </summary>
-        /// <param name="configurationService">Injected configuration service</param>
-        public AuthHttpClientService(ConfigurationService configurationService)
+        public AuthHttpClientService(ConfigurationService configurationService, IWebAuthenticatorBroker webAuthenticator)
         {
             _httpClient = ApiHttpClientFactory.Create(configurationService);
+            _configurationService = configurationService;
+            _webAuthenticator = webAuthenticator;
         }
 
         /// <inheritdoc/>
@@ -131,6 +155,48 @@ namespace Maze.Maui.App.Services
             await SecureStorage.Default.SetAsync(TOKEN_EXPIRY_STORAGE_KEY, loginResponse.LoginTokenExpiresAt.ToString("O"));
 
             return await GetMyProfileAsync();
+        }
+
+        /// <inheritdoc/>
+        public async Task<OAuthSignInResult> SignInWithOAuthAsync(string providerName)
+        {
+            if (string.IsNullOrWhiteSpace(providerName))
+                throw new ArgumentException("Provider name must be supplied", nameof(providerName));
+
+            var startUrl = new Uri(new Uri(_configurationService.ApiRootUri),
+                $"auth/oauth/{Uri.EscapeDataString(providerName)}/start?origin=mobile");
+            var callbackUrl = new Uri(OAUTH_CALLBACK_URL);
+
+            // .WaitAsync turns "stuck waiting forever" into a TimeoutException
+            // the ViewModel can translate into a friendly cancellation message.
+            var result = await _webAuthenticator
+                .AuthenticateAsync(startUrl, callbackUrl)
+                .WaitAsync(OAUTH_FLOW_TIMEOUT);
+
+            // Server-side recoverable errors (signup disabled, email not
+            // verified, etc.) come back via `reason=<code>` on the same
+            // callback URL — surface them as a typed exception so the
+            // ViewModel can show a friendly per-code message instead of a
+            // generic "Sign in failed" toast.
+            if (result.Properties.TryGetValue("reason", out var reason) && !string.IsNullOrEmpty(reason))
+                throw new OAuthFlowFailedException(reason);
+
+            if (!result.Properties.TryGetValue("token", out var token) || string.IsNullOrEmpty(token))
+                throw new Exception($"OAuth response did not include a bearer token (broker returned {result.Properties.Count} properties: [{string.Join(", ", result.Properties.Keys)}])");
+            if (!result.Properties.TryGetValue("expires_at", out var expiresAt) || string.IsNullOrEmpty(expiresAt))
+                throw new Exception("OAuth response did not include a token expiry");
+
+            // The server emits `new_user=true` on the redirect URL only when
+            // account::resolve created a brand-new user; the ViewModel layer
+            // uses this to open the Account UI with a welcome banner.
+            bool isNewUser = result.Properties.TryGetValue("new_user", out var newUserRaw)
+                             && string.Equals(newUserRaw, "true", StringComparison.Ordinal);
+
+            await SecureStorage.Default.SetAsync(TOKEN_STORAGE_KEY, token);
+            await SecureStorage.Default.SetAsync(TOKEN_EXPIRY_STORAGE_KEY, expiresAt);
+
+            var profile = await GetMyProfileAsync();
+            return new OAuthSignInResult { Profile = profile, IsNewUser = isNewUser };
         }
 
         /// <inheritdoc/>

@@ -25,6 +25,10 @@ pub trait UserStore {
     fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error>;
     /// Locates a user by their login id within the store
     fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, Error>;
+    /// Locates a user by an OAuth identity `(provider, provider_user_id)` pair.
+    /// `provider` is matched case-insensitively); `provider_user_id` is matched
+    /// exactly (it is an opaque stable id from the identity provider).
+    fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, Error>;
     /// Returns the list of users within the store, sorted
     /// alphabetically by username in ascending order
     fn get_users(&self) -> Result<Vec<User>, Error>;

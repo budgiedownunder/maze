@@ -13,10 +13,12 @@
     <ContentPage.ToolbarItems>
         <ToolbarItem Text="New"
                      Command="{Binding NewCommand}"
-                     IconImageSource="{OnPlatform 'icon_new.png', iOS='icon_new_ios.png',MacCatalyst='icon_new_ios.png'}"/>
+                     IconImageSource="{OnPlatform Default={AppThemeBinding Light=icon_new.png, Dark=icon_new_dark.png},
+                                                  iOS={AppThemeBinding Light=icon_new_ios.png, Dark=icon_new_ios_dark.png},
+                                                  MacCatalyst={AppThemeBinding Light=icon_new_ios.png, Dark=icon_new_ios_dark.png}}"/>
         <ToolbarItem Text="Refresh"
                      Command="{Binding GetMazesCommand}"
-                     IconImageSource="refresh.png"/>
+                     IconImageSource="{AppThemeBinding Light=refresh.png, Dark=refresh_dark.png}"/>
     </ContentPage.ToolbarItems>
 
     <Grid VerticalOptions="Fill" HorizontalOptions="Fill">

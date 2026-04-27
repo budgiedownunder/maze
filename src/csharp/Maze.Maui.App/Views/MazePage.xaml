@@ -12,11 +12,11 @@
         <ToolbarItem Text="Refresh"
                      IsEnabled="{Binding CanRefresh}"
                      Command="{Binding RefreshCommand}"
-                     IconImageSource="refresh.png"/>
+                     IconImageSource="{AppThemeBinding Light=refresh.png, Dark=refresh_dark.png}"/>
         <ToolbarItem Text="Save"
                      IsEnabled="{Binding CanSave}"
                      Command="{Binding SaveCommand}"
-                     IconImageSource="{OnPlatform 'icon_save.png', Android={x:Null}, iOS={x:Null}}" />
+                     IconImageSource="{OnPlatform Default={AppThemeBinding Light=icon_save.png, Dark=icon_save_dark.png}, Android={x:Null}, iOS={x:Null}}" />
     </ContentPage.ToolbarItems>
 
     <!-- Main Content Grid -->

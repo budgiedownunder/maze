@@ -9,11 +9,18 @@ import { isValidEmail } from '../utils/validation'
 
 interface Props {
   onClose: () => void
+  /**
+   * When true, render a one-line welcome banner above the form. Used by the
+   * post-OAuth-signup auto-open flow (see `OAuthCallbackPage` →
+   * `MazesPage`). The banner only shows on the auto-opened modal; manual
+   * opens via the burger menu always pass `welcome={false}` (default).
+   */
+  welcome?: boolean
 }
 
 type ModalView = 'account' | 'changePassword'
 
-export function AccountModal({ onClose }: Props) {
+export function AccountModal({ onClose, welcome = false }: Props) {
   const token = useToken() ?? ''
   const { logout } = useAuth()
   const navigate = useNavigate()
@@ -105,6 +112,12 @@ export function AccountModal({ onClose }: Props) {
     <div role="dialog" aria-modal="true" aria-label="My Account" className="modal-overlay" style={{ cursor: (isSaving || isLoading) ? 'wait' : undefined }}>
       <div className="modal modal-md">
         <h2 className="modal-title">My Account</h2>
+
+        {welcome && (
+          <p role="status" className="account-welcome-banner">
+            Welcome to Maze! Take a moment to set your username and full name.
+          </p>
+        )}
 
         {isLoading ? (
           <p>Loading profile...</p>

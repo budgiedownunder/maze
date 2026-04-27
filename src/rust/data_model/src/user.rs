@@ -1,4 +1,4 @@
-use crate::{Error, wrappers::{generate_now, generate_uuid}, UserLogin, UserValidationError};
+use crate::{Error, wrappers::{generate_now, generate_uuid}, OAuthIdentity, UserLogin, UserValidationError};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -33,6 +33,11 @@ pub struct User {
     pub api_key: Uuid,
     // Logins
     pub logins: Vec<UserLogin>,
+    /// External OAuth identities linked to this user. Empty for users that have
+    /// only ever signed in with a password. `serde(default)` keeps existing user
+    /// JSON files (written before this field existed) readable without migration.
+    #[serde(default)]
+    pub oauth_identities: Vec<OAuthIdentity>,
 }
 
 impl User {
@@ -56,6 +61,7 @@ impl User {
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     /// println!("User: {:?}", user);
     pub fn new_id() -> Uuid {
@@ -81,6 +87,7 @@ impl User {
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     /// println!("User: {:?}", user);
     pub fn new_api_key() -> Uuid {
@@ -110,6 +117,7 @@ impl User {
             password_hash: "".to_string(),
             api_key: Uuid::nil(),
             logins: vec![],
+            oauth_identities: vec![],
         }
     }
     /// Generates the JSON string representation for the user
@@ -132,6 +140,7 @@ impl User {
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     /// match user.to_json() {
     ///     Ok(json) => {
@@ -199,6 +208,7 @@ impl User {
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     /// match user.validate() {
     ///     Ok(_) => {
@@ -224,7 +234,12 @@ impl User {
         if !is_valid_email_format(&self.email) {
             return Err(Error::UserValidation(UserValidationError::EmailInvalid));
         }
-        if self.password_hash.is_empty() {
+        // OAuth-only users carry an empty password_hash. Require a password
+        // hash *only* when the user has no OAuth identity attached, so that
+        // password-only and OAuth-only accounts both validate, while a
+        // password-only user with no hash still fails (catches a real bug
+        // where signup writes an empty password).
+        if self.password_hash.is_empty() && self.oauth_identities.is_empty() {
             return Err(Error::UserValidation(UserValidationError::PasswordMissing));
         }
         Ok(())
@@ -252,6 +267,7 @@ impl User {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Peform a login
@@ -292,6 +308,7 @@ impl User {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Peform a login
@@ -329,6 +346,7 @@ impl User {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// let login = user.create_login(24, None, None);
@@ -372,6 +390,7 @@ impl User {
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins,
+    ///     oauth_identities: vec![],
     /// };
     ///
     /// // Verify that the login is valid
@@ -416,16 +435,50 @@ mod tests {
     fn can_serialize() {
         let user = User::default();
         let s = user.to_json().expect("Failed to serialize");
-        assert_eq!(s, r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#);
+        assert_eq!(s, r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#);
     }
 
     #[test]
     fn can_deserialize() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
+    }
+
+    #[test]
+    fn can_deserialize_legacy_user_without_oauth_identities() {
+        // User JSON written before the oauth_identities field existed must
+        // continue to deserialize cleanly thanks to #[serde(default)].
+        let compare = User::default();
+        let mut loaded = User::default();
+        let legacy = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
+        loaded.from_json(legacy).expect("Failed to deserialize legacy user JSON");
+        assert_eq!(loaded, compare);
+        assert!(loaded.oauth_identities.is_empty());
+    }
+
+    #[test]
+    fn can_roundtrip_user_with_multiple_oauth_identities() {
+        let mut user = create_valid_user();
+        user.oauth_identities.push(OAuthIdentity::new(
+            "google".to_string(),
+            "google-sub-123".to_string(),
+            Some("alice@example.com".to_string()),
+        ));
+        user.oauth_identities.push(OAuthIdentity::new(
+            "github".to_string(),
+            "42".to_string(),
+            Some("alice@example.com".to_string()),
+        ));
+        let json = user.to_json().expect("Failed to serialize");
+        let mut back = User::default();
+        back.from_json(&json).expect("Failed to deserialize");
+        assert_eq!(user, back);
+        assert_eq!(back.oauth_identities.len(), 2);
+        assert_eq!(back.oauth_identities[0].provider, "google");
+        assert_eq!(back.oauth_identities[1].provider, "github");
     }
 
     #[test]
@@ -532,6 +585,7 @@ mod tests {
             password_hash: "encrypted_hash".to_string(),
             api_key: User::new_api_key(),
             logins: vec![],
+            oauth_identities: vec![],
         }
     }
 
@@ -595,10 +649,24 @@ mod tests {
     #[test]
     #[should_panic(
         expected = "No password provided for the user"
-    )]    
+    )]
     fn user_validation_should_fail_with_missing_password_hash() {
         let mut user = create_valid_user();
         user.password_hash = "".to_string();
+        validate_user(&user);
+    }
+
+    #[test]
+    fn user_validation_should_pass_for_oauth_only_user_without_password() {
+        // OAuth-only users carry an empty password_hash. As long as they have
+        // at least one OAuth identity attached, validation must succeed.
+        let mut user = create_valid_user();
+        user.password_hash = "".to_string();
+        user.oauth_identities.push(OAuthIdentity::new(
+            "google".to_string(),
+            "sub-x".to_string(),
+            Some(user.email.clone()),
+        ));
         validate_user(&user);
     }
 

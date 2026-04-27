@@ -1,3 +1,4 @@
+//! OpenAPI support
 pub mod v1;
 
 use actix_web::web;

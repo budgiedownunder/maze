@@ -51,6 +51,11 @@ interface AuthContextValue {
   isAuthenticated: boolean
   profile: UserProfile | null
   login: (email: string, password: string) => Promise<void>
+  /** Ingest a bearer token issued through any auth flow other than password
+   *  (today: OAuth callback). Performs the same post-login state transitions
+   *  as `login()` — sessionStorage write, profile fetch, renewal interval —
+   *  without making the original credential request itself. */
+  setAuthFromTokenResponse: (token: string, expiresAt: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -125,18 +130,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return stopRenewalInterval
   }, [])
 
-  async function login(email: string, password: string) {
-    const response = await api.login(email, password)
+  async function setAuthFromTokenResponse(token: string, expiresAt: string) {
     const state: AuthState = {
-      token: response.login_token_id,
+      token,
       issuedAt: new Date().toISOString(),
-      expiry: response.login_token_expires_at,
+      expiry: expiresAt,
     }
     const me = await api.getMe(state.token)
     saveAuthState(state)
     setAuthState(state)
     setProfile(me)
     startRenewalInterval()
+  }
+
+  async function login(email: string, password: string) {
+    const response = await api.login(email, password)
+    await setAuthFromTokenResponse(response.login_token_id, response.login_token_expires_at)
   }
 
   async function logout() {
@@ -161,6 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: authState !== null,
         profile,
         login,
+        setAuthFromTokenResponse,
         logout,
       }}
     >

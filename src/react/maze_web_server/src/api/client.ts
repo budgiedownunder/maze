@@ -65,6 +65,13 @@ export function signup(email: string, password: string): Promise<void> {
   })
 }
 
+// Kicks off the server-mediated OAuth flow. The browser navigates away to the
+// server, which 302s onward to the provider; we never see JSON. The bearer
+// token comes back as a fragment on `/oauth/callback`.
+export function startOAuth(provider: string): void {
+  window.location.href = `${BASE}/auth/oauth/${encodeURIComponent(provider)}/start?origin=web`
+}
+
 export function getMe(token: string): Promise<UserProfile> {
   return request<UserProfile>('/users/me', {
     headers: authHeaders(token),

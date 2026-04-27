@@ -11,6 +11,7 @@ use crate::api::v1::endpoints::handlers::{
     LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
     ChangePasswordRequest, UpdateProfileRequest};
+use crate::oauth::OAuthProviderPublic;
 
 struct ApiKeyAuth;
 
@@ -66,6 +67,9 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::handlers::logout,
         crate::api::v1::endpoints::handlers::renew,
         crate::api::v1::endpoints::handlers::signup,
+        // OAuth sign-in
+        crate::api::v1::endpoints::handlers::oauth_start,
+        crate::api::v1::endpoints::handlers::oauth_callback,
         // Self-service account
         crate::api::v1::endpoints::handlers::change_password_me,
         crate::api::v1::endpoints::handlers::update_profile_me,
@@ -90,7 +94,7 @@ impl utoipa::Modify for LoginTokenAuth {
     ),
     components(
         schemas(
-            AppFeaturesResponse,
+            AppFeaturesResponse, OAuthProviderPublic,
             LoginRequest, LoginResponse, RenewResponse,
             SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
             ChangePasswordRequest, UpdateProfileRequest,

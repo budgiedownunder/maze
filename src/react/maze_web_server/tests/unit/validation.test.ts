@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateSignupForm } from '../../src/pages/SignUpPage'
+import { validateSignupForm } from '../../src/utils/validation'
 import { validateChangePasswordForm } from '../../src/components/ChangePasswordModal'
 
 describe('validateSignupForm', () => {

@@ -5,7 +5,7 @@ mod test_definitions {
     // **************************************************************************************************
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
-    use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, SharedFeatures};
+    use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, SharedFeatures};
     
     use actix_http;
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
@@ -209,7 +209,9 @@ mod test_definitions {
         // Validate user content
         fn validate_user(&self, user: &User, ignore_id: Uuid) -> Result<(), StoreError> {
             validate_user_fields(user)?;
-            if user.password_hash.is_empty() {
+            // OAuth-only users have an empty password_hash; password-only
+            // signup still requires one.
+            if user.password_hash.is_empty() && user.oauth_identities.is_empty() {
                 return Err(StoreError::UserPasswordMissing());
             }
             if self.user_name_exists(&user.username, ignore_id) {
@@ -345,6 +347,17 @@ mod test_definitions {
         fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, StoreError>{
             for v in self.users.values() {
                 if v.user.contains_valid_login(login_id) {
+                    return Ok(v.user.clone());
+                }
+            }
+            Err(StoreError::UserNotFound())
+        }
+
+        fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, StoreError> {
+            for v in self.users.values() {
+                if v.user.oauth_identities.iter().any(|i| {
+                    i.provider.eq_ignore_ascii_case(provider) && i.provider_user_id == provider_user_id
+                }) {
                     return Ok(v.user.clone());
                 }
             }
@@ -699,8 +712,9 @@ mod test_definitions {
         set_valid_password_hashes(&app_config.security.password_hash, user_defs);
 
         let (shared_mock_store, mock_users, api_key, login_id) = create_shared_mock_store(user_defs, caller_username, add_login);
+        let connector: SharedOAuthConnector = Arc::new(NoOpConnector);
         let app = test::init_service(
-            create_app(&app_config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(features), ".".to_string())
+            create_app(&app_config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(features), web::Data::new(connector), ".".to_string())
             .app_data(web::Data::new(app_config))
         )
         .await;
@@ -3607,7 +3621,7 @@ mod test_definitions {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
         let (app, _, _, api_key, _) = create_test_app(&mut user_defs, Some(non_admin_username), false).await;
         let _ = admin_username;
-        let req = create_test_put_request("/api/v1/admin/features", api_key, None, &AppFeaturesResponse { allow_signup: false });
+        let req = create_test_put_request("/api/v1/admin/features", api_key, None, &AppFeaturesResponse { allow_signup: false, ..Default::default() });
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
@@ -3617,7 +3631,7 @@ mod test_definitions {
         let non_admin_username = &format!("{USERNAME_PREFIX}1");
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
         let (app, _, _, _, login_id) = create_test_app(&mut user_defs, Some(non_admin_username), true).await;
-        let req = create_test_put_request("/api/v1/admin/features", None, login_id, &AppFeaturesResponse { allow_signup: false });
+        let req = create_test_put_request("/api/v1/admin/features", None, login_id, &AppFeaturesResponse { allow_signup: false, ..Default::default() });
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
@@ -3631,7 +3645,7 @@ mod test_definitions {
         let (app, _, _, api_key, _) = create_test_app_with_config(&mut user_defs, Some(admin_username), false, features, app_config).await;
 
         // Disable signup via admin PUT
-        let put_req = create_test_put_request("/api/v1/admin/features", api_key, None, &AppFeaturesResponse { allow_signup: false });
+        let put_req = create_test_put_request("/api/v1/admin/features", api_key, None, &AppFeaturesResponse { allow_signup: false, ..Default::default() });
         let put_resp = test::call_service(&app, put_req).await;
         assert_eq!(put_resp.status(), StatusCode::OK);
         let body = test::read_body(put_resp).await;
@@ -3656,7 +3670,7 @@ mod test_definitions {
         let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
         let (app, _, _, api_key, _) = create_test_app_with_config(&mut user_defs, Some(admin_username), false, features, app_config).await;
 
-        let put_req = create_test_put_request("/api/v1/admin/features", api_key, None, &AppFeaturesResponse { allow_signup: false });
+        let put_req = create_test_put_request("/api/v1/admin/features", api_key, None, &AppFeaturesResponse { allow_signup: false, ..Default::default() });
         let put_resp = test::call_service(&app, put_req).await;
         assert_eq!(put_resp.status(), StatusCode::OK);
 
@@ -3693,5 +3707,488 @@ mod test_definitions {
         }));
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    // ============================================================================
+    // OAuth handler tests
+    // ============================================================================
+
+    use crate::oauth::{
+        BeginFlow, FlowOrigin, NormalisedIdentity, OAuthConnector, OAuthError,
+        OAuthProviderPublic, PersistedState,
+    };
+    use async_trait::async_trait;
+
+    /// Test connector that returns canned values. Configured via its fields
+    /// so each test can drive specific branches of the handler.
+    struct FakeConnector {
+        providers: Vec<OAuthProviderPublic>,
+        authorize_url: String,
+        state_nonce: String,
+        identity: Option<NormalisedIdentity>,
+        complete_error: Option<OAuthError>,
+    }
+
+    impl FakeConnector {
+        fn google_only() -> Self {
+            Self {
+                providers: vec![OAuthProviderPublic {
+                    name: "google".into(),
+                    display_name: "Google".into(),
+                }],
+                authorize_url: "https://provider.example.com/authorize?fake=1".into(),
+                state_nonce: "fake-state-nonce".into(),
+                identity: None,
+                complete_error: None,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl OAuthConnector for FakeConnector {
+        fn enabled_providers(&self) -> Vec<OAuthProviderPublic> { self.providers.clone() }
+
+        async fn begin(&self, provider: &str, origin: FlowOrigin) -> Result<BeginFlow, OAuthError> {
+            if !self.providers.iter().any(|p| p.name == provider) {
+                return Err(OAuthError::UnknownOrDisabledProvider(provider.into()));
+            }
+            Ok(BeginFlow {
+                authorize_url: self.authorize_url.clone(),
+                persisted: PersistedState {
+                    state: self.state_nonce.clone(),
+                    pkce_verifier: "fake-pkce-verifier".into(),
+                    origin,
+                    provider: provider.to_string(),
+                    created_at_unix: chrono::Utc::now().timestamp(),
+                    client_state: None,
+                },
+            })
+        }
+
+        async fn complete(
+            &self,
+            _provider: &str,
+            _code: &str,
+            _cookie_state: &PersistedState,
+        ) -> Result<NormalisedIdentity, OAuthError> {
+            if let Some(err_msg) = self.complete_error.as_ref().map(|e| e.to_string()) {
+                return Err(OAuthError::ProviderResponse(err_msg));
+            }
+            self.identity
+                .clone()
+                .ok_or_else(|| OAuthError::ProviderResponse("test connector has no identity".into()))
+        }
+    }
+
+    async fn create_test_app_with_oauth_connector(
+        connector: Arc<dyn OAuthConnector>,
+    ) -> impl Service<actix_http::Request, Response = ServiceResponse, Error = Error> {
+        let mut user_defs: Vec<UserDefinition> = vec![];
+        let app_config = AppConfig::default();
+        let features: SharedFeatures = Arc::new(RwLock::new(app_config.features.clone()));
+        set_valid_password_hashes(&app_config.security.password_hash, &mut user_defs);
+        let (shared_mock_store, _, _, _) = create_shared_mock_store(&user_defs, None, false);
+        test::init_service(
+            create_app(
+                &app_config.security.password_hash,
+                web::Data::new(shared_mock_store),
+                web::Data::new(features),
+                web::Data::new(connector as crate::oauth::SharedOAuthConnector),
+                ".".to_string(),
+            )
+            .app_data(web::Data::new(app_config)),
+        )
+        .await
+    }
+
+    #[actix_web::test]
+    async fn oauth_start_web_origin_redirects_with_state_cookie() {
+        let connector = Arc::new(FakeConnector::google_only());
+        let app = create_test_app_with_oauth_connector(connector.clone()).await;
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/start?origin=web")
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let location = resp.headers().get("Location").expect("Location header").to_str().unwrap();
+        assert_eq!(location, "https://provider.example.com/authorize?fake=1");
+        let cookie = resp
+            .headers()
+            .get_all("set-cookie")
+            .find_map(|h| h.to_str().ok().filter(|s| s.starts_with("maze_oauth_state=")))
+            .expect("state cookie present");
+        assert!(cookie.contains("HttpOnly"), "cookie must be HttpOnly: {cookie}");
+        assert!(cookie.contains("Secure"), "cookie must be Secure: {cookie}");
+        assert!(cookie.contains("SameSite=Lax"), "cookie must be SameSite=Lax: {cookie}");
+    }
+
+    #[actix_web::test]
+    async fn oauth_start_mobile_origin_redirects_with_state_cookie() {
+        // Same response shape as web origin (302 + Set-Cookie). Returning a
+        // redirect — rather than JSON for the mobile client to dispatch — is
+        // what lets the platform browser carry the state cookie through the
+        // round trip; a JSON-then-fetch design would land the cookie in the
+        // mobile client's HTTP cookie jar instead of the system browser's.
+        let connector = Arc::new(FakeConnector::google_only());
+        let app = create_test_app_with_oauth_connector(connector).await;
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/start?origin=mobile")
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let location = resp.headers().get("Location").expect("Location header").to_str().unwrap();
+        assert_eq!(location, "https://provider.example.com/authorize?fake=1");
+        let cookie = resp
+            .headers()
+            .get_all("set-cookie")
+            .find_map(|h| h.to_str().ok().filter(|s| s.starts_with("maze_oauth_state=")))
+            .expect("state cookie present");
+        assert!(cookie.contains("HttpOnly"), "cookie must be HttpOnly: {cookie}");
+        assert!(cookie.contains("Secure"), "cookie must be Secure: {cookie}");
+    }
+
+    #[actix_web::test]
+    async fn oauth_start_unknown_provider_returns_404() {
+        let connector = Arc::new(FakeConnector::google_only());
+        let app = create_test_app_with_oauth_connector(connector).await;
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/microsoft/start?origin=web")
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn oauth_callback_with_no_state_cookie_redirects_to_login_with_error() {
+        let connector = Arc::new(FakeConnector::google_only());
+        let app = create_test_app_with_oauth_connector(connector).await;
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=xyz")
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
+        assert!(location.starts_with("/login?error=invalid_state"), "got: {location}");
+    }
+
+    #[actix_web::test]
+    async fn oauth_callback_with_state_mismatch_redirects_to_login_with_error() {
+        let connector = Arc::new(FakeConnector::google_only());
+        let app = create_test_app_with_oauth_connector(connector).await;
+
+        // Build a valid cookie value with state "real-state".
+        let persisted = PersistedState {
+            state: "real-state".into(),
+            pkce_verifier: "v".into(),
+            origin: FlowOrigin::Web,
+            provider: "google".into(),
+            created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: None,
+        };
+        let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=different-state")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
+        assert!(location.starts_with("/login?error=state_mismatch"), "got: {location}");
+    }
+
+    #[actix_web::test]
+    async fn oauth_callback_with_provider_path_mismatch_returns_error() {
+        let connector = Arc::new(FakeConnector::google_only());
+        let app = create_test_app_with_oauth_connector(connector).await;
+
+        // Cookie says google, URL path says github.
+        let persisted = PersistedState {
+            state: "s".into(),
+            pkce_verifier: "v".into(),
+            origin: FlowOrigin::Web,
+            provider: "google".into(),
+            created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: None,
+        };
+        let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/github/callback?code=abc&state=s")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
+        assert!(location.starts_with("/login?error=provider_mismatch"), "got: {location}");
+    }
+
+    #[actix_web::test]
+    async fn oauth_callback_happy_path_redirects_with_token() {
+        let mut connector = FakeConnector::google_only();
+        connector.identity = Some(NormalisedIdentity {
+            provider: "google".into(),
+            provider_user_id: "google-sub-1".into(),
+            email: Some("oauth_user@example.com".into()),
+            email_verified: true,
+            display_name: Some("Oauth User".into()),
+        });
+        let connector: Arc<dyn OAuthConnector> = Arc::new(connector);
+        let app = create_test_app_with_oauth_connector(connector).await;
+
+        let persisted = PersistedState {
+            state: "real-state".into(),
+            pkce_verifier: "v".into(),
+            origin: FlowOrigin::Web,
+            provider: "google".into(),
+            created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: None,
+        };
+        let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=real-state")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
+        assert!(location.starts_with("/oauth/callback#token="), "got: {location}");
+        assert!(location.contains("&expires_at="), "got: {location}");
+        // Cleared state cookie must accompany success too.
+        let cookie = resp
+            .headers()
+            .get_all("set-cookie")
+            .find_map(|h| h.to_str().ok().filter(|s| s.starts_with("maze_oauth_state=")))
+            .expect("state cookie present (cleared)");
+        assert!(cookie.contains("Max-Age=0"), "cleared cookie should set Max-Age=0: {cookie}");
+    }
+
+    #[actix_web::test]
+    async fn oauth_callback_mobile_origin_uses_same_host_for_errors_with_reason_and_state() {
+        // The MAUI WebAuthenticator (and WinUIEx) filter incoming custom-scheme
+        // activations by host of the registered CallbackUrl. Errors must
+        // therefore use the SAME host as success, distinguished by a `reason`
+        // query parameter, with `client_state` echoed so WinUIEx can correlate.
+        let connector: Arc<dyn OAuthConnector> = Arc::new(FakeConnector::google_only());
+        let app = create_test_app_with_oauth_connector(connector).await;
+
+        // Build a cookie whose state DOES NOT match the callback's `state` query.
+        let persisted = PersistedState {
+            state: "real-state".into(),
+            pkce_verifier: "v".into(),
+            origin: FlowOrigin::Mobile,
+            provider: "google".into(),
+            created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: Some(r#"{"appInstanceId":"","signinId":"abc-123"}"#.to_string()),
+        };
+        let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=DIFFERENT")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        // Mobile origin returns a 200 HTML bridge page (not a 302) so the
+        // system browser tab doesn't spin forever after the OS hands the
+        // `maze-app://` activation to the MAUI app; see `mobile_callback_html`.
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let body = std::str::from_utf8(&body).unwrap();
+        // SAME host as success (oauth-callback), not a different oauth-error host.
+        // Params live in the fragment to sidestep Facebook's `#_=_`; see
+        // `mobile_callback_url` for the full rationale.
+        assert!(
+            body.contains("maze-app://oauth-callback#"),
+            "error must use same host as success in HTML body: {body}"
+        );
+        // Reason instead of token.
+        assert!(body.contains("reason=state_mismatch"), "got: {body}");
+        // client_state echoed back so WinUIEx can correlate. The HTML body
+        // embeds the URL inside attribute values (meta-refresh `content` and
+        // `<a href>`), where `&` is HTML-escaped to `&amp;` for valid HTML.
+        assert!(
+            body.contains("&amp;state=%7B%22appInstanceId%22%3A%22%22%2C%22signinId%22%3A%22abc-123%22%7D"),
+            "client_state must be echoed url-encoded in HTML body: {body}"
+        );
+    }
+
+    #[actix_web::test]
+    async fn oauth_callback_new_user_flag_reflects_account_resolve_outcome() {
+        // The post-Step-7 polish item #1 needs the client to know whether an
+        // OAuth flow created a new user (so the Account UI can be opened with
+        // a welcome banner) or signed in an existing one (no banner). The
+        // server signals this via `&new_user=true` on the redirect URL when
+        // and only when account::resolve returns `Created`. This test calls
+        // the callback twice for the same identity:
+        //   1. First call → empty store → branch 3 → Created → new_user=true.
+        //   2. Second call → identity now exists → branch 1 → SignedIn → no flag.
+        let mut connector = FakeConnector::google_only();
+        connector.identity = Some(NormalisedIdentity {
+            provider: "google".into(),
+            provider_user_id: "google-sub-flag".into(),
+            email: Some("flag_user@example.com".into()),
+            email_verified: true,
+            display_name: None,
+        });
+        let connector: Arc<dyn OAuthConnector> = Arc::new(connector);
+        let app = create_test_app_with_oauth_connector(connector).await;
+
+        let persisted = PersistedState {
+            state: "s".into(),
+            pkce_verifier: "v".into(),
+            origin: FlowOrigin::Web,
+            provider: "google".into(),
+            created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: None,
+        };
+        let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
+
+        // First callback: account::resolve creates a new user.
+        let first = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=s")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let first_resp = test::call_service(&app, first).await;
+        assert_eq!(first_resp.status(), StatusCode::FOUND);
+        let first_location = first_resp.headers().get("Location").unwrap().to_str().unwrap();
+        assert!(
+            first_location.contains("&new_user=true"),
+            "first sign-in (Created) must flag new_user: {first_location}"
+        );
+
+        // Second callback for the same identity: account::resolve finds the
+        // existing user via (provider, provider_user_id) → SignedIn → no flag.
+        let second = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=s")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let second_resp = test::call_service(&app, second).await;
+        assert_eq!(second_resp.status(), StatusCode::FOUND);
+        let second_location = second_resp.headers().get("Location").unwrap().to_str().unwrap();
+        assert!(
+            !second_location.contains("new_user"),
+            "returning user (SignedIn) must not flag new_user: {second_location}"
+        );
+    }
+
+    #[actix_web::test]
+    async fn oauth_callback_mobile_origin_echoes_client_state_on_redirect() {
+        // WinUIEx WebAuthenticator (and similar URL-scheme brokers) need their
+        // client-supplied `state` echoed back on the maze-app:// callback so
+        // they can correlate the activation with the in-flight task.
+        let mut connector = FakeConnector::google_only();
+        connector.identity = Some(NormalisedIdentity {
+            provider: "google".into(),
+            provider_user_id: "google-sub-mobile".into(),
+            email: Some("mobile_user@example.com".into()),
+            email_verified: true,
+            display_name: None,
+        });
+        let connector: Arc<dyn OAuthConnector> = Arc::new(connector);
+        let app = create_test_app_with_oauth_connector(connector).await;
+
+        let persisted = PersistedState {
+            state: "real-state".into(),
+            pkce_verifier: "v".into(),
+            origin: FlowOrigin::Mobile,
+            provider: "google".into(),
+            created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: Some(r#"{"appInstanceId":"","signinId":"abc-123"}"#.to_string()),
+        };
+        let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=real-state")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let resp = test::call_service(&app, req).await;
+        // Mobile success returns a 200 HTML bridge page (not a 302); see
+        // `mobile_callback_html` for the rationale.
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let body = std::str::from_utf8(&body).unwrap();
+        assert!(body.contains("maze-app://oauth-callback#token="), "got: {body}");
+        // The URL lives inside HTML attribute values, so inter-param `&`
+        // is escaped to `&amp;` for valid HTML.
+        assert!(body.contains("&amp;expires_at="), "got: {body}");
+        // Critical: client_state must be present and percent-encoded.
+        assert!(
+            body.contains("&amp;state=%7B%22appInstanceId%22%3A%22%22%2C%22signinId%22%3A%22abc-123%22%7D"),
+            "client_state must be echoed back url-encoded: {body}"
+        );
+    }
+
+    #[actix_web::test]
+    async fn get_features_includes_oauth_providers_from_connector() {
+        let connector = Arc::new(FakeConnector::google_only());
+        let app = create_test_app_with_oauth_connector(connector).await;
+        let req = test::TestRequest::get().uri("/api/v1/features").to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let features: AppFeaturesResponse = test::read_body_json(resp).await;
+        assert_eq!(features.oauth_providers.len(), 1);
+        assert_eq!(features.oauth_providers[0].name, "google");
+        assert_eq!(features.oauth_providers[0].display_name, "Google");
+    }
+
+    #[actix_web::test]
+    async fn get_features_returns_empty_oauth_providers_with_noop_connector() {
+        // Default test app uses NoOpConnector via create_test_app_with_features.
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig { allow_signup: true }));
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app_with_features(&mut user_defs, None, false, features).await;
+        let req = test::TestRequest::get().uri("/api/v1/features").to_request();
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: AppFeaturesResponse = test::read_body_json(resp).await;
+        assert!(body.oauth_providers.is_empty());
+    }
+
+    #[actix_web::test]
+    async fn oauth_callback_extends_session_via_renew() {
+        // Locks in shared session-lifetime path: the bearer token issued by
+        // OAuth callback participates in the existing /login/renew flow
+        // exactly like a password-issued token.
+        let mut connector = FakeConnector::google_only();
+        connector.identity = Some(NormalisedIdentity {
+            provider: "google".into(),
+            provider_user_id: "google-sub-renew".into(),
+            email: Some("renew_user@example.com".into()),
+            email_verified: true,
+            display_name: None,
+        });
+        let connector: Arc<dyn OAuthConnector> = Arc::new(connector);
+        let app = create_test_app_with_oauth_connector(connector).await;
+
+        let persisted = PersistedState {
+            state: "s".into(),
+            pkce_verifier: "v".into(),
+            origin: FlowOrigin::Web,
+            provider: "google".into(),
+            created_at_unix: chrono::Utc::now().timestamp(),
+            client_state: None,
+        };
+        let cookie_val = crate::oauth::state::encode(&persisted).unwrap();
+
+        let cb = test::TestRequest::get()
+            .uri("/api/v1/auth/oauth/google/callback?code=abc&state=s")
+            .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
+            .to_request();
+        let resp = test::call_service(&app, cb).await;
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
+        // location like "/oauth/callback#token=<uuid>&expires_at=..."
+        let token_id = location
+            .strip_prefix("/oauth/callback#token=")
+            .and_then(|s| s.split('&').next())
+            .expect("token id present in location");
+
+        let renew_req = test::TestRequest::post()
+            .uri("/api/v1/login/renew")
+            .insert_header(("Authorization", format!("Bearer {token_id}")))
+            .to_request();
+        let renew_resp = test::call_service(&app, renew_req).await;
+        assert_eq!(renew_resp.status(), StatusCode::OK, "OAuth-issued token must work with /login/renew");
     }
 }

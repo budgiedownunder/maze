@@ -7,15 +7,17 @@ port = 8443
 # or absolute). For local development with the React app, set to:
 #   ../../react/maze_web_server/dist
 # If the directory does not exist, the server runs as API-only (no frontend served).
-static_dir = "static"
+#static_dir = "static"
+static_dir = "../../react/maze_web_server/dist"
 
 [security]
 # Path to TLS certificate file (default: "cert.pem")
-cert_file = "cert.pem"
+cert_file = "C:/Certs/maze.cbintex.com-crt.pem"
+#cert_file = "cert.pem"
 
 # Path to TLS private key file (default: "key.pem")
-key_file = "key.pem"
-
+key_file = "C:/Certs/maze.cbintex.com-key-pkcs8.pem"
+#key_file = "key.pem"
 # Login token expiry in hours (integer).
 login_expiry_hours = 24
 
@@ -54,4 +56,46 @@ log_file_prefix = "maze_web_server_"
 # Whether new users can self-register via the signup endpoint (default: true).
 # Can also be changed at runtime via PUT /api/v1/admin/features (admin only).
 allow_signup = true
+
+[oauth]
+# Master switch for OAuth sign-in. When false, no OAuth buttons are shown in
+# the front ends and no validation runs against the connector's section below.
+enabled = false
+# Which OAuthConnector implementation to use. "internal" speaks OAuth/OIDC
+# directly to each provider; "auth0" is reserved for a future drop-in.
+connector = "internal"
+# URL scheme the MAUI app uses as its OAuth redirect target. The MAUI client
+# must register this scheme in each platform's manifest.
+mobile_redirect_scheme = "maze-app"
+
+# ---- Internal connector: speaks OAuth/OIDC directly to each provider ----
+# Client secrets are never stored here. Set the env var named in
+# client_secret_env instead (e.g. MAZE_OAUTH_GOOGLE_SECRET).
+[oauth.internal.providers.google]
+enabled = false
+display_name = "Google"
+client_id = ""
+client_secret_env = "MAZE_OAUTH_GOOGLE_SECRET"
+redirect_uri = "https://maze.cbintex.com:8443/api/v1/auth/oauth/google/callback"
+
+[oauth.internal.providers.github]
+enabled = false
+display_name = "GitHub"
+client_id = ""
+client_secret_env = "MAZE_OAUTH_GITHUB_SECRET"
+redirect_uri = "https://maze.cbintex.com:8443/api/v1/auth/oauth/github/callback"
+
+[oauth.internal.providers.facebook]
+enabled = false
+display_name = "Facebook"
+client_id = ""
+client_secret_env = "MAZE_OAUTH_FACEBOOK_SECRET"
+redirect_uri = "https://maze.cbintex.com:8443/api/v1/auth/oauth/facebook/callback"
+
+# ---- Auth0 connector (placeholder, not implemented in v1) ----
+# [oauth.auth0]
+# domain = "your-tenant.auth0.com"
+# client_id = ""
+# client_secret_env = "MAZE_AUTH0_SECRET"
+# audience = "https://maze.cbintex.com/api"
 

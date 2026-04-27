@@ -55,6 +55,7 @@ mod tests {
             password_hash: "a_password_hash".to_string(),
             api_key: User::new_api_key(),
             logins: vec![],
+            oauth_identities: vec![],
         }
     }
 

@@ -50,7 +50,7 @@ export function resetMockMazes(): void {
 
 export const handlers = [
   http.get(`${BASE}/features`, () => {
-    return HttpResponse.json<AppFeatures>({ allow_signup: true })
+    return HttpResponse.json<AppFeatures>({ allow_signup: true, oauth_providers: [] })
   }),
 
   http.put(`${BASE}/admin/features`, async ({ request }) => {

@@ -16,6 +16,11 @@ namespace Maze.Maui.App
         private readonly IDialogService _dialogService;
         private readonly MazesViewModel _mazesViewModel;
         private readonly AccountViewModel _accountViewModel;
+        // One-shot guard: Shell fires OnNavigated more than once during a
+        // single GoToAsync (typically once for navigation start, once for
+        // finalisation), so without this we'd queue two welcome popups —
+        // closing the first then finds a second one waiting.
+        private bool _welcomePopupPending;
 
         /// <summary>
         /// Constructor
@@ -45,6 +50,30 @@ namespace Maze.Maui.App
         {
             FlyoutIsPresented = false;
             await CurrentPage.ShowPopupAsync(new AccountPopup(_accountViewModel));
+        }
+
+        /// <inheritdoc/>
+        protected override void OnNavigated(ShellNavigatedEventArgs args)
+        {
+            base.OnNavigated(args);
+            // Auto-open the Account popup with a welcome banner when arriving
+            // at the main page on the first sign-in of a brand-new OAuth user.
+            // The flag was set by LoginViewModel / SignUpViewModel before the
+            // GoToAsync call. AccountPopup itself clears the welcome flag on
+            // dismiss so the banner is visible while open and absent on
+            // subsequent burger-menu opens.
+            if (_accountViewModel.IsWelcomeMode && !_welcomePopupPending && CurrentPage is MazesPage page)
+            {
+                _welcomePopupPending = true;
+                var popup = new AccountPopup(_accountViewModel);
+                // Reset the guard once the popup is gone so a future
+                // sign-out / sign-in-as-another-new-user re-triggers cleanly.
+                popup.Closed += (_, _) => _welcomePopupPending = false;
+                // Dispatch onto the UI thread so the popup show happens after
+                // the page-arrival event has fully settled — avoids construction
+                // races on some platforms.
+                Dispatcher.Dispatch(() => _ = page.ShowPopupAsync(popup));
+            }
         }
 
         /// <summary>

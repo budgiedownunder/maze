@@ -1,4 +1,6 @@
 ﻿using Foundation;
+using Microsoft.Maui.Authentication;
+using UIKit;
 
 namespace Maze.Maui.App
 {
@@ -13,5 +15,16 @@ namespace Maze.Maui.App
         /// </summary>
         /// <returns>Instance</returns>
         protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+
+        /// <summary>
+        /// Forward custom-scheme URLs (e.g. maze-app://oauth-callback) into MAUI's
+        /// WebAuthenticator so the in-flight AuthenticateAsync task can resolve.
+        /// </summary>
+        public override bool OpenUrl(UIApplication app, NSUrl url, NSDictionary options)
+        {
+            if (WebAuthenticator.Default.OpenUrl(new Uri(url.AbsoluteString!)))
+                return true;
+            return base.OpenUrl(app, url, options);
+        }
     }
 }

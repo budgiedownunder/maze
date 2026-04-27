@@ -6,8 +6,7 @@ The `Maze.Maui.App` .NET application is a work-in-progress [MAUI](https://dotnet
 
 At the moment, it allows the user to:
 
-- Sign up for a new account
-- Sign in and out of their account
+- Sign in/up using `email`+`password` or via `OAuth` (Google, GitHub, Facebook - when enabled server-side) 
 - View and edit their account profile (username, full name, email), change their password, or delete their account
 - Load, edit, delete, rename and duplicate mazes
 - Construct mazes containing start, finish and wall cells

@@ -3,6 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             xmlns:services="clr-namespace:Maze.Maui.App.Services"
+             xmlns:converters="clr-namespace:Maze.Maui.App.Converters"
              x:DataType="viewmodel:LoginViewModel"
              x:Class="Maze.Maui.App.Views.LoginPage"
              Shell.NavBarIsVisible="False"
@@ -11,6 +13,7 @@
     <ContentPage.Resources>
         <toolkit:IsStringNotNullOrEmptyConverter x:Key="StringNotEmptyConverter" />
         <toolkit:InvertedBoolConverter x:Key="InvertBoolConverter" />
+        <converters:OAuthProviderIconConverter x:Key="OAuthIconConverter" />
     </ContentPage.Resources>
 
     <Grid VerticalOptions="Fill"
@@ -106,6 +109,31 @@
                         HorizontalOptions="Fill"
                         BackgroundColor="Transparent"
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+
+                <!-- OAuth providers (server-driven). Hidden when none are configured. -->
+                <VerticalStackLayout Spacing="8"
+                                     IsVisible="{Binding HasOAuthProviders}">
+                    <Label Text="or"
+                           HorizontalOptions="Center"
+                           TextColor="Gray" />
+                    <VerticalStackLayout Spacing="8"
+                                         BindableLayout.ItemsSource="{Binding OAuthProviders}">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="services:OAuthProviderPublic">
+                                <Button Text="{Binding DisplayName, StringFormat='Continue with {0}'}"
+                                        ImageSource="{Binding Name, Converter={StaticResource OAuthIconConverter}}"
+                                        ContentLayout="Left,8"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:LoginViewModel}}, Path=SignInWithOAuthCommand}"
+                                        CommandParameter="{Binding Name}"
+                                        HorizontalOptions="Fill"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource OffBlack}}"
+                                        TextColor="{AppThemeBinding Light={StaticResource Gray900}, Dark={StaticResource White}}"
+                                        BorderColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                                        BorderWidth="1" />
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
 
             </VerticalStackLayout>
         </ScrollView>

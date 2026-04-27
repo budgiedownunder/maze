@@ -1,6 +1,7 @@
 pub mod api;
 pub mod config;
 pub mod middleware;
+pub mod oauth;
 pub mod service;
 mod utils;
 
@@ -83,6 +84,7 @@ pub fn create_app(
     hash_config: &PasswordHashConfig,
     store: web::Data<SharedStore>,
     features: web::Data<SharedFeatures>,
+    oauth_connector: web::Data<oauth::SharedOAuthConnector>,
     static_dir: String,
 ) -> App<impl actix_service::ServiceFactory<
     actix_web::dev::ServiceRequest,
@@ -97,6 +99,7 @@ pub fn create_app(
         .app_data(auth_service)
         .app_data(store)
         .app_data(features)
+        .app_data(oauth_connector)
         .service(api::register_api())
         .service(api::register_redoc())
         .service(api::register_rapidoc())
@@ -226,9 +229,10 @@ pub async fn run_server() -> std::io::Result<()> {
     let max_workers = std::thread::available_parallelism()?;
     let shared_store: SharedStore = Arc::new(RwLock::new(store));
     let features: SharedFeatures = Arc::new(RwLock::new(config.features.clone()));
+    let oauth_connector: oauth::SharedOAuthConnector = build_oauth_connector(&config)?;
 
     HttpServer::new(move || {
-        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()), web::Data::new(features.clone()), config.static_dir.clone())
+        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()), web::Data::new(features.clone()), web::Data::new(oauth_connector.clone()), config.static_dir.clone())
         .app_data(web::Data::new(config.clone()))
         .wrap(Logger::default())
     })
@@ -236,5 +240,25 @@ pub async fn run_server() -> std::io::Result<()> {
     .workers(usize::from(max_workers))
     .run()
     .await
+}
+
+/// Build the [`oauth::SharedOAuthConnector`] selected by `config.oauth`.
+/// Returns a [`oauth::NoOpConnector`] when OAuth is disabled. The Auth0
+/// arm is intentionally `unimplemented` until a future drop adds the
+/// connector — config-load already errors with a clear message in that case.
+fn build_oauth_connector(config: &AppConfig) -> std::io::Result<oauth::SharedOAuthConnector> {
+    if !config.oauth.enabled {
+        return Ok(Arc::new(oauth::NoOpConnector));
+    }
+    match config.oauth.connector {
+        config::ConnectorKind::Internal => {
+            let connector = oauth::internal::InternalOAuthConnector::from_config(&config.oauth)
+                .map_err(|e| std::io::Error::other(format!("oauth connector init: {e}")))?;
+            Ok(Arc::new(connector))
+        }
+        config::ConnectorKind::Auth0 => Err(std::io::Error::other(
+            "oauth connector = \"auth0\" is not yet implemented",
+        )),
+    }
 }
   

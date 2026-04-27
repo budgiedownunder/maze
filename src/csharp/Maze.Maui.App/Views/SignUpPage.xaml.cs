@@ -38,6 +38,8 @@ namespace Maze.Maui.App.Views;
 /// </summary>
 public partial class SignUpPage : ContentPage
 {
+    private readonly SignUpViewModel _viewModel;
+
     /// <summary>
     /// Constructor
     /// </summary>
@@ -45,6 +47,30 @@ public partial class SignUpPage : ContentPage
     public SignUpPage(SignUpViewModel viewModel)
     {
         InitializeComponent();
-        BindingContext = viewModel;
+        BindingContext = _viewModel = viewModel;
     }
+
+    /// <inheritdoc/>
+    protected override async void OnAppearing()
+    {
+        base.OnAppearing();
+        // Track OS-level theme changes so the GitHub OAuth icon swaps to the
+        // light- or dark-fill variant at runtime. Subscribed here (and
+        // unsubscribed in OnDisappearing) so the handler lifetime matches the
+        // page's, regardless of the ViewModel's transient registration.
+        if (Application.Current is { } app)
+            app.RequestedThemeChanged += OnAppRequestedThemeChanged;
+        await _viewModel.RefreshOAuthProvidersAsync();
+    }
+
+    /// <inheritdoc/>
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        if (Application.Current is { } app)
+            app.RequestedThemeChanged -= OnAppRequestedThemeChanged;
+    }
+
+    private void OnAppRequestedThemeChanged(object? sender, AppThemeChangedEventArgs e)
+        => _viewModel.RefreshOAuthProviderItems();
 }
