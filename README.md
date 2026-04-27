@@ -8,6 +8,8 @@
 
 A multi-language experimental project exploring **Rust**, **C# (.NET 10)**, **React.js**, **TypeScript**, **WebAssembly**, and the **Bevy** game engine. Built around maze generation, solving, and both 2D and **first-person 3D** gameplay, it demonstrates library crates, REST APIs, WASM bindings, OpenAPI, a cross-platform MAUI app, a React.js SPA, Node.js-based API and E2E testing, architecture diagramming with PlantUML, documentation generation with DocFX, and automated CI/CD across Windows, macOS, and Linux.
 
+<img src="./src/rust/maze_game_bevy/screenshots/finish_corridor.png" width="600">
+
 ## Table of Contents
 - [Introduction](#introduction)
 - [Architecture](#architecture)
