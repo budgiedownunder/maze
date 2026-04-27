@@ -10,6 +10,7 @@ skinparam nodesep 60
 skinparam ranksep 80
 
 UpdateElementStyle("container", $bgColor="#cccccc", $fontColor="#222222", $borderColor="#888888")
+UpdateElementStyle("external_container", $bgColor="#888888", $fontColor="#ffffff", $borderColor="#666666")
 
 AddElementTag("rust",   $bgColor="#dea584", $fontColor="#000000", $legendText="Rust")
 AddElementTag("csharp", $bgColor="#9b4f96", $fontColor="#ffffff", $legendText="C# / .NET")
@@ -19,11 +20,9 @@ AddElementTag("doc",    $bgColor="#bdbdbd", $fontColor="#000000", $legendText="D
 
 title Component Diagram for Maze
 
-Person(user, "User", "A user of the system")
+Person_Ext(user, "User", "A user of the system")
 
-System_Boundary(c1, "Browser") {
-    Container(browser, "", "", "Internet browser")
-}
+Container_Ext(browser, "", "", "Internet browser")
 
 Container(maze_web_api, "", "http", "Maze Web API")
 
