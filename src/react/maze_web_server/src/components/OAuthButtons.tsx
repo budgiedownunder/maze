@@ -28,11 +28,23 @@ function GitHubIcon() {
   )
 }
 
+function FacebookIcon() {
+  // Stylised "f" mark in Facebook brand blue (#1877F2). Single colour;
+  // theme-adaptation handled at the button level (white on dark mode bg
+  // through `currentColor`-based CSS) — fixed brand blue in light mode.
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="#1877F2">
+      <path d="M22.675 0H1.325C.593 0 0 .593 0 1.325v21.351C0 23.408.593 24 1.325 24H12.82V14.706h-3.13v-3.622h3.13V8.413c0-3.1 1.894-4.788 4.659-4.788 1.325 0 2.464.099 2.795.143v3.24l-1.918.001c-1.504 0-1.795.715-1.795 1.763v2.31h3.587l-.467 3.622h-3.12V24h6.116c.73 0 1.323-.592 1.323-1.324V1.325C24 .593 23.408 0 22.675 0z"/>
+    </svg>
+  )
+}
+
 function ProviderIcon({ name }: { name: string }) {
   switch (name) {
-    case 'google': return <GoogleIcon />
-    case 'github': return <GitHubIcon />
-    default:       return null
+    case 'google':   return <GoogleIcon />
+    case 'github':   return <GitHubIcon />
+    case 'facebook': return <FacebookIcon />
+    default:         return null
   }
 }
 

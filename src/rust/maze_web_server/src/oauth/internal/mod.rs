@@ -6,6 +6,7 @@
 //! matter of dropping in `microsoft.rs` plus a registration line in
 //! [`InternalOAuthConnector::from_config`].
 
+mod facebook;
 mod github;
 mod google;
 
@@ -107,9 +108,10 @@ fn build_provider_client(
     match canonical {
         "google" => Ok(Box::new(google::GoogleProviderClient::new(cfg)?)),
         "github" => Ok(Box::new(github::GitHubProviderClient::new(cfg)?)),
+        "facebook" => Ok(Box::new(facebook::FacebookProviderClient::new(cfg)?)),
         other => Err(OAuthError::Misconfigured(format!(
             "[oauth.internal.providers.{other}] is enabled but no client implementation exists; \
-             supported providers in v1: google, github"
+             supported providers: google, github, facebook"
         ))),
     }
 }

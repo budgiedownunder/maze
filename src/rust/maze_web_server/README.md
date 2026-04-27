@@ -124,6 +124,13 @@ display_name = "GitHub"
 client_id = ""
 client_secret_env = "MAZE_OAUTH_GITHUB_SECRET"
 redirect_uri = "https://your-host:8443/api/v1/auth/oauth/github/callback"
+
+[oauth.internal.providers.facebook]
+enabled = false
+display_name = "Facebook"
+client_id = ""
+client_secret_env = "MAZE_OAUTH_FACEBOOK_SECRET"
+redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 ```
 
 Notes:
@@ -211,6 +218,7 @@ For each provider you want to enable, register an OAuth client with the provider
 |:---------|:------|:------|
 | **Google** | [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → Create OAuth client ID → Web application | Add the value of `redirect_uri` to **Authorized redirect URIs**. Copy Client ID into `client_id`; the generated client secret goes in the env var named by `client_secret_env`. |
 | **GitHub** | [GitHub Developer Settings](https://github.com/settings/developers) → New OAuth App | Set **Authorization callback URL** to match `redirect_uri` exactly. Copy Client ID into `client_id`; the generated client secret goes in the env var. The signed-in GitHub account must have a verified primary email at <https://github.com/settings/emails> for sign-in to succeed. |
+| **Facebook** | [Facebook for Developers](https://developers.facebook.com) → My Apps → Create App → "Authenticate and request data from users" → add the **Facebook Login** product | Under Facebook Login → Settings, add the value of `redirect_uri` to **Valid OAuth Redirect URIs** (HTTPS only outside `localhost`). Copy App ID into `client_id`; the App Secret goes in the env var. The Facebook account must have an email on file (declining the `email` scope at consent results in `email_not_verified`). The app must be in **Live** mode (with privacy policy + terms URLs) for non-developer users to sign in — in dev mode only roles you explicitly add (Admin / Developer / Tester) can authenticate. Facebook does not expose an `email_verified` flag, so we treat the email as verified whenever it is present (matches Auth0/Clerk default). |
 
 Then in `config.toml` (for Google):
 

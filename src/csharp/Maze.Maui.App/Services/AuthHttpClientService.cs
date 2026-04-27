@@ -178,7 +178,7 @@ namespace Maze.Maui.App.Services
                 throw new OAuthFlowFailedException(reason);
 
             if (!result.Properties.TryGetValue("token", out var token) || string.IsNullOrEmpty(token))
-                throw new Exception("OAuth response did not include a bearer token");
+                throw new Exception($"OAuth response did not include a bearer token (broker returned {result.Properties.Count} properties: [{string.Join(", ", result.Properties.Keys)}])");
             if (!result.Properties.TryGetValue("expires_at", out var expiresAt) || string.IsNullOrEmpty(expiresAt))
                 throw new Exception("OAuth response did not include a token expiry");
 

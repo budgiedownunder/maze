@@ -598,8 +598,26 @@ fn mobile_callback_url(
     client_state: Option<&str>,
     is_new_user: bool,
 ) -> String {
+    // Params live in the URL FRAGMENT (`#token=...&...`) rather than the query
+    // string. The mobile final response is a 200 OK HTML bridge page (see
+    // `mobile_callback_html`) that triggers `maze-app://...` activation via
+    // meta-refresh, NOT a direct 302 to the custom scheme. Two forces still
+    // make fragment the right choice:
+    //
+    //   1. Facebook appends a literal `#_=_` fragment to every OAuth redirect.
+    //      That fragment rides the Facebook→server-callback 302 and ends up
+    //      on the bridge page's URL. Meta-refresh-initiated navigations
+    //      preserve the source URL's fragment when the target URL has none,
+    //      so a query-only `maze-app://...?token=...` target would arrive at
+    //      WinUIEx as `maze-app://...?token=...#_=_`. Putting our params in
+    //      the fragment gives the target an explicit fragment, which
+    //      overrides any fragment otherwise inherited from the source page.
+    //   2. WinUIEx parses fragment-when-present and query-when-absent.
+    //      Because of (1) the URL reaching WinUIEx will always have a
+    //      fragment for the Facebook flow, so emitting our params as the
+    //      fragment is also what WinUIEx needs to actually see them.
     let mut url = format!(
-        "{scheme}://oauth-callback?token={}&expires_at={}",
+        "{scheme}://oauth-callback#token={}&expires_at={}",
         token_id,
         encode(&expires_at.to_rfc3339()),
     );
@@ -619,18 +637,86 @@ fn web_error_url(reason: &str) -> String {
 }
 
 /// Mobile error URL — uses the SAME host (`oauth-callback`) as the success
-/// redirect, distinguished by the `reason` query parameter. The MAUI
+/// redirect, distinguished by a `reason` fragment parameter. The MAUI
 /// `WebAuthenticator` (and `WinUIEx` on Windows) filters incoming
 /// URL-scheme activations by callback URL host, so the error path must share
 /// the success path's host or the in-flight `AuthenticateAsync` will never
 /// resolve. Echoes `client_state` for the same reason `mobile_callback_url`
 /// does — WinUIEx correlates the activation via the original signinId.
 fn mobile_error_url(scheme: &str, reason: &str, client_state: Option<&str>) -> String {
-    let mut url = format!("{scheme}://oauth-callback?reason={}", encode(reason));
+    // Same fragment-not-query rationale as `mobile_callback_url`.
+    let mut url = format!("{scheme}://oauth-callback#reason={}", encode(reason));
     if let Some(s) = client_state {
         url.push_str(&format!("&state={}", encode(s)));
     }
     url
+}
+
+/// Wrap a `maze-app://oauth-callback#…` redirect target in a tiny HTML page
+/// that fully loads in the system browser, then triggers the protocol handler
+/// client-side via `<meta http-equiv="refresh">`. Returning HTML instead of a
+/// `302` to a custom scheme stops the system browser tab from spinning forever
+/// after the OS hands activation off to the MAUI app.
+///
+/// Why meta-refresh and not `<script>window.location.replace(...)</script>`:
+/// modern browsers (Edge, Chrome) BLOCK JS-initiated navigations to custom
+/// schemes unless a fresh user gesture is in scope. After Facebook's "Continue
+/// as XXX" click that gesture is still in scope, so JS works; after Google /
+/// GitHub auto-redirects from a consent screen the user already approved no
+/// gesture is in scope, so JS is silently blocked and the user has to click
+/// the manual "Open Maze app" fallback. Meta-refresh is a server-directed
+/// navigation and is honored by browsers without a gesture, so it fires
+/// uniformly across all three providers. The visible link below remains as a
+/// manual fallback if the OS protocol handler fails to fire for any reason.
+fn mobile_callback_html(target_url: &str) -> String {
+    // Inside an HTML attribute value `&` must be escaped to `&amp;`;
+    // percent-encoding has already removed every other HTML-special char
+    // from the URL, so this single substitution suffices for both the
+    // meta-refresh `content` attribute and the `<a href>` fallback.
+    let escaped_url = target_url.replace('&', "&amp;");
+    format!(
+        "<!DOCTYPE html>\n\
+         <html lang=\"en\">\n\
+         <head>\n\
+         <meta charset=\"utf-8\">\n\
+         <meta http-equiv=\"refresh\" content=\"0;url={escaped_url}\">\n\
+         <title>Sign-in complete</title>\n\
+         <style>\n\
+         body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; text-align: center; padding: 3rem 1rem; color: #333; }}\n\
+         h1 {{ font-size: 1.4rem; margin-bottom: 0.5rem; }}\n\
+         p {{ font-size: 1rem; margin: 0.5rem 0; }}\n\
+         a.btn {{ display: inline-block; margin-top: 1rem; padding: 0.6rem 1.2rem; background: #1f6feb; color: white; text-decoration: none; border-radius: 6px; }}\n\
+         </style>\n\
+         </head>\n\
+         <body>\n\
+         <h1>Sign-in complete</h1>\n\
+         <p>Returning you to the Maze app — you can close this tab.</p>\n\
+         <p><a class=\"btn\" href=\"{escaped_url}\">Open Maze app</a></p>\n\
+         </body>\n\
+         </html>\n"
+    )
+}
+
+/// Build the final HTTP response for an OAuth callback. The response shape
+/// depends on origin:
+///   - `Web`:    `302 Location: <web_url>` (SPA reads `#token=…` from URL).
+///   - `Mobile`: `200 OK` HTML page that triggers the `maze-app://` protocol
+///     handler client-side. Returning HTML instead of `302` to a custom
+///     scheme stops the system browser tab from spinning indefinitely after
+///     the OS hands activation off to the MAUI app.
+///
+/// In both cases the in-flight state cookie is cleared.
+fn oauth_callback_response(origin: FlowOrigin, web_url: &str, mobile_url: &str) -> HttpResponse {
+    match origin {
+        FlowOrigin::Web => HttpResponse::Found()
+            .insert_header(("Location", web_url))
+            .cookie(clear_state_cookie())
+            .finish(),
+        FlowOrigin::Mobile => HttpResponse::Ok()
+            .content_type("text/html; charset=utf-8")
+            .cookie(clear_state_cookie())
+            .body(mobile_callback_html(mobile_url)),
+    }
 }
 
 #[utoipa::path(
@@ -679,7 +765,7 @@ pub async fn oauth_start(
 
 #[utoipa::path(
     summary = "Complete an OAuth sign-in flow",
-    description = "The provider redirects here after consent. The handler validates the CSRF cookie + state, exchanges the code via the connector, resolves or creates the user, mints a bearer token, then redirects to the SPA (web) or the app's URL scheme (mobile) with the token in the URL.",
+    description = "The provider redirects here after consent. The handler validates the CSRF cookie + state, exchanges the code via the connector, resolves or creates the user, mints a bearer token, then hands the token back to the client. Web origin: 302 to the SPA at `/oauth/callback#token=...`. Mobile origin: 200 OK with a small HTML bridge page that triggers a `maze-app://oauth-callback#token=...` activation client-side via `<meta http-equiv=\"refresh\">` (returning HTML rather than 302-ing directly to the custom scheme stops the system browser tab from spinning forever after the OS hands activation off to the MAUI app).",
     get,
     path = "/api/v1/auth/oauth/{provider}/callback",
     params(
@@ -689,7 +775,8 @@ pub async fn oauth_start(
         ("error" = Option<String>, Query, description = "Provider-side error code (if the user denied consent, etc.)")
     ),
     responses(
-        (status = 302, description = "Redirects to the SPA or the app URL scheme with the bearer token"),
+        (status = 200, description = "Mobile origin: HTML bridge page that triggers the `maze-app://` protocol activation client-side"),
+        (status = 302, description = "Web origin: redirects to the SPA at `/oauth/callback#token=...`"),
         (status = 400, description = "Invalid or expired state cookie"),
         (status = 404, description = "Unknown or disabled provider"),
         (status = 500, description = "Internal error")
@@ -868,35 +955,23 @@ pub async fn oauth_callback(
 
     let token_id = new_login.id;
     let expires_at = new_login.expires_at;
-    let location = match persisted.origin {
-        FlowOrigin::Web => web_callback_url(token_id, expires_at, is_new_user),
-        FlowOrigin::Mobile => mobile_callback_url(
-            &scheme,
-            token_id,
-            expires_at,
-            persisted.client_state.as_deref(),
-            is_new_user,
-        ),
-    };
-
-    Ok(HttpResponse::Found()
-        .insert_header(("Location", location))
-        .cookie(clear_state_cookie())
-        .finish())
+    let web_url = web_callback_url(token_id, expires_at, is_new_user);
+    let mobile_url = mobile_callback_url(
+        &scheme,
+        token_id,
+        expires_at,
+        persisted.client_state.as_deref(),
+        is_new_user,
+    );
+    Ok(oauth_callback_response(persisted.origin, &web_url, &mobile_url))
 }
 
-/// Helper: 302 to `web_url` or `mobile_url` based on `origin`, clearing the
-/// state cookie on the way out. Used for both success-and-error redirects so
-/// callers don't have to remember to clear.
+/// Helper: dispatch to `oauth_callback_response` based on origin, clearing
+/// the state cookie on the way out. Used for the error redirect paths so
+/// callers don't have to remember to clear. The `_scheme` arg is unused but
+/// retained for caller-site symmetry with `mobile_*_url` builders.
 fn redirect_with_clear(origin: FlowOrigin, _scheme: &str, web_url: &str, mobile_url: &str) -> HttpResponse {
-    let url = match origin {
-        FlowOrigin::Web => web_url,
-        FlowOrigin::Mobile => mobile_url,
-    };
-    HttpResponse::Found()
-        .insert_header(("Location", url))
-        .cookie(clear_state_cookie())
-        .finish()
+    oauth_callback_response(origin, web_url, mobile_url)
 }
 
 // **************************************************************************************************

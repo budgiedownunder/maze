@@ -40,8 +40,11 @@ pub struct OAuthProviderPublic {
 /// Where the OAuth flow originated. The handler uses this to decide how to
 /// hand the bearer token back to the client at the end:
 /// - `Web`     — redirect to `/oauth/callback#token=...` for the SPA to ingest.
-/// - `Mobile`  — redirect to `{mobile_redirect_scheme}://oauth-callback?token=...`
-///   for `WebAuthenticator` to capture inside the MAUI app.
+/// - `Mobile`  — redirect to `{mobile_redirect_scheme}://oauth-callback#token=...`
+///   for `WebAuthenticator` to capture inside the MAUI app. Params live in the
+///   fragment, not the query string, so Facebook's `#_=_` redirect quirk
+///   doesn't blank out the params seen by Windows WinUIEx; see
+///   `mobile_callback_url` in handlers.rs for the full rationale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FlowOrigin {

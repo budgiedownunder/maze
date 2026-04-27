@@ -3989,19 +3989,27 @@ mod test_definitions {
             .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
             .to_request();
         let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::FOUND);
-        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
+        // Mobile origin returns a 200 HTML bridge page (not a 302) so the
+        // system browser tab doesn't spin forever after the OS hands the
+        // `maze-app://` activation to the MAUI app; see `mobile_callback_html`.
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let body = std::str::from_utf8(&body).unwrap();
         // SAME host as success (oauth-callback), not a different oauth-error host.
+        // Params live in the fragment to sidestep Facebook's `#_=_`; see
+        // `mobile_callback_url` for the full rationale.
         assert!(
-            location.starts_with("maze-app://oauth-callback?"),
-            "error must use same host as success: {location}"
+            body.contains("maze-app://oauth-callback#"),
+            "error must use same host as success in HTML body: {body}"
         );
         // Reason instead of token.
-        assert!(location.contains("reason=state_mismatch"), "got: {location}");
-        // client_state echoed back so WinUIEx can correlate.
+        assert!(body.contains("reason=state_mismatch"), "got: {body}");
+        // client_state echoed back so WinUIEx can correlate. The HTML body
+        // embeds the URL inside attribute values (meta-refresh `content` and
+        // `<a href>`), where `&` is HTML-escaped to `&amp;` for valid HTML.
         assert!(
-            location.contains("&state=%7B%22appInstanceId%22%3A%22%22%2C%22signinId%22%3A%22abc-123%22%7D"),
-            "client_state must be echoed url-encoded: {location}"
+            body.contains("&amp;state=%7B%22appInstanceId%22%3A%22%22%2C%22signinId%22%3A%22abc-123%22%7D"),
+            "client_state must be echoed url-encoded in HTML body: {body}"
         );
     }
 
@@ -4095,14 +4103,19 @@ mod test_definitions {
             .insert_header(("cookie", format!("maze_oauth_state={cookie_val}")))
             .to_request();
         let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::FOUND);
-        let location = resp.headers().get("Location").unwrap().to_str().unwrap();
-        assert!(location.starts_with("maze-app://oauth-callback?token="), "got: {location}");
-        assert!(location.contains("&expires_at="), "got: {location}");
+        // Mobile success returns a 200 HTML bridge page (not a 302); see
+        // `mobile_callback_html` for the rationale.
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let body = std::str::from_utf8(&body).unwrap();
+        assert!(body.contains("maze-app://oauth-callback#token="), "got: {body}");
+        // The URL lives inside HTML attribute values, so inter-param `&`
+        // is escaped to `&amp;` for valid HTML.
+        assert!(body.contains("&amp;expires_at="), "got: {body}");
         // Critical: client_state must be present and percent-encoded.
         assert!(
-            location.contains("&state=%7B%22appInstanceId%22%3A%22%22%2C%22signinId%22%3A%22abc-123%22%7D"),
-            "client_state must be echoed back url-encoded: {location}"
+            body.contains("&amp;state=%7B%22appInstanceId%22%3A%22%22%2C%22signinId%22%3A%22abc-123%22%7D"),
+            "client_state must be echoed back url-encoded: {body}"
         );
     }
 

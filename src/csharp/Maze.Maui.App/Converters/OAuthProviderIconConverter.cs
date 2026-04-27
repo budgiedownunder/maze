@@ -44,6 +44,7 @@ namespace Maze.Maui.App.Converters
             {
                 "google" => "oauth_google.png",
                 "github" => isDark ? "oauth_github_dark.png" : "oauth_github.png",
+                "facebook" => isDark ? "oauth_facebook_dark.png" : "oauth_facebook.png",
                 _ => null,
             };
         }
