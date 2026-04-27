@@ -12,21 +12,42 @@ title Architecture Diagram for Maze
 
 Person(user, "User", "A user of the system")
 
-Container(api, "API", "", ".NET, JavaScript, Rust, Web")
-Container(auth, "auth", "Rust", "Authentication library")
 Container(browser, "Browser", "", "Internet browser")
-Container(html_help, "", "", "HTML help pages")
-Container(maze, "maze", "Rust", "Maze library")
-Container(maze_c, "maze_c", "Rust", "C API")
-Container(maze_console, "maze_console", "Rust", "Console application")
-Container(maze_game_bevy, "maze_game_bevy", "Rust / Bevy", "First-person 3D maze game")
-Container(maze_game_bevy_wasm, "maze_game_bevy_wasm", "Rust / Bevy / WASM", "Browser build of the 3D game")
-Container(maze_maui_app_net, "Maze.Maui.App", "C#", ".NET maze application (MAUI)")
-Container(maze_openapi_generator, "maze_openapi_generator", "Rust", "Console application")
-Container(maze_wasm, "maze_wasm", "Rust", "WebAssembly API")
-Container(maze_react_web, "maze_react_web", "React/TypeScript", "Web frontend")
-Container(maze_web_server, "maze_web_server", "Rust", "Console application")
-Container(storage, "storage", "Rust", "Data storage")
+Container(api, "API", "", ".NET, JavaScript, Rust, Web")
+
+System_Boundary(b_rust_core, "Rust core") {
+    Container(maze, "maze", "Rust", "Maze library")
+    Container(auth, "auth", "Rust", "Authentication library")
+    Container(storage, "storage", "Rust", "Data storage")
+}
+
+System_Boundary(b_rust_bins, "Rust binaries") {
+    Container(maze_web_server, "maze_web_server", "Rust", "Console application")
+    Container(maze_console, "maze_console", "Rust", "Console application")
+    Container(maze_openapi_generator, "maze_openapi_generator", "Rust", "Console application")
+}
+
+System_Boundary(b_interop, "Interop layer") {
+    Container(maze_wasm, "maze_wasm", "Rust", "WebAssembly API")
+    Container(maze_c, "maze_c", "Rust", "C API")
+}
+
+System_Boundary(b_dotnet, ".NET") {
+    Container(maze_maui_app_net, "Maze.Maui.App", "C#", ".NET maze application (MAUI)")
+}
+
+System_Boundary(b_web, "Web frontend") {
+    Container(maze_react_web, "maze_react_web", "React/TypeScript", "Web frontend")
+}
+
+System_Boundary(b_game, "3D game") {
+    Container(maze_game_bevy, "maze_game_bevy", "Rust / Bevy", "First-person 3D maze game")
+    Container(maze_game_bevy_wasm, "maze_game_bevy_wasm", "Rust / Bevy / WASM", "Browser build of the 3D game")
+}
+
+System_Boundary(b_docs, "Documentation") {
+    Container(html_help, "", "", "HTML help pages")
+}
 
 Rel(user, browser, "Uses")
 Rel(maze_react_web, maze_web_server, "Served by")
