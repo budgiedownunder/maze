@@ -258,7 +258,7 @@ When a callback arrives the server applies these rules in order:
 
 OAuth-only users (those created via branch 3) cannot sign in via `POST /api/v1/login` — `verify_password` is hardened to reject empty / non-Argon2 hashes, returning `401 Invalid email or password`. They sign in only via the OAuth flow.
 
-> **Mismatched-email edge case (deliberately unsolved in v1):** if a user's existing password account uses a different email than their Google / GitHub account, branch (2) cannot see the connection and falls through to branch (3), creating a duplicate user. A future "Linked accounts" UI in My Account will provide an explicit-link path that side-steps this.
+> **Mismatched-email edge case (deliberately unsolved in v1):** if a user's existing password account uses a different email than their OAuth provider account, branch (2) cannot see the connection and falls through to branch (3), creating a duplicate user. A future "Linked accounts" UI in My Account will provide an explicit-link path that side-steps this.
 
 ### Default Admin Account
 

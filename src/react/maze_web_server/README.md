@@ -6,7 +6,7 @@
 
 Browser-based UI for the `maze_web_server` REST API. Features:
 
-- **User accounts** — sign up/in/out, edit profile, change password, delete account, plus OAuth sign-in (Google, GitHub) rendered when the [`maze_web_server`](../../rust/maze_web_server/README.md) has those providers configured
+- **User accounts** — sign up/in/out, edit profile, change password, delete account, plus OAuth sign-in (Google, GitHub, Facebook) rendered when the [`maze_web_server`](../../rust/maze_web_server/README.md) has those providers configured
 - **Maze list** — create, open, rename, duplicate, delete, and play mazes
 - **Maze editor** — cell-by-cell editing (walls, start, finish), multi-cell range selection,
   structural editing (insert/delete rows and columns), keyboard shortcuts
