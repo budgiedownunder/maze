@@ -6,8 +6,12 @@
 LAYOUT_TOP_DOWN()
 HIDE_STEREOTYPE()
 skinparam linetype ortho
-skinparam nodesep 60
-skinparam ranksep 80
+skinparam nodesep 80
+skinparam ranksep 100
+skinparam defaultFontSize 12
+skinparam titleFontSize 18
+skinparam titleFontStyle bold
+skinparam ArrowFontSize 11
 
 UpdateElementStyle("container", $bgColor="#cccccc", $fontColor="#222222", $borderColor="#888888")
 UpdateElementStyle("external_container", $bgColor="#888888", $fontColor="#ffffff", $borderColor="#666666")
@@ -59,32 +63,32 @@ System_Boundary(b_docs, "Documentation") {
     Container(html_help, "HTML help", "", "Generated documentation pages", $tags="doc")
 }
 
-Rel(user, browser, "Uses")
+Rel(user, browser, "")
 Rel(maze_react_web, maze_web_server, "Served by")
-Rel(user, html_help, "Uses")
-Rel(user, maze_console, "Uses")
-Rel(user, maze_maui_app_net, "Uses")
-Rel(user, maze_openapi_generator, "Uses")
-Rel(browser, api, "Uses")
+Rel(user, html_help, "")
+Rel(user, maze_console, "")
+Rel(user, maze_maui_app_net, "")
+Rel(user, maze_openapi_generator, "")
+Rel(browser, api, "")
 Rel(browser, maze_react_web, "Loads")
-Rel(maze_react_web, api, "Uses")
-Rel(maze_console, api, "Uses")
-Rel(maze_maui_app_net, api, "Uses")
-Rel(maze_openapi_generator, maze_web_server, "Uses")
-Rel(maze_c, maze, "Uses")
-Rel(maze_wasm, maze, "Uses")
-Rel(api, maze_wasm, "Uses (non-iOS)")
-Rel(api, maze_c, "Uses (iOS)")
-Rel(api, maze_web_server, "Uses")
-Rel(maze_web_server, maze_wasm, "Uses")
-Rel(maze_web_server, auth, "Uses")
-Rel(maze_web_server, storage, "Uses")
-Rel(maze_game_bevy, maze, "Uses")
+Rel(maze_react_web, api, "")
+Rel(maze_console, api, "")
+Rel(maze_maui_app_net, api, "")
+Rel(maze_openapi_generator, maze_web_server, "")
+Rel(maze_c, maze, "")
+Rel(maze_wasm, maze, "")
+Rel(api, maze_wasm, "non-iOS")
+Rel(api, maze_c, "iOS")
+Rel(api, maze_web_server, "")
+Rel(maze_web_server, maze_wasm, "")
+Rel(maze_web_server, auth, "")
+Rel(maze_web_server, storage, "")
+Rel(maze_game_bevy, maze, "")
 Rel(maze_game_bevy_wasm, maze_game_bevy, "Wraps")
-Rel(maze_web_server, maze_game_bevy_wasm, "Serves at /game/")
+Rel(maze_web_server, maze_game_bevy_wasm, "Serves")
 Rel(maze_react_web, maze_game_bevy_wasm, "Loads")
-Rel(maze_react_web, maze_wasm, "Uses")
-Rel(maze_maui_app_net, maze_game_bevy_wasm, "Embeds via WebView")
+Rel(maze_react_web, maze_wasm, "")
+Rel(maze_maui_app_net, maze_game_bevy_wasm, "WebView")
 
 legend bottom left
 | <back:#9b4f96><color:#ffffff>  C# / .NET  </color></back> | <back:#dea584><color:#000000>  Rust  </color></back> | <back:#3178c6><color:#ffffff>  JavaScript / TypeScript / React  </color></back> | <back:#654ff0><color:#ffffff>  WebAssembly  </color></back> | <back:#bdbdbd><color:#000000>  Documentation  </color></back> |
