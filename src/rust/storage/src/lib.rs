@@ -32,6 +32,7 @@ pub enum StoreConfig {
 /// # // Make sure the store is in a suitable state prior to running the doc test
 /// # use storage::test_setup::setup;
 /// # setup();
+/// # tokio_test::block_on(async {
 ///
 /// use data_model::{Maze, User};
 /// use maze::{MazePath, MazePrinter};
@@ -47,10 +48,10 @@ pub enum StoreConfig {
 ///
 /// // Access the file store
 /// let file_config = FileStoreConfig::default();
-/// match get_store(StoreConfig::File(file_config)) {
+/// match get_store(StoreConfig::File(file_config)).await {
 ///     Ok(mut store) => {
 ///         // Locate the owner by username
-///         let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
+///         let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
 ///         let owner = match find_user_result {
 ///             Ok(user) => user,
 ///             Err(error) => {
@@ -60,14 +61,14 @@ pub enum StoreConfig {
 ///         };
 ///
 ///         // Create the maze within the store
-///         if let Err(error) = store.create_maze(&owner, &mut maze_to_create) {
+///         if let Err(error) = store.create_maze(&owner, &mut maze_to_create).await {
 ///             panic!(
 ///                 "failed to create maze => {}",
 ///                 error
 ///             );
 ///         }
 ///         // Now reload the maze from the store
-///         match store.get_maze(&owner, &maze_to_create.id) {
+///         match store.get_maze(&owner, &maze_to_create.id).await {
 ///             Ok(loaded_maze) => {
 ///                 println!("Successfully loaded maze:");
 ///                 let mut print_target = StdoutLinePrinter::new();
@@ -90,8 +91,9 @@ pub enum StoreConfig {
 ///         );
 ///     }
 /// }
+/// # });
 /// ```
-pub fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, Error> {
+pub async fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, Error> {
     let store = match config
     {
         StoreConfig::File(file_config) => file_store::FileStore::new(&file_config),
@@ -104,12 +106,19 @@ pub fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, Error> {
 #[doc(hidden)]
 pub mod test_setup {
     use crate::{FileStore, FileStoreConfig, store::Manage};
-    /// This function runs before every documentation test
+    /// This function runs before every documentation test.
+    /// Synchronous wrapper around the now-async `Manage::empty` so doc tests
+    /// can call it outside the `tokio_test::block_on` async block.
     pub fn setup() {
-        // Make sure any existing files and directories are cleared out
-        let mut store = FileStore::new(&FileStoreConfig::default());
-        if let Err(error) = store.empty() {
-            panic!("setup() failed to empty store: {error}");
-        }
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("setup(): failed to build tokio runtime");
+        rt.block_on(async {
+            let mut store = FileStore::new(&FileStoreConfig::default());
+            if let Err(error) = store.empty().await {
+                panic!("setup() failed to empty store: {error}");
+            }
+        });
     }
 }

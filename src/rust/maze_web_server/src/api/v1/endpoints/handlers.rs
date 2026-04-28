@@ -16,7 +16,8 @@ use actix_web::{cookie::{Cookie, SameSite, time::Duration as CookieDuration}, de
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::sync::{RwLockReadGuard, RwLockWriteGuard, RwLock, Arc};
+use std::sync::Arc;
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use urlencoding::encode;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -74,21 +75,22 @@ fn get_logout_details(req: &HttpRequest) -> Result<(User, uuid::Uuid), Error> {
     Ok((user, login_id))
 }
 
-fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &AuthService,
+async fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &AuthService,
     email: &str, password: &str) -> Result<User, Error> {
 
     if email.trim().is_empty() || password.trim().is_empty() {
         return Err(ErrorUnprocessableEntity("Email and password must be provided"));
     }
 
-    let store_lock = get_store_read_lock(store)?;
-
-    let user = store_lock.find_user_by_email(email).map_err(|err| {
-        match err {
-            StoreError::UserNotFound() => ErrorUnauthorized("Invalid email or password"),
-            _ => ErrorInternalServerError("Failed to process login request"),
-        }
-    })?;
+    let user = {
+        let store_lock = get_store_read_lock(store).await;
+        store_lock.find_user_by_email(email).await.map_err(|err| {
+            match err {
+                StoreError::UserNotFound() => ErrorUnauthorized("Invalid email or password"),
+                _ => ErrorInternalServerError("Failed to process login request"),
+            }
+        })?
+    };
 
     let password_matches = auth_service.verify_password(&user.password_hash, password).map_err(|err| {
         log::error!("Password verification failed: {err:?}");
@@ -102,20 +104,16 @@ fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &AuthSe
     Ok(user)
 }
 
-fn get_store_read_lock(
+async fn get_store_read_lock(
     store: &web::Data<Arc<RwLock<Box<dyn Store>>>>,
-) -> Result<RwLockReadGuard<'_, Box<dyn Store>>, Error> {
-    store.read().map_err(|_| {
-        ErrorInternalServerError("Failed to acquire store read lock")
-    })
+) -> RwLockReadGuard<'_, Box<dyn Store>> {
+    store.read().await
 }
 
-fn get_store_write_lock(
+async fn get_store_write_lock(
     store: &web::Data<Arc<RwLock<Box<dyn Store>>>>,
-) -> Result<RwLockWriteGuard<'_, Box<dyn Store>>, Error> {
-    store.write().map_err(|_| {
-        ErrorInternalServerError("Failed to acquire store write lock")
-    })
+) -> RwLockWriteGuard<'_, Box<dyn Store>> {
+    store.write().await
 }
 
 // User ID functions 
@@ -198,8 +196,8 @@ fn get_cannot_delete_last_admin_error() -> Error {
     ErrorConflict("Cannot delete the last admin account".to_string())
 }
 
-fn is_last_admin(store_lock: &RwLockWriteGuard<'_, Box<dyn Store>>, user_id: Uuid) -> Result<bool, Error> {
-    let admins = store_lock.get_admin_users().map_err(|err| get_users_fetch_internal_error(&err))?;
+async fn is_last_admin(store_lock: &RwLockWriteGuard<'_, Box<dyn Store>>, user_id: Uuid) -> Result<bool, Error> {
+    let admins = store_lock.get_admin_users().await.map_err(|err| get_users_fetch_internal_error(&err))?;
     Ok(admins.len() == 1 && admins[0].id == user_id)
 }
 
@@ -244,15 +242,15 @@ fn get_maze_generate_error(err: &MazeError) -> Error {
     ErrorUnprocessableEntity(get_maze_generate_error_string(err))
 }
 
-fn update_store_user<F>(
-    mut store_lock: RwLockWriteGuard<'_, Box<dyn Store>>, 
+async fn update_store_user<F>(
+    mut store_lock: RwLockWriteGuard<'_, Box<dyn Store>>,
     user: &mut User,
     handle_internal_error: F,
-) -> Result<HttpResponse, Error> 
+) -> Result<HttpResponse, Error>
 where
     F: Fn(&StoreError) -> Error,
 {
-    match store_lock.update_user(user) {
+    match store_lock.update_user(user).await {
         Ok(_) =>  Ok(HttpResponse::Ok().json(UserItem::from_store_user(user))),
         Err(err) => {
             match err {
@@ -261,9 +259,9 @@ where
                 StoreError::UserEmailInvalid() => Err(get_invalid_email_request_error()),
                 StoreError::UserEmailMissing() => Err(get_missing_email_request_error()),
                 _ => Err(handle_internal_error(&err))
-            }    
+            }
         }
-    } 
+    }
 }
 
 /// Contains the summary details for a user
@@ -480,15 +478,17 @@ pub async fn signup(
     store: web::Data<SharedStore>,
     features: web::Data<SharedFeatures>,
 ) -> Result<HttpResponse, Error> {
-    let features_lock = features.read().map_err(|_| {
-        ErrorInternalServerError("Failed to acquire features read lock")
-    })?;
-    if !features_lock.allow_signup {
+    let allow_signup = {
+        let features_lock = features.read().map_err(|_| {
+            ErrorInternalServerError("Failed to acquire features read lock")
+        })?;
+        features_lock.allow_signup
+    };
+    if !allow_signup {
         return Err(ErrorForbidden("Signup is disabled on this server"));
     }
-    drop(features_lock);
 
-    let mut store_lock = get_store_write_lock(&store)?;
+    let mut store_lock = get_store_write_lock(&store).await;
     let signup_req_data: SignupRequest = signup_req.into_inner();
     let mut store_user = signup_req_data.into_user(&auth_service)?;
     let base_username = generate_username_from_email(&signup_req_data.email);
@@ -499,7 +499,7 @@ pub async fn signup(
         } else {
             format!("{}_{}", base_username, &Uuid::new_v4().to_string().replace('-', "")[..6])
         };
-        match store_lock.create_user(&mut store_user) {
+        match store_lock.create_user(&mut store_user).await {
             Ok(()) => return Ok(
                 HttpResponse::Created()
                 .insert_header(("Location", "/api/v1/users/me"))
@@ -895,12 +895,12 @@ pub async fn oauth_callback(
         .read()
         .map_err(|_| ErrorInternalServerError("features lock"))?
         .allow_signup;
-    let mut store_lock = get_store_write_lock(&store)?;
+    let mut store_lock = get_store_write_lock(&store).await;
     let outcome = {
         // Trait upcast Store → UserStore so the connector-agnostic resolver
         // doesn't need to know about MazeStore / Manage.
         let user_store: &mut dyn storage::UserStore = &mut **store_lock;
-        account::resolve(user_store, &identity, allow_signup)
+        account::resolve(user_store, &identity, allow_signup).await
     };
     let outcome = match outcome {
         Ok(o) => o,
@@ -950,6 +950,7 @@ pub async fn oauth_callback(
     );
     store_lock
         .update_user(&mut user)
+        .await
         .map_err(|e| get_user_update_internal_error(&e))?;
     drop(store_lock);
 
@@ -1026,14 +1027,14 @@ pub async fn delete_me(
     store: web::Data<SharedStore>,
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let mut store_lock = get_store_write_lock(&store)?;
+    let mut store_lock = get_store_write_lock(&store).await;
     let user = get_authorized_user(&req, false)?;
 
-    if is_last_admin(&store_lock, user.id)? {
+    if is_last_admin(&store_lock, user.id).await? {
         return Err(get_cannot_delete_last_admin_error());
     }
 
-    match store_lock.delete_user(user.id) {
+    match store_lock.delete_user(user.id).await {
         Ok(()) => Ok(HttpResponse::NoContent().finish()),
         Err(err) => {
             match err {
@@ -1104,10 +1105,10 @@ pub async fn change_password_me(
         .hash_password(&change_req_data.new_password)
         .map_err(|err| get_hash_password_internal_error(&err))?;
 
-    let mut store_lock = get_store_write_lock(&store)?;
+    let mut store_lock = get_store_write_lock(&store).await;
     user.password_hash = new_hash;
 
-    match store_lock.update_user(&mut user) {
+    match store_lock.update_user(&mut user).await {
         Ok(_) => Ok(HttpResponse::NoContent().finish()),
         Err(err) => Err(get_user_update_internal_error(&err)),
     }
@@ -1160,9 +1161,9 @@ pub async fn update_profile_me(
     req: HttpRequest,
 ) -> Result<HttpResponse, Error> {
     let mut user = get_authorized_user(&req, false)?;
-    let store_lock = get_store_write_lock(&store)?;
+    let store_lock = get_store_write_lock(&store).await;
     update_req.into_inner().apply_to_store_user(&mut user);
-    update_store_user(store_lock, &mut user, get_user_update_internal_error)
+    update_store_user(store_lock, &mut user, get_user_update_internal_error).await
 }
 // **************************************************************************************************
 // Endpoint: GET /api/v1/login
@@ -1208,13 +1209,13 @@ pub async fn login(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let mut user = verify_user_credentials(&store, &auth_service, &login_req.email, &login_req.password)?;
+    let mut user = verify_user_credentials(&store, &auth_service, &login_req.email, &login_req.password).await?;
     let login_expiry_hours = config.security.login_expiry_hours;
     let login = user.create_login(login_expiry_hours, get_caller_ip_address(&req), get_caller_device_info(&req));
-    let store_lock = get_store_write_lock(&store)?;
+    let store_lock = get_store_write_lock(&store).await;
     update_store_user(store_lock, &mut user, |err| {
         get_user_update_internal_error(err)
-    })?;
+    }).await?;
 
     Ok(HttpResponse::Ok().json(LoginResponse {
         login_token_id: login.id,
@@ -1245,13 +1246,13 @@ pub async fn logout(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let (mut user, login_id) = get_logout_details(&req)?;
-    let store_lock = get_store_write_lock(&store)?;
+    let store_lock = get_store_write_lock(&store).await;
 
     user.remove_login(login_id);
 
     update_store_user(store_lock, &mut user, |err| {
         get_user_update_internal_error(err)
-    })?;         
+    }).await?;         
 
     Ok(HttpResponse::NoContent().finish())
 }
@@ -1298,10 +1299,10 @@ pub async fn renew(
     let login_expiry_hours = config.security.login_expiry_hours;
     let renewed = user.renew_login(login_id.0, login_expiry_hours)
         .ok_or_else(|| ErrorUnauthorized("Unauthorized request"))?;
-    let store_lock = get_store_write_lock(&store)?;
+    let store_lock = get_store_write_lock(&store).await;
     update_store_user(store_lock, &mut user, |err| {
         get_user_update_internal_error(err)
-    })?;
+    }).await?;
     Ok(HttpResponse::Ok().json(RenewResponse {
         login_token_id: renewed.id,
         login_token_expires_at: renewed.expires_at,
@@ -1332,9 +1333,9 @@ pub async fn get_users(
     req: HttpRequest,
     store: web::Data<SharedStore>
 ) -> Result<HttpResponse, Error> {
-    let store_lock = get_store_read_lock(&store)?;
+    let store_lock = get_store_read_lock(&store).await;
     let _ = get_authorized_user(&req, true)?;
-    let store_users = store_lock.get_users().map_err(|err| {
+    let store_users = store_lock.get_users().await.map_err(|err| {
         get_users_fetch_internal_error(&err)
     })?;
 
@@ -1414,12 +1415,12 @@ pub async fn create_user(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let mut store_lock = get_store_write_lock(&store)?;
+    let mut store_lock = get_store_write_lock(&store).await;
     let _ = get_authorized_user(&req, true)?;
     let create_req_data: CreateUserRequest = create_req.into_inner();
     let mut store_user = create_req_data.into_user(&auth_service)?;
 
-    match store_lock.create_user(&mut store_user) {
+    match store_lock.create_user(&mut store_user).await {
         Ok(()) => Ok(
             HttpResponse::Created()
             .insert_header(("Location", format!("/api/v1/users/{}", encode(&store_user.id.to_string()))))
@@ -1464,11 +1465,11 @@ pub async fn get_user(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let store_lock = get_store_read_lock(&store)?;
+    let store_lock = get_store_read_lock(&store).await;
     let _ = get_authorized_user(&req, true)?;
     let id = user_id_from_str(&path.into_inner())?;
 
-    match store_lock.get_user(id) {
+    match store_lock.get_user(id).await {
         Ok(user) => Ok(HttpResponse::Ok().json(UserItem::from_store_user(&user))),
         Err(err) => {
             match err {
@@ -1533,17 +1534,18 @@ pub async fn update_user(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let store_lock = get_store_write_lock(&store)?;
+    let store_lock = get_store_write_lock(&store).await;
     let _ = get_authorized_user(&req, true)?;
     let id = user_id_from_str(&path.into_inner())?;
     let update_req_data = update_req.into_inner();
 
-    match store_lock.get_user(id) {
+    match store_lock.get_user(id).await {
         Ok(mut user) => {
             update_req_data.apply_to_store_user(&mut user);
             update_store_user(store_lock, &mut user, |err| {
                 get_user_update_internal_error(err)
-            })            
+            }).await
+
         },
         Err(err) => {
             match err {
@@ -1583,15 +1585,15 @@ pub async fn delete_user(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let mut store_lock = get_store_write_lock(&store)?;
+    let mut store_lock = get_store_write_lock(&store).await;
     let _ = get_authorized_user(&req, true)?;
     let id = user_id_from_str(&path.into_inner())?;
 
-    if is_last_admin(&store_lock, id)? {
+    if is_last_admin(&store_lock, id).await? {
         return Err(get_cannot_delete_last_admin_error());
     }
 
-    match store_lock.delete_user(id) {
+    match store_lock.delete_user(id).await {
         Ok(()) => {
             Ok(HttpResponse::Ok().body(format!("user with id '{id}' deleted")))
         }    
@@ -1638,9 +1640,9 @@ pub async fn get_mazes(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let include_definitions = query.include_definitions.unwrap_or(false); 
-    let store_lock = get_store_read_lock(&store)?;
+    let store_lock = get_store_read_lock(&store).await;
     let user = get_authorized_user(&req, false)?;
-    let stored_items = store_lock.get_maze_items(&user, include_definitions).map_err(|err| {
+    let stored_items = store_lock.get_maze_items(&user, include_definitions).await.map_err(|err| {
         get_mazes_fetch_internal_error(&err)
     })?;
     Ok(HttpResponse::Ok().json(stored_items))    
@@ -1673,11 +1675,11 @@ pub async fn create_maze(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let mut store_lock = get_store_write_lock(&store)?;
+    let mut store_lock = get_store_write_lock(&store).await;
     let user = get_authorized_user(&req, false)?;
     let mut maze: Maze = req_maze.into_inner();
 
-    match store_lock.create_maze(&user, &mut maze) {
+    match store_lock.create_maze(&user, &mut maze).await {
         Ok(()) => Ok(
                 HttpResponse::Created()
                 .insert_header(("Location", format!("/api/v1/mazes/{}", encode(&maze.id))))
@@ -1719,11 +1721,11 @@ pub async fn get_maze(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let store_lock = get_store_read_lock(&store)?;
+    let store_lock = get_store_read_lock(&store).await;
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
 
-    match store_lock.get_maze(&user, &id) {
+    match store_lock.get_maze(&user, &id).await {
         Ok(maze) => Ok(HttpResponse::Ok().json(maze)),
         Err(err) => {
             match err {
@@ -1765,7 +1767,7 @@ pub async fn update_maze(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let mut store_lock = get_store_write_lock(&store)?;
+    let mut store_lock = get_store_write_lock(&store).await;
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
     let mut maze = req_maze.into_inner();
@@ -1774,7 +1776,7 @@ pub async fn update_maze(
         return Err(get_maze_id_mismatch_error(&id, &maze.id));
     }
 
-    match store_lock.update_maze(&user, &mut maze) {
+    match store_lock.update_maze(&user, &mut maze).await {
         Ok(_) => Ok(HttpResponse::Ok().json(maze)),
         Err(err) => {
             match err {
@@ -1813,11 +1815,11 @@ pub async fn delete_maze(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let mut store_lock = get_store_write_lock(&store)?;
+    let mut store_lock = get_store_write_lock(&store).await;
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
 
-    match store_lock.delete_maze(&user, &id) {
+    match store_lock.delete_maze(&user, &id).await {
         Ok(()) => {
             Ok(HttpResponse::Ok().body(format!("maze with id '{id}' deleted")))
         }    
@@ -1858,11 +1860,11 @@ pub async fn get_maze_solution(
     store: web::Data<SharedStore>,  
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
-    let store_lock = get_store_read_lock(&store)?;
+    let store_lock = get_store_read_lock(&store).await;
     let user = get_authorized_user(&req, false)?;
     let id = path.into_inner();
 
-    match store_lock.get_maze(&user, &id) {
+    match store_lock.get_maze(&user, &id).await {
         Ok(maze) => {
             match maze.solve() {
                 Ok(solution) => Ok(HttpResponse::Ok().json(solution)),

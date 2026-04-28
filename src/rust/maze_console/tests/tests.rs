@@ -1,3 +1,7 @@
+// `TEST_MUTEX` is a `std::sync::Mutex` held across `.await` points to serialize
+// tests that share file-system state. `#[tokio::test]` uses a single-threaded
+// runtime by default, so this cannot deadlock — silence the lint for this file.
+#![allow(clippy::await_holding_lock)]
 use std::error::Error;
 use std::sync::Mutex;
 
@@ -13,14 +17,14 @@ lazy_static::lazy_static! {
     static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
 }
 
-fn new_mock_app() -> MockApp {
+async fn new_mock_app() -> MockApp {
     let file_config = storage::FileStoreConfig::default();
-    match get_store(storage::StoreConfig::File(file_config)) {
+    match get_store(storage::StoreConfig::File(file_config)).await {
         Ok(mut store) => {
-            if let Err(error) = store.empty() {
+            if let Err(error) = store.empty().await {
                 panic!("new_mock_app() failed to empty store content: {error}");
             }
-            match store.init_default_admin_user("admin", "admin@maze.local", "dummy_password_hash") {
+            match store.init_default_admin_user("admin", "admin@maze.local", "dummy_password_hash").await {
                 Ok(user) => MockApp::new(store, &user),
                 Err(error) => {
                     panic!(
@@ -29,7 +33,7 @@ fn new_mock_app() -> MockApp {
                     );
                 }
             }
-        }    
+        }
         Err(error) => {
             panic!(
                 "{}",
@@ -47,25 +51,25 @@ fn vec_append_string_copies(v: &mut Vec<String>, s: &str, n: usize) {
     v.resize(v.len() + n, s.to_string());
 }
 
-fn do_quit_and_verify(
+async fn do_quit_and_verify(
     app: &mut MockApp,
     expected_output: &mut Vec<String>,
     reset_input: bool,
 ) -> Result<(), Box<dyn Error>> {
     app.add_input_key('Q', reset_input);
     expected_output.push("Exiting...".to_string());
-    app.run()?;
+    app.run().await?;
     delete_files_with_ext(".", "json")?;
     app.verify_output(expected_output)?;
     Ok(())
 }
 
-fn do_quit_run_and_verify(
+async fn do_quit_run_and_verify(
     app: &mut MockApp,
     expected_output: &mut Vec<String>,
 ) -> Result<(), Box<dyn Error>> {
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
-    do_quit_and_verify(app, expected_output, false)?;
+    do_quit_and_verify(app, expected_output, false).await?;
     Ok(())
 }
 
@@ -74,12 +78,12 @@ fn add_press_any_key_steps(app: &mut MockApp, expected_output: &mut Vec<String>)
     app.add_input_key(' ', false);
 }
 
-fn do_press_any_key_quit_run_and_verify(
+async fn do_press_any_key_quit_run_and_verify(
     app: &mut MockApp,
     expected_output: &mut Vec<String>,
 ) -> Result<(), Box<dyn Error>> {
     add_press_any_key_steps(app, expected_output);
-    do_quit_run_and_verify(app, expected_output)?;
+    do_quit_run_and_verify(app, expected_output).await?;
     Ok(())
 }
 
@@ -214,16 +218,16 @@ fn add_delete_maze_steps(
     }
 }
 
-#[test]
-fn should_be_able_to_quit_on_start() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_be_able_to_quit_on_start() -> Result<(), Box<dyn Error>> {
     let mut expected_output = vec![];
-    do_quit_and_verify(&mut new_mock_app(), &mut expected_output, true)?;
+    do_quit_and_verify(&mut new_mock_app().await, &mut expected_output, true).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_insert_rows_into_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_insert_rows_into_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('I', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
@@ -234,13 +238,13 @@ fn should_be_able_to_insert_rows_into_empty_maze() -> Result<(), Box<dyn Error>>
             false, "0", "", &[],"5")
     );
     expected_output.push("Success - new dimensions: 5 row(s), 0 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_prevent_insert_invalid_rows_into_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_prevent_insert_invalid_rows_into_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('I', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
@@ -251,13 +255,13 @@ fn should_prevent_insert_invalid_rows_into_empty_maze() -> Result<(), Box<dyn Er
             false, "0", "", &["B", "-2"],"5")
     );
     expected_output.push("Success - new dimensions: 5 row(s), 0 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_prevent_insert_invalid_rows_into_non_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_prevent_insert_invalid_rows_into_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('I', true);
@@ -275,24 +279,24 @@ fn should_prevent_insert_invalid_rows_into_non_empty_maze() -> Result<(), Box<dy
             false, "0", "", &["B", "-2"],"5")
     );
     expected_output.push("Success - new dimensions: 15 row(s), 5 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_delete_rows_from_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_delete_rows_from_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('D', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
     expected_output.push("Definition is empty - no rows to delete".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_delete_invalid_rows_from_non_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_delete_invalid_rows_from_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('D', true);
@@ -310,25 +314,25 @@ fn should_not_be_able_to_delete_invalid_rows_from_non_empty_maze() -> Result<(),
             true, "1", "8", &["A", "-1", "9"], "4")
     );
     expected_output.push("Success - new dimensions: 6 row(s), 5 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_insert_cols_into_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_insert_cols_into_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('N', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
     expected_output
         .push("Definition is empty - insert some rows before adding columns".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_prevent_insert_invalid_cols_into_non_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_prevent_insert_invalid_cols_into_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('N', true);
@@ -346,24 +350,24 @@ fn should_prevent_insert_invalid_cols_into_non_empty_maze() -> Result<(), Box<dy
             false, "0", "", &["B", "-2"], "7")
     );
     expected_output.push("Success - new dimensions: 10 row(s), 12 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_delete_cols_from_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_delete_cols_from_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('L', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
     expected_output.push("Definition has no columns to delete".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_delete_invalid_cols_from_non_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_delete_invalid_cols_from_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('L', true);
@@ -381,15 +385,15 @@ fn should_not_be_able_to_delete_invalid_cols_from_non_empty_maze() -> Result<(),
             true, "1", "2", &["A", "-1", "4"], "2")
     );
     expected_output.push("Success - new dimensions: 10 row(s), 3 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-fn run_set_endpoint_test_in_empty_maze(
+async fn run_set_endpoint_test_in_empty_maze(
     operation_key: char,
     name: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     let operation_message = format!("Set {name}");
     let expected_error_message = format!(
         "Maze has no cells - add some rows and columns first before setting the {name} cell"
@@ -399,28 +403,28 @@ fn run_set_endpoint_test_in_empty_maze(
     expected_output.push(operation_message);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
     expected_output.push(expected_error_message);
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_set_start_in_empty_maze() -> Result<(), Box<dyn Error>> {
-    run_set_endpoint_test_in_empty_maze('A', "start")?;
+#[tokio::test]
+async fn should_not_be_able_to_set_start_in_empty_maze() -> Result<(), Box<dyn Error>> {
+    run_set_endpoint_test_in_empty_maze('A', "start").await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_set_finish_in_empty_maze() -> Result<(), Box<dyn Error>> {
-    run_set_endpoint_test_in_empty_maze('F', "finish")?;
+#[tokio::test]
+async fn should_not_be_able_to_set_finish_in_empty_maze() -> Result<(), Box<dyn Error>> {
+    run_set_endpoint_test_in_empty_maze('F', "finish").await?;
     Ok(())
 }
 
-fn run_modify_endpoint_test(
+async fn run_modify_endpoint_test(
     operation_key: char,
     operation: &str,
     endpoint_char: char,
 ) -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(3, 5));
     let modified_row = format!("░░{endpoint_char}░░");
     let mut expected_output: Vec<String> = vec![];
@@ -447,19 +451,19 @@ fn run_modify_endpoint_test(
     expected_output.push("░░░░░".to_string());
     expected_output.push(modified_row);
     expected_output.push("░░░░░".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_set_start_in_non_empty_maze() -> Result<(), Box<dyn Error>> {
-    run_modify_endpoint_test('A', "Set start", 'S')?;
+#[tokio::test]
+async fn should_set_start_in_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    run_modify_endpoint_test('A', "Set start", 'S').await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_set_walls_in_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_set_walls_in_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('W', true);
     expected_output.push("Set walls".to_string());
@@ -467,16 +471,16 @@ fn should_not_be_able_to_set_walls_in_empty_maze() -> Result<(), Box<dyn Error>>
     expected_output.push(
         "Maze has no cells - add some rows and columns first before modifying walls".to_string(),
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-fn run_modify_walls_test(
+async fn run_modify_walls_test(
     operation_key: char,
     operation: &str,
     change_char: char,
 ) -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let modified_row = format!("░{change_char}{change_char}{change_char}░");
     let mut expected_output: Vec<String> = vec![];
@@ -516,19 +520,19 @@ fn run_modify_walls_test(
     vec_append_string_copies(&mut expected_output, &blank_row, 2);
     vec_append_string_copies(&mut expected_output, &modified_row, 3);
     vec_append_string_copies(&mut expected_output, &blank_row, 5);
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_set_walls_in_non_empty_maze() -> Result<(), Box<dyn Error>> {
-    run_modify_walls_test('W', "Set walls", '█')?;
+#[tokio::test]
+async fn should_set_walls_in_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    run_modify_walls_test('W', "Set walls", '█').await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_clear_walls_in_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_clear_walls_in_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('C', true);
     expected_output.push("Clear walls".to_string());
@@ -536,19 +540,19 @@ fn should_not_be_able_to_clear_walls_in_empty_maze() -> Result<(), Box<dyn Error
     expected_output.push(
         "Maze has no cells - add some rows and columns first before modifying walls".to_string(),
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_clear_walls_in_non_empty_maze() -> Result<(), Box<dyn Error>> {
-    run_modify_walls_test('C', "Clear walls", '░')?;
+#[tokio::test]
+async fn should_clear_walls_in_non_empty_maze() -> Result<(), Box<dyn Error>> {
+    run_modify_walls_test('C', "Clear walls", '░').await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_resize_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_resize_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('R', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
@@ -557,13 +561,13 @@ fn should_be_able_to_resize_maze() -> Result<(), Box<dyn Error>> {
     expected_output.push("Enter new column count: ".to_string());
     mock_app.add_input_line("10", false);
     expected_output.push("Success - new dimensions: 5 row(s), 10 column(s)".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(10, 5));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('E', true);
@@ -571,23 +575,23 @@ fn should_be_able_to_empty_maze() -> Result<(), Box<dyn Error>> {
         .push("Set maze to empty? [current dimensions: 10 row(s), 5 column(s)] (Y/N)".to_string());
     mock_app.add_input_key('Y', false);
     expected_output.push("Maze set to empty".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_solve_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_solve_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('S', true);
     expected_output.push("Failed to solve maze: no start cell found within maze".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_solve_maze_with_no_start_cell() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_solve_maze_with_no_start_cell() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     #[rustfmt::skip]
     let grid: Vec<Vec<char>> = vec![
         vec![' ', 'F'],
@@ -596,13 +600,13 @@ fn should_not_be_able_to_solve_maze_with_no_start_cell() -> Result<(), Box<dyn E
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('S', true);
     expected_output.push("Failed to solve maze: no start cell found within maze".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_solve_maze_with_no_finish_cell() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_solve_maze_with_no_finish_cell() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     #[rustfmt::skip]
     let grid: Vec<Vec<char>> = vec![
         vec!['S', ' '],
@@ -611,13 +615,13 @@ fn should_not_be_able_to_solve_maze_with_no_finish_cell() -> Result<(), Box<dyn 
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('S', true);
     expected_output.push("Failed to solve maze: no finish cell found within maze".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     #[rustfmt::skip]
     let grid: Vec<Vec<char>> = vec![
         vec!['S', 'W', ' ', 'F', 'W'],
@@ -631,13 +635,13 @@ fn should_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
     expected_output.push("S█→F█".to_string());
     expected_output.push("↓█↑█░".to_string());
     expected_output.push("→→↑█░".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_not_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     #[rustfmt::skip]
     let grid: Vec<Vec<char>> = vec![
         vec!['S', 'W', 'W', 'F', 'W'],
@@ -648,69 +652,69 @@ fn should_not_be_able_to_solve_maze() -> Result<(), Box<dyn Error>> {
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('S', true);
     expected_output.push("Failed to solve maze: no solution found".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_print_empty_maze() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_print_empty_maze() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('P', true);
     expected_output.push("Current dimensions: 0 row(s), 0 column(s)".to_string());
     expected_output.push("\nDefinition:\n".to_string());
     expected_output.push("Maze is empty".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_print_maze_with_content() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_print_maze_with_content() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(2, 3));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('P', true);
     expected_output.push("Current dimensions: 2 row(s), 3 column(s)".to_string());
     expected_output.push("\nDefinition:\n".to_string());
     vec_append_string_copies(&mut expected_output, "░░░", 2);
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_open_non_existant_maze() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_not_be_able_to_open_non_existant_maze() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_file("does_not_exist.json");
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('O', true);
     expected_output.push("Enter name of maze to open: ".to_string());
     mock_app.add_input_line("does_not_exist", false);
     expected_output.push("Failed: A maze with the name 'does_not_exist' was not found".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_no_mazes_listed() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_be_no_mazes_listed() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     mock_app.add_input_key('U', true);
     expected_output.push("Available mazes = 0\n".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_mazes_listed_after_save() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_be_mazes_listed_after_save() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
@@ -721,15 +725,15 @@ fn should_be_mazes_listed_after_save() -> Result<(), Box<dyn Error>> {
     mock_app.add_input_key('U', false);
     expected_output.push("Available mazes = 1\n".to_string());
     expected_output.push("1 - saved_maze".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
@@ -742,29 +746,29 @@ fn should_be_able_to_open_a_saved_maze() -> Result<(), Box<dyn Error>> {
     mock_app.add_input_line("saved_maze", false);
     expected_output
         .push("Maze 'saved_maze' successfully loaded from 'saved_maze.json'".to_string());
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_save_maze() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_be_able_to_save_maze() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_save_maze_as_steps(&mut mock_app, &mut expected_output,
         &MazeSaveAsConfig::new('V', true, "", "saved_maze", false, false));
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
@@ -780,16 +784,16 @@ fn should_be_able_to_save_new_maze_as_and_overwrite() -> Result<(), Box<dyn Erro
     #[rustfmt::skip]
     add_save_maze_as_steps(&mut mock_app, &mut expected_output,
         &MazeSaveAsConfig::new('Z', false, "second_name", "first_name", true, false));
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<dyn Error>> {
     // /*
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
@@ -800,28 +804,28 @@ fn should_be_able_to_save_new_maze_as_and_abandon_overwrite() -> Result<(), Box<
     #[rustfmt::skip]
     add_save_maze_as_steps(&mut mock_app, &mut expected_output,
         &MazeSaveAsConfig::new('Z', false, "first_name", "first_name", true, true));
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_unable_delete_when_no_mazes() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_be_unable_delete_when_no_mazes() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_delete_maze_steps(&mut mock_app, &mut expected_output, true, "", [].to_vec(), false);
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_only_able_to_delete_maze_after_save() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_be_only_able_to_delete_maze_after_save() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
@@ -832,15 +836,15 @@ fn should_be_only_able_to_delete_maze_after_save() -> Result<(), Box<dyn Error>>
     #[rustfmt::skip]
     add_delete_maze_steps(&mut mock_app, &mut expected_output,
         false, "saved_maze", ["saved_maze"].to_vec(), true);
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_not_be_able_to_delete_invalid_maze_after_save() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+async fn should_not_be_able_to_delete_invalid_maze_after_save() -> Result<(), Box<dyn Error>> {
     let _guard = TEST_MUTEX.lock().unwrap();
     delete_files_with_ext(".", "json")?;
-    let mut mock_app = new_mock_app();
+    let mut mock_app = new_mock_app().await;
     mock_app.current_maze = Maze::new(MazeDefinition::new(0, 0));
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
@@ -851,7 +855,7 @@ fn should_not_be_able_to_delete_invalid_maze_after_save() -> Result<(), Box<dyn 
     #[rustfmt::skip]
     add_delete_maze_steps(&mut mock_app, &mut expected_output,
         false, "does_not_exist", ["saved_maze"].to_vec(), false);
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
@@ -954,22 +958,22 @@ fn default_finish() -> GeneratePointConfig {
     GeneratePointConfig::default_point()
 }
 
-#[test]
-fn should_be_able_to_generate_maze_without_printing() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_generate_maze_without_printing() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
         &mut mock_app, &mut expected_output, true, 5, 5,
         &default_rows(), &default_cols(), &default_start(), &default_finish(), None, None,
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_generate_maze_and_print_it() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_generate_maze_and_print_it() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     // Press G, enter rows/cols, answer N to all optional prompts, then Y to print.
     // The maze grid output is non-deterministic, so reset output on the
     // press-any-key spacebar to discard it, then verify only what follows.
@@ -986,16 +990,16 @@ fn should_be_able_to_generate_maze_and_print_it() -> Result<(), Box<dyn Error>> 
     expected_output.extend(to_vec_strings(MockApp::get_menu_lines()));
     mock_app.add_input_key('Q', false);
     expected_output.push("Exiting...".to_string());
-    mock_app.run()?;
+    mock_app.run().await?;
     mock_app.verify_output(&expected_output)?;
     assert_eq!(mock_app.current_maze.definition.row_count(), 5);
     assert_eq!(mock_app.current_maze.definition.col_count(), 5);
     Ok(())
 }
 
-#[test]
-fn should_prevent_generate_maze_with_invalid_rows() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_prevent_generate_maze_with_invalid_rows() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1003,13 +1007,13 @@ fn should_prevent_generate_maze_with_invalid_rows() -> Result<(), Box<dyn Error>
         &EnterNumberConfig::new("Number of rows: ", false, "3", "", &["1", "2"], "5"),
         &default_cols(), &default_start(), &default_finish(), None, None,
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_prevent_generate_maze_with_invalid_cols() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_prevent_generate_maze_with_invalid_cols() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1018,13 +1022,13 @@ fn should_prevent_generate_maze_with_invalid_cols() -> Result<(), Box<dyn Error>
         &EnterNumberConfig::new("Number of columns: ", false, "3", "", &["1", "2"], "5"),
         &default_start(), &default_finish(), None, None,
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_generate_maze_with_custom_start() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_generate_maze_with_custom_start() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1036,13 +1040,13 @@ fn should_be_able_to_generate_maze_with_custom_start() -> Result<(), Box<dyn Err
         ),
         &default_finish(), None, None,
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_generate_maze_with_custom_finish() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_generate_maze_with_custom_finish() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1055,13 +1059,13 @@ fn should_be_able_to_generate_maze_with_custom_finish() -> Result<(), Box<dyn Er
         ),
         None, None,
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_generate_maze_with_custom_start_and_finish() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_generate_maze_with_custom_start_and_finish() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1077,13 +1081,13 @@ fn should_be_able_to_generate_maze_with_custom_start_and_finish() -> Result<(), 
         ),
         None, None,
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_prevent_generate_maze_with_invalid_start_row() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_prevent_generate_maze_with_invalid_start_row() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1095,13 +1099,13 @@ fn should_prevent_generate_maze_with_invalid_start_row() -> Result<(), Box<dyn E
         ),
         &default_finish(), None, None,
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_prevent_generate_maze_with_invalid_start_col() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_prevent_generate_maze_with_invalid_start_col() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1113,13 +1117,13 @@ fn should_prevent_generate_maze_with_invalid_start_col() -> Result<(), Box<dyn E
         ),
         &default_finish(), None, None,
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_generate_maze_with_custom_min_spine_length() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_generate_maze_with_custom_min_spine_length() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1128,13 +1132,13 @@ fn should_be_able_to_generate_maze_with_custom_min_spine_length() -> Result<(), 
         Some(&EnterNumberConfig::new("Minimum solution path length:", false, "1", "", &[], "3")),
         None,
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_be_able_to_generate_maze_with_custom_max_retries() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_be_able_to_generate_maze_with_custom_max_retries() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1143,13 +1147,13 @@ fn should_be_able_to_generate_maze_with_custom_max_retries() -> Result<(), Box<d
         None,
         Some(&EnterNumberConfig::new("Maximum retries:", false, "1", "", &[], "50")),
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_prevent_generate_maze_with_invalid_min_spine_length() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_prevent_generate_maze_with_invalid_min_spine_length() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1158,13 +1162,13 @@ fn should_prevent_generate_maze_with_invalid_min_spine_length() -> Result<(), Bo
         Some(&EnterNumberConfig::new("Minimum solution path length:", false, "1", "", &["A"], "3")),
         None,
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }
 
-#[test]
-fn should_prevent_generate_maze_with_invalid_max_retries() -> Result<(), Box<dyn Error>> {
-    let mut mock_app = new_mock_app();
+#[tokio::test]
+async fn should_prevent_generate_maze_with_invalid_max_retries() -> Result<(), Box<dyn Error>> {
+    let mut mock_app = new_mock_app().await;
     let mut expected_output: Vec<String> = vec![];
     #[rustfmt::skip]
     add_generate_maze_steps(
@@ -1173,6 +1177,6 @@ fn should_prevent_generate_maze_with_invalid_max_retries() -> Result<(), Box<dyn
         None,
         Some(&EnterNumberConfig::new("Maximum retries:", false, "1", "", &["A"], "50")),
     );
-    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output)?;
+    do_press_any_key_quit_run_and_verify(&mut mock_app, &mut expected_output).await?;
     Ok(())
 }

@@ -3,6 +3,7 @@ use std::io::{self};
 use std::thread::sleep;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use data_model::{Maze, MazePoint, User};
 use maze::{GenerationAlgorithm, Generator, GeneratorOptions, MazePath, MazePrinter, MazeSolver};
 use storage::Store;
@@ -36,7 +37,8 @@ static MENU: &str = r#"*********************************************
         "#;
 
 static PRESS_ANY_KEY_TEXT: &str = "\n[** Press any key **]\n";
-pub trait App: LinePrinter {
+#[async_trait]
+pub trait App: LinePrinter + Send {
     fn get_store(&mut self) -> &mut Box<dyn Store>;
     fn get_user(&self) -> &User;
     fn get_maze(&self) -> &Maze;
@@ -48,9 +50,9 @@ pub trait App: LinePrinter {
         self.get_maze().name.clone()
     }
 
-    fn maze_name_exists(&mut self, name: &str) -> bool {
+    async fn maze_name_exists(&mut self, name: &str) -> bool {
         let owner = self.get_user().clone();
-        if let Ok(_details) = self.get_store().find_maze_by_name(&owner, name) {
+        if let Ok(_details) = self.get_store().find_maze_by_name(&owner, name).await {
             return true;
         }
         false
@@ -446,11 +448,11 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
-    fn do_open(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn do_open(&mut self) -> Result<(), Box<dyn Error>> {
         let name = self.prompt_text("Enter name of maze to open: ")?;
         let owner = self.get_user().clone();
-        let item = self.get_store().find_maze_by_name(&owner, &name)?;
-        let maze = self.get_store().get_maze(&owner, &item.id)?;
+        let item = self.get_store().find_maze_by_name(&owner, &name).await?;
+        let maze = self.get_store().get_maze(&owner, &item.id).await?;
         let id = maze.id.clone();
         *self.get_maze_mut() = maze;
         self.print_line(&format!(
@@ -459,9 +461,9 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
-    fn get_maze_names(&mut self) -> Result<Vec<String>, Box<dyn Error>> {
+    async fn get_maze_names(&mut self) -> Result<Vec<String>, Box<dyn Error>> {
         let owner = self.get_user().clone();
-        let items = self.get_store().get_maze_items(&owner, false)?;
+        let items = self.get_store().get_maze_items(&owner, false).await?;
         let mut names: Vec<String> = Vec::new();
         for item in items {
             names.push(item.name);
@@ -469,8 +471,8 @@ pub trait App: LinePrinter {
         Ok(names)
     }
 
-    fn print_maze_names(&mut self) -> Result<usize, Box<dyn Error>> {
-        let names = self.get_maze_names()?;
+    async fn print_maze_names(&mut self) -> Result<usize, Box<dyn Error>> {
+        let names = self.get_maze_names().await?;
         self.print_line(&format!("Available mazes = {}\n", names.len()))?;
         for (i, name) in names.iter().enumerate() {
             self.print_line(&format!("{} - {}", i + 1, name))?;
@@ -478,13 +480,13 @@ pub trait App: LinePrinter {
         Ok(names.len())
     }
 
-    fn do_list(&mut self) -> Result<(), Box<dyn Error>> {
-        let _ = self.print_maze_names()?;
+    async fn do_list(&mut self) -> Result<(), Box<dyn Error>> {
+        let _ = self.print_maze_names().await?;
         Ok(())
     }
 
-    fn save_maze(&mut self, name: &str, prompt_overwrite: bool) -> Result<(), Box<dyn Error>> {
-        let name_exists = self.maze_name_exists(name);
+    async fn save_maze(&mut self, name: &str, prompt_overwrite: bool) -> Result<(), Box<dyn Error>> {
+        let name_exists = self.maze_name_exists(name).await;
         if prompt_overwrite && name_exists {
             let yes = self.prompt_yes_no(&format!(
                 "A maze with the name '{name}' already exists. Overwrite it?"
@@ -501,41 +503,41 @@ pub trait App: LinePrinter {
         let mut maze = self.get_maze().clone();
         let owner = self.get_user().clone();
         if !name_exists {
-            self.get_store().create_maze(&owner, &mut maze)?;
+            self.get_store().create_maze(&owner, &mut maze).await?;
         } else {
-            self.get_store().update_maze(&owner, &mut maze)?;
+            self.get_store().update_maze(&owner, &mut maze).await?;
         }
         *self.get_maze_mut() = maze.clone();
         self.print_line(&format!("Saved as '{name}'"))?;
         Ok(())
     }
 
-    fn do_save(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn do_save(&mut self) -> Result<(), Box<dyn Error>> {
         let name = self.get_maze_name();
         if name.is_empty() {
-            self.do_save_as()?
+            self.do_save_as().await?
         } else {
-            self.save_maze(&name, false)?
+            self.save_maze(&name, false).await?
         }
         Ok(())
     }
 
-    fn do_save_as(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn do_save_as(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_line(&format!("Current name is '{}'", self.get_maze_name()))?;
         let name = self.prompt_text("Enter name of maze to save as: ")?;
-        self.save_maze(name.trim(), true)?;
+        self.save_maze(name.trim(), true).await?;
         Ok(())
     }
 
-    fn delete_maze(&mut self, name: &str) -> Result<(), Box<dyn Error>> {
+    async fn delete_maze(&mut self, name: &str) -> Result<(), Box<dyn Error>> {
         let owner = self.get_user().clone();
-        let item = self.get_store().find_maze_by_name(&owner, name)?;
-        self.get_store().delete_maze(&owner, &item.id)?;
+        let item = self.get_store().find_maze_by_name(&owner, name).await?;
+        self.get_store().delete_maze(&owner, &item.id).await?;
         Ok(())
     }
 
-    fn do_delete(&mut self) -> Result<(), Box<dyn Error>> {
-        let num = self.print_maze_names()?;
+    async fn do_delete(&mut self) -> Result<(), Box<dyn Error>> {
+        let num = self.print_maze_names().await?;
         if num == 0 {
             self.print_line("There are no mazes available to delete")?;
             return Ok(());
@@ -545,7 +547,7 @@ pub trait App: LinePrinter {
             "Are you sure you want to delete the maze '{name}'?"
         ))?;
         if yes {
-            self.delete_maze(name.trim())?;
+            self.delete_maze(name.trim()).await?;
             self.print_line("Maze deleted")?;
         }
         Ok(())
@@ -617,7 +619,7 @@ pub trait App: LinePrinter {
         Ok(())
     }
 
-    fn process_keys(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn process_keys(&mut self) -> Result<(), Box<dyn Error>> {
         loop {
             if let Some(ch) = self.read_key()? {
                 let result = match ch.to_ascii_uppercase() {
@@ -634,11 +636,11 @@ pub trait App: LinePrinter {
                     'G' => self.do_generate(),
                     'S' => self.do_solve(),
                     'P' => self.do_print(),
-                    'O' => self.do_open(),
-                    'U' => self.do_list(),
-                    'V' => self.do_save(),
-                    'Z' => self.do_save_as(),
-                    'X' => self.do_delete(),
+                    'O' => self.do_open().await,
+                    'U' => self.do_list().await,
+                    'V' => self.do_save().await,
+                    'Z' => self.do_save_as().await,
+                    'X' => self.do_delete().await,
                     'Q' => {
                         self.print_line("Exiting...")?;
                         return Ok(());
@@ -659,10 +661,10 @@ pub trait App: LinePrinter {
         }
     }
 
-    fn run(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         self.print_welcome_banner()?;
         self.print_menu()?;
-        self.process_keys()?;
+        self.process_keys().await?;
         Ok(())
     }
 }

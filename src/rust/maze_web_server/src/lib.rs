@@ -16,6 +16,7 @@ use rustls_pemfile::{certs, pkcs8_private_keys};
 use service::auth::AuthService;
 use std::sync::Arc;
 use std::sync::RwLock;
+use tokio::sync::RwLock as AsyncRwLock;
 use std::{fs::File, io::{self, BufReader}};
 use storage::{get_store, SharedStore, Store, Error as StoreError};
 
@@ -66,16 +67,16 @@ fn construct_bind_address(port: u16) -> String {
 }
 
 /// Adds the default admin account to the store if no users are registered
-fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Store>) -> Result<(), StoreError> {
-    let users = store.get_users()?;
+async fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Store>) -> Result<(), StoreError> {
+    let users = store.get_users().await?;
     if users.is_empty() {
         let password_hash = match hash_password(DEFAULT_ADMIN_ACCOUNT_PASSWORD, hash_config) {
             Ok(hash) => hash,
             Err(error) => return Err(StoreError::Other(format!("{error}"))),
         };
-        store.init_default_admin_user(DEFAULT_ADMIN_ACCOUNT_USERNAME, DEFAULT_ADMIN_ACCOUNT_EMAIL, &password_hash)?;
+        store.init_default_admin_user(DEFAULT_ADMIN_ACCOUNT_USERNAME, DEFAULT_ADMIN_ACCOUNT_EMAIL, &password_hash).await?;
     }
-    Ok(())    
+    Ok(())
 }
 
 /// Creates a configured Actix App instance with all routes, middleware, and shared state.
@@ -222,12 +223,12 @@ pub async fn run_server() -> std::io::Result<()> {
     let bind_address = construct_bind_address(config.port);
     let rustls_config = load_rustls_config(&config)?;
     let file_config = storage::FileStoreConfig::default();
-    let mut store = get_store(storage::StoreConfig::File(file_config))?;
+    let mut store = get_store(storage::StoreConfig::File(file_config)).await?;
 
-    init_user_accounts(&config.security.password_hash, &mut store)?;
+    init_user_accounts(&config.security.password_hash, &mut store).await?;
 
     let max_workers = std::thread::available_parallelism()?;
-    let shared_store: SharedStore = Arc::new(RwLock::new(store));
+    let shared_store: SharedStore = Arc::new(AsyncRwLock::new(store));
     let features: SharedFeatures = Arc::new(RwLock::new(config.features.clone()));
     let oauth_connector: oauth::SharedOAuthConnector = build_oauth_connector(&config)?;
 

@@ -6,17 +6,16 @@ use actix_web::{
     HttpMessage,
     web,
 };
-use std::sync::{RwLockReadGuard, RwLock, Arc};
+use std::sync::Arc;
+use tokio::sync::{RwLock, RwLockReadGuard};
 use storage::{SharedStore, Store};
 use log::error;
 use uuid::Uuid;
 
-fn get_store_read_lock(
+async fn get_store_read_lock(
     store: &Arc<RwLock<Box<dyn Store>>>,
-) -> Result<RwLockReadGuard<'_, Box<dyn Store>>, Error> {
-    store.read().map_err(|_| {
-        actix_web::error::ErrorInternalServerError("Failed to acquire store read lock")
-    })
+) -> RwLockReadGuard<'_, Box<dyn Store>> {
+    store.read().await
 }
 
 /// Wrapper type used to store the login token ID in Actix request extensions.
@@ -33,35 +32,37 @@ pub async fn auth_middleware(
     next: Next<impl MessageBody + 'static>,
 ) -> Result<ServiceResponse<impl MessageBody>, Error> {
     let store = req
-        .app_data::<web::Data<SharedStore>>() 
+        .app_data::<web::Data<SharedStore>>()
         .expect("Store is missing from app_data")
         .clone();
 
-     // Check for Authorization bearer (login) token 
+     // Check for Authorization bearer (login) token
      if let Some(auth_header) = req.headers().get("Authorization") {
         let raw = auth_header.to_str().map_err(|_| reject_unauthorized(&req, "Invalid header"))?;
         if let Some(token_str) = raw.strip_prefix("Bearer ") {
             let login_id = Uuid::parse_str(token_str).map_err(|_| reject_unauthorized(&req, "Invalid token format"))?;
-            if let Some(user) = {
-                let store_lock = get_store_read_lock(&store)?;
-                store_lock.find_user_by_login_id(login_id).ok()
-            } {
-                req.extensions_mut().insert(LoginId(login_id)); 
+            let user_lookup = {
+                let store_lock = get_store_read_lock(&store).await;
+                store_lock.find_user_by_login_id(login_id).await.ok()
+            };
+            if let Some(user) = user_lookup {
+                req.extensions_mut().insert(LoginId(login_id));
                 req.extensions_mut().insert(user);
                 return next.call(req).await;
             }
-        }        
+        }
     }
 
-     // Check for API Key 
+     // Check for API Key
      if let Some(api_key) = req.headers().get("X-API-KEY") {
         if let Ok(api_key_str) = api_key.to_str() {
             if let Ok(api_key) = Uuid::parse_str(api_key_str) {
-                if let Some(user) = {
-                    let store_lock = get_store_read_lock(&store)?;
-                    store_lock.find_user_by_api_key(api_key).ok()
-                } {
-                    req.extensions_mut().insert(ApiKey(api_key)); 
+                let user_lookup = {
+                    let store_lock = get_store_read_lock(&store).await;
+                    store_lock.find_user_by_api_key(api_key).await.ok()
+                };
+                if let Some(user) = user_lookup {
+                    req.extensions_mut().insert(ApiKey(api_key));
                     req.extensions_mut().insert(user);
                     return next.call(req).await;
                 }

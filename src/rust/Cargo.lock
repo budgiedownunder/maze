@@ -3977,11 +3977,13 @@ dependencies = [
 name = "maze_console"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "crossterm",
  "data_model",
  "lazy_static",
  "maze",
  "storage",
+ "tokio",
  "utils",
 ]
 
@@ -5999,11 +6001,14 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 name = "storage"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "data_model",
  "log",
  "maze",
  "serde",
  "serde_json",
+ "tokio",
+ "tokio-test",
  "unicase",
  "utils",
  "utoipa",
@@ -6281,6 +6286,28 @@ checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
 dependencies = [
  "rustls 0.21.12",
  "tokio",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-test"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f6d24790a10a7af737693a3e8f1d03faef7e6ca0cc99aae5066f533766de545"
+dependencies = [
+ "futures-core",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]

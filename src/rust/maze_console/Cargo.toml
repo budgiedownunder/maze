@@ -6,14 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = "0.1"
 data_model = { path = "../data_model" }
 maze = { path = "../maze", features = ["generation"] }
 storage = { path = "../storage" }
+tokio = { version = "1.41", features = ["macros", "rt", "rt-multi-thread"] }
 utils = { path = "../utils" }
 crossterm = "*"
 
 [dev-dependencies]
 lazy_static = "1.4"
+tokio = { version = "1.41", features = ["macros", "rt"] }
 
 [features]
 print_output = [] 

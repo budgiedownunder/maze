@@ -3,6 +3,7 @@ use std::fs;
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf, MAIN_SEPARATOR_STR};
+use async_trait::async_trait;
 use unicase::UniCase;
 use uuid::Uuid;
 
@@ -74,6 +75,7 @@ impl FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::{Maze, User};
     /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
@@ -89,7 +91,7 @@ impl FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -99,7 +101,7 @@ impl FileStore {
     /// };
     ///
     /// // Create a maze within the file store
-    /// match store.create_maze(&owner, &mut maze_to_create) {
+    /// match store.create_maze(&owner, &mut maze_to_create).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created maze in the file store with id = {}",
@@ -113,6 +115,7 @@ impl FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
     pub fn new(config: &FileStoreConfig) -> Self {
         let mut store = FileStore {
@@ -299,7 +302,7 @@ impl FileStore {
     // Loads a user by id, returning None (with a warning) if the user directory exists
     // but user.json is missing or unreadable, and Err for all other failures.
     fn load_user_if_present(&self, id: Uuid) -> Result<Option<User>, Error> {
-        match self.get_user(id) {
+        match self.read_user(id) {
             Ok(user) => Ok(Some(user)),
             Err(Error::UserIdNotFound(_)) => {
                 log::warn!("Skipping user directory '{id}': user.json is missing or unreadable");
@@ -395,6 +398,7 @@ impl Default for FileStore {
     }
 }
 
+#[async_trait]
 impl UserStore for FileStore {
     /// Adds the default admin user to the store if it doesn't already exist, else returns it
     ///
@@ -406,6 +410,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -415,7 +420,7 @@ impl UserStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Create the default admin user within the file store if needed
-    /// match store.init_default_admin_user("admin", "admin@maze.local", "my_password_hash") {
+    /// match store.init_default_admin_user("admin", "admin@maze.local", "my_password_hash").await {
     ///     Ok(user) => {
     ///         println!(
     ///             "Successfully intiialized default admin user with id {} in the file store",
@@ -429,14 +434,15 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn init_default_admin_user(
+    async fn init_default_admin_user(
         &mut self,
         username: &str,
         email: &str,
         password_hash: &str,
     ) -> Result<User, Error> {
-        match self.find_user_by_name(username) {
+        match self.find_user_by_name(username).await {
             Ok(user) => Ok(user),
             Err(error) => match error {
                 Error::UserNotFound() => {
@@ -445,7 +451,7 @@ impl UserStore for FileStore {
                     user.email = email.to_string();
                     user.is_admin = true;
                     user.password_hash = password_hash.to_string();
-                    self.create_user(&mut user)?;
+                    self.create_user(&mut user).await?;
                     Ok(user)
                 }
                 _ => Err(error),
@@ -462,6 +468,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -484,7 +491,7 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created user with id {} in the file store",
@@ -498,8 +505,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn create_user(&mut self, user: &mut User) -> Result<(), Error> {
+    async fn create_user(&mut self, user: &mut User) -> Result<(), Error> {
         user.id = User::new_id();
         user.api_key = User::new_api_key();
         self.validate_user(user, Uuid::nil())?;
@@ -516,6 +524,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -538,13 +547,13 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created user with id {} in the file store",
     ///             user.id
     ///         );
-    ///         match store.delete_user(user.id) {
+    ///         match store.delete_user(user.id).await {
     ///             Ok(_) => {
     ///                 println!("Successfully deleted user from the file store");
     ///             }
@@ -563,8 +572,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn delete_user(&mut self, id: Uuid) -> Result<(), Error> {
+    async fn delete_user(&mut self, id: Uuid) -> Result<(), Error> {
         if id.is_nil() {
             return Err(Error::UserIdMissing());
         }
@@ -588,6 +598,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -610,7 +621,7 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created user with id {} in the file store",
@@ -618,7 +629,7 @@ impl UserStore for FileStore {
     ///         );
     ///         // Change the user full name
     ///         user.full_name = "John Henry Smith".to_string();
-    ///         match store.update_user(&mut user) {
+    ///         match store.update_user(&mut user).await {
     ///             Ok(_) => {
     ///                 println!("Successfully update user within the file store");
     ///             }
@@ -637,8 +648,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn update_user(&mut self, user: &mut User) -> Result<(), Error> {
+    async fn update_user(&mut self, user: &mut User) -> Result<(), Error> {
         if user.id == Uuid::nil() {
             return Err(Error::UserIdMissing());
         }
@@ -658,6 +670,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -680,14 +693,14 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created user with id {} in the file store",
     ///             user.id
     ///         );
     ///         // Now attempt to load it again and display the results
-    ///         match store.get_user(user.id) {
+    ///         match store.get_user(user.id).await {
     ///             Ok(user_loaded) => {
     ///                 println!("Successfully loaded user from within the file store => {:?}", user_loaded);
     ///             }
@@ -706,8 +719,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn get_user(&self, id: Uuid) -> Result<User, Error> {
+    async fn get_user(&self, id: Uuid) -> Result<User, Error> {
         self.read_user(id)
     }
     /// Locates a user by their username within the store
@@ -719,6 +733,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -741,14 +756,14 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created user with id {} in the file store",
     ///             user.id
     ///         );
     ///         // Now attempt to find it again by username and display the results
-    ///         match store.find_user_by_name(&user.username) {
+    ///         match store.find_user_by_name(&user.username).await {
     ///             Ok(user_found) => {
     ///                 println!("Successfully found user within the file store => {:?}", user_found);
     ///             }
@@ -767,8 +782,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn find_user_by_name(&self, name: &str) -> Result<User, Error> {
+    async fn find_user_by_name(&self, name: &str) -> Result<User, Error> {
         self.find_user_by_string_field("username", name, Uuid::nil())
     }
     /// Locates a user by their email address within the store
@@ -780,6 +796,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -802,14 +819,14 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created user with id {} in the file store",
     ///             user.id
     ///         );
     ///         // Now attempt to find it again by email and display the results
-    ///         match store.find_user_by_email(&user.email) {
+    ///         match store.find_user_by_email(&user.email).await {
     ///             Ok(user_found) => {
     ///                 println!("Successfully found user within the file store => {:?}", user_found);
     ///             }
@@ -828,8 +845,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn find_user_by_email(&self, email: &str) -> Result<User, Error> {
+    async fn find_user_by_email(&self, email: &str) -> Result<User, Error> {
         self.find_user_by_string_field("email", email, Uuid::nil())
     }
     /// Locates a user by their api key within the store
@@ -841,6 +859,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -863,14 +882,14 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created user with id {} in the file store",
     ///             user.id
     ///         );
     ///         // Now attempt to find it again by username and display the results
-    ///         match store.find_user_by_api_key(user.api_key) {
+    ///         match store.find_user_by_api_key(user.api_key).await {
     ///             Ok(user_found) => {
     ///                 println!("Successfully found user within the file store => {:?}", user_found);
     ///             }
@@ -889,8 +908,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error> {
+    async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error> {
         let ids = self.get_user_ids()?;
         for id in ids {
             if let Some(user) = self.load_user_if_present(id)? {
@@ -910,6 +930,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::{User, UserLogin};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -937,14 +958,14 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created user with id {} in the file store",
     ///             user.id
     ///         );
     ///         // Now attempt to find it again using the login id and display the results
-    ///         match store.find_user_by_login_id(search_login_id) {
+    ///         match store.find_user_by_login_id(search_login_id).await {
     ///             Ok(user_found) => {
     ///                 println!("Successfully found user within the file store => {:?}", user_found);
     ///             }
@@ -963,8 +984,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, Error>{
+    async fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, Error>{
         let ids = self.get_user_ids()?;
         for id in ids {
             if let Some(user) = self.load_user_if_present(id)? {
@@ -988,6 +1010,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::{OAuthIdentity, User};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -1014,14 +1037,14 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created user with id {} in the file store",
     ///             user.id
     ///         );
     ///         // Now attempt to find it again by its OAuth identity and display the results
-    ///         match store.find_user_by_oauth_identity("google", "google-sub-jsmith") {
+    ///         match store.find_user_by_oauth_identity("google", "google-sub-jsmith").await {
     ///             Ok(user_found) => {
     ///                 println!("Successfully found user within the file store => {:?}", user_found);
     ///             }
@@ -1040,8 +1063,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, Error> {
+    async fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, Error> {
         let ids = self.get_user_ids()?;
         for id in ids {
             if let Some(user) = self.load_user_if_present(id)? {
@@ -1065,6 +1089,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -1087,14 +1112,14 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created user with id {} in the file store",
     ///             user.id
     ///         );
     ///         // Now attempt to load the user list and display the results
-    ///         match store.get_users() {
+    ///         match store.get_users().await {
     ///             Ok(users_found) => {
     ///                 println!("Successfully loaded {} users from within the file store", users_found.len());
     ///             }
@@ -1113,8 +1138,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn get_users(&self) -> Result<Vec<User>, Error> {
+    async fn get_users(&self) -> Result<Vec<User>, Error> {
         let ids = self.get_user_ids()?;
         let mut users: Vec<User> = Vec::new();
         for id in ids {
@@ -1135,6 +1161,7 @@ impl UserStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
@@ -1157,14 +1184,14 @@ impl UserStore for FileStore {
     /// };
     ///
     /// // Create the admin user within the file store
-    /// match store.create_user(&mut user) {
+    /// match store.create_user(&mut user).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created admin user with id {} in the file store",
     ///             user.id
     ///         );
     ///         // Now attempt to load the admin user list and display the results
-    ///         match store.get_admin_users() {
+    ///         match store.get_admin_users().await {
     ///             Ok(admins_found) => {
     ///                 println!("Successfully loaded {} admin users from within the file store", admins_found.len());
     ///             }
@@ -1183,8 +1210,9 @@ impl UserStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn get_admin_users(&self) -> Result<Vec<User>, Error> {
+    async fn get_admin_users(&self) -> Result<Vec<User>, Error> {
         let ids = self.get_user_ids()?;
         let mut admins: Vec<User> = Vec::new();
         for id in ids {
@@ -1198,6 +1226,7 @@ impl UserStore for FileStore {
     }
 }
 
+#[async_trait]
 impl MazeStore for FileStore {
     /// Creates a new maze within the file store instance
     ///
@@ -1209,6 +1238,7 @@ impl MazeStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::{Maze, User};
     /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
@@ -1225,7 +1255,7 @@ impl MazeStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1235,7 +1265,7 @@ impl MazeStore for FileStore {
     /// };
     ///
     /// // Create maze within the file store
-    /// match store.create_maze(&owner, &mut maze_to_create) {
+    /// match store.create_maze(&owner, &mut maze_to_create).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully created maze in the file store with id = {}",
@@ -1249,8 +1279,9 @@ impl MazeStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error> {
+    async fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error> {
         if maze.name.is_empty() {
             return Err(Error::MazeNameMissing());
         }
@@ -1268,6 +1299,7 @@ impl MazeStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::{Maze, User};
     /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
@@ -1277,7 +1309,7 @@ impl MazeStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1289,7 +1321,7 @@ impl MazeStore for FileStore {
     /// // Delete maze from within the file store
     /// let id = "maze_1.json".to_string();
     ///
-    /// match store.delete_maze(&owner, &id) {
+    /// match store.delete_maze(&owner, &id).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully delete maze from the file store",
@@ -1303,8 +1335,9 @@ impl MazeStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn delete_maze(&mut self, owner: &User, id: &str) -> Result<(), Error> {
+    async fn delete_maze(&mut self, owner: &User, id: &str) -> Result<(), Error> {
         if id.is_empty() {
             return Err(Error::MazeIdMissing());
         }
@@ -1324,6 +1357,7 @@ impl MazeStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::{Maze, User};
     /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
@@ -1341,7 +1375,7 @@ impl MazeStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1351,7 +1385,7 @@ impl MazeStore for FileStore {
     /// };
     ///
     /// // Update maze within the file store
-    /// match store.update_maze(&owner, &mut maze_to_update) {
+    /// match store.update_maze(&owner, &mut maze_to_update).await {
     ///     Ok(_) => {
     ///         println!(
     ///             "Successfully updated maze in the file store with id = {}",
@@ -1365,8 +1399,9 @@ impl MazeStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error> {
+    async fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error> {
         if maze.id.is_empty() {
             return Err(Error::MazeIdMissing());
         }
@@ -1390,6 +1425,7 @@ impl MazeStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::{Maze, User};
     /// use maze::{MazePath, MazePrinter};
@@ -1408,7 +1444,7 @@ impl MazeStore for FileStore {
     /// let mut store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1418,7 +1454,7 @@ impl MazeStore for FileStore {
     /// };
     ///
     /// // Create the maze within the store
-    /// if let Err(error) = store.create_maze(&owner, &mut maze_to_create) {
+    /// if let Err(error) = store.create_maze(&owner, &mut maze_to_create).await {
     ///     println!(
     ///         "Failed to create maze => {}",
     ///         error
@@ -1427,7 +1463,7 @@ impl MazeStore for FileStore {
     /// }
     ///
     /// // Now reload the maze from the store
-    /// match store.get_maze(&owner, &maze_to_create.id) {
+    /// match store.get_maze(&owner, &maze_to_create.id).await {
     ///     Ok(loaded_maze) => {
     ///         println!("Successfully loaded maze:");
     ///         let mut print_target = StdoutLinePrinter::new();
@@ -1442,8 +1478,9 @@ impl MazeStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, Error> {
+    async fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, Error> {
         if !self.maze_exists(owner, id) {
             return Err(Error::MazeIdNotFound(id.to_string()));
         }
@@ -1473,6 +1510,7 @@ impl MazeStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
@@ -1482,7 +1520,7 @@ impl MazeStore for FileStore {
     /// let store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1494,7 +1532,7 @@ impl MazeStore for FileStore {
     /// let id = "my_maze".to_string();
     ///
     /// // Attempt to find the maze item
-    /// match store.find_maze_by_name(&owner, &id) {
+    /// match store.find_maze_by_name(&owner, &id).await {
     ///     Ok(maze_item) => {
     ///         println!("Successfully found maze item => id = {}, name = {}",
     ///             maze_item.id,
@@ -1509,8 +1547,9 @@ impl MazeStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn find_maze_by_name(&self, owner: &User, name: &str) -> Result<MazeItem, Error> {
+    async fn find_maze_by_name(&self, owner: &User, name: &str) -> Result<MazeItem, Error> {
         let id = self.make_maze_id(name);
         if !name.is_empty() && self.maze_exists(owner, &id) {
             return Ok(MazeItem {
@@ -1538,6 +1577,7 @@ impl MazeStore for FileStore {
     /// # // Make sure the store is in a suitable state prior to running the doc test
     /// # use storage::test_setup::setup;
     /// # setup();
+    /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
     /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
@@ -1547,7 +1587,7 @@ impl MazeStore for FileStore {
     /// let store = FileStore::new(&FileStoreConfig::default());
     ///
     /// // Locate the owner by username
-    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
     /// let owner = match find_user_result {
     ///    Ok(user) => user,
     ///    Err(error) => {
@@ -1557,7 +1597,7 @@ impl MazeStore for FileStore {
     /// };
     ///
     /// // Attempt to load the maze items along with their definitions
-    /// match store.get_maze_items(&owner, true) {
+    /// match store.get_maze_items(&owner, true).await {
     ///     Ok(maze_items) => {
     ///         println!("Successfully loaded {} maze items",
     ///             maze_items.len()
@@ -1570,8 +1610,9 @@ impl MazeStore for FileStore {
     ///         );
     ///     }
     /// }
+    /// # });
     /// ```
-    fn get_maze_items(
+    async fn get_maze_items(
         &self,
         owner: &User,
         include_definitions: bool,
@@ -1593,7 +1634,7 @@ impl MazeStore for FileStore {
                             if let Some(name_str) = name.to_str() {
                                 let mut name_use = name_str.to_string();
                                 let mut definition: Option<String> = None;
-                                if let Ok(maze_loaded) = self.get_maze(owner, path_str) {
+                                if let Ok(maze_loaded) = self.get_maze(owner, path_str).await {
                                     if include_definitions {
                                         definition = Some(
                                             serde_json::to_string(&maze_loaded)
@@ -1620,8 +1661,9 @@ impl MazeStore for FileStore {
     }
 }
 
+#[async_trait]
 impl Manage for FileStore {
-    fn empty(&mut self) -> Result<(), Error> {
+    async fn empty(&mut self) -> Result<(), Error> {
         let root_path = Path::new(&self.data_dir);
         if root_path.is_dir() {
             if let Err(error) = fs::remove_dir_all(root_path) {
@@ -1649,9 +1691,9 @@ mod tests {
     // Utility functions
     //****************************************************************
     // Create a new, empty store
-    fn new_store() -> FileStore {
+    async fn new_store() -> FileStore {
         let mut store = FileStore::new(&FileStoreConfig::default());
-        if let Err(error) = store.empty() {
+        if let Err(error) = store.empty().await {
             panic!("new_store() failed to empty content: {error}");
         }
         store
@@ -1679,7 +1721,7 @@ mod tests {
     }
 
     // Create a user in the file store
-    fn create_user(
+    async fn create_user(
         store: &mut FileStore,
         is_admin: bool,
         username: &str,
@@ -1689,7 +1731,7 @@ mod tests {
     ) -> User {
         let mut user = init_test_user(is_admin, username, full_name, email, password_hash);
 
-        if let Err(error) = store.create_user(&mut user) {
+        if let Err(error) = store.create_user(&mut user).await {
             panic!("{}", error);
         }
         user
@@ -1720,9 +1762,9 @@ mod tests {
     //****************************************************************
     // User tests
     //****************************************************************
-    #[test]
-    fn can_create_valid_user() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_create_valid_user() {
+        let mut store = new_store().await;
         let _ = create_user(
             &mut store,
             false,
@@ -1730,37 +1772,37 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "No username provided for the user")]
-    fn cannot_create_user_without_name() {
-        let mut store = new_store();
-        let user = create_user(&mut store, false, "", "", "", "");
+    async fn cannot_create_user_without_name() {
+        let mut store = new_store().await;
+        let user = create_user(&mut store, false, "", "", "", "").await;
         panic!("Successfully created user {user:?} but did not expect to");
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "The email address is invalid")]
-    fn cannot_create_user_with_invalid_email() {
-        let mut store = new_store();
-        let user = create_user(&mut store, false, "test", "", "bad_email_address", "");
+    async fn cannot_create_user_with_invalid_email() {
+        let mut store = new_store().await;
+        let user = create_user(&mut store, false, "test", "", "bad_email_address", "").await;
         panic!("Successfully created user {user:?} but did not expect to");
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "No password provided for the user")]
-    fn cannot_create_user_without_password() {
-        let mut store = new_store();
-        let user = create_user(&mut store, false, "test", "", "test@company.com", "");
+    async fn cannot_create_user_without_password() {
+        let mut store = new_store().await;
+        let user = create_user(&mut store, false, "test", "", "test@company.com", "").await;
         panic!("Successfully created user {user:?} but did not expect to");
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "The username is already taken")]
-    fn cannot_create_user_with_existing_name() {
-        let mut store = new_store();
+    async fn cannot_create_user_with_existing_name() {
+        let mut store = new_store().await;
         let _ = create_user(
             &mut store,
             false,
@@ -1768,7 +1810,7 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let _ = create_user(
             &mut store,
             false,
@@ -1776,13 +1818,13 @@ mod tests {
             "",
             "test@company.com2",
             "password_hash2",
-        );
+        ).await;
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "The email is already taken")]
-    fn cannot_create_user_with_existing_email() {
-        let mut store = new_store();
+    async fn cannot_create_user_with_existing_email() {
+        let mut store = new_store().await;
         let _ = create_user(
             &mut store,
             false,
@@ -1790,7 +1832,7 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let _ = create_user(
             &mut store,
             false,
@@ -1798,12 +1840,12 @@ mod tests {
             "",
             "test@company.com",
             "password_hash2",
-        );
+        ).await;
     }
 
-    #[test]
-    fn can_get_user_that_exists() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_get_user_that_exists() {
+        let mut store = new_store().await;
         let user = create_user(
             &mut store,
             false,
@@ -1811,9 +1853,9 @@ mod tests {
             "",
             "test@company.com",
             "password_hash2",
-        );
+        ).await;
 
-        match store.get_user(user.id) {
+        match store.get_user(user.id).await {
             Ok(user_loaded) => {
                 if user_loaded != user {
                     panic!("Loaded user content is different to user content saved");
@@ -1825,11 +1867,11 @@ mod tests {
         }
     }
 
-    #[test]
-    fn cannot_get_user_that_does_not_exist() {
-        let store = new_store();
+    #[tokio::test]
+    async fn cannot_get_user_that_does_not_exist() {
+        let store = new_store().await;
         let id = User::new_id();
-        match store.get_user(id) {
+        match store.get_user(id).await {
             Ok(_) => {
                 panic!(
                     "Loaded user content for id '{id}' when did not expected to"
@@ -1847,9 +1889,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn can_delete_user_that_exists() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_delete_user_that_exists() {
+        let mut store = new_store().await;
         let user = create_user(
             &mut store,
             false,
@@ -1857,9 +1899,9 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
 
-        match store.delete_user(user.id) {
+        match store.delete_user(user.id).await {
             Ok(_) => {
                 if store.user_dir_exists(user.id) {
                     panic!("User directory {} still exists", user.id);
@@ -1871,12 +1913,12 @@ mod tests {
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "No id provided for the user")]
-    fn cannot_delete_user_with_empty_id() {
-        let mut store = new_store();
+    async fn cannot_delete_user_with_empty_id() {
+        let mut store = new_store().await;
 
-        match store.delete_user(Uuid::nil()) {
+        match store.delete_user(Uuid::nil()).await {
             Ok(()) => {
                 panic!("delete_user() suceeded for nil id");
             }
@@ -1886,12 +1928,12 @@ mod tests {
         }
     }
 
-    #[test]
-    fn cannot_delete_user_that_does_not_exist() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn cannot_delete_user_that_does_not_exist() {
+        let mut store = new_store().await;
         let id = User::new_id();
 
-        match store.delete_user(id) {
+        match store.delete_user(id).await {
             Ok(()) => {
                 panic!("delete_user() suceeded for id {id}");
             }
@@ -1907,9 +1949,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn can_update_existing_user() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_update_existing_user() {
+        let mut store = new_store().await;
         let mut user = create_user(
             &mut store,
             false,
@@ -1917,18 +1959,18 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
-        if let Err(error) = store.update_user(&mut user) {
+        ).await;
+        if let Err(error) = store.update_user(&mut user).await {
             panic!("Failed to update user: '{error}'");
         }
     }
 
-    #[test]
-    fn cannot_update_user_that_does_not_exist() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn cannot_update_user_that_does_not_exist() {
+        let mut store = new_store().await;
         let mut user = init_test_user(false, "test", "", "test@company.com", "password_hash");
         user.id = User::new_id();
-        if let Err(error) = store.update_user(&mut user) {
+        if let Err(error) = store.update_user(&mut user).await {
             let err_msg = error.to_string();
             let err_msg_expected = Error::UserIdNotFound(user.id.to_string()).to_string();
             if err_msg != err_msg_expected {
@@ -1939,10 +1981,10 @@ mod tests {
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "No id provided for the user")]
-    fn cannot_update_existing_user_without_id() {
-        let mut store = new_store();
+    async fn cannot_update_existing_user_without_id() {
+        let mut store = new_store().await;
         let mut user = create_user(
             &mut store,
             false,
@@ -1950,17 +1992,17 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         user.id = Uuid::nil();
-        if let Err(error) = store.update_user(&mut user) {
+        if let Err(error) = store.update_user(&mut user).await {
             panic!("{error}'");
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "No username provided for the user")]
-    fn cannot_update_existing_user_without_name() {
-        let mut store = new_store();
+    async fn cannot_update_existing_user_without_name() {
+        let mut store = new_store().await;
         let mut user = create_user(
             &mut store,
             false,
@@ -1968,17 +2010,17 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         user.username = "".to_string();
-        if let Err(error) = store.update_user(&mut user) {
+        if let Err(error) = store.update_user(&mut user).await {
             panic!("{}", error.to_string());
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "No email address provided for the user")]
-    fn cannot_update_existing_user_without_email() {
-        let mut store = new_store();
+    async fn cannot_update_existing_user_without_email() {
+        let mut store = new_store().await;
         let mut user = create_user(
             &mut store,
             false,
@@ -1986,17 +2028,17 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         user.email = "".to_string();
-        if let Err(error) = store.update_user(&mut user) {
+        if let Err(error) = store.update_user(&mut user).await {
             panic!("{}", error.to_string());
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "The email address is invalid")]
-    fn cannot_update_existing_user_with_invalid_email() {
-        let mut store = new_store();
+    async fn cannot_update_existing_user_with_invalid_email() {
+        let mut store = new_store().await;
         let mut user = create_user(
             &mut store,
             false,
@@ -2004,17 +2046,17 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         user.email = "bad_email_address".to_string();
-        if let Err(error) = store.update_user(&mut user) {
+        if let Err(error) = store.update_user(&mut user).await {
             panic!("{}", error.to_string());
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "No password provided for the user")]
-    fn cannot_update_existing_user_without_password() {
-        let mut store = new_store();
+    async fn cannot_update_existing_user_without_password() {
+        let mut store = new_store().await;
         let mut user = create_user(
             &mut store,
             false,
@@ -2022,17 +2064,17 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         user.password_hash = "".to_string();
-        if let Err(error) = store.update_user(&mut user) {
+        if let Err(error) = store.update_user(&mut user).await {
             panic!("{}", error.to_string());
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "The username is already taken")]
-    fn cannot_update_user_with_existing_name() {
-        let mut store = new_store();
+    async fn cannot_update_user_with_existing_name() {
+        let mut store = new_store().await;
         let user = create_user(
             &mut store,
             false,
@@ -2040,7 +2082,7 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let mut user2 = create_user(
             &mut store,
             false,
@@ -2048,17 +2090,17 @@ mod tests {
             "",
             "test2@company.com",
             "password_hash2",
-        );
+        ).await;
         user2.username = user.username;
-        if let Err(error) = store.update_user(&mut user2) {
+        if let Err(error) = store.update_user(&mut user2).await {
             panic!("{}", error.to_string());
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "The email is already taken")]
-    fn cannot_update_user_with_existing_email() {
-        let mut store = new_store();
+    async fn cannot_update_user_with_existing_email() {
+        let mut store = new_store().await;
         let user = create_user(
             &mut store,
             false,
@@ -2066,7 +2108,7 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let mut user2 = create_user(
             &mut store,
             false,
@@ -2074,16 +2116,16 @@ mod tests {
             "",
             "test2@company.com",
             "password_hash2",
-        );
+        ).await;
         user2.email = user.email;
-        if let Err(error) = store.update_user(&mut user2) {
+        if let Err(error) = store.update_user(&mut user2).await {
             panic!("{}", error.to_string());
         }
     }
 
-    #[test]
-    fn can_find_existing_user_by_name() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_find_existing_user_by_name() {
+        let mut store = new_store().await;
         let _ = create_user(
             &mut store,
             false,
@@ -2091,16 +2133,16 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
-        if let Err(error) = store.find_user_by_name("test") {
+        ).await;
+        if let Err(error) = store.find_user_by_name("test").await {
             panic!("Failed to find user by name: {error}");
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "User not found")]
-    fn cannot_find_non_existent_user_by_name() {
-        let mut store = new_store();
+    async fn cannot_find_non_existent_user_by_name() {
+        let mut store = new_store().await;
         let _ = create_user(
             &mut store,
             false,
@@ -2108,15 +2150,15 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
-        if let Err(error) = store.find_user_by_name("unknown") {
+        ).await;
+        if let Err(error) = store.find_user_by_name("unknown").await {
             panic!("{}", error.to_string());
         }
     }
 
-    #[test]
-    fn can_find_existing_user_by_email() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_find_existing_user_by_email() {
+        let mut store = new_store().await;
         let user = create_user(
             &mut store,
             false,
@@ -2124,16 +2166,16 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
-        if let Err(error) = store.find_user_by_email(&user.email) {
+        ).await;
+        if let Err(error) = store.find_user_by_email(&user.email).await {
             panic!("Failed to find user by email: {error}");
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "User not found")]
-    fn cannot_find_non_existent_user_by_email() {
-        let mut store = new_store();
+    async fn cannot_find_non_existent_user_by_email() {
+        let mut store = new_store().await;
         let _ = create_user(
             &mut store,
             false,
@@ -2141,15 +2183,15 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
-        if let Err(error) = store.find_user_by_email("unknown@company.com") {
+        ).await;
+        if let Err(error) = store.find_user_by_email("unknown@company.com").await {
             panic!("{}", error.to_string());
         }
     }
 
-    #[test]
-    fn can_find_existing_user_by_api_key() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_find_existing_user_by_api_key() {
+        let mut store = new_store().await;
         let user = create_user(
             &mut store,
             false,
@@ -2157,24 +2199,24 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
-        if let Err(error) = store.find_user_by_api_key(user.api_key) {
+        ).await;
+        if let Err(error) = store.find_user_by_api_key(user.api_key).await {
             panic!("Failed to find user by api_key: {error}");
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "User not found")]
-    fn cannot_find_existing_user_by_invalid_api_key() {
-        let store = new_store();
-        if let Err(error) = store.find_user_by_api_key(User::new_api_key()) {
+    async fn cannot_find_existing_user_by_invalid_api_key() {
+        let store = new_store().await;
+        if let Err(error) = store.find_user_by_api_key(User::new_api_key()).await {
             panic!("{}", error.to_string());
         }
     }
 
-    #[test]
-    fn can_get_user_list() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_get_user_list() {
+        let mut store = new_store().await;
         let _ = create_user(
             &mut store,
             false,
@@ -2182,7 +2224,7 @@ mod tests {
             "",
             "test4@company.com",
             "password_hash",
-        );
+        ).await;
         let _ = create_user(
             &mut store,
             false,
@@ -2190,7 +2232,7 @@ mod tests {
             "",
             "test1@company.com",
             "password_hash",
-        );
+        ).await;
         let _ = create_user(
             &mut store,
             false,
@@ -2198,7 +2240,7 @@ mod tests {
             "",
             "test2@company.com",
             "password_hash",
-        );
+        ).await;
         let _ = create_user(
             &mut store,
             false,
@@ -2206,8 +2248,8 @@ mod tests {
             "",
             "test3@company.com",
             "password_hash",
-        );
-        match store.get_users() {
+        ).await;
+        match store.get_users().await {
             Ok(users) => {
                 let count_expected = 4;
                 if users.len() != count_expected {
@@ -2230,47 +2272,47 @@ mod tests {
         }
     }
 
-    #[test]
-    fn can_get_empty_user_list_when_there_are_no_users() {
-        let store = new_store();
-        if let Err(error) = store.get_users() {
+    #[tokio::test]
+    async fn can_get_empty_user_list_when_there_are_no_users() {
+        let store = new_store().await;
+        if let Err(error) = store.get_users().await {
             panic!("{}", error.to_string());
         }
     }
 
-    #[test]
-    fn get_users_skips_orphaned_user_directory() {
-        let mut store = new_store();
-        let _ = create_user(&mut store, false, "valid", "", "valid@company.com", "hash");
+    #[tokio::test]
+    async fn get_users_skips_orphaned_user_directory() {
+        let mut store = new_store().await;
+        let _ = create_user(&mut store, false, "valid", "", "valid@company.com", "hash").await;
         let orphan_id = Uuid::new_v4();
         std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
             .expect("failed to create orphan directory");
-        let users = store.get_users().expect("get_users should succeed despite orphaned directory");
+        let users = store.get_users().await.expect("get_users should succeed despite orphaned directory");
         assert_eq!(users.len(), 1);
         assert_eq!(users[0].username, "valid");
     }
 
-    #[test]
-    fn find_user_by_email_skips_orphaned_user_directory() {
-        let mut store = new_store();
-        let _ = create_user(&mut store, false, "valid", "", "valid@company.com", "hash");
+    #[tokio::test]
+    async fn find_user_by_email_skips_orphaned_user_directory() {
+        let mut store = new_store().await;
+        let _ = create_user(&mut store, false, "valid", "", "valid@company.com", "hash").await;
         let orphan_id = Uuid::new_v4();
         std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
             .expect("failed to create orphan directory");
-        store.find_user_by_email("valid@company.com").expect("find_user_by_email should succeed despite orphaned directory");
+        store.find_user_by_email("valid@company.com").await.expect("find_user_by_email should succeed despite orphaned directory");
     }
 
-    #[test]
-    fn can_find_user_by_oauth_identity() {
+    #[tokio::test]
+    async fn can_find_user_by_oauth_identity() {
         use data_model::OAuthIdentity;
-        let mut store = new_store();
+        let mut store = new_store().await;
         let mut alice = init_test_user(false, "alice", "Alice", "alice@example.com", "hash");
         alice.oauth_identities.push(OAuthIdentity::new(
             "google".to_string(),
             "google-sub-alice".to_string(),
             Some("alice@example.com".to_string()),
         ));
-        store.create_user(&mut alice).expect("create alice");
+        store.create_user(&mut alice).await.expect("create alice");
 
         let mut bob = init_test_user(false, "bob", "Bob", "bob@example.com", "hash");
         bob.oauth_identities.push(OAuthIdentity::new(
@@ -2278,38 +2320,38 @@ mod tests {
             "12345".to_string(),
             Some("bob@example.com".to_string()),
         ));
-        store.create_user(&mut bob).expect("create bob");
+        store.create_user(&mut bob).await.expect("create bob");
 
-        let found = store.find_user_by_oauth_identity("google", "google-sub-alice")
+        let found = store.find_user_by_oauth_identity("google", "google-sub-alice").await
             .expect("alice should be found by google identity");
         assert_eq!(found.id, alice.id);
 
-        let found = store.find_user_by_oauth_identity("github", "12345")
+        let found = store.find_user_by_oauth_identity("github", "12345").await
             .expect("bob should be found by github identity");
         assert_eq!(found.id, bob.id);
 
         // Provider name is matched case-insensitively (canonical form is lowercase).
-        let found = store.find_user_by_oauth_identity("GOOGLE", "google-sub-alice")
+        let found = store.find_user_by_oauth_identity("GOOGLE", "google-sub-alice").await
             .expect("provider name should match case-insensitively");
         assert_eq!(found.id, alice.id);
 
         // provider_user_id is matched exactly (case-sensitive).
-        assert!(store.find_user_by_oauth_identity("google", "GOOGLE-SUB-ALICE").is_err());
+        assert!(store.find_user_by_oauth_identity("google", "GOOGLE-SUB-ALICE").await.is_err());
 
         // Wrong provider for an existing provider_user_id must not match.
-        assert!(store.find_user_by_oauth_identity("github", "google-sub-alice").is_err());
+        assert!(store.find_user_by_oauth_identity("github", "google-sub-alice").await.is_err());
 
         // Unknown identity returns UserNotFound.
-        assert!(store.find_user_by_oauth_identity("google", "no-such-sub").is_err());
+        assert!(store.find_user_by_oauth_identity("google", "no-such-sub").await.is_err());
     }
 
-    #[test]
-    fn find_user_by_oauth_identity_supports_multiple_providers_per_user() {
+    #[tokio::test]
+    async fn find_user_by_oauth_identity_supports_multiple_providers_per_user() {
         // Locks in the multi-provider-per-user invariant: a single user with both
         // Google and GitHub identities is found by either lookup, returning the
         // same User.id.
         use data_model::OAuthIdentity;
-        let mut store = new_store();
+        let mut store = new_store().await;
         let mut alice = init_test_user(false, "alice", "Alice", "alice@example.com", "hash");
         alice.oauth_identities.push(OAuthIdentity::new(
             "google".to_string(),
@@ -2321,55 +2363,55 @@ mod tests {
             "67890".to_string(),
             Some("alice@example.com".to_string()),
         ));
-        store.create_user(&mut alice).expect("create alice");
+        store.create_user(&mut alice).await.expect("create alice");
 
-        let by_google = store.find_user_by_oauth_identity("google", "google-sub-alice")
+        let by_google = store.find_user_by_oauth_identity("google", "google-sub-alice").await
             .expect("found via google");
-        let by_github = store.find_user_by_oauth_identity("github", "67890")
+        let by_github = store.find_user_by_oauth_identity("github", "67890").await
             .expect("found via github");
         assert_eq!(by_google.id, alice.id);
         assert_eq!(by_github.id, alice.id);
         assert_eq!(by_google.id, by_github.id);
     }
 
-    #[test]
-    fn find_user_by_oauth_identity_skips_orphaned_user_directory() {
+    #[tokio::test]
+    async fn find_user_by_oauth_identity_skips_orphaned_user_directory() {
         use data_model::OAuthIdentity;
-        let mut store = new_store();
+        let mut store = new_store().await;
         let mut alice = init_test_user(false, "valid", "", "valid@company.com", "hash");
         alice.oauth_identities.push(OAuthIdentity::new(
             "google".to_string(),
             "sub-1".to_string(),
             Some("valid@company.com".to_string()),
         ));
-        store.create_user(&mut alice).expect("create user");
+        store.create_user(&mut alice).await.expect("create user");
         let orphan_id = Uuid::new_v4();
         std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
             .expect("failed to create orphan directory");
-        store.find_user_by_oauth_identity("google", "sub-1")
+        store.find_user_by_oauth_identity("google", "sub-1").await
             .expect("find_user_by_oauth_identity should succeed despite orphaned directory");
     }
 
-    #[test]
-    fn find_user_by_login_id_skips_orphaned_user_directory() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn find_user_by_login_id_skips_orphaned_user_directory() {
+        let mut store = new_store().await;
         let mut user = init_test_user(false, "valid", "", "valid@company.com", "hash");
         let login = data_model::UserLogin::new(24, None, None);
         let login_id = login.id;
         user.logins.push(login);
-        store.create_user(&mut user).expect("failed to create user");
+        store.create_user(&mut user).await.expect("failed to create user");
         let orphan_id = Uuid::new_v4();
         std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
             .expect("failed to create orphan directory");
-        store.find_user_by_login_id(login_id).expect("find_user_by_login_id should succeed despite orphaned directory");
+        store.find_user_by_login_id(login_id).await.expect("find_user_by_login_id should succeed despite orphaned directory");
     }
 
     //****************************************************************
     // Maze tests
     //****************************************************************
-    #[test]
-    fn can_save_maze_to_valid_file_path() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_save_maze_to_valid_file_path() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2377,7 +2419,7 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
 
         match store.write_maze_file(&owner, &mut maze, &id, true) {
@@ -2386,10 +2428,10 @@ mod tests {
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "A maze with id 'maze.json' already exists")]
-    fn cannot_save_maze_to_existing_file_path_if_overwrite_disabled() {
-        let mut store = new_store();
+    async fn cannot_save_maze_to_existing_file_path_if_overwrite_disabled() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2397,7 +2439,7 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
         let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
@@ -2413,9 +2455,9 @@ mod tests {
             }
         }
     }
-    #[test]
-    fn can_save_maze_to_existing_file_path_if_overwrite_enabled() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_save_maze_to_existing_file_path_if_overwrite_enabled() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2423,7 +2465,7 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (id, mut maze) = init_test_maze(&store, "maze", false, true);
         let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
@@ -2436,9 +2478,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn can_create_maze_that_does_not_exist() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_create_maze_that_does_not_exist() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2446,19 +2488,19 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (_id, mut maze) = init_test_maze(&store, "maze", false, true);
 
-        match store.create_maze(&owner, &mut maze) {
+        match store.create_maze(&owner, &mut maze).await {
             Ok(_) => {}
             Err(error) => panic!("Failed to create maze: {error}"),
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "No name provided")]
-    fn cannot_create_maze_with_empty_name() {
-        let mut store = new_store();
+    async fn cannot_create_maze_with_empty_name() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2466,19 +2508,19 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (_, mut maze) = init_test_maze(&store, "maze", false, false);
 
-        match store.create_maze(&owner, &mut maze) {
+        match store.create_maze(&owner, &mut maze).await {
             Ok(_) => panic!("Successfully saved unnamed maze but did not expect to"),
             Err(error) => panic!("{}", error),
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "A maze with id 'maze.json' already exists")]
-    fn cannot_create_maze_that_exists() {
-        let mut store = new_store();
+    async fn cannot_create_maze_that_exists() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2486,12 +2528,12 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (id, mut maze) = init_test_maze(&store, "maze", false, true);
         let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
 
-        match store.create_maze(&owner, &mut maze) {
+        match store.create_maze(&owner, &mut maze).await {
             Ok(_) => {
                 panic!(
                     "Successfully created maze when file: {path} existed, when should not have"
@@ -2503,9 +2545,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn can_update_existing_maze() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_update_existing_maze() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2513,12 +2555,12 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
         let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
 
-        match store.update_maze(&owner, &mut maze) {
+        match store.update_maze(&owner, &mut maze).await {
             Ok(_) => {}
             Err(error) => {
                 panic!("{}", error);
@@ -2526,10 +2568,10 @@ mod tests {
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "A maze with id 'maze.json' was not found")]
-    fn cannot_update_non_existent_maze() {
-        let mut store = new_store();
+    async fn cannot_update_non_existent_maze() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2537,10 +2579,10 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
 
-        match store.update_maze(&owner, &mut maze) {
+        match store.update_maze(&owner, &mut maze).await {
             Ok(_) => {
                 panic!("Successfully updated maze when file: {id} did not exist");
             }
@@ -2550,10 +2592,10 @@ mod tests {
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "No id provided for the maze")]
-    fn cannot_update_maze_with_no_id() {
-        let mut store = new_store();
+    async fn cannot_update_maze_with_no_id() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2561,10 +2603,10 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (_, mut maze) = init_test_maze(&store, "maze", false, true);
 
-        match store.update_maze(&owner, &mut maze) {
+        match store.update_maze(&owner, &mut maze).await {
             Ok(_) => {
                 panic!("Successfully updated maze when maze had no id");
             }
@@ -2574,9 +2616,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn can_delete_maze() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_delete_maze() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2584,13 +2626,13 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (id, mut maze) = init_test_maze(&store, "maze", true, true);
 
         match store.write_maze_file(&owner, &mut maze, &id, true) {
             Ok(_) => {
                 if store.maze_exists(&owner, &maze.id) {
-                    match store.delete_maze(&owner, &maze.id) {
+                    match store.delete_maze(&owner, &maze.id).await {
                         Ok(_) => {
                             if store.maze_exists(&owner, &maze.id) {
                                 panic!("Maze file {} still exists after maze delete", maze.id);
@@ -2606,10 +2648,10 @@ mod tests {
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "No id provided for the maze")]
-    fn cannot_delete_maze_with_empty_id() {
-        let mut store = new_store();
+    async fn cannot_delete_maze_with_empty_id() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2617,9 +2659,9 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
 
-        match store.delete_maze(&owner, "") {
+        match store.delete_maze(&owner, "").await {
             Ok(()) => {
                 panic!("delete_maze() suceeded for blank id");
             }
@@ -2629,9 +2671,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn can_get_maze_that_exists() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn can_get_maze_that_exists() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2639,11 +2681,11 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let (_id, mut maze) = init_test_maze(&store, "maze", true, true);
 
-        match store.create_maze(&owner, &mut maze) {
-            Ok(_) => match store.get_maze(&owner, &maze.id) {
+        match store.create_maze(&owner, &mut maze).await {
+            Ok(_) => match store.get_maze(&owner, &maze.id).await {
                 Ok(maze_loaded) => {
                     if maze_loaded != maze {
                         panic!("Loaded maze content is different to maze content saved");
@@ -2659,10 +2701,10 @@ mod tests {
         }
     }
 
-    #[test]
+    #[tokio::test]
     #[should_panic(expected = "A maze with id 'missing.json' was not found")]
-    fn cannot_get_maze_that_does_not_exist() {
-        let mut store = new_store();
+    async fn cannot_get_maze_that_does_not_exist() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2670,10 +2712,10 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
         let id = "missing.json";
 
-        match store.get_maze(&owner, id) {
+        match store.get_maze(&owner, id).await {
             Ok(_) => {
                 panic!("Succesfully loaded maze content when file is missing");
             }
@@ -2683,9 +2725,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn maze_item_list_should_be_empty() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn maze_item_list_should_be_empty() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2693,9 +2735,9 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
 
-        match store.get_maze_items(&owner, false) {
+        match store.get_maze_items(&owner, false).await {
             Ok(items) => {
                 if !items.is_empty() {
                     panic!("Maze item list is not empty ({} items found)", items.len());
@@ -2707,9 +2749,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn maze_item_list_should_not_be_empty() {
-        let mut store = new_store();
+    #[tokio::test]
+    async fn maze_item_list_should_not_be_empty() {
+        let mut store = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2717,21 +2759,21 @@ mod tests {
             "",
             "test@company.com",
             "password_hash",
-        );
+        ).await;
 
         let (_, mut maze_1) = init_test_maze(&store, "maze_1", false, true);
-        match store.create_maze(&owner, &mut maze_1) {
+        match store.create_maze(&owner, &mut maze_1).await {
             Ok(_) => {}
             Err(error) => panic!("Failed to create maze {}: {}", maze_1.name, error),
         }
 
         let (_, mut maze_2) = init_test_maze(&store, "maze_2", false, true);
-        match store.create_maze(&owner, &mut maze_2) {
+        match store.create_maze(&owner, &mut maze_2).await {
             Ok(_) => {}
             Err(error) => panic!("Failed to create maze {}: {}", maze_2.name, error),
         }
 
-        match store.get_maze_items(&owner, false) {
+        match store.get_maze_items(&owner, false).await {
             Ok(items) => {
                 if items.len() != 2 {
                     panic!("Maze item list does not contain the expected number of items (2 expected, {} found)", items.len());
@@ -2744,7 +2786,7 @@ mod tests {
             }
         }
 
-        match store.get_maze_items(&owner, true) {
+        match store.get_maze_items(&owner, true).await {
             Ok(items) => {
                 if items.len() != 2 {
                     panic!("Maze item list does not contain the expected number of items (2 expected, {} found)", items.len());
