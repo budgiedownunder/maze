@@ -1,12 +1,16 @@
 // Re-export modules
 mod error;
 mod file_store;
+#[cfg(feature = "sql-store")]
+mod sql_store;
 pub mod store;
 pub mod validation;
 
 // Re-export traits and structs
 pub use error::Error;
 pub use file_store::{FileStore, FileStoreConfig};
+#[cfg(feature = "sql-store")]
+pub use sql_store::{SqlStore, SqlStoreConfig};
 pub use store::MazeItem;
 pub use store::MazeStore;
 pub use store::Store;
@@ -16,6 +20,8 @@ pub use store::UserStore;
 /// Represents the supported store configurations
 pub enum StoreConfig {
     File(FileStoreConfig),
+    #[cfg(feature = "sql-store")]
+    Sql(SqlStoreConfig),
 }
 
 /// Creates and returns a store of the given type
@@ -94,12 +100,11 @@ pub enum StoreConfig {
 /// # });
 /// ```
 pub async fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, Error> {
-    let store = match config
-    {
-        StoreConfig::File(file_config) => file_store::FileStore::new(&file_config),
-    };
-
-    Ok(Box::new(store))
+    match config {
+        StoreConfig::File(file_config) => Ok(Box::new(file_store::FileStore::new(&file_config))),
+        #[cfg(feature = "sql-store")]
+        StoreConfig::Sql(sql_config) => Ok(Box::new(sql_store::SqlStore::new(sql_config).await?)),
+    }
 }
 
 /// Hidden module that provides setup functionality for doc tests.

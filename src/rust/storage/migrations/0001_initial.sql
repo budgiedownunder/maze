@@ -37,9 +37,14 @@
 -- at ~64 KB per row. Per-deployment maze cell-count caps are enforced at the
 -- application layer (handlers / UI / console), not in the schema.
 
+-- Note on `is_admin INTEGER`: stored as 0/1, not BOOLEAN. SQLx's `Any` driver
+-- in 0.8 does not bridge SQLite's BOOLEAN affinity (read fails with "Any
+-- driver does not support the SQLite type Bool"). INTEGER is the lowest
+-- common denominator that decodes uniformly across PostgreSQL, MySQL, and
+-- SQLite. The SqlStore code converts to/from `bool` at the Rust boundary.
 CREATE TABLE IF NOT EXISTS users (
     id            TEXT NOT NULL PRIMARY KEY,
-    is_admin      BOOLEAN NOT NULL DEFAULT FALSE,
+    is_admin      INTEGER NOT NULL DEFAULT 0,
     username      TEXT NOT NULL,
     full_name     TEXT NOT NULL DEFAULT '',
     email         TEXT NOT NULL,
