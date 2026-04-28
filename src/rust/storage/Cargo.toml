@@ -37,3 +37,7 @@ uuid = { version = "1.7", features = ["v4", "serde"] }
 tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros"] }
 tokio-test = "0.4"
 
+[[example]]
+name = "verify_migration"
+required-features = ["sql-store"]
+
