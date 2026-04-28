@@ -14,7 +14,7 @@ UpdateElementStyle("external_container", $bgColor="#888888", $fontColor="#ffffff
 
 AddElementTag("rust",   $bgColor="#dea584", $fontColor="#000000", $legendText="Rust")
 AddElementTag("csharp", $bgColor="#9b4f96", $fontColor="#ffffff", $legendText="C# / .NET")
-AddElementTag("ts",     $bgColor="#3178c6", $fontColor="#ffffff", $legendText="TypeScript / React")
+AddElementTag("ts",     $bgColor="#3178c6", $fontColor="#ffffff", $legendText="JavaScript / TypeScript / React")
 AddElementTag("wasm",   $bgColor="#654ff0", $fontColor="#ffffff", $legendText="WebAssembly")
 AddElementTag("doc",    $bgColor="#bdbdbd", $fontColor="#000000", $legendText="Documentation")
 
@@ -23,31 +23,31 @@ title Architecture Diagram for Maze
 Person_Ext(user, "User", "A user of the system")
 
 Container_Ext(browser, "Browser", "", "Internet browser")
-Container(api, "API", "", ".NET, JavaScript, Rust, Web")
+Container(api, "API", ".NET / JavaScript / Rust / Web", "Cross-platform Maze API abstraction")
 
 System_Boundary(b_rust_core, "Rust core") {
-    Container(maze, "maze", "Rust", "Maze library", $tags="rust")
-    Container(auth, "auth", "Rust", "Authentication library", $tags="rust")
-    Container(storage, "storage", "Rust", "Data storage", $tags="rust")
+    Container(maze, "maze", "", "Maze library", $tags="rust")
+    Container(auth, "auth", "", "Authentication library", $tags="rust")
+    Container(storage, "storage", "", "Data storage", $tags="rust")
 }
 
 System_Boundary(b_rust_bins, "Rust binaries") {
-    Container(maze_web_server, "maze_web_server", "Rust", "Console application", $tags="rust")
-    Container(maze_console, "maze_console", "Rust", "Console application", $tags="rust")
-    Container(maze_openapi_generator, "maze_openapi_generator", "Rust", "Console application", $tags="rust")
+    Container(maze_web_server, "maze_web_server", "", "Console application", $tags="rust")
+    Container(maze_console, "maze_console", "", "Console application", $tags="rust")
+    Container(maze_openapi_generator, "maze_openapi_generator", "", "Console application", $tags="rust")
 }
 
 System_Boundary(b_interop, "Interop layer") {
-    Container(maze_wasm, "maze_wasm", "Rust", "WebAssembly API", $tags="wasm")
-    Container(maze_c, "maze_c", "Rust", "C API", $tags="rust")
+    Container(maze_wasm, "maze_wasm", "Rust / WASM", "WebAssembly API", $tags="wasm")
+    Container(maze_c, "maze_c", "", "C API", $tags="rust")
 }
 
 System_Boundary(b_dotnet, ".NET") {
-    Container(maze_maui_app_net, "Maze.Maui.App", "C#", ".NET maze application (MAUI)", $tags="csharp")
+    Container(maze_maui_app_net, "Maze.Maui.App", "", ".NET maze application (MAUI)", $tags="csharp")
 }
 
 System_Boundary(b_web, "Web frontend") {
-    Container(maze_react_web, "maze_react_web", "React/TypeScript", "Web frontend", $tags="ts")
+    Container(maze_react_web, "maze_react_web", "", "Web frontend", $tags="ts")
 }
 
 System_Boundary(b_game, "3D game") {
@@ -56,7 +56,7 @@ System_Boundary(b_game, "3D game") {
 }
 
 System_Boundary(b_docs, "Documentation") {
-    Container(html_help, "", "", "HTML help pages", $tags="doc")
+    Container(html_help, "HTML help", "", "Generated documentation pages", $tags="doc")
 }
 
 Rel(user, browser, "Uses")
@@ -82,11 +82,12 @@ Rel(maze_web_server, storage, "Uses")
 Rel(maze_game_bevy, maze, "Uses")
 Rel(maze_game_bevy_wasm, maze_game_bevy, "Wraps")
 Rel(maze_web_server, maze_game_bevy_wasm, "Serves at /game/")
-Rel(browser, maze_game_bevy_wasm, "Loads")
+Rel(maze_react_web, maze_game_bevy_wasm, "Loads")
+Rel(maze_react_web, maze_wasm, "Uses")
 Rel(maze_maui_app_net, maze_game_bevy_wasm, "Embeds via WebView")
 
 legend bottom left
-| <back:#9b4f96><color:#ffffff>  C# / .NET  </color></back> | <back:#dea584><color:#000000>  Rust  </color></back> | <back:#3178c6><color:#ffffff>  TypeScript / React  </color></back> | <back:#654ff0><color:#ffffff>  WebAssembly  </color></back> | <back:#bdbdbd><color:#000000>  Documentation  </color></back> |
+| <back:#9b4f96><color:#ffffff>  C# / .NET  </color></back> | <back:#dea584><color:#000000>  Rust  </color></back> | <back:#3178c6><color:#ffffff>  JavaScript / TypeScript / React  </color></back> | <back:#654ff0><color:#ffffff>  WebAssembly  </color></back> | <back:#bdbdbd><color:#000000>  Documentation  </color></back> |
 endlegend
 
 @enduml
