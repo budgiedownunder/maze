@@ -15,6 +15,8 @@ skinparam ArrowFontSize 11
 
 UpdateElementStyle("container", $bgColor="#cccccc", $fontColor="#222222", $borderColor="#888888")
 UpdateElementStyle("external_container", $bgColor="#888888", $fontColor="#ffffff", $borderColor="#666666")
+UpdateBoundaryStyle($bgColor="#fafafa", $fontColor="#555555", $borderColor="#888888", $borderStyle="dashed")
+UpdateRelStyle($lineColor="#888888", $textColor="#666666")
 
 AddElementTag("rust",   $bgColor="#dea584", $fontColor="#000000", $legendText="Rust")
 AddElementTag("csharp", $bgColor="#9b4f96", $fontColor="#ffffff", $legendText="C# / .NET")
