@@ -3,88 +3,130 @@
 
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
+LAYOUT_TOP_DOWN()
+HIDE_STEREOTYPE()
+skinparam linetype ortho
+skinparam nodesep 80
+skinparam ranksep 100
+skinparam defaultFontSize 12
+skinparam titleFontSize 18
+skinparam titleFontStyle bold
+skinparam ArrowFontSize 11
+
+UpdateElementStyle("container", $bgColor="#cccccc", $fontColor="#222222", $borderColor="#888888")
+UpdateElementStyle("external_container", $bgColor="#888888", $fontColor="#ffffff", $borderColor="#666666")
+UpdateBoundaryStyle($bgColor="#fafafa", $fontColor="#555555", $borderColor="#888888", $borderStyle="dashed")
+UpdateRelStyle($lineColor="#888888", $textColor="#666666")
+
+AddElementTag("rust",   $bgColor="#dea584", $fontColor="#000000", $legendText="Rust")
+AddElementTag("csharp", $bgColor="#9b4f96", $fontColor="#ffffff", $legendText="C# / .NET")
+AddElementTag("ts",     $bgColor="#3178c6", $fontColor="#ffffff", $legendText="JavaScript / TypeScript / React")
+AddElementTag("wasm",   $bgColor="#654ff0", $fontColor="#ffffff", $legendText="WebAssembly")
+AddElementTag("doc",    $bgColor="#bdbdbd", $fontColor="#000000", $legendText="Documentation")
+
 title Component Diagram for Maze
 
-Person(user, "User", "A user of the system")
+Person_Ext(user, "User", "A user of the system")
 
-System_Boundary(c1, "Browser") {
-    Container(browser, "", "", "Internet browser")
+Container_Ext(browser, "Browser", "", "Internet browser")
+
+Container(maze_web_api, "Maze Web API", "http", "Public REST API")
+
+System_Boundary(b_rust_core, "Rust core") {
+    Container(maze, "maze", "", "Maze library", $tags="rust")
+    Container(data_model, "data_model", "", "Data model", $tags="rust")
+    Container(utils, "utils", "", "Utility functions", $tags="rust")
+    Container(auth, "auth", "", "Authentication library", $tags="rust")
+    Container(storage, "storage", "", "Data storage", $tags="rust")
 }
 
-System_Boundary(c2, "Maze Project") {
-    Container(html_help, "", "", "HTML help pages")
-    Container(auth, "auth", "Rust", "Authentication library")
-    Container(data_model, "data_model", "Rust", "Data model")
-    Container(docfx, "docfx", "", "HTML help generation")
-    Container(maze, "maze", "Rust", "Maze library")
-    Container(maze_game_bevy, "maze_game_bevy", "Rust / Bevy", "First-person 3D maze game (library + native binary)")
-    Container(maze_game_bevy_wasm, "maze_game_bevy_wasm", "Rust / Bevy / WASM", "Browser build of the 3D game")
-    Container(maze_maui_app_net, "Maze.Maui.App", "C#", ".NET maze application (MAUI)")
-    Container(maze_maui_controls_net, "Maze.Maui.Controls", "C#", ".NET custom controls and definitions (MAUI)")
-    Container(maze_maui_services_net, "Maze.Maui.Services", "C#", ".NET custom services (MAUI)")
-    Container(maze_api_net_tests, "Maze.Api.Tests", "C#", "Maze.Api tests")
-    Container(maze_api_net, "Maze.Api", "C#", "Maze API .NET assembly")
-    Container(maze_interop_net_tests, "Maze.Interop.Tests", "C#", "Maze.Interop tests")
-    Container(maze_interop_net, "Maze.Interop", "C#", "Maze interop .NET assembly")
-    Container(maze_react_web, "maze_react_web", "React/TypeScript", "Web frontend")
-    Container(maze_wasm_js, "maze_wasm.js", "Javascipt", "Maze Javascript API library")
-    Container(maze_wasm, "maze_wasm", "Rust", "Maze WebAssembly API library")
-    Container(maze_c, "maze_c", "Rust", "Maze C API library")
-    Container(maze_console, "maze_console", "Rust", "Console application")
-    Container(maze_web_api, "", "http", "Maze Web API")
-    Container(maze_web_server, "maze_web_server", "Rust", "Console application")
-    Container(maze_openapi_generator, "maze_openapi_generator", "Rust", "Console application")
-    Container(openapi_json, "openapi.json", "", "JSON file")
-    Container(storage, "storage", "Rust", "Data storage")
-    Container(utils, "utils", "Rust", "Utility functions")
+System_Boundary(b_rust_bins, "Rust binaries") {
+    Container(maze_web_server, "maze_web_server", "", "Console application", $tags="rust")
+    Container(maze_console, "maze_console", "", "Console application", $tags="rust")
+    Container(maze_openapi_generator, "maze_openapi_generator", "", "Console application", $tags="rust")
 }
 
-Rel(user, browser, "Uses")
-Rel(browser, html_help, "Uses")
-Rel(browser, maze_wasm_js, "Uses")
+System_Boundary(b_interop, "Interop layer") {
+    Container(maze_wasm, "maze_wasm", "Rust / WASM", "Maze WebAssembly API library", $tags="wasm")
+    Container(maze_wasm_js, "maze_wasm.js", "Javascript", "Maze Javascript API library", $tags="ts")
+    Container(maze_c, "maze_c", "", "Maze C API library", $tags="rust")
+}
+
+System_Boundary(b_dotnet, ".NET") {
+    Container(maze_maui_app_net, "Maze.Maui.App", "", ".NET maze application (MAUI)", $tags="csharp")
+    Container(maze_maui_controls_net, "Maze.Maui.Controls", "", ".NET custom controls and definitions (MAUI)", $tags="csharp")
+    Container(maze_maui_services_net, "Maze.Maui.Services", "", ".NET custom services (MAUI)", $tags="csharp")
+    Container(maze_api_net, "Maze.Api", "", "Maze API .NET assembly", $tags="csharp")
+    Container(maze_api_net_tests, "Maze.Api.Tests", "", "Maze.Api tests", $tags="csharp")
+    Container(maze_interop_net, "Maze.Interop", "", "Maze interop .NET assembly", $tags="csharp")
+    Container(maze_interop_net_tests, "Maze.Interop.Tests", "", "Maze.Interop tests", $tags="csharp")
+}
+
+System_Boundary(b_web, "Web frontend") {
+    Container(maze_react_web, "maze_react_web", "", "Web frontend", $tags="ts")
+}
+
+System_Boundary(b_game, "3D game") {
+    Container(maze_game_bevy, "maze_game_bevy", "Rust / Bevy", "First-person 3D maze game (library + native binary)", $tags="rust")
+    Container(maze_game_bevy_wasm, "maze_game_bevy_wasm", "Rust / Bevy / WASM", "Browser build of the 3D game", $tags="wasm")
+}
+
+System_Boundary(b_docs, "Documentation") {
+    Container(docfx, "docfx", "", "HTML help generation", $tags="doc")
+    Container(html_help, "HTML help", "", "Generated documentation pages", $tags="doc")
+    Container(openapi_json, "openapi.json", "", "JSON file", $tags="doc")
+}
+
+Rel(user, browser, "")
+Rel(browser, html_help, "")
+Rel(maze_react_web, maze_wasm_js, "")
 Rel(docfx, html_help, "Produces")
-Rel(user, maze_console, "Uses")
-Rel(maze_console, data_model, "Uses")
-Rel(maze_console, maze, "Uses")
-Rel(maze_console, storage, "Uses")
-Rel(maze_console, utils, "Uses")
+Rel(user, maze_console, "")
+Rel(maze_console, data_model, "")
+Rel(maze_console, maze, "")
+Rel(maze_console, storage, "")
+Rel(maze_console, utils, "")
 Rel(browser, maze_react_web, "Loads")
-Rel(maze_react_web, maze_web_api, "Uses")
+Rel(maze_react_web, maze_web_api, "")
 Rel(maze_react_web, maze_web_server, "Served by")
-Rel(browser, maze_web_api, "Uses")
+Rel(browser, maze_web_api, "")
 Rel(maze_web_api, maze_web_server, "Hosted By")
-Rel(maze_web_server, auth, "Uses")
-Rel(maze_web_server, data_model, "Uses")
-Rel(maze_web_server, maze, "Uses")
-Rel(maze_web_server, storage, "Uses")
-Rel(user, maze_openapi_generator, "Uses")
-Rel(maze_openapi_generator, maze_web_server, "Uses")
+Rel(maze_web_server, auth, "")
+Rel(maze_web_server, data_model, "")
+Rel(maze_web_server, maze, "")
+Rel(maze_web_server, storage, "")
+Rel(user, maze_openapi_generator, "")
+Rel(maze_openapi_generator, maze_web_server, "")
 Rel(maze_openapi_generator, openapi_json, "Generates")
 Rel(openapi_json, html_help, "Used to Generate")
-Rel(user, maze_maui_app_net, "Uses")
-Rel(maze_maui_app_net, maze_maui_controls_net, "Uses")
-Rel(maze_maui_app_net, maze_maui_services_net, "Uses")
-Rel(maze_maui_app_net, maze_api_net, "Uses")
-Rel(maze_maui_controls_net, maze_maui_services_net, "Uses")
-Rel(maze_api_net_tests, maze_api_net, "Uses")
-Rel(maze_api_net, maze_interop_net, "Uses")
-Rel(maze_interop_net_tests, maze_interop_net, "Uses")
-Rel(maze_interop_net, maze_wasm, "Uses (non-iOS)")
-Rel(maze_interop_net, maze_c, "Uses (iOS)")
-Rel(maze_wasm_js, maze_wasm, "Uses")
-Rel(maze_wasm, data_model, "Uses")
-Rel(maze_wasm, maze, "Uses")
-Rel(maze_c, data_model, "Uses")
-Rel(maze_c, maze, "Uses")
-Rel(storage, data_model, "Uses")
-Rel(storage, maze, "Uses")
-Rel(storage, utils, "Uses")
-Rel(maze, data_model, "Uses")
-Rel(maze, utils, "Uses")
-Rel(maze_game_bevy, maze, "Uses")
+Rel(user, maze_maui_app_net, "")
+Rel(maze_maui_app_net, maze_maui_controls_net, "")
+Rel(maze_maui_app_net, maze_maui_services_net, "")
+Rel(maze_maui_app_net, maze_api_net, "")
+Rel(maze_maui_controls_net, maze_maui_services_net, "")
+Rel(maze_api_net_tests, maze_api_net, "")
+Rel(maze_api_net, maze_interop_net, "")
+Rel(maze_interop_net_tests, maze_interop_net, "")
+Rel(maze_interop_net, maze_wasm, "non-iOS")
+Rel(maze_interop_net, maze_c, "iOS")
+Rel(maze_wasm_js, maze_wasm, "")
+Rel(maze_wasm, data_model, "")
+Rel(maze_wasm, maze, "")
+Rel(maze_c, data_model, "")
+Rel(maze_c, maze, "")
+Rel(storage, data_model, "")
+Rel(storage, maze, "")
+Rel(storage, utils, "")
+Rel(maze, data_model, "")
+Rel(maze, utils, "")
+Rel(maze_game_bevy, maze, "")
 Rel(maze_game_bevy_wasm, maze_game_bevy, "Wraps")
-Rel(maze_web_server, maze_game_bevy_wasm, "Serves at /game/")
-Rel(browser, maze_game_bevy_wasm, "Loads")
-Rel(maze_maui_app_net, maze_game_bevy_wasm, "Embeds via WebView")
+Rel(maze_web_server, maze_game_bevy_wasm, "Serves")
+Rel(maze_react_web, maze_game_bevy_wasm, "Loads")
+Rel(maze_maui_app_net, maze_game_bevy_wasm, "WebView")
+
+legend bottom left
+| <back:#9b4f96><color:#ffffff>  C# / .NET  </color></back> | <back:#dea584><color:#000000>  Rust  </color></back> | <back:#3178c6><color:#ffffff>  JavaScript / TypeScript / React  </color></back> | <back:#654ff0><color:#ffffff>  WebAssembly  </color></back> | <back:#bdbdbd><color:#000000>  Documentation  </color></back> |
+endlegend
 
 @enduml

@@ -3,50 +3,97 @@
 
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
+LAYOUT_TOP_DOWN()
+HIDE_STEREOTYPE()
+skinparam linetype ortho
+skinparam nodesep 80
+skinparam ranksep 100
+skinparam defaultFontSize 12
+skinparam titleFontSize 18
+skinparam titleFontStyle bold
+skinparam ArrowFontSize 11
+
+UpdateElementStyle("container", $bgColor="#cccccc", $fontColor="#222222", $borderColor="#888888")
+UpdateElementStyle("external_container", $bgColor="#888888", $fontColor="#ffffff", $borderColor="#666666")
+UpdateBoundaryStyle($bgColor="#fafafa", $fontColor="#555555", $borderColor="#888888", $borderStyle="dashed")
+UpdateRelStyle($lineColor="#888888", $textColor="#666666")
+
+AddElementTag("rust",   $bgColor="#dea584", $fontColor="#000000", $legendText="Rust")
+AddElementTag("csharp", $bgColor="#9b4f96", $fontColor="#ffffff", $legendText="C# / .NET")
+AddElementTag("ts",     $bgColor="#3178c6", $fontColor="#ffffff", $legendText="JavaScript / TypeScript / React")
+AddElementTag("wasm",   $bgColor="#654ff0", $fontColor="#ffffff", $legendText="WebAssembly")
+AddElementTag("doc",    $bgColor="#bdbdbd", $fontColor="#000000", $legendText="Documentation")
+
 title Architecture Diagram for Maze
 
-Person(user, "User", "A user of the system")
+Person_Ext(user, "User", "A user of the system")
 
-Container(api, "API", "", ".NET, JavaScript, Rust, Web")
-Container(auth, "auth", "Rust", "Authentication library")
-Container(browser, "Browser", "", "Internet browser")
-Container(html_help, "", "", "HTML help pages")
-Container(maze, "maze", "Rust", "Maze library")
-Container(maze_c, "maze_c", "Rust", "C API")
-Container(maze_console, "maze_console", "Rust", "Console application")
-Container(maze_game_bevy, "maze_game_bevy", "Rust / Bevy", "First-person 3D maze game")
-Container(maze_game_bevy_wasm, "maze_game_bevy_wasm", "Rust / Bevy / WASM", "Browser build of the 3D game")
-Container(maze_maui_app_net, "Maze.Maui.App", "C#", ".NET maze application (MAUI)")
-Container(maze_openapi_generator, "maze_openapi_generator", "Rust", "Console application")
-Container(maze_wasm, "maze_wasm", "Rust", "WebAssembly API")
-Container(maze_react_web, "maze_react_web", "React/TypeScript", "Web frontend")
-Container(maze_web_server, "maze_web_server", "Rust", "Console application")
-Container(storage, "storage", "Rust", "Data storage")
+Container_Ext(browser, "Browser", "", "Internet browser")
+Container(api, "API", ".NET / JavaScript / Rust / Web", "Cross-platform Maze API abstraction")
 
-Rel(user, browser, "Uses")
+System_Boundary(b_rust_core, "Rust core") {
+    Container(maze, "maze", "", "Maze library", $tags="rust")
+    Container(auth, "auth", "", "Authentication library", $tags="rust")
+    Container(storage, "storage", "", "Data storage", $tags="rust")
+}
+
+System_Boundary(b_rust_bins, "Rust binaries") {
+    Container(maze_web_server, "maze_web_server", "", "Console application", $tags="rust")
+    Container(maze_console, "maze_console", "", "Console application", $tags="rust")
+    Container(maze_openapi_generator, "maze_openapi_generator", "", "Console application", $tags="rust")
+}
+
+System_Boundary(b_interop, "Interop layer") {
+    Container(maze_wasm, "maze_wasm", "Rust / WASM", "WebAssembly API", $tags="wasm")
+    Container(maze_c, "maze_c", "", "C API", $tags="rust")
+}
+
+System_Boundary(b_dotnet, ".NET") {
+    Container(maze_maui_app_net, "Maze.Maui.App", "", ".NET maze application (MAUI)", $tags="csharp")
+}
+
+System_Boundary(b_web, "Web frontend") {
+    Container(maze_react_web, "maze_react_web", "", "Web frontend", $tags="ts")
+}
+
+System_Boundary(b_game, "3D game") {
+    Container(maze_game_bevy, "maze_game_bevy", "Rust / Bevy", "First-person 3D maze game", $tags="rust")
+    Container(maze_game_bevy_wasm, "maze_game_bevy_wasm", "Rust / Bevy / WASM", "Browser build of the 3D game", $tags="wasm")
+}
+
+System_Boundary(b_docs, "Documentation") {
+    Container(html_help, "HTML help", "", "Generated documentation pages", $tags="doc")
+}
+
+Rel(user, browser, "")
 Rel(maze_react_web, maze_web_server, "Served by")
-Rel(user, html_help, "Uses")
-Rel(user, maze_console, "Uses")
-Rel(user, maze_maui_app_net, "Uses")
-Rel(user, maze_openapi_generator, "Uses")
-Rel(browser, api, "Uses")
+Rel(user, html_help, "")
+Rel(user, maze_console, "")
+Rel(user, maze_maui_app_net, "")
+Rel(user, maze_openapi_generator, "")
+Rel(browser, api, "")
 Rel(browser, maze_react_web, "Loads")
-Rel(maze_react_web, api, "Uses")
-Rel(maze_console, api, "Uses")
-Rel(maze_maui_app_net, api, "Uses")
-Rel(maze_openapi_generator, maze_web_server, "Uses")
-Rel(maze_c, maze, "Uses")
-Rel(maze_wasm, maze, "Uses")
-Rel(api, maze_wasm, "Uses (non-iOS)")
-Rel(api, maze_c, "Uses (iOS)")
-Rel(api, maze_web_server, "Uses")
-Rel(maze_web_server, maze_wasm, "Uses")
-Rel(maze_web_server, auth, "Uses")
-Rel(maze_web_server, storage, "Uses")
-Rel(maze_game_bevy, maze, "Uses")
+Rel(maze_react_web, api, "")
+Rel(maze_console, api, "")
+Rel(maze_maui_app_net, api, "")
+Rel(maze_openapi_generator, maze_web_server, "")
+Rel(maze_c, maze, "")
+Rel(maze_wasm, maze, "")
+Rel(api, maze_wasm, "non-iOS")
+Rel(api, maze_c, "iOS")
+Rel(api, maze_web_server, "")
+Rel(maze_web_server, maze_wasm, "")
+Rel(maze_web_server, auth, "")
+Rel(maze_web_server, storage, "")
+Rel(maze_game_bevy, maze, "")
 Rel(maze_game_bevy_wasm, maze_game_bevy, "Wraps")
-Rel(maze_web_server, maze_game_bevy_wasm, "Serves at /game/")
-Rel(browser, maze_game_bevy_wasm, "Loads")
-Rel(maze_maui_app_net, maze_game_bevy_wasm, "Embeds via WebView")
+Rel(maze_web_server, maze_game_bevy_wasm, "Serves")
+Rel(maze_react_web, maze_game_bevy_wasm, "Loads")
+Rel(maze_react_web, maze_wasm, "")
+Rel(maze_maui_app_net, maze_game_bevy_wasm, "WebView")
+
+legend bottom left
+| <back:#9b4f96><color:#ffffff>  C# / .NET  </color></back> | <back:#dea584><color:#000000>  Rust  </color></back> | <back:#3178c6><color:#ffffff>  JavaScript / TypeScript / React  </color></back> | <back:#654ff0><color:#ffffff>  WebAssembly  </color></back> | <back:#bdbdbd><color:#000000>  Documentation  </color></back> |
+endlegend
 
 @enduml
