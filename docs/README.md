@@ -29,7 +29,7 @@ The `docs/diagrams/` directory contains visual representations of the system arc
 
 ![Diagram](diagrams/architecture.png)
 
-For more detailed explanations, see the [Architecture Documentation](diagrams/README.md).
+For more detailed explanations of each diagram, the source format (PlantUML / C4-PlantUML), the PNG-generation workflow, and how to preview diagrams locally, see the [Diagrams Documentation](diagrams/README.md).
 
 ## Setup and Installation
 
