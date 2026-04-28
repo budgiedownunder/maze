@@ -85,4 +85,8 @@ Rel(maze_web_server, maze_game_bevy_wasm, "Serves at /game/")
 Rel(browser, maze_game_bevy_wasm, "Loads")
 Rel(maze_maui_app_net, maze_game_bevy_wasm, "Embeds via WebView")
 
+legend bottom left
+| <back:#9b4f96><color:#ffffff>  C# / .NET  </color></back> | <back:#dea584><color:#000000>  Rust  </color></back> | <back:#3178c6><color:#ffffff>  TypeScript / React  </color></back> | <back:#654ff0><color:#ffffff>  WebAssembly  </color></back> | <back:#bdbdbd><color:#000000>  Documentation  </color></back> |
+endlegend
+
 @enduml
