@@ -3,6 +3,13 @@ name = "storage"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+# Enables the SQL backend (`SqlStore`) with built-in support for PostgreSQL,
+# MySQL, and SQLite via SQLx's `Any` driver. Selection happens at runtime
+# based on the connection URL — no per-database sub-features.
+sql-store = ["dep:sqlx"]
+
 [dependencies]
 async-trait = "0.1"
 data_model = { path = "../data_model" }
@@ -10,6 +17,16 @@ log = "0.4"
 maze = { path = "../maze" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "any",
+    "postgres",
+    "mysql",
+    "sqlite",
+    "uuid",
+    "chrono",
+    "migrate",
+], optional = true }
 tokio = { version = "1.41", features = ["rt", "sync"] }
 utoipa = { version = "5.2" }
 utils = { path = "../utils" }
