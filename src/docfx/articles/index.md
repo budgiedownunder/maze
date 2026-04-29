@@ -21,6 +21,8 @@ The following components are present:
 |              | [`maze`](../api/rust/maze/view_content.md)                                     | Maze definition and calculation library
 |              | [`maze_c`](../api/rust/maze_c/view_content.md)                                 | Maze C API library
 |              | [`maze_console`](../api/rust/maze_console/view_content.md)                     | Maze console application
+|              | [`maze_game_bevy`](../api/rust/maze_game_bevy/view_content.md)                 | 3D maze game engine library
+|              | [`maze_game_bevy_wasm`](../api/rust/maze_game_bevy_wasm/view_content.md)       | 3D maze game engine WebAssembly library
 |              | [`maze_openapi_generator`](../api/rust/maze_openapi_generator/view_content.md) | Maze OpenAPI generator console application
 |              | [`maze_wasm`](../api/rust/maze_wasm/view_content.md)                           | Maze WebAssembly API library
 |              | [`maze_web_server`](../api/rust/maze_web_server/view_content.md)               | Maze web server console application
