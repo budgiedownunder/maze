@@ -87,7 +87,10 @@ async fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &
         store_lock.find_user_by_email(email).await.map_err(|err| {
             match err {
                 StoreError::UserNotFound() => ErrorUnauthorized("Invalid email or password"),
-                _ => ErrorInternalServerError("Failed to process login request"),
+                _ => {
+                    log::warn!("login failed for {email:?}: {err}");
+                    ErrorInternalServerError("Failed to process login request")
+                }
             }
         })?
     };
