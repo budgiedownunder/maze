@@ -77,6 +77,11 @@ System_Boundary(b_docs, "Documentation") {
     Container(openapi_json, "openapi.json", "", "JSON file", $tags="doc")
 }
 
+System_Boundary(b_persistence, "Persistence") {
+    ContainerDb_Ext(filesystem, "Filesystem", "", "JSON files")
+    ContainerDb_Ext(database, "Database", "", "SQLite / PostgreSQL / MySQL")
+}
+
 Rel(user, browser, "")
 Rel(browser, html_help, "")
 Rel(maze_react_web, maze_wasm_js, "")
@@ -117,6 +122,8 @@ Rel(maze_c, maze, "")
 Rel(storage, data_model, "")
 Rel(storage, maze, "")
 Rel(storage, utils, "")
+Rel(storage, filesystem, "")
+Rel(storage, database, "")
 Rel(maze, data_model, "")
 Rel(maze, utils, "")
 Rel(maze_game_bevy, maze, "")
