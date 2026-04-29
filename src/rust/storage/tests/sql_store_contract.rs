@@ -207,6 +207,12 @@ async fn find_user_by_oauth_identity_provider_case_insensitive() {
 }
 
 #[tokio::test]
+async fn find_user_by_oauth_identity_strict_matching() {
+    let mut s = fresh_store().await;
+    contract::find_user_by_oauth_identity_strict_matching(&mut s).await;
+}
+
+#[tokio::test]
 async fn find_user_by_oauth_identity_supports_multiple_per_user() {
     let mut s = fresh_store().await;
     contract::find_user_by_oauth_identity_supports_multiple_per_user(&mut s).await;
@@ -288,6 +294,24 @@ async fn delete_maze_is_scoped_to_owner() {
 async fn update_maze_persists_changes() {
     let mut s = fresh_store().await;
     contract::update_maze_persists_changes(&mut s).await;
+}
+
+#[tokio::test]
+async fn update_maze_returns_not_found_for_unknown_id() {
+    let mut s = fresh_store().await;
+    contract::update_maze_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn update_maze_rejects_empty_id() {
+    let mut s = fresh_store().await;
+    contract::update_maze_rejects_empty_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn delete_maze_rejects_empty_id() {
+    let mut s = fresh_store().await;
+    contract::delete_maze_rejects_empty_id(&mut s).await;
 }
 
 #[tokio::test]

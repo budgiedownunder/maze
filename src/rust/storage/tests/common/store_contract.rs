@@ -349,6 +349,38 @@ pub async fn find_user_by_oauth_identity_provider_case_insensitive(store: &mut B
     assert_eq!(mixed.id, alice.id);
 }
 
+pub async fn find_user_by_oauth_identity_strict_matching(store: &mut Box<dyn Store>) {
+    let mut alice = make_oauth_user("alice", "alice@example.com", "google", "sub-alice");
+    store.create_user(&mut alice).await.expect("create_user");
+
+    // Wrong provider for a known sub must not match.
+    assert!(
+        store
+            .find_user_by_oauth_identity("github", "sub-alice")
+            .await
+            .is_err(),
+        "wrong provider must not match a known sub"
+    );
+
+    // Unknown identity returns UserNotFound (not Other).
+    let err = store
+        .find_user_by_oauth_identity("google", "no-such-sub")
+        .await
+        .expect_err("unknown identity must error");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+
+    // Case-sensitivity of `provider_user_id` is intentionally NOT asserted
+    // here. PostgreSQL and SQLite use case-sensitive collations by default
+    // so `"sub-alice" != "SUB-ALICE"`; MySQL's default `utf8mb4_unicode_ci`
+    // collation is case-insensitive and matches both. Making the column
+    // case-sensitive across all three backends would require MySQL-specific
+    // `COLLATE utf8mb4_bin` syntax, breaking single-file schema portability.
+    // The OAuth/OIDC `sub` claim is supposed to be opaque and case-significant
+    // per spec, so this is a known divergence — currently low-risk because
+    // the supported providers (Google, GitHub, Facebook) return purely
+    // numeric subs.
+}
+
 pub async fn find_user_by_oauth_identity_supports_multiple_per_user(store: &mut Box<dyn Store>) {
     let mut alice = fixture_user(store, "alice", "alice@example.com").await;
     alice.oauth_identities.push(OAuthIdentity::new(
@@ -525,6 +557,37 @@ pub async fn delete_maze_is_scoped_to_owner(store: &mut Box<dyn Store>) {
     // Alice's maze still exists.
     let still_there = store.get_maze(&alice, &alice_maze.id).await.expect("still there");
     assert_eq!(still_there.name, "alice-only");
+}
+
+pub async fn update_maze_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let mut ghost = make_maze("ghost-maze");
+    ghost.id = "no-such-id".to_string(); // non-empty so we get past the empty-id guard
+    let err = store
+        .update_maze(&alice, &mut ghost)
+        .await
+        .expect_err("expected MazeIdNotFound");
+    assert!(matches!(err, Error::MazeIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn update_maze_rejects_empty_id(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let mut maze = make_maze("some-maze");
+    maze.id = String::new();
+    let err = store
+        .update_maze(&alice, &mut maze)
+        .await
+        .expect_err("expected MazeIdMissing");
+    assert!(matches!(err, Error::MazeIdMissing()), "got {err:?}");
+}
+
+pub async fn delete_maze_rejects_empty_id(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let err = store
+        .delete_maze(&alice, "")
+        .await
+        .expect_err("expected MazeIdMissing");
+    assert!(matches!(err, Error::MazeIdMissing()), "got {err:?}");
 }
 
 pub async fn update_maze_persists_changes(store: &mut Box<dyn Store>) {
