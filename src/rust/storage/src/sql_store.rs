@@ -187,6 +187,43 @@ impl SqlStore {
     /// any pending migrations. Subsequent calls against an already-migrated
     /// database are idempotent — SQLx tracks applied migrations in its own
     /// `_sqlx_migrations` table.
+    ///
+    /// # Returns
+    ///
+    /// A new [`SqlStore`] connected to the configured database with all
+    /// migrations applied. Errors if the URL scheme is unsupported, the
+    /// database is unreachable, the optional `auto_create_database` step
+    /// fails, or a migration fails to apply.
+    ///
+    /// # Examples
+    ///
+    /// Create an in-memory SQLite store, run migrations, and verify the
+    /// schema is queryable
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{SqlStore, SqlStoreConfig, UserStore};
+    ///
+    /// let store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     // SQLite `:memory:` is per-connection; pin to one connection so
+    ///     // every query sees the same database.
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // The store has just been migrated — no users yet.
+    /// assert!(!store.has_users().await.expect("has_users"));
+    /// # });
+    /// ```
+    ///
+    /// For PostgreSQL or MySQL, set `url` to a `postgres://…` or `mysql://…`
+    /// connection string. Runnable starter configurations for every backend
+    /// are checked in alongside `maze_web_server` — see
+    /// `config.example.sqlite.toml`, `config.example.postgres.toml`,
+    /// `config.example.postgres-cloud.toml`, and `config.example.mysql.toml`.
     pub async fn new(config: SqlStoreConfig) -> Result<Self, Error> {
         install_default_drivers();
 
@@ -454,6 +491,45 @@ async fn insert_user_oauth_identities(
 
 #[async_trait]
 impl UserStore for SqlStore {
+    /// Adds the default admin user to the store if it doesn't already exist, else returns it
+    ///
+    /// # Examples
+    ///
+    /// Try to create a new user within an in-memory SQLite-backed store
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the default admin user within the SQL store if needed
+    /// match store.init_default_admin_user("admin", "admin@maze.local", "my_password_hash").await {
+    ///     Ok(user) => {
+    ///         println!(
+    ///             "Successfully initialised default admin user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to initialise default admin user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn init_default_admin_user(
         &mut self,
         username: &str,
@@ -475,6 +551,58 @@ impl UserStore for SqlStore {
         }
     }
 
+    /// Adds a new user to the store and sets the allocated `id` within the user object
+    ///
+    /// # Examples
+    ///
+    /// Try to create a new user within an in-memory SQLite-backed store
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    /// };
+    ///
+    /// // Create the user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn create_user(&mut self, user: &mut User) -> Result<(), Error> {
         user.id = User::new_id();
         user.api_key = User::new_api_key();
@@ -502,6 +630,68 @@ impl UserStore for SqlStore {
         Ok(())
     }
 
+    /// Deletes a user from the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then delete a user within an in-memory SQLite-backed store
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    /// };
+    ///
+    /// // Create the user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///         match store.delete_user(user.id).await {
+    ///             Ok(_) => {
+    ///                 println!("Successfully deleted user from the SQL store");
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to delete user => {}",
+    ///                     error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn delete_user(&mut self, id: Uuid) -> Result<(), Error> {
         if id.is_nil() {
             return Err(Error::UserIdMissing());
@@ -517,6 +707,70 @@ impl UserStore for SqlStore {
         Ok(())
     }
 
+    /// Updates a user within the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then update a user within an in-memory SQLite-backed store
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    /// };
+    ///
+    /// // Create the user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///         // Change the user full name
+    ///         user.full_name = "John Henry Smith".to_string();
+    ///         match store.update_user(&mut user).await {
+    ///             Ok(_) => {
+    ///                 println!("Successfully updated user within the SQL store");
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to update user => {}",
+    ///                     error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn update_user(&mut self, user: &mut User) -> Result<(), Error> {
         if user.id == Uuid::nil() {
             return Err(Error::UserIdMissing());
@@ -562,6 +816,69 @@ impl UserStore for SqlStore {
         Ok(())
     }
 
+    /// Loads a user from the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then load a user from within an in-memory SQLite-backed store
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    /// };
+    ///
+    /// // Create the user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to load it again and display the results
+    ///         match store.get_user(user.id).await {
+    ///             Ok(user_loaded) => {
+    ///                 println!("Successfully loaded user from within the SQL store => {:?}", user_loaded);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to load user => {}",
+    ///                     error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn get_user(&self, id: Uuid) -> Result<User, Error> {
         let row = sqlx::query(&q(self.kind, "SELECT * FROM users WHERE id = ?"))
             .bind(id.to_string())
@@ -574,6 +891,69 @@ impl UserStore for SqlStore {
         }
     }
 
+    /// Locates a user by their username within the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then locate a user from within an in-memory SQLite-backed store
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    /// };
+    ///
+    /// // Create the user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to find it again by username and display the results
+    ///         match store.find_user_by_name(&user.username).await {
+    ///             Ok(user_found) => {
+    ///                 println!("Successfully found user within the SQL store => {:?}", user_found);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to find user => {}",
+    ///                     error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn find_user_by_name(&self, name: &str) -> Result<User, Error> {
         let mut rows = sqlx::query(&q(
             self.kind,
@@ -592,6 +972,69 @@ impl UserStore for SqlStore {
         }
     }
 
+    /// Locates a user by their email address within the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then locate a user from within an in-memory SQLite-backed store by email
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    /// };
+    ///
+    /// // Create the user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to find it again by email and display the results
+    ///         match store.find_user_by_email(&user.email).await {
+    ///             Ok(user_found) => {
+    ///                 println!("Successfully found user within the SQL store => {:?}", user_found);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to find user => {}",
+    ///                     error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn find_user_by_email(&self, email: &str) -> Result<User, Error> {
         let mut rows = sqlx::query(&q(
             self.kind,
@@ -610,6 +1053,69 @@ impl UserStore for SqlStore {
         }
     }
 
+    /// Locates a user by their api key within the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then locate a user by its api key from within an in-memory SQLite-backed store
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    /// };
+    ///
+    /// // Create the user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to find it again by api key and display the results
+    ///         match store.find_user_by_api_key(user.api_key).await {
+    ///             Ok(user_found) => {
+    ///                 println!("Successfully found user within the SQL store => {:?}", user_found);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to find user => {}",
+    ///                     error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error> {
         // `users.api_key` is enforced UNIQUE at the schema level so this can
         // return at most one row by construction. The multi-row guard is here
@@ -629,6 +1135,74 @@ impl UserStore for SqlStore {
         }
     }
 
+    /// Locates a user by their login id within the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then locate a user by its login id within an in-memory SQLite-backed store
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserLogin};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the login token
+    /// let login = UserLogin::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
+    /// let search_login_id = login.id;
+    /// let logins = vec![login];
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins,
+    ///     oauth_identities: vec![],
+    /// };
+    ///
+    /// // Create the user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to find it again using the login id and display the results
+    ///         match store.find_user_by_login_id(search_login_id).await {
+    ///             Ok(user_found) => {
+    ///                 println!("Successfully found user within the SQL store => {:?}", user_found);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to find user => {}",
+    ///                     error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, Error> {
         // Strictly speaking, `user_logins.id` is the table's PRIMARY KEY so this
         // can return at most one row by construction. We still use the
@@ -656,6 +1230,77 @@ impl UserStore for SqlStore {
         }
     }
 
+    /// Locates a user by an OAuth identity `(provider, provider_user_id)` pair.
+    /// `provider` is matched case-insensitively (canonical providers are stored
+    /// lowercase: "google", "github"); `provider_user_id` is matched exactly (it
+    /// is an opaque stable id from the identity provider).
+    ///
+    /// # Examples
+    ///
+    /// Try to create a user with a linked Google identity and then locate it by
+    /// its OAuth identity within an in-memory SQLite-backed store
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OAuthIdentity, User};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition with a linked Google identity
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![OAuthIdentity::new(
+    ///         "google".to_string(),
+    ///         "google-sub-jsmith".to_string(),
+    ///         Some("jsmith@company.com".to_string()),
+    ///     )],
+    /// };
+    ///
+    /// // Create the user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to find it again by its OAuth identity and display the results
+    ///         match store.find_user_by_oauth_identity("google", "google-sub-jsmith").await {
+    ///             Ok(user_found) => {
+    ///                 println!("Successfully found user within the SQL store => {:?}", user_found);
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to find user => {}",
+    ///                     error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn find_user_by_oauth_identity(
         &self,
         provider: &str,
@@ -681,6 +1326,70 @@ impl UserStore for SqlStore {
         }
     }
 
+    /// Returns the list of users within the store, sorted
+    /// alphabetically by username in ascending order
+    ///
+    /// # Examples
+    ///
+    /// Try to create a user within an in-memory SQLite-backed store and then load the list of registered users and display their count
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    /// };
+    ///
+    /// // Create the user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to load the user list and display the results
+    ///         match store.get_users().await {
+    ///             Ok(users_found) => {
+    ///                 println!("Successfully loaded {} users from within the SQL store", users_found.len());
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to load users => {}",
+    ///                     error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn get_users(&self) -> Result<Vec<User>, Error> {
         let rows = sqlx::query(&q(self.kind, "SELECT * FROM users ORDER BY username"))
             .fetch_all(&self.pool)
@@ -693,6 +1402,69 @@ impl UserStore for SqlStore {
         Ok(users)
     }
 
+    /// Returns the list of admin users within the store
+    ///
+    /// # Examples
+    ///
+    /// Try to create an admin user within an in-memory SQLite-backed store and then load the list of admin users and display their count
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the admin user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: true,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     email: "jsmith@company.com".to_string(),
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    /// };
+    ///
+    /// // Create the admin user within the SQL store
+    /// match store.create_user(&mut user).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created admin user with id {} in the SQL store",
+    ///             user.id
+    ///         );
+    ///         // Now attempt to load the admin user list and display the results
+    ///         match store.get_admin_users().await {
+    ///             Ok(admins_found) => {
+    ///                 println!("Successfully loaded {} admin users from within the SQL store", admins_found.len());
+    ///             }
+    ///             Err(error) => {
+    ///                 println!(
+    ///                     "Failed to load admin users => {}",
+    ///                     error
+    ///                 );
+    ///             }
+    ///         }
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create user => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn get_admin_users(&self) -> Result<Vec<User>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
@@ -708,6 +1480,42 @@ impl UserStore for SqlStore {
         Ok(users)
     }
 
+    /// Returns whether at least one user exists in the SQL store.
+    ///
+    /// Implemented as a `SELECT 1 FROM users LIMIT 1` existence probe so the
+    /// engine can return on the first row it sees (index-only on the PK in
+    /// practice). Far cheaper than `get_users()` which would hydrate every
+    /// user plus their logins and oauth_identities.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(true)` if any user is present, `Ok(false)` if the store is empty.
+    ///
+    /// # Examples
+    ///
+    /// Check whether the store has any users before deciding to seed a
+    /// default admin account
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// match store.has_users().await {
+    ///     Ok(true) => println!("Store already has users — skip bootstrap"),
+    ///     Ok(false) => println!("Store is empty — seed a default admin"),
+    ///     Err(error) => println!("Failed to check store: {}", error),
+    /// }
+    /// # });
+    /// ```
     async fn has_users(&self) -> Result<bool, Error> {
         let row = sqlx::query(&q(self.kind, "SELECT 1 FROM users LIMIT 1"))
             .fetch_optional(&self.pool)
@@ -723,6 +1531,62 @@ impl UserStore for SqlStore {
 
 #[async_trait]
 impl MazeStore for SqlStore {
+    /// Creates a new maze within the SQL store instance
+    ///
+    /// # Examples
+    ///
+    /// Try to create a new maze within an in-memory SQLite-backed store
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{Maze, User};
+    /// use storage::{SqlStore, SqlStoreConfig, MazeStore, Store, Error, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let mut maze_to_create = Maze::from_vec(grid);
+    /// maze_to_create.name = "maze_1".to_string();
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    ///
+    /// // Create maze within the SQL store
+    /// match store.create_maze(&owner, &mut maze_to_create).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully created maze in the SQL store with id = {}",
+    ///             maze_to_create.id
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to create maze => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error> {
         if maze.name.is_empty() {
             return Err(Error::MazeNameMissing());
@@ -758,6 +1622,57 @@ impl MazeStore for SqlStore {
         Ok(())
     }
 
+    /// Deletes an existing maze from within the SQL store instance
+    ///
+    /// # Examples
+    ///
+    /// Try to delete an existing maze from within an in-memory SQLite-backed store
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{Maze, User};
+    /// use storage::{SqlStore, SqlStoreConfig, MazeStore, Store, Error, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    ///
+    /// // Delete maze from within the SQL store
+    /// let id = "some-maze-id".to_string();
+    ///
+    /// match store.delete_maze(&owner, &id).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully deleted maze from the SQL store",
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to delete maze with id {} => {}",
+    ///             id,
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn delete_maze(&mut self, owner: &User, id: &str) -> Result<(), Error> {
         if id.is_empty() {
             return Err(Error::MazeIdMissing());
@@ -777,6 +1692,63 @@ impl MazeStore for SqlStore {
         Ok(())
     }
 
+    /// Updates an existing maze within the SQL store instance
+    ///
+    /// # Examples
+    ///
+    /// Try to update an existing maze within an in-memory SQLite-backed store with new content
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{Maze, User};
+    /// use storage::{SqlStore, SqlStoreConfig, MazeStore, Store, Error, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let mut maze_to_update = Maze::from_vec(grid);
+    /// maze_to_update.name = "maze_1".to_string();
+    /// maze_to_update.id = "some-maze-id".to_string();
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    ///
+    /// // Update maze within the SQL store
+    /// match store.update_maze(&owner, &mut maze_to_update).await {
+    ///     Ok(_) => {
+    ///         println!(
+    ///             "Successfully updated maze in the SQL store with id = {}",
+    ///             maze_to_update.id
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to update maze => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error> {
         if maze.id.is_empty() {
             return Err(Error::MazeIdMissing());
@@ -799,6 +1771,78 @@ impl MazeStore for SqlStore {
         Ok(())
     }
 
+    /// Loads a maze from within the SQL store instance
+    ///
+    /// # Returns
+    ///
+    /// The maze instance if successful
+    ///
+    /// # Examples
+    ///
+    /// Try to create and then reload a maze from within an in-memory SQLite-backed store and, if successful, print it
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{Maze, User};
+    /// use maze::{MazePath, MazePrinter};
+    /// use storage::{SqlStore, SqlStoreConfig, MazeStore, Store, Error, UserStore};
+    /// use utils::StdoutLinePrinter;
+    /// use uuid::Uuid;
+    ///
+    /// let grid: Vec<Vec<char>> = vec![
+    ///    vec!['S', ' ', 'W'],
+    ///    vec![' ', 'F', 'W']
+    /// ];
+    /// let mut maze_to_create = Maze::from_vec(grid);
+    /// maze_to_create.name = "maze_1".to_string();
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    ///
+    /// // Create the maze within the store
+    /// if let Err(error) = store.create_maze(&owner, &mut maze_to_create).await {
+    ///     println!(
+    ///         "Failed to create maze => {}",
+    ///         error
+    ///     );
+    ///     return;
+    /// }
+    ///
+    /// // Now reload the maze from the store
+    /// match store.get_maze(&owner, &maze_to_create.id).await {
+    ///     Ok(loaded_maze) => {
+    ///         println!("Successfully loaded maze:");
+    ///         let mut print_target = StdoutLinePrinter::new();
+    ///         let empty_path = MazePath { points: vec![] };
+    ///         loaded_maze.print(&mut print_target, empty_path);
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to load maze with id '{}' => {}",
+    ///             maze_to_create.id,
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, Error> {
         let row = sqlx::query(&q(
             self.kind,
@@ -815,6 +1859,62 @@ impl MazeStore for SqlStore {
         }
     }
 
+    /// Locates a maze item by name from within the SQL store instance
+    ///
+    /// # Returns
+    ///
+    /// The maze item if successful
+    ///
+    /// # Examples
+    ///
+    /// Try to find the maze item with name `my_maze` from within an in-memory SQLite-backed store and, if successful, print its details
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, MazeStore, Store, Error, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    ///
+    /// let name = "my_maze".to_string();
+    ///
+    /// // Attempt to find the maze item
+    /// match store.find_maze_by_name(&owner, &name).await {
+    ///     Ok(maze_item) => {
+    ///         println!("Successfully found maze item => id = {}, name = {}",
+    ///             maze_item.id,
+    ///             maze_item.name
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to find maze item with name '{}' => {}",
+    ///             name,
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn find_maze_by_name(&self, owner: &User, name: &str) -> Result<MazeItem, Error> {
         if name.is_empty() {
             return Err(Error::MazeNameNotFound(name.to_string()));
@@ -845,6 +1945,60 @@ impl MazeStore for SqlStore {
         }
     }
 
+    /// Returns the list of maze items within the SQL store instance, sorted
+    /// alphabetically in ascending order, optionally including the
+    /// maze definitions as a JSON string
+    ///
+    /// # Returns
+    ///
+    /// The maze items if successful
+    ///
+    /// # Examples
+    ///
+    /// Try to load the maze items within an in-memory SQLite-backed store and, if successful, print the number of items found
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::User;
+    /// use storage::{SqlStore, SqlStoreConfig, MazeStore, Store, Error, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Locate the owner by username
+    /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
+    /// let owner = match find_user_result {
+    ///    Ok(user) => user,
+    ///    Err(error) => {
+    ///        println!("Error fetching user: {:?}", error);
+    ///        return ;
+    ///    }
+    /// };
+    ///
+    /// // Attempt to load the maze items along with their definitions
+    /// match store.get_maze_items(&owner, true).await {
+    ///     Ok(maze_items) => {
+    ///         println!("Successfully loaded {} maze items",
+    ///             maze_items.len()
+    ///         );
+    ///     }
+    ///     Err(error) => {
+    ///         println!(
+    ///             "Failed to load maze items => {}",
+    ///             error
+    ///         );
+    ///     }
+    /// }
+    /// # });
+    /// ```
     async fn get_maze_items(
         &self,
         owner: &User,
@@ -880,6 +2034,43 @@ impl MazeStore for SqlStore {
 
 #[async_trait]
 impl Manage for SqlStore {
+    /// Resets the SQL store to its initial empty state by deleting all rows
+    /// from every application table (`user_logins`, `oauth_identities`,
+    /// `mazes`, and `users`) in foreign-key-safe order.
+    ///
+    /// Intended for tests and scripted bootstrap flows. **Destructive** —
+    /// every user, login, OAuth identity, and maze is removed. The schema
+    /// itself (and SQLx's `_sqlx_migrations` tracking table) is preserved
+    /// so subsequent restarts skip the migration step.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, `Err(...)` if any of the underlying DELETE
+    /// statements fail.
+    ///
+    /// # Examples
+    ///
+    /// Empty an in-memory SQLite-backed store before running a test scenario
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{SqlStore, SqlStoreConfig, Manage, Store};
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Wipe any existing content
+    /// if let Err(error) = store.empty().await {
+    ///     panic!("Failed to empty the store: {}", error);
+    /// }
+    /// # });
+    /// ```
     async fn empty(&mut self) -> Result<(), Error> {
         // Delete in FK-safe order (children first). A single TRUNCATE-equivalent
         // would be faster but TRUNCATE syntax differs across backends; portable
