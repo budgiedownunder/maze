@@ -367,6 +367,31 @@ impl FileStore {
         file_exists(&self.maze_path(owner, id))
     }
 
+    // Returns the actual on-disk filename of any maze whose name matches
+    // `name` case-insensitively for `owner`, or None if no such maze
+    // exists.
+    //
+    // Used by `find_maze_by_name` and `create_maze` so that case-insensitive
+    // matching is enforced in code rather than via filesystem semantics —
+    // NTFS and APFS-default are case-insensitive, ext4 is not, so relying
+    // on the filesystem makes behaviour OS-dependent.
+    fn find_maze_filename_ci(&self, owner: &User, name: &str) -> Option<String> {
+        if name.is_empty() {
+            return None;
+        }
+        let target = UniCase::new(self.make_maze_id(name));
+        let mazes_dir = self.get_mazes_dir(owner);
+        let entries = std::fs::read_dir(&mazes_dir).ok()?;
+        for entry in entries.flatten() {
+            if let Some(filename) = entry.file_name().to_str() {
+                if UniCase::new(filename.to_string()) == target {
+                    return Some(filename.to_string());
+                }
+            }
+        }
+        None
+    }
+
     // Wriets a maze file
     fn write_maze_file(
         &self,
@@ -1285,6 +1310,14 @@ impl MazeStore for FileStore {
         if maze.name.is_empty() {
             return Err(Error::MazeNameMissing());
         }
+        // Reject case-insensitive name collision before writing — the
+        // `write_maze_file` overwrite check uses `Path::exists`, which
+        // is case-insensitive on NTFS/APFS but case-sensitive on ext4.
+        // Without this guard, "Treasure" and "TREASURE" can both be
+        // created on Linux but only one on Windows.
+        if let Some(existing) = self.find_maze_filename_ci(owner, &maze.name) {
+            return Err(Error::MazeIdExists(existing));
+        }
         let id = self.make_maze_id(&maze.name);
         self.write_maze_file(owner, maze, &id, false)?;
         Ok(())
@@ -1550,15 +1583,16 @@ impl MazeStore for FileStore {
     /// # });
     /// ```
     async fn find_maze_by_name(&self, owner: &User, name: &str) -> Result<MazeItem, Error> {
-        let id = self.make_maze_id(name);
-        if !name.is_empty() && self.maze_exists(owner, &id) {
-            return Ok(MazeItem {
+        // Case-insensitive lookup, implemented in code rather than via
+        // filesystem semantics — see `find_maze_filename_ci` for rationale.
+        match self.find_maze_filename_ci(owner, name) {
+            Some(id) => Ok(MazeItem {
                 id,
                 name: name.to_string(),
                 definition: None,
-            });
+            }),
+            None => Err(Error::MazeNameNotFound(name.to_string())),
         }
-        Err(Error::MazeNameNotFound(name.to_string()))
     }
     /// Returns the list of maze items within the file store instance, sorted
     /// alphabetically in ascending order, optionally including the
