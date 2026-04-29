@@ -311,6 +311,182 @@ impl OAuthConfig {
     }
 }
 
+/// Selects which backend the [`storage`] crate uses.
+///
+/// `File` keeps the on-disk layout and is the default. `Sql` switches to the
+/// `SqlStore` (SQLite, PostgreSQL, or MySQL) chosen at runtime by the
+/// `[storage.sql].driver` field.
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum StorageKind {
+    #[default]
+    File,
+    Sql,
+}
+
+/// File-backed storage configuration.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct FileStorageConfig {
+    /// Directory under which user/maze data is stored (relative to the working
+    /// directory or absolute). Can be overridden with
+    /// `MAZE_WEB_SERVER_STORAGE_FILE_DATA_DIR`.
+    #[serde(default = "default_storage_file_data_dir")]
+    pub data_dir: String,
+}
+
+impl Default for FileStorageConfig {
+    fn default() -> Self {
+        Self {
+            data_dir: default_storage_file_data_dir(),
+        }
+    }
+}
+
+/// SQL-backed storage configuration.
+///
+/// `password` is **never** read from `config.toml`. It is sourced exclusively
+/// from `MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD` so credentials never land in
+/// committed files or container images. The connection URL is assembled at
+/// startup from these discrete fields plus any TLS query parameters required
+/// by `require_tls` / `ca_cert_path`.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SqlStorageConfig {
+    /// Driver name: `"postgres"`, `"mysql"`, or `"sqlite"`.
+    #[serde(default = "default_storage_sql_driver")]
+    pub driver: String,
+
+    /// Database server host (postgres / mysql only).
+    #[serde(default)]
+    pub host: String,
+
+    /// Database server port (postgres / mysql only).
+    #[serde(default)]
+    pub port: u16,
+
+    /// Database name (postgres / mysql only).
+    #[serde(default)]
+    pub database: String,
+
+    /// Database user (postgres / mysql only).
+    #[serde(default)]
+    pub username: String,
+
+    /// Resolved at startup from `MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD`.
+    /// Skipped during (de)serialisation — never read from or written to the
+    /// config file.
+    #[serde(skip)]
+    pub password: String,
+
+    /// SQLite database file path (sqlite only).
+    #[serde(default = "default_storage_sql_path")]
+    pub path: String,
+
+    /// Maximum pool connections.
+    #[serde(default = "default_storage_sql_max_connections")]
+    pub max_connections: u32,
+
+    /// If true, create the target database on first run when it does not
+    /// exist. Suitable for SQLite and local dev only — production cloud
+    /// credentials typically lack the privilege to use this.
+    #[serde(default)]
+    pub auto_create_database: bool,
+
+    /// Require TLS for postgres / mysql. Translated into driver-specific URL
+    /// query parameters at connect time. Ignored for SQLite (no network).
+    #[serde(default)]
+    pub require_tls: bool,
+
+    /// Optional CA bundle for full TLS verification. When set, switches the
+    /// driver-specific TLS mode to verify-CA / verify-full.
+    #[serde(default)]
+    pub ca_cert_path: String,
+
+    /// Initial-connection timeout, in seconds. Encoded into the connection
+    /// URL as a driver-specific query parameter (`connect_timeout` for
+    /// postgres). MySQL has no portable equivalent on the URL — the field
+    /// is accepted for config consistency but only honoured for postgres.
+    #[serde(default = "default_storage_sql_connect_timeout_secs")]
+    pub connect_timeout_secs: u64,
+
+    /// Idle-connection timeout, in seconds. Connections idle longer than
+    /// this are dropped from the pool — important for cloud databases that
+    /// kill idle TCP sockets.
+    #[serde(default = "default_storage_sql_idle_timeout_secs")]
+    pub idle_timeout_secs: u64,
+
+    /// Pool-acquisition timeout, in seconds. Bounds both the initial pool
+    /// connect and subsequent `acquire()` waits.
+    #[serde(default = "default_storage_sql_acquire_timeout_secs")]
+    pub acquire_timeout_secs: u64,
+}
+
+impl Default for SqlStorageConfig {
+    fn default() -> Self {
+        Self {
+            driver: default_storage_sql_driver(),
+            host: String::new(),
+            port: 0,
+            database: String::new(),
+            username: String::new(),
+            password: String::new(),
+            path: default_storage_sql_path(),
+            max_connections: default_storage_sql_max_connections(),
+            auto_create_database: false,
+            require_tls: false,
+            ca_cert_path: String::new(),
+            connect_timeout_secs: default_storage_sql_connect_timeout_secs(),
+            idle_timeout_secs: default_storage_sql_idle_timeout_secs(),
+            acquire_timeout_secs: default_storage_sql_acquire_timeout_secs(),
+        }
+    }
+}
+
+/// Top-level storage configuration. Selects between the file-backed and
+/// SQL-backed implementations of the [`storage::Store`] trait.
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct StorageConfig {
+    /// Which backend to use: `"file"` or `"sql"`.
+    #[serde(default, rename = "type")]
+    pub kind: StorageKind,
+
+    /// File-backend settings (used when `type = "file"`).
+    #[serde(default)]
+    pub file: FileStorageConfig,
+
+    /// SQL-backend settings (used when `type = "sql"`).
+    #[serde(default)]
+    pub sql: SqlStorageConfig,
+}
+
+impl StorageConfig {
+    /// Resolves the SQL password from `MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD`
+    /// when `type = "sql"` and the driver requires authentication. SQLite is
+    /// exempt because it has no network user. Returns Ok without inspecting
+    /// anything when a file backend is selected.
+    ///
+    /// Called from [`AppConfig::load`] so the password is never read from a
+    /// file or written to the serialised form (`#[serde(skip)]` on the field).
+    pub fn resolve_password_from_env(&mut self) -> Result<(), String> {
+        if self.kind != StorageKind::Sql {
+            return Ok(());
+        }
+        if self.sql.driver.eq_ignore_ascii_case("sqlite") {
+            return Ok(());
+        }
+        let var = "MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD";
+        match std::env::var(var) {
+            Ok(value) => {
+                self.sql.password = value;
+                Ok(())
+            }
+            Err(_) => Err(format!(
+                "[storage.sql] driver = \"{}\" requires the env var \"{}\" to be set; passwords are not read from config files",
+                self.sql.driver, var
+            )),
+        }
+    }
+}
+
 /// Application configuration settings loaded from config.toml or environment variables.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AppConfig {
@@ -341,6 +517,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub oauth: OAuthConfig,
 
+    /// Storage backend configuration.
+    #[serde(default)]
+    pub storage: StorageConfig,
+
     /// Path to the config file that was loaded. Not read from the config file itself —
     /// used by the admin API to persist runtime feature-flag changes back to disk.
     #[serde(skip, default = "default_config_path")]
@@ -356,6 +536,7 @@ impl Default for AppConfig {
             static_dir: default_static_dir(),
             features: AppFeaturesConfig::default(),
             oauth: OAuthConfig::default(),
+            storage: StorageConfig::default(),
             config_path: default_config_path(),
         }
     }
@@ -375,6 +556,13 @@ fn default_logging_log_file_prefix() -> String { "maze_web_server_".to_string() 
 fn default_features_allow_signup() -> bool { true }
 fn default_oauth_enabled() -> bool { false }
 fn default_mobile_redirect_scheme() -> String { "maze-app".to_string() }
+fn default_storage_file_data_dir() -> String { "data".to_string() }
+fn default_storage_sql_driver() -> String { "sqlite".to_string() }
+fn default_storage_sql_path() -> String { "maze.db".to_string() }
+fn default_storage_sql_max_connections() -> u32 { 5 }
+fn default_storage_sql_connect_timeout_secs() -> u64 { 10 }
+fn default_storage_sql_idle_timeout_secs() -> u64 { 600 }
+fn default_storage_sql_acquire_timeout_secs() -> u64 { 30 }
 
 /// Application Configuration
 impl AppConfig {
@@ -391,6 +579,25 @@ impl AppConfig {
             .set_default("oauth.enabled", default_oauth_enabled())?
             .set_default("oauth.connector", "internal")?
             .set_default("oauth.mobile_redirect_scheme", default_mobile_redirect_scheme())?
+            .set_default("storage.type", "file")?
+            .set_default("storage.file.data_dir", default_storage_file_data_dir())?
+            .set_default("storage.sql.driver", default_storage_sql_driver())?
+            .set_default("storage.sql.path", default_storage_sql_path())?
+            .set_default("storage.sql.max_connections", default_storage_sql_max_connections())?
+            .set_default("storage.sql.auto_create_database", false)?
+            .set_default("storage.sql.require_tls", false)?
+            .set_default(
+                "storage.sql.connect_timeout_secs",
+                default_storage_sql_connect_timeout_secs(),
+            )?
+            .set_default(
+                "storage.sql.idle_timeout_secs",
+                default_storage_sql_idle_timeout_secs(),
+            )?
+            .set_default(
+                "storage.sql.acquire_timeout_secs",
+                default_storage_sql_acquire_timeout_secs(),
+            )?
             .add_source(File::with_name("config.toml").required(false));
 
         builder = set_env_overrides(builder)?;
@@ -400,6 +607,9 @@ impl AppConfig {
             .or_else(|_| Ok::<_, config::ConfigError>(AppConfig::default()))?;
         cfg.oauth
             .resolve_and_validate()
+            .map_err(config::ConfigError::Message)?;
+        cfg.storage
+            .resolve_password_from_env()
             .map_err(config::ConfigError::Message)?;
         Ok(cfg)
     }
@@ -460,6 +670,55 @@ fn set_env_overrides(mut builder: ConfigBuilder<DefaultState>) -> Result<ConfigB
 
     if let Ok(scheme) = std::env::var(get_app_env_name("OAUTH_MOBILE_REDIRECT_SCHEME")) {
         builder = builder.set_override("oauth.mobile_redirect_scheme", scheme)?;
+    }
+
+    // Storage backend overrides. Note: STORAGE_SQL_PASSWORD is *not* read here
+    // — `StorageConfig::resolve_password_from_env` handles it after deserialise
+    // so the password never lives inside the `config` crate's value tree.
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_TYPE")) {
+        builder = builder.set_override("storage.type", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_FILE_DATA_DIR")) {
+        builder = builder.set_override("storage.file.data_dir", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_DRIVER")) {
+        builder = builder.set_override("storage.sql.driver", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_HOST")) {
+        builder = builder.set_override("storage.sql.host", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_PORT")) {
+        builder = builder.set_override("storage.sql.port", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_DATABASE")) {
+        builder = builder.set_override("storage.sql.database", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_USERNAME")) {
+        builder = builder.set_override("storage.sql.username", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_PATH")) {
+        builder = builder.set_override("storage.sql.path", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_MAX_CONNECTIONS")) {
+        builder = builder.set_override("storage.sql.max_connections", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_AUTO_CREATE_DATABASE")) {
+        builder = builder.set_override("storage.sql.auto_create_database", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_REQUIRE_TLS")) {
+        builder = builder.set_override("storage.sql.require_tls", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_CA_CERT_PATH")) {
+        builder = builder.set_override("storage.sql.ca_cert_path", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_CONNECT_TIMEOUT_SECS")) {
+        builder = builder.set_override("storage.sql.connect_timeout_secs", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_IDLE_TIMEOUT_SECS")) {
+        builder = builder.set_override("storage.sql.idle_timeout_secs", v)?;
+    }
+    if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_ACQUIRE_TIMEOUT_SECS")) {
+        builder = builder.set_override("storage.sql.acquire_timeout_secs", v)?;
     }
 
     Ok(builder)

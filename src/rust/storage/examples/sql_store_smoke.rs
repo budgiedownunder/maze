@@ -29,6 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         url,
         max_connections,
         auto_create_database: true,
+        ..SqlStoreConfig::default()
     })
     .await?;
 

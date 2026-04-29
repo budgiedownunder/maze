@@ -42,32 +42,71 @@
 -- driver does not support the SQLite type Bool"). INTEGER is the lowest
 -- common denominator that decodes uniformly across PostgreSQL, MySQL, and
 -- SQLite. The SqlStore code converts to/from `bool` at the Rust boundary.
+--
+-- Column type rule: VARCHAR(N) everywhere a string is stored — never bare
+-- TEXT. Two MySQL-driven reasons:
+--   1. MySQL rejects bare TEXT in primary keys, unique indexes, foreign keys,
+--      and other indexed positions ("BLOB/TEXT column ... used in key
+--      specification without a key length", error 1170).
+--   2. SQLx 0.8's `Any` driver classifies MySQL TEXT as `BLOB` in its
+--      type-info abstraction (TEXT and BLOB share the same wire type in
+--      MySQL; the Any layer collapses the distinction). Decoding into
+--      `String` then fails with "Rust type `alloc::string::String` is not
+--      compatible with SQL type `BLOB`". VARCHAR is unambiguously `Text`.
+-- PostgreSQL treats VARCHAR(N) as a length-bounded TEXT (no behavioural
+-- change), and SQLite ignores the length entirely (TYPE affinity rules).
+--
+-- Sizes are chosen to fit MySQL's row-size and key-length budgets while
+-- giving comfortable headroom:
+--   * 36   for UUIDs
+--   * 32   for RFC 3339 timestamps (24 chars + slack)
+--   * 45   for IP addresses (IPv6 max is 45)
+--   * 64   for usernames and provider names
+--   * 254  for emails (RFC 5321 max)
+--   * 255  for opaque OAuth subject ids, full names, device info, maze names
+--   * 16000 for the maze JSON definition (~64 KB at utf8mb4 — same as the
+--          original TEXT cap; large columns are stored off-page in InnoDB
+--          DYNAMIC row format so they don't blow the 65,535-byte row limit)
+-- The composite key (provider+provider_user_id at 64+255) and the
+-- (owner_id, name) unique constraint are well within InnoDB's 3072-byte
+-- key limit under utf8mb4.
+--
+-- Note: `full_name` has no DEFAULT despite being NOT NULL. MySQL rejects
+-- literal defaults on TEXT/BLOB columns ("can't have a default value", error
+-- 1101) — the rule was relaxed in MySQL 8.0.13+ but only for parenthesised
+-- expressions, which then breaks portability with PostgreSQL/SQLite. Every
+-- INSERT path through SqlStore supplies `full_name` explicitly (User::default()
+-- initialises it to ""), so the column-level default was redundant anyway.
+--
+-- Index style: unique constraints are declared inline on the column (`UNIQUE`)
+-- rather than via standalone `CREATE UNIQUE INDEX IF NOT EXISTS` statements.
+-- MySQL doesn't accept `IF NOT EXISTS` on CREATE INDEX/UNIQUE INDEX (error
+-- 1064 syntax error); PostgreSQL and SQLite do. Inline UNIQUE works in all
+-- three. Non-unique helper indexes for FK columns are emitted as plain
+-- `CREATE INDEX` — SQLx tracks applied migrations so the file runs at most
+-- once per fresh database, and `IF NOT EXISTS` was redundant defence.
 CREATE TABLE IF NOT EXISTS users (
-    id            TEXT NOT NULL PRIMARY KEY,
-    is_admin      INTEGER NOT NULL DEFAULT 0,
-    username      TEXT NOT NULL,
-    full_name     TEXT NOT NULL DEFAULT '',
-    email         TEXT NOT NULL,
-    password_hash TEXT NOT NULL,
-    api_key       TEXT NOT NULL
+    id            VARCHAR(36)  NOT NULL PRIMARY KEY,
+    is_admin      INTEGER      NOT NULL DEFAULT 0,
+    username      VARCHAR(64)  NOT NULL UNIQUE,
+    full_name     VARCHAR(255) NOT NULL,
+    email         VARCHAR(254) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    api_key       VARCHAR(36)  NOT NULL UNIQUE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users (username);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email    ON users (email);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key  ON users (api_key);
-
 CREATE TABLE IF NOT EXISTS user_logins (
-    id          TEXT NOT NULL PRIMARY KEY,
-    user_id     TEXT NOT NULL,
-    created_at  TEXT NOT NULL,
-    expires_at  TEXT NOT NULL,
-    ip_address  TEXT,
-    device_info TEXT,
+    id          VARCHAR(36)  NOT NULL PRIMARY KEY,
+    user_id     VARCHAR(36)  NOT NULL,
+    created_at  VARCHAR(32)  NOT NULL,
+    expires_at  VARCHAR(32)  NOT NULL,
+    ip_address  VARCHAR(45),
+    device_info VARCHAR(255),
     CONSTRAINT fk_user_logins_user_id
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_user_logins_user_id ON user_logins (user_id);
+CREATE INDEX idx_user_logins_user_id ON user_logins (user_id);
 
 -- OAuth identities linked to a user. A user may have multiple identities (one
 -- per provider). The `(provider, provider_user_id)` pair is globally unique
@@ -94,27 +133,27 @@ CREATE INDEX IF NOT EXISTS idx_user_logins_user_id ON user_logins (user_id);
 --     backfill `oauth_providers` from `SELECT DISTINCT provider`, add an FK
 --     column, drop the inline column. Not a one-way door.
 CREATE TABLE IF NOT EXISTS oauth_identities (
-    user_id          TEXT NOT NULL,
-    provider         TEXT NOT NULL,
-    provider_user_id TEXT NOT NULL,
-    provider_email   TEXT,
-    linked_at        TEXT NOT NULL,
-    last_seen_at     TEXT NOT NULL,
+    user_id          VARCHAR(36)  NOT NULL,
+    provider         VARCHAR(64)  NOT NULL,
+    provider_user_id VARCHAR(255) NOT NULL,
+    provider_email   VARCHAR(254),
+    linked_at        VARCHAR(32)  NOT NULL,
+    last_seen_at     VARCHAR(32)  NOT NULL,
     PRIMARY KEY (provider, provider_user_id),
     CONSTRAINT fk_oauth_identities_user_id
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_oauth_identities_user_id ON oauth_identities (user_id);
+CREATE INDEX idx_oauth_identities_user_id ON oauth_identities (user_id);
 
 CREATE TABLE IF NOT EXISTS mazes (
-    id          TEXT NOT NULL PRIMARY KEY,
-    owner_id    TEXT NOT NULL,
-    name        TEXT NOT NULL,
-    definition  TEXT NOT NULL,
+    id          VARCHAR(36)    NOT NULL PRIMARY KEY,
+    owner_id    VARCHAR(36)    NOT NULL,
+    name        VARCHAR(255)   NOT NULL,
+    definition  VARCHAR(16000) NOT NULL,
     CONSTRAINT fk_mazes_owner_id
         FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT uq_mazes_owner_name UNIQUE (owner_id, name)
 );
 
-CREATE INDEX IF NOT EXISTS idx_mazes_owner_id ON mazes (owner_id);
+CREATE INDEX idx_mazes_owner_id ON mazes (owner_id);
