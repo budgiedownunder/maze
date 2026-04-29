@@ -353,6 +353,20 @@ pub async fn find_user_by_oauth_identity_strict_matching(store: &mut Box<dyn Sto
     let mut alice = make_oauth_user("alice", "alice@example.com", "google", "sub-alice");
     store.create_user(&mut alice).await.expect("create_user");
 
+    // provider_user_id is matched exactly (case-sensitive) per OAuth/OIDC
+    // spec — `sub` is opaque and case-significant. PG and SQLite use
+    // case-sensitive collations by default; MySQL needs an explicit
+    // `COLLATE utf8mb4_bin` patch on the column (applied in `SqlStore::new`
+    // post-migration since the COLLATE syntax isn't portable through the
+    // single migration file).
+    assert!(
+        store
+            .find_user_by_oauth_identity("google", "SUB-ALICE")
+            .await
+            .is_err(),
+        "provider_user_id must be case-sensitive"
+    );
+
     // Wrong provider for a known sub must not match.
     assert!(
         store
@@ -368,17 +382,6 @@ pub async fn find_user_by_oauth_identity_strict_matching(store: &mut Box<dyn Sto
         .await
         .expect_err("unknown identity must error");
     assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
-
-    // Case-sensitivity of `provider_user_id` is intentionally NOT asserted
-    // here. PostgreSQL and SQLite use case-sensitive collations by default
-    // so `"sub-alice" != "SUB-ALICE"`; MySQL's default `utf8mb4_unicode_ci`
-    // collation is case-insensitive and matches both. Making the column
-    // case-sensitive across all three backends would require MySQL-specific
-    // `COLLATE utf8mb4_bin` syntax, breaking single-file schema portability.
-    // The OAuth/OIDC `sub` claim is supposed to be opaque and case-significant
-    // per spec, so this is a known divergence — currently low-risk because
-    // the supported providers (Google, GitHub, Facebook) return purely
-    // numeric subs.
 }
 
 pub async fn find_user_by_oauth_identity_supports_multiple_per_user(store: &mut Box<dyn Store>) {

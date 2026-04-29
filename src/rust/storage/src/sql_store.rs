@@ -215,6 +215,25 @@ impl SqlStore {
             .await
             .map_err(|e| Error::Other(format!("migration failed: {e}")))?;
 
+        // MySQL post-migration patch: force `oauth_identities.provider_user_id`
+        // to a case-sensitive collation. The default `utf8mb4_unicode_ci` makes
+        // string comparisons case-insensitive, but the OAuth/OIDC `sub` claim
+        // is opaque and case-significant per spec. PG and SQLite already use
+        // case-sensitive defaults — no equivalent needed there. The schema
+        // can't carry `COLLATE utf8mb4_bin` directly because it's MySQL-only
+        // syntax that PG/SQLite reject, so it lives here, run after the
+        // portable migration. ALTER TABLE on an already-utf8mb4_bin column is
+        // an INPLACE metadata-only op, fast and idempotent.
+        if kind == SqlBackend::MySql {
+            sqlx::query(
+                "ALTER TABLE oauth_identities \
+                 MODIFY provider_user_id VARCHAR(255) COLLATE utf8mb4_bin NOT NULL",
+            )
+            .execute(&pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+
         Ok(Self { pool, kind })
     }
 }
