@@ -68,8 +68,7 @@ fn construct_bind_address(port: u16) -> String {
 
 /// Adds the default admin account to the store if no users are registered
 async fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Store>) -> Result<(), StoreError> {
-    let users = store.get_users().await?;
-    if users.is_empty() {
+    if !store.has_users().await? {
         let password_hash = match hash_password(DEFAULT_ADMIN_ACCOUNT_PASSWORD, hash_config) {
             Ok(hash) => hash,
             Err(error) => return Err(StoreError::Other(format!("{error}"))),

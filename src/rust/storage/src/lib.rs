@@ -11,6 +11,7 @@ pub use error::Error;
 pub use file_store::{FileStore, FileStoreConfig};
 #[cfg(feature = "sql-store")]
 pub use sql_store::{SqlStore, SqlStoreConfig};
+pub use store::Manage;
 pub use store::MazeItem;
 pub use store::MazeStore;
 pub use store::Store;

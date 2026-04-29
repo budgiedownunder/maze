@@ -385,6 +385,10 @@ mod test_definitions {
                 .collect();
             Ok(admins)
         }
+
+        async fn has_users(&self) -> Result<bool, StoreError> {
+            Ok(!self.users.is_empty())
+        }
     }
 
     #[async_trait]

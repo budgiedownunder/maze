@@ -233,6 +233,12 @@ async fn get_users_empty_when_store_empty() {
 }
 
 #[tokio::test]
+async fn has_users_round_trips() {
+    let mut s = fresh_store().await;
+    contract::has_users_round_trips(&mut s).await;
+}
+
+#[tokio::test]
 async fn get_admin_users_filters_to_admins_only() {
     let mut s = fresh_store().await;
     contract::get_admin_users_filters_to_admins_only(&mut s).await;

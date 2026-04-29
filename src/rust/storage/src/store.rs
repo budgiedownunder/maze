@@ -37,6 +37,8 @@ pub trait UserStore {
     async fn get_users(&self) -> Result<Vec<User>, Error>;
     /// Returns the list of admin users within the store
     async fn get_admin_users(&self) -> Result<Vec<User>, Error>;
+    /// Returns whether at least one user exists in the store
+    async fn has_users(&self) -> Result<bool, Error>;
 }
 
 /// Contains the identifying details for a maze item and (optionally)

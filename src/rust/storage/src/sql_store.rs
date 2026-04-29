@@ -707,6 +707,14 @@ impl UserStore for SqlStore {
         }
         Ok(users)
     }
+
+    async fn has_users(&self) -> Result<bool, Error> {
+        let row = sqlx::query(&q(self.kind, "SELECT 1 FROM users LIMIT 1"))
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        Ok(row.is_some())
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1249,6 +1249,44 @@ impl UserStore for FileStore {
         }
         Ok(admins)
     }
+
+    /// Returns whether at least one user exists in the file store.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(true)` if any valid user is present, `Ok(false)` if the store is
+    /// empty (or contains only orphan directories).
+    ///
+    /// # Examples
+    ///
+    /// Check whether the store has any users before deciding to seed a
+    /// default admin account
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    /// # tokio_test::block_on(async {
+    ///
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    ///
+    /// // Create the file store
+    /// let store = FileStore::new(&FileStoreConfig::default());
+    ///
+    /// match store.has_users().await {
+    ///     Ok(true) => println!("Store already has users — skip bootstrap"),
+    ///     Ok(false) => println!("Store is empty — seed a default admin"),
+    ///     Err(error) => println!("Failed to check store: {}", error),
+    /// }
+    /// # });
+    /// ```
+    async fn has_users(&self) -> Result<bool, Error> {
+        for id in self.get_user_ids()? {
+            if self.load_user_if_present(id)?.is_some() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
 }
 
 #[async_trait]
@@ -1697,6 +1735,34 @@ impl MazeStore for FileStore {
 
 #[async_trait]
 impl Manage for FileStore {
+    /// Resets the file store to its initial empty state by deleting the
+    /// entire data directory and re-creating the empty user-tree skeleton.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` on success, `Err(...)` if the data directory could not be
+    /// removed or re-initialised.
+    ///
+    /// # Examples
+    ///
+    /// Empty the store before running a test scenario
+    /// ```
+    /// # // Make sure the store is in a suitable state prior to running the doc test
+    /// # use storage::test_setup::setup;
+    /// # setup();
+    /// # tokio_test::block_on(async {
+    ///
+    /// use storage::{FileStore, FileStoreConfig, Manage, Store};
+    ///
+    /// // Create the file store
+    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    ///
+    /// // Wipe any existing content
+    /// if let Err(error) = store.empty().await {
+    ///     panic!("Failed to empty the store: {}", error);
+    /// }
+    /// # });
+    /// ```
     async fn empty(&mut self) -> Result<(), Error> {
         let root_path = Path::new(&self.data_dir);
         if root_path.is_dir() {

@@ -245,6 +245,7 @@ mod tests {
         }
         async fn get_users(&self) -> Result<Vec<User>, StoreError> { Ok(self.users.values().cloned().collect()) }
         async fn get_admin_users(&self) -> Result<Vec<User>, StoreError> { Ok(vec![]) }
+        async fn has_users(&self) -> Result<bool, StoreError> { Ok(!self.users.is_empty()) }
     }
 
     fn ident(provider: &str, sub: &str, email: Option<&str>, verified: bool) -> NormalisedIdentity {

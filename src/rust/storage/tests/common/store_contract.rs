@@ -431,6 +431,18 @@ pub async fn get_users_empty_when_store_empty(store: &mut Box<dyn Store>) {
     assert!(users.is_empty(), "got {} users on empty store", users.len());
 }
 
+pub async fn has_users_round_trips(store: &mut Box<dyn Store>) {
+    assert!(
+        !store.has_users().await.expect("has_users on empty store"),
+        "has_users must return false on an empty store"
+    );
+    let _ = fixture_user(store, "alice", "alice@example.com").await;
+    assert!(
+        store.has_users().await.expect("has_users on populated store"),
+        "has_users must return true after a user is created"
+    );
+}
+
 pub async fn get_admin_users_filters_to_admins_only(store: &mut Box<dyn Store>) {
     let _ = fixture_user(store, "alice", "alice@example.com").await;
     let _ = fixture_admin(store, "root", "root@example.com").await;
