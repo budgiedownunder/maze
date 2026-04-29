@@ -86,6 +86,22 @@ The following configuration settings exist:
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
+| Storage  | `storage.type`               | Text (`file` / `sql`) | `file` | `MAZE_WEB_SERVER_STORAGE_TYPE`
+|          | `storage.file.data_dir`      | Text    | `data`  | `MAZE_WEB_SERVER_STORAGE_FILE_DATA_DIR`
+|          | `storage.sql.driver`         | Text (`sqlite` / `postgres` / `mysql`) | `sqlite` | `MAZE_WEB_SERVER_STORAGE_SQL_DRIVER`
+|          | `storage.sql.host`           | Text    | (empty) | `MAZE_WEB_SERVER_STORAGE_SQL_HOST`
+|          | `storage.sql.port`           | Integer | `0`     | `MAZE_WEB_SERVER_STORAGE_SQL_PORT`
+|          | `storage.sql.database`       | Text    | (empty) | `MAZE_WEB_SERVER_STORAGE_SQL_DATABASE`
+|          | `storage.sql.username`       | Text    | (empty) | `MAZE_WEB_SERVER_STORAGE_SQL_USERNAME`
+|          | `storage.sql.password`       | Text    | (env-var only — never read from config files) | `MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD`
+|          | `storage.sql.path`           | Text    | `maze.db` | `MAZE_WEB_SERVER_STORAGE_SQL_PATH`
+|          | `storage.sql.max_connections` | Integer | `5`    | `MAZE_WEB_SERVER_STORAGE_SQL_MAX_CONNECTIONS`
+|          | `storage.sql.auto_create_database` | Boolean | `false` | `MAZE_WEB_SERVER_STORAGE_SQL_AUTO_CREATE_DATABASE`
+|          | `storage.sql.require_tls`    | Boolean | `false` | `MAZE_WEB_SERVER_STORAGE_SQL_REQUIRE_TLS`
+|          | `storage.sql.ca_cert_path`   | Text    | (empty) | `MAZE_WEB_SERVER_STORAGE_SQL_CA_CERT_PATH`
+|          | `storage.sql.connect_timeout_secs` | Integer | `10` | `MAZE_WEB_SERVER_STORAGE_SQL_CONNECT_TIMEOUT_SECS`
+|          | `storage.sql.idle_timeout_secs` | Integer | `600` | `MAZE_WEB_SERVER_STORAGE_SQL_IDLE_TIMEOUT_SECS`
+|          | `storage.sql.acquire_timeout_secs` | Integer | `30` | `MAZE_WEB_SERVER_STORAGE_SQL_ACQUIRE_TIMEOUT_SECS`
 
 These can also be set in a local configuration file called `config.toml` as follows
 
@@ -102,6 +118,37 @@ log_level = "info"
 
 [features]
 allow_signup = true
+
+[storage]
+# Backend selector: "file" (on-disk JSON layout) or "sql" (SQLite/Postgres/MySQL).
+type = "file"
+
+[storage.file]
+# Directory under which user/maze data is stored, relative to the working
+# directory or absolute.
+data_dir = "data"
+
+# ---- SQL backend ----
+# To switch to a SQL backend, set type = "sql" above and uncomment the
+# block below. Driver selection happens at runtime — one binary supports
+# all three engines via SQLx's Any backend. The connection URL is
+# assembled from these fields at startup. The password is *never*
+# stored here — set MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD instead
+# (sqlite is exempt — it has no network user).
+# [storage.sql]
+# driver = "postgres"            # "postgres", "mysql", or "sqlite"
+# host = "your-db-host"          # postgres / mysql only
+# port = 5432                    # postgres / mysql only
+# database = "your_database"     # postgres / mysql only
+# username = "your_app_user"     # postgres / mysql only
+# path = "your_database.db"      # sqlite only
+# max_connections = 5
+# auto_create_database = false   # sqlite + dev only — cloud creds rarely have the privilege
+# require_tls = false            # set true for any host beyond localhost
+# ca_cert_path = ""              # optional CA bundle for full TLS verification
+# connect_timeout_secs = 10
+# idle_timeout_secs = 600
+# acquire_timeout_secs = 30
 
 [oauth]
 enabled = false
@@ -143,6 +190,128 @@ Notes:
 - `oauth.enabled` is the master switch — when `false`, no OAuth buttons render in any client and the per-provider sections below are not validated.
 - `oauth.connector` selects the implementation. `internal` ships in v1; `auth0` is reserved for a future drop-in and will error with a clear "not yet implemented" message at startup.
 - OAuth client secrets are **always** read from the environment variable named in `client_secret_env`, never from `config.toml`. On startup the server walks every enabled provider and reports *all* misconfigurations in one error (empty `client_id`, missing env var, etc.) rather than fix-restart-fix-restart looping. See the **OAuth Sign-In** subsection below for full setup steps.
+- The `[storage]` section selects between the file-backed (`type = "file"`, the default) and SQL-backed (`type = "sql"`) implementations. The SQL backend supports SQLite, PostgreSQL, and MySQL via SQLx's `Any` driver — all three engines are compiled into the same binary; selection happens at runtime via `storage.sql.driver` and the connection details. See **Storage Backend** below for setup recipes per backend.
+
+## Storage Backend
+
+The server stores users, maze definitions, OAuth identities, and login tokens in a pluggable backend selected by `storage.type`.
+
+### When to use which
+
+| Backend | Best for | Setup |
+|:--------|:---------|:------|
+| `file` | Local dev, single-instance, zero infrastructure | None — server creates `data/` on first run |
+| `sql` + `sqlite` | Local dev, single-instance with relational guarantees, low-traffic self-hosted production | None — `auto_create_database = true` creates the `.db` file on first run |
+| `sql` + `postgres` | Networked / multi-instance production, cloud deployments | Operator pre-provisions the database and grants the app user (see below) |
+| `sql` + `mysql` | Networked / multi-instance production, MySQL-shop deployments | Same operator pattern as PostgreSQL |
+
+### Example configurations
+
+Runnable starter configs are checked in alongside this README:
+
+| File | Description |
+|:-----|:------------|
+| [`config.example.sqlite.toml`](./config.example.sqlite.toml) | SQLite — no infrastructure, file at `maze.db` |
+| [`config.example.postgres.toml`](./config.example.postgres.toml) | PostgreSQL on `localhost` (Docker / LAN), TLS off |
+| [`config.example.postgres-cloud.toml`](./config.example.postgres-cloud.toml) | Cloud-managed PostgreSQL (RDS / Cloud SQL / Azure DB), TLS required, longer timeouts, no auto-create |
+| [`config.example.mysql.toml`](./config.example.mysql.toml) | MySQL on `localhost` (Docker / LAN), TLS off |
+
+Copy the relevant file over `config.toml` (or merge its `[storage]` block in) and adjust hostnames, usernames, etc. Set `MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD` in the environment before starting the server when using `postgres` or `mysql`.
+
+### Two-phase migration model (PostgreSQL / MySQL)
+
+Production databases are managed in two phases with distinct privileges. The application **never** runs `CREATE DATABASE` or `CREATE USER` against a production server — those are operator-only steps.
+
+**Phase 1 — Operator (one-time, before the app first connects):**
+
+1. Create the database server instance (Docker / managed cloud service / on-prem install).
+2. Create the application's database.
+3. Create an application user with `CREATE TABLE` rights inside the database, but no server-level admin rights.
+
+PostgreSQL:
+```sql
+CREATE DATABASE your_database;
+CREATE USER your_app_user WITH PASSWORD '<your_app_password>';
+GRANT CONNECT ON DATABASE your_database TO your_app_user;
+\c your_database
+GRANT USAGE, CREATE ON SCHEMA public TO your_app_user;
+```
+
+MySQL:
+```sql
+CREATE DATABASE your_database CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'your_app_user'@'%' IDENTIFIED BY '<your_app_password>';
+GRANT CREATE, ALTER, DROP, INDEX, REFERENCES, SELECT, INSERT, UPDATE, DELETE
+    ON your_database.* TO 'your_app_user'@'%';
+FLUSH PRIVILEGES;
+```
+
+The app user gets `CREATE TABLE` rights inside the database but cannot create or drop other databases on the same server. Replace `your_database`, `your_app_user`, and `<your_app_password>` with your own values.
+
+**Phase 2 — Application startup (every deployment):**
+
+4. App connects with the app-user credentials to the pre-existing database.
+5. SQLx applies any pending migrations from `storage/migrations/` automatically — this is when `CREATE TABLE` statements run.
+6. SQLx tracks applied migrations in its own `_sqlx_migrations` table, so subsequent restarts skip migrations that have already been applied.
+
+**Schema changes** (future migrations) ship as new `0002_*.sql` files alongside `0001_initial.sql` and apply automatically on the next deploy. The same binary runs against dev/staging/prod — only the connection config differs.
+
+**`auto_create_database = true`** is for local dev / SQLite only. PostgreSQL and MySQL cloud credentials typically lack the server-level `CREATEDB`/`CREATE` privilege required for it to work, and managed databases are usually pre-provisioned by IaC (Terraform / CloudFormation / Bicep) anyway.
+
+### TLS
+
+`require_tls = true` enforces TLS for the connection. The URL gets driver-appropriate query parameters appended at startup:
+
+| Driver | Without `ca_cert_path` | With `ca_cert_path` |
+|:-------|:-----------------------|:--------------------|
+| `postgres` | `?sslmode=require` (TLS used, cert not verified) | `?sslmode=verify-full&sslrootcert=<path>` (full verification) |
+| `mysql` | `?ssl-mode=REQUIRED` | `?ssl-mode=VERIFY_CA&ssl-ca=<path>` |
+| `sqlite` | (ignored — no network) | (ignored) |
+
+For cloud-managed databases, `ca_cert_path` should point at the provider's CA bundle (e.g. `rds-global-bundle.pem` for AWS RDS).
+
+#### PostgreSQL TLS — local Docker recipe
+
+The default `postgres:16` image ships with `ssl = off`. To enable TLS for a local TLS smoke-test you need to run the container with TLS enabled and a cert mounted. From a host with OpenSSL available:
+
+```bash
+# Generate a self-signed cert/key pair (one-off)
+openssl req -x509 -nodes -newkey rsa:2048 \
+    -keyout postgres-server.key -out postgres-server.crt \
+    -days 365 -subj "/CN=localhost"
+
+# Run postgres with TLS enabled and the cert mounted
+docker run --name maze-postgres-tls \
+    -e POSTGRES_PASSWORD=pw -p 5432:5432 \
+    -v "$(pwd)/postgres-server.crt:/var/lib/postgresql/server.crt:ro" \
+    -v "$(pwd)/postgres-server.key:/var/lib/postgresql/server.key:ro" \
+    -d postgres:16 \
+    -c ssl=on \
+    -c ssl_cert_file=/var/lib/postgresql/server.crt \
+    -c ssl_key_file=/var/lib/postgresql/server.key
+```
+
+(On Windows, replace `$(pwd)` with the absolute Windows path to your cert files.)
+
+Then set `require_tls = true` in `config.toml` and start the server. Verify TLS is actually being used by querying the live connection state:
+
+```bash
+docker exec -it maze-postgres-tls psql -U postgres -d your_database \
+    -c "SELECT datname, usename, ssl, version FROM pg_stat_ssl JOIN pg_stat_activity USING(pid) WHERE usename = 'your_app_user';"
+```
+
+`ssl = t` and a `version` of `TLSv1.2` or `TLSv1.3` confirms the pool's connections are encrypted.
+
+#### MySQL TLS — already on by default
+
+The `mysql:8` Docker image enables TLS automatically with an auto-generated self-signed cert. Set `require_tls = true` in `config.toml`, start the server, and verify per-connection TLS state via:
+
+```bash
+docker exec -it maze-mysql mysql -uroot -ppw \
+    -e "SELECT processlist_user, processlist_host, connection_type FROM performance_schema.threads WHERE processlist_user = 'your_app_user';"
+```
+
+`connection_type = SSL/TLS` per pool connection confirms TLS is in use.
 
 
 ## Web Frontend

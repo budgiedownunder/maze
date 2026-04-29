@@ -1,0 +1,63 @@
+# Example configuration: PostgreSQL-backed storage (local / LAN)
+#
+# Suitable for local development against a Docker-hosted PostgreSQL, or for
+# on-network (LAN / VPN / internal datacentre) deployments where TLS is
+# either terminated upstream or considered optional inside a trusted network.
+# For cloud-managed databases (AWS RDS, GCP Cloud SQL, Azure Database) see
+# `config.example.postgres-cloud.toml`.
+#
+# One-off database setup (operator step — not run by the application):
+#
+#     docker run --name maze-postgres -e POSTGRES_PASSWORD=pw -p 5432:5432 -d postgres:16
+#     docker exec -it maze-postgres psql -U postgres -c "CREATE DATABASE maze;"
+#     docker exec -it maze-postgres psql -U postgres \
+#         -c "CREATE USER maze_app WITH PASSWORD 'maze_app_pw';"
+#     docker exec -it maze-postgres psql -U postgres \
+#         -c "GRANT CONNECT ON DATABASE maze TO maze_app;"
+#     docker exec -it maze-postgres psql -U postgres -d maze \
+#         -c "GRANT USAGE, CREATE ON SCHEMA public TO maze_app;"
+#
+# Before starting the server, set the password env var (replace
+# `maze_app_pw` with whatever password you used above):
+#
+#     export MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD=maze_app_pw       # bash
+#     $env:MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD = "maze_app_pw"     # PowerShell
+#
+# Copy this file over `config.toml` and run `cargo run`.
+
+port = 8443
+
+[security]
+cert_file = "cert.pem"
+key_file = "key.pem"
+login_expiry_hours = 24
+
+[logging]
+log_dir = "logs"
+log_level = "info"
+log_file_prefix = "maze_web_server_"
+
+[features]
+allow_signup = true
+
+[storage]
+type = "sql"
+
+[storage.sql]
+driver = "postgres"
+host = "localhost"
+port = 5432
+database = "maze"
+username = "maze_app"
+# password — never stored here; set MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD env var
+max_connections = 5
+auto_create_database = false
+require_tls = false
+connect_timeout_secs = 10
+idle_timeout_secs = 600
+acquire_timeout_secs = 30
+
+[oauth]
+enabled = false
+connector = "internal"
+mobile_redirect_scheme = "maze-app"
