@@ -109,11 +109,12 @@ cargo doc --features sql-store --open
 
 ## SqlStore schema and migrations
 
-The SqlStore schema is defined in [`migrations/0001_initial.sql`](./migrations/0001_initial.sql). It creates four tables:
+The SqlStore schema is defined across the migration files in [`migrations/`](./migrations/). It creates five tables:
 
 | Table | Purpose |
 |:------|:--------|
-| `users` | User records with admin flag, username, full name, email, password hash, API key |
+| `users` | User records with admin flag, username, full name, password hash, API key (added in `0001_initial.sql`; the `email` column was dropped in `0002_user_emails.sql` after data was moved to `user_emails`) |
+| `user_emails` | Email addresses attached to a user, with `is_primary`, `verified`, and `verified_at` (added in `0002_user_emails.sql`). Globally unique on `email`; one row per user has `is_primary = 1`, enforced in application code |
 | `user_logins` | Active and expired bearer-token login sessions, FK to `users` |
 | `oauth_identities` | Provider-linked identities (Google, GitHub, Facebook), FK to `users` |
 | `mazes` | Maze definitions (JSON), FK to owner `users` |

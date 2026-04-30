@@ -88,9 +88,9 @@ mod test_definitions {
                 is_admin: self.user.is_admin,
                 username: self.user.username.clone(),
                 full_name: self.user.full_name.clone(),
-                email: self.user.email.clone(),
-            }  
-        }          
+                email: self.user.email().to_string(),
+            }
+        }
         
         fn new_from_user(user: &User) -> Self {
             let mut new_user = user.clone();
@@ -192,10 +192,14 @@ mod test_definitions {
             self.find_user_id_by_name(name, ignore_id) != Uuid::nil()
         }
 
-        /// Locates a user by their email within the store
+        /// Locates a user by their email within the store. Looks across every
+        /// row of every user (matching the SQL `user_emails.email` UNIQUE).
         fn find_user_by_email(&self, email: &str, ignore_id: Uuid) -> Result<User, StoreError> {
             for v in self.users.values() {
-                if v.user.email == email && v.user.id != ignore_id {
+                if v.user.id == ignore_id {
+                    continue;
+                }
+                if v.user.emails.iter().any(|row| row.email.eq_ignore_ascii_case(email)) {
                     return Ok(v.user.clone());
                 }
             }
@@ -218,11 +222,13 @@ mod test_definitions {
             if self.user_name_exists(&user.username, ignore_id) {
                 return Err(StoreError::UserNameExists());
             }
-            if self.user_email_exists(&user.email, ignore_id) {
-                return Err(StoreError::UserEmailExists());
+            for row in &user.emails {
+                if self.user_email_exists(&row.email, ignore_id) {
+                    return Err(StoreError::UserEmailExists());
+                }
             }
             Ok(())
-        }        
+        }
     }
 
     #[async_trait]
@@ -555,7 +561,7 @@ mod test_definitions {
         user.username = username.to_string();
         user.is_admin = is_admin;
         user.api_key = User::new_api_key();
-        user.email = new_email(username);
+        user.set_primary_email_address(&new_email(username));
         user.password_hash = password_hash.to_string();
         user
     }

@@ -15,7 +15,7 @@ use crate::store::{Manage, MazeStore, UserStore};
 use crate::{validation::validate_user_fields, Error, MazeItem, Store};
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, Utc};
-use data_model::{Maze, OAuthIdentity, User, UserLogin};
+use data_model::{Maze, OAuthIdentity, User, UserEmail, UserLogin};
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{AnyPool, Row};
@@ -312,6 +312,44 @@ async fn fetch_user_logins(
     Ok(logins)
 }
 
+async fn fetch_user_emails(
+    pool: &AnyPool,
+    kind: SqlBackend,
+    user_id: Uuid,
+) -> Result<Vec<UserEmail>, Error> {
+    // Order by primary-first, then alphabetically — keeps the primary at the
+    // front of every loaded user, which `User::primary_email()` finds via
+    // `iter().find(...)` in O(1) for the common case.
+    let rows = sqlx::query(&q(
+        kind,
+        "SELECT email, is_primary, verified, verified_at \
+         FROM user_emails WHERE user_id = ? ORDER BY is_primary DESC, email",
+    ))
+    .bind(user_id.to_string())
+    .fetch_all(pool)
+    .await
+    .map_err(map_sqlx_err)?;
+
+    let mut emails = Vec::with_capacity(rows.len());
+    for row in rows {
+        let is_primary_raw: i32 = row.try_get("is_primary").map_err(map_sqlx_err)?;
+        let verified_raw: i32 = row.try_get("verified").map_err(map_sqlx_err)?;
+        let verified_at_raw: Option<String> =
+            row.try_get("verified_at").map_err(map_sqlx_err)?;
+        let verified_at = match verified_at_raw {
+            Some(s) => Some(datetime_from_sql(&s)?),
+            None => None,
+        };
+        emails.push(UserEmail {
+            email: row.try_get("email").map_err(map_sqlx_err)?,
+            is_primary: int_to_bool(is_primary_raw),
+            verified: int_to_bool(verified_raw),
+            verified_at,
+        });
+    }
+    Ok(emails)
+}
+
 async fn fetch_user_oauth_identities(
     pool: &AnyPool,
     kind: SqlBackend,
@@ -362,12 +400,16 @@ async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result
     let api_key_str: String = row.try_get("api_key").map_err(map_sqlx_err)?;
     let api_key = parse_uuid("api_key", &api_key_str)?;
     let is_admin_raw: i32 = row.try_get("is_admin").map_err(map_sqlx_err)?;
+    // `users.email` is read but discarded — `user_emails` is the source of
+    // truth. The legacy column is kept populated by every write path as a
+    // write-through denormalisation, awaiting a future per-backend migration
+    // to retire it. See `migrations/0002_user_emails.sql` for context.
     Ok(User {
         id,
         is_admin: int_to_bool(is_admin_raw),
         username: row.try_get("username").map_err(map_sqlx_err)?,
         full_name: row.try_get("full_name").map_err(map_sqlx_err)?,
-        email: row.try_get("email").map_err(map_sqlx_err)?,
+        emails: fetch_user_emails(pool, kind, id).await?,
         password_hash: row.try_get("password_hash").map_err(map_sqlx_err)?,
         api_key,
         logins: fetch_user_logins(pool, kind, id).await?,
@@ -393,7 +435,7 @@ async fn check_user_unique_fields(
     pool: &AnyPool,
     kind: SqlBackend,
     username: &str,
-    email: &str,
+    emails: &[UserEmail],
     ignore_id: Uuid,
 ) -> Result<(), Error> {
     let ignore = ignore_id.to_string();
@@ -409,17 +451,21 @@ async fn check_user_unique_fields(
     if by_name.is_some() {
         return Err(Error::UserNameExists());
     }
-    let by_email = sqlx::query(&q(
-        kind,
-        "SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id <> ?",
-    ))
-    .bind(email)
-    .bind(&ignore)
-    .fetch_optional(pool)
-    .await
-    .map_err(map_sqlx_err)?;
-    if by_email.is_some() {
-        return Err(Error::UserEmailExists());
+    // Check every email row against the global UNIQUE on user_emails.email.
+    for row in emails {
+        let by_email = sqlx::query(&q(
+            kind,
+            "SELECT user_id FROM user_emails \
+             WHERE LOWER(email) = LOWER(?) AND user_id <> ?",
+        ))
+        .bind(&row.email)
+        .bind(&ignore)
+        .fetch_optional(pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if by_email.is_some() {
+            return Err(Error::UserEmailExists());
+        }
     }
     Ok(())
 }
@@ -430,6 +476,30 @@ fn validate_user_for_store(user: &User) -> Result<(), Error> {
     // no OAuth identity is attached. Mirrors FileStore validation.
     if user.password_hash.is_empty() && user.oauth_identities.is_empty() {
         return Err(Error::UserPasswordMissing());
+    }
+    Ok(())
+}
+
+async fn insert_user_emails(
+    pool: &AnyPool,
+    kind: SqlBackend,
+    user_id: Uuid,
+    emails: &[UserEmail],
+) -> Result<(), Error> {
+    for row in emails {
+        sqlx::query(&q(
+            kind,
+            "INSERT INTO user_emails (user_id, email, is_primary, verified, verified_at) \
+             VALUES (?, ?, ?, ?, ?)",
+        ))
+        .bind(user_id.to_string())
+        .bind(&row.email)
+        .bind(bool_to_int(row.is_primary))
+        .bind(bool_to_int(row.verified))
+        .bind(row.verified_at.map(datetime_to_sql))
+        .execute(pool)
+        .await
+        .map_err(map_sqlx_err)?;
     }
     Ok(())
 }
@@ -499,7 +569,7 @@ impl UserStore for SqlStore {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -541,7 +611,7 @@ impl UserStore for SqlStore {
             Err(Error::UserNotFound()) => {
                 let mut user = User::default();
                 user.username = username.to_string();
-                user.email = email.to_string();
+                user.set_primary_email_address(email);
                 user.is_admin = true;
                 user.password_hash = password_hash.to_string();
                 self.create_user(&mut user).await?;
@@ -559,7 +629,7 @@ impl UserStore for SqlStore {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -579,7 +649,7 @@ impl UserStore for SqlStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -607,8 +677,11 @@ impl UserStore for SqlStore {
         user.id = User::new_id();
         user.api_key = User::new_api_key();
         validate_user_for_store(user)?;
-        check_user_unique_fields(&self.pool, self.kind, &user.username, &user.email, Uuid::nil()).await?;
+        check_user_unique_fields(&self.pool, self.kind, &user.username, &user.emails, Uuid::nil()).await?;
 
+        // `users.email` is a denormalised copy of the primary `user_emails`
+        // row. Kept populated until a future migration retires the legacy
+        // column. See `migrations/0002_user_emails.sql`.
         sqlx::query(&q(
             self.kind,
             "INSERT INTO users (id, is_admin, username, full_name, email, password_hash, api_key) \
@@ -618,13 +691,14 @@ impl UserStore for SqlStore {
         .bind(bool_to_int(user.is_admin))
         .bind(&user.username)
         .bind(&user.full_name)
-        .bind(&user.email)
+        .bind(user.email())
         .bind(&user.password_hash)
         .bind(user.api_key.to_string())
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
 
+        insert_user_emails(&self.pool, self.kind, user.id, &user.emails).await?;
         insert_user_logins(&self.pool, self.kind, user.id, &user.logins).await?;
         insert_user_oauth_identities(&self.pool, self.kind, user.id, &user.oauth_identities).await?;
         Ok(())
@@ -637,7 +711,7 @@ impl UserStore for SqlStore {
     /// Try to create and then delete a user within an in-memory SQLite-backed store
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -657,7 +731,7 @@ impl UserStore for SqlStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -714,7 +788,7 @@ impl UserStore for SqlStore {
     /// Try to create and then update a user within an in-memory SQLite-backed store
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -734,7 +808,7 @@ impl UserStore for SqlStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -776,8 +850,9 @@ impl UserStore for SqlStore {
             return Err(Error::UserIdMissing());
         }
         validate_user_for_store(user)?;
-        check_user_unique_fields(&self.pool, self.kind, &user.username, &user.email, user.id).await?;
+        check_user_unique_fields(&self.pool, self.kind, &user.username, &user.emails, user.id).await?;
 
+        // `users.email` write-through denormalisation; see `create_user`.
         let result = sqlx::query(&q(
             self.kind,
             "UPDATE users SET is_admin = ?, username = ?, full_name = ?, email = ?, \
@@ -787,7 +862,7 @@ impl UserStore for SqlStore {
         .bind(bool_to_int(user.is_admin))
         .bind(&user.username)
         .bind(&user.full_name)
-        .bind(&user.email)
+        .bind(user.email())
         .bind(&user.password_hash)
         .bind(user.api_key.to_string())
         .bind(user.id.to_string())
@@ -800,6 +875,11 @@ impl UserStore for SqlStore {
 
         // Replace child collections wholesale — matches the load-modify-save
         // semantics callers use against the trait. Far simpler than diffing.
+        sqlx::query(&q(self.kind, "DELETE FROM user_emails WHERE user_id = ?"))
+            .bind(user.id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
         sqlx::query(&q(self.kind, "DELETE FROM user_logins WHERE user_id = ?"))
             .bind(user.id.to_string())
             .execute(&self.pool)
@@ -811,6 +891,7 @@ impl UserStore for SqlStore {
             .await
             .map_err(map_sqlx_err)?;
 
+        insert_user_emails(&self.pool, self.kind, user.id, &user.emails).await?;
         insert_user_logins(&self.pool, self.kind, user.id, &user.logins).await?;
         insert_user_oauth_identities(&self.pool, self.kind, user.id, &user.oauth_identities).await?;
         Ok(())
@@ -823,7 +904,7 @@ impl UserStore for SqlStore {
     /// Try to create and then load a user from within an in-memory SQLite-backed store
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -843,7 +924,7 @@ impl UserStore for SqlStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -898,7 +979,7 @@ impl UserStore for SqlStore {
     /// Try to create and then locate a user from within an in-memory SQLite-backed store
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -918,7 +999,7 @@ impl UserStore for SqlStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -979,7 +1060,7 @@ impl UserStore for SqlStore {
     /// Try to create and then locate a user from within an in-memory SQLite-backed store by email
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -999,7 +1080,7 @@ impl UserStore for SqlStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -1014,7 +1095,7 @@ impl UserStore for SqlStore {
     ///             user.id
     ///         );
     ///         // Now attempt to find it again by email and display the results
-    ///         match store.find_user_by_email(&user.email).await {
+    ///         match store.find_user_by_email(user.email()).await {
     ///             Ok(user_found) => {
     ///                 println!("Successfully found user within the SQL store => {:?}", user_found);
     ///             }
@@ -1038,7 +1119,9 @@ impl UserStore for SqlStore {
     async fn find_user_by_email(&self, email: &str) -> Result<User, Error> {
         let mut rows = sqlx::query(&q(
             self.kind,
-            "SELECT * FROM users WHERE LOWER(email) = LOWER(?)",
+            "SELECT u.* FROM users u \
+             JOIN user_emails ue ON ue.user_id = u.id \
+             WHERE LOWER(ue.email) = LOWER(?)",
         ))
         .bind(email)
         .fetch_all(&self.pool)
@@ -1060,7 +1143,7 @@ impl UserStore for SqlStore {
     /// Try to create and then locate a user by its api key from within an in-memory SQLite-backed store
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1080,7 +1163,7 @@ impl UserStore for SqlStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -1142,7 +1225,7 @@ impl UserStore for SqlStore {
     /// Try to create and then locate a user by its login id within an in-memory SQLite-backed store
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{User, UserLogin};
+    /// use data_model::{User, UserEmail, UserLogin};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1167,7 +1250,7 @@ impl UserStore for SqlStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins,
@@ -1241,7 +1324,7 @@ impl UserStore for SqlStore {
     /// its OAuth identity within an in-memory SQLite-backed store
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::{OAuthIdentity, User};
+    /// use data_model::{OAuthIdentity, User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1261,7 +1344,7 @@ impl UserStore for SqlStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -1334,7 +1417,7 @@ impl UserStore for SqlStore {
     /// Try to create a user within an in-memory SQLite-backed store and then load the list of registered users and display their count
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1354,7 +1437,7 @@ impl UserStore for SqlStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -1409,7 +1492,7 @@ impl UserStore for SqlStore {
     /// Try to create an admin user within an in-memory SQLite-backed store and then load the list of admin users and display their count
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1429,7 +1512,7 @@ impl UserStore for SqlStore {
     ///     is_admin: true,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -1871,7 +1954,7 @@ impl MazeStore for SqlStore {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, MazeStore, Store, Error, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1959,7 +2042,7 @@ impl MazeStore for SqlStore {
     ///
     /// ```
     /// # tokio_test::block_on(async {
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{SqlStore, SqlStoreConfig, MazeStore, Store, Error, UserStore};
     /// use uuid::Uuid;
     ///

@@ -114,7 +114,7 @@ pub async fn resolve(
         is_admin: false,
         username,
         full_name: identity.display_name.clone().unwrap_or_default(),
-        email: email.clone(),
+        emails: vec![data_model::UserEmail::new_primary_verified(&email)],
         password_hash: String::new(), // OAuth-only account; verify_password hardens against this
         api_key: User::new_api_key(),
         logins: vec![],
@@ -222,7 +222,7 @@ mod tests {
         async fn find_user_by_email(&self, email: &str) -> Result<User, StoreError> {
             self.users
                 .values()
-                .find(|u| u.email.eq_ignore_ascii_case(email))
+                .find(|u| u.emails.iter().any(|row| row.email.eq_ignore_ascii_case(email)))
                 .cloned()
                 .ok_or(StoreError::UserNotFound())
         }
@@ -264,7 +264,7 @@ mod tests {
             is_admin: false,
             username: username.to_string(),
             full_name: String::new(),
-            email: email.to_string(),
+            emails: vec![data_model::UserEmail::new_primary_verified(email)],
             password_hash: "$argon2id$dummy".to_string(),
             api_key: User::new_api_key(),
             logins: vec![],
@@ -340,7 +340,7 @@ mod tests {
             ResolveOutcome::Created(u) => u,
             other => panic!("expected Created, got {other:?}"),
         };
-        assert_eq!(user.email, "bob@example.com");
+        assert_eq!(user.email(), "bob@example.com");
         assert_eq!(user.username, "bob");
         assert_eq!(user.full_name, "Bob");
         assert!(user.password_hash.is_empty(), "OAuth-only account should have empty password hash");

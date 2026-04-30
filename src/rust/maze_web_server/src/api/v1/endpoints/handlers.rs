@@ -290,9 +290,9 @@ impl UserItem {
             is_admin: user.is_admin,
             username: user.username.clone(),
             full_name: user.full_name.clone(),
-            email: user.email.clone(),
+            email: user.email().to_string(),
         }
-    }    
+    }
 }
 // **************************************************************************************************
 // Endpoint: GET /api/v1/features
@@ -437,7 +437,7 @@ impl SignupRequest {
                 is_admin: false,
                 username: "".to_string(),
                 full_name: "".to_string(),
-                email: self.email.clone(),
+                emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
                 password_hash,
                 api_key: Uuid::nil(),
                 logins: vec![],
@@ -1135,7 +1135,7 @@ impl UpdateProfileRequest {
     pub fn apply_to_store_user(&self, user: &mut User) {
         user.username = self.username.clone();
         user.full_name = self.full_name.clone();
-        user.email = self.email.clone();
+        user.set_primary_email_address(&self.email);
     }
 }
 
@@ -1383,7 +1383,7 @@ impl CreateUserRequest {
                 is_admin: self.is_admin,
                 username: self.username.clone(),
                 full_name: self.full_name.clone(),
-                email: self.email.clone(),
+                emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
                 password_hash,
                 api_key: Uuid::nil(),
                 logins: vec![],
@@ -1504,7 +1504,7 @@ impl UpdateUserRequest {
         user.is_admin = self.is_admin;
         user.username = self.username.clone();
         user.full_name = self.full_name.clone();
-        user.email = self.email.clone();
+        user.set_primary_email_address(&self.email);
     }
 }
 

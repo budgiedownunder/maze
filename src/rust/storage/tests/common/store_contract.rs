@@ -10,7 +10,7 @@
 
 #![allow(dead_code)] // Some helpers may not yet be wired into every backend's runner.
 
-use data_model::{Maze, MazeDefinition, OAuthIdentity, User, UserLogin};
+use data_model::{Maze, MazeDefinition, OAuthIdentity, User, UserEmail, UserLogin};
 use storage::{Error, Store};
 use uuid::Uuid;
 
@@ -26,7 +26,7 @@ pub fn make_user(username: &str, email: &str) -> User {
         is_admin: false,
         username: username.to_string(),
         full_name: String::new(),
-        email: email.to_string(),
+        emails: vec![UserEmail::new_primary_verified(email)],
         password_hash: "argon2id$contract-test-hash".to_string(),
         api_key: Uuid::nil(),
         logins: vec![],
@@ -241,12 +241,12 @@ pub async fn delete_user_cascades_to_mazes(store: &mut Box<dyn Store>) {
 pub async fn update_user_persists_changes(store: &mut Box<dyn Store>) {
     let mut alice = fixture_user(store, "alice", "alice@example.com").await;
     alice.full_name = "Alice Updated".to_string();
-    alice.email = "alice-new@example.com".to_string();
+    alice.set_primary_email_address("alice-new@example.com");
     store.update_user(&mut alice).await.expect("update_user");
 
     let loaded = store.get_user(alice.id).await.expect("get_user");
     assert_eq!(loaded.full_name, "Alice Updated");
-    assert_eq!(loaded.email, "alice-new@example.com");
+    assert_eq!(loaded.email(), "alice-new@example.com");
 }
 
 pub async fn update_user_replaces_logins_wholesale(store: &mut Box<dyn Store>) {

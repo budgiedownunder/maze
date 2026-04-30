@@ -10,7 +10,7 @@
 //!     DATABASE_URL=postgres://postgres:pw@localhost/postgres \
 //!         cargo run --example sql_store_smoke -p storage --features sql-store
 
-use data_model::{Maze, MazeDefinition, OAuthIdentity, User, UserLogin};
+use data_model::{Maze, MazeDefinition, OAuthIdentity, User, UserEmail, UserLogin};
 use storage::store::{Manage, MazeStore, UserStore};
 use storage::{SqlStore, SqlStoreConfig};
 
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Users ────────────────────────────────────────────────────────────
     let mut alice = User::default();
     alice.username = "alice".into();
-    alice.email = "alice@example.com".into();
+    alice.emails = vec![UserEmail::new_primary_verified("alice@example.com")];
     alice.password_hash = "argon2id$dummyhash".into();
     alice.is_admin = true;
     store.create_user(&mut alice).await?;
@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bob = User::default();
     bob.username = "bob".into();
-    bob.email = "bob@example.com".into();
+    bob.emails = vec![UserEmail::new_primary_verified("bob@example.com")];
     bob.oauth_identities.push(OAuthIdentity::new(
         "google".into(),
         "google-sub-bob".into(),

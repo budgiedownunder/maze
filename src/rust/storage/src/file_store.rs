@@ -11,7 +11,7 @@ use data_model::{Maze, User};
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
 use crate::store::{Manage, MazeStore, UserStore};
-use crate::{validation::validate_user_fields, Error, MazeItem, Store};
+use crate::{file_store_migration, validation::validate_user_fields, Error, MazeItem, Store};
 
 /// File store configuration settings
 #[derive(Debug, Clone)]
@@ -53,7 +53,7 @@ impl FieldAccess for User {
         match field_name {
             "username" => Some(self.username.clone()),
             "full_name" => Some(self.full_name.clone()),
-            "email" => Some(self.email.clone()),
+            "email" => Some(self.email().to_string()),
             "password_hash" => Some(self.password_hash.clone()),
             _ => None,
         }
@@ -134,6 +134,10 @@ impl FileStore {
     fn init(&mut self) -> Result<(), Error> {
         self.data_dir = Self::make_data_dir(&self.config.data_dir)?;
         self.users_dir = self.make_users_dir()?;
+        // Migrate any pre-multi-email `user.json` files in place (idempotent —
+        // already-migrated files parse straight as the new shape and are
+        // left alone).
+        file_store_migration::migrate_users_dir(&self.users_dir)?;
         Ok(())
     }
 
@@ -244,8 +248,12 @@ impl FileStore {
         if self.user_name_exists(&user.username, ignore_id) {
             return Err(Error::UserNameExists());
         }
-        if self.user_email_exists(&user.email, ignore_id) {
-            return Err(Error::UserEmailExists());
+        // Check uniqueness for every email row on the user — mirrors the
+        // global UNIQUE constraint on `user_emails.email` in the SQL schema.
+        for row in &user.emails {
+            if self.user_email_exists(&row.email, ignore_id) {
+                return Err(Error::UserEmailExists());
+            }
         }
         Ok(())
     }
@@ -293,10 +301,38 @@ impl FileStore {
             .is_ok()
     }
 
-    // Checks whether a given user email exists in the file store
+    // Checks whether a given user email exists in the file store, looking
+    // across every email row of every user (mirrors the SQL `user_emails.email`
+    // UNIQUE constraint).
     fn user_email_exists(&self, email: &str, ignore_id: Uuid) -> bool {
-        self.find_user_by_string_field("email", email, ignore_id)
-            .is_ok()
+        self.find_user_by_any_email_internal(email, ignore_id).is_ok()
+    }
+
+    // Locates a user with any email row matching `search_value` (case-
+    // insensitively). Used by `user_email_exists` and `find_user_by_email`.
+    fn find_user_by_any_email_internal(
+        &self,
+        search_value: &str,
+        ignore_id: Uuid,
+    ) -> Result<User, Error> {
+        let ids = self.get_user_ids()?;
+        let search = UniCase::new(search_value);
+        for id in ids {
+            if id == ignore_id {
+                continue;
+            }
+            let Some(user) = self.load_user_if_present(id)? else {
+                continue;
+            };
+            if user
+                .emails
+                .iter()
+                .any(|row| UniCase::new(row.email.clone()) == search)
+            {
+                return Ok(user);
+            }
+        }
+        Err(Error::UserNotFound())
     }
 
     // Loads a user by id, returning None (with a warning) if the user directory exists
@@ -434,7 +470,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -473,7 +509,7 @@ impl UserStore for FileStore {
                 Error::UserNotFound() => {
                     let mut user = User::default();
                     user.username = username.to_string();
-                    user.email = email.to_string();
+                    user.set_primary_email_address(email);
                     user.is_admin = true;
                     user.password_hash = password_hash.to_string();
                     self.create_user(&mut user).await?;
@@ -492,7 +528,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -508,7 +544,7 @@ impl UserStore for FileStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -548,7 +584,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -564,7 +600,7 @@ impl UserStore for FileStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -622,7 +658,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -638,7 +674,7 @@ impl UserStore for FileStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -694,7 +730,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -710,7 +746,7 @@ impl UserStore for FileStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -757,7 +793,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -773,7 +809,7 @@ impl UserStore for FileStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -820,7 +856,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -836,7 +872,7 @@ impl UserStore for FileStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -851,7 +887,7 @@ impl UserStore for FileStore {
     ///             user.id
     ///         );
     ///         // Now attempt to find it again by email and display the results
-    ///         match store.find_user_by_email(&user.email).await {
+    ///         match store.find_user_by_email(user.email()).await {
     ///             Ok(user_found) => {
     ///                 println!("Successfully found user within the file store => {:?}", user_found);
     ///             }
@@ -873,7 +909,7 @@ impl UserStore for FileStore {
     /// # });
     /// ```
     async fn find_user_by_email(&self, email: &str) -> Result<User, Error> {
-        self.find_user_by_string_field("email", email, Uuid::nil())
+        self.find_user_by_any_email_internal(email, Uuid::nil())
     }
     /// Locates a user by their api key within the store
     ///
@@ -883,7 +919,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -899,7 +935,7 @@ impl UserStore for FileStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -954,7 +990,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::{User, UserLogin};
+    /// use data_model::{User, UserEmail, UserLogin};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -975,7 +1011,7 @@ impl UserStore for FileStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins,
@@ -1034,7 +1070,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::{OAuthIdentity, User};
+    /// use data_model::{OAuthIdentity, User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1050,7 +1086,7 @@ impl UserStore for FileStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -1113,7 +1149,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1129,7 +1165,7 @@ impl UserStore for FileStore {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -1185,7 +1221,7 @@ impl UserStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1201,7 +1237,7 @@ impl UserStore for FileStore {
     ///     is_admin: true,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -1580,7 +1616,7 @@ impl MazeStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1648,7 +1684,7 @@ impl MazeStore for FileStore {
     /// ```
     /// # tokio_test::block_on(async {
     ///
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// use storage::{FileStore, FileStoreConfig, MazeStore, Store, Error, UserStore};
     /// use uuid::Uuid;
     ///
@@ -1816,7 +1852,7 @@ mod tests {
             is_admin,
             username: username.to_string(),
             full_name: full_name.to_string(),
-            email: email.to_string(),
+            emails: vec![data_model::UserEmail::new_primary_verified(email)],
             password_hash: password_hash.to_string(),
             api_key: User::new_api_key(),
             logins: vec![],
