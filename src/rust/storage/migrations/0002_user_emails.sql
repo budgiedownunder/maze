@@ -32,10 +32,11 @@
 -- portable column-drop on a `UNIQUE NOT NULL` column requires per-backend
 -- DDL gymnastics (SQLite refuses with "cannot drop UNIQUE column"; PG and
 -- MySQL each need different sequences to drop the implicit constraint
--- before the column). The application keeps `users.email` populated as
--- the primary email's address (write-through denormalisation) so the old
--- column remains valid for any tool that still queries it. A future
--- migration with per-backend SQL can retire `users.email` cleanly.
+-- before the column). Retirement is handled per-backend in Rust by
+-- `retire_legacy_users_email_column()` in `sql_store.rs`, run on every
+-- `SqlStore::new()`. That function is naturally idempotent: PG and MySQL
+-- use `IF EXISTS` clauses, SQLite probes `PRAGMA table_info` and
+-- short-circuits when the column is already gone.
 CREATE TABLE IF NOT EXISTS user_emails (
     user_id      VARCHAR(36)  NOT NULL,
     email        VARCHAR(254) NOT NULL,

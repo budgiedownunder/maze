@@ -113,7 +113,7 @@ The SqlStore schema is defined across the migration files in [`migrations/`](./m
 
 | Table | Purpose |
 |:------|:--------|
-| `users` | User records with admin flag, username, full name, password hash, API key (added in `0001_initial.sql`; the `email` column was dropped in `0002_user_emails.sql` after data was moved to `user_emails`) |
+| `users` | User records with admin flag, username, full name, password hash, API key (added in `0001_initial.sql`). The `email` column was retired post-`0002_user_emails.sql` by per-backend cleanup in `SqlStore::new` (`retire_legacy_users_email_column`) — portable column-drop on a `UNIQUE NOT NULL` column isn't expressible in a single migration file across SQLite, PostgreSQL, and MySQL |
 | `user_emails` | Email addresses attached to a user, with `is_primary`, `verified`, and `verified_at` (added in `0002_user_emails.sql`). Globally unique on `email`; one row per user has `is_primary = 1`, enforced in application code |
 | `user_logins` | Active and expired bearer-token login sessions, FK to `users` |
 | `oauth_identities` | Provider-linked identities (Google, GitHub, Facebook), FK to `users` |
