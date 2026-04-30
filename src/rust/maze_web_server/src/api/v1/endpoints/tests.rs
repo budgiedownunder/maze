@@ -395,6 +395,23 @@ mod test_definitions {
         async fn has_users(&self) -> Result<bool, StoreError> {
             Ok(!self.users.is_empty())
         }
+
+        // Email-management methods are exercised through the storage crate's
+        // contract suite; the web-layer tests don't drive them directly, so
+        // these stubs return a clear error if anything in the maze_web_server
+        // tests ever reaches them by accident.
+        async fn add_user_email(&mut self, _u: Uuid, _e: &str, _v: bool) -> Result<data_model::UserEmail, StoreError> {
+            Err(StoreError::Other("MockStore::add_user_email not implemented".into()))
+        }
+        async fn remove_user_email(&mut self, _u: Uuid, _e: &str) -> Result<(), StoreError> {
+            Err(StoreError::Other("MockStore::remove_user_email not implemented".into()))
+        }
+        async fn set_primary_email(&mut self, _u: Uuid, _e: &str) -> Result<(), StoreError> {
+            Err(StoreError::Other("MockStore::set_primary_email not implemented".into()))
+        }
+        async fn mark_email_verified(&mut self, _u: Uuid, _e: &str) -> Result<(), StoreError> {
+            Err(StoreError::Other("MockStore::mark_email_verified not implemented".into()))
+        }
     }
 
     #[async_trait]

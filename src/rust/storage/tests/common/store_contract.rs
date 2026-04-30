@@ -486,6 +486,217 @@ pub async fn init_default_admin_is_idempotent(store: &mut Box<dyn Store>) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// UserStore — email management (add/remove/set_primary/mark_verified)
+// ─────────────────────────────────────────────────────────────────────────
+
+pub async fn add_user_email_appends_a_non_primary_row(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let row = store
+        .add_user_email(alice.id, "alice2@example.com", false)
+        .await
+        .expect("add_user_email");
+    assert_eq!(row.email, "alice2@example.com");
+    assert!(!row.is_primary, "newly added row must not be primary");
+    assert!(!row.verified, "verified flag must reflect the requested value");
+
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    assert_eq!(loaded.emails.len(), 2);
+    assert_eq!(loaded.primary_email().expect("primary").email, "alice@example.com");
+}
+
+pub async fn add_user_email_with_verified_true_records_verified_at(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let row = store
+        .add_user_email(alice.id, "alice-verified@example.com", true)
+        .await
+        .expect("add_user_email");
+    assert!(row.verified);
+    assert!(row.verified_at.is_some(), "verified=true must set verified_at");
+}
+
+pub async fn add_user_email_rejects_invalid_format(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let err = store
+        .add_user_email(alice.id, "not-an-email", false)
+        .await
+        .expect_err("expected EmailInvalid");
+    assert!(matches!(err, Error::UserEmailInvalid()), "got {err:?}");
+}
+
+pub async fn add_user_email_rejects_empty(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let err = store
+        .add_user_email(alice.id, "", false)
+        .await
+        .expect_err("expected EmailMissing");
+    assert!(
+        matches!(err, Error::UserEmailMissing() | Error::UserEmailInvalid()),
+        "got {err:?}"
+    );
+}
+
+pub async fn add_user_email_rejects_duplicate_across_users(store: &mut Box<dyn Store>) {
+    let _alice = fixture_user(store, "alice", "alice@example.com").await;
+    let bob = fixture_user(store, "bob", "bob@example.com").await;
+
+    let err = store
+        .add_user_email(bob.id, "alice@example.com", false)
+        .await
+        .expect_err("expected EmailExists across users");
+    assert!(matches!(err, Error::UserEmailExists()), "got {err:?}");
+}
+
+pub async fn add_user_email_rejects_duplicate_on_same_user(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let err = store
+        .add_user_email(alice.id, "alice@example.com", false)
+        .await
+        .expect_err("expected EmailExists on same user");
+    assert!(matches!(err, Error::UserEmailExists()), "got {err:?}");
+}
+
+pub async fn add_user_email_rejects_unknown_user(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .add_user_email(id, "ghost@example.com", false)
+        .await
+        .expect_err("expected UserIdNotFound");
+    assert!(
+        matches!(err, Error::UserIdNotFound(ref s) if s == &id.to_string()),
+        "got {err:?}"
+    );
+}
+
+pub async fn remove_user_email_drops_a_non_primary_row(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .add_user_email(alice.id, "alice2@example.com", true)
+        .await
+        .expect("add_user_email");
+
+    store
+        .remove_user_email(alice.id, "alice2@example.com")
+        .await
+        .expect("remove_user_email");
+
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    assert_eq!(loaded.emails.len(), 1);
+    assert_eq!(loaded.email(), "alice@example.com");
+}
+
+pub async fn remove_user_email_refuses_the_only_email(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let err = store
+        .remove_user_email(alice.id, "alice@example.com")
+        .await
+        .expect_err("expected EmailIsLast");
+    assert!(matches!(err, Error::UserEmailIsLast()), "got {err:?}");
+}
+
+pub async fn remove_user_email_refuses_the_primary(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .add_user_email(alice.id, "alice2@example.com", true)
+        .await
+        .expect("add_user_email");
+    let err = store
+        .remove_user_email(alice.id, "alice@example.com")
+        .await
+        .expect_err("expected EmailIsPrimary");
+    assert!(matches!(err, Error::UserEmailIsPrimary()), "got {err:?}");
+}
+
+pub async fn remove_user_email_returns_not_found_for_unknown_address(
+    store: &mut Box<dyn Store>,
+) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let err = store
+        .remove_user_email(alice.id, "nope@example.com")
+        .await
+        .expect_err("expected EmailNotFound");
+    assert!(matches!(err, Error::UserEmailNotFound(_)), "got {err:?}");
+}
+
+pub async fn set_primary_email_clears_other_primaries(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .add_user_email(alice.id, "alice2@example.com", true)
+        .await
+        .expect("add_user_email");
+
+    store
+        .set_primary_email(alice.id, "alice2@example.com")
+        .await
+        .expect("set_primary_email");
+
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    let primary_count = loaded.emails.iter().filter(|r| r.is_primary).count();
+    assert_eq!(primary_count, 1, "exactly one primary must remain");
+    assert_eq!(loaded.email(), "alice2@example.com");
+}
+
+pub async fn set_primary_email_rejects_unverified_target(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .add_user_email(alice.id, "alice2@example.com", false)
+        .await
+        .expect("add_user_email (unverified)");
+    let err = store
+        .set_primary_email(alice.id, "alice2@example.com")
+        .await
+        .expect_err("expected EmailNotVerified");
+    assert!(matches!(err, Error::UserEmailNotVerified()), "got {err:?}");
+
+    // Original primary must be unchanged.
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    assert_eq!(loaded.email(), "alice@example.com");
+}
+
+pub async fn set_primary_email_returns_not_found_for_unknown_address(
+    store: &mut Box<dyn Store>,
+) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let err = store
+        .set_primary_email(alice.id, "nope@example.com")
+        .await
+        .expect_err("expected EmailNotFound");
+    assert!(matches!(err, Error::UserEmailNotFound(_)), "got {err:?}");
+}
+
+pub async fn mark_email_verified_promotes_unverified_row(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .add_user_email(alice.id, "alice2@example.com", false)
+        .await
+        .expect("add_user_email (unverified)");
+
+    store
+        .mark_email_verified(alice.id, "alice2@example.com")
+        .await
+        .expect("mark_email_verified");
+
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    let row = loaded
+        .emails
+        .iter()
+        .find(|r| r.email == "alice2@example.com")
+        .expect("row");
+    assert!(row.verified, "verified must be true after mark");
+    assert!(row.verified_at.is_some(), "verified_at must be populated");
+}
+
+pub async fn mark_email_verified_returns_not_found_for_unknown_address(
+    store: &mut Box<dyn Store>,
+) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let err = store
+        .mark_email_verified(alice.id, "nope@example.com")
+        .await
+        .expect_err("expected EmailNotFound");
+    assert!(matches!(err, Error::UserEmailNotFound(_)), "got {err:?}");
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // MazeStore
 // ─────────────────────────────────────────────────────────────────────────
 

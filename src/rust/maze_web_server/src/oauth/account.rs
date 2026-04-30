@@ -246,6 +246,18 @@ mod tests {
         async fn get_users(&self) -> Result<Vec<User>, StoreError> { Ok(self.users.values().cloned().collect()) }
         async fn get_admin_users(&self) -> Result<Vec<User>, StoreError> { Ok(vec![]) }
         async fn has_users(&self) -> Result<bool, StoreError> { Ok(!self.users.is_empty()) }
+        async fn add_user_email(&mut self, _u: Uuid, _e: &str, _v: bool) -> Result<data_model::UserEmail, StoreError> {
+            Err(StoreError::Other("not used".into()))
+        }
+        async fn remove_user_email(&mut self, _u: Uuid, _e: &str) -> Result<(), StoreError> {
+            Err(StoreError::Other("not used".into()))
+        }
+        async fn set_primary_email(&mut self, _u: Uuid, _e: &str) -> Result<(), StoreError> {
+            Err(StoreError::Other("not used".into()))
+        }
+        async fn mark_email_verified(&mut self, _u: Uuid, _e: &str) -> Result<(), StoreError> {
+            Err(StoreError::Other("not used".into()))
+        }
     }
 
     fn ident(provider: &str, sub: &str, email: Option<&str>, verified: bool) -> NormalisedIdentity {

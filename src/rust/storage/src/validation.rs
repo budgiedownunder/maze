@@ -1,5 +1,25 @@
-use data_model::{Error as DataModelError, User, UserValidationError};
+use data_model::{is_valid_email_format, Error as DataModelError, User, UserValidationError};
 use crate::Error;
+
+/// Validates a single email address for storage operations that take only
+/// the address (no surrounding `User`). Centralises the "is it empty? does
+/// it match the data-model regex?" pair that every email-management
+/// `UserStore` method runs up front.
+///
+/// # Returns
+///
+/// `Ok(())` if the address is non-empty and well-formed,
+/// `Err(Error::UserEmailMissing)` if blank,
+/// `Err(Error::UserEmailInvalid)` otherwise.
+pub fn validate_email_format(email: &str) -> Result<(), Error> {
+    if email.trim().is_empty() {
+        return Err(Error::UserEmailMissing());
+    }
+    if !is_valid_email_format(email) {
+        return Err(Error::UserEmailInvalid());
+    }
+    Ok(())
+}
 
 /// Validates the fields within a user object for create/update within a store
 ///

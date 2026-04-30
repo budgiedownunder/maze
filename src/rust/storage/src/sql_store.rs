@@ -12,7 +12,10 @@
 //! portable. See `migrations/0001_initial.sql` for the full design rationale.
 
 use crate::store::{Manage, MazeStore, UserStore};
-use crate::{validation::validate_user_fields, Error, MazeItem, Store};
+use crate::{
+    validation::{validate_email_format, validate_user_fields},
+    Error, MazeItem, Store,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, Utc};
 use data_model::{Maze, OAuthIdentity, User, UserEmail, UserLogin};
@@ -1793,6 +1796,183 @@ impl UserStore for SqlStore {
             .map_err(map_sqlx_err)?;
         Ok(row.is_some())
     }
+
+    async fn add_user_email(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+        verified: bool,
+    ) -> Result<UserEmail, Error> {
+        // Confirm the user exists; surfaces a clean UserIdNotFound if not.
+        let _ = self.get_user(user_id).await?;
+        validate_email_format(email)?;
+        // Reject if any user already owns this address.
+        let conflict = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 FROM user_emails WHERE LOWER(email) = LOWER(?)",
+        ))
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if conflict.is_some() {
+            return Err(Error::UserEmailExists());
+        }
+        let verified_at = if verified {
+            Some(canonical_now_millis())
+        } else {
+            None
+        };
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO user_emails (user_id, email, is_primary, verified, verified_at) \
+             VALUES (?, ?, ?, ?, ?)",
+        ))
+        .bind(user_id.to_string())
+        .bind(email)
+        .bind(bool_to_int(false)) // never primary on add
+        .bind(bool_to_int(verified))
+        .bind(verified_at.map(datetime_to_sql))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(UserEmail {
+            email: email.to_string(),
+            is_primary: false,
+            verified,
+            verified_at,
+        })
+    }
+
+    async fn remove_user_email(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+    ) -> Result<(), Error> {
+        let row = fetch_user_email_row(&self.pool, self.kind, user_id, email).await?;
+        let is_primary: i32 = row.try_get("is_primary").map_err(map_sqlx_err)?;
+
+        // Count rows so we can refuse to remove the user's only email.
+        let total: i64 = sqlx::query(&q(
+            self.kind,
+            "SELECT COUNT(*) AS c FROM user_emails WHERE user_id = ?",
+        ))
+        .bind(user_id.to_string())
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?
+        .try_get("c")
+        .map_err(map_sqlx_err)?;
+        if total <= 1 {
+            return Err(Error::UserEmailIsLast());
+        }
+        if int_to_bool(is_primary) {
+            return Err(Error::UserEmailIsPrimary());
+        }
+
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM user_emails \
+             WHERE user_id = ? AND LOWER(email) = LOWER(?)",
+        ))
+        .bind(user_id.to_string())
+        .bind(email)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    async fn set_primary_email(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+    ) -> Result<(), Error> {
+        let row = fetch_user_email_row(&self.pool, self.kind, user_id, email).await?;
+        let verified: i32 = row.try_get("verified").map_err(map_sqlx_err)?;
+        if !int_to_bool(verified) {
+            return Err(Error::UserEmailNotVerified());
+        }
+
+        // Atomically clear is_primary on every row of the user, then set it
+        // on the target. A transaction ensures the "exactly one primary"
+        // invariant isn't observable as broken mid-flight.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "UPDATE user_emails SET is_primary = 0 WHERE user_id = ?",
+        ))
+        .bind(user_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            self.kind,
+            "UPDATE user_emails SET is_primary = 1 \
+             WHERE user_id = ? AND LOWER(email) = LOWER(?)",
+        ))
+        .bind(user_id.to_string())
+        .bind(email)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        tx.commit().await.map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    async fn mark_email_verified(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+    ) -> Result<(), Error> {
+        let result = sqlx::query(&q(
+            self.kind,
+            "UPDATE user_emails SET verified = 1, verified_at = ? \
+             WHERE user_id = ? AND LOWER(email) = LOWER(?)",
+        ))
+        .bind(datetime_to_sql(canonical_now_millis()))
+        .bind(user_id.to_string())
+        .bind(email)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            return Err(Error::UserEmailNotFound(email.to_string()));
+        }
+        Ok(())
+    }
+}
+
+/// Returns the current UTC time truncated to millisecond precision so it
+/// round-trips losslessly through the `VARCHAR(32)` RFC 3339 columns.
+/// Mirrors `UserEmail::new_primary_verified` in `data_model`.
+fn canonical_now_millis() -> DateTime<Utc> {
+    use chrono::SubsecRound;
+    Utc::now().trunc_subsecs(3)
+}
+
+/// Fetches a single `user_emails` row identified by `(user_id, email)` —
+/// the email match is case-insensitive — and returns
+/// `Error::UserEmailNotFound` if no row exists. Centralises the lookup
+/// that every email-mutating `UserStore` method runs to validate the
+/// target row before deciding the action.
+async fn fetch_user_email_row(
+    pool: &AnyPool,
+    kind: SqlBackend,
+    user_id: Uuid,
+    email: &str,
+) -> Result<AnyRow, Error> {
+    sqlx::query(&q(
+        kind,
+        "SELECT email, is_primary, verified, verified_at FROM user_emails \
+         WHERE user_id = ? AND LOWER(email) = LOWER(?)",
+    ))
+    .bind(user_id.to_string())
+    .bind(email)
+    .fetch_optional(pool)
+    .await
+    .map_err(map_sqlx_err)?
+    .ok_or_else(|| Error::UserEmailNotFound(email.to_string()))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

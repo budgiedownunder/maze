@@ -258,6 +258,104 @@ async fn init_default_admin_is_idempotent() {
     contract::init_default_admin_is_idempotent(&mut s).await;
 }
 
+// ─── UserStore — email management ────────────────────────────────────────
+
+#[tokio::test]
+async fn add_user_email_appends_a_non_primary_row() {
+    let mut s = fresh_store().await;
+    contract::add_user_email_appends_a_non_primary_row(&mut s).await;
+}
+
+#[tokio::test]
+async fn add_user_email_with_verified_true_records_verified_at() {
+    let mut s = fresh_store().await;
+    contract::add_user_email_with_verified_true_records_verified_at(&mut s).await;
+}
+
+#[tokio::test]
+async fn add_user_email_rejects_invalid_format() {
+    let mut s = fresh_store().await;
+    contract::add_user_email_rejects_invalid_format(&mut s).await;
+}
+
+#[tokio::test]
+async fn add_user_email_rejects_empty() {
+    let mut s = fresh_store().await;
+    contract::add_user_email_rejects_empty(&mut s).await;
+}
+
+#[tokio::test]
+async fn add_user_email_rejects_duplicate_across_users() {
+    let mut s = fresh_store().await;
+    contract::add_user_email_rejects_duplicate_across_users(&mut s).await;
+}
+
+#[tokio::test]
+async fn add_user_email_rejects_duplicate_on_same_user() {
+    let mut s = fresh_store().await;
+    contract::add_user_email_rejects_duplicate_on_same_user(&mut s).await;
+}
+
+#[tokio::test]
+async fn add_user_email_rejects_unknown_user() {
+    let mut s = fresh_store().await;
+    contract::add_user_email_rejects_unknown_user(&mut s).await;
+}
+
+#[tokio::test]
+async fn remove_user_email_drops_a_non_primary_row() {
+    let mut s = fresh_store().await;
+    contract::remove_user_email_drops_a_non_primary_row(&mut s).await;
+}
+
+#[tokio::test]
+async fn remove_user_email_refuses_the_only_email() {
+    let mut s = fresh_store().await;
+    contract::remove_user_email_refuses_the_only_email(&mut s).await;
+}
+
+#[tokio::test]
+async fn remove_user_email_refuses_the_primary() {
+    let mut s = fresh_store().await;
+    contract::remove_user_email_refuses_the_primary(&mut s).await;
+}
+
+#[tokio::test]
+async fn remove_user_email_returns_not_found_for_unknown_address() {
+    let mut s = fresh_store().await;
+    contract::remove_user_email_returns_not_found_for_unknown_address(&mut s).await;
+}
+
+#[tokio::test]
+async fn set_primary_email_clears_other_primaries() {
+    let mut s = fresh_store().await;
+    contract::set_primary_email_clears_other_primaries(&mut s).await;
+}
+
+#[tokio::test]
+async fn set_primary_email_rejects_unverified_target() {
+    let mut s = fresh_store().await;
+    contract::set_primary_email_rejects_unverified_target(&mut s).await;
+}
+
+#[tokio::test]
+async fn set_primary_email_returns_not_found_for_unknown_address() {
+    let mut s = fresh_store().await;
+    contract::set_primary_email_returns_not_found_for_unknown_address(&mut s).await;
+}
+
+#[tokio::test]
+async fn mark_email_verified_promotes_unverified_row() {
+    let mut s = fresh_store().await;
+    contract::mark_email_verified_promotes_unverified_row(&mut s).await;
+}
+
+#[tokio::test]
+async fn mark_email_verified_returns_not_found_for_unknown_address() {
+    let mut s = fresh_store().await;
+    contract::mark_email_verified_returns_not_found_for_unknown_address(&mut s).await;
+}
+
 // ─── MazeStore ───────────────────────────────────────────────────────────
 
 #[tokio::test]

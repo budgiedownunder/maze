@@ -5,8 +5,11 @@ use std::sync::OnceLock;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-// Checks that email has the shape local@domain.tld with no whitespace in any part.
-fn is_valid_email_format(email: &str) -> bool {
+/// Checks that an email address has the shape `local@domain.tld` with no
+/// whitespace in any part. Exposed for storage backends and other layers
+/// that need to validate user-supplied addresses outside of the full
+/// [`User::validate`] flow.
+pub fn is_valid_email_format(email: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").expect("Invalid email regex"));
     re.is_match(email)

@@ -7,11 +7,15 @@ use async_trait::async_trait;
 use unicase::UniCase;
 use uuid::Uuid;
 
-use data_model::{Maze, User};
+use data_model::{Maze, User, UserEmail};
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
 use crate::store::{Manage, MazeStore, UserStore};
-use crate::{file_store_migration, validation::validate_user_fields, Error, MazeItem, Store};
+use crate::{
+    file_store_migration,
+    validation::{validate_email_format, validate_user_fields},
+    Error, MazeItem, Store,
+};
 
 /// File store configuration settings
 #[derive(Debug, Clone)]
@@ -1326,6 +1330,117 @@ impl UserStore for FileStore {
         }
         Ok(false)
     }
+
+    async fn add_user_email(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+        verified: bool,
+    ) -> Result<UserEmail, Error> {
+        let mut user = self.read_user(user_id)?;
+        // Validate format first so callers see EmailMissing / EmailInvalid
+        // before any uniqueness probe.
+        validate_email_format(email)?;
+        // Reject if THIS user already has this address. (We can't lean on
+        // `user_email_exists(_, user_id)` for this — that helper skips the
+        // user_id passed as `ignore_id`.)
+        if user
+            .emails
+            .iter()
+            .any(|r| r.email.eq_ignore_ascii_case(email))
+        {
+            return Err(Error::UserEmailExists());
+        }
+        // Reject if any OTHER user already has this address (mirrors the
+        // SQL `user_emails.email` UNIQUE constraint).
+        if self.user_email_exists(email, user_id) {
+            return Err(Error::UserEmailExists());
+        }
+        let row = UserEmail {
+            email: email.to_string(),
+            is_primary: false,
+            verified,
+            verified_at: if verified {
+                Some(generate_now_millis())
+            } else {
+                None
+            },
+        };
+        user.emails.push(row.clone());
+        self.write_user_file(&user, true)?;
+        Ok(row)
+    }
+
+    async fn remove_user_email(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+    ) -> Result<(), Error> {
+        let mut user = self.read_user(user_id)?;
+        let idx = find_email_row_index(&user, email)?;
+        if user.emails.len() == 1 {
+            return Err(Error::UserEmailIsLast());
+        }
+        if user.emails[idx].is_primary {
+            return Err(Error::UserEmailIsPrimary());
+        }
+        user.emails.remove(idx);
+        self.write_user_file(&user, true)?;
+        Ok(())
+    }
+
+    async fn set_primary_email(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+    ) -> Result<(), Error> {
+        let mut user = self.read_user(user_id)?;
+        let idx = find_email_row_index(&user, email)?;
+        if !user.emails[idx].verified {
+            return Err(Error::UserEmailNotVerified());
+        }
+        // Clear the flag on every other row, then set it on the target.
+        // Done as two passes (rather than in one loop with the index) so
+        // the invariant "exactly one primary" is restored before we save.
+        for (i, row) in user.emails.iter_mut().enumerate() {
+            row.is_primary = i == idx;
+        }
+        self.write_user_file(&user, true)?;
+        Ok(())
+    }
+
+    async fn mark_email_verified(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+    ) -> Result<(), Error> {
+        let mut user = self.read_user(user_id)?;
+        let idx = find_email_row_index(&user, email)?;
+        user.emails[idx].verified = true;
+        user.emails[idx].verified_at = Some(generate_now_millis());
+        self.write_user_file(&user, true)?;
+        Ok(())
+    }
+}
+
+/// Returns the index of the email row matching `email` (case-insensitively)
+/// within `user.emails`, or `Error::UserEmailNotFound` if no row matches.
+/// Centralises the lookup that every email-mutating `UserStore` method
+/// performs against the in-memory `User` value before it writes back.
+fn find_email_row_index(user: &User, email: &str) -> Result<usize, Error> {
+    user.emails
+        .iter()
+        .position(|row| row.email.eq_ignore_ascii_case(email))
+        .ok_or_else(|| Error::UserEmailNotFound(email.to_string()))
+}
+
+/// Returns the current UTC time truncated to millisecond precision so it
+/// round-trips losslessly through both the JSON-on-disk format and the SQL
+/// store's RFC 3339 storage format. Mirrors what
+/// `UserEmail::new_primary_verified` does.
+fn generate_now_millis() -> chrono::DateTime<chrono::Utc> {
+    use chrono::SubsecRound;
+    chrono::Utc::now().trunc_subsecs(3)
 }
 
 #[async_trait]
