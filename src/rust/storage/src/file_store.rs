@@ -72,9 +72,6 @@ impl FileStore {
     /// Try to create a new maze within a file store
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::{Maze, User};
@@ -88,7 +85,10 @@ impl FileStore {
     /// maze_to_create.name = "maze_1".to_string();
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Locate the owner by username
     /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
@@ -432,9 +432,6 @@ impl UserStore for FileStore {
     /// Try to create a new user within a file store
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -442,7 +439,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the default admin user within the file store if needed
     /// match store.init_default_admin_user("admin", "admin@maze.local", "my_password_hash").await {
@@ -490,9 +490,6 @@ impl UserStore for FileStore {
     /// Try to create a new user within a file store
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -500,7 +497,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the user definition
     /// let mut user = User {
@@ -546,9 +546,6 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then delete a user within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -556,7 +553,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the user definition
     /// let mut user = User {
@@ -620,9 +620,6 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then update a user within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -630,7 +627,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the user definition
     /// let mut user = User {
@@ -692,9 +692,6 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then load a user from within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -702,7 +699,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the user definition
     /// let mut user = User {
@@ -755,9 +755,6 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then locate a user from within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -765,7 +762,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the user definition
     /// let mut user = User {
@@ -818,9 +818,6 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then locate a user from within a file store by email
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -828,7 +825,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the user definition
     /// let mut user = User {
@@ -881,9 +881,6 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then locate a user by its api key from within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -891,7 +888,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the user definition
     /// let mut user = User {
@@ -952,9 +952,6 @@ impl UserStore for FileStore {
     ///
     /// Try to create and then locate a user by its login id within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::{User, UserLogin};
@@ -962,7 +959,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     /// 
     /// // Create the login tokens
     /// let login = UserLogin::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
@@ -1032,9 +1032,6 @@ impl UserStore for FileStore {
     /// Try to create a user with a linked Google identity and then locate it by
     /// its OAuth identity within a file store
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::{OAuthIdentity, User};
@@ -1042,7 +1039,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the user definition with a linked Google identity
     /// let mut user = User {
@@ -1111,9 +1111,6 @@ impl UserStore for FileStore {
     ///
     /// Try to create a user within a file store and then load the list of registered users and display their count
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -1121,7 +1118,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the user definition
     /// let mut user = User {
@@ -1183,9 +1183,6 @@ impl UserStore for FileStore {
     ///
     /// Try to create an admin user within a file store and then load the list of admin users and display their count
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -1193,7 +1190,10 @@ impl UserStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Create the admin user definition
     /// let mut user = User {
@@ -1262,15 +1262,15 @@ impl UserStore for FileStore {
     /// Check whether the store has any users before deciding to seed a
     /// default admin account
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
     ///
     /// // Create the file store
-    /// let store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// match store.has_users().await {
     ///     Ok(true) => println!("Store already has users — skip bootstrap"),
@@ -1298,9 +1298,6 @@ impl MazeStore for FileStore {
     /// Try to create a new maze within a file store
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::{Maze, User};
@@ -1315,7 +1312,10 @@ impl MazeStore for FileStore {
     /// maze_to_create.name = "maze_1".to_string();
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Locate the owner by username
     /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
@@ -1367,9 +1367,6 @@ impl MazeStore for FileStore {
     /// Try to delete an existing maze from within a file store
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::{Maze, User};
@@ -1377,7 +1374,10 @@ impl MazeStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Locate the owner by username
     /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
@@ -1425,9 +1425,6 @@ impl MazeStore for FileStore {
     /// Try to update an existing maze within a file store with new content
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::{Maze, User};
@@ -1443,7 +1440,10 @@ impl MazeStore for FileStore {
     /// maze_to_update.id = "maze_1".to_string();
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Locate the owner by username
     /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
@@ -1493,9 +1493,6 @@ impl MazeStore for FileStore {
     /// Try to create and then reload a maze from within a file store and, if successful, print it
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::{Maze, User};
@@ -1512,7 +1509,10 @@ impl MazeStore for FileStore {
     /// maze_to_create.name = "maze_1".to_string();
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Locate the owner by username
     /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
@@ -1578,9 +1578,6 @@ impl MazeStore for FileStore {
     /// print its details
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -1588,7 +1585,10 @@ impl MazeStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Locate the owner by username
     /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
@@ -1646,9 +1646,6 @@ impl MazeStore for FileStore {
     /// print the number of items found
     ///
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use data_model::User;
@@ -1656,7 +1653,10 @@ impl MazeStore for FileStore {
     /// use uuid::Uuid;
     ///
     /// // Create the file store
-    /// let store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Locate the owner by username
     /// let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
@@ -1747,15 +1747,15 @@ impl Manage for FileStore {
     ///
     /// Empty the store before running a test scenario
     /// ```
-    /// # // Make sure the store is in a suitable state prior to running the doc test
-    /// # use storage::test_setup::setup;
-    /// # setup();
     /// # tokio_test::block_on(async {
     ///
     /// use storage::{FileStore, FileStoreConfig, Manage, Store};
     ///
     /// // Create the file store
-    /// let mut store = FileStore::new(&FileStoreConfig::default());
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
     ///
     /// // Wipe any existing content
     /// if let Err(error) = store.empty().await {
@@ -1790,13 +1790,17 @@ mod tests {
     //****************************************************************
     // Utility functions
     //****************************************************************
-    // Create a new, empty store
-    async fn new_store() -> FileStore {
-        let mut store = FileStore::new(&FileStoreConfig::default());
-        if let Err(error) = store.empty().await {
-            panic!("new_store() failed to empty content: {error}");
-        }
-        store
+    // Create a new, empty store rooted at a fresh temp directory. The
+    // returned `TempDir` must outlive the `FileStore` (RAII deletes the
+    // directory on drop), so callers bind both: `let (store, _temp) = ...`.
+    // Per-test temp dirs make every test independent — no `--test-threads=1`
+    // needed.
+    async fn new_store() -> (FileStore, tempfile::TempDir) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store = FileStore::new(&FileStoreConfig {
+            data_dir: temp.path().to_string_lossy().to_string(),
+        });
+        (store, temp)
     }
 
     // Initialize a User struct
@@ -1874,7 +1878,7 @@ mod tests {
 
     #[tokio::test]
     async fn get_users_skips_orphaned_user_directory() {
-        let mut store = new_store().await;
+        let (mut store, _temp) = new_store().await;
         let _ = create_user(&mut store, false, "valid", "", "valid@company.com", "hash").await;
         let orphan_id = Uuid::new_v4();
         std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
@@ -1886,7 +1890,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_user_by_email_skips_orphaned_user_directory() {
-        let mut store = new_store().await;
+        let (mut store, _temp) = new_store().await;
         let _ = create_user(&mut store, false, "valid", "", "valid@company.com", "hash").await;
         let orphan_id = Uuid::new_v4();
         std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
@@ -1897,7 +1901,7 @@ mod tests {
     #[tokio::test]
     async fn find_user_by_oauth_identity_skips_orphaned_user_directory() {
         use data_model::OAuthIdentity;
-        let mut store = new_store().await;
+        let (mut store, _temp) = new_store().await;
         let mut alice = init_test_user(false, "valid", "", "valid@company.com", "hash");
         alice.oauth_identities.push(OAuthIdentity::new(
             "google".to_string(),
@@ -1914,7 +1918,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_user_by_login_id_skips_orphaned_user_directory() {
-        let mut store = new_store().await;
+        let (mut store, _temp) = new_store().await;
         let mut user = init_test_user(false, "valid", "", "valid@company.com", "hash");
         let login = data_model::UserLogin::new(24, None, None);
         let login_id = login.id;
@@ -1930,7 +1934,7 @@ mod tests {
 
     #[tokio::test]
     async fn can_save_maze_to_valid_file_path() {
-        let mut store = new_store().await;
+        let (mut store, _temp) = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -1950,7 +1954,7 @@ mod tests {
     #[tokio::test]
     #[should_panic(expected = "A maze with id 'maze.json' already exists")]
     async fn cannot_save_maze_to_existing_file_path_if_overwrite_disabled() {
-        let mut store = new_store().await;
+        let (mut store, _temp) = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -1977,7 +1981,7 @@ mod tests {
 
     #[tokio::test]
     async fn can_save_maze_to_existing_file_path_if_overwrite_enabled() {
-        let mut store = new_store().await;
+        let (mut store, _temp) = new_store().await;
         let owner = create_user(
             &mut store,
             false,
@@ -2003,7 +2007,7 @@ mod tests {
     #[tokio::test]
     #[should_panic(expected = "A maze with id 'maze.json' already exists")]
     async fn cannot_create_maze_that_exists() {
-        let mut store = new_store().await;
+        let (mut store, _temp) = new_store().await;
         let owner = create_user(
             &mut store,
             false,

@@ -94,7 +94,7 @@ cargo test --locked -p maze_game_bevy
 cargo test --locked -p maze
 cargo test --locked -p maze --features generation
 cargo test --locked -p maze_game_bevy_wasm
-cargo test --locked -p storage --features sql-store -- --test-threads=1
+cargo test --locked -p storage --features sql-store
 cargo test --locked -p maze_c -- --test-threads=1
 cargo test --locked -p maze_wasm
 cargo test --locked -p maze_console -- --test-threads=1

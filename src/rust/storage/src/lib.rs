@@ -36,9 +36,6 @@ pub enum StoreConfig {
 /// Try to create and then reload a maze from within a file store and, if successful, print it
 ///
 /// ```
-/// # // Make sure the store is in a suitable state prior to running the doc test
-/// # use storage::test_setup::setup;
-/// # setup();
 /// # tokio_test::block_on(async {
 ///
 /// use data_model::{Maze, User};
@@ -54,7 +51,10 @@ pub enum StoreConfig {
 /// maze_to_create.name = "maze_1".to_string();
 ///
 /// // Access the file store
-/// let file_config = FileStoreConfig::default();
+/// let temp = tempfile::tempdir().unwrap();
+/// let file_config = FileStoreConfig {
+///     data_dir: temp.path().to_string_lossy().to_string(),
+/// };
 /// match get_store(StoreConfig::File(file_config)).await {
 ///     Ok(mut store) => {
 ///         // Locate the owner by username
@@ -108,23 +108,3 @@ pub async fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, Error> {
     }
 }
 
-/// Hidden module that provides setup functionality for doc tests.
-#[doc(hidden)]
-pub mod test_setup {
-    use crate::{FileStore, FileStoreConfig, store::Manage};
-    /// This function runs before every documentation test.
-    /// Synchronous wrapper around the now-async `Manage::empty` so doc tests
-    /// can call it outside the `tokio_test::block_on` async block.
-    pub fn setup() {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("setup(): failed to build tokio runtime");
-        rt.block_on(async {
-            let mut store = FileStore::new(&FileStoreConfig::default());
-            if let Err(error) = store.empty().await {
-                panic!("setup() failed to empty store: {error}");
-            }
-        });
-    }
-}

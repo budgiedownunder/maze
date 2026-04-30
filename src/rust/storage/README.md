@@ -37,18 +37,18 @@ The full suite runs the same trait-contract scenarios against every backend.
 
 From within the `storage` directory:
 ```
-cargo test --features sql-store -- --test-threads=1
+cargo test --features sql-store
 ```
 
 This runs:
 - FileStore inline unit tests
 - SqlStore inline unit tests (datetime helpers — gated by `sql-store`)
 - Validation tests
-- The contract suite against FileStore (`tests/file_store_contract.rs` — 45 scenarios)
-- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 45 scenarios)
+- The contract suite against FileStore (`tests/file_store_contract.rs` — 49 scenarios)
+- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 49 scenarios)
 - Doc tests
 
-`--test-threads=1` is required because the FileStore tests share a working directory.
+Tests run in parallel — every FileStore test is rooted at its own `tempfile::TempDir`, and every SqlStore test creates its own in-memory SQLite, so there's no shared state to serialise around.
 
 #### SqlStore against PostgreSQL
 
@@ -64,7 +64,7 @@ DATABASE_URL=postgres://postgres:pw@localhost:5432/maze_test \
     cargo test --features sql-store --test sql_store_contract -- --test-threads=1
 ```
 
-`--test sql_store_contract` scopes the run to just the SqlStore integration test binary; FileStore + unit/doc tests are skipped (they don't depend on `DATABASE_URL`).
+`--test sql_store_contract` scopes the run to just the SqlStore integration test binary; FileStore + unit/doc tests are skipped (they don't depend on `DATABASE_URL`). `--test-threads=1` here is needed only because PostgreSQL/MySQL backends share a single test database — the contract suite calls `store.empty()` between scenarios to keep them isolated.
 
 #### SqlStore against MySQL
 
