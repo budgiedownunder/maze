@@ -2020,7 +2020,8 @@ mod tests {
         let path = store.maze_path(&owner, &id);
         let mut _file = File::create(&path).expect("Failed to create file");
 
-        match store.create_maze(&owner, &mut maze).await {
+        let result = store.create_maze(&owner, &mut maze).await;
+        match result {
             Ok(_) => {
                 panic!(
                     "Successfully created maze when file: {path} existed, when should not have"
