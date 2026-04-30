@@ -316,7 +316,11 @@ impl FileStore {
     }
 
     // Locates a user with any email row matching `search_value` (case-
-    // insensitively). Used by `user_email_exists` and `find_user_by_email`.
+    // insensitively), regardless of verification state. Used by
+    // `user_email_exists` for uniqueness checks — those need to see every
+    // address on every user, verified or not, otherwise an attacker could
+    // squat on `victim@example.com` with `verified = false` and the
+    // collision check would let another user re-register the same address.
     fn find_user_by_any_email_internal(
         &self,
         search_value: &str,
@@ -336,6 +340,29 @@ impl FileStore {
                 .iter()
                 .any(|row| UniCase::new(row.email.clone()) == search)
             {
+                return Ok(user);
+            }
+        }
+        Err(Error::UserNotFound())
+    }
+
+    // Locates a user with a `verified = true` email row matching
+    // `search_value` (case-insensitively). The verified filter lives in
+    // the lookup itself rather than at every callsite — see the trait
+    // doc-comment for rationale.
+    fn find_user_by_verified_email_internal(
+        &self,
+        search_value: &str,
+    ) -> Result<User, Error> {
+        let ids = self.get_user_ids()?;
+        let search = UniCase::new(search_value);
+        for id in ids {
+            let Some(user) = self.load_user_if_present(id)? else {
+                continue;
+            };
+            if user.emails.iter().any(|row| {
+                row.verified && UniCase::new(row.email.clone()) == search
+            }) {
                 return Ok(user);
             }
         }
@@ -855,7 +882,10 @@ impl UserStore for FileStore {
     async fn find_user_by_name(&self, name: &str) -> Result<User, Error> {
         self.find_user_by_string_field("username", name, Uuid::nil())
     }
-    /// Locates a user by their email address within the store
+    /// Locates a user by an email address within the store, returning the
+    /// match only if the matching `user_emails` row is `verified = true`.
+    /// Unverified rows are invisible to this lookup. See the trait
+    /// doc-comment for the security rationale.
     ///
     /// # Examples
     ///
@@ -894,7 +924,7 @@ impl UserStore for FileStore {
     ///             user.id
     ///         );
     ///         // Now attempt to find it again by email and display the results
-    ///         match store.find_user_by_email(user.email()).await {
+    ///         match store.find_user_by_verified_email(user.email()).await {
     ///             Ok(user_found) => {
     ///                 println!("Successfully found user within the file store => {:?}", user_found);
     ///             }
@@ -915,8 +945,8 @@ impl UserStore for FileStore {
     /// }
     /// # });
     /// ```
-    async fn find_user_by_email(&self, email: &str) -> Result<User, Error> {
-        self.find_user_by_any_email_internal(email, Uuid::nil())
+    async fn find_user_by_verified_email(&self, email: &str) -> Result<User, Error> {
+        self.find_user_by_verified_email_internal(email)
     }
     /// Locates a user by their api key within the store
     ///
@@ -2041,13 +2071,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn find_user_by_email_skips_orphaned_user_directory() {
+    async fn find_user_by_verified_email_skips_orphaned_user_directory() {
         let (mut store, _temp) = new_store().await;
         let _ = create_user(&mut store, false, "valid", "", "valid@company.com", "hash").await;
         let orphan_id = Uuid::new_v4();
         std::fs::create_dir_all(std::path::Path::new(&store.users_dir).join(orphan_id.to_string()))
             .expect("failed to create orphan directory");
-        store.find_user_by_email("valid@company.com").await.expect("find_user_by_email should succeed despite orphaned directory");
+        store.find_user_by_verified_email("valid@company.com").await.expect("find_user_by_verified_email should succeed despite orphaned directory");
     }
 
     #[tokio::test]

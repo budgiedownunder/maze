@@ -84,7 +84,7 @@ async fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &
 
     let user = {
         let store_lock = get_store_read_lock(store).await;
-        store_lock.find_user_by_email(email).await.map_err(|err| {
+        store_lock.find_user_by_verified_email(email).await.map_err(|err| {
             match err {
                 StoreError::UserNotFound() => ErrorUnauthorized("Invalid email or password"),
                 _ => {

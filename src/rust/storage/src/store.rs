@@ -22,8 +22,12 @@ pub trait UserStore {
     async fn get_user(&self, id: Uuid) -> Result<User, Error>;
     /// Locates a user by their username within the store
     async fn find_user_by_name(&self, name: &str) -> Result<User, Error>;
-    /// Locates a user by their email address within the store
-    async fn find_user_by_email(&self, email: &str) -> Result<User, Error>;
+    /// Locates a user by an email address within the store, returning the
+    /// match only if the matching `user_emails` row is `verified = true`.
+    /// Unverified rows are invisible to this lookup, preventing a
+    /// session-hijack scenario where an attacker attaches an unverified
+    /// address to a victim's account and redirects password resets to it.
+    async fn find_user_by_verified_email(&self, email: &str) -> Result<User, Error>;
     /// Locates a user by their api key within the store
     async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error>;
     /// Locates a user by their login id within the store
@@ -62,8 +66,8 @@ pub trait UserStore {
     /// Promotes the named email to primary. Atomically clears `is_primary`
     /// on every other row of the user. Rejects with
     /// [`Error::UserEmailNotVerified`] if the target row is `verified = false`
-    /// (the §10 linchpin: prevents a session-hijacker from redirecting
-    /// password resets to an attacker-controlled mailbox).
+    /// — preventing a session-hijacker from promoting an attacker-controlled
+    /// mailbox and redirecting password resets to it.
     async fn set_primary_email(
         &mut self,
         user_id: Uuid,

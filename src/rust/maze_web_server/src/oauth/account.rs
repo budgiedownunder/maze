@@ -84,7 +84,7 @@ pub async fn resolve(
     };
 
     // ---- Branch 2: email-link to an existing password account --------------
-    if let Ok(mut user) = store.find_user_by_email(&email).await {
+    if let Ok(mut user) = store.find_user_by_verified_email(&email).await {
         if !identity.email_verified {
             // Refuse: linking to an existing account based on an unverified
             // email would let an attacker hijack accounts at providers that
@@ -219,10 +219,14 @@ mod tests {
                 .cloned()
                 .ok_or(StoreError::UserNotFound())
         }
-        async fn find_user_by_email(&self, email: &str) -> Result<User, StoreError> {
+        async fn find_user_by_verified_email(&self, email: &str) -> Result<User, StoreError> {
             self.users
                 .values()
-                .find(|u| u.emails.iter().any(|row| row.email.eq_ignore_ascii_case(email)))
+                .find(|u| {
+                    u.emails
+                        .iter()
+                        .any(|row| row.verified && row.email.eq_ignore_ascii_case(email))
+                })
                 .cloned()
                 .ok_or(StoreError::UserNotFound())
         }

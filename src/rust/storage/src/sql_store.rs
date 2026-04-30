@@ -1243,7 +1243,10 @@ impl UserStore for SqlStore {
         }
     }
 
-    /// Locates a user by their email address within the store
+    /// Locates a user by an email address within the store, returning the
+    /// match only if the matching `user_emails` row is `verified = true`.
+    /// Unverified rows are invisible to this lookup. See the trait
+    /// doc-comment for the security rationale.
     ///
     /// # Examples
     ///
@@ -1285,7 +1288,7 @@ impl UserStore for SqlStore {
     ///             user.id
     ///         );
     ///         // Now attempt to find it again by email and display the results
-    ///         match store.find_user_by_email(user.email()).await {
+    ///         match store.find_user_by_verified_email(user.email()).await {
     ///             Ok(user_found) => {
     ///                 println!("Successfully found user within the SQL store => {:?}", user_found);
     ///             }
@@ -1306,12 +1309,12 @@ impl UserStore for SqlStore {
     /// }
     /// # });
     /// ```
-    async fn find_user_by_email(&self, email: &str) -> Result<User, Error> {
+    async fn find_user_by_verified_email(&self, email: &str) -> Result<User, Error> {
         let mut rows = sqlx::query(&q(
             self.kind,
             "SELECT u.* FROM users u \
              JOIN user_emails ue ON ue.user_id = u.id \
-             WHERE LOWER(ue.email) = LOWER(?)",
+             WHERE LOWER(ue.email) = LOWER(?) AND ue.verified <> 0",
         ))
         .bind(email)
         .fetch_all(&self.pool)
@@ -1321,7 +1324,7 @@ impl UserStore for SqlStore {
             0 => Err(Error::UserNotFound()),
             1 => user_from_row(&self.pool, self.kind, &rows.pop().expect("len==1")).await,
             n => Err(integrity_violation(&format!(
-                "{n} users match email '{email}' case-insensitively"
+                "{n} users match verified email '{email}' case-insensitively"
             ))),
         }
     }

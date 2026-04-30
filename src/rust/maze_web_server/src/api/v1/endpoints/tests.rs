@@ -339,9 +339,20 @@ mod test_definitions {
         async fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
             MockStore::find_user_by_name_in_map(&self.users, name, Uuid::nil())
         }
-        /// Locates a user by their email address within the store
-        async fn find_user_by_email(&self, email: &str) -> Result<User, StoreError> {
-            self.find_user_by_email(email, Uuid::nil())
+        /// Locates a user by an email address within the store, returning
+        /// the match only if the matching email row is verified. Mirrors
+        /// the verified-only filter enforced by the real stores.
+        async fn find_user_by_verified_email(&self, email: &str) -> Result<User, StoreError> {
+            for v in self.users.values() {
+                if v.user
+                    .emails
+                    .iter()
+                    .any(|row| row.verified && row.email.eq_ignore_ascii_case(email))
+                {
+                    return Ok(v.user.clone());
+                }
+            }
+            Err(StoreError::UserNotFound())
         }
         /// Locates a user by their api key within the store
         async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
@@ -790,7 +801,7 @@ mod test_definitions {
     async fn verify_user_login_presence(shared_store: &Arc<AsyncRwLock<Box<dyn Store>>>, email: &str, login_id: Uuid, expected_presence: bool) {
         let store_lock = get_store_read_lock(shared_store).await;
         // Confirm login id associated with user
-        match store_lock.find_user_by_email(email).await {
+        match store_lock.find_user_by_verified_email(email).await {
             Ok(user) => {
                 let presence = user.contains_valid_login(login_id);
                 if presence != expected_presence {

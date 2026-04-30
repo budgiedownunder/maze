@@ -300,12 +300,48 @@ pub async fn find_user_by_name_returns_not_found(store: &mut Box<dyn Store>) {
     assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
 }
 
-pub async fn find_user_by_email_is_case_insensitive(store: &mut Box<dyn Store>) {
+pub async fn find_user_by_verified_email_is_case_insensitive(store: &mut Box<dyn Store>) {
     let alice = fixture_user(store, "alice", "Alice@Example.COM").await;
-    let by_lower = store.find_user_by_email("alice@example.com").await.expect("lower");
-    let by_upper = store.find_user_by_email("ALICE@EXAMPLE.COM").await.expect("upper");
+    let by_lower = store.find_user_by_verified_email("alice@example.com").await.expect("lower");
+    let by_upper = store.find_user_by_verified_email("ALICE@EXAMPLE.COM").await.expect("upper");
     assert_eq!(by_lower.id, alice.id);
     assert_eq!(by_upper.id, alice.id);
+}
+
+pub async fn find_user_by_verified_email_skips_unverified_rows(store: &mut Box<dyn Store>) {
+    // A `user_emails` row with `verified = false` must be invisible to
+    // `find_user_by_verified_email`, even when the row exists and the
+    // address matches case-insensitively.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store
+        .add_user_email(alice.id, "alice2@example.com", false)
+        .await
+        .expect("add unverified email");
+
+    // The unverified row exists on alice but is invisible to the lookup.
+    let err = store
+        .find_user_by_verified_email("alice2@example.com")
+        .await
+        .expect_err("unverified row must not be returned");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+
+    // Sanity: the verified primary is still findable.
+    let by_primary = store
+        .find_user_by_verified_email("alice@example.com")
+        .await
+        .expect("primary verified email is findable");
+    assert_eq!(by_primary.id, alice.id);
+
+    // After verification the previously-invisible row becomes findable.
+    store
+        .mark_email_verified(alice.id, "alice2@example.com")
+        .await
+        .expect("mark_email_verified");
+    let by_secondary = store
+        .find_user_by_verified_email("alice2@example.com")
+        .await
+        .expect("once verified, the row is visible");
+    assert_eq!(by_secondary.id, alice.id);
 }
 
 pub async fn find_user_by_api_key_round_trips(store: &mut Box<dyn Store>) {

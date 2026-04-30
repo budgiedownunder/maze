@@ -177,9 +177,15 @@ async fn find_user_by_name_returns_not_found() {
 }
 
 #[tokio::test]
-async fn find_user_by_email_is_case_insensitive() {
+async fn find_user_by_verified_email_is_case_insensitive() {
     let mut s = fresh_store().await;
-    contract::find_user_by_email_is_case_insensitive(&mut s).await;
+    contract::find_user_by_verified_email_is_case_insensitive(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_user_by_verified_email_skips_unverified_rows() {
+    let mut s = fresh_store().await;
+    contract::find_user_by_verified_email_skips_unverified_rows(&mut s).await;
 }
 
 #[tokio::test]

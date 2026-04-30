@@ -1,11 +1,11 @@
 //! On-startup migration for FileStore `user.json` files.
 //!
-//! Old-shape JSON carried `email: String`. The current shape carries
-//! `emails: Vec<UserEmail>` per the multi-email feature. `FileStore::new()`
-//! walks the users directory, rewrites any old-shape file in place to the
-//! new shape, and saves the original alongside as `user.json.bak`. The
-//! conversion is idempotent — running against already-migrated data
-//! is a no-op (every file parses straight as the new shape).
+//! Old-shape JSON carried `email: String`; the current shape carries
+//! `emails: Vec<UserEmail>`. `FileStore::new()` walks the users directory,
+//! rewrites any old-shape file in place to the new shape, and saves the
+//! original alongside as `user.json.bak`. The conversion is idempotent —
+//! running against already-migrated data is a no-op (every file parses
+//! straight as the new shape).
 
 use std::fs;
 use std::io::Write;
