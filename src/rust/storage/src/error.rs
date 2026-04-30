@@ -52,7 +52,7 @@ impl std::fmt::Display for Error {
             }
             Error::DataModelError(e) => write!(f, "Data model error: {e}"),
             Error::Io(e) => write!(f, "I/O error: {e}"),
-            Error::SerdeJson(ref error) => write!(f, "{error}"),
+            Error::SerdeJson(error) => write!(f, "{error}"),
             Error::Other(msg) => write!(f, "Error: {msg}"),
         }
     }

@@ -10,12 +10,13 @@ use actix_service::Service;
 use actix_web::{ App, HttpRequest, middleware::Logger, HttpServer, web};
 use actix_web::http::header::{CACHE_CONTROL, HeaderName, HeaderValue};
 use auth::{config::PasswordHashConfig, hashing::hash_password};
-use config::app::{AppConfig, AppFeaturesConfig};
+use config::app::{AppConfig, AppFeaturesConfig, SqlStorageConfig, StorageConfig, StorageKind};
 use rustls::{ServerConfig, Certificate, PrivateKey};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use service::auth::AuthService;
 use std::sync::Arc;
 use std::sync::RwLock;
+use tokio::sync::RwLock as AsyncRwLock;
 use std::{fs::File, io::{self, BufReader}};
 use storage::{get_store, SharedStore, Store, Error as StoreError};
 
@@ -66,16 +67,15 @@ fn construct_bind_address(port: u16) -> String {
 }
 
 /// Adds the default admin account to the store if no users are registered
-fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Store>) -> Result<(), StoreError> {
-    let users = store.get_users()?;
-    if users.is_empty() {
+async fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Store>) -> Result<(), StoreError> {
+    if !store.has_users().await? {
         let password_hash = match hash_password(DEFAULT_ADMIN_ACCOUNT_PASSWORD, hash_config) {
             Ok(hash) => hash,
             Err(error) => return Err(StoreError::Other(format!("{error}"))),
         };
-        store.init_default_admin_user(DEFAULT_ADMIN_ACCOUNT_USERNAME, DEFAULT_ADMIN_ACCOUNT_EMAIL, &password_hash)?;
+        store.init_default_admin_user(DEFAULT_ADMIN_ACCOUNT_USERNAME, DEFAULT_ADMIN_ACCOUNT_EMAIL, &password_hash).await?;
     }
-    Ok(())    
+    Ok(())
 }
 
 /// Creates a configured Actix App instance with all routes, middleware, and shared state.
@@ -221,13 +221,14 @@ pub async fn run_server() -> std::io::Result<()> {
   
     let bind_address = construct_bind_address(config.port);
     let rustls_config = load_rustls_config(&config)?;
-    let file_config = storage::FileStoreConfig::default();
-    let mut store = get_store(storage::StoreConfig::File(file_config))?;
+    let store_config = build_store_config(&config.storage)
+        .map_err(std::io::Error::other)?;
+    let mut store = get_store(store_config).await?;
 
-    init_user_accounts(&config.security.password_hash, &mut store)?;
+    init_user_accounts(&config.security.password_hash, &mut store).await?;
 
     let max_workers = std::thread::available_parallelism()?;
-    let shared_store: SharedStore = Arc::new(RwLock::new(store));
+    let shared_store: SharedStore = Arc::new(AsyncRwLock::new(store));
     let features: SharedFeatures = Arc::new(RwLock::new(config.features.clone()));
     let oauth_connector: oauth::SharedOAuthConnector = build_oauth_connector(&config)?;
 
@@ -240,6 +241,108 @@ pub async fn run_server() -> std::io::Result<()> {
     .workers(usize::from(max_workers))
     .run()
     .await
+}
+
+/// Translates the user-facing [`StorageConfig`] into the lower-level
+/// [`storage::StoreConfig`] understood by [`get_store`].
+///
+/// The SQL branch assembles a SQLx connection URL from discrete config fields
+/// and appends driver-specific TLS / connect-timeout query parameters. The
+/// password is taken from the in-memory `SqlStorageConfig.password` (which
+/// `StorageConfig::resolve_password_from_env` will already have populated from
+/// the `MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD` env var).
+fn build_store_config(storage: &StorageConfig) -> Result<storage::StoreConfig, String> {
+    match storage.kind {
+        StorageKind::File => Ok(storage::StoreConfig::File(storage::FileStoreConfig {
+            data_dir: storage.file.data_dir.clone(),
+        })),
+        StorageKind::Sql => {
+            let url = assemble_sql_url(&storage.sql)?;
+            Ok(storage::StoreConfig::Sql(storage::SqlStoreConfig {
+                url,
+                max_connections: storage.sql.max_connections,
+                auto_create_database: storage.sql.auto_create_database,
+                idle_timeout_secs: storage.sql.idle_timeout_secs,
+                acquire_timeout_secs: storage.sql.acquire_timeout_secs,
+            }))
+        }
+    }
+}
+
+/// Assembles a SQLx connection URL from a [`SqlStorageConfig`].
+///
+/// `connect_timeout_secs` and `require_tls` are encoded as driver-specific
+/// query parameters because `AnyPoolOptions` does not expose them
+/// generically. SQLite ignores both (no network).
+fn assemble_sql_url(sql: &SqlStorageConfig) -> Result<String, String> {
+    let driver = sql.driver.to_ascii_lowercase();
+    match driver.as_str() {
+        "sqlite" => {
+            if sql.path.trim().is_empty() {
+                return Err("[storage.sql] driver = \"sqlite\" requires a non-empty path".into());
+            }
+            Ok(format!("sqlite:{}", sql.path))
+        }
+        "postgres" | "postgresql" | "mysql" => {
+            if sql.host.trim().is_empty() {
+                return Err(format!("[storage.sql] driver = \"{driver}\" requires a non-empty host"));
+            }
+            if sql.database.trim().is_empty() {
+                return Err(format!("[storage.sql] driver = \"{driver}\" requires a non-empty database"));
+            }
+            if sql.username.trim().is_empty() {
+                return Err(format!("[storage.sql] driver = \"{driver}\" requires a non-empty username"));
+            }
+            let scheme = if driver == "mysql" { "mysql" } else { "postgres" };
+            let user = urlencoding::encode(&sql.username);
+            let pass = urlencoding::encode(&sql.password);
+            let auth = if sql.password.is_empty() {
+                user.into_owned()
+            } else {
+                format!("{user}:{pass}")
+            };
+            let host_port = if sql.port == 0 {
+                sql.host.clone()
+            } else {
+                format!("{}:{}", sql.host, sql.port)
+            };
+            let mut url = format!("{scheme}://{auth}@{host_port}/{}", sql.database);
+            let mut params: Vec<(&'static str, String)> = Vec::new();
+            if sql.require_tls {
+                if driver == "mysql" {
+                    let mode = if sql.ca_cert_path.is_empty() { "REQUIRED" } else { "VERIFY_CA" };
+                    params.push(("ssl-mode", mode.into()));
+                    if !sql.ca_cert_path.is_empty() {
+                        params.push(("ssl-ca", sql.ca_cert_path.clone()));
+                    }
+                } else {
+                    let mode = if sql.ca_cert_path.is_empty() { "require" } else { "verify-full" };
+                    params.push(("sslmode", mode.into()));
+                    if !sql.ca_cert_path.is_empty() {
+                        params.push(("sslrootcert", sql.ca_cert_path.clone()));
+                    }
+                }
+            }
+            // `connect_timeout_secs` deliberately *not* appended to the URL.
+            // sqlx-postgres / sqlx-mysql don't recognise it as a URL parameter
+            // (they warn and ignore). It's still accepted as a config field
+            // for parity with the deployment-topology examples; whether to
+            // bind it onto pool options later is a follow-up.
+            let _ = sql.connect_timeout_secs;
+            if !params.is_empty() {
+                url.push('?');
+                let parts: Vec<String> = params
+                    .into_iter()
+                    .map(|(k, v)| format!("{}={}", k, urlencoding::encode(&v)))
+                    .collect();
+                url.push_str(&parts.join("&"));
+            }
+            Ok(url)
+        }
+        other => Err(format!(
+            "[storage.sql] unknown driver \"{other}\" — expected \"sqlite\", \"postgres\", or \"mysql\""
+        )),
+    }
 }
 
 /// Build the [`oauth::SharedOAuthConnector`] selected by `config.oauth`.

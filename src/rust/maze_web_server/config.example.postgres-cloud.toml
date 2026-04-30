@@ -1,0 +1,100 @@
+# Example configuration: PostgreSQL-backed storage (cloud-managed)
+#
+# Suitable for AWS RDS, GCP Cloud SQL, Azure Database for PostgreSQL, or any
+# managed PostgreSQL where:
+#
+#   - the database server is reachable over a public or private network
+#     and TLS is mandatory;
+#   - idle TCP connections may be reaped by the load-balancer or by the
+#     managed-DB service itself, so the pool needs to drop idle connections
+#     before they become stale;
+#   - the application credentials lack server-level CREATEDB privileges, so
+#     the database, user, and grants are pre-provisioned (typically by IaC
+#     such as Terraform / CloudFormation / Bicep).
+#
+# Operator setup (one-time, by IaC or DBA — not run by the application):
+#
+#     CREATE DATABASE your_database;
+#     CREATE USER your_app_user WITH PASSWORD '<provider-managed secret>';
+#     GRANT CONNECT ON DATABASE your_database TO your_app_user;
+#     \c your_database
+#     GRANT USAGE, CREATE ON SCHEMA public TO your_app_user;
+#
+# The application user should NOT have CREATEDB or superuser rights. SQLx
+# applies migrations using whatever rights the connecting user has — a
+# vanilla CONNECT + USAGE + CREATE on the schema is sufficient.
+#
+# Before starting the server, inject the password from your secret manager
+# (AWS Secrets Manager / GCP Secret Manager / Azure Key Vault) into the
+# environment as MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD. In a container
+# orchestrator this typically comes from a Kubernetes Secret, an ECS task
+# definition `secrets:` block, or equivalent. Never store it in this file
+# or in any committed image.
+
+port = 8443
+
+[security]
+# In production, point at certs issued by your CA. Self-signed certs are
+# fine for development but should be replaced for any deployment users
+# can reach.
+cert_file = "cert.pem"
+key_file = "key.pem"
+login_expiry_hours = 24
+
+[logging]
+log_dir = "logs"
+log_level = "info"
+log_file_prefix = "maze_web_server_"
+
+[features]
+allow_signup = true
+
+[storage]
+type = "sql"
+
+[storage.sql]
+driver = "postgres"
+# Replace with your cloud-DB endpoint, e.g.:
+#   AWS RDS:    "<db>.<id>.<region>.rds.amazonaws.com"
+#   GCP CloudSQL via private IP: "<reserved private IP>"
+#   Azure DB:   "<server>.postgres.database.azure.com"
+host = "your-db-host.example.com"
+port = 5432
+database = "your_database"
+username = "your_app_user"
+# password — never stored here; set MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD env var
+
+# A higher pool size suits multi-worker production. Tune to match the
+# managed DB's connection limit and your worker count.
+max_connections = 10
+
+# Cloud credentials typically lack CREATEDB / server-level CREATE rights,
+# so the database must be pre-provisioned by the operator (see comment
+# block above). Leave this off.
+auto_create_database = false
+
+# Mandatory for any managed-DB connection. The two settings interact:
+#
+#   require_tls = true, ca_cert_path = ""        → sslmode=require
+#       (TLS used; server cert is NOT verified)
+#   require_tls = true, ca_cert_path = "<path>"  → sslmode=verify-full
+#       + sslrootcert=<path> (full verification against the supplied CA)
+#
+# For AWS RDS, download `rds-global-bundle.pem` (or a region-specific
+# bundle) and reference it from a path the server can read. Equivalent
+# bundles are available from GCP and Azure.
+require_tls = true
+ca_cert_path = "/etc/ssl/certs/your-cloud-db-ca.pem"
+
+# Cloud-managed databases often kill idle TCP sockets (~10 minutes is
+# common). Setting idle_timeout below that ensures the pool drops idle
+# connections before the server does, avoiding stale-connection errors.
+connect_timeout_secs = 10
+idle_timeout_secs = 600
+acquire_timeout_secs = 30
+
+[oauth]
+# Configure as appropriate for your deployment.
+enabled = false
+connector = "internal"
+mobile_redirect_scheme = "maze-app"

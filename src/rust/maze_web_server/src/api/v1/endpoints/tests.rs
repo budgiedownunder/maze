@@ -9,14 +9,15 @@ mod test_definitions {
     
     use actix_http;
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
-    use auth::{config::PasswordHashConfig, hashing::hash_password};  
+    use auth::{config::PasswordHashConfig, hashing::hash_password};
     use chrono::{DateTime, Utc};
     use data_model::{Maze, MazeDefinition, MazePoint, User, UserLogin};
     use maze::{Error as MazeError, GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution, MazeSolver};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use std::collections::HashMap;
-    use std::sync::{Arc, RwLock, RwLockReadGuard};
+    use std::sync::{Arc, RwLock};
+    use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
     use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
     use uuid::Uuid;
 
@@ -131,10 +132,10 @@ mod test_definitions {
         }
 
         /// Find the api key to use for a given username. If the username does not exist,
-        /// return an invalid key to simulate an invalid access attempt 
+        /// return an invalid key to simulate an invalid access attempt
         fn get_api_key_to_use(&self, caller_username: Option<&str>) -> Uuid {
             if let Some(username) = caller_username {
-                if let Ok(user) = self.find_user_by_name(username) {
+                if let Ok(user) = MockStore::find_user_by_name_in_map(&self.users, username, Uuid::nil()) {
                     return user.api_key;
                 }
             }
@@ -224,9 +225,10 @@ mod test_definitions {
         }        
     }
 
+    #[async_trait]
     impl MazeStore for MockStore {
 
-        fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
+        async fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
             let mock_user = self.get_mock_user_mut(owner.id)?;
             let id = MockMaze::create_id_from_name(&maze.name);
 
@@ -247,7 +249,7 @@ mod test_definitions {
             Ok(())
         }
 
-        fn delete_maze(&mut self, owner: &User, id: &str) -> Result<(), StoreError> {
+        async fn delete_maze(&mut self, owner: &User, id: &str) -> Result<(), StoreError> {
             let mock_user = self.get_mock_user_mut(owner.id)?;
             if mock_user.mazes.remove(id).is_some() {
                 Ok(())
@@ -256,7 +258,7 @@ mod test_definitions {
             }
         }
 
-        fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
+        async fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
             let mock_user = self.get_mock_user_mut(owner.id)?;
             if mock_user.mazes.contains_key(&maze.id) {
                 mock_user.mazes.insert(
@@ -271,7 +273,7 @@ mod test_definitions {
             Err(StoreError::MazeIdNotFound(maze.id.to_string()))
         }
 
-        fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, StoreError> {
+        async fn get_maze(&self, owner: &User, id: &str) -> Result<Maze, StoreError> {
             let mock_user = self.get_mock_user(owner.id)?;
             if let Some(mock_maze) = mock_user.mazes.get(id) {
                 return Ok(mock_maze.maze.clone());
@@ -279,11 +281,11 @@ mod test_definitions {
             Err(StoreError::MazeIdNotFound(id.to_string()))
         }
 
-        fn find_maze_by_name(&self, _owner: &User, _name: &str) -> Result<MazeItem, StoreError> {
+        async fn find_maze_by_name(&self, _owner: &User, _name: &str) -> Result<MazeItem, StoreError> {
             Err(StoreError::Other("Mock interface not implemented".to_string()))
         }
 
-        fn get_maze_items(&self, owner: &User, include_definitions: bool) -> Result<Vec<MazeItem>, StoreError> {
+        async fn get_maze_items(&self, owner: &User, include_definitions: bool) -> Result<Vec<MazeItem>, StoreError> {
             let mock_user = self.get_mock_user(owner.id)?;
             let mut items: Vec<MazeItem> = maze_items_from_map(&mock_user.mazes, include_definitions);
             items.sort_by_key(|item| item.name.clone());
@@ -291,13 +293,14 @@ mod test_definitions {
         }
     }
 
+    #[async_trait]
     impl UserStore for MockStore {
         /// Adds the default admin user to the store if it doesn't already exist, else returns it
-        fn init_default_admin_user(&mut self, _username: &str, _email: &str, _password_hash: &str) -> Result<User, StoreError> {
+        async fn init_default_admin_user(&mut self, _username: &str, _email: &str, _password_hash: &str) -> Result<User, StoreError> {
             Err(StoreError::Other("init_default_admin_user() not implemented for MockStore".to_string()))
         }
         /// Adds a new user to the store and sets the allocated `id` within the user object
-        fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
+        async fn create_user(&mut self, user: &mut User) -> Result<(), StoreError> {
             let mock_user = MockUser::new_from_user(user);
             user.id = mock_user.user.id;
             self.validate_user(user, Uuid::nil())?;
@@ -305,7 +308,7 @@ mod test_definitions {
             Ok(())
         }
         /// Deletes a user from the store
-        fn delete_user(&mut self, id: Uuid) -> Result<(), StoreError> {
+        async fn delete_user(&mut self, id: Uuid) -> Result<(), StoreError> {
             if self.users.remove(&id).is_some() {
                 Ok(())
             } else {
@@ -313,29 +316,29 @@ mod test_definitions {
             }
         }
         /// Updates a user within the store
-        fn update_user(&mut self, user: &mut User) -> Result<(), StoreError> {
+        async fn update_user(&mut self, user: &mut User) -> Result<(), StoreError> {
             self.validate_user(user, user.id)?;
             let mock_user = self.get_mock_user_mut(user.id)?;
             mock_user.user = user.clone();
             Ok(())
         }
         /// Loads a user from the store
-        fn get_user(&self, id: Uuid) -> Result<User, StoreError> {
+        async fn get_user(&self, id: Uuid) -> Result<User, StoreError> {
             if let Some(mock_user) = self.users.get(&id) {
                 return Ok(mock_user.user.clone());
             }
             Err(StoreError::UserIdNotFound(id.to_string()))
         }
         /// Locates a user by their username within the store
-        fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
+        async fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
             MockStore::find_user_by_name_in_map(&self.users, name, Uuid::nil())
         }
         /// Locates a user by their email address within the store
-        fn find_user_by_email(&self, email: &str) -> Result<User, StoreError> {
+        async fn find_user_by_email(&self, email: &str) -> Result<User, StoreError> {
             self.find_user_by_email(email, Uuid::nil())
         }
         /// Locates a user by their api key within the store
-        fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
+        async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
             for v in self.users.values() {
                 if v.user.api_key == api_key {
                     return Ok(v.user.clone());
@@ -344,7 +347,7 @@ mod test_definitions {
             Err(StoreError::UserNotFound())
         }
 
-        fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, StoreError>{
+        async fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, StoreError>{
             for v in self.users.values() {
                 if v.user.contains_valid_login(login_id) {
                     return Ok(v.user.clone());
@@ -353,7 +356,7 @@ mod test_definitions {
             Err(StoreError::UserNotFound())
         }
 
-        fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, StoreError> {
+        async fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, StoreError> {
             for v in self.users.values() {
                 if v.user.oauth_identities.iter().any(|i| {
                     i.provider.eq_ignore_ascii_case(provider) && i.provider_user_id == provider_user_id
@@ -365,7 +368,7 @@ mod test_definitions {
         }
         /// Returns the list of users within the store, sorted
         /// alphabetically by username in ascending order
-        fn get_users(&self) -> Result<Vec<User>, StoreError> {
+        async fn get_users(&self) -> Result<Vec<User>, StoreError> {
             let mut users: Vec<User> = self.users.values()
                 .map( |value| value.user.clone())
                 .collect();
@@ -375,17 +378,22 @@ mod test_definitions {
         }
 
         /// Returns the list of admin users within the store
-        fn get_admin_users(&self) -> Result<Vec<User>, StoreError> {
+        async fn get_admin_users(&self) -> Result<Vec<User>, StoreError> {
             let admins: Vec<User> = self.users.values()
                 .filter(|v| v.user.is_admin)
                 .map(|v| v.user.clone())
                 .collect();
             Ok(admins)
         }
+
+        async fn has_users(&self) -> Result<bool, StoreError> {
+            Ok(!self.users.is_empty())
+        }
     }
 
+    #[async_trait]
     impl Manage for MockStore {
-        fn empty(&mut self) -> Result<(), StoreError> {
+        async fn empty(&mut self) -> Result<(), StoreError> {
             self.users = HashMap::new();
             Ok(())
         }
@@ -612,7 +620,7 @@ mod test_definitions {
     }
 
     fn new_shared_mock_maze_store(mock_store: MockStore) -> SharedStore {
-        Arc::new(RwLock::new(Box::new(mock_store)))
+        Arc::new(AsyncRwLock::new(Box::new(mock_store)))
     }
 
     fn new_users_map(user_defs:&Vec<UserDefinition>) -> HashMap<Uuid, MockUser> {
@@ -750,19 +758,16 @@ mod test_definitions {
         "Email and password must be provided".to_string()
     }
 
-    fn get_store_read_lock(
-        shared_store: &Arc<RwLock<Box<dyn Store>>>,
+    async fn get_store_read_lock(
+        shared_store: &Arc<AsyncRwLock<Box<dyn Store>>>,
     ) -> RwLockReadGuard<'_, Box<dyn Store>> {
-        match shared_store.read() {
-            Ok(store_lock) => store_lock,
-            Err(err) => panic!("Failed to acquire store read lock: {err}"),
-        }
+        shared_store.read().await
     }
 
-    fn verify_user_login_presence(shared_store: &Arc<RwLock<Box<dyn Store>>>, email: &str, login_id: Uuid, expected_presence: bool) {
-        let store_lock = get_store_read_lock(shared_store);
+    async fn verify_user_login_presence(shared_store: &Arc<AsyncRwLock<Box<dyn Store>>>, email: &str, login_id: Uuid, expected_presence: bool) {
+        let store_lock = get_store_read_lock(shared_store).await;
         // Confirm login id associated with user
-        match store_lock.find_user_by_email(email) {
+        match store_lock.find_user_by_email(email).await {
             Ok(user) => {
                 let presence = user.contains_valid_login(login_id);
                 if presence != expected_presence {
@@ -804,7 +809,7 @@ mod test_definitions {
             assert_ne!(login_response.login_token_expires_at, DateTime::<Utc>::default());
 
             if run_logout_test {
-                verify_user_login_presence(&shared_store, email, login_id, true);
+                verify_user_login_presence(&shared_store, email, login_id, true).await;
 
                 // Logout
                 let logout_url = "/api/v1/logout".to_string();
@@ -815,10 +820,11 @@ mod test_definitions {
                 if let Some(expected_logout_status_code) = expected_logout_status_code {
                     assert_eq!(logout_resp.status(), expected_logout_status_code);
                     if expected_logout_status_code == StatusCode::NO_CONTENT {
-                        verify_user_login_presence(&shared_store, email, login_id, false);
-                    }    
+                        verify_user_login_presence(&shared_store, email, login_id, false).await;
+                    }
                 }
-            } 
+            }
+
         } else {
             match expected_login_err_message {
                 Some(value) => {
@@ -1788,7 +1794,7 @@ mod test_definitions {
         // Expiry is extended
         assert!(renew_response.login_token_expires_at >= original_expiry);
         // Login still present in store
-        verify_user_login_presence(&shared_store, VALID_USER_EMAIL_1, login_id, true);
+        verify_user_login_presence(&shared_store, VALID_USER_EMAIL_1, login_id, true).await;
     }
 
     #[actix_web::test]
@@ -2944,9 +2950,9 @@ mod test_definitions {
         if expected_status_code == StatusCode::NO_CONTENT {
             // Verify the caller's account is gone from the store
             if let Some(username) = caller_username {
-                let store_lock = get_store_read_lock(&shared_store);
+                let store_lock = get_store_read_lock(&shared_store).await;
                 assert!(
-                    store_lock.find_user_by_name(username).is_err(),
+                    store_lock.find_user_by_name(username).await.is_err(),
                     "user '{username}' should have been deleted but was still found"
                 );
             }

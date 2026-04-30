@@ -1,0 +1,62 @@
+# Example configuration: MySQL-backed storage (local / LAN)
+#
+# Suitable for local development against a Docker-hosted MySQL, or for
+# on-network (LAN / VPN / internal datacentre) deployments. Works against
+# MySQL 8.0+ and MariaDB.
+#
+# One-off database setup (operator step — not run by the application):
+#
+#     docker run --name maze-mysql -e MYSQL_ROOT_PASSWORD=pw -p 3306:3306 -d mysql:8
+#     docker exec -it maze-mysql mysql -uroot -ppw \
+#         -e "CREATE DATABASE maze CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+#     docker exec -it maze-mysql mysql -uroot -ppw \
+#         -e "CREATE USER 'maze_app'@'%' IDENTIFIED BY 'maze_app_pw';"
+#     docker exec -it maze-mysql mysql -uroot -ppw \
+#         -e "GRANT CREATE, ALTER, DROP, INDEX, REFERENCES, SELECT, INSERT, UPDATE, DELETE \
+#                 ON maze.* TO 'maze_app'@'%';"
+#     docker exec -it maze-mysql mysql -uroot -ppw -e "FLUSH PRIVILEGES;"
+#
+# Before starting the server, set the password env var (replace
+# `maze_app_pw` with whatever password you used above):
+#
+#     export MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD=maze_app_pw       # bash
+#     $env:MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD = "maze_app_pw"     # PowerShell
+#
+# Copy this file over `config.toml` and run `cargo run`.
+
+port = 8443
+
+[security]
+cert_file = "cert.pem"
+key_file = "key.pem"
+login_expiry_hours = 24
+
+[logging]
+log_dir = "logs"
+log_level = "info"
+log_file_prefix = "maze_web_server_"
+
+[features]
+allow_signup = true
+
+[storage]
+type = "sql"
+
+[storage.sql]
+driver = "mysql"
+host = "localhost"
+port = 3306
+database = "maze"
+username = "maze_app"
+# password — never stored here; set MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD env var
+max_connections = 5
+auto_create_database = false
+require_tls = false
+connect_timeout_secs = 10
+idle_timeout_secs = 600
+acquire_timeout_secs = 30
+
+[oauth]
+enabled = false
+connector = "internal"
+mobile_redirect_scheme = "maze-app"

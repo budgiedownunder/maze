@@ -65,6 +65,11 @@ System_Boundary(b_docs, "Documentation") {
     Container(html_help, "HTML help", "", "Generated documentation pages", $tags="doc")
 }
 
+System_Boundary(b_persistence, "Persistence") {
+    ContainerDb_Ext(filesystem, "Filesystem", "", "JSON files")
+    ContainerDb_Ext(database, "Database", "", "SQLite / PostgreSQL / MySQL")
+}
+
 Rel(user, browser, "")
 Rel(maze_react_web, maze_web_server, "Served by")
 Rel(user, html_help, "")
@@ -85,6 +90,8 @@ Rel(api, maze_web_server, "")
 Rel(maze_web_server, maze_wasm, "")
 Rel(maze_web_server, auth, "")
 Rel(maze_web_server, storage, "")
+Rel(storage, filesystem, "")
+Rel(storage, database, "")
 Rel(maze_game_bevy, maze, "")
 Rel(maze_game_bevy_wasm, maze_game_bevy, "Wraps")
 Rel(maze_web_server, maze_game_bevy_wasm, "Serves")

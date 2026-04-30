@@ -12,12 +12,11 @@ static_dir = "../../react/maze_web_server/dist"
 
 [security]
 # Path to TLS certificate file (default: "cert.pem")
-cert_file = "C:/Certs/maze.cbintex.com-crt.pem"
-#cert_file = "cert.pem"
+cert_file = "cert.pem"
 
 # Path to TLS private key file (default: "key.pem")
-key_file = "C:/Certs/maze.cbintex.com-key-pkcs8.pem"
-#key_file = "key.pem"
+key_file = "key.pem"
+
 # Login token expiry in hours (integer).
 login_expiry_hours = 24
 
@@ -52,6 +51,39 @@ log_level = "info"
 # e.g. "maze_web_server_" produces "maze_web_server_2026-04-09.log"
 log_file_prefix = "maze_web_server_"
 
+[storage]
+# Backend selector: "file" (on-disk JSON layout) or "sql" (SQLite/Postgres/MySQL).
+# Can be overridden with `MAZE_WEB_SERVER_STORAGE_TYPE`.
+type = "file"
+
+[storage.file]
+# Directory under which user/maze data is stored, relative to the working
+# directory or absolute. Can be overridden with
+# `MAZE_WEB_SERVER_STORAGE_FILE_DATA_DIR`.
+data_dir = "data"
+
+# ---- SQL backend (uncomment + set type = "sql" to use) ----
+# Driver selection happens at runtime — one binary supports all three engines
+# via SQLx's Any backend. The connection URL is assembled from these fields
+# at startup; the password is *never* read from this file — set the
+# `MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD` env var instead (sqlite excepted, no auth).
+# [storage.sql]
+# driver = "postgres"            # "postgres", "mysql", or "sqlite"
+# host = "your-db-host"          # postgres / mysql only
+# port = 5432                    # postgres / mysql only
+# database = "your_database"     # postgres / mysql only
+# username = "your_app_user"     # postgres / mysql only
+# path = "your_database.db"      # sqlite only
+# max_connections = 5
+# auto_create_database = false   # if true, create DB on first run if missing
+#                                # (sqlite + dev only — cloud creds rarely have the privilege)
+# require_tls = false            # set true for any host beyond localhost
+# ca_cert_path = ""              # optional CA bundle for full TLS verification (cloud DBs)
+# connect_timeout_secs = 10      # encoded into URL for postgres only
+# idle_timeout_secs = 600
+# acquire_timeout_secs = 30
+# password: never stored here — set MAZE_WEB_SERVER_STORAGE_SQL_PASSWORD
+
 [features]
 # Whether new users can self-register via the signup endpoint (default: true).
 # Can also be changed at runtime via PUT /api/v1/admin/features (admin only).
@@ -76,26 +108,26 @@ enabled = false
 display_name = "Google"
 client_id = ""
 client_secret_env = "MAZE_OAUTH_GOOGLE_SECRET"
-redirect_uri = "https://maze.cbintex.com:8443/api/v1/auth/oauth/google/callback"
+redirect_uri = "https://your-host:8443/api/v1/auth/oauth/google/callback"
 
 [oauth.internal.providers.github]
 enabled = false
 display_name = "GitHub"
 client_id = ""
 client_secret_env = "MAZE_OAUTH_GITHUB_SECRET"
-redirect_uri = "https://maze.cbintex.com:8443/api/v1/auth/oauth/github/callback"
+redirect_uri = "https://your-host:8443/api/v1/auth/oauth/github/callback"
 
 [oauth.internal.providers.facebook]
 enabled = false
 display_name = "Facebook"
 client_id = ""
 client_secret_env = "MAZE_OAUTH_FACEBOOK_SECRET"
-redirect_uri = "https://maze.cbintex.com:8443/api/v1/auth/oauth/facebook/callback"
+redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 
 # ---- Auth0 connector (placeholder, not implemented in v1) ----
 # [oauth.auth0]
 # domain = "your-tenant.auth0.com"
 # client_id = ""
 # client_secret_env = "MAZE_AUTH0_SECRET"
-# audience = "https://maze.cbintex.com/api"
+# audience = "https://your-host/api"
 

@@ -1,12 +1,17 @@
 // Re-export modules
 mod error;
 mod file_store;
+#[cfg(feature = "sql-store")]
+mod sql_store;
 pub mod store;
 pub mod validation;
 
 // Re-export traits and structs
 pub use error::Error;
 pub use file_store::{FileStore, FileStoreConfig};
+#[cfg(feature = "sql-store")]
+pub use sql_store::{SqlStore, SqlStoreConfig};
+pub use store::Manage;
 pub use store::MazeItem;
 pub use store::MazeStore;
 pub use store::Store;
@@ -16,6 +21,8 @@ pub use store::UserStore;
 /// Represents the supported store configurations
 pub enum StoreConfig {
     File(FileStoreConfig),
+    #[cfg(feature = "sql-store")]
+    Sql(SqlStoreConfig),
 }
 
 /// Creates and returns a store of the given type
@@ -29,9 +36,7 @@ pub enum StoreConfig {
 /// Try to create and then reload a maze from within a file store and, if successful, print it
 ///
 /// ```
-/// # // Make sure the store is in a suitable state prior to running the doc test
-/// # use storage::test_setup::setup;
-/// # setup();
+/// # tokio_test::block_on(async {
 ///
 /// use data_model::{Maze, User};
 /// use maze::{MazePath, MazePrinter};
@@ -46,11 +51,14 @@ pub enum StoreConfig {
 /// maze_to_create.name = "maze_1".to_string();
 ///
 /// // Access the file store
-/// let file_config = FileStoreConfig::default();
-/// match get_store(StoreConfig::File(file_config)) {
+/// let temp = tempfile::tempdir().unwrap();
+/// let file_config = FileStoreConfig {
+///     data_dir: temp.path().to_string_lossy().to_string(),
+/// };
+/// match get_store(StoreConfig::File(file_config)).await {
 ///     Ok(mut store) => {
 ///         // Locate the owner by username
-///         let find_user_result: Result<User, Error> = store.find_user_by_name("a_username");
+///         let find_user_result: Result<User, Error> = store.find_user_by_name("a_username").await;
 ///         let owner = match find_user_result {
 ///             Ok(user) => user,
 ///             Err(error) => {
@@ -60,14 +68,14 @@ pub enum StoreConfig {
 ///         };
 ///
 ///         // Create the maze within the store
-///         if let Err(error) = store.create_maze(&owner, &mut maze_to_create) {
+///         if let Err(error) = store.create_maze(&owner, &mut maze_to_create).await {
 ///             panic!(
 ///                 "failed to create maze => {}",
 ///                 error
 ///             );
 ///         }
 ///         // Now reload the maze from the store
-///         match store.get_maze(&owner, &maze_to_create.id) {
+///         match store.get_maze(&owner, &maze_to_create.id).await {
 ///             Ok(loaded_maze) => {
 ///                 println!("Successfully loaded maze:");
 ///                 let mut print_target = StdoutLinePrinter::new();
@@ -90,26 +98,13 @@ pub enum StoreConfig {
 ///         );
 ///     }
 /// }
+/// # });
 /// ```
-pub fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, Error> {
-    let store = match config
-    {
-        StoreConfig::File(file_config) => file_store::FileStore::new(&file_config),
-    };
-
-    Ok(Box::new(store))
-}
-
-/// Hidden module that provides setup functionality for doc tests.
-#[doc(hidden)]
-pub mod test_setup {
-    use crate::{FileStore, FileStoreConfig, store::Manage};
-    /// This function runs before every documentation test
-    pub fn setup() {
-        // Make sure any existing files and directories are cleared out
-        let mut store = FileStore::new(&FileStoreConfig::default());
-        if let Err(error) = store.empty() {
-            panic!("setup() failed to empty store: {error}");
-        }
+pub async fn get_store(config: StoreConfig) -> Result<Box<dyn Store>, Error> {
+    match config {
+        StoreConfig::File(file_config) => Ok(Box::new(file_store::FileStore::new(&file_config))),
+        #[cfg(feature = "sql-store")]
+        StoreConfig::Sql(sql_config) => Ok(Box::new(sql_store::SqlStore::new(sql_config).await?)),
     }
 }
+

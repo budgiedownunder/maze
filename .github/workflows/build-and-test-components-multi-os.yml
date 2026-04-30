@@ -182,7 +182,7 @@ jobs:
         cargo test --locked -p maze
         cargo test --locked -p maze --features generation
         cargo test --locked -p maze_game_bevy_wasm
-        cargo test --locked -p storage -- --test-threads=1
+        cargo test --locked -p storage --features sql-store
         cargo test --locked -p maze_c -- --test-threads=1
         cargo test --locked -p maze_wasm
         cargo test --locked -p maze_console -- --test-threads=1
@@ -238,3 +238,75 @@ jobs:
       shell: cmd
       run: |
         build_all.bat
+
+  # ------------------------------------------------------------------------
+  # PostgreSQL contract suite for SqlStore.
+  #
+  # Independent top-level job — runs in parallel with `build-and-test`. Linux
+  # only because GitHub-hosted `macos-latest` and `windows-latest` runners do
+  # not support service containers (no Docker daemon in those VMs). The
+  # cross-OS coverage for the SQLite path lives in the `build-and-test`
+  # matrix above; this job adds PostgreSQL coverage on a single Linux runner.
+  # ------------------------------------------------------------------------
+  test-sql-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: maze_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run SqlStore contract suite against PostgreSQL
+        working-directory: ./src/rust
+        env:
+          DATABASE_URL: postgres://postgres:testpassword@localhost:5432/maze_test
+        run: cargo test --locked -p storage --features sql-store --test sql_store_contract -- --test-threads=1
+
+  # ------------------------------------------------------------------------
+  # MySQL contract suite for SqlStore.
+  #
+  # Mirrors `test-sql-postgres` — same `--test sql_store_contract` invocation,
+  # different service container and `DATABASE_URL`. Linux-only for the same
+  # service-container reason.
+  # ------------------------------------------------------------------------
+  test-sql-mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: testpassword
+          MYSQL_DATABASE: maze_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run SqlStore contract suite against MySQL
+        working-directory: ./src/rust
+        env:
+          DATABASE_URL: mysql://root:testpassword@localhost:3306/maze_test
+        run: cargo test --locked -p storage --features sql-store --test sql_store_contract -- --test-threads=1

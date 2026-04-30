@@ -1,0 +1,42 @@
+# Example configuration: SQLite-backed storage
+#
+# Suitable for local development, single-instance hosting, and any deployment
+# where one writable filesystem path is the only available infrastructure.
+# SQLite has no separate server process — the database engine is statically
+# linked into the binary, the data lives in a single .db file, and there are
+# no auth credentials to manage.
+#
+# Copy this file over `config.toml` (or merge the [storage] block into
+# your existing config.toml) and run `cargo run`.
+
+port = 8443
+
+[security]
+cert_file = "cert.pem"
+key_file = "key.pem"
+login_expiry_hours = 24
+
+[logging]
+log_dir = "logs"
+log_level = "info"
+log_file_prefix = "maze_web_server_"
+
+[features]
+allow_signup = true
+
+[storage]
+type = "sql"
+
+[storage.sql]
+driver = "sqlite"
+# Path to the .db file, relative to the server working directory or absolute.
+# The first time the server starts, `auto_create_database = true` creates the
+# file and applies migrations.
+path = "maze.db"
+auto_create_database = true
+max_connections = 5
+
+[oauth]
+enabled = false
+connector = "internal"
+mobile_redirect_scheme = "maze-app"
