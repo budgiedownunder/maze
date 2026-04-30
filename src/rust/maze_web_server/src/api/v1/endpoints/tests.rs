@@ -3032,6 +3032,43 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn signup_creates_user_with_one_primary_verified_email_row() {
+        // The store-side `create_user` is exercised by the storage crate's
+        // contract suite; this test guards the *web layer's* invariant — a
+        // fresh signup must produce exactly one `UserEmail` row, marked both
+        // primary and verified, with the address echoed verbatim from the
+        // signup request.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, shared_store, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let signup_email = new_email(NEW_USERNAME_1);
+        let req = create_test_post_request(
+            "/api/v1/signup",
+            None,
+            None,
+            Some(&new_signup_request(&signup_email, false)),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        // Round-trip through the store to inspect the persisted shape.
+        let store_lock = shared_store.read().await;
+        let user = store_lock
+            .find_user_by_verified_email(&signup_email)
+            .await
+            .expect("signup must produce a user findable by verified email");
+        assert_eq!(
+            user.emails.len(),
+            1,
+            "signup must seed exactly one email row, got {}",
+            user.emails.len()
+        );
+        let row = &user.emails[0];
+        assert_eq!(row.email, signup_email, "stored email must match signup request");
+        assert!(row.is_primary, "signup-seeded email must be primary");
+        assert!(row.verified, "signup-seeded email must be verified");
+    }
+
+    #[actix_web::test]
     async fn signup_with_duplicate_email_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
