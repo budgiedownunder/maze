@@ -282,14 +282,17 @@ impl FileStore {
         let ids = self.get_user_ids()?;
         let search = UniCase::new(search_value);
         for id in ids {
-            if id != ignore_id {
-                if let Some(user) = self.load_user_if_present(id)? {
-                    if let Some(user_value) = user.get_string_field(field_name) {
-                        if UniCase::new(user_value) == search {
-                            return Ok(user);
-                        }
-                    }
-                }
+            if id == ignore_id {
+                continue;
+            }
+            let Some(user) = self.load_user_if_present(id)? else {
+                continue;
+            };
+            let Some(user_value) = user.get_string_field(field_name) else {
+                continue;
+            };
+            if UniCase::new(user_value) == search {
+                return Ok(user);
             }
         }
         Err(Error::UserNotFound())
@@ -419,10 +422,10 @@ impl FileStore {
         let mazes_dir = self.get_mazes_dir(owner);
         let entries = std::fs::read_dir(&mazes_dir).ok()?;
         for entry in entries.flatten() {
-            if let Some(filename) = entry.file_name().to_str() {
-                if UniCase::new(filename.to_string()) == target {
-                    return Some(filename.to_string());
-                }
+            if let Some(filename) = entry.file_name().to_str()
+                && UniCase::new(filename.to_string()) == target
+            {
+                return Some(filename.to_string());
             }
         }
         None
@@ -974,10 +977,10 @@ impl UserStore for FileStore {
     async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error> {
         let ids = self.get_user_ids()?;
         for id in ids {
-            if let Some(user) = self.load_user_if_present(id)? {
-                if user.api_key == api_key {
-                    return Ok(user);
-                }
+            if let Some(user) = self.load_user_if_present(id)?
+                && user.api_key == api_key
+            {
+                return Ok(user);
             }
         }
         Err(Error::UserNotFound())
@@ -1050,10 +1053,10 @@ impl UserStore for FileStore {
     async fn find_user_by_login_id(&self, login_id: Uuid) -> Result<User, Error>{
         let ids = self.get_user_ids()?;
         for id in ids {
-            if let Some(user) = self.load_user_if_present(id)? {
-                if user.contains_valid_login(login_id) {
-                    return Ok(user);
-                }
+            if let Some(user) = self.load_user_if_present(id)?
+                && user.contains_valid_login(login_id)
+            {
+                return Ok(user);
             }
         }
         Err(Error::UserNotFound())
@@ -1129,13 +1132,13 @@ impl UserStore for FileStore {
     async fn find_user_by_oauth_identity(&self, provider: &str, provider_user_id: &str) -> Result<User, Error> {
         let ids = self.get_user_ids()?;
         for id in ids {
-            if let Some(user) = self.load_user_if_present(id)? {
-                if user.oauth_identities.iter().any(|identity| {
+            if let Some(user) = self.load_user_if_present(id)?
+                && user.oauth_identities.iter().any(|identity| {
                     identity.provider.eq_ignore_ascii_case(provider)
                         && identity.provider_user_id == provider_user_id
-                }) {
-                    return Ok(user);
-                }
+                })
+            {
+                return Ok(user);
             }
         }
         Err(Error::UserNotFound())
@@ -1277,10 +1280,10 @@ impl UserStore for FileStore {
         let ids = self.get_user_ids()?;
         let mut admins: Vec<User> = Vec::new();
         for id in ids {
-            if let Some(user) = self.load_user_if_present(id)? {
-                if user.is_admin {
-                    admins.push(user);
-                }
+            if let Some(user) = self.load_user_if_present(id)?
+                && user.is_admin
+            {
+                admins.push(user);
             }
         }
         Ok(admins)
@@ -1735,35 +1738,33 @@ impl MazeStore for FileStore {
         paths.sort();
 
         for path in paths {
-            if let Some(path_str) = path.to_str() {
-                if let Some(extension) = path.extension() {
-                    if extension == "json" {
-                        if let Some(name) = path.file_stem() {
-                            if let Some(name_str) = name.to_str() {
-                                let mut name_use = name_str.to_string();
-                                let mut definition: Option<String> = None;
-                                if let Ok(maze_loaded) = self.get_maze(owner, path_str).await {
-                                    if include_definitions {
-                                        definition = Some(
-                                            serde_json::to_string(&maze_loaded)
-                                                .expect("Failed to serialize"),
-                                        );
-                                    }
-                                    if !maze_loaded.name.is_empty() {
-                                        name_use = maze_loaded.name.to_string();
-                                    }
-                                }
+            let Some(path_str) = path.to_str() else { continue };
+            let Some(extension) = path.extension() else { continue };
+            if extension != "json" {
+                continue;
+            }
+            let Some(name) = path.file_stem() else { continue };
+            let Some(name_str) = name.to_str() else { continue };
 
-                                items.push(MazeItem {
-                                    id: path_str.to_string(),
-                                    name: name_use,
-                                    definition,
-                                });
-                            }
-                        }
-                    }
+            let mut name_use = name_str.to_string();
+            let mut definition: Option<String> = None;
+            if let Ok(maze_loaded) = self.get_maze(owner, path_str).await {
+                if include_definitions {
+                    definition = Some(
+                        serde_json::to_string(&maze_loaded)
+                            .expect("Failed to serialize"),
+                    );
+                }
+                if !maze_loaded.name.is_empty() {
+                    name_use = maze_loaded.name.to_string();
                 }
             }
+
+            items.push(MazeItem {
+                id: path_str.to_string(),
+                name: name_use,
+                definition,
+            });
         }
         Ok(items)
     }
@@ -1801,13 +1802,13 @@ impl Manage for FileStore {
     /// ```
     async fn empty(&mut self) -> Result<(), Error> {
         let root_path = Path::new(&self.data_dir);
-        if root_path.is_dir() {
-            if let Err(error) = fs::remove_dir_all(root_path) {
-                return Err(Error::Other(format!(
-                    "Failed to delete root data directory: {} - {}",
-                    self.data_dir, error
-                )));
-            }
+        if root_path.is_dir()
+            && let Err(error) = fs::remove_dir_all(root_path)
+        {
+            return Err(Error::Other(format!(
+                "Failed to delete root data directory: {} - {}",
+                self.data_dir, error
+            )));
         }
         if let Err(error) = self.init() {
             return Err(Error::Other(format!(
