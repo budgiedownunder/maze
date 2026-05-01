@@ -78,7 +78,9 @@ namespace Maze.Maui.App.Services
     }
 
     /// <summary>
-    /// Update profile request body
+    /// Update profile request body. Email mutation lives on the dedicated
+    /// /api/v1/users/me/emails endpoints; the server rejects this body if
+    /// it includes an <c>email</c> field.
     /// </summary>
     internal class UpdateProfileRequest
     {
@@ -87,9 +89,6 @@ namespace Maze.Maui.App.Services
 
         [JsonPropertyName("full_name")]
         public string FullName { get; set; } = "";
-
-        [JsonPropertyName("email")]
-        public string Email { get; set; } = "";
     }
 
     /// <summary>
@@ -323,13 +322,12 @@ namespace Maze.Maui.App.Services
         }
 
         /// <inheritdoc/>
-        public async Task<UserProfile> UpdateProfileAsync(string username, string fullName, string email)
+        public async Task<UserProfile> UpdateProfileAsync(string username, string fullName)
         {
             var body = JsonSerializer.Serialize(new UpdateProfileRequest
             {
                 Username = username,
-                FullName = fullName,
-                Email = email
+                FullName = fullName
             });
             using var request = new HttpRequestMessage(HttpMethod.Put, "users/me/profile");
             await AddBearerHeaderAsync(request);

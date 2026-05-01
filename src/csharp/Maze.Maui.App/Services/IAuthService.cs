@@ -119,8 +119,13 @@ namespace Maze.Maui.App.Services
         /// </summary>
         Task SetInitialPasswordAsync(string newPassword);
 
-        /// <summary>Updates the current user's profile (username, full name, email). Returns the updated profile.</summary>
-        Task<UserProfile> UpdateProfileAsync(string username, string fullName, string email);
+        /// <summary>Updates the current user's profile (username and full name).
+        /// Email is mutated through the dedicated email-management methods
+        /// (<see cref="AddEmailAsync"/> / <see cref="RemoveEmailAsync"/> /
+        /// <see cref="SetPrimaryEmailAsync"/>); the server rejects this
+        /// endpoint if `email` is included in the body. Returns the
+        /// updated profile.</summary>
+        Task<UserProfile> UpdateProfileAsync(string username, string fullName);
 
         /// <summary>Returns all email rows attached to the current user.</summary>
         Task<List<UserEmail>> GetMyEmailsAsync();

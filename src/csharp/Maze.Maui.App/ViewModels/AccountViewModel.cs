@@ -3,7 +3,6 @@ using CommunityToolkit.Mvvm.Input;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
 using System.Net;
-using System.Text.RegularExpressions;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -18,7 +17,6 @@ namespace Maze.Maui.App.ViewModels
 
         private string _loadedUsername = "";
         private string _loadedFullName = "";
-        private string _loadedEmail = "";
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SaveProfileCommand))]
@@ -27,10 +25,6 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(SaveProfileCommand))]
         private string fullName = "";
-
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(SaveProfileCommand))]
-        private string email = "";
 
         [ObservableProperty]
         private bool isAdmin;
@@ -81,7 +75,6 @@ namespace Maze.Maui.App.ViewModels
                 var profile = await _authService.GetMyProfileAsync();
                 Username = _loadedUsername = profile.Username;
                 FullName = _loadedFullName = profile.FullName;
-                Email = _loadedEmail = profile.Email;
                 IsAdmin = profile.IsAdmin;
                 LoadStatus = "";
             }
@@ -102,7 +95,6 @@ namespace Maze.Maui.App.ViewModels
         {
             Username = _loadedUsername = "";
             FullName = _loadedFullName = "";
-            Email = _loadedEmail = "";
             IsAdmin = false;
             ErrorMessage = "";
             LoadStatus = "Loading profile...";
@@ -110,13 +102,11 @@ namespace Maze.Maui.App.ViewModels
 
         partial void OnUsernameChanged(string value) => ErrorMessage = "";
         partial void OnFullNameChanged(string value) => ErrorMessage = "";
-        partial void OnEmailChanged(string value) => ErrorMessage = "";
 
         private bool CanSaveProfile() =>
             !IsBusy &&
             !string.IsNullOrWhiteSpace(Username) &&
-            !string.IsNullOrWhiteSpace(Email) &&
-            (Username != _loadedUsername || FullName != _loadedFullName || Email != _loadedEmail);
+            (Username != _loadedUsername || FullName != _loadedFullName);
 
         /// <summary>
         /// Saves the user's updated profile to the server
@@ -124,24 +114,18 @@ namespace Maze.Maui.App.ViewModels
         [RelayCommand(CanExecute = nameof(CanSaveProfile))]
         private async Task SaveProfile()
         {
-            if (!Regex.IsMatch(Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
-            {
-                ErrorMessage = "Please enter a valid email address";
-                return;
-            }
             IsBusy = true;
             ErrorMessage = "";
             try
             {
-                var profile = await _authService.UpdateProfileAsync(Username, FullName, Email);
+                var profile = await _authService.UpdateProfileAsync(Username, FullName);
                 Username = _loadedUsername = profile.Username;
                 FullName = _loadedFullName = profile.FullName;
-                Email = _loadedEmail = profile.Email;
                 IsAdmin = profile.IsAdmin;
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
             {
-                ErrorMessage = "Username or email is already in use by another account";
+                ErrorMessage = "Username is already in use by another account";
             }
             catch
             {
