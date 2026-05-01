@@ -288,6 +288,12 @@ pub struct UserItem {
     /// verification status, and verification timestamp.
     #[serde(default)]
     pub emails: Vec<data_model::UserEmail>,
+    /// Whether the user has a password set. `false` for OAuth-only users
+    /// who haven't yet added a password as a second login method —
+    /// front-ends use this to choose between the "Change" and "Set"
+    /// variants of the password popup. The hash itself is never exposed.
+    #[serde(default)]
+    pub has_password: bool,
 }
 
 impl UserItem {
@@ -299,6 +305,7 @@ impl UserItem {
             full_name: user.full_name.clone(),
             email: user.email().to_string(),
             emails: user.emails.clone(),
+            has_password: !user.password_hash.is_empty(),
         }
     }
 }
@@ -1059,24 +1066,37 @@ pub async fn delete_me(
 // Endpoint: PUT /api/v1/users/me/password
 // Handler:  change_password_me()
 // **************************************************************************************************
-/// Change password request
+/// Set-or-change password request. The endpoint handles two flows
+/// based on whether the authenticated user already has a password:
+///
+///   * **Change** (user has a password) — `current_password` is required
+///     and verified before the password is rotated.
+///   * **Set** (OAuth-only user adding a password as a second login
+///     method) — `current_password` must be omitted; there is nothing
+///     to verify against.
+///
+/// `deny_unknown_fields` rejects unknown keys cleanly so an out-of-date
+/// client doesn't get a silent partial success.
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ChangePasswordRequest {
-    /// Current password
-    pub current_password: String,
+    /// Current password — required when the user already has one,
+    /// must be omitted when setting an initial password.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_password: Option<String>,
     /// New password
     pub new_password: String,
 }
 
 #[utoipa::path(
-    summary = "Changes the authenticated user's password",
-    description = "This endpoint allows the currently authenticated user to change their password by providing their current password and a new password",
+    summary = "Sets or changes the authenticated user's password",
+    description = "Set-or-change endpoint. When the user already has a password (`has_password = true` on `/me`), `current_password` is required and verified; when they don't (OAuth-only user adding a password as a second login method), `current_password` must be omitted.",
     put,
     path = "/api/v1/users/me/password",
     request_body = ChangePasswordRequest,
     responses(
-        (status = 204, description = "Password changed successfully"),
-        (status = 400, description = "Invalid request (e.g. weak new password or empty current password)"),
+        (status = 204, description = "Password set or changed successfully"),
+        (status = 400, description = "Invalid request (weak new password, missing/extraneous current_password)"),
         (status = 401, description = "Unauthorized request or incorrect current password")
     ),
     security(
@@ -1094,20 +1114,35 @@ pub async fn change_password_me(
 ) -> Result<HttpResponse, Error> {
     let mut user = get_authorized_user(&req, false)?;
     let change_req_data = change_req.into_inner();
+    let user_has_password = !user.password_hash.is_empty();
 
-    if change_req_data.current_password.is_empty() {
-        return Err(get_invalid_request_error("current password must be provided"));
-    }
-
-    let password_matches = auth_service
-        .verify_password(&user.password_hash, &change_req_data.current_password)
-        .map_err(|err| {
-            log::error!("Password verification failed: {err:?}");
-            ErrorInternalServerError("Internal authentication error")
-        })?;
-
-    if !password_matches {
-        return Err(ErrorUnauthorized("Current password is incorrect"));
+    match (user_has_password, change_req_data.current_password.as_deref()) {
+        // Change path — user has a password, must prove they know it.
+        (true, Some(current)) if !current.is_empty() => {
+            let password_matches = auth_service
+                .verify_password(&user.password_hash, current)
+                .map_err(|err| {
+                    log::error!("Password verification failed: {err:?}");
+                    ErrorInternalServerError("Internal authentication error")
+                })?;
+            if !password_matches {
+                return Err(ErrorUnauthorized("Current password is incorrect"));
+            }
+        }
+        (true, _) => {
+            return Err(get_invalid_request_error(
+                "current_password is required to change an existing password",
+            ));
+        }
+        // Set path — OAuth-only user adding a password. `current_password`
+        // must be omitted; sending an empty string or any value is a
+        // client bug worth surfacing rather than silently ignoring.
+        (false, None) => { /* allowed — fall through to validation */ }
+        (false, Some(_)) => {
+            return Err(get_invalid_request_error(
+                "current_password must be omitted when no password is set",
+            ));
+        }
     }
 
     validate_password_complexity(&change_req_data.new_password)?;
@@ -1120,7 +1155,26 @@ pub async fn change_password_me(
     user.password_hash = new_hash;
 
     match store_lock.update_user(&mut user).await {
-        Ok(_) => Ok(HttpResponse::NoContent().finish()),
+        Ok(_) => {
+            // Defence-in-depth audit log for both branches: a session-
+            // hijacker that successfully sets/rotates a password leaves a
+            // trace here. When email-send-support ships, this is where
+            // the notification mail to the primary email gets fired.
+            if user_has_password {
+                log::info!(
+                    "password changed for user {} (primary email: {})",
+                    user.id,
+                    user.email()
+                );
+            } else {
+                log::info!(
+                    "initial password set for user {} (primary email: {})",
+                    user.id,
+                    user.email()
+                );
+            }
+            Ok(HttpResponse::NoContent().finish())
+        }
         Err(err) => Err(get_user_update_internal_error(&err)),
     }
 }

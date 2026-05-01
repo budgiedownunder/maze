@@ -90,6 +90,7 @@ mod test_definitions {
                 full_name: self.user.full_name.clone(),
                 email: self.user.email().to_string(),
                 emails: self.user.emails.clone(),
+                has_password: !self.user.password_hash.is_empty(),
             }
         }
         
@@ -996,6 +997,7 @@ mod test_definitions {
                 full_name: self.full_name.clone(),
                 email: self.email.clone(),
                 emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
+                has_password: true,
             }
         }
 
@@ -1104,6 +1106,7 @@ mod test_definitions {
                 full_name: self.full_name.clone(),
                 email: self.email.clone(),
                 emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
+                has_password: true,
             }
         }
 
@@ -3370,7 +3373,16 @@ mod test_definitions {
     impl ChangePasswordRequest {
         pub fn new(current_password: &str, new_password: &str) -> ChangePasswordRequest {
             ChangePasswordRequest {
-                current_password: current_password.to_string(),
+                current_password: Some(current_password.to_string()),
+                new_password: new_password.to_string(),
+            }
+        }
+
+        /// Builds a "set initial password" request — `current_password`
+        /// omitted, used by the OAuth-only-set-initial test path.
+        pub fn new_set_initial(new_password: &str) -> ChangePasswordRequest {
+            ChangePasswordRequest {
+                current_password: None,
                 new_password: new_password.to_string(),
             }
         }
@@ -3659,6 +3671,99 @@ mod test_definitions {
             false,
             &ChangePasswordRequest::new(VALID_USER_PASSWORD, "NewPassword1!"),
             StatusCode::UNAUTHORIZED,
+        ).await;
+    }
+
+    // ─── set-initial-password (OAuth-only user adding a password) ───────
+
+    /// Spins up an app with one OAuth-only user (empty password_hash, one
+    /// linked OAuth identity) and signs them in with an api_key. Returns
+    /// the typical create_test_app tuple plus the user's id. The test
+    /// fixture's `set_valid_password_hashes` overwrites `password_hash`
+    /// at signup, so we clear it via the store after the app exists —
+    /// and add a stub OAuth identity in the same step so user validation
+    /// accepts the empty hash.
+    async fn oauth_only_user_test_app() -> (
+        impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        SharedStore,
+        Uuid,
+        Option<Uuid>,
+        Option<Uuid>,
+    ) {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let user_id = MockStore::find_user_id_by_name_in_map(
+            &mock_users,
+            VALID_USERNAME_1,
+            Uuid::nil(),
+        );
+        {
+            let mut store_lock = shared_store.write().await;
+            let mut user = store_lock.get_user(user_id).await.expect("user");
+            user.password_hash = String::new();
+            user.oauth_identities.push(data_model::OAuthIdentity::new(
+                "google".into(),
+                "set-initial-test-sub".into(),
+                None,
+            ));
+            store_lock.update_user(&mut user).await.expect("seed oauth-only state");
+        }
+        (app, shared_store, user_id, api_key, login_id)
+    }
+
+    #[actix_web::test]
+    async fn set_initial_password_succeeds_for_oauth_only_user() {
+        let (app, shared_store, user_id, api_key, login_id) = oauth_only_user_test_app().await;
+
+        // Sanity: GET /me reflects that no password is set.
+        let req = create_test_get_request("/api/v1/users/me", api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let me: UserItem = serde_json::from_slice(&body).expect("UserItem");
+        assert!(!me.has_password, "OAuth-only user must report has_password=false");
+
+        // Send a set-initial request — `current_password` omitted.
+        let req = create_test_put_request(
+            "/api/v1/users/me/password",
+            api_key,
+            login_id,
+            &ChangePasswordRequest::new_set_initial("NewSet1!"),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        // Verify the store now has a non-empty password_hash and that
+        // GET /me reports has_password = true.
+        let store_lock = shared_store.read().await;
+        let stored = store_lock.get_user(user_id).await.expect("user");
+        assert!(!stored.password_hash.is_empty(), "password_hash must be populated after set");
+    }
+
+    #[actix_web::test]
+    async fn set_initial_password_rejects_when_current_password_present() {
+        let (app, _, _, api_key, login_id) = oauth_only_user_test_app().await;
+        // OAuth-only user but the client mistakenly sends a current_password.
+        let req = create_test_put_request(
+            "/api/v1/users/me/password",
+            api_key,
+            login_id,
+            &ChangePasswordRequest::new("anything", "NewSet1!"),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    async fn change_password_rejects_when_current_password_omitted() {
+        // User with a password tries the set-initial request shape.
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            false,
+            &ChangePasswordRequest::new_set_initial("NewChange1!"),
+            StatusCode::BAD_REQUEST,
         ).await;
     }
 
