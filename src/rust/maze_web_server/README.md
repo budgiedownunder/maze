@@ -472,7 +472,7 @@ On first run, if no admin user exists in the data store, the server automaticall
 |:------|:------|
 | Username | `admin` |
 | Email | `admin@maze.local` |
-| Password | `Admin1!` |
+| Password | `Admin123!` |
 
 Sign in using the **email address** and password. The username is used for display purposes only.
 
