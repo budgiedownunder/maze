@@ -3,6 +3,26 @@ using System.Text.Json.Serialization;
 namespace Maze.Maui.App.Services
 {
     /// <summary>
+    /// One row from the server's <c>user_emails</c> table — an address plus
+    /// its primary/verified flags. Returned in the <see cref="UserProfile.Emails"/>
+    /// list and as elements of the <see cref="EmailsResponse"/>.
+    /// </summary>
+    public class UserEmail
+    {
+        [JsonPropertyName("email")]
+        public string Email { get; set; } = "";
+
+        [JsonPropertyName("is_primary")]
+        public bool IsPrimary { get; set; }
+
+        [JsonPropertyName("verified")]
+        public bool Verified { get; set; }
+
+        [JsonPropertyName("verified_at")]
+        public DateTimeOffset? VerifiedAt { get; set; }
+    }
+
+    /// <summary>
     /// Represents a user profile returned by the server
     /// </summary>
     public class UserProfile
@@ -21,6 +41,19 @@ namespace Maze.Maui.App.Services
 
         [JsonPropertyName("email")]
         public string Email { get; set; } = "";
+
+        /// <summary>All email rows attached to this user, including primary
+        /// status, verification status, and verification timestamp.</summary>
+        [JsonPropertyName("emails")]
+        public List<UserEmail> Emails { get; set; } = new();
+
+        /// <summary>Whether the user has a password set. <c>false</c> for
+        /// OAuth-only users who haven't yet added a password as a second
+        /// login method — front-ends use this to choose between the "Change"
+        /// and "Set" variants of the password popup. The hash itself is
+        /// never exposed.</summary>
+        [JsonPropertyName("has_password")]
+        public bool HasPassword { get; set; }
     }
 
     /// <summary>
@@ -73,11 +106,44 @@ namespace Maze.Maui.App.Services
         /// <summary>Deletes the currently authenticated user's account and clears the stored token.</summary>
         Task DeleteMyAccountAsync();
 
-        /// <summary>Changes the current user's password. Throws HttpRequestException on failure.</summary>
+        /// <summary>Changes the current user's password. Requires the
+        /// current password (the user has one — <see cref="UserProfile.HasPassword"/>
+        /// is <c>true</c>). Throws <see cref="HttpRequestException"/> on
+        /// failure (401 = current password incorrect).</summary>
         Task ChangePasswordAsync(string currentPassword, string newPassword);
+
+        /// <summary>Sets an initial password for an OAuth-only user (one
+        /// whose <see cref="UserProfile.HasPassword"/> is <c>false</c>). The
+        /// request body omits <c>current_password</c> entirely; sending it
+        /// in the set-initial flow is rejected by the server with a 400.
+        /// </summary>
+        Task SetInitialPasswordAsync(string newPassword);
 
         /// <summary>Updates the current user's profile (username, full name, email). Returns the updated profile.</summary>
         Task<UserProfile> UpdateProfileAsync(string username, string fullName, string email);
+
+        /// <summary>Returns all email rows attached to the current user.</summary>
+        Task<List<UserEmail>> GetMyEmailsAsync();
+
+        /// <summary>Adds a new email row to the current user, returning the
+        /// updated email list. Throws <see cref="HttpRequestException"/> on
+        /// 400 (invalid format) or 409 (already taken).</summary>
+        Task<List<UserEmail>> AddEmailAsync(string email);
+
+        /// <summary>Removes an email row from the current user, returning
+        /// the updated email list. Throws <see cref="HttpRequestException"/>
+        /// on 404 (not registered) or 409 (last email or primary).</summary>
+        Task<List<UserEmail>> RemoveEmailAsync(string email);
+
+        /// <summary>Promotes an email to the user's primary, returning the
+        /// updated email list. Throws <see cref="HttpRequestException"/> on
+        /// 404 (not registered) or 409 (target is unverified).</summary>
+        Task<List<UserEmail>> SetPrimaryEmailAsync(string email);
+
+        /// <summary>Triggers verification for an email. Until the
+        /// email-send infrastructure ships this throws
+        /// <see cref="HttpRequestException"/> with status 501.</summary>
+        Task VerifyEmailAsync(string email);
 
         /// <summary>
         /// Attempts to renew the current bearer login token, extending its lifetime without

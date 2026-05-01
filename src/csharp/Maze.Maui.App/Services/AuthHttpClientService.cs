@@ -43,15 +43,38 @@ namespace Maze.Maui.App.Services
     }
 
     /// <summary>
-    /// Change password request body
+    /// Change-or-set password request body. <see cref="CurrentPassword"/>
+    /// is nullable + omitted when null on the wire — the server rejects a
+    /// set-initial flow with <c>current_password</c> present, so absence is
+    /// load-bearing rather than aesthetic.
     /// </summary>
     internal class ChangePasswordRequest
     {
         [JsonPropertyName("current_password")]
-        public string CurrentPassword { get; set; } = "";
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? CurrentPassword { get; set; }
 
         [JsonPropertyName("new_password")]
         public string NewPassword { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Request body for <c>POST /api/v1/users/me/emails</c>.
+    /// </summary>
+    internal class AddEmailRequest
+    {
+        [JsonPropertyName("email")]
+        public string Email { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Response shape for every <c>/api/v1/users/me/emails</c> read or
+    /// write — callers always get back the full, current set.
+    /// </summary>
+    internal class EmailsResponse
+    {
+        [JsonPropertyName("emails")]
+        public List<UserEmail> Emails { get; set; } = [];
     }
 
     /// <summary>
@@ -282,6 +305,24 @@ namespace Maze.Maui.App.Services
         }
 
         /// <inheritdoc/>
+        public async Task SetInitialPasswordAsync(string newPassword)
+        {
+            // CurrentPassword left null so the JsonIgnore-WhenWritingNull
+            // condition on the DTO drops it from the wire payload entirely.
+            // The server rejects a set-initial flow that includes
+            // current_password with a 400.
+            var body = JsonSerializer.Serialize(new ChangePasswordRequest
+            {
+                NewPassword = newPassword
+            });
+            using var request = new HttpRequestMessage(HttpMethod.Put, "users/me/password");
+            await AddBearerHeaderAsync(request);
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+            var response = await _httpClient.SendAsync(request);
+            await EnsureSuccessAsync(response, "Set password failed");
+        }
+
+        /// <inheritdoc/>
         public async Task<UserProfile> UpdateProfileAsync(string username, string fullName, string email)
         {
             var body = JsonSerializer.Serialize(new UpdateProfileRequest
@@ -299,6 +340,71 @@ namespace Maze.Maui.App.Services
             string json = await response.Content.ReadAsStringAsync();
             return JsonSerializer.Deserialize<UserProfile>(json)
                 ?? throw new Exception("Invalid profile response from server");
+        }
+
+        /// <inheritdoc/>
+        public async Task<List<UserEmail>> GetMyEmailsAsync()
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "users/me/emails");
+            await AddBearerHeaderAsync(request);
+            var response = await _httpClient.SendAsync(request);
+            await EnsureSuccessAsync(response, "Failed to load emails");
+            return await ReadEmailsResponseAsync(response);
+        }
+
+        /// <inheritdoc/>
+        public async Task<List<UserEmail>> AddEmailAsync(string email)
+        {
+            var body = JsonSerializer.Serialize(new AddEmailRequest { Email = email });
+            using var request = new HttpRequestMessage(HttpMethod.Post, "users/me/emails");
+            await AddBearerHeaderAsync(request);
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
+            var response = await _httpClient.SendAsync(request);
+            await EnsureSuccessAsync(response, "Failed to add email");
+            return await ReadEmailsResponseAsync(response);
+        }
+
+        /// <inheritdoc/>
+        public async Task<List<UserEmail>> RemoveEmailAsync(string email)
+        {
+            var path = $"users/me/emails/{Uri.EscapeDataString(email)}";
+            using var request = new HttpRequestMessage(HttpMethod.Delete, path);
+            await AddBearerHeaderAsync(request);
+            var response = await _httpClient.SendAsync(request);
+            await EnsureSuccessAsync(response, "Failed to remove email");
+            return await ReadEmailsResponseAsync(response);
+        }
+
+        /// <inheritdoc/>
+        public async Task<List<UserEmail>> SetPrimaryEmailAsync(string email)
+        {
+            var path = $"users/me/emails/{Uri.EscapeDataString(email)}/primary";
+            using var request = new HttpRequestMessage(HttpMethod.Put, path);
+            await AddBearerHeaderAsync(request);
+            var response = await _httpClient.SendAsync(request);
+            await EnsureSuccessAsync(response, "Failed to set primary email");
+            return await ReadEmailsResponseAsync(response);
+        }
+
+        /// <inheritdoc/>
+        public async Task VerifyEmailAsync(string email)
+        {
+            // The server returns 501 here until the email-send infrastructure
+            // ships; EnsureSuccessAsync surfaces that as an
+            // HttpRequestException whose Status the caller can check.
+            var path = $"users/me/emails/{Uri.EscapeDataString(email)}/verify";
+            using var request = new HttpRequestMessage(HttpMethod.Post, path);
+            await AddBearerHeaderAsync(request);
+            var response = await _httpClient.SendAsync(request);
+            await EnsureSuccessAsync(response, "Failed to verify email");
+        }
+
+        private static async Task<List<UserEmail>> ReadEmailsResponseAsync(HttpResponseMessage response)
+        {
+            string json = await response.Content.ReadAsStringAsync();
+            var parsed = JsonSerializer.Deserialize<EmailsResponse>(json)
+                ?? throw new Exception("Invalid emails response from server");
+            return parsed.Emails;
         }
 
         /// <inheritdoc/>
