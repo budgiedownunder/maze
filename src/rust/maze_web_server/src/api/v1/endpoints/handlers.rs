@@ -1199,8 +1199,14 @@ pub struct UpdateProfileRequest {
 
 impl UpdateProfileRequest {
     pub fn apply_to_store_user(&self, user: &mut User) {
-        user.username = self.username.clone();
-        user.full_name = self.full_name.clone();
+        // Edge-trim silently — `" alice"` and `"alice"` would otherwise be
+        // stored as distinct usernames, leaving whitespace-padded display
+        // values that surface as identity collisions. Mid-string spaces are
+        // preserved (e.g. `"Mary Jane"` round-trips unchanged). Whitespace-
+        // only input collapses to `""` and falls through to the existing
+        // empty-username rejection in storage validation.
+        user.username = self.username.trim().to_string();
+        user.full_name = self.full_name.trim().to_string();
     }
 }
 
@@ -1446,8 +1452,10 @@ impl CreateUserRequest {
             User {
                 id: Uuid::nil(),
                 is_admin: self.is_admin,
-                username: self.username.clone(),
-                full_name: self.full_name.clone(),
+                // Edge-trim silently — see UpdateProfileRequest::apply_to_store_user
+                // for the rationale; same rule applies on admin-side create.
+                username: self.username.trim().to_string(),
+                full_name: self.full_name.trim().to_string(),
                 emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
                 password_hash,
                 api_key: Uuid::nil(),
@@ -1567,8 +1575,10 @@ pub struct UpdateUserRequest {
 impl UpdateUserRequest {
     pub fn apply_to_store_user(&self, user: &mut User) {
         user.is_admin = self.is_admin;
-        user.username = self.username.clone();
-        user.full_name = self.full_name.clone();
+        // Edge-trim silently — see UpdateProfileRequest::apply_to_store_user
+        // for the rationale; same rule applies on admin-side update.
+        user.username = self.username.trim().to_string();
+        user.full_name = self.full_name.trim().to_string();
         user.set_primary_email_address(&self.email);
     }
 }

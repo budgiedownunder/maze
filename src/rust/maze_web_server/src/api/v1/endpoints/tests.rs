@@ -3826,6 +3826,99 @@ mod test_definitions {
     }
 
     // **************************************************************************************************
+    // Tests: silent edge-trim of username + full_name on profile-edit and admin-side create/update.
+    // Server-side trim ensures `" alice"` and `"alice"` aren't stored as
+    // distinct identities. Mid-string spaces (`"Mary Jane"`) are preserved.
+    // Whitespace-only usernames collapse to empty strings and fall through
+    // to the existing empty-username rejection.
+    // **************************************************************************************************
+
+    async fn run_update_profile_trims_whitespace(use_login: bool) {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), use_login).await;
+        let req_body = UpdateProfileRequest::new("  alice_42  ", "  Alice Mary  ");
+        let url = "/api/v1/users/me/profile".to_string();
+        let req = create_test_put_request(&url, api_key, login_id, &req_body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let user: UserItem = serde_json::from_slice(&body)
+            .expect("failed to deserialise update_profile_me response");
+        assert_eq!(user.username, "alice_42");
+        // Mid-string space preserved.
+        assert_eq!(user.full_name, "Alice Mary");
+    }
+
+    #[actix_web::test]
+    async fn update_profile_trims_whitespace_with_api_key() {
+        run_update_profile_trims_whitespace(false).await;
+    }
+    #[actix_web::test]
+    async fn update_profile_trims_whitespace_with_login() {
+        run_update_profile_trims_whitespace(true).await;
+    }
+
+    #[actix_web::test]
+    async fn update_profile_with_whitespace_only_username_returns_400() {
+        run_update_profile_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            false,
+            &UpdateProfileRequest::new("   ", "Some Full Name"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn create_user_trims_whitespace_in_username_and_full_name() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 0, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), false).await;
+        let create_req = CreateUserRequest::new(
+            false,
+            "  bob_99  ",
+            "  Bob Jones  ",
+            "bob.99@example.com",
+            "Password1!",
+        );
+        let url = "/api/v1/users".to_string();
+        let req = create_test_post_request(&url, api_key, login_id, Some(&create_req));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = test::read_body(resp).await;
+        let user: UserItem = serde_json::from_slice(&body)
+            .expect("failed to deserialise create_user response");
+        assert_eq!(user.username, "bob_99");
+        assert_eq!(user.full_name, "Bob Jones");
+    }
+
+    #[actix_web::test]
+    async fn update_user_trims_whitespace_in_username_and_full_name() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), false).await;
+        let target_id =
+            MockStore::find_user_id_by_name_in_map(&mock_users, VALID_USERNAME_1, Uuid::nil());
+        let target_email = new_email(VALID_USERNAME_1);
+        let update_req = UpdateUserRequest::new(
+            false,
+            "  carol_77  ",
+            "  Carol Smith  ",
+            &target_email,
+        );
+        let url = format!("/api/v1/users/{target_id}");
+        let req = create_test_put_request(&url, api_key, login_id, &update_req);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let user: UserItem = serde_json::from_slice(&body)
+            .expect("failed to deserialise update_user response");
+        assert_eq!(user.username, "carol_77");
+        assert_eq!(user.full_name, "Carol Smith");
+    }
+
+    // **************************************************************************************************
     // Tests: /api/v1/users/me/emails (GET / POST / DELETE / PUT primary / POST verify-stub)
     // **************************************************************************************************
 
