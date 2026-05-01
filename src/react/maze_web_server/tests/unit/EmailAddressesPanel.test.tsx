@@ -186,4 +186,45 @@ describe('EmailAddressesPanel', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/failed to load emails/i)
   })
+
+  it('keeps the Add Email button disabled until the typed address is well-formed', async () => {
+    await renderPanel()
+
+    const input = screen.getByPlaceholderText(/add another email/i)
+    const button = screen.getByRole('button', { name: /^Add Email$/ })
+
+    expect(button).toBeDisabled()
+    await userEvent.type(input, 'not-an-email')
+    expect(button).toBeDisabled()
+    await userEvent.type(input, '@example.com')
+    expect(button).toBeEnabled()
+  })
+
+  it('appends the new email on a successful add and clears the input', async () => {
+    await renderPanel()
+
+    const input = screen.getByPlaceholderText(/add another email/i)
+    await userEvent.type(input, 'second@example.com')
+    await userEvent.click(screen.getByRole('button', { name: /^Add Email$/ }))
+
+    await waitFor(() => expect(screen.getByText('second@example.com')).toBeInTheDocument())
+    expect(input).toHaveValue('')
+    // Existing primary row still present and primary.
+    const oneRow = screen.getByText('test@example.com').closest('li')!
+    expect(within(oneRow).getByText('Primary')).toBeInTheDocument()
+  })
+
+  it('surfaces a 409 duplicate inline and keeps the typed value in the input', async () => {
+    await renderPanel()
+
+    const input = screen.getByPlaceholderText(/add another email/i)
+    // The seeded mock list already contains test@example.com — the default
+    // POST handler returns 409 on duplicates, so retyping it triggers the
+    // error path.
+    await userEvent.type(input, 'test@example.com')
+    await userEvent.click(screen.getByRole('button', { name: /^Add Email$/ }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/already in use/i))
+    expect(input).toHaveValue('test@example.com')
+  })
 })

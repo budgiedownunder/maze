@@ -91,6 +91,11 @@
   padding: 0.75rem 1rem;
 }
 
+.btn-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Welcome banner shown on the My Account modal when it's auto-opened after
    the user's first OAuth sign-up. */
 .account-welcome-banner {
@@ -393,6 +398,40 @@
 .email-pill--unverified {
   background: var(--pill-unverified-bg);
   color: var(--pill-unverified-text);
+}
+
+.email-add-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.email-add-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.email-add-form .btn-link {
+  margin-top: 0;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Hides an element visually while keeping it discoverable to screen readers
+   (used for the add-email form's `<label>` since the input has a
+   placeholder doing duty as the visible affordance). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ──────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import * as api from '../api/client'
 import type { UserEmail } from '../types/api'
+import { isValidEmail } from '../utils/validation'
 
 interface Props {
   token: string
@@ -10,6 +11,8 @@ export function EmailAddressesPanel({ token }: Props) {
   const [emails, setEmails] = useState<UserEmail[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyEmail, setBusyEmail] = useState<string | null>(null)
+  const [newEmail, setNewEmail] = useState('')
+  const [isAdding, setIsAdding] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -51,6 +54,32 @@ export function EmailAddressesPanel({ token }: Props) {
     if (emails === null) return
     const optimistic = emails.filter(row => row.email !== email)
     return runWrite(email, optimistic, () => api.removeMyEmail(token, email), 'Failed to remove email')
+  }
+
+  // The add-form path doesn't lend itself to optimistic update — the row's
+  // verified/verified_at fields come from the server and we don't want to
+  // fabricate them. Send first, set the list from the response.
+  async function handleAddEmail(e: React.FormEvent) {
+    e.preventDefault()
+    if (!isValidEmail(newEmail) || isAdding) return
+    setIsAdding(true)
+    setError(null)
+    try {
+      const res = await api.addMyEmail(token, newEmail)
+      setEmails(res.emails)
+      setNewEmail('')
+    } catch (ex: unknown) {
+      const status = (ex as { status?: number }).status
+      const message = (ex as { message?: string }).message
+      const baseMessage = status === 409
+        ? 'That email is already in use'
+        : status === 400
+          ? 'Email format is invalid'
+          : 'Failed to add email'
+      setError(message && status !== 409 && status !== 400 ? `${baseMessage}: ${message}` : baseMessage)
+    } finally {
+      setIsAdding(false)
+    }
   }
 
   return (
@@ -113,6 +142,26 @@ export function EmailAddressesPanel({ token }: Props) {
             )
           })}
         </ul>
+      )}
+      {emails !== null && (
+        <form onSubmit={handleAddEmail} className="email-add-form">
+          <label htmlFor="add-email-input" className="visually-hidden">Add another email</label>
+          <input
+            id="add-email-input"
+            type="email"
+            placeholder="Add another email address"
+            value={newEmail}
+            onChange={e => setNewEmail(e.target.value)}
+            disabled={isAdding}
+          />
+          <button
+            type="submit"
+            className="btn-link"
+            disabled={isAdding || !isValidEmail(newEmail)}
+          >
+            {isAdding ? 'Adding...' : 'Add Email'}
+          </button>
+        </form>
       )}
     </section>
   )
