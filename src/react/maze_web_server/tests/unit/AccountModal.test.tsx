@@ -70,6 +70,12 @@ describe('AccountModal', () => {
     expect(screen.queryByText(/administrator/i)).not.toBeInTheDocument()
   })
 
+  it('renders the Email Addresses panel after the profile loads', async () => {
+    renderModal()
+    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
+    expect(await screen.findByRole('heading', { name: /email addresses/i })).toBeInTheDocument()
+  })
+
   it('shows Administrator badge for admin users', async () => {
     server.use(
       http.get('/api/v1/users/me', () => HttpResponse.json({ ...mockProfile, is_admin: true })),

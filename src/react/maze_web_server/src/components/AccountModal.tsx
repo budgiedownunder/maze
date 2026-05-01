@@ -4,6 +4,7 @@ import * as api from '../api/client'
 import { useAuth, useToken } from '../context/AuthContext'
 import { ChangePasswordModal } from './ChangePasswordModal'
 import { ConfirmModal } from './ConfirmModal'
+import { EmailAddressesPanel } from './EmailAddressesPanel'
 import type { UserProfile } from '../types/api'
 import { isValidEmail } from '../utils/validation'
 
@@ -146,6 +147,8 @@ export function AccountModal({ onClose, welcome = false }: Props) {
             </button>
           </form>
         )}
+
+        {!isLoading && <EmailAddressesPanel token={token} />}
 
         <div className="modal-actions">
           <button type="button" onClick={() => setView('changePassword')} disabled={isLoading} className="btn-link">

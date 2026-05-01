@@ -20,6 +20,12 @@
   --border-input: #d1d5db;
   --badge-admin-bg: #4f46e5;
   --badge-admin-text: #ffffff;
+  --badge-primary-bg: #aa3bff;
+  --badge-primary-text: #ffffff;
+  --pill-verified-bg: rgba(22, 163, 74, 0.15);
+  --pill-verified-text: #15803d;
+  --pill-unverified-bg: rgba(107, 114, 128, 0.15);
+  --pill-unverified-text: #6b7280;
   --overlay-bg: rgba(0, 0, 0, 0.5);
   --spinner-overlay-bg: rgba(255, 255, 255, 0.75);
   --button-bg: #e5e7eb;
@@ -66,6 +72,12 @@
     --border-input: #3f4150;
     --badge-admin-bg: #6d60e8;
     --badge-admin-text: #ffffff;
+    --badge-primary-bg: #c084fc;
+    --badge-primary-text: #1e1b29;
+    --pill-verified-bg: rgba(74, 222, 128, 0.18);
+    --pill-verified-text: #4ade80;
+    --pill-unverified-bg: rgba(156, 163, 175, 0.18);
+    --pill-unverified-text: #9ca3af;
     --overlay-bg: rgba(0, 0, 0, 0.65);
     --spinner-overlay-bg: rgba(22, 23, 29, 0.75);
     --button-bg: #374151;
@@ -98,6 +110,12 @@
   --border-input: #3f4150;
   --badge-admin-bg: #6d60e8;
   --badge-admin-text: #ffffff;
+  --badge-primary-bg: #c084fc;
+  --badge-primary-text: #1e1b29;
+  --pill-verified-bg: rgba(74, 222, 128, 0.18);
+  --pill-verified-text: #4ade80;
+  --pill-unverified-bg: rgba(156, 163, 175, 0.18);
+  --pill-unverified-text: #9ca3af;
   --overlay-bg: rgba(0, 0, 0, 0.65);
   --spinner-overlay-bg: rgba(22, 23, 29, 0.75);
   --button-bg: #374151;
