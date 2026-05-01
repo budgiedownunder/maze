@@ -137,6 +137,42 @@ describe('AccountModal', () => {
     expect(screen.getByRole('dialog', { name: /change password/i })).toBeInTheDocument()
   })
 
+  it('shows "Set Password" trigger and opens the Set variant when has_password is false', async () => {
+    server.use(
+      http.get('/api/v1/users/me', () => HttpResponse.json({ ...mockProfile, has_password: false })),
+    )
+    renderModal()
+    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
+    const trigger = screen.getByRole('button', { name: /^set password$/i })
+    expect(trigger).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^change password$/i })).not.toBeInTheDocument()
+    await userEvent.click(trigger)
+    expect(screen.getByRole('dialog', { name: /set password/i })).toBeInTheDocument()
+  })
+
+  it('flips trigger button text from Set Password to Change Password after a successful set', async () => {
+    server.use(
+      http.get('/api/v1/users/me', () => HttpResponse.json({ ...mockProfile, has_password: false })),
+      http.put('/api/v1/users/me/password', () => new HttpResponse(null, { status: 204 })),
+    )
+    renderModal()
+    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
+    expect(screen.getByRole('button', { name: /^set password$/i })).toBeInTheDocument()
+
+    // Open the Set variant, fill it, submit.
+    await userEvent.click(screen.getByRole('button', { name: /^set password$/i }))
+    await userEvent.type(screen.getByLabelText(/^new password$/i), 'NewPass1!')
+    await userEvent.type(screen.getByLabelText(/confirm new password/i), 'NewPass1!')
+    await userEvent.click(screen.getByRole('button', { name: /^set password$/i }))
+
+    // After the popup closes, the trigger should read Change Password —
+    // the parent flipped its local has_password optimistically on success.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^change password$/i })).toBeInTheDocument()
+    )
+    expect(screen.queryByRole('button', { name: /^set password$/i })).not.toBeInTheDocument()
+  })
+
   it('shows delete confirmation step when Delete Account is clicked', async () => {
     renderModal()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))

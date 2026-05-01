@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { validateSignupForm } from '../../src/utils/validation'
-import { validateChangePasswordForm } from '../../src/components/ChangePasswordModal'
+import {
+  validateChangePasswordForm,
+  validateSetPasswordForm,
+} from '../../src/utils/passwordValidation'
 
 describe('validateSignupForm', () => {
   const valid = {
@@ -87,5 +90,45 @@ describe('validateChangePasswordForm', () => {
 
   it('requires a special character', () => {
     expect(validateChangePasswordForm({ ...valid, newPassword: 'Password1a', confirmPassword: 'Password1a' })).toMatch(/special/)
+  })
+})
+
+describe('validateSetPasswordForm', () => {
+  const valid = {
+    newPassword: 'NewPass1!',
+    confirmPassword: 'NewPass1!',
+  }
+
+  it('returns null for a valid form', () => {
+    expect(validateSetPasswordForm(valid)).toBeNull()
+  })
+
+  it('requires both fields', () => {
+    expect(validateSetPasswordForm({ ...valid, newPassword: '' })).not.toBeNull()
+    expect(validateSetPasswordForm({ ...valid, confirmPassword: '' })).not.toBeNull()
+  })
+
+  it('requires new passwords to match', () => {
+    expect(validateSetPasswordForm({ ...valid, confirmPassword: 'Different1!' })).toMatch(/match/)
+  })
+
+  it('requires new password of at least 8 characters', () => {
+    expect(validateSetPasswordForm({ newPassword: 'P1!aaaa', confirmPassword: 'P1!aaaa' })).toMatch(/8 characters/)
+  })
+
+  it('requires an uppercase letter', () => {
+    expect(validateSetPasswordForm({ newPassword: 'password1!', confirmPassword: 'password1!' })).toMatch(/uppercase/)
+  })
+
+  it('requires a lowercase letter', () => {
+    expect(validateSetPasswordForm({ newPassword: 'PASSWORD1!', confirmPassword: 'PASSWORD1!' })).toMatch(/lowercase/)
+  })
+
+  it('requires a digit', () => {
+    expect(validateSetPasswordForm({ newPassword: 'Password!!', confirmPassword: 'Password!!' })).toMatch(/digit/)
+  })
+
+  it('requires a special character', () => {
+    expect(validateSetPasswordForm({ newPassword: 'Password1a', confirmPassword: 'Password1a' })).toMatch(/special/)
   })
 })

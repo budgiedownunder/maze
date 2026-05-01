@@ -89,7 +89,13 @@ export function AccountModal({ onClose, welcome = false }: Props) {
   }
 
   if (view === 'changePassword') {
-    return <ChangePasswordModal onClose={() => setView('account')} />
+    // saved is non-null here because the changePassword view is only
+    // reachable via the trigger button, which is disabled while loading.
+    return <ChangePasswordModal
+      onClose={() => setView('account')}
+      hasPassword={saved?.has_password ?? true}
+      onSuccess={() => setSaved(s => s ? { ...s, has_password: true } : s)}
+    />
   }
 
   return (
@@ -140,7 +146,7 @@ export function AccountModal({ onClose, welcome = false }: Props) {
 
         <div className="modal-actions">
           <button type="button" onClick={() => setView('changePassword')} disabled={isLoading} className="btn-link">
-            Change Password
+            {saved?.has_password === false ? 'Set Password' : 'Change Password'}
           </button>
           <button type="button" onClick={() => setShowDeleteConfirm(true)} disabled={isLoading} className="btn-danger">
             Delete Account
