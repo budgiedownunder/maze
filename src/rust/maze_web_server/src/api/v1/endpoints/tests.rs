@@ -408,22 +408,100 @@ mod test_definitions {
             Ok(!self.users.is_empty())
         }
 
-        // Email-management methods are exercised through the storage crate's
-        // contract suite; the web-layer tests don't drive them directly, so
-        // these stubs return a clear error if anything in the maze_web_server
-        // tests ever reaches them by accident.
-        async fn add_user_email(&mut self, _u: Uuid, _e: &str, _v: bool) -> Result<data_model::UserEmail, StoreError> {
-            Err(StoreError::Other("MockStore::add_user_email not implemented".into()))
+        async fn add_user_email(
+            &mut self,
+            user_id: Uuid,
+            email: &str,
+            verified: bool,
+        ) -> Result<data_model::UserEmail, StoreError> {
+            if email.trim().is_empty() {
+                return Err(StoreError::UserEmailMissing());
+            }
+            if !data_model::is_valid_email_format(email) {
+                return Err(StoreError::UserEmailInvalid());
+            }
+            // Same-user duplicate.
+            let existing = self.get_mock_user(user_id)?;
+            if existing.user.emails.iter().any(|r| r.email.eq_ignore_ascii_case(email)) {
+                return Err(StoreError::UserEmailExists());
+            }
+            // Cross-user duplicate.
+            for v in self.users.values() {
+                if v.user.id == user_id { continue; }
+                if v.user.emails.iter().any(|r| r.email.eq_ignore_ascii_case(email)) {
+                    return Err(StoreError::UserEmailExists());
+                }
+            }
+            let row = data_model::UserEmail {
+                email: email.to_string(),
+                is_primary: false,
+                verified,
+                verified_at: if verified {
+                    Some(chrono::Utc::now().with_timezone(&chrono::Utc))
+                } else {
+                    None
+                },
+            };
+            let mock_user = self.get_mock_user_mut(user_id)?;
+            mock_user.user.emails.push(row.clone());
+            Ok(row)
         }
-        async fn remove_user_email(&mut self, _u: Uuid, _e: &str) -> Result<(), StoreError> {
-            Err(StoreError::Other("MockStore::remove_user_email not implemented".into()))
+
+        async fn remove_user_email(
+            &mut self,
+            user_id: Uuid,
+            email: &str,
+        ) -> Result<(), StoreError> {
+            let mock_user = self.get_mock_user_mut(user_id)?;
+            let idx = find_email_row_index(&mock_user.user, email)?;
+            if mock_user.user.emails.len() == 1 {
+                return Err(StoreError::UserEmailIsLast());
+            }
+            if mock_user.user.emails[idx].is_primary {
+                return Err(StoreError::UserEmailIsPrimary());
+            }
+            mock_user.user.emails.remove(idx);
+            Ok(())
         }
-        async fn set_primary_email(&mut self, _u: Uuid, _e: &str) -> Result<(), StoreError> {
-            Err(StoreError::Other("MockStore::set_primary_email not implemented".into()))
+
+        async fn set_primary_email(
+            &mut self,
+            user_id: Uuid,
+            email: &str,
+        ) -> Result<(), StoreError> {
+            let mock_user = self.get_mock_user_mut(user_id)?;
+            let idx = find_email_row_index(&mock_user.user, email)?;
+            if !mock_user.user.emails[idx].verified {
+                return Err(StoreError::UserEmailNotVerified());
+            }
+            for (i, row) in mock_user.user.emails.iter_mut().enumerate() {
+                row.is_primary = i == idx;
+            }
+            Ok(())
         }
-        async fn mark_email_verified(&mut self, _u: Uuid, _e: &str) -> Result<(), StoreError> {
-            Err(StoreError::Other("MockStore::mark_email_verified not implemented".into()))
+
+        async fn mark_email_verified(
+            &mut self,
+            user_id: Uuid,
+            email: &str,
+        ) -> Result<(), StoreError> {
+            let mock_user = self.get_mock_user_mut(user_id)?;
+            let idx = find_email_row_index(&mock_user.user, email)?;
+            mock_user.user.emails[idx].verified = true;
+            mock_user.user.emails[idx].verified_at = Some(chrono::Utc::now());
+            Ok(())
         }
+    }
+
+    /// Locates the index of the email row matching `email` (case-insensitively)
+    /// within `user.emails`, or returns `UserEmailNotFound`. Centralises the
+    /// lookup that every email-mutating MockStore method runs before deciding
+    /// the action — mirrors the `find_email_row_index` helper in `file_store.rs`.
+    fn find_email_row_index(user: &User, email: &str) -> Result<usize, StoreError> {
+        user.emails
+            .iter()
+            .position(|r| r.email.eq_ignore_ascii_case(email))
+            .ok_or_else(|| StoreError::UserEmailNotFound(email.to_string()))
     }
 
     #[async_trait]
@@ -3640,6 +3718,263 @@ mod test_definitions {
             &new_update_profile_request(VALID_USERNAME_1),
             StatusCode::UNAUTHORIZED,
         ).await;
+    }
+
+    // **************************************************************************************************
+    // Tests: /api/v1/users/me/emails (GET / POST / DELETE / PUT primary / POST verify-stub)
+    // **************************************************************************************************
+
+    use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
+
+    /// Spins up a test app with one regular user, signed in via login token,
+    /// and returns the app + the user's id + a closure for building auth'd
+    /// requests. Centralises the setup the email-management tests share.
+    async fn me_emails_test_app() -> (
+        impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        SharedStore,
+        Uuid,
+        Option<Uuid>,
+        Option<Uuid>,
+    ) {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let user_id = MockStore::find_user_id_by_name_in_map(
+            &mock_users,
+            VALID_USERNAME_1,
+            Uuid::nil(),
+        );
+        (app, shared_store, user_id, api_key, login_id)
+    }
+
+    async fn parse_emails_response(resp: ServiceResponse) -> UserEmailsResponse {
+        let body = test::read_body(resp).await;
+        serde_json::from_slice(&body).expect("failed to deserialise UserEmailsResponse")
+    }
+
+    /// Path for an email-keyed action under `/api/v1/users/me/emails/...`.
+    /// Centralises the URL-encoding of the address path segment so each
+    /// callsite doesn't duplicate the `urlencoding::encode` boilerplate.
+    fn email_path(email: &str, suffix: &str) -> String {
+        let encoded = urlencoding::encode(email);
+        if suffix.is_empty() {
+            format!("/api/v1/users/me/emails/{encoded}")
+        } else {
+            format!("/api/v1/users/me/emails/{encoded}/{suffix}")
+        }
+    }
+
+    /// POSTs `AddUserEmailRequest { email }` to `/api/v1/users/me/emails`
+    /// against the provided test app, returning the response status. Used
+    /// by other tests that need a secondary email row in place before
+    /// they exercise their own scenario.
+    async fn seed_secondary_email_via_handler(
+        app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        api_key: Option<Uuid>,
+        login_id: Option<Uuid>,
+        email: &str,
+    ) -> StatusCode {
+        let req = create_test_post_request(
+            "/api/v1/users/me/emails",
+            api_key,
+            login_id,
+            Some(&AddUserEmailRequest { email: email.to_string() }),
+        );
+        let resp = test::call_service(app, req).await;
+        resp.status()
+    }
+
+    #[actix_web::test]
+    async fn list_emails_returns_users_email_rows() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let req = create_test_get_request("/api/v1/users/me/emails", api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = parse_emails_response(resp).await;
+        assert_eq!(body.emails.len(), 1);
+        assert!(body.emails[0].is_primary);
+        assert!(body.emails[0].verified);
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn list_emails_unauthenticated_returns_401() {
+        let (app, _, _, _, _) = me_emails_test_app().await;
+        let req = create_test_get_request("/api/v1/users/me/emails", None, None);
+        let _ = test::call_service(&app, req).await;
+    }
+
+    #[actix_web::test]
+    async fn add_email_succeeds_with_valid_address() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let body = AddUserEmailRequest { email: "alice2@example.com".into() };
+        let req = create_test_post_request("/api/v1/users/me/emails", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let response = parse_emails_response(resp).await;
+        assert_eq!(response.emails.len(), 2);
+        let new_row = response
+            .emails
+            .iter()
+            .find(|r| r.email == "alice2@example.com")
+            .expect("new row present");
+        assert!(!new_row.is_primary);
+    }
+
+    #[actix_web::test]
+    async fn add_email_with_invalid_format_returns_400() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let body = AddUserEmailRequest { email: "not-an-email".into() };
+        let req = create_test_post_request("/api/v1/users/me/emails", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    async fn add_email_duplicate_on_same_user_returns_409() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let body = AddUserEmailRequest { email: new_email(VALID_USERNAME_1) };
+        let req = create_test_post_request("/api/v1/users/me/emails", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn add_email_duplicate_across_users_returns_409() {
+        // Two regular users; user 1 tries to add user 2's email.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 2, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let body = AddUserEmailRequest { email: new_email(VALID_USERNAME_2) };
+        let req = create_test_post_request("/api/v1/users/me/emails", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn delete_email_removes_non_primary_row() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let secondary = "alice2@example.com";
+        let _ = seed_secondary_email_via_handler(&app, api_key, login_id, secondary).await;
+
+        let req = create_test_delete_request(&email_path(secondary, ""), api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let response = parse_emails_response(resp).await;
+        assert_eq!(response.emails.len(), 1);
+        assert!(response.emails.iter().all(|r| r.email != secondary));
+    }
+
+    #[actix_web::test]
+    async fn delete_email_only_email_returns_409() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let only_email = new_email(VALID_USERNAME_1);
+        let req = create_test_delete_request(&email_path(&only_email, ""), api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn delete_email_primary_returns_409() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        // Add a secondary so the primary isn't also the last.
+        let _ = seed_secondary_email_via_handler(&app, api_key, login_id, "alice2@example.com").await;
+
+        // Now try to delete the primary — must be refused.
+        let primary = new_email(VALID_USERNAME_1);
+        let req = create_test_delete_request(&email_path(&primary, ""), api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn delete_email_unknown_address_returns_404() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let req = create_test_delete_request(&email_path("unknown@example.com", ""), api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn set_primary_email_promotes_verified_secondary() {
+        let (app, shared_store, user_id, api_key, login_id) = me_emails_test_app().await;
+
+        // Add a secondary (created with verified = true by the handler).
+        let secondary = "alice2@example.com";
+        let _ = seed_secondary_email_via_handler(&app, api_key, login_id, secondary).await;
+
+        // Promote it.
+        let req = create_test_put_request(
+            &email_path(secondary, "primary"),
+            api_key,
+            login_id,
+            &serde_json::json!({}),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let response = parse_emails_response(resp).await;
+        let primary = response
+            .emails
+            .iter()
+            .find(|r| r.is_primary)
+            .expect("exactly one primary");
+        assert_eq!(primary.email, secondary);
+
+        // And in the store.
+        let store_lock = shared_store.read().await;
+        let stored = store_lock.get_user(user_id).await.expect("user");
+        assert_eq!(stored.email(), secondary);
+    }
+
+    #[actix_web::test]
+    async fn set_primary_email_rejects_unverified_target() {
+        let (app, shared_store, user_id, api_key, login_id) = me_emails_test_app().await;
+
+        // Insert an unverified secondary directly via the store, bypassing
+        // the add-email handler (which currently sets verified = true).
+        let unverified = "unverified@example.com";
+        {
+            let mut store_lock = shared_store.write().await;
+            store_lock
+                .add_user_email(user_id, unverified, false)
+                .await
+                .expect("seed unverified");
+        }
+
+        let req = create_test_put_request(
+            &email_path(unverified, "primary"),
+            api_key,
+            login_id,
+            &serde_json::json!({}),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn set_primary_email_unknown_address_returns_404() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let req = create_test_put_request(
+            &email_path("unknown@example.com", "primary"),
+            api_key,
+            login_id,
+            &serde_json::json!({}),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn verify_email_endpoint_is_stub_returns_501() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let req = create_test_post_request::<()>(
+            &email_path("anyone@example.com", "verify"),
+            api_key,
+            login_id,
+            None,
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
     }
 
     // API documentation page load
