@@ -89,6 +89,7 @@ mod test_definitions {
                 username: self.user.username.clone(),
                 full_name: self.user.full_name.clone(),
                 email: self.user.email().to_string(),
+                emails: self.user.emails.clone(),
             }
         }
         
@@ -916,7 +917,8 @@ mod test_definitions {
                 username: self.username.clone(),
                 full_name: self.full_name.clone(),
                 email: self.email.clone(),
-            }            
+                emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
+            }
         }
 
     }    
@@ -961,8 +963,18 @@ mod test_definitions {
             let body = test::read_body(resp).await;
             let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize response");
             let mut expected_user_response = create_req.to_user_item();
-            expected_user_response.id = response_user.id; 
+            expected_user_response.id = response_user.id;
+            // `emails` carries a `verified_at` timestamp set at write time
+            // by the store; the expected value built from the request can't
+            // know the exact instant. Copy it from the response, then assert
+            // the rest. The `emails` content is checked separately below.
+            expected_user_response.emails = response_user.emails.clone();
             assert_eq!(expected_user_response, response_user);
+            // Spot-check the emails shape (independent of timestamp).
+            assert_eq!(response_user.emails.len(), 1);
+            assert_eq!(response_user.emails[0].email, response_user.email);
+            assert!(response_user.emails[0].is_primary);
+            assert!(response_user.emails[0].verified);
         }
     }
 
@@ -1013,7 +1025,8 @@ mod test_definitions {
                 username: self.username.clone(),
                 full_name: self.full_name.clone(),
                 email: self.email.clone(),
-            }            
+                emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
+            }
         }
 
     }    
@@ -1052,9 +1065,14 @@ mod test_definitions {
             let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize response");
             let mut expected_response_user = update_req.to_user_item();
             expected_response_user.id = response_user.id;
+            // emails carries a `verified_at` timestamp set at write time;
+            // copy it across before asserting equality. See the equivalent
+            // note in run_create_user_test.
+            expected_response_user.emails = response_user.emails.clone();
             assert_eq!(expected_response_user, response_user);
         }
-    }    
+    }
+
 
     async fn run_delete_user_test(
         create_users_def: &CreateUsersDef,
@@ -3176,6 +3194,31 @@ mod test_definitions {
         ).await;
     }
 
+    #[actix_web::test]
+    async fn get_me_response_includes_emails_field_alongside_legacy_email() {
+        // Asserts the dual shape of GET /me: the legacy `email` field is
+        // populated with the primary's address (backwards-compat for
+        // clients that haven't migrated), AND the new `emails` array
+        // contains the full row data with primary/verified flags.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = create_test_get_request("/api/v1/users/me", api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = test::read_body(resp).await;
+        let response_user: UserItem =
+            serde_json::from_slice(&body).expect("failed to deserialize get_me response");
+        let expected_email = new_email(VALID_USERNAME_1);
+        assert_eq!(response_user.email, expected_email);
+        assert_eq!(response_user.emails.len(), 1);
+        let row = &response_user.emails[0];
+        assert_eq!(row.email, expected_email);
+        assert!(row.is_primary);
+        assert!(row.verified);
+    }
+
     // **************************************************************************************************
     // Tests: DELETE /api/v1/users/me
     // **************************************************************************************************
@@ -3256,28 +3299,16 @@ mod test_definitions {
     }
 
     impl UpdateProfileRequest {
-        pub fn new(username: &str, full_name: &str, email: &str) -> UpdateProfileRequest {
+        pub fn new(username: &str, full_name: &str) -> UpdateProfileRequest {
             UpdateProfileRequest {
                 username: username.to_string(),
                 full_name: full_name.to_string(),
-                email: email.to_string(),
-            }
-        }
-
-        pub fn to_user_item(&self) -> UserItem {
-            UserItem {
-                id: Uuid::nil(),
-                is_admin: false,
-                username: self.username.clone(),
-                full_name: self.full_name.clone(),
-                email: self.email.clone(),
             }
         }
     }
 
-    fn new_update_profile_request(username: &str, email: Option<&str>) -> UpdateProfileRequest {
-        let email_use = email.unwrap_or(&new_email(username)).to_string();
-        UpdateProfileRequest::new(username, &format!("Updated {username} full name"), &email_use)
+    fn new_update_profile_request(username: &str) -> UpdateProfileRequest {
+        UpdateProfileRequest::new(username, &format!("Updated {username} full name"))
     }
 
     async fn run_change_password_me_test(
@@ -3320,7 +3351,9 @@ mod test_definitions {
             assert_eq!(response_user.is_admin, original_user.user.is_admin);
             assert_eq!(response_user.username, update_req.username);
             assert_eq!(response_user.full_name, update_req.full_name);
-            assert_eq!(response_user.email, update_req.email);
+            // Email is no longer mutable through this endpoint — it must
+            // round-trip from the original user unchanged.
+            assert_eq!(response_user.email, original_user.user.email());
         }
     }
 
@@ -3406,22 +3439,22 @@ mod test_definitions {
     }
 
     // update_profile_me scenario helpers
-    async fn run_can_update_profile_with_new_username_and_email(use_login: bool) {
+    async fn run_can_update_profile_with_new_username(use_login: bool) {
         run_update_profile_me_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1),
             use_login,
-            &new_update_profile_request("updated_username_1", None),
+            &new_update_profile_request("updated_username_1"),
             StatusCode::OK,
         ).await;
     }
 
-    async fn run_can_update_profile_keeping_same_username_and_email(use_login: bool) {
+    async fn run_can_update_profile_keeping_same_username(use_login: bool) {
         run_update_profile_me_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1),
             use_login,
-            &new_update_profile_request(VALID_USERNAME_1, None),
+            &new_update_profile_request(VALID_USERNAME_1),
             StatusCode::OK,
         ).await;
     }
@@ -3432,18 +3465,7 @@ mod test_definitions {
             &CreateUsersDef::new(1, 2, MazeContent::Empty),
             Some(VALID_USERNAME_2),
             use_login,
-            &new_update_profile_request(VALID_USERNAME_1, None),
-            StatusCode::CONFLICT,
-        ).await;
-    }
-
-    async fn run_cannot_update_profile_with_existing_email(use_login: bool) {
-        // user_2 tries to take user_1's email
-        run_update_profile_me_test(
-            &CreateUsersDef::new(1, 2, MazeContent::Empty),
-            Some(VALID_USERNAME_2),
-            use_login,
-            &new_update_profile_request(VALID_USERNAME_2, Some(&new_email(VALID_USERNAME_1))),
+            &new_update_profile_request(VALID_USERNAME_1),
             StatusCode::CONFLICT,
         ).await;
     }
@@ -3453,19 +3475,28 @@ mod test_definitions {
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1),
             use_login,
-            &UpdateProfileRequest::new("", "Some Full Name", &new_email(VALID_USERNAME_1)),
+            &UpdateProfileRequest::new("", "Some Full Name"),
             StatusCode::BAD_REQUEST,
         ).await;
     }
 
-    async fn run_cannot_update_profile_with_invalid_email(use_login: bool) {
-        run_update_profile_me_test(
-            &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            Some(VALID_USERNAME_1),
-            use_login,
-            &UpdateProfileRequest::new(VALID_USERNAME_1, "Some Full Name", "not-a-valid-email"),
-            StatusCode::BAD_REQUEST,
-        ).await;
+    /// Verifies that an old client still sending an `email` field gets a
+    /// 400 rather than a silent partial success. `deny_unknown_fields` on
+    /// `UpdateProfileRequest` rejects the body at JSON parse time. Crafts
+    /// the request as raw JSON bytes since the typed struct no longer has
+    /// the `email` field at compile time.
+    async fn run_update_profile_with_email_field_returns_400(use_login: bool) {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), use_login).await;
+        let body = serde_json::json!({
+            "username": "updated_username_1",
+            "full_name": "Updated Full Name",
+            "email": "shouldnt@example.com",
+        });
+        let req = create_test_put_request("/api/v1/users/me/profile", api_key, login_id, &body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     // change_password_me tests
@@ -3555,21 +3586,21 @@ mod test_definitions {
 
     // update_profile_me tests
     #[actix_web::test]
-    async fn can_update_profile_with_new_username_and_email_with_api_key() {
-        run_can_update_profile_with_new_username_and_email(false).await;
+    async fn can_update_profile_with_new_username_with_api_key() {
+        run_can_update_profile_with_new_username(false).await;
     }
     #[actix_web::test]
-    async fn can_update_profile_with_new_username_and_email_with_login() {
-        run_can_update_profile_with_new_username_and_email(true).await;
+    async fn can_update_profile_with_new_username_with_login() {
+        run_can_update_profile_with_new_username(true).await;
     }
 
     #[actix_web::test]
-    async fn can_update_profile_keeping_same_username_and_email_with_api_key() {
-        run_can_update_profile_keeping_same_username_and_email(false).await;
+    async fn can_update_profile_keeping_same_username_with_api_key() {
+        run_can_update_profile_keeping_same_username(false).await;
     }
     #[actix_web::test]
-    async fn can_update_profile_keeping_same_username_and_email_with_login() {
-        run_can_update_profile_keeping_same_username_and_email(true).await;
+    async fn can_update_profile_keeping_same_username_with_login() {
+        run_can_update_profile_keeping_same_username(true).await;
     }
 
     #[actix_web::test]
@@ -3582,15 +3613,6 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn cannot_update_profile_with_existing_email_with_api_key() {
-        run_cannot_update_profile_with_existing_email(false).await;
-    }
-    #[actix_web::test]
-    async fn cannot_update_profile_with_existing_email_with_login() {
-        run_cannot_update_profile_with_existing_email(true).await;
-    }
-
-    #[actix_web::test]
     async fn cannot_update_profile_with_empty_username_with_api_key() {
         run_cannot_update_profile_with_empty_username(false).await;
     }
@@ -3600,12 +3622,12 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn cannot_update_profile_with_invalid_email_with_api_key() {
-        run_cannot_update_profile_with_invalid_email(false).await;
+    async fn update_profile_with_email_field_returns_400_with_api_key() {
+        run_update_profile_with_email_field_returns_400(false).await;
     }
     #[actix_web::test]
-    async fn cannot_update_profile_with_invalid_email_with_login() {
-        run_cannot_update_profile_with_invalid_email(true).await;
+    async fn update_profile_with_email_field_returns_400_with_login() {
+        run_update_profile_with_email_field_returns_400(true).await;
     }
 
     #[actix_web::test]
@@ -3615,7 +3637,7 @@ mod test_definitions {
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
             None,
             false,
-            &new_update_profile_request(VALID_USERNAME_1, None),
+            &new_update_profile_request(VALID_USERNAME_1),
             StatusCode::UNAUTHORIZED,
         ).await;
     }

@@ -277,12 +277,19 @@ pub struct UserItem {
     pub is_admin: bool,
     /// Username
     pub username: String,
-    /// Full name 
+    /// Full name
     pub full_name: String,
-    /// Email address
+    /// Primary email address. Equals the `email` of whichever row in
+    /// `emails` is the primary, or an empty string if the user somehow
+    /// has no primary (a should-not-happen state surfaced as empty rather
+    /// than a 500).
     pub email: String,
+    /// All email addresses attached to this user, including primary status,
+    /// verification status, and verification timestamp.
+    #[serde(default)]
+    pub emails: Vec<data_model::UserEmail>,
 }
- 
+
 impl UserItem {
     pub fn from_store_user(user: &User) -> UserItem {
         UserItem {
@@ -291,6 +298,7 @@ impl UserItem {
             username: user.username.clone(),
             full_name: user.full_name.clone(),
             email: user.email().to_string(),
+            emails: user.emails.clone(),
         }
     }
 }
@@ -1120,36 +1128,39 @@ pub async fn change_password_me(
 // Endpoint: PUT /api/v1/users/me/profile
 // Handler:  update_profile_me()
 // **************************************************************************************************
-/// Update profile request
+/// Update profile request. Email mutation lives on the dedicated
+/// `/api/v1/users/me/emails/*` endpoints — this endpoint covers only
+/// username and full name. `deny_unknown_fields` rejects any request that
+/// still includes an `email` field (or any other unknown field) with a
+/// 400, so an out-of-date client can't silently get a "success" response
+/// while its email payload is dropped on the floor.
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateProfileRequest {
     /// Username
     pub username: String,
     /// Full name
     pub full_name: String,
-    /// Email address
-    pub email: String,
 }
 
 impl UpdateProfileRequest {
     pub fn apply_to_store_user(&self, user: &mut User) {
         user.username = self.username.clone();
         user.full_name = self.full_name.clone();
-        user.set_primary_email_address(&self.email);
     }
 }
 
 #[utoipa::path(
     summary = "Updates the authenticated user's profile",
-    description = "This endpoint allows the currently authenticated user to update their username, full name, and email address",
+    description = "This endpoint allows the currently authenticated user to update their username and full name. Email management is on the dedicated /api/v1/users/me/emails endpoints.",
     put,
     path = "/api/v1/users/me/profile",
     request_body = UpdateProfileRequest,
     responses(
         (status = 200, description = "Profile updated successfully", body = UserItem),
-        (status = 400, description = "Invalid request (e.g. empty username or invalid email)"),
+        (status = 400, description = "Invalid request (e.g. empty username, or unknown field such as `email`)"),
         (status = 401, description = "Unauthorized request"),
-        (status = 409, description = "Username or email already in use by another user")
+        (status = 409, description = "Username already in use by another user")
     ),
     security(
         ("api_key" = []),
