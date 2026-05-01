@@ -37,6 +37,15 @@ impl UserEmail {
             verified_at: Some(generate_now().trunc_subsecs(3)),
         }
     }
+
+    /// Marks this row verified and refreshes `verified_at` to now (truncated
+    /// to millisecond precision to match the SQL store's RFC 3339 storage
+    /// shape). Idempotent: re-marking an already-verified row simply updates
+    /// the timestamp to reflect the fresh observation.
+    pub fn mark_verified(&mut self) {
+        self.verified = true;
+        self.verified_at = Some(generate_now().trunc_subsecs(3));
+    }
 }
 
 #[cfg(test)]

@@ -91,6 +91,18 @@ pub async fn resolve(
             // tolerate unverified addresses.
             return Err(ResolveError::EmailNotVerified);
         }
+        // Defence-in-depth: refresh `verified_at` on the matched row to
+        // capture the provider's fresh confirmation. The lookup already
+        // gates on `verified = true`, so this is a no-op for the flag, but
+        // the timestamp update is meaningful and the assignment survives
+        // any future loosening of the lookup.
+        if let Some(row) = user
+            .emails
+            .iter_mut()
+            .find(|r| r.email.eq_ignore_ascii_case(&email))
+        {
+            row.mark_verified();
+        }
         user.oauth_identities.push(OAuthIdentity::new(
             identity.provider.clone(),
             identity.provider_user_id.clone(),
@@ -408,6 +420,152 @@ mod tests {
         let stored = store.users.get(&inserted_id).unwrap();
         assert_eq!(stored.oauth_identities[0].provider_email.as_deref(), Some("second@example.com"));
         assert!(stored.oauth_identities[0].last_seen_at > original_seen);
+    }
+
+    /// Builds a password account whose primary email is **unverified** —
+    /// the squatter shape used by the attacker-squat regression test below.
+    fn password_user_unverified(email: &str, username: &str) -> User {
+        User {
+            id: User::new_id(),
+            is_admin: false,
+            username: username.to_string(),
+            full_name: String::new(),
+            emails: vec![data_model::UserEmail {
+                email: email.to_string(),
+                is_primary: true,
+                verified: false,
+                verified_at: None,
+            }],
+            password_hash: "$argon2id$dummy".to_string(),
+            api_key: User::new_api_key(),
+            logins: vec![],
+            oauth_identities: vec![],
+        }
+    }
+
+    #[tokio::test]
+    async fn branch_2_does_not_auto_link_when_local_email_is_unverified() {
+        // Attacker-squat regression: an attacker registers an account with
+        // `victim@example.com` but never proves ownership (`verified =
+        // false`). Later the real victim signs in via OAuth and the
+        // provider returns `email_verified = true` for the same address.
+        // `resolve()` must NOT silently link the OAuth identity to the
+        // squatter — that would hand the victim's account to the attacker.
+        // The verified-only filter on `find_user_by_verified_email` is
+        // what enforces this, so Branch 2 doesn't fire and the flow falls
+        // through to Branch 3.
+        let mut store = MemStore::default();
+        let squatter_id = store
+            .insert(password_user_unverified("victim@example.com", "squatter"))
+            .id;
+
+        let identity = ident("google", "sub-victim", Some("victim@example.com"), true);
+        let outcome = resolve(&mut store, &identity, true /* allow_signup */)
+            .await
+            .expect("ok");
+        match outcome {
+            ResolveOutcome::Created(u) => {
+                assert_ne!(
+                    u.id, squatter_id,
+                    "must NOT link to the unverified squatter — that would be the security hole"
+                );
+                // Sanity: the OAuth identity is on the new user, not the squatter.
+                assert_eq!(u.oauth_identities.len(), 1);
+                assert_eq!(u.oauth_identities[0].provider_user_id, "sub-victim");
+            }
+            other => panic!("expected Created (Branch 3), got {other:?}"),
+        }
+
+        // The squatter is still in the store, untouched.
+        let squatter = store.users.get(&squatter_id).expect("squatter still present");
+        assert!(
+            squatter.oauth_identities.is_empty(),
+            "the attacker's record must not have gained an OAuth identity"
+        );
+    }
+
+    #[tokio::test]
+    async fn branch_2_refreshes_verified_at_on_link() {
+        // Defence-in-depth: linking via Branch 2 must refresh `verified_at`
+        // on the matched row to capture the provider's fresh observation,
+        // even though the row was already verified (the lookup gates on it).
+        let mut store = MemStore::default();
+        let mut user = password_user("alice@example.com", "alice");
+        // Force a clearly old verified_at so we can assert it advances.
+        user.emails[0].verified_at =
+            Some(chrono::Utc::now() - chrono::Duration::hours(24));
+        let stale = user.emails[0].verified_at.unwrap();
+        let inserted_id = store.insert(user).id;
+
+        let identity = ident("google", "sub-alice", Some("alice@example.com"), true);
+        resolve(&mut store, &identity, false).await.expect("ok");
+
+        let stored = store.users.get(&inserted_id).expect("user still present");
+        let row = stored
+            .emails
+            .iter()
+            .find(|r| r.email == "alice@example.com")
+            .expect("primary row still present");
+        assert!(row.verified, "row must remain verified");
+        assert!(
+            row.verified_at.expect("verified_at must be Some") > stale,
+            "verified_at must be refreshed to a newer instant on link"
+        );
+    }
+
+    #[tokio::test]
+    async fn branch_3_new_user_has_primary_verified_email_row() {
+        // Tightens `branch_3_creates_new_user_when_no_match_and_signup_allowed`
+        // around the email-row shape: the new user's first (and only) email
+        // row must be `is_primary = true, verified = true` with the
+        // provider-supplied address, mirroring what the storage layer
+        // expects for OAuth signups.
+        let mut store = MemStore::default();
+        let identity = ident("github", "12345", Some("bob@example.com"), true);
+        let outcome = resolve(&mut store, &identity, true).await.expect("ok");
+        let user = match outcome {
+            ResolveOutcome::Created(u) => u,
+            other => panic!("expected Created, got {other:?}"),
+        };
+        assert_eq!(user.emails.len(), 1);
+        let row = &user.emails[0];
+        assert_eq!(row.email, "bob@example.com");
+        assert!(row.is_primary, "OAuth-created user's first email must be primary");
+        assert!(row.verified, "OAuth-created user's first email must be verified");
+        assert!(row.verified_at.is_some(), "verified_at must be populated");
+    }
+
+    #[tokio::test]
+    async fn branch_2_links_even_if_user_has_an_oauth_identity_with_a_different_provider() {
+        // Sanity: an existing user already linked to provider X must still
+        // be linkable to a fresh identity at provider Y via Branch 2 (the
+        // email match drives the link; the unrelated identity at X doesn't
+        // interfere). Confirms that "same email, different provider" is
+        // a Branch 2 case, not a Branch 1 case in disguise.
+        let mut store = MemStore::default();
+        let mut user = password_user("alice@example.com", "alice");
+        user.oauth_identities.push(OAuthIdentity::new(
+            "google".into(),
+            "sub-alice-google".into(),
+            Some("alice@example.com".into()),
+        ));
+        let inserted_id = store.insert(user).id;
+
+        let identity = ident("github", "sub-alice-github", Some("alice@example.com"), true);
+        let outcome = resolve(&mut store, &identity, false).await.expect("ok");
+        let user = match outcome {
+            ResolveOutcome::SignedIn(u) => u,
+            other => panic!("expected SignedIn (Branch 2), got {other:?}"),
+        };
+        assert_eq!(user.id, inserted_id);
+        assert_eq!(user.oauth_identities.len(), 2, "both identities must coexist");
+        let providers: Vec<&str> = user
+            .oauth_identities
+            .iter()
+            .map(|i| i.provider.as_str())
+            .collect();
+        assert!(providers.contains(&"google"));
+        assert!(providers.contains(&"github"));
     }
 
     #[tokio::test]
