@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Plain net10.0 — no MAUI Sdk, no WindowsAppSDK. Tests pull the
+         ViewModel sources directly via file-link compilation below; that
+         avoids the WindowsAppSDK auto-initializer which throws inside an
+         unpackaged test host. The trade-off: ViewModels under test must
+         stay free of MAUI runtime types (Shell.Current, Application, etc.)
+         If a ViewModel needs MAUI runtime, abstract it behind an interface
+         that the test project can mock. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Maze.Maui.App.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+  <!-- Source files compiled into the test assembly. Adding a ViewModel?
+       Add it here too. -->
+  <ItemGroup>
+    <Compile Include="..\Maze.Maui.App\Services\IAuthService.cs"
+             Link="LinkedSource\Services\IAuthService.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\BaseViewModel.cs"
+             Link="LinkedSource\ViewModels\BaseViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\EmailRowViewModel.cs"
+             Link="LinkedSource\ViewModels\EmailRowViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\EmailAddressesViewModel.cs"
+             Link="LinkedSource\ViewModels\EmailAddressesViewModel.cs" />
+  </ItemGroup>
+
+</Project>
