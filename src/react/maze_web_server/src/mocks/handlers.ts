@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { AppFeatures, LoginResponse, Maze, RenewResponse, UpdateProfileRequest, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, LoginResponse, Maze, RenewResponse, UpdateProfileRequest, UserEmail, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -8,7 +8,21 @@ export const mockProfile: UserProfile = {
   username: 'testuser',
   full_name: 'Test User',
   email: 'test@example.com',
+  emails: [
+    { email: 'test@example.com', is_primary: true, verified: true, verified_at: '2026-01-01T00:00:00.000Z' },
+  ],
   is_admin: false,
+  has_password: true,
+}
+
+export let mockEmails: UserEmail[] = [
+  { email: 'test@example.com', is_primary: true, verified: true, verified_at: '2026-01-01T00:00:00.000Z' },
+]
+
+export function resetMockEmails(): void {
+  mockEmails = [
+    { email: 'test@example.com', is_primary: true, verified: true, verified_at: '2026-01-01T00:00:00.000Z' },
+  ]
 }
 
 export const mockLoginResponse: LoginResponse = {
@@ -93,6 +107,45 @@ export const handlers = [
 
   http.delete(`${BASE}/users/me`, () => {
     return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get(`${BASE}/users/me/emails`, () => {
+    return HttpResponse.json<UserEmailsResponse>({ emails: mockEmails })
+  }),
+
+  http.post(`${BASE}/users/me/emails`, async ({ request }) => {
+    const body = await request.json() as AddUserEmailRequest
+    if (mockEmails.some(e => e.email.toLowerCase() === body.email.toLowerCase())) {
+      return new HttpResponse('Email is already taken', { status: 409 })
+    }
+    mockEmails = [
+      ...mockEmails,
+      { email: body.email, is_primary: false, verified: true, verified_at: new Date().toISOString() },
+    ]
+    return HttpResponse.json<UserEmailsResponse>({ emails: mockEmails }, { status: 201 })
+  }),
+
+  http.delete(`${BASE}/users/me/emails/:email`, ({ params }) => {
+    const target = decodeURIComponent(params.email as string)
+    const row = mockEmails.find(e => e.email === target)
+    if (!row) return new HttpResponse(null, { status: 404 })
+    if (mockEmails.length === 1) return new HttpResponse('Cannot remove last email', { status: 409 })
+    if (row.is_primary) return new HttpResponse('Cannot remove primary email', { status: 409 })
+    mockEmails = mockEmails.filter(e => e.email !== target)
+    return HttpResponse.json<UserEmailsResponse>({ emails: mockEmails })
+  }),
+
+  http.put(`${BASE}/users/me/emails/:email/primary`, ({ params }) => {
+    const target = decodeURIComponent(params.email as string)
+    const row = mockEmails.find(e => e.email === target)
+    if (!row) return new HttpResponse(null, { status: 404 })
+    if (!row.verified) return new HttpResponse('Cannot promote unverified email', { status: 409 })
+    mockEmails = mockEmails.map(e => ({ ...e, is_primary: e.email === target }))
+    return HttpResponse.json<UserEmailsResponse>({ emails: mockEmails })
+  }),
+
+  http.post(`${BASE}/users/me/emails/:email/verify`, () => {
+    return new HttpResponse('Email verification flow is not yet implemented', { status: 501 })
   }),
 
   http.get(`${BASE}/mazes`, ({ request }) => {
