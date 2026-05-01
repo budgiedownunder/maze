@@ -61,7 +61,6 @@ describe('AccountModal', () => {
     renderModal()
     await waitFor(() => expect(screen.getByDisplayValue(mockProfile.username)).toBeInTheDocument())
     expect(screen.getByDisplayValue(mockProfile.full_name)).toBeInTheDocument()
-    expect(screen.getByDisplayValue(mockProfile.email)).toBeInTheDocument()
   })
 
   it('does not show Administrator badge for regular users', async () => {
@@ -107,16 +106,7 @@ describe('AccountModal', () => {
     await waitFor(() => expect(screen.getByDisplayValue('updateduser')).toBeInTheDocument())
   })
 
-  it('Save Profile button is disabled and shows error when email has no domain dot', async () => {
-    renderModal()
-    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
-    await userEvent.clear(screen.getByLabelText(/email/i))
-    await userEvent.type(screen.getByLabelText(/email/i), 'mytest@x')
-    expect(screen.getByRole('button', { name: /save profile/i })).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent(/valid email/i)
-  })
-
-  it('shows 409 error when username or email already in use', async () => {
+  it('shows 409 error when username already in use', async () => {
     server.use(
       http.put('/api/v1/users/me/profile', () => HttpResponse.json(null, { status: 409 })),
     )
@@ -130,14 +120,14 @@ describe('AccountModal', () => {
 
   it('shows server error message on non-409 save failure', async () => {
     server.use(
-      http.put('/api/v1/users/me/profile', () => HttpResponse.text('Email format is invalid', { status: 400 })),
+      http.put('/api/v1/users/me/profile', () => HttpResponse.text('Username format is invalid', { status: 400 })),
     )
     renderModal()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     await userEvent.clear(screen.getByDisplayValue(mockProfile.username))
     await userEvent.type(screen.getByLabelText(/username/i), 'newname')
     await userEvent.click(screen.getByRole('button', { name: /save profile/i }))
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/email format is invalid/i))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/username format is invalid/i))
   })
 
   it('opens ChangePasswordModal when Change Password is clicked', async () => {

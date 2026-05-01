@@ -32,7 +32,7 @@ test('My Account modal opens and shows profile fields', async ({ page }) => {
   const dialog = page.getByRole('dialog', { name: /my account/i })
   await expect(dialog).toBeVisible()
   await expect(dialog.getByLabel('Username')).toHaveValue('testuser')
-  await expect(dialog.getByLabel('Email')).toHaveValue('test@example.com')
+  await expect(dialog.getByText('test@example.com')).toBeVisible()
   await dialog.getByRole('button', { name: /close/i }).click()
   await expect(dialog).not.toBeVisible()
 })
