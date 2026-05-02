@@ -11,7 +11,8 @@ namespace Maze.Maui.App.ViewModels
     /// <summary>
     /// Represents the view model for the account page
     /// </summary>
-    public partial class AccountViewModel : BaseViewModel
+    public partial class AccountViewModel : BaseViewModel,
+        IRecipient<PasswordSetMessage>
     {
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
@@ -29,6 +30,16 @@ namespace Maze.Maui.App.ViewModels
 
         [ObservableProperty]
         private bool isAdmin;
+
+        /// <summary>
+        /// Whether the authenticated user has a password set. Drives the
+        /// trigger-button label ("Change Password" vs "Set Password") and
+        /// the variant the popup renders. Flipped optimistically to
+        /// <c>true</c> on receipt of <see cref="PasswordSetMessage"/> so
+        /// the label updates without re-fetching the profile.
+        /// </summary>
+        [ObservableProperty]
+        private bool hasPassword = true;
 
         [ObservableProperty]
         private string errorMessage = "";
@@ -56,7 +67,14 @@ namespace Maze.Maui.App.ViewModels
             Title = "Account";
             _authService = authService;
             _dialogService = dialogService;
+            // Subscribe to in-process pub/sub so a successful Set/Change in
+            // the password popup flips the local HasPassword without a
+            // re-fetch. Singleton lifetime guarantees we outlive any sender.
+            WeakReferenceMessenger.Default.RegisterAll(this);
         }
+
+        /// <inheritdoc/>
+        public void Receive(PasswordSetMessage message) => HasPassword = true;
 
         /// <summary>
         /// Loads the user's profile from the server
@@ -75,6 +93,7 @@ namespace Maze.Maui.App.ViewModels
                 Username = _loadedUsername = profile.Username;
                 FullName = _loadedFullName = profile.FullName;
                 IsAdmin = profile.IsAdmin;
+                HasPassword = profile.HasPassword;
                 LoadStatus = "";
             }
             catch
@@ -137,12 +156,17 @@ namespace Maze.Maui.App.ViewModels
         }
 
         /// <summary>
-        /// Navigates to the change password page
+        /// Navigates to the change password page, passing the current
+        /// <see cref="HasPassword"/> so the page renders the correct
+        /// (Change vs Set) variant without re-fetching the profile.
         /// </summary>
         [RelayCommand]
         private async Task ChangePassword()
         {
-            await Shell.Current.GoToAsync(nameof(ChangePasswordPage));
+            await Shell.Current.GoToAsync(nameof(ChangePasswordPage), new Dictionary<string, object>
+            {
+                { "HasPassword", HasPassword }
+            });
         }
 
         /// <summary>

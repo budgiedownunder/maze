@@ -88,6 +88,7 @@ namespace Maze.Maui.App
 
             builder.Services.AddSingleton<IDeviceTypeService>(provider => new DeviceTypeService());
             builder.Services.AddSingleton<IDialogService>(provider => new PopupWindowService());
+            builder.Services.AddSingleton<INavigationService, ShellNavigationService>();
 
             builder.Services.AddTransient<LoginViewModel>();
             builder.Services.AddTransient<SignUpViewModel>();

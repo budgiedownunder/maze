@@ -31,12 +31,18 @@
   <ItemGroup>
     <Compile Include="..\Maze.Maui.App\Services\IAuthService.cs"
              Link="LinkedSource\Services\IAuthService.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\INavigationService.cs"
+             Link="LinkedSource\Services\INavigationService.cs" />
+    <Compile Include="..\Maze.Maui.App\Messages\PasswordSetMessage.cs"
+             Link="LinkedSource\Messages\PasswordSetMessage.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\BaseViewModel.cs"
              Link="LinkedSource\ViewModels\BaseViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\EmailRowViewModel.cs"
              Link="LinkedSource\ViewModels\EmailRowViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\EmailAddressesViewModel.cs"
              Link="LinkedSource\ViewModels\EmailAddressesViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\ChangePasswordViewModel.cs"
+             Link="LinkedSource\ViewModels\ChangePasswordViewModel.cs" />
   </ItemGroup>
 
 </Project>
