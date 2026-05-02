@@ -1,5 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using Maze.Maui.App.Messages;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
 using System.Net;
@@ -13,7 +15,6 @@ namespace Maze.Maui.App.ViewModels
     {
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
-        private readonly MazesViewModel _mazesViewModel;
 
         private string _loadedUsername = "";
         private string _loadedFullName = "";
@@ -50,13 +51,11 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         /// <param name="authService">Injected auth service</param>
         /// <param name="dialogService">Injected dialog service</param>
-        /// <param name="mazesViewModel">Injected view model</param>
-        public AccountViewModel(IAuthService authService, IDialogService dialogService, MazesViewModel mazesViewModel)
+        public AccountViewModel(IAuthService authService, IDialogService dialogService)
         {
             Title = "Account";
             _authService = authService;
             _dialogService = dialogService;
-            _mazesViewModel = mazesViewModel;
         }
 
         /// <summary>
@@ -167,7 +166,7 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 await _authService.DeleteMyAccountAsync();
-                _mazesViewModel.InvalidateData();
+                WeakReferenceMessenger.Default.Send(new MazesInvalidatedMessage());
                 ClearProfile();
                 await Shell.Current.GoToAsync("//LoginPage");
             }

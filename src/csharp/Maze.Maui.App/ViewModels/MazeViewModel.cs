@@ -1,5 +1,7 @@
 ﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using Maze.Maui.App.Messages;
 using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
 using Maze.Maui.Services;
@@ -20,7 +22,6 @@ namespace Maze.Maui.App.ViewModels
         private readonly IDeviceTypeService _deviceTypeService;
         private readonly IMazeService _mazeService;
         private readonly IDialogService _dialogService;
-        private readonly MazesViewModel _mazesViewModel;
 
         /// <summary>
         /// Represents an insert rows requested event handler
@@ -234,12 +235,10 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="deviceTypeService">Injected device type service</param>
         /// <param name="dialogService">Injected dialog service</param>
         /// <param name="mazeService">Injected maze service</param>
-        /// <param name="mazesViewModel">Injected mazes view model</param>
-        public MazeViewModel(IDeviceTypeService deviceTypeService, IDialogService dialogService, IMazeService mazeService, MazesViewModel mazesViewModel)
+        public MazeViewModel(IDeviceTypeService deviceTypeService, IDialogService dialogService, IMazeService mazeService)
         {
             this._deviceTypeService = deviceTypeService;
             this._mazeService = mazeService;
-            this._mazesViewModel = mazesViewModel;
             this._dialogService = dialogService;
         }
         /// <summary>
@@ -443,7 +442,7 @@ namespace Maze.Maui.App.ViewModels
 
                 await _mazeService.CreateMazeItem(item);
                 MazeItem.Name = name;
-                _mazesViewModel.AddNewItem(item);
+                WeakReferenceMessenger.Default.Send(new NewMazeItemMessage(item));
                 created = true;
             }
             return created;

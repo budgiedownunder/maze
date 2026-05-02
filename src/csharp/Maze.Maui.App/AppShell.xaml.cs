@@ -1,5 +1,7 @@
 using CommunityToolkit.Maui.Extensions;
 using CommunityToolkit.Maui.Views;
+using CommunityToolkit.Mvvm.Messaging;
+using Maze.Maui.App.Messages;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;
 using Maze.Maui.App.Views;
@@ -14,7 +16,6 @@ namespace Maze.Maui.App
     {
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
-        private readonly MazesViewModel _mazesViewModel;
         private readonly AccountViewModel _accountViewModel;
         // One-shot guard: Shell fires OnNavigated more than once during a
         // single GoToAsync (typically once for navigation start, once for
@@ -27,13 +28,11 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="authService">Injected auth service</param>
         /// <param name="dialogService">Injected dialog service</param>
-        /// <param name="mazesViewModel">Injected mazes view model</param>
         /// <param name="accountViewModel">Injected account view model</param>
-        public AppShell(IAuthService authService, IDialogService dialogService, MazesViewModel mazesViewModel, AccountViewModel accountViewModel)
+        public AppShell(IAuthService authService, IDialogService dialogService, AccountViewModel accountViewModel)
         {
             _authService = authService;
             _dialogService = dialogService;
-            _mazesViewModel = mazesViewModel;
             _accountViewModel = accountViewModel;
             InitializeComponent();
             Routing.RegisterRoute(nameof(MazePage), typeof(MazePage));
@@ -110,7 +109,7 @@ namespace Maze.Maui.App
             try
             {
                 await _authService.SignOutAsync();
-                _mazesViewModel.InvalidateData();
+                WeakReferenceMessenger.Default.Send(new MazesInvalidatedMessage());
                 _accountViewModel.ClearProfile();
                 await GoToAsync("//LoginPage");
             }
