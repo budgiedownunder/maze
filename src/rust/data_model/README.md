@@ -10,7 +10,8 @@ The `data_model` crate is written in `Rust` and defines the following data model
 - `MazeDefinition` - represents a maze definition
 - `MazePoint` - represents a point within a maze
 - `OAuthIdentity` - represents a link between a user and an external OAuth provider
-- `User` - represents a user
+- `User` - represents a user (with one or more associated `UserEmail`s)
+- `UserEmail` - represents an email address attached to a user, with primary and verification flags
 - `UserLogin` - represents a user login
 
 ## Getting Started

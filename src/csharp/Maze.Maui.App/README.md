@@ -7,7 +7,10 @@ The `Maze.Maui.App` .NET application is a work-in-progress [MAUI](https://dotnet
 At the moment, it allows the user to:
 
 - Sign in/up using `email`+`password` or via `OAuth` (Google, GitHub, Facebook - when enabled server-side) 
-- View and edit their account profile (username, full name, email), change their password, or delete their account
+- View and edit their account profile (username, full name)
+- Manage their email addresses (add, set primary, remove)
+- Change or set their password (set-initial flow for OAuth-only users)
+- Delete their account
 - Load, edit, delete, rename and duplicate mazes
 - Construct mazes containing start, finish and wall cells
 - Generate mazes automatically using the [`Maze.Api`](../Maze.Api/README.md) .NET assembly, with configurable dimensions, start/finish positions and minimum spine length
@@ -39,7 +42,7 @@ The app uses a two-area navigation model:
 
 - **Login area** (hamburger menu hidden): shown on first launch and after sign-out. Provides Sign In and Create Account actions.
 - **Main area**: shown after a successful sign-in. The **Mazes** tab is the primary view (tab bar hidden). A hamburger flyout menu provides access to:
-  - **My Account…** — opens a popup to view and edit your profile, change your password, or delete your account
+  - **My Account…** — opens a popup to view and edit your profile (username, full name), manage your email addresses, change or set your password, or delete your account
   - **Sign Out** — signs out, prompting to save any unsaved maze changes first
   - **About** — opens a popup with app information
 
