@@ -4,14 +4,17 @@
                xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
                xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
                x:DataType="viewmodel:AccountViewModel"
+               x:Name="AccountPopupRoot"
                x:Class="Maze.Maui.App.Views.AccountPopup"
                CanBeDismissedByTappingOutsideOfPopup="True">
 
     <toolkit:Popup.Resources>
         <toolkit:IsStringNotNullOrEmptyConverter x:Key="StringNotEmptyConverter" />
+        <toolkit:InvertedBoolConverter x:Key="InvertBoolConverter" />
     </toolkit:Popup.Resources>
 
-    <Border Padding="16"
+    <Border x:Name="PopupBorder"
+            Padding="16"
             StrokeShape="RoundRectangle 8"
             Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
@@ -19,7 +22,8 @@
         <Grid VerticalOptions="Fill"
               HorizontalOptions="Fill">
 
-            <ScrollView VerticalOptions="Fill">
+            <ScrollView x:Name="OuterScroll"
+                        VerticalOptions="Fill">
                 <VerticalStackLayout Spacing="16"
                                      HorizontalOptions="Fill">
 
@@ -97,6 +101,137 @@
                             Command="{Binding SaveProfileCommand}"
                             IsVisible="{Binding IsNotBusy}"
                             HorizontalOptions="Fill" />
+
+                    <!-- Email Addresses panel — BindingContext set from
+                         code-behind (OnHandlerChanged) to a separate
+                         EmailAddressesViewModel. The popup's outer
+                         BindingContext stays on AccountViewModel. -->
+                    <!-- x:DataType retypes compiled bindings inside this
+                         subtree to EmailAddressesViewModel; the popup
+                         root's x:DataType (AccountViewModel) would
+                         otherwise cause Emails / NewEmail bindings to
+                         silently fail at compile time. -->
+                    <VerticalStackLayout x:DataType="viewmodel:EmailAddressesViewModel"
+                                         BindingContext="{Binding Source={x:Reference AccountPopupRoot}, Path=EmailsViewModel}"
+                                         Spacing="8">
+                        <Label Text="Email Addresses"
+                               FontAttributes="Bold"
+                               FontSize="14" />
+                        <Label Text="{Binding LoadStatus}"
+                               IsVisible="{Binding IsBusy}"
+                               HorizontalOptions="Center" />
+                        <Label Text="{Binding ErrorMessage}"
+                               TextColor="Red"
+                               IsVisible="{Binding ErrorMessage, Converter={StaticResource StringNotEmptyConverter}}"
+                               HorizontalOptions="Center" />
+                        <!-- Bounded inner scroll for the email list itself so a
+                             long list doesn't push the trigger buttons off the
+                             popup. The outer popup ScrollView (bounded in
+                             code-behind via OuterScroll.HeightRequest) handles
+                             any remaining overflow. iOS may have nested-scroll
+                             quirks where the inner doesn't engage with touch
+                             gestures, but the outer scroll is what matters for
+                             reaching the Close button. -->
+                        <ScrollView MaximumHeightRequest="120">
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Emails}"
+                                                 Spacing="0">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="viewmodel:EmailRowViewModel">
+                                        <!-- Right margin reserves room for the scroll bar so
+                                             it doesn't overlap the row when visible. -->
+                                        <Border Padding="8"
+                                                Margin="0,2,8,2"
+                                                StrokeShape="RoundRectangle 4"
+                                                Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+                                                StrokeThickness="1"
+                                                BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+                                        <VerticalStackLayout Spacing="6">
+                                            <!-- Email + status badges -->
+                                            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                                <Label Text="{Binding Email}"
+                                                       FontSize="13"
+                                                       VerticalOptions="Center" />
+                                                <!-- Primary badge: solid bright accent (matches React's
+                                                     badge-primary background) — deliberately bolder than
+                                                     the verified/unverified pills above. -->
+                                                <Label Text="Primary"
+                                                       IsVisible="{Binding IsPrimary}"
+                                                       FontSize="10"
+                                                       TextColor="{AppThemeBinding Light=White, Dark=#1E1B29}"
+                                                       BackgroundColor="{AppThemeBinding Light=#AA3BFF, Dark=#C084FC}"
+                                                       Padding="6,2"
+                                                       VerticalOptions="Center" />
+                                                <!-- Pill colors mirror React's CSS vars: semi-transparent tinted
+                                                     bg + darker text in light mode, lighter text in dark mode. -->
+                                                <Label Text="Verified"
+                                                       IsVisible="{Binding Verified}"
+                                                       FontSize="10"
+                                                       TextColor="{AppThemeBinding Light=#15803D, Dark=#4ADE80}"
+                                                       BackgroundColor="{AppThemeBinding Light=#2616A34A, Dark=#2E4ADE80}"
+                                                       Padding="6,2"
+                                                       VerticalOptions="Center" />
+                                                <Label Text="Unverified"
+                                                       IsVisible="{Binding Verified, Converter={StaticResource InvertBoolConverter}}"
+                                                       FontSize="10"
+                                                       TextColor="{AppThemeBinding Light=#6B7280, Dark=#9CA3AF}"
+                                                       BackgroundColor="{AppThemeBinding Light=#266B7280, Dark=#2E9CA3AF}"
+                                                       Padding="6,2"
+                                                       VerticalOptions="Center" />
+                                            </HorizontalStackLayout>
+                                            <!-- Inline action buttons — visibility/disabled rules mirror the
+                                                 React EmailAddressesPanel: Make Primary hidden on the primary
+                                                 row + disabled when the row is unverified; Remove hidden on
+                                                 the primary row; Resend Verification hidden on verified rows
+                                                 + disabled stub on unverified (real action lands with the
+                                                 future email-send-support feature). -->
+                                            <HorizontalStackLayout Spacing="8">
+                                                <Button Text="Make Primary"
+                                                        IsVisible="{Binding IsPrimary, Converter={StaticResource InvertBoolConverter}}"
+                                                        IsEnabled="{Binding Verified}"
+                                                        Padding="8,4"
+                                                        FontSize="11"
+                                                        BackgroundColor="Transparent"
+                                                        TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:EmailAddressesViewModel}}, Path=SetPrimaryCommand}" />
+                                                <Button Text="Remove"
+                                                        IsVisible="{Binding IsPrimary, Converter={StaticResource InvertBoolConverter}}"
+                                                        Padding="8,4"
+                                                        FontSize="11"
+                                                        BackgroundColor="Transparent"
+                                                        TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:EmailAddressesViewModel}}, Path=RemoveEmailCommand}" />
+                                                <Button Text="Resend Verification"
+                                                        IsVisible="{Binding Verified, Converter={StaticResource InvertBoolConverter}}"
+                                                        IsEnabled="False"
+                                                        Padding="8,4"
+                                                        FontSize="11"
+                                                        BackgroundColor="Transparent"
+                                                        TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                                        CommandParameter="{Binding .}"
+                                                        Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:EmailAddressesViewModel}}, Path=VerifyEmailCommand}" />
+                                            </HorizontalStackLayout>
+                                        </VerticalStackLayout>
+                                    </Border>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </ScrollView>
+                        <!-- Add-email row -->
+                        <Grid ColumnDefinitions="*,Auto"
+                              ColumnSpacing="8">
+                            <Entry Grid.Column="0"
+                                   Text="{Binding NewEmail}"
+                                   Placeholder="Add another email address"
+                                   Keyboard="Email"
+                                   VerticalOptions="Center" />
+                            <Button Grid.Column="1"
+                                    Text="Add Email"
+                                    Command="{Binding AddEmailCommand}"
+                                    VerticalOptions="Center" />
+                        </Grid>
+                    </VerticalStackLayout>
 
                     <Button Text="Change Password"
                             Command="{Binding ChangePasswordCommand}"
