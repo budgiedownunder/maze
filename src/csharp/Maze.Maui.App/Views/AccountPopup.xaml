@@ -54,7 +54,7 @@
                         <VerticalStackLayout Spacing="12">
 
                             <Grid ColumnDefinitions="Auto,*"
-                                  RowDefinitions="Auto,Auto,Auto"
+                                  RowDefinitions="Auto,Auto"
                                   ColumnSpacing="12"
                                   RowSpacing="12">
                                 <Label Grid.Row="0" Grid.Column="0"
@@ -74,16 +74,6 @@
                                 <Entry Grid.Row="1" Grid.Column="1"
                                        Text="{Binding FullName}"
                                        Keyboard="Text"
-                                       HorizontalOptions="Fill"
-                                       VerticalOptions="Center" />
-
-                                <Label Grid.Row="2" Grid.Column="0"
-                                       Text="Email"
-                                       FontAttributes="Bold"
-                                       VerticalOptions="Center" />
-                                <Entry Grid.Row="2" Grid.Column="1"
-                                       Text="{Binding Email}"
-                                       Keyboard="Email"
                                        HorizontalOptions="Fill"
                                        VerticalOptions="Center" />
                             </Grid>
@@ -113,7 +103,17 @@
                             IsVisible="{Binding IsNotBusy}"
                             HorizontalOptions="Fill"
                             BackgroundColor="Transparent"
-                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+                            TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}">
+                        <!-- Trigger flips the label for OAuth-only users (no
+                             password yet). The Set/Change semantics live in
+                             ChangePasswordViewModel; this just reflects the
+                             current `HasPassword` state on the trigger. -->
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding HasPassword}" Value="False">
+                                <Setter Property="Text" Value="Set Password" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
 
                     <Button Text="Delete Account"
                             Command="{Binding DeleteAccountCommand}"
