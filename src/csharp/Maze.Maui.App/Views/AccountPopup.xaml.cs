@@ -42,19 +42,47 @@ namespace Maze.Maui.App.Views
     {
         private readonly AccountViewModel _viewModel;
 
+        /// <summary>The Email Addresses panel ViewModel — exposed as a
+        /// public property so the XAML can reach it via
+        /// <c>{Binding Source={x:Reference ...}}</c> without affecting the
+        /// outer popup's BindingContext (still the AccountViewModel).</summary>
+        public EmailAddressesViewModel EmailsViewModel { get; }
+
         /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="viewModel">The account view model</param>
-        public AccountPopup(AccountViewModel viewModel)
+        /// <param name="emailsViewModel">The email-addresses view model
+        ///   (transient — fresh instance per popup-open).</param>
+        public AccountPopup(AccountViewModel viewModel, EmailAddressesViewModel emailsViewModel)
         {
             _viewModel = viewModel;
+            EmailsViewModel = emailsViewModel;
             BindingContext = viewModel;
             InitializeComponent();
-            double screenWidth = DeviceDisplay.Current.MainDisplayInfo.Width
-                / DeviceDisplay.Current.MainDisplayInfo.Density;
-            WidthRequest = Math.Min(screenWidth * 0.85, 400);
+            // Constrain width to a fraction of the screen, and bound the
+            // INNER ScrollView's height directly. Setting HeightRequest on
+            // the popup itself only engages outer scrolling on Windows;
+            // iOS and Android leave the popup-level constraint
+            // unpropagated and the outer ScrollView never bounded.
+            // Setting HeightRequest on the ScrollView element itself works
+            // on every platform, so the Close / Delete / Change Password
+            // buttons stay reachable when the email list is long.
+            double density = DeviceDisplay.Current.MainDisplayInfo.Density;
+            double screenWidth = DeviceDisplay.Current.MainDisplayInfo.Width / density;
+            double screenHeight = DeviceDisplay.Current.MainDisplayInfo.Height / density;
+            double popupWidth = Math.Min(screenWidth * 0.85, 400);
+            double popupHeight = Math.Min(screenHeight * 0.85, 700);
+            WidthRequest = popupWidth;
+            // Outer ScrollView capped so its content is always scrollable
+            // within a known frame. Popup.HeightRequest doesn't propagate
+            // through the iOS UIViewController presentation; setting it on
+            // the ScrollView (and on the surrounding Border, below) bounds
+            // the actual visible frame so scroll engages on every platform.
+            OuterScroll.HeightRequest = Math.Min(screenHeight * 0.8, 660);
+            PopupBorder.HeightRequest = popupHeight;
             viewModel.LoadProfileCommand.Execute(null);
+            emailsViewModel.LoadEmailsCommand.Execute(null);
 
             // Clear the welcome-banner flag once the popup is closed (by either
             // path — Close button or tap-outside — both fire Closed). Subsequent

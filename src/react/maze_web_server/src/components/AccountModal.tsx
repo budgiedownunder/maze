@@ -4,8 +4,8 @@ import * as api from '../api/client'
 import { useAuth, useToken } from '../context/AuthContext'
 import { ChangePasswordModal } from './ChangePasswordModal'
 import { ConfirmModal } from './ConfirmModal'
+import { EmailAddressesPanel } from './EmailAddressesPanel'
 import type { UserProfile } from '../types/api'
-import { isValidEmail } from '../utils/validation'
 
 interface Props {
   onClose: () => void
@@ -33,7 +33,6 @@ export function AccountModal({ onClose, welcome = false }: Props) {
   const [saved, setSaved] = useState<UserProfile | null>(null)
   const [username, setUsername] = useState('')
   const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
 
   useEffect(() => {
     const busy = isSaving || isLoading || isDeleting
@@ -47,7 +46,6 @@ export function AccountModal({ onClose, welcome = false }: Props) {
         setSaved(profile)
         setUsername(profile.username)
         setFullName(profile.full_name)
-        setEmail(profile.email)
       })
       .catch(() => setError('Failed to load profile'))
       .finally(() => setIsLoading(false))
@@ -55,25 +53,22 @@ export function AccountModal({ onClose, welcome = false }: Props) {
 
   const hasChanges = saved !== null && (
     username !== saved.username ||
-    fullName !== saved.full_name ||
-    email !== saved.email
+    fullName !== saved.full_name
   )
-  const emailValid = isValidEmail(email)
-  const saveDisabled = isSaving || isLoading || !hasChanges || !username.trim() || !emailValid
+  const saveDisabled = isSaving || isLoading || !hasChanges || !username.trim()
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     setIsSaving(true)
     setError(null)
     try {
-      const updated = await api.updateProfile(token, { username, full_name: fullName, email })
+      const updated = await api.updateProfile(token, { username, full_name: fullName })
       setSaved(updated)
       setUsername(updated.username)
       setFullName(updated.full_name)
-      setEmail(updated.email)
     } catch (ex: unknown) {
       const err = ex as { status?: number; message?: string }
-      setError(err.status === 409 ? 'Username or email already in use' : (err.message ?? 'Failed to save profile'))
+      setError(err.status === 409 ? 'Username already in use' : (err.message ?? 'Failed to save profile'))
     } finally {
       setIsSaving(false)
     }
@@ -94,7 +89,13 @@ export function AccountModal({ onClose, welcome = false }: Props) {
   }
 
   if (view === 'changePassword') {
-    return <ChangePasswordModal onClose={() => setView('account')} />
+    // saved is non-null here because the changePassword view is only
+    // reachable via the trigger button, which is disabled while loading.
+    return <ChangePasswordModal
+      onClose={() => setView('account')}
+      hasPassword={saved?.has_password ?? true}
+      onSuccess={() => setSaved(s => s ? { ...s, has_password: true } : s)}
+    />
   }
 
   return (
@@ -129,12 +130,6 @@ export function AccountModal({ onClose, welcome = false }: Props) {
             <label htmlFor="acc-fullname">Full Name</label>
             <input id="acc-fullname" value={fullName} onChange={e => setFullName(e.target.value)} disabled={isSaving} />
 
-            <label htmlFor="acc-email">Email</label>
-            <input id="acc-email" type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={isSaving} />
-            {!isLoading && !emailValid && (
-              <p role="alert" className="error-msg">{email.trim() ? 'Please enter a valid email address' : 'Email is required'}</p>
-            )}
-
             {saved?.is_admin && (
               <span className="badge-admin">Administrator</span>
             )}
@@ -147,9 +142,11 @@ export function AccountModal({ onClose, welcome = false }: Props) {
           </form>
         )}
 
+        {!isLoading && <EmailAddressesPanel token={token} />}
+
         <div className="modal-actions">
           <button type="button" onClick={() => setView('changePassword')} disabled={isLoading} className="btn-link">
-            Change Password
+            {saved?.has_password === false ? 'Set Password' : 'Change Password'}
           </button>
           <button type="button" onClick={() => setShowDeleteConfirm(true)} disabled={isLoading} className="btn-danger">
             Delete Account

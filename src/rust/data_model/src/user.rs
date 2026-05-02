@@ -1,12 +1,15 @@
-use crate::{Error, wrappers::{generate_now, generate_uuid}, OAuthIdentity, UserLogin, UserValidationError};
+use crate::{Error, UserEmail, wrappers::{generate_now, generate_uuid}, OAuthIdentity, UserLogin, UserValidationError};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-// Checks that email has the shape local@domain.tld with no whitespace in any part.
-fn is_valid_email_format(email: &str) -> bool {
+/// Checks that an email address has the shape `local@domain.tld` with no
+/// whitespace in any part. Exposed for storage backends and other layers
+/// that need to validate user-supplied addresses outside of the full
+/// [`User::validate`] flow.
+pub fn is_valid_email_format(email: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").expect("Invalid email regex"));
     re.is_match(email)
@@ -22,10 +25,11 @@ pub struct User {
     pub is_admin: bool,
     /// Username
     pub username: String,
-    /// Full name 
+    /// Full name
     pub full_name: String,
-    /// Email address
-    pub email: String,
+    /// Email addresses attached to this user. Exactly one row has
+    /// `is_primary = true` at all times for a well-formed user.
+    pub emails: Vec<UserEmail>,
     /// Password hash (encrypted)
     pub password_hash: String,
     #[schema(value_type = String)] // Treat as string during serlialization
@@ -51,13 +55,13 @@ impl User {
     ///
     /// Initialize a user with a new user id and api key and then print it
     /// ```
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// let user = User {
     ///     id: User::new_id(),
     ///     is_admin: false,
     ///     username: "john_smith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "john_smith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("john_smith@company.com")],
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
@@ -77,13 +81,13 @@ impl User {
     ///
     /// Initialize a user with a new user id and api key and then print it
     /// ```
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// let user = User {
     ///     id: User::new_id(),
     ///     is_admin: false,
     ///     username: "john_smith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "john_smith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("john_smith@company.com")],
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
@@ -113,11 +117,46 @@ impl User {
             is_admin: false,
             username: "".to_string(),
             full_name: "".to_string(),
-            email: "".to_string(),
+            emails: vec![],
             password_hash: "".to_string(),
             api_key: Uuid::nil(),
             logins: vec![],
             oauth_identities: vec![],
+        }
+    }
+    /// Returns the user's primary [`UserEmail`] row, if any.
+    ///
+    /// A well-formed user loaded from a `UserStore` always has exactly one
+    /// row with `is_primary = true`, so in practice this is always `Some`.
+    /// `Option` is returned because the type system can't prove the
+    /// invariant — callers that don't know they have a primary acknowledge
+    /// the case statically rather than risking a panic.
+    pub fn primary_email(&self) -> Option<&UserEmail> {
+        self.emails.iter().find(|e| e.is_primary)
+    }
+    /// Returns the user's primary email address, or an empty string if no
+    /// primary is set. Convenience accessor for callers that previously
+    /// read `user.email` directly.
+    pub fn email(&self) -> &str {
+        self.primary_email().map(|e| e.email.as_str()).unwrap_or("")
+    }
+    /// Returns true if the user has a verified email row matching the given
+    /// address (case-insensitive).
+    pub fn has_verified_email(&self, email: &str) -> bool {
+        self.emails
+            .iter()
+            .any(|e| e.verified && e.email.eq_ignore_ascii_case(email))
+    }
+    /// Sets the user's primary email address. If a primary row already
+    /// exists, its `email` is updated in place (`verified` and `verified_at`
+    /// are unchanged — callers in the email-management API decide whether a
+    /// change should flip the verified flag). If no rows exist yet, a new
+    /// primary, verified row is added (used during signup-style flows).
+    pub fn set_primary_email_address(&mut self, email: &str) {
+        if let Some(row) = self.emails.iter_mut().find(|e| e.is_primary) {
+            row.email = email.to_string();
+        } else {
+            self.emails.push(UserEmail::new_primary_verified(email));
         }
     }
     /// Generates the JSON string representation for the user
@@ -130,13 +169,13 @@ impl User {
     ///
     /// Initialize a user, convert it to JSON and print it
     /// ```
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// let user = User {
     ///     id: User::new_id(),
     ///     is_admin: false,
     ///     username: "john_smith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "john_smith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("john_smith@company.com")],
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
@@ -157,7 +196,7 @@ impl User {
         Ok(serde_json::to_string(&self)?)
     }
     /// Initializes a user instance by reading the JSON string content provided
-    /// 
+    ///
     /// # Returns
     ///
     /// This function will return an error if the JSON could not be read
@@ -168,7 +207,7 @@ impl User {
     /// ```
     /// use data_model::User;
     /// let mut user = User::default();
-    /// let json = r#"{"id":"02345678-1234-5678-1234-567890123456","is_admin":false,"username":"john_smith","full_name":"John Smith","email":"john_smith@company.com","password_hash":"some_password_hash","api_key":"12345678-1234-5678-1234-567890123456","logins":[]}"#;
+    /// let json = r#"{"id":"02345678-1234-5678-1234-567890123456","is_admin":false,"username":"john_smith","full_name":"John Smith","emails":[{"email":"john_smith@company.com","is_primary":true,"verified":true,"verified_at":null}],"password_hash":"some_password_hash","api_key":"12345678-1234-5678-1234-567890123456","logins":[]}"#;
     /// match user.from_json(json) {
     ///     Ok(()) => {
     ///         println!(
@@ -198,13 +237,13 @@ impl User {
     ///
     /// Initialize a user with an invalid email address and validate it
     /// ```
-    /// use data_model::User;
+    /// use data_model::{User, UserEmail};
     /// let user = User {
     ///     id: User::new_id(),
     ///     is_admin: false,
     ///     username: "john_smith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "bad_email".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("bad_email")],
     ///     password_hash: "encrypted_hash".to_string(),
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
@@ -228,11 +267,16 @@ impl User {
         if self.username.is_empty() {
             return Err(Error::UserValidation(UserValidationError::UsernameMissing));
         }
-        if self.email.trim().is_empty() {
+        if self.emails.is_empty() {
             return Err(Error::UserValidation(UserValidationError::EmailMissing));
         }
-        if !is_valid_email_format(&self.email) {
-            return Err(Error::UserValidation(UserValidationError::EmailInvalid));
+        for row in &self.emails {
+            if row.email.trim().is_empty() {
+                return Err(Error::UserValidation(UserValidationError::EmailMissing));
+            }
+            if !is_valid_email_format(&row.email) {
+                return Err(Error::UserValidation(UserValidationError::EmailInvalid));
+            }
         }
         // OAuth-only users carry an empty password_hash. Require a password
         // hash *only* when the user has no OAuth identity attached, so that
@@ -254,16 +298,16 @@ impl User {
     ///
     /// Initialize a user with valid details, create a login and then print the login id
     /// ```
-    /// use data_model::{User};
+    /// use data_model::{User, UserEmail};
     /// use uuid::Uuid;
-    ///  
+    ///
     /// // Create the user definition
     /// let mut user = User {
     ///     id: Uuid::nil(),
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -274,7 +318,7 @@ impl User {
     /// let expiry_hours = 24;
     /// let ip_address = Some("123.456.789.012".to_string());
     /// let device_info = Some("Device info string".to_string());
-    /// 
+    ///
     /// let login = user.create_login(expiry_hours, ip_address, device_info);
     /// println!("Created login with id = {}", login.id);
     /// ```
@@ -295,16 +339,16 @@ impl User {
     ///
     /// Initialize a user with valid details, create a login and then remove it - printing the login details and status along the way
     /// ```
-    /// use data_model::{User};
+    /// use data_model::{User, UserEmail};
     /// use uuid::Uuid;
-    ///  
+    ///
     /// // Create the user definition
     /// let mut user = User {
     ///     id: Uuid::nil(),
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -315,7 +359,7 @@ impl User {
     /// let expiry_hours = 24;
     /// let ip_address = Some("123.456.789.012".to_string());
     /// let device_info = Some("Device info string".to_string());
-    /// 
+    ///
     /// let login = user.create_login(expiry_hours, ip_address, device_info);
     /// println!("Created login with id = {}, user now contains login = {}", login.id, user.contains_valid_login(login.id));
     /// user.remove_login(login.id);
@@ -334,7 +378,7 @@ impl User {
     ///
     /// Create a user and a login, renew it, and verify the expiry has been extended
     /// ```
-    /// use data_model::{User, UserLogin};
+    /// use data_model::{User, UserEmail, UserLogin};
     /// use uuid::Uuid;
     ///
     /// let mut user = User {
@@ -342,7 +386,7 @@ impl User {
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
@@ -362,7 +406,7 @@ impl User {
             None
         }
     }
-    /// Checks whether a user object contains the given login token id and, if so, that it has not expired 
+    /// Checks whether a user object contains the given login token id and, if so, that it has not expired
     ///
     /// # Returns
     ///
@@ -372,21 +416,21 @@ impl User {
     ///
     /// Initialize a user with valid details and login token and then verify that the token is valid
     /// ```
-    /// use data_model::{User, UserLogin};
+    /// use data_model::{User, UserEmail, UserLogin};
     /// use uuid::Uuid;
-    ///  
+    ///
     /// // Create the login
     /// let login = UserLogin::new(24, Some("123.456.789.012".to_string()), Some("Device info string".to_string()));
-    /// let search_login_id = login.id; 
+    /// let search_login_id = login.id;
     /// let logins = vec![login];
-    /// 
+    ///
     /// // Create the user definition
     /// let mut user = User {
     ///     id: Uuid::nil(),
     ///     is_admin: false,
     ///     username: "jsmith".to_string(),
     ///     full_name: "John Smith".to_string(),
-    ///     email: "jsmith@company.com".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
     ///     password_hash: "Hashed password".to_string(),
     ///     api_key: Uuid::nil(),
     ///     logins,
@@ -412,7 +456,7 @@ impl User {
 mod tests {
     use super::*;
     use chrono::Duration;
-    use pretty_assertions::{assert_eq, assert_ne};    
+    use pretty_assertions::{assert_eq, assert_ne};
 
     #[test]
     fn can_create_user_id() {
@@ -435,14 +479,14 @@ mod tests {
     fn can_serialize() {
         let user = User::default();
         let s = user.to_json().expect("Failed to serialize");
-        assert_eq!(s, r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#);
+        assert_eq!(s, r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#);
     }
 
     #[test]
     fn can_deserialize() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
@@ -453,7 +497,7 @@ mod tests {
         // continue to deserialize cleanly thanks to #[serde(default)].
         let compare = User::default();
         let mut loaded = User::default();
-        let legacy = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
+        let legacy = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(legacy).expect("Failed to deserialize legacy user JSON");
         assert_eq!(loaded, compare);
         assert!(loaded.oauth_identities.is_empty());
@@ -483,67 +527,67 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `logins`\", line: 1, column: 170))"
-    )]    
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `logins`\""
+    )]
     fn cannot_deserialize_with_missing_logins() {
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000"}"#;
         loaded.from_json(s).expect("Failed to deserialize");
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `id`\", line: 1, column: 138))"
-    )]    
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `id`\""
+    )]
     fn cannot_deserialize_with_missing_id() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"is_admin":false,"username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
+        let s = r#"{"is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `is_admin`\", line: 1, column: 165))"
-    )]    
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `is_admin`\""
+    )]
     fn cannot_deserialize_with_missing_is_admin() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","username":"","full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `username`\", line: 1, column: 168))"
-    )]    
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `username`\""
+    )]
     fn cannot_deserialize_with_missing_username() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"full_name":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `full_name`\", line: 1, column: 167))"
-    )]    
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `full_name`\""
+    )]
     fn cannot_deserialize_with_missing_full_name() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","email":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `email`\", line: 1, column: 171))"
-    )]    
-    fn cannot_deserialize_with_missing_email() {
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `emails`\""
+    )]
+    fn cannot_deserialize_with_missing_emails() {
         let compare = User::default();
         let mut loaded = User::default();
         let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
@@ -553,24 +597,24 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `password_hash`\", line: 1, column: 163))"
-    )]    
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `password_hash`\""
+    )]
     fn cannot_deserialize_with_missing_password_hash() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
 
     #[test]
     #[should_panic(
-        expected = "Failed to deserialize: Serialization(Error(\"missing field `api_key`\", line: 1, column: 133))"
-    )]    
+        expected = "Failed to deserialize: Serialization(Error(\"missing field `api_key`\""
+    )]
     fn cannot_deserialize_with_missing_api_key() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","email":"","password_hash":"","logins":[]}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","logins":[]}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
@@ -581,7 +625,7 @@ mod tests {
             is_admin: false,
             username: "john_smith".to_string(),
             full_name: "John Smith".to_string(),
-            email: "john_smith@company.com".to_string(),
+            emails: vec![UserEmail::new_primary_verified("john_smith@company.com")],
             password_hash: "encrypted_hash".to_string(),
             api_key: User::new_api_key(),
             logins: vec![],
@@ -605,7 +649,7 @@ mod tests {
     #[test]
     #[should_panic(
         expected = "No id provided for the user"
-    )]    
+    )]
     fn user_validation_should_fail_with_missing_ids() {
         let mut user = create_valid_user();
         user.id = Uuid::nil();
@@ -615,7 +659,7 @@ mod tests {
     #[test]
     #[should_panic(
         expected = "No username provided for the user"
-    )]    
+    )]
     fn user_validation_should_fail_with_missing_username() {
         let mut user = create_valid_user();
         user.username = "".to_string();
@@ -626,7 +670,7 @@ mod tests {
     #[should_panic(expected = "No email address provided for the user")]
     fn user_validation_should_fail_with_missing_email() {
         let mut user = create_valid_user();
-        user.email = "".to_string();
+        user.emails.clear();
         validate_user(&user);
     }
 
@@ -634,7 +678,7 @@ mod tests {
     #[should_panic(expected = "Invalid email address")]
     fn user_validation_should_fail_with_bad_email() {
         let mut user = create_valid_user();
-        user.email = "bad_email".to_string();
+        user.emails[0].email = "bad_email".to_string();
         validate_user(&user);
     }
 
@@ -642,7 +686,7 @@ mod tests {
     #[should_panic(expected = "Invalid email address")]
     fn user_validation_should_fail_with_email_missing_tld() {
         let mut user = create_valid_user();
-        user.email = "x@y".to_string();
+        user.emails[0].email = "x@y".to_string();
         validate_user(&user);
     }
 
@@ -662,12 +706,65 @@ mod tests {
         // at least one OAuth identity attached, validation must succeed.
         let mut user = create_valid_user();
         user.password_hash = "".to_string();
+        let primary_email = user.email().to_string();
         user.oauth_identities.push(OAuthIdentity::new(
             "google".to_string(),
             "sub-x".to_string(),
-            Some(user.email.clone()),
+            Some(primary_email),
         ));
         validate_user(&user);
+    }
+
+    #[test]
+    fn primary_email_returns_primary_row() {
+        let user = create_valid_user();
+        let primary = user.primary_email().expect("primary expected");
+        assert!(primary.is_primary);
+        assert_eq!(primary.email, "john_smith@company.com");
+    }
+
+    #[test]
+    fn primary_email_returns_none_when_no_primary_row() {
+        let user = User::default();
+        assert!(user.primary_email().is_none());
+    }
+
+    #[test]
+    fn email_accessor_returns_primary_address() {
+        let user = create_valid_user();
+        assert_eq!(user.email(), "john_smith@company.com");
+    }
+
+    #[test]
+    fn email_accessor_returns_empty_when_no_primary() {
+        let user = User::default();
+        assert_eq!(user.email(), "");
+    }
+
+    #[test]
+    fn has_verified_email_matches_case_insensitively() {
+        let user = create_valid_user();
+        assert!(user.has_verified_email("JOHN_smith@Company.COM"));
+        assert!(!user.has_verified_email("other@example.com"));
+    }
+
+    #[test]
+    fn set_primary_email_address_updates_existing_primary() {
+        let mut user = create_valid_user();
+        user.set_primary_email_address("new@example.com");
+        assert_eq!(user.email(), "new@example.com");
+        assert_eq!(user.emails.len(), 1);
+        assert!(user.emails[0].is_primary);
+    }
+
+    #[test]
+    fn set_primary_email_address_adds_row_when_no_primary() {
+        let mut user = User::default();
+        user.set_primary_email_address("new@example.com");
+        assert_eq!(user.email(), "new@example.com");
+        assert_eq!(user.emails.len(), 1);
+        assert!(user.emails[0].is_primary);
+        assert!(user.emails[0].verified);
     }
 
     fn create_valid_user_with_login() -> (User, Uuid) {

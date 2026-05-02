@@ -1,5 +1,25 @@
-use data_model::{Error as DataModelError, User, UserValidationError};
+use data_model::{is_valid_email_format, Error as DataModelError, User, UserValidationError};
 use crate::Error;
+
+/// Validates a single email address for storage operations that take only
+/// the address (no surrounding `User`). Centralises the "is it empty? does
+/// it match the data-model regex?" pair that every email-management
+/// `UserStore` method runs up front.
+///
+/// # Returns
+///
+/// `Ok(())` if the address is non-empty and well-formed,
+/// `Err(Error::UserEmailMissing)` if blank,
+/// `Err(Error::UserEmailInvalid)` otherwise.
+pub fn validate_email_format(email: &str) -> Result<(), Error> {
+    if email.trim().is_empty() {
+        return Err(Error::UserEmailMissing());
+    }
+    if !is_valid_email_format(email) {
+        return Err(Error::UserEmailInvalid());
+    }
+    Ok(())
+}
 
 /// Validates the fields within a user object for create/update within a store
 ///
@@ -42,6 +62,7 @@ pub fn validate_user_fields(user: &User) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use data_model::UserEmail;
     use uuid::Uuid;
 
     // Initialize a User struct
@@ -51,7 +72,7 @@ mod tests {
             is_admin: false,
             username: "john_smith".to_string(),
             full_name:"John Smith".to_string(),
-            email: "john_smith@company.com".to_string(),
+            emails: vec![UserEmail::new_primary_verified("john_smith@company.com")],
             password_hash: "a_password_hash".to_string(),
             api_key: User::new_api_key(),
             logins: vec![],
@@ -99,7 +120,7 @@ mod tests {
     #[should_panic(expected = "No email address provided for the user")]
     fn validation_should_fail_for_missing_email() {
         let mut user = init_valid_user();
-        user.email = "".to_string();
+        user.emails.clear();
         run_validation_test(&user);
     }
 
@@ -107,7 +128,7 @@ mod tests {
     #[should_panic(expected = "The email address is invalid")]
     fn validation_should_fail_for_invalid_email() {
         let mut user = init_valid_user();
-        user.email = "bad_email_address".to_string();
+        user.emails[0].email = "bad_email_address".to_string();
         run_validation_test(&user);
     }
 

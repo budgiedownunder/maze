@@ -1,9 +1,26 @@
+export interface UserEmail {
+  email: string
+  is_primary: boolean
+  verified: boolean
+  verified_at: string | null
+}
+
 export interface UserProfile {
   id: string
   username: string
   full_name: string
   email: string
+  emails: UserEmail[]
   is_admin: boolean
+  has_password: boolean
+}
+
+export interface UserEmailsResponse {
+  emails: UserEmail[]
+}
+
+export interface AddUserEmailRequest {
+  email: string
 }
 
 export interface LoginResponse {
@@ -19,11 +36,10 @@ export interface RenewResponse {
 export interface UpdateProfileRequest {
   username: string
   full_name: string
-  email: string
 }
 
 export interface ChangePasswordRequest {
-  current_password: string
+  current_password?: string
   new_password: string
 }
 

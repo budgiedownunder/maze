@@ -1,4 +1,4 @@
-import type { AppFeatures, ChangePasswordRequest, LoginResponse, Maze, MazeDefinition, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserProfile } from '../types/api'
+import type { AddUserEmailRequest, AppFeatures, ChangePasswordRequest, LoginResponse, Maze, MazeDefinition, RenewResponse, SaveMazeRequest, UpdateProfileRequest, UserEmailsResponse, UserProfile } from '../types/api'
 
 const BASE = '/api/v1'
 
@@ -97,6 +97,44 @@ export function changePassword(token: string, body: ChangePasswordRequest): Prom
 export function deleteMe(token: string): Promise<void> {
   return requestEmpty('/users/me', {
     method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+export function getMyEmails(token: string): Promise<UserEmailsResponse> {
+  return request<UserEmailsResponse>('/users/me/emails', {
+    headers: authHeaders(token),
+  })
+}
+
+export function addMyEmail(token: string, email: string): Promise<UserEmailsResponse> {
+  const body: AddUserEmailRequest = { email }
+  return request<UserEmailsResponse>('/users/me/emails', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  })
+}
+
+export function removeMyEmail(token: string, email: string): Promise<UserEmailsResponse> {
+  return request<UserEmailsResponse>(`/users/me/emails/${encodeURIComponent(email)}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+export function setPrimaryEmail(token: string, email: string): Promise<UserEmailsResponse> {
+  return request<UserEmailsResponse>(`/users/me/emails/${encodeURIComponent(email)}/primary`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+  })
+}
+
+// Server returns 501 until the email-send infrastructure is in place; the
+// caller surfaces that as a thrown error with `status === 501`.
+export function verifyMyEmail(token: string, email: string): Promise<void> {
+  return requestEmpty(`/users/me/emails/${encodeURIComponent(email)}/verify`, {
+    method: 'POST',
     headers: authHeaders(token),
   })
 }

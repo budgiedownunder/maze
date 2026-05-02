@@ -1,6 +1,7 @@
 // Re-export modules
 mod error;
 mod file_store;
+mod file_store_migration;
 #[cfg(feature = "sql-store")]
 mod sql_store;
 pub mod store;

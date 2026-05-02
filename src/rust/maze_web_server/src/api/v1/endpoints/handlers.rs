@@ -84,7 +84,7 @@ async fn verify_user_credentials(store: &web::Data<SharedStore>, auth_service: &
 
     let user = {
         let store_lock = get_store_read_lock(store).await;
-        store_lock.find_user_by_email(email).await.map_err(|err| {
+        store_lock.find_user_by_verified_email(email).await.map_err(|err| {
             match err {
                 StoreError::UserNotFound() => ErrorUnauthorized("Invalid email or password"),
                 _ => {
@@ -277,12 +277,25 @@ pub struct UserItem {
     pub is_admin: bool,
     /// Username
     pub username: String,
-    /// Full name 
+    /// Full name
     pub full_name: String,
-    /// Email address
+    /// Primary email address. Equals the `email` of whichever row in
+    /// `emails` is the primary, or an empty string if the user somehow
+    /// has no primary (a should-not-happen state surfaced as empty rather
+    /// than a 500).
     pub email: String,
+    /// All email addresses attached to this user, including primary status,
+    /// verification status, and verification timestamp.
+    #[serde(default)]
+    pub emails: Vec<data_model::UserEmail>,
+    /// Whether the user has a password set. `false` for OAuth-only users
+    /// who haven't yet added a password as a second login method —
+    /// front-ends use this to choose between the "Change" and "Set"
+    /// variants of the password popup. The hash itself is never exposed.
+    #[serde(default)]
+    pub has_password: bool,
 }
- 
+
 impl UserItem {
     pub fn from_store_user(user: &User) -> UserItem {
         UserItem {
@@ -290,9 +303,11 @@ impl UserItem {
             is_admin: user.is_admin,
             username: user.username.clone(),
             full_name: user.full_name.clone(),
-            email: user.email.clone(),
+            email: user.email().to_string(),
+            emails: user.emails.clone(),
+            has_password: !user.password_hash.is_empty(),
         }
-    }    
+    }
 }
 // **************************************************************************************************
 // Endpoint: GET /api/v1/features
@@ -437,7 +452,7 @@ impl SignupRequest {
                 is_admin: false,
                 username: "".to_string(),
                 full_name: "".to_string(),
-                email: self.email.clone(),
+                emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
                 password_hash,
                 api_key: Uuid::nil(),
                 logins: vec![],
@@ -1051,24 +1066,37 @@ pub async fn delete_me(
 // Endpoint: PUT /api/v1/users/me/password
 // Handler:  change_password_me()
 // **************************************************************************************************
-/// Change password request
+/// Set-or-change password request. The endpoint handles two flows
+/// based on whether the authenticated user already has a password:
+///
+///   * **Change** (user has a password) — `current_password` is required
+///     and verified before the password is rotated.
+///   * **Set** (OAuth-only user adding a password as a second login
+///     method) — `current_password` must be omitted; there is nothing
+///     to verify against.
+///
+/// `deny_unknown_fields` rejects unknown keys cleanly so an out-of-date
+/// client doesn't get a silent partial success.
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct ChangePasswordRequest {
-    /// Current password
-    pub current_password: String,
+    /// Current password — required when the user already has one,
+    /// must be omitted when setting an initial password.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_password: Option<String>,
     /// New password
     pub new_password: String,
 }
 
 #[utoipa::path(
-    summary = "Changes the authenticated user's password",
-    description = "This endpoint allows the currently authenticated user to change their password by providing their current password and a new password",
+    summary = "Sets or changes the authenticated user's password",
+    description = "Set-or-change endpoint. When the user already has a password (`has_password = true` on `/me`), `current_password` is required and verified; when they don't (OAuth-only user adding a password as a second login method), `current_password` must be omitted.",
     put,
     path = "/api/v1/users/me/password",
     request_body = ChangePasswordRequest,
     responses(
-        (status = 204, description = "Password changed successfully"),
-        (status = 400, description = "Invalid request (e.g. weak new password or empty current password)"),
+        (status = 204, description = "Password set or changed successfully"),
+        (status = 400, description = "Invalid request (weak new password, missing/extraneous current_password)"),
         (status = 401, description = "Unauthorized request or incorrect current password")
     ),
     security(
@@ -1086,20 +1114,35 @@ pub async fn change_password_me(
 ) -> Result<HttpResponse, Error> {
     let mut user = get_authorized_user(&req, false)?;
     let change_req_data = change_req.into_inner();
+    let user_has_password = !user.password_hash.is_empty();
 
-    if change_req_data.current_password.is_empty() {
-        return Err(get_invalid_request_error("current password must be provided"));
-    }
-
-    let password_matches = auth_service
-        .verify_password(&user.password_hash, &change_req_data.current_password)
-        .map_err(|err| {
-            log::error!("Password verification failed: {err:?}");
-            ErrorInternalServerError("Internal authentication error")
-        })?;
-
-    if !password_matches {
-        return Err(ErrorUnauthorized("Current password is incorrect"));
+    match (user_has_password, change_req_data.current_password.as_deref()) {
+        // Change path — user has a password, must prove they know it.
+        (true, Some(current)) if !current.is_empty() => {
+            let password_matches = auth_service
+                .verify_password(&user.password_hash, current)
+                .map_err(|err| {
+                    log::error!("Password verification failed: {err:?}");
+                    ErrorInternalServerError("Internal authentication error")
+                })?;
+            if !password_matches {
+                return Err(ErrorUnauthorized("Current password is incorrect"));
+            }
+        }
+        (true, _) => {
+            return Err(get_invalid_request_error(
+                "current_password is required to change an existing password",
+            ));
+        }
+        // Set path — OAuth-only user adding a password. `current_password`
+        // must be omitted; sending an empty string or any value is a
+        // client bug worth surfacing rather than silently ignoring.
+        (false, None) => { /* allowed — fall through to validation */ }
+        (false, Some(_)) => {
+            return Err(get_invalid_request_error(
+                "current_password must be omitted when no password is set",
+            ));
+        }
     }
 
     validate_password_complexity(&change_req_data.new_password)?;
@@ -1112,7 +1155,26 @@ pub async fn change_password_me(
     user.password_hash = new_hash;
 
     match store_lock.update_user(&mut user).await {
-        Ok(_) => Ok(HttpResponse::NoContent().finish()),
+        Ok(_) => {
+            // Defence-in-depth audit log for both branches: a session-
+            // hijacker that successfully sets/rotates a password leaves a
+            // trace here. When email-send-support ships, this is where
+            // the notification mail to the primary email gets fired.
+            if user_has_password {
+                log::info!(
+                    "password changed for user {} (primary email: {})",
+                    user.id,
+                    user.email()
+                );
+            } else {
+                log::info!(
+                    "initial password set for user {} (primary email: {})",
+                    user.id,
+                    user.email()
+                );
+            }
+            Ok(HttpResponse::NoContent().finish())
+        }
         Err(err) => Err(get_user_update_internal_error(&err)),
     }
 }
@@ -1120,36 +1182,45 @@ pub async fn change_password_me(
 // Endpoint: PUT /api/v1/users/me/profile
 // Handler:  update_profile_me()
 // **************************************************************************************************
-/// Update profile request
+/// Update profile request. Email mutation lives on the dedicated
+/// `/api/v1/users/me/emails/*` endpoints — this endpoint covers only
+/// username and full name. `deny_unknown_fields` rejects any request that
+/// still includes an `email` field (or any other unknown field) with a
+/// 400, so an out-of-date client can't silently get a "success" response
+/// while its email payload is dropped on the floor.
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct UpdateProfileRequest {
     /// Username
     pub username: String,
     /// Full name
     pub full_name: String,
-    /// Email address
-    pub email: String,
 }
 
 impl UpdateProfileRequest {
     pub fn apply_to_store_user(&self, user: &mut User) {
-        user.username = self.username.clone();
-        user.full_name = self.full_name.clone();
-        user.email = self.email.clone();
+        // Edge-trim silently — `" alice"` and `"alice"` would otherwise be
+        // stored as distinct usernames, leaving whitespace-padded display
+        // values that surface as identity collisions. Mid-string spaces are
+        // preserved (e.g. `"Mary Jane"` round-trips unchanged). Whitespace-
+        // only input collapses to `""` and falls through to the existing
+        // empty-username rejection in storage validation.
+        user.username = self.username.trim().to_string();
+        user.full_name = self.full_name.trim().to_string();
     }
 }
 
 #[utoipa::path(
     summary = "Updates the authenticated user's profile",
-    description = "This endpoint allows the currently authenticated user to update their username, full name, and email address",
+    description = "This endpoint allows the currently authenticated user to update their username and full name. Email management is on the dedicated /api/v1/users/me/emails endpoints.",
     put,
     path = "/api/v1/users/me/profile",
     request_body = UpdateProfileRequest,
     responses(
         (status = 200, description = "Profile updated successfully", body = UserItem),
-        (status = 400, description = "Invalid request (e.g. empty username or invalid email)"),
+        (status = 400, description = "Invalid request (e.g. empty username, or unknown field such as `email`)"),
         (status = 401, description = "Unauthorized request"),
-        (status = 409, description = "Username or email already in use by another user")
+        (status = 409, description = "Username already in use by another user")
     ),
     security(
         ("api_key" = []),
@@ -1381,9 +1452,11 @@ impl CreateUserRequest {
             User {
                 id: Uuid::nil(),
                 is_admin: self.is_admin,
-                username: self.username.clone(),
-                full_name: self.full_name.clone(),
-                email: self.email.clone(),
+                // Edge-trim silently — see UpdateProfileRequest::apply_to_store_user
+                // for the rationale; same rule applies on admin-side create.
+                username: self.username.trim().to_string(),
+                full_name: self.full_name.trim().to_string(),
+                emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
                 password_hash,
                 api_key: Uuid::nil(),
                 logins: vec![],
@@ -1502,9 +1575,11 @@ pub struct UpdateUserRequest {
 impl UpdateUserRequest {
     pub fn apply_to_store_user(&self, user: &mut User) {
         user.is_admin = self.is_admin;
-        user.username = self.username.clone();
-        user.full_name = self.full_name.clone();
-        user.email = self.email.clone();
+        // Edge-trim silently — see UpdateProfileRequest::apply_to_store_user
+        // for the rationale; same rule applies on admin-side update.
+        user.username = self.username.trim().to_string();
+        user.full_name = self.full_name.trim().to_string();
+        user.set_primary_email_address(&self.email);
     }
 }
 

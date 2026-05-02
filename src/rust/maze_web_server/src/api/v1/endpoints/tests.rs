@@ -88,9 +88,11 @@ mod test_definitions {
                 is_admin: self.user.is_admin,
                 username: self.user.username.clone(),
                 full_name: self.user.full_name.clone(),
-                email: self.user.email.clone(),
-            }  
-        }          
+                email: self.user.email().to_string(),
+                emails: self.user.emails.clone(),
+                has_password: !self.user.password_hash.is_empty(),
+            }
+        }
         
         fn new_from_user(user: &User) -> Self {
             let mut new_user = user.clone();
@@ -192,10 +194,14 @@ mod test_definitions {
             self.find_user_id_by_name(name, ignore_id) != Uuid::nil()
         }
 
-        /// Locates a user by their email within the store
+        /// Locates a user by their email within the store. Looks across every
+        /// row of every user (matching the SQL `user_emails.email` UNIQUE).
         fn find_user_by_email(&self, email: &str, ignore_id: Uuid) -> Result<User, StoreError> {
             for v in self.users.values() {
-                if v.user.email == email && v.user.id != ignore_id {
+                if v.user.id == ignore_id {
+                    continue;
+                }
+                if v.user.emails.iter().any(|row| row.email.eq_ignore_ascii_case(email)) {
                     return Ok(v.user.clone());
                 }
             }
@@ -218,11 +224,13 @@ mod test_definitions {
             if self.user_name_exists(&user.username, ignore_id) {
                 return Err(StoreError::UserNameExists());
             }
-            if self.user_email_exists(&user.email, ignore_id) {
-                return Err(StoreError::UserEmailExists());
+            for row in &user.emails {
+                if self.user_email_exists(&row.email, ignore_id) {
+                    return Err(StoreError::UserEmailExists());
+                }
             }
             Ok(())
-        }        
+        }
     }
 
     #[async_trait]
@@ -333,9 +341,20 @@ mod test_definitions {
         async fn find_user_by_name(&self, name: &str) -> Result<User, StoreError> {
             MockStore::find_user_by_name_in_map(&self.users, name, Uuid::nil())
         }
-        /// Locates a user by their email address within the store
-        async fn find_user_by_email(&self, email: &str) -> Result<User, StoreError> {
-            self.find_user_by_email(email, Uuid::nil())
+        /// Locates a user by an email address within the store, returning
+        /// the match only if the matching email row is verified. Mirrors
+        /// the verified-only filter enforced by the real stores.
+        async fn find_user_by_verified_email(&self, email: &str) -> Result<User, StoreError> {
+            for v in self.users.values() {
+                if v.user
+                    .emails
+                    .iter()
+                    .any(|row| row.verified && row.email.eq_ignore_ascii_case(email))
+                {
+                    return Ok(v.user.clone());
+                }
+            }
+            Err(StoreError::UserNotFound())
         }
         /// Locates a user by their api key within the store
         async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
@@ -389,6 +408,101 @@ mod test_definitions {
         async fn has_users(&self) -> Result<bool, StoreError> {
             Ok(!self.users.is_empty())
         }
+
+        async fn add_user_email(
+            &mut self,
+            user_id: Uuid,
+            email: &str,
+            verified: bool,
+        ) -> Result<data_model::UserEmail, StoreError> {
+            if email.trim().is_empty() {
+                return Err(StoreError::UserEmailMissing());
+            }
+            if !data_model::is_valid_email_format(email) {
+                return Err(StoreError::UserEmailInvalid());
+            }
+            // Same-user duplicate.
+            let existing = self.get_mock_user(user_id)?;
+            if existing.user.emails.iter().any(|r| r.email.eq_ignore_ascii_case(email)) {
+                return Err(StoreError::UserEmailExists());
+            }
+            // Cross-user duplicate.
+            for v in self.users.values() {
+                if v.user.id == user_id { continue; }
+                if v.user.emails.iter().any(|r| r.email.eq_ignore_ascii_case(email)) {
+                    return Err(StoreError::UserEmailExists());
+                }
+            }
+            let row = data_model::UserEmail {
+                email: email.to_string(),
+                is_primary: false,
+                verified,
+                verified_at: if verified {
+                    Some(chrono::Utc::now().with_timezone(&chrono::Utc))
+                } else {
+                    None
+                },
+            };
+            let mock_user = self.get_mock_user_mut(user_id)?;
+            mock_user.user.emails.push(row.clone());
+            Ok(row)
+        }
+
+        async fn remove_user_email(
+            &mut self,
+            user_id: Uuid,
+            email: &str,
+        ) -> Result<(), StoreError> {
+            let mock_user = self.get_mock_user_mut(user_id)?;
+            let idx = find_email_row_index(&mock_user.user, email)?;
+            if mock_user.user.emails.len() == 1 {
+                return Err(StoreError::UserEmailIsLast());
+            }
+            if mock_user.user.emails[idx].is_primary {
+                return Err(StoreError::UserEmailIsPrimary());
+            }
+            mock_user.user.emails.remove(idx);
+            Ok(())
+        }
+
+        async fn set_primary_email(
+            &mut self,
+            user_id: Uuid,
+            email: &str,
+        ) -> Result<(), StoreError> {
+            let mock_user = self.get_mock_user_mut(user_id)?;
+            let idx = find_email_row_index(&mock_user.user, email)?;
+            if !mock_user.user.emails[idx].verified {
+                return Err(StoreError::UserEmailNotVerified());
+            }
+            for (i, row) in mock_user.user.emails.iter_mut().enumerate() {
+                row.is_primary = i == idx;
+            }
+            Ok(())
+        }
+
+        async fn mark_email_verified(
+            &mut self,
+            user_id: Uuid,
+            email: &str,
+        ) -> Result<(), StoreError> {
+            let mock_user = self.get_mock_user_mut(user_id)?;
+            let idx = find_email_row_index(&mock_user.user, email)?;
+            mock_user.user.emails[idx].verified = true;
+            mock_user.user.emails[idx].verified_at = Some(chrono::Utc::now());
+            Ok(())
+        }
+    }
+
+    /// Locates the index of the email row matching `email` (case-insensitively)
+    /// within `user.emails`, or returns `UserEmailNotFound`. Centralises the
+    /// lookup that every email-mutating MockStore method runs before deciding
+    /// the action — mirrors the `find_email_row_index` helper in `file_store.rs`.
+    fn find_email_row_index(user: &User, email: &str) -> Result<usize, StoreError> {
+        user.emails
+            .iter()
+            .position(|r| r.email.eq_ignore_ascii_case(email))
+            .ok_or_else(|| StoreError::UserEmailNotFound(email.to_string()))
     }
 
     #[async_trait]
@@ -555,7 +669,7 @@ mod test_definitions {
         user.username = username.to_string();
         user.is_admin = is_admin;
         user.api_key = User::new_api_key();
-        user.email = new_email(username);
+        user.set_primary_email_address(&new_email(username));
         user.password_hash = password_hash.to_string();
         user
     }
@@ -767,7 +881,7 @@ mod test_definitions {
     async fn verify_user_login_presence(shared_store: &Arc<AsyncRwLock<Box<dyn Store>>>, email: &str, login_id: Uuid, expected_presence: bool) {
         let store_lock = get_store_read_lock(shared_store).await;
         // Confirm login id associated with user
-        match store_lock.find_user_by_email(email).await {
+        match store_lock.find_user_by_verified_email(email).await {
             Ok(user) => {
                 let presence = user.contains_valid_login(login_id);
                 if presence != expected_presence {
@@ -882,7 +996,9 @@ mod test_definitions {
                 username: self.username.clone(),
                 full_name: self.full_name.clone(),
                 email: self.email.clone(),
-            }            
+                emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
+                has_password: true,
+            }
         }
 
     }    
@@ -927,8 +1043,18 @@ mod test_definitions {
             let body = test::read_body(resp).await;
             let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize response");
             let mut expected_user_response = create_req.to_user_item();
-            expected_user_response.id = response_user.id; 
+            expected_user_response.id = response_user.id;
+            // `emails` carries a `verified_at` timestamp set at write time
+            // by the store; the expected value built from the request can't
+            // know the exact instant. Copy it from the response, then assert
+            // the rest. The `emails` content is checked separately below.
+            expected_user_response.emails = response_user.emails.clone();
             assert_eq!(expected_user_response, response_user);
+            // Spot-check the emails shape (independent of timestamp).
+            assert_eq!(response_user.emails.len(), 1);
+            assert_eq!(response_user.emails[0].email, response_user.email);
+            assert!(response_user.emails[0].is_primary);
+            assert!(response_user.emails[0].verified);
         }
     }
 
@@ -979,7 +1105,9 @@ mod test_definitions {
                 username: self.username.clone(),
                 full_name: self.full_name.clone(),
                 email: self.email.clone(),
-            }            
+                emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
+                has_password: true,
+            }
         }
 
     }    
@@ -1018,9 +1146,14 @@ mod test_definitions {
             let response_user: UserItem = serde_json::from_slice(&body).expect("failed to deserialize response");
             let mut expected_response_user = update_req.to_user_item();
             expected_response_user.id = response_user.id;
+            // emails carries a `verified_at` timestamp set at write time;
+            // copy it across before asserting equality. See the equivalent
+            // note in run_create_user_test.
+            expected_response_user.emails = response_user.emails.clone();
             assert_eq!(expected_response_user, response_user);
         }
-    }    
+    }
+
 
     async fn run_delete_user_test(
         create_users_def: &CreateUsersDef,
@@ -2998,6 +3131,43 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn signup_creates_user_with_one_primary_verified_email_row() {
+        // The store-side `create_user` is exercised by the storage crate's
+        // contract suite; this test guards the *web layer's* invariant — a
+        // fresh signup must produce exactly one `UserEmail` row, marked both
+        // primary and verified, with the address echoed verbatim from the
+        // signup request.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, shared_store, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let signup_email = new_email(NEW_USERNAME_1);
+        let req = create_test_post_request(
+            "/api/v1/signup",
+            None,
+            None,
+            Some(&new_signup_request(&signup_email, false)),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        // Round-trip through the store to inspect the persisted shape.
+        let store_lock = shared_store.read().await;
+        let user = store_lock
+            .find_user_by_verified_email(&signup_email)
+            .await
+            .expect("signup must produce a user findable by verified email");
+        assert_eq!(
+            user.emails.len(),
+            1,
+            "signup must seed exactly one email row, got {}",
+            user.emails.len()
+        );
+        let row = &user.emails[0];
+        assert_eq!(row.email, signup_email, "stored email must match signup request");
+        assert!(row.is_primary, "signup-seeded email must be primary");
+        assert!(row.verified, "signup-seeded email must be verified");
+    }
+
+    #[actix_web::test]
     async fn signup_with_duplicate_email_fails() {
         run_signup_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
@@ -3105,6 +3275,31 @@ mod test_definitions {
         ).await;
     }
 
+    #[actix_web::test]
+    async fn get_me_response_includes_emails_field_alongside_legacy_email() {
+        // Asserts the dual shape of GET /me: the legacy `email` field is
+        // populated with the primary's address (backwards-compat for
+        // clients that haven't migrated), AND the new `emails` array
+        // contains the full row data with primary/verified flags.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let req = create_test_get_request("/api/v1/users/me", api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = test::read_body(resp).await;
+        let response_user: UserItem =
+            serde_json::from_slice(&body).expect("failed to deserialize get_me response");
+        let expected_email = new_email(VALID_USERNAME_1);
+        assert_eq!(response_user.email, expected_email);
+        assert_eq!(response_user.emails.len(), 1);
+        let row = &response_user.emails[0];
+        assert_eq!(row.email, expected_email);
+        assert!(row.is_primary);
+        assert!(row.verified);
+    }
+
     // **************************************************************************************************
     // Tests: DELETE /api/v1/users/me
     // **************************************************************************************************
@@ -3178,35 +3373,32 @@ mod test_definitions {
     impl ChangePasswordRequest {
         pub fn new(current_password: &str, new_password: &str) -> ChangePasswordRequest {
             ChangePasswordRequest {
-                current_password: current_password.to_string(),
+                current_password: Some(current_password.to_string()),
+                new_password: new_password.to_string(),
+            }
+        }
+
+        /// Builds a "set initial password" request — `current_password`
+        /// omitted, used by the OAuth-only-set-initial test path.
+        pub fn new_set_initial(new_password: &str) -> ChangePasswordRequest {
+            ChangePasswordRequest {
+                current_password: None,
                 new_password: new_password.to_string(),
             }
         }
     }
 
     impl UpdateProfileRequest {
-        pub fn new(username: &str, full_name: &str, email: &str) -> UpdateProfileRequest {
+        pub fn new(username: &str, full_name: &str) -> UpdateProfileRequest {
             UpdateProfileRequest {
                 username: username.to_string(),
                 full_name: full_name.to_string(),
-                email: email.to_string(),
-            }
-        }
-
-        pub fn to_user_item(&self) -> UserItem {
-            UserItem {
-                id: Uuid::nil(),
-                is_admin: false,
-                username: self.username.clone(),
-                full_name: self.full_name.clone(),
-                email: self.email.clone(),
             }
         }
     }
 
-    fn new_update_profile_request(username: &str, email: Option<&str>) -> UpdateProfileRequest {
-        let email_use = email.unwrap_or(&new_email(username)).to_string();
-        UpdateProfileRequest::new(username, &format!("Updated {username} full name"), &email_use)
+    fn new_update_profile_request(username: &str) -> UpdateProfileRequest {
+        UpdateProfileRequest::new(username, &format!("Updated {username} full name"))
     }
 
     async fn run_change_password_me_test(
@@ -3249,7 +3441,9 @@ mod test_definitions {
             assert_eq!(response_user.is_admin, original_user.user.is_admin);
             assert_eq!(response_user.username, update_req.username);
             assert_eq!(response_user.full_name, update_req.full_name);
-            assert_eq!(response_user.email, update_req.email);
+            // Email is no longer mutable through this endpoint — it must
+            // round-trip from the original user unchanged.
+            assert_eq!(response_user.email, original_user.user.email());
         }
     }
 
@@ -3335,22 +3529,22 @@ mod test_definitions {
     }
 
     // update_profile_me scenario helpers
-    async fn run_can_update_profile_with_new_username_and_email(use_login: bool) {
+    async fn run_can_update_profile_with_new_username(use_login: bool) {
         run_update_profile_me_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1),
             use_login,
-            &new_update_profile_request("updated_username_1", None),
+            &new_update_profile_request("updated_username_1"),
             StatusCode::OK,
         ).await;
     }
 
-    async fn run_can_update_profile_keeping_same_username_and_email(use_login: bool) {
+    async fn run_can_update_profile_keeping_same_username(use_login: bool) {
         run_update_profile_me_test(
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1),
             use_login,
-            &new_update_profile_request(VALID_USERNAME_1, None),
+            &new_update_profile_request(VALID_USERNAME_1),
             StatusCode::OK,
         ).await;
     }
@@ -3361,18 +3555,7 @@ mod test_definitions {
             &CreateUsersDef::new(1, 2, MazeContent::Empty),
             Some(VALID_USERNAME_2),
             use_login,
-            &new_update_profile_request(VALID_USERNAME_1, None),
-            StatusCode::CONFLICT,
-        ).await;
-    }
-
-    async fn run_cannot_update_profile_with_existing_email(use_login: bool) {
-        // user_2 tries to take user_1's email
-        run_update_profile_me_test(
-            &CreateUsersDef::new(1, 2, MazeContent::Empty),
-            Some(VALID_USERNAME_2),
-            use_login,
-            &new_update_profile_request(VALID_USERNAME_2, Some(&new_email(VALID_USERNAME_1))),
+            &new_update_profile_request(VALID_USERNAME_1),
             StatusCode::CONFLICT,
         ).await;
     }
@@ -3382,19 +3565,28 @@ mod test_definitions {
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
             Some(VALID_USERNAME_1),
             use_login,
-            &UpdateProfileRequest::new("", "Some Full Name", &new_email(VALID_USERNAME_1)),
+            &UpdateProfileRequest::new("", "Some Full Name"),
             StatusCode::BAD_REQUEST,
         ).await;
     }
 
-    async fn run_cannot_update_profile_with_invalid_email(use_login: bool) {
-        run_update_profile_me_test(
-            &CreateUsersDef::new(1, 1, MazeContent::Empty),
-            Some(VALID_USERNAME_1),
-            use_login,
-            &UpdateProfileRequest::new(VALID_USERNAME_1, "Some Full Name", "not-a-valid-email"),
-            StatusCode::BAD_REQUEST,
-        ).await;
+    /// Verifies that an old client still sending an `email` field gets a
+    /// 400 rather than a silent partial success. `deny_unknown_fields` on
+    /// `UpdateProfileRequest` rejects the body at JSON parse time. Crafts
+    /// the request as raw JSON bytes since the typed struct no longer has
+    /// the `email` field at compile time.
+    async fn run_update_profile_with_email_field_returns_400(use_login: bool) {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), use_login).await;
+        let body = serde_json::json!({
+            "username": "updated_username_1",
+            "full_name": "Updated Full Name",
+            "email": "shouldnt@example.com",
+        });
+        let req = create_test_put_request("/api/v1/users/me/profile", api_key, login_id, &body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     // change_password_me tests
@@ -3482,23 +3674,116 @@ mod test_definitions {
         ).await;
     }
 
-    // update_profile_me tests
-    #[actix_web::test]
-    async fn can_update_profile_with_new_username_and_email_with_api_key() {
-        run_can_update_profile_with_new_username_and_email(false).await;
-    }
-    #[actix_web::test]
-    async fn can_update_profile_with_new_username_and_email_with_login() {
-        run_can_update_profile_with_new_username_and_email(true).await;
+    // ─── set-initial-password (OAuth-only user adding a password) ───────
+
+    /// Spins up an app with one OAuth-only user (empty password_hash, one
+    /// linked OAuth identity) and signs them in with an api_key. Returns
+    /// the typical create_test_app tuple plus the user's id. The test
+    /// fixture's `set_valid_password_hashes` overwrites `password_hash`
+    /// at signup, so we clear it via the store after the app exists —
+    /// and add a stub OAuth identity in the same step so user validation
+    /// accepts the empty hash.
+    async fn oauth_only_user_test_app() -> (
+        impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        SharedStore,
+        Uuid,
+        Option<Uuid>,
+        Option<Uuid>,
+    ) {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let user_id = MockStore::find_user_id_by_name_in_map(
+            &mock_users,
+            VALID_USERNAME_1,
+            Uuid::nil(),
+        );
+        {
+            let mut store_lock = shared_store.write().await;
+            let mut user = store_lock.get_user(user_id).await.expect("user");
+            user.password_hash = String::new();
+            user.oauth_identities.push(data_model::OAuthIdentity::new(
+                "google".into(),
+                "set-initial-test-sub".into(),
+                None,
+            ));
+            store_lock.update_user(&mut user).await.expect("seed oauth-only state");
+        }
+        (app, shared_store, user_id, api_key, login_id)
     }
 
     #[actix_web::test]
-    async fn can_update_profile_keeping_same_username_and_email_with_api_key() {
-        run_can_update_profile_keeping_same_username_and_email(false).await;
+    async fn set_initial_password_succeeds_for_oauth_only_user() {
+        let (app, shared_store, user_id, api_key, login_id) = oauth_only_user_test_app().await;
+
+        // Sanity: GET /me reflects that no password is set.
+        let req = create_test_get_request("/api/v1/users/me", api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let me: UserItem = serde_json::from_slice(&body).expect("UserItem");
+        assert!(!me.has_password, "OAuth-only user must report has_password=false");
+
+        // Send a set-initial request — `current_password` omitted.
+        let req = create_test_put_request(
+            "/api/v1/users/me/password",
+            api_key,
+            login_id,
+            &ChangePasswordRequest::new_set_initial("NewSet1!"),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        // Verify the store now has a non-empty password_hash and that
+        // GET /me reports has_password = true.
+        let store_lock = shared_store.read().await;
+        let stored = store_lock.get_user(user_id).await.expect("user");
+        assert!(!stored.password_hash.is_empty(), "password_hash must be populated after set");
+    }
+
+    #[actix_web::test]
+    async fn set_initial_password_rejects_when_current_password_present() {
+        let (app, _, _, api_key, login_id) = oauth_only_user_test_app().await;
+        // OAuth-only user but the client mistakenly sends a current_password.
+        let req = create_test_put_request(
+            "/api/v1/users/me/password",
+            api_key,
+            login_id,
+            &ChangePasswordRequest::new("anything", "NewSet1!"),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    async fn change_password_rejects_when_current_password_omitted() {
+        // User with a password tries the set-initial request shape.
+        run_change_password_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            false,
+            &ChangePasswordRequest::new_set_initial("NewChange1!"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    // update_profile_me tests
+    #[actix_web::test]
+    async fn can_update_profile_with_new_username_with_api_key() {
+        run_can_update_profile_with_new_username(false).await;
     }
     #[actix_web::test]
-    async fn can_update_profile_keeping_same_username_and_email_with_login() {
-        run_can_update_profile_keeping_same_username_and_email(true).await;
+    async fn can_update_profile_with_new_username_with_login() {
+        run_can_update_profile_with_new_username(true).await;
+    }
+
+    #[actix_web::test]
+    async fn can_update_profile_keeping_same_username_with_api_key() {
+        run_can_update_profile_keeping_same_username(false).await;
+    }
+    #[actix_web::test]
+    async fn can_update_profile_keeping_same_username_with_login() {
+        run_can_update_profile_keeping_same_username(true).await;
     }
 
     #[actix_web::test]
@@ -3511,15 +3796,6 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn cannot_update_profile_with_existing_email_with_api_key() {
-        run_cannot_update_profile_with_existing_email(false).await;
-    }
-    #[actix_web::test]
-    async fn cannot_update_profile_with_existing_email_with_login() {
-        run_cannot_update_profile_with_existing_email(true).await;
-    }
-
-    #[actix_web::test]
     async fn cannot_update_profile_with_empty_username_with_api_key() {
         run_cannot_update_profile_with_empty_username(false).await;
     }
@@ -3529,12 +3805,12 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn cannot_update_profile_with_invalid_email_with_api_key() {
-        run_cannot_update_profile_with_invalid_email(false).await;
+    async fn update_profile_with_email_field_returns_400_with_api_key() {
+        run_update_profile_with_email_field_returns_400(false).await;
     }
     #[actix_web::test]
-    async fn cannot_update_profile_with_invalid_email_with_login() {
-        run_cannot_update_profile_with_invalid_email(true).await;
+    async fn update_profile_with_email_field_returns_400_with_login() {
+        run_update_profile_with_email_field_returns_400(true).await;
     }
 
     #[actix_web::test]
@@ -3544,9 +3820,359 @@ mod test_definitions {
             &CreateUsersDef::new(1, 1, MazeContent::Empty),
             None,
             false,
-            &new_update_profile_request(VALID_USERNAME_1, None),
+            &new_update_profile_request(VALID_USERNAME_1),
             StatusCode::UNAUTHORIZED,
         ).await;
+    }
+
+    // **************************************************************************************************
+    // Tests: silent edge-trim of username + full_name on profile-edit and admin-side create/update.
+    // Server-side trim ensures `" alice"` and `"alice"` aren't stored as
+    // distinct identities. Mid-string spaces (`"Mary Jane"`) are preserved.
+    // Whitespace-only usernames collapse to empty strings and fall through
+    // to the existing empty-username rejection.
+    // **************************************************************************************************
+
+    async fn run_update_profile_trims_whitespace(use_login: bool) {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), use_login).await;
+        let req_body = UpdateProfileRequest::new("  alice_42  ", "  Alice Mary  ");
+        let url = "/api/v1/users/me/profile".to_string();
+        let req = create_test_put_request(&url, api_key, login_id, &req_body);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let user: UserItem = serde_json::from_slice(&body)
+            .expect("failed to deserialise update_profile_me response");
+        assert_eq!(user.username, "alice_42");
+        // Mid-string space preserved.
+        assert_eq!(user.full_name, "Alice Mary");
+    }
+
+    #[actix_web::test]
+    async fn update_profile_trims_whitespace_with_api_key() {
+        run_update_profile_trims_whitespace(false).await;
+    }
+    #[actix_web::test]
+    async fn update_profile_trims_whitespace_with_login() {
+        run_update_profile_trims_whitespace(true).await;
+    }
+
+    #[actix_web::test]
+    async fn update_profile_with_whitespace_only_username_returns_400() {
+        run_update_profile_me_test(
+            &CreateUsersDef::new(1, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            false,
+            &UpdateProfileRequest::new("   ", "Some Full Name"),
+            StatusCode::BAD_REQUEST,
+        ).await;
+    }
+
+    #[actix_web::test]
+    async fn create_user_trims_whitespace_in_username_and_full_name() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 0, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), false).await;
+        let create_req = CreateUserRequest::new(
+            false,
+            "  bob_99  ",
+            "  Bob Jones  ",
+            "bob.99@example.com",
+            "Password1!",
+        );
+        let url = "/api/v1/users".to_string();
+        let req = create_test_post_request(&url, api_key, login_id, Some(&create_req));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = test::read_body(resp).await;
+        let user: UserItem = serde_json::from_slice(&body)
+            .expect("failed to deserialise create_user response");
+        assert_eq!(user.username, "bob_99");
+        assert_eq!(user.full_name, "Bob Jones");
+    }
+
+    #[actix_web::test]
+    async fn update_user_trims_whitespace_in_username_and_full_name() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_ADMIN_USERNAME_1), false).await;
+        let target_id =
+            MockStore::find_user_id_by_name_in_map(&mock_users, VALID_USERNAME_1, Uuid::nil());
+        let target_email = new_email(VALID_USERNAME_1);
+        let update_req = UpdateUserRequest::new(
+            false,
+            "  carol_77  ",
+            "  Carol Smith  ",
+            &target_email,
+        );
+        let url = format!("/api/v1/users/{target_id}");
+        let req = create_test_put_request(&url, api_key, login_id, &update_req);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let user: UserItem = serde_json::from_slice(&body)
+            .expect("failed to deserialise update_user response");
+        assert_eq!(user.username, "carol_77");
+        assert_eq!(user.full_name, "Carol Smith");
+    }
+
+    // **************************************************************************************************
+    // Tests: /api/v1/users/me/emails (GET / POST / DELETE / PUT primary / POST verify-stub)
+    // **************************************************************************************************
+
+    use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
+
+    /// Spins up a test app with one regular user, signed in via login token,
+    /// and returns the app + the user's id + a closure for building auth'd
+    /// requests. Centralises the setup the email-management tests share.
+    async fn me_emails_test_app() -> (
+        impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        SharedStore,
+        Uuid,
+        Option<Uuid>,
+        Option<Uuid>,
+    ) {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, mock_users, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let user_id = MockStore::find_user_id_by_name_in_map(
+            &mock_users,
+            VALID_USERNAME_1,
+            Uuid::nil(),
+        );
+        (app, shared_store, user_id, api_key, login_id)
+    }
+
+    async fn parse_emails_response(resp: ServiceResponse) -> UserEmailsResponse {
+        let body = test::read_body(resp).await;
+        serde_json::from_slice(&body).expect("failed to deserialise UserEmailsResponse")
+    }
+
+    /// Path for an email-keyed action under `/api/v1/users/me/emails/...`.
+    /// Centralises the URL-encoding of the address path segment so each
+    /// callsite doesn't duplicate the `urlencoding::encode` boilerplate.
+    fn email_path(email: &str, suffix: &str) -> String {
+        let encoded = urlencoding::encode(email);
+        if suffix.is_empty() {
+            format!("/api/v1/users/me/emails/{encoded}")
+        } else {
+            format!("/api/v1/users/me/emails/{encoded}/{suffix}")
+        }
+    }
+
+    /// POSTs `AddUserEmailRequest { email }` to `/api/v1/users/me/emails`
+    /// against the provided test app, returning the response status. Used
+    /// by other tests that need a secondary email row in place before
+    /// they exercise their own scenario.
+    async fn seed_secondary_email_via_handler(
+        app: &impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        api_key: Option<Uuid>,
+        login_id: Option<Uuid>,
+        email: &str,
+    ) -> StatusCode {
+        let req = create_test_post_request(
+            "/api/v1/users/me/emails",
+            api_key,
+            login_id,
+            Some(&AddUserEmailRequest { email: email.to_string() }),
+        );
+        let resp = test::call_service(app, req).await;
+        resp.status()
+    }
+
+    #[actix_web::test]
+    async fn list_emails_returns_users_email_rows() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let req = create_test_get_request("/api/v1/users/me/emails", api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = parse_emails_response(resp).await;
+        assert_eq!(body.emails.len(), 1);
+        assert!(body.emails[0].is_primary);
+        assert!(body.emails[0].verified);
+    }
+
+    #[actix_web::test]
+    #[should_panic(expected = "Unauthorized request")]
+    async fn list_emails_unauthenticated_returns_401() {
+        let (app, _, _, _, _) = me_emails_test_app().await;
+        let req = create_test_get_request("/api/v1/users/me/emails", None, None);
+        let _ = test::call_service(&app, req).await;
+    }
+
+    #[actix_web::test]
+    async fn add_email_succeeds_with_valid_address() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let body = AddUserEmailRequest { email: "alice2@example.com".into() };
+        let req = create_test_post_request("/api/v1/users/me/emails", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let response = parse_emails_response(resp).await;
+        assert_eq!(response.emails.len(), 2);
+        let new_row = response
+            .emails
+            .iter()
+            .find(|r| r.email == "alice2@example.com")
+            .expect("new row present");
+        assert!(!new_row.is_primary);
+    }
+
+    #[actix_web::test]
+    async fn add_email_with_invalid_format_returns_400() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let body = AddUserEmailRequest { email: "not-an-email".into() };
+        let req = create_test_post_request("/api/v1/users/me/emails", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    async fn add_email_duplicate_on_same_user_returns_409() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let body = AddUserEmailRequest { email: new_email(VALID_USERNAME_1) };
+        let req = create_test_post_request("/api/v1/users/me/emails", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn add_email_duplicate_across_users_returns_409() {
+        // Two regular users; user 1 tries to add user 2's email.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 2, MazeContent::Empty));
+        let (app, _, _, api_key, login_id) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), true).await;
+        let body = AddUserEmailRequest { email: new_email(VALID_USERNAME_2) };
+        let req = create_test_post_request("/api/v1/users/me/emails", api_key, login_id, Some(&body));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn delete_email_removes_non_primary_row() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let secondary = "alice2@example.com";
+        let _ = seed_secondary_email_via_handler(&app, api_key, login_id, secondary).await;
+
+        let req = create_test_delete_request(&email_path(secondary, ""), api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let response = parse_emails_response(resp).await;
+        assert_eq!(response.emails.len(), 1);
+        assert!(response.emails.iter().all(|r| r.email != secondary));
+    }
+
+    #[actix_web::test]
+    async fn delete_email_only_email_returns_409() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let only_email = new_email(VALID_USERNAME_1);
+        let req = create_test_delete_request(&email_path(&only_email, ""), api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn delete_email_primary_returns_409() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        // Add a secondary so the primary isn't also the last.
+        let _ = seed_secondary_email_via_handler(&app, api_key, login_id, "alice2@example.com").await;
+
+        // Now try to delete the primary — must be refused.
+        let primary = new_email(VALID_USERNAME_1);
+        let req = create_test_delete_request(&email_path(&primary, ""), api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn delete_email_unknown_address_returns_404() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let req = create_test_delete_request(&email_path("unknown@example.com", ""), api_key, login_id);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn set_primary_email_promotes_verified_secondary() {
+        let (app, shared_store, user_id, api_key, login_id) = me_emails_test_app().await;
+
+        // Add a secondary (created with verified = true by the handler).
+        let secondary = "alice2@example.com";
+        let _ = seed_secondary_email_via_handler(&app, api_key, login_id, secondary).await;
+
+        // Promote it.
+        let req = create_test_put_request(
+            &email_path(secondary, "primary"),
+            api_key,
+            login_id,
+            &serde_json::json!({}),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let response = parse_emails_response(resp).await;
+        let primary = response
+            .emails
+            .iter()
+            .find(|r| r.is_primary)
+            .expect("exactly one primary");
+        assert_eq!(primary.email, secondary);
+
+        // And in the store.
+        let store_lock = shared_store.read().await;
+        let stored = store_lock.get_user(user_id).await.expect("user");
+        assert_eq!(stored.email(), secondary);
+    }
+
+    #[actix_web::test]
+    async fn set_primary_email_rejects_unverified_target() {
+        let (app, shared_store, user_id, api_key, login_id) = me_emails_test_app().await;
+
+        // Insert an unverified secondary directly via the store, bypassing
+        // the add-email handler (which currently sets verified = true).
+        let unverified = "unverified@example.com";
+        {
+            let mut store_lock = shared_store.write().await;
+            store_lock
+                .add_user_email(user_id, unverified, false)
+                .await
+                .expect("seed unverified");
+        }
+
+        let req = create_test_put_request(
+            &email_path(unverified, "primary"),
+            api_key,
+            login_id,
+            &serde_json::json!({}),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[actix_web::test]
+    async fn set_primary_email_unknown_address_returns_404() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let req = create_test_put_request(
+            &email_path("unknown@example.com", "primary"),
+            api_key,
+            login_id,
+            &serde_json::json!({}),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[actix_web::test]
+    async fn verify_email_endpoint_is_stub_returns_501() {
+        let (app, _, _, api_key, login_id) = me_emails_test_app().await;
+        let req = create_test_post_request::<()>(
+            &email_path("anyone@example.com", "verify"),
+            api_key,
+            login_id,
+            None,
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::NOT_IMPLEMENTED);
     }
 
     // API documentation page load

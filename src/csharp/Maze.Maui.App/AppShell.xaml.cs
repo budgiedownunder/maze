@@ -1,9 +1,12 @@
 using CommunityToolkit.Maui.Extensions;
 using CommunityToolkit.Maui.Views;
+using CommunityToolkit.Mvvm.Messaging;
+using Maze.Maui.App.Messages;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;
 using Maze.Maui.App.Views;
 using Maze.Maui.Controls.Pointer;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Maze.Maui.App
 {
@@ -14,8 +17,8 @@ namespace Maze.Maui.App
     {
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
-        private readonly MazesViewModel _mazesViewModel;
         private readonly AccountViewModel _accountViewModel;
+        private readonly IServiceProvider _serviceProvider;
         // One-shot guard: Shell fires OnNavigated more than once during a
         // single GoToAsync (typically once for navigation start, once for
         // finalisation), so without this we'd queue two welcome popups —
@@ -27,14 +30,15 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="authService">Injected auth service</param>
         /// <param name="dialogService">Injected dialog service</param>
-        /// <param name="mazesViewModel">Injected mazes view model</param>
         /// <param name="accountViewModel">Injected account view model</param>
-        public AppShell(IAuthService authService, IDialogService dialogService, MazesViewModel mazesViewModel, AccountViewModel accountViewModel)
+        /// <param name="serviceProvider">DI service provider — used to resolve a fresh
+        ///   <see cref="EmailAddressesViewModel"/> per popup-open (transient lifetime).</param>
+        public AppShell(IAuthService authService, IDialogService dialogService, AccountViewModel accountViewModel, IServiceProvider serviceProvider)
         {
             _authService = authService;
             _dialogService = dialogService;
-            _mazesViewModel = mazesViewModel;
             _accountViewModel = accountViewModel;
+            _serviceProvider = serviceProvider;
             InitializeComponent();
             Routing.RegisterRoute(nameof(MazePage), typeof(MazePage));
             Routing.RegisterRoute(nameof(MazeGamePage), typeof(MazeGamePage));
@@ -49,7 +53,11 @@ namespace Maze.Maui.App
         private async void OnAccountMenuItemClicked(object sender, EventArgs e)
         {
             FlyoutIsPresented = false;
-            await CurrentPage.ShowPopupAsync(new AccountPopup(_accountViewModel));
+            // Resolve a fresh EmailAddressesViewModel per popup-open so the
+            // email list starts from server-authoritative state each time
+            // (transient lifetime, see MauiProgram).
+            var emailsViewModel = _serviceProvider.GetRequiredService<EmailAddressesViewModel>();
+            await CurrentPage.ShowPopupAsync(new AccountPopup(_accountViewModel, emailsViewModel));
         }
 
         /// <inheritdoc/>
@@ -65,7 +73,8 @@ namespace Maze.Maui.App
             if (_accountViewModel.IsWelcomeMode && !_welcomePopupPending && CurrentPage is MazesPage page)
             {
                 _welcomePopupPending = true;
-                var popup = new AccountPopup(_accountViewModel);
+                var emailsViewModel = _serviceProvider.GetRequiredService<EmailAddressesViewModel>();
+                var popup = new AccountPopup(_accountViewModel, emailsViewModel);
                 // Reset the guard once the popup is gone so a future
                 // sign-out / sign-in-as-another-new-user re-triggers cleanly.
                 popup.Closed += (_, _) => _welcomePopupPending = false;
@@ -110,7 +119,7 @@ namespace Maze.Maui.App
             try
             {
                 await _authService.SignOutAsync();
-                _mazesViewModel.InvalidateData();
+                WeakReferenceMessenger.Default.Send(new MazesInvalidatedMessage());
                 _accountViewModel.ClearProfile();
                 await GoToAsync("//LoginPage");
             }

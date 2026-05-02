@@ -1,9 +1,11 @@
-﻿using Maze.Maui.App.Models;
+﻿using Maze.Maui.App.Messages;
+using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Messaging;
 using Maze.Maui.App.Extensions;
 
 namespace Maze.Maui.App.ViewModels
@@ -11,7 +13,9 @@ namespace Maze.Maui.App.ViewModels
     /// <summary>
     /// Represents a mazes view model
     /// </summary>
-    public partial class MazesViewModel : BaseViewModel
+    public partial class MazesViewModel : BaseViewModel,
+        IRecipient<MazesInvalidatedMessage>,
+        IRecipient<NewMazeItemMessage>
     {
         public ObservableCollection<MazeItem> MazeItems { get; } = new();
         // Private properties
@@ -35,7 +39,17 @@ namespace Maze.Maui.App.ViewModels
             Title = "Mazes";
             _mazeService = mazeService;
             _dialogService = dialogService;
+            // Subscribe to in-process pub/sub. Singleton lifetime guarantees
+            // the recipient outlives any sender, and WeakReferenceMessenger
+            // automatically tidies up if that ever stops being true.
+            WeakReferenceMessenger.Default.RegisterAll(this);
         }
+
+        /// <inheritdoc/>
+        public void Receive(MazesInvalidatedMessage message) => InvalidateData();
+
+        /// <inheritdoc/>
+        public void Receive(NewMazeItemMessage message) => AddNewItem(message.Item);
         /// <summary>
         /// Represents the load status
         /// </summary>

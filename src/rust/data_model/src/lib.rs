@@ -6,6 +6,7 @@ mod maze_definition;
 mod maze_point;
 mod oauth_identity;
 mod user;
+mod user_email;
 mod user_login;
 mod wrappers;
 
@@ -16,5 +17,6 @@ pub use maze::Maze;
 pub use maze_cell_state::MazeCellState;
 pub use maze_point::MazePoint;
 pub use oauth_identity::OAuthIdentity;
-pub use user::User;
+pub use user::{is_valid_email_format, User};
+pub use user_email::UserEmail;
 pub use user_login::UserLogin;

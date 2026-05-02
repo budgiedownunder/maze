@@ -350,18 +350,53 @@ The following endpoints manage user identity:
 | `POST` | `/api/v1/logout` | Bearer | Invalidate the current bearer token |
 | `GET` | `/api/v1/auth/oauth/{provider}/start` | None | Begin an OAuth sign-in flow; 302-redirects to the provider's consent page (see **OAuth Sign-In** below) |
 | `GET` | `/api/v1/auth/oauth/{provider}/callback` | None | Provider redirects here after consent; mints a bearer token and redirects back to the SPA or mobile app |
-| `GET` | `/api/v1/users/me` | Either | Return the signed-in user's profile |
-| `PUT` | `/api/v1/users/me/profile` | Either | Update the signed-in user's profile (username, full name, email) |
-| `PUT` | `/api/v1/users/me/password` | Either | Change the signed-in user's password |
+| `GET` | `/api/v1/users/me` | Either | Return the signed-in user's profile (includes `email`, `emails`, and `has_password` — see below) |
+| `PUT` | `/api/v1/users/me/profile` | Either | Update the signed-in user's username and full name. **Email is no longer mutable here** — use `/api/v1/users/me/emails` instead. Sending an `email` field returns `400 Bad Request` |
+| `PUT` | `/api/v1/users/me/password` | Either | **Sets or changes** the signed-in user's password — the same endpoint handles both flows (see **Password set-or-change** below) |
 | `DELETE` | `/api/v1/users/me` | Either | Delete the signed-in user's account and all their mazes |
+| `GET` | `/api/v1/users/me/emails` | Either | List the signed-in user's email addresses with primary/verified status |
+| `POST` | `/api/v1/users/me/emails` | Either | Add a new email row (created `verified = true` for now; once email-send-support ships, this becomes `verified = false` until the user clicks the verify link) |
+| `DELETE` | `/api/v1/users/me/emails/{email}` | Either | Remove an email; rejects with 409 if the address is the user's only email or their primary |
+| `PUT` | `/api/v1/users/me/emails/{email}/primary` | Either | Promote an email to primary; rejects with 409 if the target is unverified |
+| `POST` | `/api/v1/users/me/emails/{email}/verify` | Either | **Stub** — returns `501 Not Implemented` until the email-verification flow ships |
 
 In addition, `GET /api/v1/features` returns an `oauth_providers` array describing the canonical name and human-readable display name of each provider currently enabled — clients render one button per entry.
 
 The full API reference (including maze and admin-user endpoints) is available interactively via the documentation endpoints listed above.
 
+### `GET /api/v1/users/me` shape
+
+The response is a `UserItem` carrying:
+
+- `id`, `is_admin`, `username`, `full_name`
+- `email` — the **primary** email address (legacy single-field shape, preserved for backwards-compat)
+- `emails` — the full list of email rows: `{ email, is_primary, verified, verified_at }` per row. Always at least one row; exactly one is `is_primary`
+- `has_password` — `true` if a password is set, `false` for OAuth-only users who haven't yet added a password. Front-ends use this to choose between the "Change Password" and "Set Password" UI variants
+
+### Password set-or-change
+
+`PUT /api/v1/users/me/password` is a single endpoint that handles both setting an initial password (OAuth-only users adding a password as a second login method) and changing an existing one. The body shape is:
+
+```json
+{ "current_password": "...", "new_password": "..." }
+```
+
+`current_password` is **optional**, with branching driven by the user's existing state (which the client reads from `has_password` on `GET /me`):
+
+| User state                  | Required body                                | Behaviour                                     |
+|:----------------------------|:---------------------------------------------|:----------------------------------------------|
+| `has_password = true`       | `current_password` + `new_password`          | Verify `current_password`, then rotate        |
+| `has_password = false`      | `new_password` only (omit `current_password`)| Set initial password                          |
+
+Mismatched shapes return `400 Bad Request`:
+- Sending `current_password` to a user who doesn't have one yet (the "set" path)
+- Omitting `current_password` for a user who does (the "change" path)
+
+A wrong `current_password` on the change path returns `401 Unauthorized`.
+
 ### Password Requirements
 
-The following password complexity rules apply when creating an account (`POST /api/v1/signup`) or changing a password (`PUT /api/v1/users/me/password`):
+The following password complexity rules apply when creating an account (`POST /api/v1/signup`) or setting/changing a password (`PUT /api/v1/users/me/password`):
 
 | Rule | Requirement |
 |:-----|:------------|
@@ -437,7 +472,7 @@ On first run, if no admin user exists in the data store, the server automaticall
 |:------|:------|
 | Username | `admin` |
 | Email | `admin@maze.local` |
-| Password | `Admin1!` |
+| Password | `Admin123!` |
 
 Sign in using the **email address** and password. The username is used for display purposes only.
 

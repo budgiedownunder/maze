@@ -1,6 +1,6 @@
-use actix_web::web; 
+use actix_web::web;
 use actix_web::middleware::from_fn;
-use crate::api::v1::endpoints::handlers;
+use crate::api::v1::endpoints::{handlers, user_emails};
 use crate::middleware::auth::auth_middleware;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -32,6 +32,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 .service(handlers::delete_me)
                 .service(handlers::logout)
                 .service(handlers::renew)
+                // Users (self-service: email management)
+                .service(user_emails::list_emails)
+                .service(user_emails::add_email)
+                .service(user_emails::delete_email)
+                .service(user_emails::set_primary_email)
+                .service(user_emails::verify_email_stub)
                 // Features
                 .service(handlers::update_admin_features)
                 // Users (admin)

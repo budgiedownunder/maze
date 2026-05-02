@@ -24,7 +24,7 @@ pub type SharedFeatures = Arc<RwLock<AppFeaturesConfig>>;
 
 const DEFAULT_ADMIN_ACCOUNT_USERNAME: &str = "admin";
 const DEFAULT_ADMIN_ACCOUNT_EMAIL: &str = "admin@maze.local";
-const DEFAULT_ADMIN_ACCOUNT_PASSWORD: &str = "Admin1!";
+const DEFAULT_ADMIN_ACCOUNT_PASSWORD: &str = "Admin123!";
 
 /// Loads the rust_ls configuration for the server session (see: https://docs.rs/rustls/latest/rustls/server/struct.ServerConfig.html)
 fn load_rustls_config(config: &AppConfig) -> io::Result<ServerConfig> {

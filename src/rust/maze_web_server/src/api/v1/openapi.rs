@@ -1,4 +1,4 @@
-use data_model::{Maze, MazeDefinition};
+use data_model::{Maze, MazeDefinition, UserEmail};
 use maze::{GenerationAlgorithm, GeneratorOptions, MazePath, MazeSolution};
 use storage::MazeItem;
 use utoipa::{
@@ -11,6 +11,7 @@ use crate::api::v1::endpoints::handlers::{
     LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
     ChangePasswordRequest, UpdateProfileRequest};
+use crate::api::v1::endpoints::user_emails::{AddUserEmailRequest, UserEmailsResponse};
 use crate::oauth::OAuthProviderPublic;
 
 struct ApiKeyAuth;
@@ -75,6 +76,12 @@ impl utoipa::Modify for LoginTokenAuth {
         crate::api::v1::endpoints::handlers::update_profile_me,
         crate::api::v1::endpoints::handlers::get_me,
         crate::api::v1::endpoints::handlers::delete_me,
+        // Self-service email management
+        crate::api::v1::endpoints::user_emails::list_emails,
+        crate::api::v1::endpoints::user_emails::add_email,
+        crate::api::v1::endpoints::user_emails::delete_email,
+        crate::api::v1::endpoints::user_emails::set_primary_email,
+        crate::api::v1::endpoints::user_emails::verify_email_stub,
         // Mazes
         crate::api::v1::endpoints::handlers::get_mazes,
         crate::api::v1::endpoints::handlers::create_maze,
@@ -98,6 +105,7 @@ impl utoipa::Modify for LoginTokenAuth {
             LoginRequest, LoginResponse, RenewResponse,
             SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
             ChangePasswordRequest, UpdateProfileRequest,
+            UserEmail, UserEmailsResponse, AddUserEmailRequest,
             Maze, MazeDefinition, MazeItem, MazePath, MazeSolution,
             GeneratorOptions, GenerationAlgorithm),
 

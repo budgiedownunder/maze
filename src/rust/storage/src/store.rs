@@ -1,6 +1,6 @@
 use crate::Error;
 use async_trait::async_trait;
-use data_model::{Maze, User};
+use data_model::{Maze, User, UserEmail};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -22,8 +22,12 @@ pub trait UserStore {
     async fn get_user(&self, id: Uuid) -> Result<User, Error>;
     /// Locates a user by their username within the store
     async fn find_user_by_name(&self, name: &str) -> Result<User, Error>;
-    /// Locates a user by their email address within the store
-    async fn find_user_by_email(&self, email: &str) -> Result<User, Error>;
+    /// Locates a user by an email address within the store, returning the
+    /// match only if the matching `user_emails` row is `verified = true`.
+    /// Unverified rows are invisible to this lookup, preventing a
+    /// session-hijack scenario where an attacker attaches an unverified
+    /// address to a victim's account and redirects password resets to it.
+    async fn find_user_by_verified_email(&self, email: &str) -> Result<User, Error>;
     /// Locates a user by their api key within the store
     async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error>;
     /// Locates a user by their login id within the store
@@ -39,6 +43,44 @@ pub trait UserStore {
     async fn get_admin_users(&self) -> Result<Vec<User>, Error>;
     /// Returns whether at least one user exists in the store
     async fn has_users(&self) -> Result<bool, Error>;
+    /// Adds a new email row to the user. The new row is non-primary; pass
+    /// `verified = true` for trusted sources (OAuth-link, admin seed) and
+    /// `verified = false` for self-asserted user-typed emails. The store
+    /// rejects with [`Error::UserEmailExists`] if the address is already
+    /// in use by any user (mirrors the SQL `user_emails.email` UNIQUE).
+    async fn add_user_email(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+        verified: bool,
+    ) -> Result<UserEmail, Error>;
+    /// Removes an email row from the user. Rejects with
+    /// [`Error::UserEmailIsPrimary`] if it is the primary row (caller must
+    /// promote another first), and with [`Error::UserEmailIsLast`] if it is
+    /// the user's only email row.
+    async fn remove_user_email(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+    ) -> Result<(), Error>;
+    /// Promotes the named email to primary. Atomically clears `is_primary`
+    /// on every other row of the user. Rejects with
+    /// [`Error::UserEmailNotVerified`] if the target row is `verified = false`
+    /// — preventing a session-hijacker from promoting an attacker-controlled
+    /// mailbox and redirecting password resets to it.
+    async fn set_primary_email(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+    ) -> Result<(), Error>;
+    /// Marks the named email row verified, setting `verified_at = now()`.
+    /// Idempotent: re-marking an already-verified row updates `verified_at`
+    /// to the current time (matches "user re-clicked the verification link").
+    async fn mark_email_verified(
+        &mut self,
+        user_id: Uuid,
+        email: &str,
+    ) -> Result<(), Error>;
 }
 
 /// Contains the identifying details for a maze item and (optionally)
