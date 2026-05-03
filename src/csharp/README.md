@@ -10,6 +10,7 @@ The following `C#` (`.NET`) components are present:
 |              | [`Maze.Interop`](./Maze.Interop/README.md)                 | .NET interop to `maze_wasm` web assembly
 |              | [`Maze.Interop.Tests`](./Maze.Interop.Tests>/README.md)    | .NET test library for [`Maze.Interop`](./Maze.Interop/README.md) 
 |              | [`Maze.Maui.App`](./Maze.Maui.App/README.md)               | Maze [MAUI](https://dotnet.microsoft.com/md) application
+|              | [`Maze.Maui.App.Tests`](./Maze.Maui.App.Tests/README.md)   | Unit tests for [`Maze.Maui.App`](./Maze.Maui.App/README.md) ViewModels
 |              | [`Maze.Maui.Controls`](./Maze.Maui.Controls/README.md)     | Maze [MAUI](https://dotnet.microsoft.com/en-usen-us/apps/maui) custom controls              
 |              | [`Maze.Maui.Services`](./Maze.Maui.Services/README.md)     | Maze [MAUI](https://dotnet.microsoft.com/en-usen-us/apps/maui) custom services              
 
