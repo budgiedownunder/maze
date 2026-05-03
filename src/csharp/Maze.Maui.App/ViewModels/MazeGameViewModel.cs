@@ -15,7 +15,7 @@ namespace Maze.Maui.App.ViewModels
         private readonly IDialogService _dialogService;
         private MazeItem? _mazeItem;
         private MazeGame? _game;
-        private MazeGrid? _gameGrid;
+        private IMazeGridView? _gameGrid;
 
         /// <summary>
         /// Constructor
@@ -62,8 +62,8 @@ namespace Maze.Maui.App.ViewModels
         /// and places the player sprite at the start cell.
         /// Called by the page from <c>OnNavigatedTo</c> after the query property is set.
         /// </summary>
-        /// <param name="gameGrid">The <see cref="MazeGrid"/> to initialize.</param>
-        public void StartGame(MazeGrid gameGrid)
+        /// <param name="gameGrid">The grid view (production: <see cref="MazeGrid"/>) to initialize.</param>
+        public void StartGame(IMazeGridView gameGrid)
         {
             LoadStatus = "";
             _gameGrid = gameGrid;

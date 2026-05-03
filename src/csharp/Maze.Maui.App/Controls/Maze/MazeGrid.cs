@@ -1,5 +1,6 @@
 using static Maze.Api.Maze;
 using Maze.Api;
+using Maze.Maui.App.Services;
 using Maze.Maui.Controls.InteractiveGrid;
 using Maze.Maui.App.Models;
 using Maze.Maui.Controls.Keyboard;
@@ -9,7 +10,7 @@ namespace Maze.Maui.App
     /// <summary>
     /// The `MazeGrid` class represents an interactive maze grid
     /// </summary>
-    public class MazeGrid : Controls.InteractiveGrid.Grid
+    public class MazeGrid : Controls.InteractiveGrid.Grid, IMazeGridView
     {
         private const int DEFAULT_ROW_COUNT = 5;
         private const int DEFAULT_COLUMN_COUNT = 5;
