@@ -58,3 +58,18 @@ dotnet build
 
 ### Testing
 Testing can be performed via the [`Maze.Api.Tests`](../Maze.Api.Tests/README.md) assembly.
+
+### Linting
+To verify code formatting and analyzer rules, run the following from the `Maze.Api` directory:
+
+```
+dotnet format --verify-no-changes --severity info
+```
+
+To autofix violations, run:
+
+```
+dotnet format --severity info
+```
+
+The expected output is zero errors and zero warnings.

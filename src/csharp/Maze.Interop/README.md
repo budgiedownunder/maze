@@ -45,6 +45,21 @@ dotnet build
 ### Testing
 Testing can be performed via the [`Maze.Interop.Tests`](../Maze.Interop.Tests/README.md) assembly.
 
+### Linting
+To verify code formatting and analyzer rules, run the following from the `Maze.Interop` directory:
+
+```
+dotnet format --verify-no-changes --severity info
+```
+
+To autofix violations, run:
+
+```
+dotnet format --severity info
+```
+
+The expected output is zero errors and zero warnings.
+
 ### Wasmer C API Notes
 
 #### 1. Building the C API for Android using `Windows Subsystem for Linux (WSL)`
