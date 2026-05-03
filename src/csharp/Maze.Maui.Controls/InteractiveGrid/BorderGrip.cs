@@ -110,10 +110,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="e">Pan updated event arguments</param>
         private void OnPanUpdated(PanUpdatedEventArgs e)
         {
-            if (PanUpdated is not null)
-            {
-                PanUpdated.Invoke(this, e);
-            }
+            PanUpdated?.Invoke(this, e);
         }
 
     }

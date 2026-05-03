@@ -6,9 +6,9 @@
     public class SelectionState
     {
         // Private properties
-        CellRange? selectedCells;
-        CellPoint? activeCellPoint;
-        CellPoint? anchorCellPoint;
+        readonly CellRange? selectedCells;
+        readonly CellPoint? activeCellPoint;
+        readonly CellPoint? anchorCellPoint;
 
         /// <summary>
         /// Selected cell range
@@ -43,14 +43,11 @@
         /// <param name="maxRow">Maximum row number</param>
         public void ClampRows(int maxRow)
         {
-            if (activeCellPoint is not null)
-                activeCellPoint.ClampRow(maxRow);
+            activeCellPoint?.ClampRow(maxRow);
 
-            if (anchorCellPoint is not null)
-                anchorCellPoint.ClampRow(maxRow);
+            anchorCellPoint?.ClampRow(maxRow);
 
-            if (selectedCells is not null)
-                selectedCells.ClampRows(maxRow);
+            selectedCells?.ClampRows(maxRow);
         }
         /// <summary>
         /// Restricts the columns associated with the object so that they do not exceed the given maximum column number
@@ -58,14 +55,11 @@
         /// <param name="maxColumn">Maximum column number</param>
         public void ClampColumns(int maxColumn)
         {
-            if (activeCellPoint is not null)
-                activeCellPoint.ClampColumn(maxColumn);
+            activeCellPoint?.ClampColumn(maxColumn);
 
-            if (anchorCellPoint is not null)
-                anchorCellPoint.ClampColumn(maxColumn);
+            anchorCellPoint?.ClampColumn(maxColumn);
 
-            if (selectedCells is not null)
-                selectedCells.ClampColumns(maxColumn);
+            selectedCells?.ClampColumns(maxColumn);
         }
     }
 }

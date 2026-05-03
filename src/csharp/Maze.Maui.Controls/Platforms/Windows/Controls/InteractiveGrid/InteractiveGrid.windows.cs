@@ -18,13 +18,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 return;
             }
             var mauiWinWindow = (Microsoft.UI.Xaml.Window)windowObject;
-            if (mauiWinWindow is not null)
-            {
-                // Subscribe to PreviewKeyDown (tunneling) so we intercept navigation keys
-                // before WinUI's ScrollViewer can process them (End/Home would otherwise
-                // scroll the Shell page, shifting the grid up into the navigation bar).
-                mauiWinWindow.Content.PreviewKeyDown += OnKeyDown;
-            }
+            // Subscribe to PreviewKeyDown (tunneling) so we intercept navigation keys
+            // before WinUI's ScrollViewer can process them (End/Home would otherwise
+            // scroll the Shell page, shifting the grid up into the navigation bar).
+            mauiWinWindow?.Content.PreviewKeyDown += OnKeyDown;
 
             // Suppress BringIntoViewRequested on the _dataGrid's native WinUI panel so
             // that adding virtual cells cannot bubble up past our ScrollViewer to the
@@ -39,7 +36,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                     // Anchor _dataGrid to the top-left of its ScrollViewer so that when the grid
                     // is smaller than the viewport it does not get centred by WinUI layout.
                     panel.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Left;
-                    panel.VerticalAlignment   = Microsoft.UI.Xaml.VerticalAlignment.Top;
+                    panel.VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Top;
                 }
             };
         }
@@ -50,16 +47,16 @@ namespace Maze.Maui.Controls.InteractiveGrid
             OnProcessKeyDown(GetKeyState(), key, true);
             // Mark navigation keys as handled so WinUI elements (e.g. Shell ScrollViewer)
             // do not also respond to them and shift the page layout.
-            if (key == Keyboard.Key.Left  || key == Keyboard.Key.Right ||
-                key == Keyboard.Key.Up    || key == Keyboard.Key.Down  ||
-                key == Keyboard.Key.Home  || key == Keyboard.Key.End)
+            if (key == Keyboard.Key.Left || key == Keyboard.Key.Right ||
+                key == Keyboard.Key.Up || key == Keyboard.Key.Down ||
+                key == Keyboard.Key.Home || key == Keyboard.Key.End)
                 e.Handled = true;
         }
         /// <summary>
         /// Determines the current keyboard press state
         /// </summary>
         /// <returns>Key state</returns>
-        Keyboard.KeyState GetKeyState()
+        static Keyboard.KeyState GetKeyState()
         {
             Keyboard.KeyState state = Keyboard.KeyState.None;
 
@@ -73,7 +70,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             return state;
         }
 
-        Keyboard.Key GetKey(VirtualKey virtualKey)
+        static Keyboard.Key GetKey(VirtualKey virtualKey)
         {
             return (Keyboard.Key)virtualKey;
         }
@@ -83,7 +80,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Key state</returns>
 
         [DllImport("user32.dll")]
-        public static extern short GetAsyncKeyState(int vKey);
+        private static extern short GetAsyncKeyState(int vKey);
 
         private const int VK_SHIFT = 0x10;
         private const int VK_CTRL = 0x11;

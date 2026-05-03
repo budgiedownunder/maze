@@ -747,6 +747,6 @@ namespace Maze.Interop
             FreeSizedMemory(colOutPtr);
             return result == 0;
         }
-     }
+    }
 }
 #endif // !IOS

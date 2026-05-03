@@ -45,7 +45,7 @@ namespace Maze.Interop
         private static MazeInterop? instance = null;
         private bool _disposed = false;
 
-        private IMazeConnector connector;
+        private readonly IMazeConnector connector;
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct MazeWasmError
@@ -127,7 +127,7 @@ namespace Maze.Interop
         /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
         /// <param name="connectionType">Type of WebAssembly connection technology to use</param>
         /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then an attempt is made to load WebAssembly from the default location.</param>
-        private MazeInterop(string wasmPathOrName, ConnectionType connectionType=ConnectionType.Wasmtime, byte[]? wasmBytes = null)
+        private MazeInterop(string wasmPathOrName, ConnectionType connectionType = ConnectionType.Wasmtime, byte[]? wasmBytes = null)
         {
             switch (connectionType)
             {
@@ -178,8 +178,7 @@ namespace Maze.Interop
         {
             if (!_disposed)
             {
-                if(connector is not null)
-                    connector.Dispose();
+                connector?.Dispose();
                 _disposed = true;
             }
         }
@@ -189,7 +188,7 @@ namespace Maze.Interop
         /// <returns>Web Assembly path</returns>
         static public string GetWasmPath()
         {
-           // Console.WriteLine("Current Directory: " + Environment.CurrentDirectory);
+            // Console.WriteLine("Current Directory: " + Environment.CurrentDirectory);
 
             const string WASM_FILE_NAME = "maze_wasm.wasm";
             const string APP_SETTINGS_FILE_NAME = "appsettings.json";
@@ -242,7 +241,7 @@ namespace Maze.Interop
         /// <param name="createNew">Create a new instance even if a global one already exists</param>
         /// <param name="wasmBytes">WebAssembly bytes. If this is `null` then an attempt is made to load WebAssembly from the default location.</param>
         /// <returns>Interop instance</returns>
-        static public MazeInterop GetInstance(ConnectionType connectionType= ConnectionType.Wasmtime,
+        static public MazeInterop GetInstance(ConnectionType connectionType = ConnectionType.Wasmtime,
             bool createNew = false, byte[]? wasmBytes = null)
         {
             if (instance is null || createNew)

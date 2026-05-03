@@ -1,4 +1,4 @@
-﻿using CursorIcon    = Maze.Maui.Controls.Pointer.Icon;
+﻿using CursorIcon = Maze.Maui.Controls.Pointer.Icon;
 using CursorPointer = Maze.Maui.Controls.Pointer.Pointer;
 using Microsoft.Maui.Controls.Shapes;
 
@@ -58,9 +58,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
         const bool DEFAULT_IS_PAN_SUPPORT_ENABLED = true;
 
-        static private Color GRID_LIGHT_GREEN = Color.FromRgb(211, 240, 224);
-        static private Color GRID_VERY_LIGHT_GRAY = Color.FromRgb(240, 240, 240);
-        static private Color GRID_LIGHT_GRAY = Color.FromRgb(225, 225, 225);
+        private static readonly Color GRID_LIGHT_GREEN = Color.FromRgb(211, 240, 224);
+        private static readonly Color GRID_VERY_LIGHT_GRAY = Color.FromRgb(240, 240, 240);
+        private static readonly Color GRID_LIGHT_GRAY = Color.FromRgb(225, 225, 225);
 
         /// <summary>
         /// Represents a type of X offset within the grid
@@ -402,13 +402,13 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             if (RowCount == 0 || ColumnCount == 0 || VirtualBuffer == 0) return;
 
-            double viewW = _dataScrollView.Width  > 0 ? _dataScrollView.Width  : CellWidth  * 10;
+            double viewW = _dataScrollView.Width > 0 ? _dataScrollView.Width : CellWidth * 10;
             double viewH = _dataScrollView.Height > 0 ? _dataScrollView.Height : CellHeight * 10;
 
             int newFirstRow = Math.Max(0, (int)(scrollY / CellHeight) - VirtualBuffer);
-            int newLastRow  = Math.Min(RowCount    - 1, (int)Math.Ceiling((scrollY + viewH) / CellHeight) + VirtualBuffer);
-            int newFirstCol = Math.Max(0, (int)(scrollX / CellWidth)  - VirtualBuffer);
-            int newLastCol  = Math.Min(ColumnCount - 1, (int)Math.Ceiling((scrollX + viewW) / CellWidth)  + VirtualBuffer);
+            int newLastRow = Math.Min(RowCount - 1, (int)Math.Ceiling((scrollY + viewH) / CellHeight) + VirtualBuffer);
+            int newFirstCol = Math.Max(0, (int)(scrollX / CellWidth) - VirtualBuffer);
+            int newLastCol = Math.Min(ColumnCount - 1, (int)Math.Ceiling((scrollX + viewW) / CellWidth) + VirtualBuffer);
 
             BatchGrids(() =>
             {
@@ -542,12 +542,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
             AddColumnDefinitions();
             // Pin _dataGrid to its exact content size so that adding/removing virtual cells
             // does not trigger layout invalidation up to the Shell navigation bar.
-            _dataGrid.WidthRequest  = ColumnCount * CellWidth;
-            _dataGrid.HeightRequest = RowCount    * CellHeight;
+            _dataGrid.WidthRequest = ColumnCount * CellWidth;
+            _dataGrid.HeightRequest = RowCount * CellHeight;
             // Anchor to top-left so that when the grid is smaller than the ScrollView viewport
             // it does not get centred by WinUI/MAUI layout.
             _dataGrid.HorizontalOptions = LayoutOptions.Start;
-            _dataGrid.VerticalOptions   = LayoutOptions.Start;
+            _dataGrid.VerticalOptions = LayoutOptions.Start;
             AddCornerHeader();
             PopulateInitialViewport();
         }
@@ -557,20 +557,20 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void PopulateInitialViewport()
         {
-            double viewW = _dataScrollView.Width  > 0 ? _dataScrollView.Width  : CellWidth  * 10;
+            double viewW = _dataScrollView.Width > 0 ? _dataScrollView.Width : CellWidth * 10;
             double viewH = _dataScrollView.Height > 0 ? _dataScrollView.Height : CellHeight * 10;
 
             _vpFirstRow = 0;
             _vpFirstCol = 0;
             if (VirtualBuffer == 0)
             {
-                _vpLastRow = RowCount    - 1;
+                _vpLastRow = RowCount - 1;
                 _vpLastCol = ColumnCount - 1;
             }
             else
             {
-                _vpLastRow = Math.Min((int)Math.Ceiling(viewH / CellHeight) + VirtualBuffer, RowCount    - 1);
-                _vpLastCol = Math.Min((int)Math.Ceiling(viewW / CellWidth)  + VirtualBuffer, ColumnCount - 1);
+                _vpLastRow = Math.Min((int)Math.Ceiling(viewH / CellHeight) + VirtualBuffer, RowCount - 1);
+                _vpLastCol = Math.Min((int)Math.Ceiling(viewW / CellWidth) + VirtualBuffer, ColumnCount - 1);
             }
 
             BatchGrids(() =>
@@ -592,8 +592,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void ResetVirtualViewport()
         {
-            _dataGrid.WidthRequest  = ColumnCount * CellWidth;
-            _dataGrid.HeightRequest = RowCount    * CellHeight;
+            _dataGrid.WidthRequest = ColumnCount * CellWidth;
+            _dataGrid.HeightRequest = RowCount * CellHeight;
 
             if (VirtualBuffer == 0)
             {
@@ -661,12 +661,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
             {
                 int minRow = int.MaxValue, maxRow = int.MinValue;
                 int minCol = int.MaxValue, maxCol = int.MinValue;
-                foreach (var key in _activeCells.Keys)
+                foreach (var (row, col) in _activeCells.Keys)
                 {
-                    if (key.row < minRow) minRow = key.row;
-                    if (key.row > maxRow) maxRow = key.row;
-                    if (key.col < minCol) minCol = key.col;
-                    if (key.col > maxCol) maxCol = key.col;
+                    if (row < minRow) minRow = row;
+                    if (row > maxRow) maxRow = row;
+                    if (col < minCol) minCol = col;
+                    if (col > maxCol) maxCol = col;
                 }
                 _vpFirstRow = minRow; _vpLastRow = maxRow;
                 _vpFirstCol = minCol; _vpLastCol = maxCol;
@@ -959,7 +959,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             CellFrame? cellFrame = GetCell(row, column) as CellFrame;
             if (cellFrame is not null)
-                SetCellContent(cellFrame, contentView);
+                Grid.SetCellContent(cellFrame, contentView);
             return cellFrame;
         }
         /// <summary>
@@ -967,10 +967,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <param name="cellFrame">Cell frame</param>
         /// <param name="contentView">Content to attach to cell</param>
-        public void SetCellContent(CellFrame? cellFrame, ContentView contentView)
+        public static void SetCellContent(CellFrame? cellFrame, ContentView contentView)
         {
-            if (cellFrame is not null)
-                cellFrame.Content = contentView;
+            cellFrame?.Content = contentView;
         }
         /// <summary>
         /// Adds single tap gesture support to a given cell frame. This will
@@ -1278,15 +1277,14 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             bool shiftPressed = Keyboard.Utility.IsStateFlagSet(state, Keyboard.KeyState.Shift);
             bool ctrlPressed = Keyboard.Utility.IsStateFlagSet(state, Keyboard.KeyState.Ctrl);
-            bool capsLockPressed = Keyboard.Utility.IsStateFlagSet(state, Keyboard.KeyState.CapsLock);
 
             // On desktop, a movement key without Shift exits extended selection mode so the user
             // returns to normal single-cell navigation.
             if (ExitExtendedSelectionOnDeselect && IsExtendedSelectionMode && !shiftPressed)
             {
-                if (key == Keyboard.Key.Left  || key == Keyboard.Key.Right ||
-                    key == Keyboard.Key.Up    || key == Keyboard.Key.Down  ||
-                    key == Keyboard.Key.Home  || key == Keyboard.Key.End)
+                if (key == Keyboard.Key.Left || key == Keyboard.Key.Right ||
+                    key == Keyboard.Key.Up || key == Keyboard.Key.Down ||
+                    key == Keyboard.Key.Home || key == Keyboard.Key.End)
                     ExitExtendedSelectionModeOnly();
             }
 
@@ -1332,8 +1330,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         public void ClearSelection()
         {
-            if (activeCell is not null)
-                activeCell.BackgroundColor = this.CellBackgroundColor;
+            activeCell?.BackgroundColor = this.CellBackgroundColor;
             activeCell = null;
             activeCellPoint.Clear();
             ClearAnchorCell(true);
@@ -1503,8 +1500,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 SetActiveCellToAnchorCell(false);
             ClearAnchorCell(true);
             ClearSelectedCells();
-            if (activeCell is not null)
-                activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
+            activeCell?.BackgroundColor = this.ActiveCellBackgroundColor;
             UpdateSelectionFrame(true);
         }
         /// <summary>
@@ -1766,8 +1762,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             anchorCell.BackgroundColor = this.HighlightCellBackgroundColor;
             ClearAnchorCell(false);
             SetAnchorCell(newRow, newColumn);
-            if (anchorCell is not null)
-                anchorCell.BackgroundColor = this.ActiveCellBackgroundColor;
+            anchorCell?.BackgroundColor = this.ActiveCellBackgroundColor;
         }
         /// <summary>
         /// Move the active sell to a given row and column
@@ -1786,8 +1781,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 SetActiveCellToAnchorCell(false);
                 ClearAnchorCell(true);
                 ClearSelectedCells();
-                if (activeCell is not null)
-                    activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
+                activeCell?.BackgroundColor = this.ActiveCellBackgroundColor;
                 wasExtendedSelection = true;
             }
             // No change in position?
@@ -1842,8 +1836,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
             activeCell = newActiveCell;
             if (anchorCell is not null)
                 anchorCell.BackgroundColor = this.AnchorCellBackgroundColor;
-            else if (activeCell is not null)
-                activeCell.BackgroundColor = this.ActiveCellBackgroundColor;
+            else
+                activeCell?.BackgroundColor = this.ActiveCellBackgroundColor;
 
             activeCellPoint.Set(row, column);
 
@@ -1867,30 +1861,30 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="displayCol">1-based display column of the cell to scroll into view</param>
         protected async void ScrollCellIntoView(int displayRow, int displayCol)
         {
-            double cellLeftX   = (displayCol - 1) * CellWidth;
-            double cellTopY    = (displayRow - 1) * CellHeight;
-            double cellRightX  = cellLeftX  + CellWidth  - 1;
-            double cellBottomY = cellTopY   + CellHeight - 1;
+            double cellLeftX = (displayCol - 1) * CellWidth;
+            double cellTopY = (displayRow - 1) * CellHeight;
+            double cellRightX = cellLeftX + CellWidth - 1;
+            double cellBottomY = cellTopY + CellHeight - 1;
 
-            double currentScrollX   = _dataScrollView.ScrollX;
-            double currentScrollY   = _dataScrollView.ScrollY;
-            double scrollViewWidth  = _dataScrollView.Width;
+            double currentScrollX = _dataScrollView.ScrollX;
+            double currentScrollY = _dataScrollView.ScrollY;
+            double scrollViewWidth = _dataScrollView.Width;
             double scrollViewHeight = _dataScrollView.Height;
 
             // If the cell is already fully visible, there is no need to scroll
-            if (cellLeftX >= currentScrollX && cellRightX  <= currentScrollX + scrollViewWidth &&
-                cellTopY  >= currentScrollY && cellBottomY <= currentScrollY + scrollViewHeight)
+            if (cellLeftX >= currentScrollX && cellRightX <= currentScrollX + scrollViewWidth &&
+                cellTopY >= currentScrollY && cellBottomY <= currentScrollY + scrollViewHeight)
                 return;
 
             // Calculate scroll adjustments (if any)
             double targetX = currentScrollX;
             double targetY = currentScrollY;
 
-            if      (cellLeftX  < currentScrollX)                         targetX = cellLeftX;
-            else if (cellRightX > currentScrollX + scrollViewWidth)       targetX = cellRightX  - scrollViewWidth;
+            if (cellLeftX < currentScrollX) targetX = cellLeftX;
+            else if (cellRightX > currentScrollX + scrollViewWidth) targetX = cellRightX - scrollViewWidth;
 
-            if      (cellTopY    < currentScrollY)                        targetY = cellTopY;
-            else if (cellBottomY > currentScrollY + scrollViewHeight)     targetY = cellBottomY - scrollViewHeight;
+            if (cellTopY < currentScrollY) targetY = cellTopY;
+            else if (cellBottomY > currentScrollY + scrollViewHeight) targetY = cellBottomY - scrollViewHeight;
 
             // Use instant (non-animated) scroll for large jumps (e.g. Ctrl+End/Home).
             // This prevents WinUI scroll anchoring from shifting the Shell page: when
@@ -1953,8 +1947,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         void ClearAnchorCellFormatting()
         {
-            if (anchorCell is not null)
-                anchorCell.BackgroundColor = this.CellBackgroundColor;
+            anchorCell?.BackgroundColor = this.CellBackgroundColor;
         }
         /// <summary>
         /// Clears the anchor cell
@@ -2104,8 +2097,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                         else
                             _highlightedCells.Add((row - 1, column - 1));
                         CellFrame? cellFrame = GetCell(row, column) as CellFrame;
-                        if (cellFrame is not null)
-                            cellFrame.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightCellBackgroundColor;
+                        cellFrame?.BackgroundColor = clear ? this.CellBackgroundColor : this.HighlightCellBackgroundColor;
                     }
                 }
             }
@@ -2172,8 +2164,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void HighlightRowHeader(int row, bool clear, bool allColumnsSelected)
         {
             HeaderFrame? header = GetRowHeaderCell(row);
-            if (header is not null)
-                header.BackgroundColor = clear ? this.HeaderBackgroundColor : (allColumnsSelected ? this.HeaderSelectedBackgroundColor : this.HeaderActiveBackgroundColor);
+            header?.BackgroundColor = clear ? this.HeaderBackgroundColor : (allColumnsSelected ? this.HeaderSelectedBackgroundColor : this.HeaderActiveBackgroundColor);
         }
         /// <summary>
         /// Updates the highlighting of the column headers associated with a given cell range
@@ -2195,8 +2186,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void HighlightColHeader(int column, bool clear, bool allRowsSelected)
         {
             HeaderFrame? header = GetColHeaderCell(column);
-            if (header is not null)
-                header.BackgroundColor = clear ? this.HeaderBackgroundColor : (allRowsSelected ? this.HeaderSelectedBackgroundColor : HeaderActiveBackgroundColor);
+            header?.BackgroundColor = clear ? this.HeaderBackgroundColor : (allRowsSelected ? this.HeaderSelectedBackgroundColor : HeaderActiveBackgroundColor);
         }
         /// <summary>
         /// Gets the header associated with a given row
@@ -2279,11 +2269,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
             }
             int row = FindCellNextRowForYOffset(startRow, type, offset),
                 rowIncrement = offset > 0 ? 1 : -1;
-            double offsetRemaining = Math.Abs(offset), rowHeight = 0.0;
+            double offsetRemaining = Math.Abs(offset);
 
             while (row >= 1 && row <= RowCount)
             {
-                rowHeight = GetRowHeight(row);
+                double rowHeight = GetRowHeight(row);
                 if (offsetRemaining <= rowHeight)
                     break;
                 offsetRemaining -= rowHeight;
@@ -2329,11 +2319,11 @@ namespace Maze.Maui.Controls.InteractiveGrid
             }
             int column = FindCellNextColumnForXOffset(startColumn, type, offset),
                 columnIncrement = offset > 0 ? 1 : -1;
-            double offsetRemaining = Math.Abs(offset), columnWidth = 0.0;
+            double offsetRemaining = Math.Abs(offset);
 
             while (column >= 1 && column <= ColumnCount)
             {
-                columnWidth = GetColumnWidth(column);
+                double columnWidth = GetColumnWidth(column);
                 if (offsetRemaining <= columnWidth)
                     break;
                 offsetRemaining -= columnWidth;
@@ -2367,7 +2357,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <param name="child">Child view</param>
         /// <returns>Boolean</returns>
-        private bool IsSelectionFrameObject(IView child)
+        private static bool IsSelectionFrameObject(IView child)
         {
             return (child is BorderGrip || child is BorderBox);
         }
@@ -2376,9 +2366,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <param name="child">Child view</param>
         /// <returns>Boolean</returns>
-        private bool IsGridCellOrHeader(IView child)
+        private static bool IsGridCellOrHeader(IView child)
         {
-            return !IsSelectionFrameObject(child);
+            return !Grid.IsSelectionFrameObject(child);
         }
         /// <summary>
         /// Gets the cell associated with a given row and column
@@ -2405,7 +2395,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             if (AllColumnsSelected && RowCount > 1)
             {
-                if(selectedCells is not null)
+                if (selectedCells is not null)
                     deleted = DeleteRows(selectedCells.Top, selectedCells.Bottom);
                 else if (activeCell is not null)
                     deleted = DeleteRows(activeCellPoint.Row, activeCellPoint.Row);
@@ -2421,7 +2411,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             bool inserted = false;
 
-            if(AllColumnsSelected)
+            if (AllColumnsSelected)
             {
                 if (selectedCells is not null)
                     inserted = InsertRows(selectedCells.Top, selectedCells.Bottom);
@@ -2457,7 +2447,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         {
             bool inserted = false;
 
-            if (AllRowsSelected )
+            if (AllRowsSelected)
             {
                 if (selectedCells is not null)
                     inserted = InsertColumns(selectedCells.Left, selectedCells.Right);
@@ -2551,7 +2541,6 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Boolean</returns>
         private bool Remove(Target target, int startPosition, int endPosition, bool triggerEvents)
         {
-            bool removed = false;
             bool retainAnchorCell = anchorCell is not null;
             SelectionState selectionState = GetSelectionState();
 
@@ -2559,7 +2548,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             ClearAnchorCell(true);
             ClearActiveCell(true);
 
-            removed = RemoveChildren(target, startPosition, endPosition);
+            bool removed = RemoveChildren(target, startPosition, endPosition);
 
             if (removed)
             {
@@ -2611,7 +2600,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 ResetChildPositions(target, startPosition, -(endPosition - startPosition + 1));
                 int count = endPosition - startPosition + 1;
                 if (target == Target.Row) OnAfterRowsRemoved(startPosition, count);
-                else                      OnAfterColumnsRemoved(startPosition, count);
+                else OnAfterColumnsRemoved(startPosition, count);
             }
 
             return removed;
@@ -2659,7 +2648,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
                     break;
             }
         }
-        private void RemoveChildrenFromGrid(Microsoft.Maui.Controls.Grid grid, Target target, int gridPosition)
+        private static void RemoveChildrenFromGrid(Microsoft.Maui.Controls.Grid grid, Target target, int gridPosition)
         {
             for (int i = grid.Children.Count - 1; i >= 0; i--)
             {
@@ -2702,7 +2691,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             // Children to shift: those with 0-based position >= startPosition (equivalent to display pos > startPosition).
             foreach (var child in grid.Children)
             {
-                int currentPosition = GetChildPosition(target, child);
+                int currentPosition = Grid.GetChildPosition(target, child);
                 if (currentPosition >= startPosition)
                     SetChildPosition(target, child, currentPosition + positionChange);
             }
@@ -2717,7 +2706,6 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Boolean</returns>
         private bool Insert(Target target, int startPosition, int endPosition, bool triggerEvents)
         {
-            bool inserted = false;
             bool retainAnchorCell = anchorCell is not null;
             SelectionState selectionState = GetSelectionState();
 
@@ -2725,7 +2713,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             ClearAnchorCell(true);
             ClearActiveCell(true);
 
-            inserted = InsertChildren(target, startPosition, endPosition);
+            bool inserted = InsertChildren(target, startPosition, endPosition);
 
             if (inserted)
                 ResetVirtualViewport();
@@ -2755,7 +2743,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
             int count = endPosition - startPosition + 1;
             if (target == Target.Row) OnBeforeRowsInserted(startPosition, count);
-            else                      OnBeforeColumnsInserted(startPosition, count);
+            else OnBeforeColumnsInserted(startPosition, count);
 
             bool inserted = false;
 
@@ -2858,7 +2846,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="target">Target type</param>
         /// <param name="child">Child view</param>
         /// <returns>Position index</returns>
-        private int GetChildPosition(Target target, IView child)
+        private static int GetChildPosition(Target target, IView child)
         {
             switch (target)
             {
@@ -2898,7 +2886,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             if (child is HeaderFrame hf && hf.Type == HeaderType.Column)
                 UpdateHeaderIndex(HeaderType.Column, child, newColumn);
             else
-                UpdateCellIndex(Target.Column, child, newColumn);
+                Grid.UpdateCellIndex(Target.Column, child, newColumn);
         }
         /// <summary>
         /// Sets the row associated with a given child view (newRow is 0-based in the sub-grid)
@@ -2911,7 +2899,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             if (child is HeaderFrame hf && hf.Type == HeaderType.Row)
                 UpdateHeaderIndex(HeaderType.Row, child, newRow);
             else
-                UpdateCellIndex(Target.Row, child, newRow);
+                Grid.UpdateCellIndex(Target.Row, child, newRow);
         }
         /// <summary>
         /// Updates the cell index associated with a given child view
@@ -2919,7 +2907,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="target">Target type</param>
         /// <param name="child">Child view</param>
         /// <param name="newIndex">New index</param>
-        private void UpdateCellIndex(Target target, IView child, int newIndex)
+        private static void UpdateCellIndex(Target target, IView child, int newIndex)
         {
             CellFrame? cellFrame = child as CellFrame;
             if (cellFrame is not null)
@@ -2960,10 +2948,10 @@ namespace Maze.Maui.Controls.InteractiveGrid
             switch (target)
             {
                 case Target.Column:
-                    ColumnCount = ColumnCount + addAmount;
+                    ColumnCount += addAmount;
                     break;
                 case Target.Row:
-                    RowCount = RowCount + addAmount;
+                    RowCount += addAmount;
                     break;
             }
         }

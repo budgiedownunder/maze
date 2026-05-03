@@ -16,9 +16,9 @@ namespace Maze.Maui.App
     {
         // Define whether or not to use the mock maze service
 #if IOS
-        static bool useMockMazeService = false;
+        static readonly bool useMockMazeService = false;
 #else
-        static bool useMockMazeService = false;
+        static readonly bool useMockMazeService = false;
 #endif
 
         /// <summary>
@@ -81,7 +81,7 @@ namespace Maze.Maui.App
 #endif
             builder.Services.AddSingleton<IAuthService, AuthHttpClientService>();
             builder.Services.AddSingleton<IAppFeaturesService, AppFeaturesHttpClientService>();
-            if(useMockMazeService)
+            if (useMockMazeService)
                 builder.Services.AddSingleton<IMazeService, MockMazeService>();
             else
                 builder.Services.AddSingleton<IMazeService, MazeHttpClientService>();
@@ -122,7 +122,7 @@ namespace Maze.Maui.App
             try
             {
                 MazeInterop.ConnectionType connectionType =
-                    OperatingSystem.IsIOS()     ? MazeInterop.ConnectionType.Native :
+                    OperatingSystem.IsIOS() ? MazeInterop.ConnectionType.Native :
                     OperatingSystem.IsAndroid() ? MazeInterop.ConnectionType.Wasmer :
                                                 MazeInterop.ConnectionType.Wasmtime;
 
@@ -135,7 +135,7 @@ namespace Maze.Maui.App
                     wasmBytes = ms.ToArray();
                 }
                 MazeInterop interop = MazeInterop.GetInstance(connectionType, true, wasmBytes);
-                
+
             }
             catch (Exception ex)
             {

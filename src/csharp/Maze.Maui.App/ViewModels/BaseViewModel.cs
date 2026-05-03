@@ -11,8 +11,8 @@ namespace Maze.Maui.App.ViewModels
         /// <summary>
         /// Constructor
         /// </summary>
-        public BaseViewModel() 
-        { 
+        public BaseViewModel()
+        {
         }
         /// <summary>
         /// Indicates whether the view model is busy

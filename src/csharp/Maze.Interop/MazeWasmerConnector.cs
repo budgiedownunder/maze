@@ -1,4 +1,4 @@
-﻿#if !IOS
+#if !IOS
 namespace Maze.Interop
 {
     using System.Runtime.InteropServices;
@@ -159,13 +159,15 @@ namespace Maze.Interop
                             break;
                         default:
                             throw new Exception($"kind is unsupported");
-                    };
+                    }
+                    ;
                 }
-                catch (Exception e) {
-                    throw new Exception($"cannot convert value of kind {kind.ToString()} to wasm_val_t - {e.Message}");
+                catch (Exception e)
+                {
+                    throw new Exception($"cannot convert value of kind {kind} to wasm_val_t - {e.Message}");
                 }
             }
-            public object? ToValue()
+            public readonly object? ToValue()
             {
                 object? value = null;
                 try
@@ -188,11 +190,12 @@ namespace Maze.Interop
                             break;
                         default:
                             throw new Exception($"kind is unsupported");
-                    };
+                    }
+                    ;
                 }
                 catch (Exception e)
                 {
-                    throw new Exception($"cannot convert value of kind {kind.ToString()} to object - {e.Message}");
+                    throw new Exception($"cannot convert value of kind {kind} to object - {e.Message}");
                 }
                 return value;
             }
@@ -287,7 +290,7 @@ namespace Maze.Interop
         public static extern void wasm_val_vec_new_uninitialized(ref wasm_val_vec_t buffer, UIntPtr size);
 
         [DllImport(LibraryName, EntryPoint = "wasm_val_vec_delete", CallingConvention = CallingConvention.Cdecl)]
-        public static extern void wasm_val_vec_delete(ref wasm_val_vec_t value );
+        public static extern void wasm_val_vec_delete(ref wasm_val_vec_t value);
 
         [DllImport(LibraryName, EntryPoint = "wasm_func_call", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr wasm_func_call(IntPtr functionPtr, ref wasm_val_vec_t args, ref wasm_val_vec_t results); // returns: own wasm_trap_t*
@@ -303,7 +306,7 @@ namespace Maze.Interop
 
         [DllImport(LibraryName, EntryPoint = "wasm_trap_new", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr wasm_trap_new(IntPtr store, ref wasm_byte_vec_t message /* wasm_message_t* == wasm_byte_vec_t */ );
-        
+
         // *******************************
         // Last error
         // *******************************
@@ -324,7 +327,7 @@ namespace Maze.Interop
         public static string GetExportName(IntPtr wasmExternPtr)
         {
             string name = "N.A";
-            IntPtr wasmExportTypePtr = IntPtr.Zero;
+
             IntPtr externTypePtr = WasmerInterop.wasm_extern_type(wasmExternPtr);
             if (externTypePtr != IntPtr.Zero)
             {
@@ -357,10 +360,11 @@ namespace Maze.Interop
             Exception? exception = null;
             GCHandle argsHandle = GCHandle.Alloc(args, GCHandleType.Pinned);
             IntPtr argsPtr = argsHandle.AddrOfPinnedObject();
-            wasm_val_vec_t argsVec;
-            wasm_val_vec_new(out argsVec, (UIntPtr)args.Length, argsPtr);
+
+            wasm_val_vec_new(out wasm_val_vec_t argsVec, (UIntPtr)args.Length, argsPtr);
             WasmerInterop.wasm_val_vec_t resultVec = new WasmerInterop.wasm_val_vec_t();
-            if (hasResult)
+            if (
+hasResult)
                 WasmerInterop.wasm_val_vec_new_uninitialized(ref resultVec, 1);
 
             IntPtr trap = WasmerInterop.wasm_func_call(functionPtr, ref argsVec, ref resultVec);
@@ -375,7 +379,7 @@ namespace Maze.Interop
                     }
                     else
                     {
-                        exception = new Exception($"Wasmer call to WebAssembly function '{name}' returned unexpected result type {value.kind.ToString()} " +
+                        exception = new Exception($"Wasmer call to WebAssembly function '{name}' returned unexpected result type {value.kind} " +
                                                    "(expected: '{expectedResultType.ToString()})");
                     }
                 }
@@ -393,7 +397,7 @@ namespace Maze.Interop
             if (exception is not null)
                 throw (exception);
         }
-         /// <summary>
+        /// <summary>
         /// Returns the latest error triggered within Wasmer (if any)
         /// </summary>
         /// <returns>Error string</returns>
@@ -439,14 +443,14 @@ namespace Maze.Interop
     /// </summary>
     internal class MazeWasmerMemory : IWebAssemblyMemory
     {
-        IntPtr _wasmMemoryPtr = IntPtr.Zero;
+        readonly IntPtr _wasmMemoryPtr = IntPtr.Zero;
         /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="wasmMemoryPtr">WebAssembly memory pointer</param>
         internal MazeWasmerMemory(IntPtr wasmMemoryPtr)
         {
-            if(wasmMemoryPtr == IntPtr.Zero)
+            if (wasmMemoryPtr == IntPtr.Zero)
             {
                 throw new Exception("Zero wasmMemoryPtr supplied to MazeWasmerMemory constructor");
             }
@@ -515,7 +519,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="ptrOffset">Memory offset pointer to string</param>
         /// <returns>String value if successful</returns>
-        public string StringPtrToString(UInt32 ptrOffset) 
+        public string StringPtrToString(UInt32 ptrOffset)
         {
             IntPtr memoryBase = WasmerInterop.wasm_memory_data(_wasmMemoryPtr);
             uint memorySize = WasmerInterop.wasm_memory_data_size(_wasmMemoryPtr);
@@ -536,12 +540,12 @@ namespace Maze.Interop
     /// </summary>
     class MazeWasmerFunction : IWebAssemblyFunction
     {
-        private string _name = "";
-        private IntPtr _ptr = IntPtr.Zero; // type: wasm_func_t * 
-        private List<wasm_valkind_t> _argTypes = new List<wasm_valkind_t>();
-        private bool _hasResult = false;
-        private List<wasm_valkind_t> _resultTypes = new List<wasm_valkind_t>();
-        private wasm_valkind_t _expectedResultType = wasm_valkind_t.NONE;
+        private readonly string _name = "";
+        private readonly IntPtr _ptr = IntPtr.Zero; // type: wasm_func_t * 
+        private readonly List<wasm_valkind_t> _argTypes = new List<wasm_valkind_t>();
+        private readonly bool _hasResult = false;
+        private readonly List<wasm_valkind_t> _resultTypes = new List<wasm_valkind_t>();
+        private readonly wasm_valkind_t _expectedResultType = wasm_valkind_t.NONE;
         /// <summary>
         /// The function name within the WebAssembly
         /// </summary>
@@ -556,7 +560,7 @@ namespace Maze.Interop
         /// The number of arguments expected
         /// </summary>
         /// <returns>Argument count</returns>
-        public int ArgCount{ get => this._argTypes.Count; }
+        public int ArgCount { get => this._argTypes.Count; }
         /// <summary>
         /// Whether the function returns a result
         /// </summary>
@@ -638,7 +642,7 @@ namespace Maze.Interop
                 throw new Exception($"Incorrect number of arguments supplied for WebAssembly function '{this.Name}' - expected {this.ArgCount} but {argCount} supplied");
             }
             WasmerInterop.wasm_val_t resultBuffer = new WasmerInterop.wasm_val_t();
-            WasmerInterop.CallFunction(Name, Ptr, ArgCount > 0 ? ToCallArgs(args): [], HasResult, ExpectedResultType, ref resultBuffer);
+            WasmerInterop.CallFunction(Name, Ptr, ArgCount > 0 ? ToCallArgs(args) : [], HasResult, ExpectedResultType, ref resultBuffer);
             if (HasResult)
             {
                 result = resultBuffer.ToValue();
@@ -695,7 +699,8 @@ namespace Maze.Interop
         bool _disposed = false;
 
         // Wasmtime Store and Instance
-        string wasmPathOrName;
+
+        readonly string wasmPathOrName;
 
         IntPtr _engine = IntPtr.Zero;
         IntPtr _store = IntPtr.Zero;
@@ -808,8 +813,7 @@ namespace Maze.Interop
             }
             Console.WriteLine("[MazeWasmerConnector] Store created.");
 
-            if(wasmBytes is null)
-                wasmBytes = File.ReadAllBytes(wasmPathOrName);
+            wasmBytes ??= File.ReadAllBytes(wasmPathOrName);
 
             Console.WriteLine($"[MazeWasmerConnector] Wasm bytes loaded: {wasmBytes.Length} bytes.");
             _wasmVec = new WasmerInterop.wasm_byte_vec_t();
@@ -957,9 +961,9 @@ namespace Maze.Interop
         {
             if (_functionMap is null) return;
 
-            if (_functionMap.ContainsKey(name))
+            if (_functionMap.TryGetValue(name, out RefFunctionGetter? value))
             {
-                ref IWebAssemblyFunction? function = ref _functionMap[name]();
+                ref IWebAssemblyFunction? function = ref value();
                 function = new MazeWasmerFunction(name, wasmFuncPtr);
             }
         }

@@ -98,8 +98,8 @@ namespace Maze.Maui.App.Services
     public class MazeHttpClientService : IMazeService
     {
         // Private properties
-        ConfigurationService _configurationService;
-        HttpClient _httpClient;
+        readonly ConfigurationService _configurationService;
+        readonly HttpClient _httpClient;
         List<Models.MazeItem> _mazeItems = new();
         /// <summary>
         /// Constructor
@@ -150,7 +150,7 @@ namespace Maze.Maui.App.Services
             }
 
             string url = $"mazes";
-            string json = GetMazeItemJson(item);
+            string json = MazeHttpClientService.GetMazeItemJson(item);
             HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await _httpClient.PostAsync(url, content);
             response.EnsureSuccessStatusCode();
@@ -167,7 +167,7 @@ namespace Maze.Maui.App.Services
             {
                 throw new Exception("Maze item or id is null or empty");
             }
-            string url = GetIdUriPath(id);
+            string url = MazeHttpClientService.GetIdUriPath(id);
             var response = await _httpClient.GetAsync(url);
             response.EnsureSuccessStatusCode();
             return await ReadItem(response);
@@ -183,8 +183,8 @@ namespace Maze.Maui.App.Services
             {
                 throw new Exception("Maze item or id is null or empty");
             }
-            string url = GetIdUriPath(item.ID);
-            string json = GetMazeItemJson(item);
+            string url = MazeHttpClientService.GetIdUriPath(item.ID);
+            string json = MazeHttpClientService.GetMazeItemJson(item);
             HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await _httpClient.PutAsync(url, content);
             response.EnsureSuccessStatusCode();
@@ -213,7 +213,7 @@ namespace Maze.Maui.App.Services
         /// <returns>A task. Will throw an exception if the item could not be deleted.</returns>
         public async Task DeleteMazeItem(string id)
         {
-            string url = GetIdUriPath(id);
+            string url = MazeHttpClientService.GetIdUriPath(id);
             var response = await _httpClient.DeleteAsync(url);
             response.EnsureSuccessStatusCode();
         }
@@ -222,21 +222,24 @@ namespace Maze.Maui.App.Services
         /// </summary>
         /// <param name="id">Maze item `ID`</param>
         /// <returns>Uri path</returns>
-        private string GetIdUriPath(string id)
+        private static string GetIdUriPath(string id)
         {
             string idEncoded = Uri.EscapeDataString(id);
             return $"mazes/{idEncoded}";
         }
+        private static readonly JsonSerializerOptions s_mazeItemJsonOptions = new()
+        {
+            Converters = { new DefinitionConverter() }
+        };
+
         /// <summary>
         /// Converts a maze item to JSON`
         /// </summary>
         /// <param name="item">Maze item</param>
         /// <returns>JSON string</returns>
-        private string GetMazeItemJson(MazeItem item)
+        private static string GetMazeItemJson(MazeItem item)
         {
-            var options = new JsonSerializerOptions();
-            options.Converters.Add(new DefinitionConverter());
-            return JsonSerializer.Serialize(item, options);
+            return JsonSerializer.Serialize(item, s_mazeItemJsonOptions);
         }
         /// <summary>
         /// Reads an `id` field from a HTTP response containing JSON

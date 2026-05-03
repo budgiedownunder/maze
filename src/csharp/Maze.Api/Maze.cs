@@ -12,7 +12,7 @@ namespace Maze.Api
     public class Maze : IDisposable
     {
         // Private data
-        static MazeInterop _interop = MazeInterop.GetInstance(); // Used when UseStaticInterop = true
+        static readonly MazeInterop _interop = MazeInterop.GetInstance(); // Used when UseStaticInterop = true
         private bool _disposed = false;
         private UIntPtr _mazePtr = default;
         /// <summary>
@@ -25,7 +25,7 @@ namespace Maze.Api
         /// The current [Maze.Interop](xref:Maze.Interop) associated with the object
         /// </summary>
         /// <returns>[Maze.Interop](xref:Maze.Interop) instance</returns>
-        public MazeInterop Interop
+        public static MazeInterop Interop
         {
             get
             {
@@ -58,7 +58,7 @@ namespace Maze.Api
         /// <summary>
         /// Represents a point within a maze
         /// </summary>
-       public struct Point
+        public struct Point
         {
             /// <summary>
             /// Row associated with the point (zero-based)
@@ -169,7 +169,7 @@ namespace Maze.Api
             try
             {
                 MazeGenerationAlgorithm mazeAlgorithm = (MazeGenerationAlgorithm)(byte)options.Algorithm;
-                UIntPtr optionsPtr = maze.Interop.NewGeneratorOptions(
+                UIntPtr optionsPtr = Interop.NewGeneratorOptions(
                     options.RowCount,
                     options.ColCount,
                     mazeAlgorithm,
@@ -177,20 +177,20 @@ namespace Maze.Api
                 try
                 {
                     if (options.StartRow.HasValue && options.StartCol.HasValue)
-                        maze.Interop.GeneratorOptionsSetStart(optionsPtr, options.StartRow.Value, options.StartCol.Value);
+                        Interop.GeneratorOptionsSetStart(optionsPtr, options.StartRow.Value, options.StartCol.Value);
                     if (options.FinishRow.HasValue && options.FinishCol.HasValue)
-                        maze.Interop.GeneratorOptionsSetFinish(optionsPtr, options.FinishRow.Value, options.FinishCol.Value);
+                        Interop.GeneratorOptionsSetFinish(optionsPtr, options.FinishRow.Value, options.FinishCol.Value);
                     if (options.MinSpineLength.HasValue)
-                        maze.Interop.GeneratorOptionsSetMinSpineLength(optionsPtr, options.MinSpineLength.Value);
+                        Interop.GeneratorOptionsSetMinSpineLength(optionsPtr, options.MinSpineLength.Value);
                     if (options.MaxRetries.HasValue)
-                        maze.Interop.GeneratorOptionsSetMaxRetries(optionsPtr, options.MaxRetries.Value);
+                        Interop.GeneratorOptionsSetMaxRetries(optionsPtr, options.MaxRetries.Value);
                     if (options.BranchFromFinish.HasValue)
-                        maze.Interop.GeneratorOptionsSetBranchFromFinish(optionsPtr, options.BranchFromFinish.Value ? (byte)1 : (byte)0);
-                    maze.Interop.MazeGenerate(maze._mazePtr, optionsPtr);
+                        Interop.GeneratorOptionsSetBranchFromFinish(optionsPtr, options.BranchFromFinish.Value ? (byte)1 : (byte)0);
+                    Interop.MazeGenerate(maze._mazePtr, optionsPtr);
                 }
                 finally
                 {
-                    maze.Interop.FreeGeneratorOptions(optionsPtr);
+                    Interop.FreeGeneratorOptions(optionsPtr);
                 }
                 return maze;
             }

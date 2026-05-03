@@ -1,4 +1,4 @@
-﻿#if !IOS && !ANDROID
+#if !IOS && !ANDROID
 namespace Maze.Interop
 {
     using System.Text;
@@ -9,7 +9,7 @@ namespace Maze.Interop
     /// </summary>
     internal class MazeWasmtimeMemory : IWebAssemblyMemory
     {
-        private Wasmtime.Memory _memory = null!;
+        private readonly Wasmtime.Memory _memory = null!;
         /// <summary>
         /// Constructor
         /// </summary>
@@ -89,7 +89,7 @@ namespace Maze.Interop
     /// </summary>
     class MazeWasmtimeFunction : IWebAssemblyFunction
     {
-        Wasmtime.Function _func;
+        readonly Wasmtime.Function _func;
         /// <summary>
         /// Constructor
         /// </summary>
@@ -112,7 +112,7 @@ namespace Maze.Interop
         /// values
         /// </summary>
         /// <returns>Array result</returns>
-        private ValueBox[] ToValueBoxArray(params object[] values)
+        private static ValueBox[] ToValueBoxArray(params object[] values)
         {
             if (values.Length == 0)
                 return [];
@@ -128,9 +128,9 @@ namespace Maze.Interop
         /// value
         /// </summary>
         /// <returns>Result</returns>
-        private ValueBox ToValueBox(object value) 
+        private static ValueBox ToValueBox(object value)
         {
-            ValueBox result= new ValueBox();
+            ValueBox result;
             switch (value)
             {
                 case int intValue:
@@ -152,7 +152,7 @@ namespace Maze.Interop
                     result = doubleValue;
                     break;
                 default:
-                    throw new Exception($"unable to convert argument value to Wasmtime ValueBox - unsupported type {value.GetType().ToString()}");
+                    throw new Exception($"unable to convert argument value to Wasmtime ValueBox - unsupported type {value.GetType()}");
             }
             return result;
         }
@@ -176,9 +176,10 @@ namespace Maze.Interop
         private bool _disposed = false;
 
         // Wasmtime Store and Instance
-        private string wasmPathOrName = null!;
+
+        private readonly string wasmPathOrName = null!;
         private Store store = null!;
-        private Instance instanceWasm= null!;
+        private Instance instanceWasm = null!;
 
         /// <summary>
         /// Constructor
@@ -243,15 +244,13 @@ namespace Maze.Interop
         private void InitializeModule(byte[]? wasmBytes)
         {
             var engine = new Engine();
-            var module = wasmBytes is not null 
+            var module = wasmBytes is not null
                 ? Wasmtime.Module.FromBytes(engine, "maze_wasm", wasmBytes)
                 : Wasmtime.Module.FromFile(engine, wasmPathOrName);
             using var linker = new Linker(engine);
             store = new Store(engine);
 
-            instanceWasm = new Instance(store, module);
-            if (instanceWasm is null)
-                throw new Exception("Failed to create Wasmtime instance");
+            instanceWasm = new Instance(store, module) ?? throw new Exception("Failed to create Wasmtime instance");
         }
         /// <summary>
         /// Initializes the WebAssembly memory
@@ -259,9 +258,7 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         private void InitializeMemory()
         {
-            var wasmtimeMemory = instanceWasm.GetMemory("memory");
-            if (wasmtimeMemory is null)
-                throw new Exception("Failed to locate memory in WebAssembly");
+            var wasmtimeMemory = instanceWasm.GetMemory("memory") ?? throw new Exception("Failed to locate memory in WebAssembly");
             base.memory = new MazeWasmtimeMemory(wasmtimeMemory);
         }
         /// <summary>
@@ -307,15 +304,15 @@ namespace Maze.Interop
             generatorOptionsSetBranchFromFinish = ResolveFunction("generator_options_set_branch_from_finish");
             mazeGenerate = ResolveFunction("maze_wasm_generate");
             freeGeneratorOptions = ResolveFunction("free_generator_options_wasm");
-            newMazeGame              = ResolveFunction("new_maze_game_wasm");
-            freeMazeGame             = ResolveFunction("free_maze_game_wasm");
-            mazeGameMovePlayer       = ResolveFunction("maze_game_wasm_move_player");
-            mazeGamePlayerRow        = ResolveFunction("maze_game_wasm_player_row");
-            mazeGamePlayerCol        = ResolveFunction("maze_game_wasm_player_col");
-            mazeGamePlayerDirection  = ResolveFunction("maze_game_wasm_player_direction");
-            mazeGameIsComplete       = ResolveFunction("maze_game_wasm_is_complete");
+            newMazeGame = ResolveFunction("new_maze_game_wasm");
+            freeMazeGame = ResolveFunction("free_maze_game_wasm");
+            mazeGameMovePlayer = ResolveFunction("maze_game_wasm_move_player");
+            mazeGamePlayerRow = ResolveFunction("maze_game_wasm_player_row");
+            mazeGamePlayerCol = ResolveFunction("maze_game_wasm_player_col");
+            mazeGamePlayerDirection = ResolveFunction("maze_game_wasm_player_direction");
+            mazeGameIsComplete = ResolveFunction("maze_game_wasm_is_complete");
             mazeGameVisitedCellCount = ResolveFunction("maze_game_wasm_visited_cell_count");
-            mazeGameGetVisitedCell   = ResolveFunction("maze_game_wasm_get_visited_cell");
+            mazeGameGetVisitedCell = ResolveFunction("maze_game_wasm_get_visited_cell");
         }
         /// <summary>
         /// Locates a WebAssembly function. Will throw an exception if the function is not found.
@@ -323,13 +320,9 @@ namespace Maze.Interop
         /// <returns>Function</returns>
         private IWebAssemblyFunction ResolveFunction(string functionName)
         {
-            Wasmtime.Function? func = instanceWasm?.GetFunction(functionName);
-            if (func is null)
-            {
-                throw new Exception($"Failed to load the WebAssembly function: {functionName} from {wasmPathOrName}.");
-            }
+            Wasmtime.Function? func = (instanceWasm?.GetFunction(functionName)) ?? throw new Exception($"Failed to load the WebAssembly function: {functionName} from {wasmPathOrName}.");
             return new MazeWasmtimeFunction(func);
         }
-     }
+    }
 }
 #endif

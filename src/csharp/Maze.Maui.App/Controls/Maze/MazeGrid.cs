@@ -1,4 +1,4 @@
-﻿using static Maze.Api.Maze;
+using static Maze.Api.Maze;
 using Maze.Api;
 using Maze.Maui.Controls.InteractiveGrid;
 using Maze.Maui.App.Models;
@@ -108,11 +108,11 @@ namespace Maze.Maui.App
             // moves or clicks without Shift. On touch, extended selection is sticky.
             ExitExtendedSelectionOnDeselect = enablePanSupport;
             this.mazeItem = mazeItem;
-            RowCount    = (int)(mazeItem?.Definition?.RowCount   ?? DEFAULT_ROW_COUNT);
+            RowCount = (int)(mazeItem?.Definition?.RowCount ?? DEFAULT_ROW_COUNT);
             ColumnCount = (int)(mazeItem?.Definition?.ColCount ?? DEFAULT_COLUMN_COUNT);
 
             // Populate the logical cell-type model before building the visual layer
-            _cellTypes          = new CellType[RowCount, ColumnCount];
+            _cellTypes = new CellType[RowCount, ColumnCount];
             _solutionDirections = new MazeCellContent.PathDirection[RowCount, ColumnCount];
             _startRow = _startCol = _finishRow = _finishCol = -1;
 
@@ -121,7 +121,7 @@ namespace Maze.Maui.App
                 for (int c = 0; c < ColumnCount; c++)
                 {
                     _cellTypes[r, c] = GetMazeItemCellType(r, c);
-                    if      (_cellTypes[r, c] == CellType.Start)  { _startRow  = r + 1; _startCol  = c + 1; }
+                    if (_cellTypes[r, c] == CellType.Start) { _startRow = r + 1; _startCol = c + 1; }
                     else if (_cellTypes[r, c] == CellType.Finish) { _finishRow = r + 1; _finishCol = c + 1; }
                 }
             }
@@ -149,15 +149,13 @@ namespace Maze.Maui.App
             int numWalls = 0;
             if (currentSelection is not null)
             {
-                CellType cellType = CellType.Empty;
-
                 cellCount = currentSelection.CellCount;
                 singleCell = cellCount == 1;
                 for (int row = currentSelection.Top; row <= currentSelection.Bottom; row++)
                 {
                     for (int column = currentSelection.Left; column <= currentSelection.Right; column++)
                     {
-                        cellType = GetCellType(row, column);
+                        CellType cellType = GetCellType(row, column);
                         switch (cellType)
                         {
                             case CellType.Start:
@@ -257,7 +255,7 @@ namespace Maze.Maui.App
         /// </summary>
         protected override void UpdateCellContent(CellFrame frame, int row, int column)
         {
-            var type      = _cellTypes[row, column];
+            var type = _cellTypes[row, column];
             var direction = _solutionDirections[row, column];
             if (frame.Content is MazeCellContent existing)
                 existing.Update(type, direction);
@@ -272,37 +270,37 @@ namespace Maze.Maui.App
         protected override void OnBeforeRowsInserted(int startDisplayRow, int count)
         {
             ResizeLogicalArrayRows(RowCount + count, startDisplayRow - 1, count, true);
-            if (_startRow  >= startDisplayRow) _startRow  += count;
+            if (_startRow >= startDisplayRow) _startRow += count;
             if (_finishRow >= startDisplayRow) _finishRow += count;
         }
         protected override void OnBeforeColumnsInserted(int startDisplayColumn, int count)
         {
             ResizeLogicalArrayCols(ColumnCount + count, startDisplayColumn - 1, count, true);
-            if (_startCol  >= startDisplayColumn) _startCol  += count;
+            if (_startCol >= startDisplayColumn) _startCol += count;
             if (_finishCol >= startDisplayColumn) _finishCol += count;
         }
         protected override void OnAfterRowsRemoved(int startDisplayRow, int count)
         {
             ResizeLogicalArrayRows(RowCount, startDisplayRow - 1, count, false);
             int removedEnd = startDisplayRow + count - 1;
-            if      (_startRow >= startDisplayRow && _startRow <= removedEnd) _startRow = _startCol = -1;
-            else if (_startRow > removedEnd)                                  _startRow -= count;
-            if      (_finishRow >= startDisplayRow && _finishRow <= removedEnd) _finishRow = _finishCol = -1;
-            else if (_finishRow > removedEnd)                                   _finishRow -= count;
+            if (_startRow >= startDisplayRow && _startRow <= removedEnd) _startRow = _startCol = -1;
+            else if (_startRow > removedEnd) _startRow -= count;
+            if (_finishRow >= startDisplayRow && _finishRow <= removedEnd) _finishRow = _finishCol = -1;
+            else if (_finishRow > removedEnd) _finishRow -= count;
         }
         protected override void OnAfterColumnsRemoved(int startDisplayColumn, int count)
         {
             ResizeLogicalArrayCols(ColumnCount, startDisplayColumn - 1, count, false);
             int removedEnd = startDisplayColumn + count - 1;
-            if      (_startCol >= startDisplayColumn && _startCol <= removedEnd) _startRow = _startCol = -1;
-            else if (_startCol > removedEnd)                                     _startCol -= count;
-            if      (_finishCol >= startDisplayColumn && _finishCol <= removedEnd) _finishRow = _finishCol = -1;
-            else if (_finishCol > removedEnd)                                      _finishCol -= count;
+            if (_startCol >= startDisplayColumn && _startCol <= removedEnd) _startRow = _startCol = -1;
+            else if (_startCol > removedEnd) _startCol -= count;
+            if (_finishCol >= startDisplayColumn && _finishCol <= removedEnd) _finishRow = _finishCol = -1;
+            else if (_finishCol > removedEnd) _finishCol -= count;
         }
         private void ResizeLogicalArrayRows(int newRowCount, int insertIdx, int count, bool insert)
         {
             var newTypes = new CellType[newRowCount, ColumnCount];
-            var newDirs  = new MazeCellContent.PathDirection[newRowCount, ColumnCount];
+            var newDirs = new MazeCellContent.PathDirection[newRowCount, ColumnCount];
 
             for (int r = 0; r < insertIdx; r++)
                 for (int c = 0; c < ColumnCount; c++)
@@ -327,7 +325,7 @@ namespace Maze.Maui.App
         private void ResizeLogicalArrayCols(int newColCount, int insertIdx, int count, bool insert)
         {
             var newTypes = new CellType[RowCount, newColCount];
-            var newDirs  = new MazeCellContent.PathDirection[RowCount, newColCount];
+            var newDirs = new MazeCellContent.PathDirection[RowCount, newColCount];
 
             for (int r = 0; r < RowCount; r++)
             {
@@ -482,7 +480,7 @@ namespace Maze.Maui.App
                     for (int column = currentSelection.Left; column <= currentSelection.Right; column++)
                         SetCellContent(row, column, cellType);
                 }
-                if (_startRow  > 0 && currentSelection.ContainsPosition(_startRow,  _startCol))  { _startRow  = _startCol  = -1; }
+                if (_startRow > 0 && currentSelection.ContainsPosition(_startRow, _startCol)) { _startRow = _startCol = -1; }
                 if (_finishRow > 0 && currentSelection.ContainsPosition(_finishRow, _finishCol)) { _finishRow = _finishCol = -1; }
             }
         }
@@ -498,14 +496,14 @@ namespace Maze.Maui.App
             if (row >= 1 && row <= RowCount && column >= 1 && column <= ColumnCount)
             {
                 _cellTypes[row - 1, column - 1] = cellType;
-                if      (cellType == CellType.Start)                              { _startRow  = row;  _startCol  = column; }
-                else if (cellType == CellType.Finish)                             { _finishRow = row;  _finishCol = column; }
-                else if (_startRow  == row && _startCol  == column) _startRow  = _startCol  = -1;
+                if (cellType == CellType.Start) { _startRow = row; _startCol = column; }
+                else if (cellType == CellType.Finish) { _finishRow = row; _finishCol = column; }
+                else if (_startRow == row && _startCol == column) _startRow = _startCol = -1;
                 else if (_finishRow == row && _finishCol == column) _finishRow = _finishCol = -1;
             }
             CellFrame? cellFrame = GetCell(row, column) as CellFrame;
             if (cellFrame is not null)
-                SetCellContent(cellFrame, new MazeCellContent(cellType));
+                Controls.InteractiveGrid.Grid.SetCellContent(cellFrame, new MazeCellContent(cellType));
             return cellFrame;
         }
         /// <summary>
@@ -522,9 +520,9 @@ namespace Maze.Maui.App
                 {
                     switch (_cellTypes[row, column])
                     {
-                        case CellType.Start:  maze.SetStartCell((uint)row, (uint)column);                              break;
-                        case CellType.Finish: maze.SetFinishCell((uint)row, (uint)column);                             break;
-                        case CellType.Wall:   maze.SetWallCells((uint)row, (uint)column, (uint)row, (uint)column);     break;
+                        case CellType.Start: maze.SetStartCell((uint)row, (uint)column); break;
+                        case CellType.Finish: maze.SetFinishCell((uint)row, (uint)column); break;
+                        case CellType.Wall: maze.SetWallCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                     }
                 }
             }
@@ -543,16 +541,13 @@ namespace Maze.Maui.App
 
             List<Api.Maze.Point> points = solution.GetPathPoints();
             MazeCellContent.PathDirection prevCellDirection = MazeCellContent.PathDirection.None;
-            Api.Maze.Point? nextPoint = null;
-            Api.Maze.Point thisPoint;
-            MazeCellContent.PathDirection thisCellDirection = MazeCellContent.PathDirection.None;
 
+            Api.Maze.Point thisPoint;
             for (int i = 0; i < points.Count; i++)
             {
                 thisPoint = points[i];
-                thisCellDirection = MazeCellContent.PathDirection.None;
-                nextPoint = i + 1 < points.Count ? points[i + 1] : null;
-                thisCellDirection = GetCellPathDirection(prevCellDirection, thisPoint, nextPoint);
+                Api.Maze.Point? nextPoint = i + 1 < points.Count ? points[i + 1] : null;
+                MazeCellContent.PathDirection thisCellDirection = GetCellPathDirection(prevCellDirection, thisPoint, nextPoint);
                 SetSolutionCell((int)thisPoint.Row + 1, (int)thisPoint.Column + 1, thisCellDirection);
                 prevCellDirection = thisCellDirection;
             }
@@ -568,14 +563,13 @@ namespace Maze.Maui.App
         /// <param name="cellPoint">Cell point</param>
         /// <param name="nextCellPoint">Next cell point</param>
         /// <returns>Path direction</returns>
-        private MazeCellContent.PathDirection GetCellPathDirection(
+        private static MazeCellContent.PathDirection GetCellPathDirection(
             MazeCellContent.PathDirection prevCellDirection,
             Api.Maze.Point cellPoint,
             Api.Maze.Point? nextCellPoint
         )
         {
-            MazeCellContent.PathDirection direction = MazeCellContent.PathDirection.None;
-
+            MazeCellContent.PathDirection direction;
             if (nextCellPoint is not null)
             {
                 Api.Maze.Point nextPoint = nextCellPoint.Value;
@@ -584,7 +578,7 @@ namespace Maze.Maui.App
             }
             else
             {
-                direction = GetContinueDirection(prevCellDirection);
+                direction = MazeGrid.GetContinueDirection(prevCellDirection);
             }
 
             return direction;
@@ -596,7 +590,7 @@ namespace Maze.Maui.App
         /// <param name="from">From point</param>
         /// <param name="to">To point</param>
         /// <returns>Path direction</returns>
-        private MazeCellContent.PathDirection GetCellOffsetDirection(MazeCellContent.PathDirection prevDirection, Api.Maze.Point from, Api.Maze.Point to)
+        private static MazeCellContent.PathDirection GetCellOffsetDirection(MazeCellContent.PathDirection prevDirection, Api.Maze.Point from, Api.Maze.Point to)
         {
             MazeCellContent.PathDirection direction = MazeCellContent.PathDirection.None;
             bool sameRow = from.Row == to.Row;
@@ -606,11 +600,11 @@ namespace Maze.Maui.App
             {
                 if (sameColumn)
                 {
-                    direction = to.Row > from.Row ? GetDownDirection(prevDirection) : GetUpDirection(prevDirection);
+                    direction = to.Row > from.Row ? MazeGrid.GetDownDirection(prevDirection) : MazeGrid.GetUpDirection(prevDirection);
                 }
                 if (sameRow)
                 {
-                    direction = to.Column > from.Column ? GetRightDirection(prevDirection) : GetLeftDirection(prevDirection);
+                    direction = to.Column > from.Column ? MazeGrid.GetRightDirection(prevDirection) : MazeGrid.GetLeftDirection(prevDirection);
                 }
             }
 
@@ -621,7 +615,7 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="prevDirection">Previous cell direction</param>
         /// <returns>Path direction</returns>
-        private MazeCellContent.PathDirection GetUpDirection(MazeCellContent.PathDirection prevDirection)
+        private static MazeCellContent.PathDirection GetUpDirection(MazeCellContent.PathDirection prevDirection)
         {
             switch (prevDirection)
             {
@@ -638,7 +632,7 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="prevDirection">Previous cell direction</param>
         /// <returns>Path direction</returns>
-        private MazeCellContent.PathDirection GetDownDirection(MazeCellContent.PathDirection prevDirection)
+        private static MazeCellContent.PathDirection GetDownDirection(MazeCellContent.PathDirection prevDirection)
         {
             switch (prevDirection)
             {
@@ -655,7 +649,7 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="prevDirection">Previous cell direction</param>
         /// <returns>Path direction</returns>
-        private MazeCellContent.PathDirection GetLeftDirection(MazeCellContent.PathDirection prevDirection)
+        private static MazeCellContent.PathDirection GetLeftDirection(MazeCellContent.PathDirection prevDirection)
         {
             switch (prevDirection)
             {
@@ -672,7 +666,7 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="prevDirection">Previous cell direction</param>
         /// <returns>Path direction</returns>
-        private MazeCellContent.PathDirection GetRightDirection(MazeCellContent.PathDirection prevDirection)
+        private static MazeCellContent.PathDirection GetRightDirection(MazeCellContent.PathDirection prevDirection)
         {
             switch (prevDirection)
             {
@@ -689,7 +683,7 @@ namespace Maze.Maui.App
         /// </summary>
         /// <param name="currentDirection">Current cell direction</param>
         /// <returns>Path direction</returns>
-        private MazeCellContent.PathDirection GetContinueDirection(MazeCellContent.PathDirection currentDirection)
+        private static MazeCellContent.PathDirection GetContinueDirection(MazeCellContent.PathDirection currentDirection)
         {
             MazeCellContent.PathDirection direction = MazeCellContent.PathDirection.None;
 
@@ -817,8 +811,7 @@ namespace Maze.Maui.App
                     for (int column = 1; column <= ColumnCount; column++)
                     {
                         MazeCellContent? cellContent = GetCellContent(row, column);
-                        if (cellContent is not null)
-                            cellContent.SetSolutionPath(MazeCellContent.PathDirection.None);
+                        cellContent?.SetSolutionPath(MazeCellContent.PathDirection.None);
                     }
                 }
                 haveSolutionCells = false;
@@ -833,22 +826,24 @@ namespace Maze.Maui.App
         /// <param name="direction">Facing direction</param>
         public void SetPlayerAt(int row, int col, MazeGameDirection direction)
         {
-            string image = direction switch {
-                MazeGameDirection.Up    => "walker_up.gif",
-                MazeGameDirection.Down  => "walker_down.gif",
-                MazeGameDirection.Left  => "walker_left.gif",
+            string image = direction switch
+            {
+                MazeGameDirection.Up => "walker_up.gif",
+                MazeGameDirection.Down => "walker_down.gif",
+                MazeGameDirection.Left => "walker_left.gif",
                 MazeGameDirection.Right => "walker_right.gif",
-                MazeGameDirection.None  => "walker_down.gif",   // forward-facing before first move
+                MazeGameDirection.None => "walker_down.gif",   // forward-facing before first move
                 _ => throw new ArgumentOutOfRangeException(nameof(direction))
             };
             SetWalkerCell(row + 1, col + 1, image);
             // Scroll one cell ahead so the player can see what's coming before reaching the edge
-            (int aheadRow, int aheadCol) = direction switch {
-                MazeGameDirection.Up    => (row - 1, col + 1),
-                MazeGameDirection.Down  => (row + 3, col + 1),
-                MazeGameDirection.Left  => (row + 1, col - 1),
+            (int aheadRow, int aheadCol) = direction switch
+            {
+                MazeGameDirection.Up => (row - 1, col + 1),
+                MazeGameDirection.Down => (row + 3, col + 1),
+                MazeGameDirection.Left => (row + 1, col - 1),
                 MazeGameDirection.Right => (row + 1, col + 3),
-                _                       => (row + 1, col + 1)
+                _ => (row + 1, col + 1)
             };
             ScrollCellIntoView(Math.Clamp(aheadRow, 1, RowCount), Math.Clamp(aheadCol, 1, ColumnCount));
         }
@@ -871,12 +866,13 @@ namespace Maze.Maui.App
         /// <param name="direction">Direction the player was moving when they left this cell</param>
         public void SetFootstepAt(int row, int col, MazeGameDirection direction)
         {
-            var dir = direction switch {
-                MazeGameDirection.Up    => MazeCellContent.PathDirection.Up,
-                MazeGameDirection.Down  => MazeCellContent.PathDirection.Down,
-                MazeGameDirection.Left  => MazeCellContent.PathDirection.Left,
+            var dir = direction switch
+            {
+                MazeGameDirection.Up => MazeCellContent.PathDirection.Up,
+                MazeGameDirection.Down => MazeCellContent.PathDirection.Down,
+                MazeGameDirection.Left => MazeCellContent.PathDirection.Left,
                 MazeGameDirection.Right => MazeCellContent.PathDirection.Right,
-                MazeGameDirection.None  => MazeCellContent.PathDirection.None,
+                MazeGameDirection.None => MazeCellContent.PathDirection.None,
                 _ => throw new ArgumentOutOfRangeException(nameof(direction))
             };
             SetSolutionCell(row + 1, col + 1, dir);
@@ -898,8 +894,8 @@ namespace Maze.Maui.App
         /// </summary>
         private static MazeGameDirection GetMovementDirection(Api.Maze.Point from, Api.Maze.Point to)
         {
-            if (to.Row    < from.Row)    return MazeGameDirection.Up;
-            if (to.Row    > from.Row)    return MazeGameDirection.Down;
+            if (to.Row < from.Row) return MazeGameDirection.Up;
+            if (to.Row > from.Row) return MazeGameDirection.Down;
             if (to.Column < from.Column) return MazeGameDirection.Left;
             return MazeGameDirection.Right;
         }
@@ -909,20 +905,21 @@ namespace Maze.Maui.App
         /// footstep images that were never implemented; all render identically to their cardinal form.
         /// </summary>
         private static MazeGameDirection PathDirectionToCardinal(MazeCellContent.PathDirection dir) =>
-            dir switch {
+            dir switch
+            {
                 MazeCellContent.PathDirection.Up or
                 MazeCellContent.PathDirection.UpFromLeft or
-                MazeCellContent.PathDirection.UpFromRight   => MazeGameDirection.Up,
+                MazeCellContent.PathDirection.UpFromRight => MazeGameDirection.Up,
                 MazeCellContent.PathDirection.Down or
                 MazeCellContent.PathDirection.DownFromLeft or
                 MazeCellContent.PathDirection.DownFromRight => MazeGameDirection.Down,
                 MazeCellContent.PathDirection.Left or
                 MazeCellContent.PathDirection.LeftFromUp or
-                MazeCellContent.PathDirection.LeftFromDown  => MazeGameDirection.Left,
+                MazeCellContent.PathDirection.LeftFromDown => MazeGameDirection.Left,
                 MazeCellContent.PathDirection.Right or
                 MazeCellContent.PathDirection.RightFromUp or
                 MazeCellContent.PathDirection.RightFromDown => MazeGameDirection.Right,
-                _                                           => MazeGameDirection.None
+                _ => MazeGameDirection.None
             };
         /// <summary>
         /// Sets a solution cell direction in the logical model and updates the visible frame (if any)
@@ -935,8 +932,7 @@ namespace Maze.Maui.App
                 if (direction != MazeCellContent.PathDirection.None)
                     haveSolutionCells = true;
                 MazeCellContent? cellContent = GetCellContent(row, column);
-                if (cellContent is not null)
-                    cellContent.SetSolutionPath(direction);
+                cellContent?.SetSolutionPath(direction);
             }
         }
     }
@@ -981,8 +977,8 @@ namespace Maze.Maui.App
     /// </summary>
     public class MazeGridKeyDownEventArgs : EventArgs
     {
-        Controls.Keyboard.KeyState keyState = Controls.Keyboard.KeyState.None;
-        Controls.Keyboard.Key key = Controls.Keyboard.Key.None;
+        readonly Controls.Keyboard.KeyState keyState = Controls.Keyboard.KeyState.None;
+        readonly Controls.Keyboard.Key key = Controls.Keyboard.Key.None;
 
         /// <summary>
         /// Additional key state information
@@ -1164,9 +1160,9 @@ namespace Maze.Maui.App
             VisitedDot = 13
         }
 
-        static private Color SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR = Colors.White;
-        static private Color SOLUTION_PATH_CELL_HIGHLIGHT_COLOR = Colors.LightGreen;
-        static private Color GAME_VISITED_CELL_HIGHLIGHT_COLOR = Colors.White;
+        private static readonly Color SOLUTION_PATH_START_FINISH_HIGHLIGHT_COLOR = Colors.White;
+        private static readonly Color SOLUTION_PATH_CELL_HIGHLIGHT_COLOR = Colors.LightGreen;
+        private static readonly Color GAME_VISITED_CELL_HIGHLIGHT_COLOR = Colors.White;
 
         CellType cellType = CellType.Empty;
         PathDirection solutionPathDirection = PathDirection.None;

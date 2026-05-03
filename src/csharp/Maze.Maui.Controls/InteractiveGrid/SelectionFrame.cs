@@ -1,4 +1,4 @@
-﻿namespace Maze.Maui.Controls.InteractiveGrid
+namespace Maze.Maui.Controls.InteractiveGrid
 {
     /// <summary>
     /// The `SelectionFrame` class represents a selection frame that is used to
@@ -18,7 +18,7 @@
         private const int BORDER_ID_FIRST = BORDER_ID_TOP;
         private const int BORDER_ID_LAST = BORDER_ID_RIGHT;
 
-        static private Color DEFAULT_BORDER_COLOR = Colors.Black;
+        private static readonly Color DEFAULT_BORDER_COLOR = Colors.Black;
         const double DEFAULT_BORDER_WIDTH = 2.0;
         const double DEFAULT_BORDER_GRIP_DIAMETER = 10.0;
         const bool DEFAULT_IS_PAN_SUPPORT_ENABLED = true;
@@ -30,7 +30,8 @@
 
         private readonly Grid parentGrid;
         private readonly FrameBorder[] frameBorders = new FrameBorder[4];
-        private bool isPanSupportEnabled;
+
+        private readonly bool isPanSupportEnabled;
         private bool isAnimationRunning = false;
         private CellRange? cellRange;
 
@@ -142,14 +143,14 @@
         private void CreateBorders()
         {
             for (int id = BORDER_ID_FIRST; id <= BORDER_ID_LAST; id++)
-                frameBorders[id] = NewFrameBorder(ToFrameBorderEdge(id));
+                frameBorders[id] = NewFrameBorder(SelectionFrame.ToFrameBorderEdge(id));
         }
         /// <summary>
         /// Converts an internal border ID to a `FrameEdge` type
         /// </summary>
         /// <param name="borderID">Border ID</param>
         /// <returns>Frame edge type</returns>
-        private FrameBorder.FrameEdge ToFrameBorderEdge(int borderID)
+        private static FrameBorder.FrameEdge ToFrameBorderEdge(int borderID)
         {
             switch (borderID)
             {
@@ -254,7 +255,7 @@
             foreach (var border in frameBorders)
                 border.EnableDashAnimation(enable);
 
-            if(enable)
+            if (enable)
                 StartDashAnimation();
             else
                 StopDashAnimation();
@@ -271,8 +272,8 @@
         /// <summary>
         /// Starts dash animation
         /// </summary>
-        private void StartDashAnimation() 
-        { 
+        private void StartDashAnimation()
+        {
             if (isAnimationRunning || Application.Current is null) return;
             isAnimationRunning = true;
 
@@ -291,7 +292,8 @@
         /// <summary>
         /// Stops dash animation
         /// </summary>
-        private void StopDashAnimation() {
+        private void StopDashAnimation()
+        {
             isAnimationRunning = false;
         }
 

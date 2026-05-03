@@ -36,32 +36,32 @@ namespace Maze.Interop.Tests
         {
             GetInterop().FreeMazeGame(gamePtr);
         }
-        private void AssertRowCount(UInt32 actual, UInt32 expected)
+        private static void AssertRowCount(UInt32 actual, UInt32 expected)
         {
             Assert.True(actual == expected, $"Expected rowCount to be {expected} but got {actual}");
         }
-        private void AssertColCount(UInt32 actual, UInt32 expected)
+        private static void AssertColCount(UInt32 actual, UInt32 expected)
         {
             Assert.True(actual == expected, $"Expected colCount to be {expected} but got {actual}");
         }
-        private void AssertCellType(MazeCellType actual, MazeCellType expected)
+        private static void AssertCellType(MazeCellType actual, MazeCellType expected)
         {
             Assert.True(actual == expected, $"Expected cell type to be '{expected}' but got '{actual}'");
         }
-        private void AssertPoint(string context, MazePoint actual, MazePoint expected)
+        private static void AssertPoint(string context, MazePoint actual, MazePoint expected)
         {
             Assert.True(actual.row == expected.row, $"Expected {context} point row to be '{expected.row}' but got '{actual.row}'");
             Assert.True(actual.col == expected.col, $"Expected {context} point column to be '{expected.col}' but got '{actual.col}'");
         }
-        private void AssertStartCell(MazePoint actual, MazePoint expected)
+        private static void AssertStartCell(MazePoint actual, MazePoint expected)
         {
             AssertPoint("start", actual, expected);
         }
-        private void AssertFinishCell(MazePoint actual, MazePoint expected)
+        private static void AssertFinishCell(MazePoint actual, MazePoint expected)
         {
             AssertPoint("finish", actual, expected);
         }
-        private void AssertRangeCellType(UIntPtr mazePtr, UInt32 fromRow, UInt32 fromCol, UInt32 toRow, UInt32 toCol, MazeCellType expected, bool freeMazePtrOnFail)
+        private void AssertRangeCellType(UIntPtr mazePtr, UInt32 fromRow, UInt32 fromCol, UInt32 toRow, UInt32 toCol, MazeCellType expected)
         {
             MazeInterop interop = GetInterop();
             for (UInt32 row = fromRow; row <= toRow; row++)
@@ -560,9 +560,8 @@ namespace Maze.Interop.Tests
         {
             MazeInterop interop = GetInterop();
             UIntPtr mazePtr = CreateNewMaze(5, 5);
-            MazePoint start = new MazePoint();
             interop.MazeSetStartCell(mazePtr, 1, 2);
-            start = interop.MazeGetStartCell(mazePtr);
+            MazePoint start = interop.MazeGetStartCell(mazePtr);
             FreeMaze(mazePtr);
             AssertStartCell(start, new MazePoint() { row = 1, col = 2 });
         }
@@ -636,9 +635,8 @@ namespace Maze.Interop.Tests
         {
             MazeInterop interop = GetInterop();
             UIntPtr mazePtr = CreateNewMaze(5, 5);
-            MazePoint finish = new MazePoint();
             interop.MazeSetFinishCell(mazePtr, 3, 4);
-            finish = interop.MazeGetFinishCell(mazePtr);
+            MazePoint finish = interop.MazeGetFinishCell(mazePtr);
             FreeMaze(mazePtr);
             AssertFinishCell(finish, new MazePoint() { row = 3, col = 4 });
         }
@@ -696,7 +694,7 @@ namespace Maze.Interop.Tests
             MazeInterop interop = GetInterop();
             UIntPtr mazePtr = CreateNewMaze(5, 10);
             interop.MazeSetWallCells(mazePtr, 0, 0, 3, 6);
-            AssertRangeCellType(mazePtr, 0, 0, 3, 6, MazeCellType.Wall, true);
+            AssertRangeCellType(mazePtr, 0, 0, 3, 6, MazeCellType.Wall);
             FreeMaze(mazePtr);
         }
         /// <summary>

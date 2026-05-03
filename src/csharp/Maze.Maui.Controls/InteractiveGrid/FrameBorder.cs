@@ -11,12 +11,12 @@ namespace Maze.Maui.Controls.InteractiveGrid
     public class FrameBorder
     {
         // Private properties
-        SelectionFrame parentFrame;
+        readonly SelectionFrame parentFrame;
 
         private readonly BorderBox box;
         private readonly BorderGrip? grip;
 
-        static private Color DEFAULT_COLOR = Colors.Black;
+        private static readonly Color DEFAULT_COLOR = Colors.Black;
         private const double DEFAULT_EDGE_THICKNESS = 2.0;
         private const double DEFAULT_GRIP_DIAMETER = 10.0;
 
@@ -24,7 +24,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         FrameEdge frameEdge = FrameEdge.None;
         FrameCorner gripCorner = FrameCorner.None;
         double edgeThickness = DEFAULT_EDGE_THICKNESS;
-        double gripDiameter = DEFAULT_GRIP_DIAMETER;
+        readonly double gripDiameter = DEFAULT_GRIP_DIAMETER;
 
         int startRow = 0;
         int startColumn = 0;
@@ -106,7 +106,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
             set
             {
                 frameEdge = value;
-                gripCorner = GetGripCorner(frameEdge);
+                gripCorner = FrameBorder.GetGripCorner(frameEdge);
             }
         }
         /// <summary>
@@ -273,7 +273,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// 
         private void OnBoxPanUpdated(BorderBox sender, PanUpdatedEventArgs e)
         {
-            OnPanUpdated(sender, e, false);
+            OnPanUpdated(e, false);
         }
         /// <summary>
         /// Registers the event handlers for the frame's grip (if enabled)
@@ -293,7 +293,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// 
         private void OnGripPanUpdated(BorderGrip sender, PanUpdatedEventArgs e)
         {
-            OnPanUpdated(sender, e, true);
+            OnPanUpdated(e, true);
         }
         /// <summary>
         /// Gets the icon to display for the box or grip when the pointer hovers over the object
@@ -343,10 +343,9 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <summary>
         /// Handles the pan updated event for either the border box or grip, triggering any registered PanUpdated handler
         /// </summary>
-        /// <param name="view">The object receiving the pan event</param>
         /// <param name="e">Pan updated event arguments</param>
-        /// <param name="isGrip">Flag indicating whether `view` corresponds to a grip. If not, it is a box.</param>
-        private void OnPanUpdated(IView view, PanUpdatedEventArgs e, bool isGrip)
+        /// <param name="isGrip">Flag indicating whether the pan event came from a grip. If not, it came from a box.</param>
+        private void OnPanUpdated(PanUpdatedEventArgs e, bool isGrip)
         {
             switch (e.StatusType)
             {
@@ -464,10 +463,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private void UpdateColor(Color newColor)
         {
             color = newColor;
-            if (box is not null)
-                box.Color = newColor;
-            if (grip is not null)
-                grip.Color = newColor;
+            box?.Color = newColor;
+            grip?.Color = newColor;
         }
         /// <summary>
         /// Updates the edge thickness to a new thickmess
@@ -494,8 +491,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         public void Show(bool show)
         {
             box.IsVisible = show;
-            if (grip is not null)
-                grip.IsVisible = show;
+            grip?.IsVisible = show;
         }
         /// <summary>
         /// Adds the object's components to the parent grid
@@ -564,7 +560,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         /// <param name="edge">Frame edge</param>
         /// <returns>Frame corner</returns>
-        private FrameCorner GetGripCorner(FrameEdge edge)
+        private static FrameCorner GetGripCorner(FrameEdge edge)
         {
             switch (edge)
             {
@@ -586,9 +582,6 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>X translation to apply to object's X position to draw grip (in DIPs)</returns>
         private double GetGripTranslationX(double width)
         {
-            bool singleRow = ParentFrame.RowCount == 1;
-            bool singleColumn = ParentFrame.ColumnCount == 1;
-
             switch (Edge)
             {
                 case FrameEdge.Top:
@@ -609,9 +602,6 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Ytranslation to apply to object's Y position to draw grip (in DIPs)</returns>
         private double GetGripTranslationY(double height)
         {
-            bool singleRow = ParentFrame.RowCount == 1;
-            bool singleColumn = ParentFrame.ColumnCount == 1;
-
             switch (Edge)
             {
                 case FrameEdge.Top:

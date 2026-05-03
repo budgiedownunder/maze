@@ -133,11 +133,8 @@ namespace Maze.Maui.App.ViewModels
         {
             _game?.Dispose();
             _game = null;
-            if (_gameGrid is not null)
-            {
-                _gameGrid.IsInteractionLocked = false;
-                _gameGrid = null;
-            }
+            _gameGrid?.IsInteractionLocked = false;
+            _gameGrid = null;
         }
     }
 }

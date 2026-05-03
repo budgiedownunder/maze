@@ -430,7 +430,7 @@ namespace Maze.Maui.App.ViewModels
         private async Task<bool> CreateMazeItem(Api.Maze definition)
         {
             bool created = false;
-            string? name = await _dialogService.DisplayPrompt("Create Maze", "Name", "Name", "OK", "Cancel", "Enter maze name", 
+            string? name = await _dialogService.DisplayPrompt("Create Maze", "Name", "Name", "OK", "Cancel", "Enter maze name",
                                                 keyboard: Keyboard.Text, allowEmpty: false, trimResult: true);
             if (name is not null)
             {
@@ -474,7 +474,8 @@ namespace Maze.Maui.App.ViewModels
             if (await _dialogService.ShowConfirmation("Refresh Maze",
                 "Are you sure you want to refresh the maze?\n\nNote: any changes you have made will be lost",
                 "Yes", "No",
-                isDestructive: true)) {
+                isDestructive: true))
+            {
 
                 if (CanClearSolution)
                     await ClearSolutionAsync();
@@ -491,7 +492,7 @@ namespace Maze.Maui.App.ViewModels
                         refreshed = true;
                     }
                 }
-                catch (Exception ex )
+                catch (Exception ex)
                 {
                     await _dialogService.ShowAlert("Error", $"Failed to refresh maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
                 }
@@ -534,5 +535,5 @@ namespace Maze.Maui.App.ViewModels
                 IsBusy = false;
             }
         }
-     }
+    }
 }

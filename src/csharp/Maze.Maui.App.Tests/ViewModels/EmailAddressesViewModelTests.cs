@@ -103,8 +103,10 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.AddEmailAsync(It.IsAny<string>()))
                 .ThrowsAsync(new HttpRequestException("conflict", null, HttpStatusCode.Conflict));
-            var vm = new EmailAddressesViewModel(auth.Object);
-            vm.NewEmail = "dup@example.com";
+            var vm = new EmailAddressesViewModel(auth.Object)
+            {
+                NewEmail = "dup@example.com"
+            };
 
             await vm.AddEmailCommand.ExecuteAsync(null);
 
@@ -119,8 +121,10 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.AddEmailAsync(It.IsAny<string>()))
                 .ThrowsAsync(new HttpRequestException("bad", null, HttpStatusCode.BadRequest));
-            var vm = new EmailAddressesViewModel(auth.Object);
-            vm.NewEmail = "weird@example.com";
+            var vm = new EmailAddressesViewModel(auth.Object)
+            {
+                NewEmail = "weird@example.com"
+            };
 
             await vm.AddEmailCommand.ExecuteAsync(null);
 

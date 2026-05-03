@@ -39,7 +39,7 @@ namespace Maze.Api
     /// </summary>
     public sealed class MazeGame : IDisposable
     {
-        static MazeInterop _interop = MazeInterop.GetInstance();
+        static readonly MazeInterop _interop = MazeInterop.GetInstance();
 
         /// <summary>
         /// When true (the default), all instances share the static <see cref="MazeInterop"/> singleton.
@@ -48,7 +48,7 @@ namespace Maze.Api
         public static bool UseStaticInterop { get; set; } = true;
 
         /// <summary>Returns the <see cref="MazeInterop"/> instance used by this game session.</summary>
-        public MazeInterop Interop => UseStaticInterop ? _interop : MazeInterop.GetInstance();
+        public static MazeInterop Interop => UseStaticInterop ? _interop : MazeInterop.GetInstance();
 
         private UIntPtr _gamePtr;
         private bool _disposed;
@@ -65,6 +65,8 @@ namespace Maze.Api
             GC.SuppressFinalize(this);
         }
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0060:Remove unused parameter",
+            Justification = "Standard IDisposable+finalizer dispatcher pattern; 'disposing' must remain in the signature so future managed-cleanup logic can branch on it.")]
         private void Dispose(bool disposing)
         {
             if (_disposed) return;

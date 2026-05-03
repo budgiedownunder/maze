@@ -90,7 +90,7 @@ namespace Maze.Maui.App.Services
                 if (settings != null)
                     _settings = settings;
             }
-            catch { } 
+            catch { }
         }
     }
 }
