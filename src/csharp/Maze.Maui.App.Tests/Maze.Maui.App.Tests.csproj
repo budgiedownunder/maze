@@ -31,8 +31,12 @@
   <ItemGroup>
     <Compile Include="..\Maze.Maui.App\Services\IAuthService.cs"
              Link="LinkedSource\Services\IAuthService.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\IDialogService.cs"
+             Link="LinkedSource\Services\IDialogService.cs" />
     <Compile Include="..\Maze.Maui.App\Services\INavigationService.cs"
              Link="LinkedSource\Services\INavigationService.cs" />
+    <Compile Include="..\Maze.Maui.App\Messages\MazesInvalidatedMessage.cs"
+             Link="LinkedSource\Messages\MazesInvalidatedMessage.cs" />
     <Compile Include="..\Maze.Maui.App\Messages\PasswordSetMessage.cs"
              Link="LinkedSource\Messages\PasswordSetMessage.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\BaseViewModel.cs"
@@ -43,6 +47,8 @@
              Link="LinkedSource\ViewModels\EmailAddressesViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\ChangePasswordViewModel.cs"
              Link="LinkedSource\ViewModels\ChangePasswordViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\AccountViewModel.cs"
+             Link="LinkedSource\ViewModels\AccountViewModel.cs" />
   </ItemGroup>
 
 </Project>

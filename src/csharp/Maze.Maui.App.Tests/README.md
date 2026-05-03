@@ -12,6 +12,7 @@ Tests currently cover:
 
 | Class | What it tests |
 |:------|:--------------|
+| `AccountViewModelTests` | Profile load/save, dirty-tracking, password message handler, delete-account confirmation |
 | `ChangePasswordViewModelTests` | Password Change/Set branching, messenger send, back-navigation |
 | `EmailAddressesViewModelTests` | Email list management — add, set primary, remove, primary-row guards |
 
