@@ -73,6 +73,10 @@
              Link="LinkedSource\ViewModels\MazesViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\MazeViewModel.cs"
              Link="LinkedSource\ViewModels\MazeViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\MazeGameViewModel.cs"
+             Link="LinkedSource\ViewModels\MazeGameViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\IMazeGridView.cs"
+             Link="LinkedSource\Services\IMazeGridView.cs" />
   </ItemGroup>
 
 </Project>

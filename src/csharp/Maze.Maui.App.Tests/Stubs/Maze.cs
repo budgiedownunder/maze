@@ -22,6 +22,7 @@ namespace Maze.Api
 
         public string ToJson() => Json;
         public void FromJson(string json) => Json = json;
+        public string DefinitionToJson() => Json;
         public void Solve() => Solved = true;
         public void Dispose() { }
     }

@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Maze.Api;
 using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
+using Microsoft.Maui.Controls;
 
 namespace Maze.Maui.App.ViewModels
 {
