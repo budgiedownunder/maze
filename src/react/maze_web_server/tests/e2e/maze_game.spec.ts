@@ -138,6 +138,8 @@ test('unauthenticated visit to /game/ redirects to login', async ({ page }) => {
 // ──────────────────────────────────────────────────────────────
 
 test.describe('MazeGamePage — mobile (Pixel 7)', () => {
+  // Spread device settings but omit defaultBrowserType — Playwright disallows it inside a describe group.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rename is the omission
   const { defaultBrowserType: _ignored, ...pixel7 } = devices['Pixel 7']
   test.use(pixel7)
 

@@ -175,15 +175,8 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
     // Frame position is measured from the DOM so it stays correct at any zoom level.
     const [frameStyle, setFrameStyle] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
 
-    // Keep a ref so the stable measureFrame callback can read the latest selectionRect
-    // without being recreated every time it changes.
-    const selectionRectRef = useRef(selectionRect)
-    selectionRectRef.current = selectionRect
-
-    // Stable measurement function — no deps, safe to subscribe to window events.
     const measureFrame = useCallback(() => {
-      const sr = selectionRectRef.current
-      if (!sr || !containerRef.current) {
+      if (!selectionRect || !containerRef.current) {
         setFrameStyle(null)
         return
       }
@@ -194,19 +187,19 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       // JSDOM (unit tests) always returns zero-sized rects — fall back to calculated values.
       if (containerRect.width === 0) {
         setFrameStyle({
-          top: HEADER_SIZE + sr.minRow * cellSize,
-          left: HEADER_SIZE + sr.minCol * cellSize,
-          width: (sr.maxCol - sr.minCol + 1) * cellSize,
-          height: (sr.maxRow - sr.minRow + 1) * cellSize,
+          top: HEADER_SIZE + selectionRect.minRow * cellSize,
+          left: HEADER_SIZE + selectionRect.minCol * cellSize,
+          width: (selectionRect.maxCol - selectionRect.minCol + 1) * cellSize,
+          height: (selectionRect.maxRow - selectionRect.minRow + 1) * cellSize,
         })
         return
       }
 
       const tlCell = container.querySelector<HTMLElement>(
-        `td[aria-label="Cell ${sr.minRow + 1},${sr.minCol + 1}"]`,
+        `td[aria-label="Cell ${selectionRect.minRow + 1},${selectionRect.minCol + 1}"]`,
       )
       const brCell = container.querySelector<HTMLElement>(
-        `td[aria-label="Cell ${sr.maxRow + 1},${sr.maxCol + 1}"]`,
+        `td[aria-label="Cell ${selectionRect.maxRow + 1},${selectionRect.maxCol + 1}"]`,
       )
       if (!tlCell || !brCell) return
 
@@ -222,12 +215,16 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         width: brRect.right - tlRect.left,
         height: brRect.bottom - tlRect.top,
       })
-    }, []) // stable — reads selectionRect via ref
+    }, [selectionRect, cellSize])
 
-    // Re-measure whenever the selection changes.
+    // Re-measure whenever measureFrame's inputs change (selection, cell size).
+    // Canonical "measure DOM post-layout, then setState" pattern — the setState
+    // inside measureFrame is required because frameStyle depends on values only
+    // available after the browser has laid out the cells.
     useLayoutEffect(() => {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       measureFrame()
-    }, [selectionRect, measureFrame])
+    }, [measureFrame])
 
     // Re-measure on window resize (browser zoom fires resize), so the frame stays
     // aligned after the user zooms without needing to reselect.
@@ -270,7 +267,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
             inline: needRight ? 'end' : 'nearest',
           })
       }
-    }, [activeCell])
+    }, [activeCell, cellSize])
 
     // Scroll the walker cell into view on every step, using the same logic as activeCell above.
     useLayoutEffect(() => {
@@ -295,7 +292,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
             inline: needRight ? 'end' : 'nearest',
           })
       }
-    }, [walkState])
+    }, [walkState, cellSize])
 
     // Scroll a lookahead cell into view after each successful game move.
     useEffect(() => {

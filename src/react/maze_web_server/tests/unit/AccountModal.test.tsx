@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
 import { mockLoginResponse, mockProfile } from '../../src/mocks/handlers'
-import { AuthProvider } from '../../src/context/AuthContext'
+import { AuthProvider } from '../../src/context/AuthProvider'
 import { AccountModal } from '../../src/components/AccountModal'
 
 const mockNavigate = vi.fn()

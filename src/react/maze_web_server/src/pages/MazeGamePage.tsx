@@ -39,6 +39,7 @@ export function MazeGamePage() {
   const isComplete = game?.is_complete() ?? false
   const [showResult, setShowResult] = useState(false)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isComplete) setShowResult(true)
   }, [isComplete])
 

@@ -2,7 +2,8 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../mocks/server'
-import { AppFeaturesProvider, useAppFeatures } from './AppFeaturesContext'
+import { useAppFeatures } from './AppFeaturesContext'
+import { AppFeaturesProvider } from './AppFeaturesProvider'
 
 describe('AppFeaturesContext', () => {
   it('fetches features on mount', async () => {

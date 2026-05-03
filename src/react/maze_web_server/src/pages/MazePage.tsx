@@ -309,6 +309,7 @@ export function MazePage() {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- signature dictated by MazeGrid's onCellDoubleClick prop type
   const handleCellDoubleClick = useCallback((_row: number, _col: number) => {
     if (!isTouchOnly) return
     if (isRangeMode) {
@@ -573,7 +574,7 @@ export function MazePage() {
                 isWalking
               }
               onClick={() => {
-                selectionStatus.allColumnsSelected ? deleteRows() : deleteCols()
+                if (selectionStatus.allColumnsSelected) deleteRows(); else deleteCols()
                 gridRef.current?.focus()
               }}
             >

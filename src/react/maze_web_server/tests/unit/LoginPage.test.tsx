@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { ThemeProvider } from '../../src/context/ThemeContext'
+import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { LoginPage } from '../../src/pages/LoginPage'
 
 const mockNavigate = vi.fn()

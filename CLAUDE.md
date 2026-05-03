@@ -60,6 +60,15 @@ For build and test commands, see **`src/csharp/README.md`**.
 
 ---
 
+## React conventions
+
+- React frontends live under `src/react/`; each subdirectory is a standalone npm project.
+- **After any change to React code under `src/react/`, run `npm run lint` from that project's directory and fix all errors and warnings before claiming the code change is complete.** Expected output: zero errors, zero warnings.
+
+For build and test commands, see each project's `README.md` (e.g. `src/react/maze_web_server/README.md`).
+
+---
+
 ## Build and test
 
 **Always read the relevant README before building or testing.** Commands are subject to change and the READMEs are the maintained source of truth:
