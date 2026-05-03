@@ -65,6 +65,27 @@ Non-Windows:
 dotnet test Build-Non-Windows.sln
 ```
 
+### Linting
+To verify code formatting and analyzer rules across all C# projects, run the following from the `csharp` directory:
+
+Windows:
+
+```
+dotnet format Build-Windows.sln --verify-no-changes --severity info
+```
+
+Non-Windows:
+
+```
+dotnet format Build-Non-Windows.sln --verify-no-changes --severity info
+```
+
+To autofix violations, omit the `--verify-no-changes` flag.
+
+The expected output is zero errors and zero warnings.
+
+Per-project linting commands are documented in each project's README (useful for fast iteration during development). Lint rule configuration lives in [`.editorconfig`](./.editorconfig) at this directory.
+
 ### Benchmarking
 There are no benchmarking tests currently configured for these components.
 
