@@ -6,5 +6,8 @@
 // resolve `Keyboard?` without pulling in MAUI runtime references.
 namespace Maze.Maui.App.Services
 {
-    public sealed class Keyboard { }
+    public sealed class Keyboard
+    {
+        public static Keyboard Text { get; } = new();
+    }
 }

@@ -16,6 +16,7 @@ Tests currently cover:
 | `ChangePasswordViewModelTests` | Password Change/Set branching, messenger send, back-navigation |
 | `EmailAddressesViewModelTests` | Email list management — add, set primary, remove, primary-row guards |
 | `LoginViewModelTests` | Credentials sign-in (validation, 401, navigation), OAuth flow, session restore, OAuth provider sync |
+| `MazesViewModelTests` | Maze list load + sort, name uniqueness, add/remove/invalidate, rename / duplicate / delete dialog flows, message handlers, navigation routing |
 | `SignUpViewModelTests` | CanSignUp guards, password match + complexity rules, 409 conflict, error-clearing partials, OAuth refresh |
 
 When adding a new ViewModel test, also add the corresponding source-file link entry to `Maze.Maui.App.Tests.csproj`.
