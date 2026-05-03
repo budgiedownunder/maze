@@ -41,6 +41,8 @@
              Link="LinkedSource\Services\INavigationService.cs" />
     <Compile Include="..\Maze.Maui.App\Services\OAuthErrors.cs"
              Link="LinkedSource\Services\OAuthErrors.cs" />
+    <Compile Include="..\Maze.Maui.Services\DeviceTypeService.cs"
+             Link="LinkedSource\Services\DeviceTypeService.cs" />
     <Compile Include="..\Maze.Maui.App\Extensions\StringExtensions.cs"
              Link="LinkedSource\Extensions\StringExtensions.cs" />
     <Compile Include="..\Maze.Maui.App\Models\GameType.cs"
@@ -69,6 +71,8 @@
              Link="LinkedSource\ViewModels\SignUpViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\MazesViewModel.cs"
              Link="LinkedSource\ViewModels\MazesViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\MazeViewModel.cs"
+             Link="LinkedSource\ViewModels\MazeViewModel.cs" />
   </ItemGroup>
 
 </Project>
