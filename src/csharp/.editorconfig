@@ -1,0 +1,86 @@
+# C# linting rules silenced for this codebase.
+#
+# Each entry below disables a rule that we have evaluated and rejected
+# (see C:/Users/cbudg/.claude/plans/do-we-have-anything-logical-fairy.md
+# Step 2 triage for the per-rule rationale).
+#
+# This file layers on top of the repo-root .editorconfig and is honoured by:
+#   dotnet format --verify-no-changes --severity info
+# (run from src/csharp/ against Build-Windows.sln / Build-Non-Windows.sln,
+# or from any project directory).
+
+[*.cs]
+
+# IDE0028 / IDE0300 / IDE0305 — Use C# 12 collection expressions ([...] instead of new List<T> { ... }).
+# Collection-expression rewrites can change overload resolution between
+# IEnumerable<T>, T[], and Span<T> overloads — material risk in the WASM/native
+# interop layer where overload selection is load-bearing.
+dotnet_diagnostic.IDE0028.severity = none
+dotnet_diagnostic.IDE0300.severity = none
+dotnet_diagnostic.IDE0305.severity = none
+
+# IDE0063 — 'using' statement can be simplified.
+# Codebase consistently uses scoped 'using (...) { ... }' blocks for explicit
+# lifetime; the simplified top-level form is a stylistic preference we reject.
+dotnet_diagnostic.IDE0063.severity = none
+
+# IDE0066 — Use 'switch' expression instead of 'switch' statement.
+# Switch-expression rewrite is non-trivial when cases have multi-statement
+# bodies, and changes exhaustiveness semantics (unmatched values throw
+# SwitchExpressionException at runtime). Codebase prefers switch statements.
+dotnet_diagnostic.IDE0066.severity = none
+
+# IDE0090 — 'new' expression can be simplified (target-typed new).
+# We prefer the explicit 'new TypeName()' form. It is greppable, makes
+# constructor selection unambiguous, and surfaces compile-time mismatches
+# when the LHS type is refactored.
+dotnet_diagnostic.IDE0090.severity = none
+
+# IDE0290 — Use primary constructor.
+# Captured primary-constructor parameters are mutable, are not real fields
+# (so reflection / serializer / DI scans see something different), and
+# interact badly with CommunityToolkit.Mvvm source generators in this
+# codebase. Stylistic migration with maintenance cost; not adopted.
+dotnet_diagnostic.IDE0290.severity = none
+
+# SYSLIB1054 — Mark P/Invoke method with LibraryImportAttribute (source-gen P/Invoke).
+# Migrating every native interop signature to [LibraryImport] requires the
+# 'partial' modifier on every method, source-generator output, and changes
+# how non-blittable types (e.g. bool) are marshaled. Out of scope for lint
+# cleanup; would need a careful per-signature review.
+dotnet_diagnostic.SYSLIB1054.severity = none
+
+# SYSLIB1045 — Convert to 'GeneratedRegexAttribute' (source-gen regex).
+# Same family as SYSLIB1054 — would force a Regex-source-gen migration with
+# subtle semantic differences (timeouts, partial match support). Not adopted
+# for the small number of regexes in this codebase.
+dotnet_diagnostic.SYSLIB1045.severity = none
+
+# CA2101 — Specify marshaling for P/Invoke string arguments.
+# CA2101 was authored before .NET Core 3.0 introduced UnmanagedType.LPUTF8Str,
+# and its allow-list only recognises LPWStr (UTF-16) or CharSet.Unicode as
+# safe marshaling. The Maze.Interop native bridge calls into the maze_c Rust
+# crate, which expects *const c_char (UTF-8) and rejects UTF-16. We use
+# [MarshalAs(UnmanagedType.LPUTF8Str)] — the correct choice for Rust interop —
+# which the analyzer does not recognise, hence this suppression.
+dotnet_diagnostic.CA2101.severity = none
+
+# CA2020 — Prevent behavioral change caused by built-in operators of IntPtr/UIntPtr.
+# Fires entirely in the WASM interop layer where pointer arithmetic and
+# casts (e.g. (long)(uint)mazePtr) are the deliberate marshaling pattern.
+# Suppressing the analyzer to throw 'unchecked' blocks at it does not add
+# safety in this context.
+dotnet_diagnostic.CA2020.severity = none
+
+# CsWinRT1028 / CsWinRT1030 — C#/WinRT projection guidance.
+# Surface only on net10.0-windows targets. The Maze app does not ship as a
+# WinRT component, so the projection guidance does not apply.
+dotnet_diagnostic.CsWinRT1028.severity = none
+dotnet_diagnostic.CsWinRT1030.severity = none
+
+# MVVMTK0051 — Project has [ObservableProperty]-on-fields warnings that the
+# code fixer could resolve via partial properties.
+# This codebase has deliberately chosen field-based [ObservableProperty]
+# (see Maze.Maui.App.csproj <NoWarn>MVVMTK0045</NoWarn>); migrating to
+# partial properties is a separate refactor, not a lint cleanup.
+dotnet_diagnostic.MVVMTK0051.severity = none
