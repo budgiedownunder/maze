@@ -21,6 +21,7 @@ namespace Maze.Maui.App.ViewModels
         // Private properties
         readonly IMazeService _mazeService;
         readonly IDialogService _dialogService;
+        readonly INavigationService _navigationService;
         private bool _dataLoaded = false;
         public bool IsDataLoaded => _dataLoaded;
         public void InvalidateData()
@@ -34,11 +35,13 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         /// <param name="dialogService">Injected dialog service</param>
         /// <param name="mazeService">Injected maze service</param>
-        public MazesViewModel(IDialogService dialogService, IMazeService mazeService)
+        /// <param name="navigationService">Injected navigation service</param>
+        public MazesViewModel(IDialogService dialogService, IMazeService mazeService, INavigationService navigationService)
         {
             Title = "Mazes";
             _mazeService = mazeService;
             _dialogService = dialogService;
+            _navigationService = navigationService;
             // Subscribe to in-process pub/sub. Singleton lifetime guarantees
             // the recipient outlives any sender, and WeakReferenceMessenger
             // automatically tidies up if that ever stops being true.
@@ -121,7 +124,7 @@ namespace Maze.Maui.App.ViewModels
             IsBusy = true;
             try
             {
-                await Shell.Current.GoToAsync($"{nameof(MazePage)}", true,
+                await _navigationService.GoToAsync(nameof(MazePage),
                     new Dictionary<string, object>
                     {
                         {"MazeItem", item }
@@ -169,7 +172,7 @@ namespace Maze.Maui.App.ViewModels
                 var route = gameType == GameType.ThreeD
                     ? nameof(Views.Play3dGamePage)
                     : nameof(Views.MazeGamePage);
-                await Shell.Current.GoToAsync(route, true,
+                await _navigationService.GoToAsync(route,
                     new Dictionary<string, object> { { "MazeItem", item } });
                 await Task.Delay(500);
             }

@@ -13,6 +13,7 @@ namespace Maze.Maui.App.ViewModels
     {
         private readonly IAuthService _authService;
         private readonly IAppFeaturesService _appFeaturesService;
+        private readonly INavigationService _navigationService;
         private readonly AccountViewModel _accountViewModel;
 
         /// <summary>OAuth providers exposed by the server. Same data as on the login
@@ -59,14 +60,16 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         /// <param name="authService">Injected auth service</param>
         /// <param name="appFeaturesService">Injected app features service</param>
+        /// <param name="navigationService">Injected navigation service</param>
         /// <param name="accountViewModel">Injected (singleton) account view model — used to flip
         /// <see cref="AccountViewModel.IsWelcomeMode"/> when an OAuth sign-up creates a brand-new
         /// user, so the Account popup auto-opens with a welcome banner on the next page.</param>
-        public SignUpViewModel(IAuthService authService, IAppFeaturesService appFeaturesService, AccountViewModel accountViewModel)
+        public SignUpViewModel(IAuthService authService, IAppFeaturesService appFeaturesService, INavigationService navigationService, AccountViewModel accountViewModel)
         {
             Title = "Sign Up";
             _authService = authService;
             _appFeaturesService = appFeaturesService;
+            _navigationService = navigationService;
             _accountViewModel = accountViewModel;
         }
 
@@ -131,7 +134,7 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 await _authService.SignUpAsync(Email, Password);
-                await Shell.Current.GoToAsync("..");
+                await _navigationService.GoBackAsync();
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
             {
@@ -148,9 +151,9 @@ namespace Maze.Maui.App.ViewModels
         }
 
         [RelayCommand]
-        private static async Task GoBack()
+        private async Task GoBack()
         {
-            await Shell.Current.GoToAsync("..");
+            await _navigationService.GoBackAsync();
         }
 
         [RelayCommand]
@@ -166,7 +169,7 @@ namespace Maze.Maui.App.ViewModels
                 // navigating: AppShell.OnNavigated will read it on arrival at the
                 // main page and auto-open the Account popup with a welcome banner.
                 _accountViewModel.IsWelcomeMode = result.IsNewUser;
-                await Shell.Current.GoToAsync("//MainPage");
+                await _navigationService.GoToRootAsync("//MainPage");
             }
             catch (OAuthFlowFailedException ex)
             {
