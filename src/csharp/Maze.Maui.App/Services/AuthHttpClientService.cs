@@ -262,7 +262,7 @@ namespace Maze.Maui.App.Services
         public async Task<UserProfile> GetMyProfileAsync()
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, "users/me");
-            await AddBearerHeaderAsync(request);
+            await AuthHttpClientService.AddBearerHeaderAsync(request);
             var response = await _httpClient.SendAsync(request);
             await EnsureSuccessAsync(response, "Failed to load profile");
 
@@ -277,7 +277,7 @@ namespace Maze.Maui.App.Services
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Delete, "users/me");
-                await AddBearerHeaderAsync(request);
+                await AuthHttpClientService.AddBearerHeaderAsync(request);
                 var response = await _httpClient.SendAsync(request);
                 await EnsureSuccessAsync(response, "Failed to delete account");
             }
@@ -297,7 +297,7 @@ namespace Maze.Maui.App.Services
                 NewPassword = newPassword
             });
             using var request = new HttpRequestMessage(HttpMethod.Put, "users/me/password");
-            await AddBearerHeaderAsync(request);
+            await AuthHttpClientService.AddBearerHeaderAsync(request);
             request.Content = new StringContent(body, Encoding.UTF8, "application/json");
             var response = await _httpClient.SendAsync(request);
             await EnsureSuccessAsync(response, "Change password failed");
@@ -315,7 +315,7 @@ namespace Maze.Maui.App.Services
                 NewPassword = newPassword
             });
             using var request = new HttpRequestMessage(HttpMethod.Put, "users/me/password");
-            await AddBearerHeaderAsync(request);
+            await AuthHttpClientService.AddBearerHeaderAsync(request);
             request.Content = new StringContent(body, Encoding.UTF8, "application/json");
             var response = await _httpClient.SendAsync(request);
             await EnsureSuccessAsync(response, "Set password failed");
@@ -330,7 +330,7 @@ namespace Maze.Maui.App.Services
                 FullName = fullName
             });
             using var request = new HttpRequestMessage(HttpMethod.Put, "users/me/profile");
-            await AddBearerHeaderAsync(request);
+            await AuthHttpClientService.AddBearerHeaderAsync(request);
             request.Content = new StringContent(body, Encoding.UTF8, "application/json");
             var response = await _httpClient.SendAsync(request);
             await EnsureSuccessAsync(response, "Update profile failed");
@@ -344,7 +344,7 @@ namespace Maze.Maui.App.Services
         public async Task<List<UserEmail>> GetMyEmailsAsync()
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, "users/me/emails");
-            await AddBearerHeaderAsync(request);
+            await AuthHttpClientService.AddBearerHeaderAsync(request);
             var response = await _httpClient.SendAsync(request);
             await EnsureSuccessAsync(response, "Failed to load emails");
             return await ReadEmailsResponseAsync(response);
@@ -355,7 +355,7 @@ namespace Maze.Maui.App.Services
         {
             var body = JsonSerializer.Serialize(new AddEmailRequest { Email = email });
             using var request = new HttpRequestMessage(HttpMethod.Post, "users/me/emails");
-            await AddBearerHeaderAsync(request);
+            await AuthHttpClientService.AddBearerHeaderAsync(request);
             request.Content = new StringContent(body, Encoding.UTF8, "application/json");
             var response = await _httpClient.SendAsync(request);
             await EnsureSuccessAsync(response, "Failed to add email");
@@ -367,7 +367,7 @@ namespace Maze.Maui.App.Services
         {
             var path = $"users/me/emails/{Uri.EscapeDataString(email)}";
             using var request = new HttpRequestMessage(HttpMethod.Delete, path);
-            await AddBearerHeaderAsync(request);
+            await AuthHttpClientService.AddBearerHeaderAsync(request);
             var response = await _httpClient.SendAsync(request);
             await EnsureSuccessAsync(response, "Failed to remove email");
             return await ReadEmailsResponseAsync(response);
@@ -378,7 +378,7 @@ namespace Maze.Maui.App.Services
         {
             var path = $"users/me/emails/{Uri.EscapeDataString(email)}/primary";
             using var request = new HttpRequestMessage(HttpMethod.Put, path);
-            await AddBearerHeaderAsync(request);
+            await AuthHttpClientService.AddBearerHeaderAsync(request);
             var response = await _httpClient.SendAsync(request);
             await EnsureSuccessAsync(response, "Failed to set primary email");
             return await ReadEmailsResponseAsync(response);
@@ -392,7 +392,7 @@ namespace Maze.Maui.App.Services
             // HttpRequestException whose Status the caller can check.
             var path = $"users/me/emails/{Uri.EscapeDataString(email)}/verify";
             using var request = new HttpRequestMessage(HttpMethod.Post, path);
-            await AddBearerHeaderAsync(request);
+            await AuthHttpClientService.AddBearerHeaderAsync(request);
             var response = await _httpClient.SendAsync(request);
             await EnsureSuccessAsync(response, "Failed to verify email");
         }
@@ -443,7 +443,7 @@ namespace Maze.Maui.App.Services
             return null;
         }
 
-        private async Task AddBearerHeaderAsync(HttpRequestMessage request)
+        private static async Task AddBearerHeaderAsync(HttpRequestMessage request)
         {
             string? token = await SecureStorage.Default.GetAsync(TOKEN_STORAGE_KEY);
             if (!string.IsNullOrEmpty(token))

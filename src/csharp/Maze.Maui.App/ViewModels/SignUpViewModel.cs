@@ -148,7 +148,7 @@ namespace Maze.Maui.App.ViewModels
         }
 
         [RelayCommand]
-        private async Task GoBack()
+        private static async Task GoBack()
         {
             await Shell.Current.GoToAsync("..");
         }

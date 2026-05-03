@@ -16,32 +16,32 @@ namespace Maze.Api.Tests
     /// </summary>
     public abstract class MazeApiTestBase()
     {
-        private void AssertRowCount(UInt32 actual, UInt32 expected)
+        private static void AssertRowCount(UInt32 actual, UInt32 expected)
         {
             Assert.True(actual == expected, $"Expected rowCount to be {expected} but got {actual}");
         }
-        private void AssertColCount(UInt32 actual, UInt32 expected)
+        private static void AssertColCount(UInt32 actual, UInt32 expected)
         {
             Assert.True(actual == expected, $"Expected colCount to be {expected} but got {actual}");
         }
-        private void AssertCellType(Maze.CellType actual, Maze.CellType expected)
+        private static void AssertCellType(Maze.CellType actual, Maze.CellType expected)
         {
             Assert.True(actual == expected, $"Expected cell type to be '{expected}' but got '{actual}'");
         }
-        private void AssertPoint(string context, Maze.Point actual, Maze.Point expected)
+        private static void AssertPoint(string context, Maze.Point actual, Maze.Point expected)
         {
             Assert.True(actual.Row == expected.Row, $"Expected {context} point row to be '{expected.Row}' but got '{actual.Row}'");
             Assert.True(actual.Column == expected.Column, $"Expected {context} point column to be '{expected.Column}' but got '{actual.Column}'");
         }
-        private void AssertStartCell(Maze.Point actual, Maze.Point expected)
+        private static void AssertStartCell(Maze.Point actual, Maze.Point expected)
         {
             AssertPoint("start", actual, expected);
         }
-        private void AssertFinishCell(Maze.Point actual, Maze.Point expected)
+        private static void AssertFinishCell(Maze.Point actual, Maze.Point expected)
         {
             AssertPoint("finish", actual, expected);
         }
-        private void AssertRangeCellType(Maze maze, UInt32 fromRow, UInt32 fromCol, UInt32 toRow, UInt32 toCol, Maze.CellType expected)
+        private static void AssertRangeCellType(Maze maze, UInt32 fromRow, UInt32 fromCol, UInt32 toRow, UInt32 toCol, Maze.CellType expected)
         {
             for (UInt32 row = fromRow; row <= toRow; row++)
             {

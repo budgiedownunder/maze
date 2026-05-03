@@ -25,7 +25,7 @@ namespace Maze.Maui.App.Services
         public async Task<List<Models.MazeItem>> GetMazeItems(bool includeDefinitions)
         {
             // Dummy await, to keep the compiler happy for this async method
-            await Task.CompletedTask; 
+            await Task.CompletedTask;
 
             if (includeDefinitions)
             {
@@ -62,8 +62,8 @@ namespace Maze.Maui.App.Services
 
             _mazeItems.Add(new MazeItem()
             {
-                ID= item.ID,
-                Name = item.Name,   
+                ID = item.ID,
+                Name = item.Name,
                 Definition = item.Definition,
             });
 
@@ -129,10 +129,7 @@ namespace Maze.Maui.App.Services
             }
 
             MazeItem? storedItem = FindItem(item.ID);
-            if (storedItem is not null)
-            {
-                storedItem.Name = newName;
-            }
+            storedItem?.Name = newName;
 
             item.Name = newName;
 
@@ -157,11 +154,7 @@ namespace Maze.Maui.App.Services
         /// <returns>Maze item. If unsuccessful, an exception will be thrown.</returns>
         private MazeItem? FindItem(string id)
         {
-            MazeItem? item = _mazeItems.FirstOrDefault(item => item.ID == id);
-            if (item is null)
-            {
-                throw new Exception($"Maze item with id '{id} was not found");
-            }
+            MazeItem? item = _mazeItems.FirstOrDefault(item => item.ID == id) ?? throw new Exception($"Maze item with id '{id} was not found");
             return item;
         }
         /// <summary>

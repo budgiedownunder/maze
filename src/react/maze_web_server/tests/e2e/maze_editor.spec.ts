@@ -471,6 +471,7 @@ test('saving a new maze opens name prompt and navigates to /mazes/:id', async ({
 
 test.describe('double-tap range mode', () => {
   // Spread device settings but omit defaultBrowserType — Playwright disallows it inside a describe group.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the rename is the omission
   const { defaultBrowserType: _ignored, ...pixel7 } = devices['Pixel 7']
   test.use(pixel7)
 

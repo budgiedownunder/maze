@@ -402,7 +402,7 @@ export function useMazeEditor() {
     }
     setSolutionState(null)
     setIsDirty(true)
-  }, [selectionRect, grid])
+  }, [selectionRect, grid, activeCell, anchorCell])
 
   const insertColsBefore = useCallback(() => {
     if (!selectionRect) return
@@ -452,7 +452,7 @@ export function useMazeEditor() {
     }
     setSolutionState(null)
     setIsDirty(true)
-  }, [selectionRect, grid])
+  }, [selectionRect, grid, activeCell, anchorCell])
 
   return {
     grid,

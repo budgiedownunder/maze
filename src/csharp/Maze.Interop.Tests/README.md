@@ -38,3 +38,18 @@ To run the tests, run the following command from the `Maze.Interop.Tests` direct
 ```
 dotnet test
 ```
+
+### Linting
+To verify code formatting and analyzer rules, run the following from the `Maze.Interop.Tests` directory:
+
+```
+dotnet format --verify-no-changes --severity info
+```
+
+To autofix violations, run:
+
+```
+dotnet format --severity info
+```
+
+The expected output is zero errors and zero warnings.

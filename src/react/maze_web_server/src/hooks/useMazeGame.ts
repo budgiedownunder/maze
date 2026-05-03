@@ -15,37 +15,47 @@ export interface MazeGameHookState {
   error: string | null
 }
 
+type LoadResult = {
+  key: string
+  game: MazeGameWasm | null
+  error: string | null
+  version: number
+}
+
 export function useMazeGame(
   definitionJson: string | null
 ): [MazeGameHookState, (dir: MazeGameDirection) => void] {
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [version, setVersion] = useState(0)
-  const [game, setGame] = useState<MazeGameWasm | null>(null)
+  const [loadResult, setLoadResult] = useState<LoadResult | null>(null)
   const gameRef = useRef<MazeGameWasm | null>(null)
   const lastMoveTickRef = useRef<number>(0)
   const lastMoveDirectionRef = useRef<MazeGameDirection | null>(null)
   const MOVE_INTERVAL_MS = 120
 
+  // Render-time derivation: only honor loadResult while it matches the current
+  // definitionJson. When definitionJson changes, the prior result is stale
+  // until the effect produces a new one — render as loading in the meantime.
+  // Computing this here (instead of resetting state synchronously inside the
+  // effect) is what keeps the effect free of set-state-in-effect violations.
+  const matches = loadResult !== null && loadResult.key === definitionJson
+  const game = matches ? loadResult!.game : null
+  const error = matches ? loadResult!.error : null
+  const version = matches ? loadResult!.version : 0
+  const loading = definitionJson !== null && !matches
+
   useEffect(() => {
     if (!definitionJson) return
-    setLoading(true)
-    setError(null)
-    setVersion(0)
-    setGame(null)
     let cancelled = false
+    const key = definitionJson
     createMazeGame(definitionJson).then(newGame => {
       if (cancelled) { freeMazeGame(newGame); return }
       gameRef.current = newGame
-      setGame(newGame)
-      setLoading(false)
+      setLoadResult({ key, game: newGame, error: null, version: 0 })
     }).catch((err: Error) => {
-      if (!cancelled) { setError(err.message); setLoading(false) }
+      if (!cancelled) setLoadResult({ key, game: null, error: err.message, version: 0 })
     })
     return () => {
       cancelled = true
       if (gameRef.current) { freeMazeGame(gameRef.current); gameRef.current = null }
-      setGame(null)
     }
   }, [definitionJson])
 
@@ -58,7 +68,9 @@ export function useMazeGame(
     lastMoveTickRef.current = now
     lastMoveDirectionRef.current = dir
     const result = moveMazeGamePlayer(gameRef.current, dir)
-    if (result !== MazeGamePlayerMoveResult.Blocked) setVersion(v => v + 1)
+    if (result !== MazeGamePlayerMoveResult.Blocked) {
+      setLoadResult(prev => prev ? { ...prev, version: prev.version + 1 } : prev)
+    }
   }, [])
 
   return [{ game, version, loading, error }, move]

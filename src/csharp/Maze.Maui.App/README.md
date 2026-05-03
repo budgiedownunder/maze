@@ -137,3 +137,18 @@ This should build and register the application with `Windows`. You should then b
 ### Testing
 Automated testing is not implemented yet
 
+### Linting
+To verify code formatting and analyzer rules, run the following from the `Maze.Maui.App` directory:
+
+```
+dotnet format --verify-no-changes --severity info
+```
+
+To autofix violations, run:
+
+```
+dotnet format --severity info
+```
+
+The expected output is zero errors and zero warnings.
+

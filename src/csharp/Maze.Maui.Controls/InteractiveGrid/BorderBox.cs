@@ -1,4 +1,4 @@
-﻿using Maze.Maui.Controls.Pointer;
+using Maze.Maui.Controls.Pointer;
 
 namespace Maze.Maui.Controls.InteractiveGrid
 {
@@ -33,7 +33,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// The pattern of dashes and gaps used to draw the box (in DIPs)
         /// </summary>
         /// <returns>Dash pattern</returns>
-        public float[] DashPattern { get; set; } = new float[] {6, 4};
+        public float[] DashPattern { get; set; } = new float[] { 6, 4 };
         /// <summary>
         /// The width/height of the dashes when drawn (in DIPs)
         /// </summary>
@@ -47,8 +47,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <summary>
         /// Constructor
         /// </summary>
-        public BoxDrawable() 
-        { 
+        public BoxDrawable()
+        {
         }
         /// <summary>
         /// Draws the box on the canvas
@@ -58,7 +58,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <returns>Nothing</returns>
         public void Draw(ICanvas canvas, RectF dirtyRect)
         {
-            if(Dashed)
+            if (Dashed)
             {
                 canvas.StrokeColor = DashColor;
                 canvas.StrokeSize = DashSize;
@@ -90,7 +90,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
         private const int DASH_LENGTH = 6;
         private const int GAP_LENGTH = 4;
         private const int TOTAL_ANIMATION_PATTERN_LENGTH = DASH_LENGTH + GAP_LENGTH;
-        private float[] dashPattern = new float[2] { DASH_LENGTH, GAP_LENGTH };
+
+        private readonly float[] dashPattern = new float[2] { DASH_LENGTH, GAP_LENGTH };
 
         /// <summary>
         /// Pan updated delegate handler
@@ -173,7 +174,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <summary>
         /// Initializes the drawable object
         /// </summary>
-        private void InitializeDrawable() {
+        private void InitializeDrawable()
+        {
             Drawable = new BoxDrawable();
             UpdateDrawable();
         }
@@ -192,7 +194,8 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 drawable.DashBackgroundColor = Colors.White;
                 drawable.DashOffset = AnimationCycleIndex;
                 Invalidate();
-            };
+            }
+            ;
         }
         /// <summary>
         /// Registers internal event handlers
@@ -251,10 +254,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// <param name="e">Pan updated event arguments</param>
         private void OnPanUpdated(PanUpdatedEventArgs e)
         {
-            if (PanUpdated is not null)
-            {
-                PanUpdated.Invoke(this, e);
-            }
+            PanUpdated?.Invoke(this, e);
         }
         /// <summary>
         /// Enables or disables dash animation
@@ -293,7 +293,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
         /// </summary>
         private void IncrementAnimationCycleIndex()
         {
-            AnimationCycleIndex = AnimationCycleIndex + 1;
+            AnimationCycleIndex++;
         }
     }
 }

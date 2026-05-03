@@ -19,9 +19,7 @@
   <!-- Define target frameworks -->
   <PropertyGroup Condition="'$(IsBuildingHelp)' != 'true'">
     <TargetFramework>net10.0</TargetFramework>
-    <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">
-      net10.0;net10.0-android;net10.0-ios;net10.0-windows10.0.19041.0
-    </TargetFrameworks>
+    <TargetFrameworks Condition="'$(IsWindowsAndIncludeMobileFrameworks)' == 'true'">net10.0;net10.0-android;net10.0-ios;net10.0-windows10.0.19041.0</TargetFrameworks>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(IsBuildingHelp)' == 'true'">

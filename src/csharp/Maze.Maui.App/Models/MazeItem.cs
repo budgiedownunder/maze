@@ -23,7 +23,8 @@ namespace Maze.Maui.App.Models
         /// </summary>
         /// <returns>Maze name</returns>
         [JsonPropertyName("name")]
-        public string Name { 
+        public string Name
+        {
             get => name;
             set
             {
@@ -32,7 +33,7 @@ namespace Maze.Maui.App.Models
                     name = value;
                     OnPropertyChanged(nameof(Name));
                 }
-            } 
+            }
         }
         /// <summary>
         /// The maze definition
@@ -59,7 +60,8 @@ namespace Maze.Maui.App.Models
         [JsonIgnore]
         public string DimensionsSummary
         {
-            get {
+            get
+            {
                 if (Definition is not null)
                 {
                     string rowsLabel = Definition.RowCount == 1 ? "row" : "rows";
@@ -76,7 +78,8 @@ namespace Maze.Maui.App.Models
         [JsonIgnore]
         public string DimensionsSummaryShort
         {
-            get {
+            get
+            {
                 if (Definition is not null)
                     return $"{Definition.RowCount}r x {Definition.ColCount}c";
                 return "N/A";
@@ -85,7 +88,8 @@ namespace Maze.Maui.App.Models
         /// <summary>
         /// Constructor
         /// </summary>
-        public MazeItem() { 
+        public MazeItem()
+        {
         }
         /// <summary>
         /// Registered property changed event handler

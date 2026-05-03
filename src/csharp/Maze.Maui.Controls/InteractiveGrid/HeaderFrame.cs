@@ -29,7 +29,7 @@ namespace Maze.Maui.Controls.InteractiveGrid
     public class HeaderFrame : Border
     {
         // Private properties
-        HeaderType type;
+        readonly HeaderType type;
         /// <summary>
         /// Header type
         /// </summary>

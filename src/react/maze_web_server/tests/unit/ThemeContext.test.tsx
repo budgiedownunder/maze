@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { ThemeProvider, useTheme } from '../../src/context/ThemeContext'
+import { useTheme } from '../../src/context/ThemeContext'
+import { ThemeProvider } from '../../src/context/ThemeProvider'
 
 function ThemeDisplay() {
   const { theme, toggleTheme } = useTheme()

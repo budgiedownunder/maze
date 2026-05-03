@@ -57,10 +57,10 @@ namespace Maze.Maui.App.Views
         // Private definitions
         const String APP_TITLE = "MAZE";
         // Private properties
-        MazeViewModel _viewModel;
-        MazesViewModel _mazesViewModel;
-        IDialogService _dialogService;
-        IDeviceTypeService _deviceTypeService;
+        readonly MazeViewModel _viewModel;
+        readonly MazesViewModel _mazesViewModel;
+        readonly IDialogService _dialogService;
+        readonly IDeviceTypeService _deviceTypeService;
         uint? _lastMinSolutionLength;
         CancellationTokenSource? _fallbackInitCts;
         CancellationTokenSource? _walkCts;
@@ -92,12 +92,12 @@ namespace Maze.Maui.App.Views
         /// Indicates whether maze solve is supported
         /// </summary>
         /// <returns>Boolean value</returns>
-        private bool IsSolveSupported { get => OperatingSystem.IsWindows() || OperatingSystem.IsAndroid() || OperatingSystem.IsIOS(); }
+        private static bool IsSolveSupported { get => OperatingSystem.IsWindows() || OperatingSystem.IsAndroid() || OperatingSystem.IsIOS(); }
         /// <summary>
         /// Indicates whether maze generation is supported
         /// </summary>
         /// <returns>Boolean value</returns>
-        private bool IsGenerationSupported { get => OperatingSystem.IsWindows() || OperatingSystem.IsAndroid() || OperatingSystem.IsIOS(); }
+        private static bool IsGenerationSupported { get => OperatingSystem.IsWindows() || OperatingSystem.IsAndroid() || OperatingSystem.IsIOS(); }
         /// <summary>
         /// Indicates whether the maze solution is currently displayed
         /// </summary>
@@ -653,9 +653,9 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private void ShowSolveButtons()
         {
-            _viewModel.CanSolve = IsSolveSupported && !IsSolutionDisplayed && !_isWalking;
-            _viewModel.CanWalkSolution = IsSolveSupported && !IsSolutionDisplayed && !_isWalking;
-            _viewModel.CanClearSolution = IsSolveSupported && (IsSolutionDisplayed || _isWalking);
+            _viewModel.CanSolve = MazePage.IsSolveSupported && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanWalkSolution = MazePage.IsSolveSupported && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanClearSolution = MazePage.IsSolveSupported && (IsSolutionDisplayed || _isWalking);
             _viewModel.IsWalking = _isWalking || _walkSolutionDisplayed;
         }
         /// <summary>
@@ -673,7 +673,7 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private void ShowGenerateButton()
         {
-            _viewModel.CanGenerate = IsGenerationSupported && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanGenerate = MazePage.IsGenerationSupported && !IsSolutionDisplayed && !_isWalking;
         }
         /// <summary>
         /// Handles the maze cell selection changed event

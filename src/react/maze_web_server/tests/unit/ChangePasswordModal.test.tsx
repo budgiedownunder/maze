@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
-import { AuthProvider } from '../../src/context/AuthContext'
+import { AuthProvider } from '../../src/context/AuthProvider'
 import { ChangePasswordModal } from '../../src/components/ChangePasswordModal'
 import { mockLoginResponse } from '../../src/mocks/handlers'
 

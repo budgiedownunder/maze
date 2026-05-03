@@ -11,7 +11,7 @@ namespace Maze.Maui.App
             : base(handle, ownership)
         {
             string? nativeLibraryDir = Android.App.Application.Context.ApplicationInfo?.NativeLibraryDir;
-            if(nativeLibraryDir is not null)
+            if (nativeLibraryDir is not null)
             {
                 var wasmerLibFilePath = System.IO.Path.Combine(nativeLibraryDir, "libwasmer.so");
                 try

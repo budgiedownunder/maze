@@ -115,20 +115,20 @@ namespace Maze.Maui.App.Views
         {
             MazeGameDirection dir = e.Key switch
             {
-                Controls.Keyboard.Key.Up    => MazeGameDirection.Up,
-                Controls.Keyboard.Key.Down  => MazeGameDirection.Down,
-                Controls.Keyboard.Key.Left  => MazeGameDirection.Left,
+                Controls.Keyboard.Key.Up => MazeGameDirection.Up,
+                Controls.Keyboard.Key.Down => MazeGameDirection.Down,
+                Controls.Keyboard.Key.Left => MazeGameDirection.Left,
                 Controls.Keyboard.Key.Right => MazeGameDirection.Right,
                 _ => MazeGameDirection.None
             };
             Move(dir);
         }
 
-        private void OnDpadUpPressed(object? sender, EventArgs e)    => StartDpad(MazeGameDirection.Up);
-        private void OnDpadDownPressed(object? sender, EventArgs e)  => StartDpad(MazeGameDirection.Down);
-        private void OnDpadLeftPressed(object? sender, EventArgs e)  => StartDpad(MazeGameDirection.Left);
+        private void OnDpadUpPressed(object? sender, EventArgs e) => StartDpad(MazeGameDirection.Up);
+        private void OnDpadDownPressed(object? sender, EventArgs e) => StartDpad(MazeGameDirection.Down);
+        private void OnDpadLeftPressed(object? sender, EventArgs e) => StartDpad(MazeGameDirection.Left);
         private void OnDpadRightPressed(object? sender, EventArgs e) => StartDpad(MazeGameDirection.Right);
-        private void OnDpadReleased(object? sender, EventArgs e)     => StopDpad();
+        private void OnDpadReleased(object? sender, EventArgs e) => StopDpad();
 
         private void StartDpad(MazeGameDirection direction)
         {

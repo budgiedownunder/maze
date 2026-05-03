@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
 import { mockMazeAlpha, resetMockMazes } from '../../src/mocks/handlers'
-import { ThemeProvider } from '../../src/context/ThemeContext'
+import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { MazePage } from '../../src/pages/MazePage'
 
 const { mockGenerateMaze, mockSolveMaze } = vi.hoisted(() => ({

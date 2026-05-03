@@ -12,7 +12,7 @@ namespace Maze.Api
     public class Solution : IDisposable
     {
         // Private data
-        static MazeInterop _interop = MazeInterop.GetInstance(); // Used when UseStaticInterop = true
+        static readonly MazeInterop _interop = MazeInterop.GetInstance(); // Used when UseStaticInterop = true
         private bool _disposed = false;
         private UIntPtr _solutionPtr = default;
         /// <summary>
@@ -25,7 +25,7 @@ namespace Maze.Api
         /// The current [Maze.Interop](xref:Maze.Interop) associated with the object
         /// </summary>
         /// <returns>[Maze.Interop](xref:Maze.Interop) instance</returns>
-        public MazeInterop Interop
+        public static MazeInterop Interop
         {
             get
             {

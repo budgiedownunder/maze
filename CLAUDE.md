@@ -55,8 +55,18 @@ For build and test commands, see **`src/rust/README.md`** and each crate's own `
   - Wasmtime — Windows, Android
   - Wasmer — Android emulator, iOS simulator
   - Native C via P/Invoke — iOS physical device
+- **After any change to C# code under `src/csharp/`, run `dotnet format --verify-no-changes --severity info` from the project's directory (or `dotnet format <Build-Windows.sln|Build-Non-Windows.sln> --verify-no-changes --severity info` from `src/csharp/` to lint everything) and fix all errors and warnings before claiming the code change is complete.** Expected output: zero errors, zero warnings. Lint rule configuration lives in `src/csharp/.editorconfig`.
 
 For build and test commands, see **`src/csharp/README.md`**.
+
+---
+
+## React conventions
+
+- React frontends live under `src/react/`; each subdirectory is a standalone npm project.
+- **After any change to React code under `src/react/`, run `npm run lint` from that project's directory and fix all errors and warnings before claiming the code change is complete.** Expected output: zero errors, zero warnings.
+
+For build and test commands, see each project's `README.md` (e.g. `src/react/maze_web_server/README.md`).
 
 ---
 

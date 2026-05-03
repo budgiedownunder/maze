@@ -19,8 +19,8 @@ namespace Maze.Maui.App.ViewModels
     {
         public ObservableCollection<MazeItem> MazeItems { get; } = new();
         // Private properties
-        IMazeService _mazeService;
-        IDialogService _dialogService;
+        readonly IMazeService _mazeService;
+        readonly IDialogService _dialogService;
         private bool _dataLoaded = false;
         public bool IsDataLoaded => _dataLoaded;
         public void InvalidateData()
@@ -203,7 +203,7 @@ namespace Maze.Maui.App.ViewModels
 
             while (!finished)
             {
-                string? name = await _dialogService.DisplayPrompt("Rename Maze", "Name", "Name", 
+                string? name = await _dialogService.DisplayPrompt("Rename Maze", "Name", "Name",
                                             "OK", "Cancel", "Enter new maze name",
                                             keyboard: Keyboard.Text, initialValue: initialName,
                                             allowEmpty: false, trimResult: true);
@@ -428,7 +428,7 @@ namespace Maze.Maui.App.ViewModels
         private bool NameExists(string name)
         {
             string nameUpper = name.ToUpper();
-            return MazeItems.Any(item => item.Name.ToUpper() == nameUpper);
+            return MazeItems.Any(item => item.Name.Equals(nameUpper, StringComparison.CurrentCultureIgnoreCase));
         }
     }
 }
