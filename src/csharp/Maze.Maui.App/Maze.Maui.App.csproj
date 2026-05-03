@@ -32,6 +32,11 @@
 		<SingleProject>true</SingleProject>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<!-- iOS builds resolve project-reference assemblies (Maze.Interop, Maze.Maui.Controls,
+		     Maze.Maui.Services) under an arch-specific RID (e.g. iossimulator-arm64) but those
+		     dependencies build as AnyCPU, triggering CS8012. Mirrors the property already set
+		     in Maze.Api.csproj / Maze.Api.Tests.csproj. -->
+		<ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
 
 		<!-- Display name -->
 		<ApplicationTitle>Maze</ApplicationTitle>
@@ -54,6 +59,26 @@
 	<PropertyGroup>
 		<Title>BudgieDownUnder Maze App (MAUI)</Title>
 		<Description>BudgieDownUnder's Maze Application (MAUI)</Description>
+	</PropertyGroup>
+
+	<!-- Android packaging suppression. Both Maze.Interop.aar (which embeds libwasmer.so) and
+	     Maze.Interop's <NativeLibrary> runtimes/ entry contribute the same libwasmer.so to the
+	     final APK; the Android packager correctly skips the duplicate but emits XA4301. The
+	     duplication can't be removed without restructuring how Maze.Interop produces its AAR,
+	     so the warning is suppressed here. -->
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
+		<NoWarn>$(NoWarn);XA4301</NoWarn>
+	</PropertyGroup>
+
+	<!-- iOS architecture-mismatch suppression. CS8012 fires from csc when an
+	     AnyCPU assembly is referenced under an arch-specific RID (e.g.
+	     iossimulator-arm64). Maze.Interop, Maze.Maui.Controls, and Maze.Maui.Services
+	     are pure-managed AnyCPU assemblies that work fine on iOS arm64; the warning
+	     is overly cautious. The MSBuild-side equivalent is suppressed by the
+	     ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch property above; this
+	     handles the csc-side warning that the property does not cover. -->
+	<PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-ios'">
+		<NoWarn>$(NoWarn);CS8012</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>

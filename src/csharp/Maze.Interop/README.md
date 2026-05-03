@@ -60,6 +60,17 @@ dotnet format --severity info
 
 The expected output is zero errors and zero warnings.
 
+### Known build warning: `XA0141` (Android 16 KB page-size)
+
+Building the consuming MAUI app for Android emits one warning:
+
+```
+warning XA0141: Android 16 will require 16 KB page sizes, shared library
+'libwasmer.so' does not have a 16 KB page size.
+```
+
+The bundled `libwasmer.so` (under `runtimes/android-x64/native/`) was built from the upstream Wasmer C API repository; current binaries are not yet aligned for the 16 KB page-size requirement that Android 16 introduces. The fix lives upstream — Wasmer must publish a rebuild — so this repo cannot silence the warning at the source. When a fixed Wasmer release is available, replace `libwasmer.so` and the warning will disappear.
+
 ### Wasmer C API Notes
 
 #### 1. Building the C API for Android using `Windows Subsystem for Linux (WSL)`
