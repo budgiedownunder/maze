@@ -29,10 +29,30 @@
   <!-- Source files compiled into the test assembly. Adding a ViewModel?
        Add it here too. -->
   <ItemGroup>
+    <Compile Include="..\Maze.Maui.App\Services\IAppFeaturesService.cs"
+             Link="LinkedSource\Services\IAppFeaturesService.cs" />
     <Compile Include="..\Maze.Maui.App\Services\IAuthService.cs"
              Link="LinkedSource\Services\IAuthService.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\IDialogService.cs"
+             Link="LinkedSource\Services\IDialogService.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\IMazeService.cs"
+             Link="LinkedSource\Services\IMazeService.cs" />
     <Compile Include="..\Maze.Maui.App\Services\INavigationService.cs"
              Link="LinkedSource\Services\INavigationService.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\OAuthErrors.cs"
+             Link="LinkedSource\Services\OAuthErrors.cs" />
+    <Compile Include="..\Maze.Maui.Services\DeviceTypeService.cs"
+             Link="LinkedSource\Services\DeviceTypeService.cs" />
+    <Compile Include="..\Maze.Maui.App\Extensions\StringExtensions.cs"
+             Link="LinkedSource\Extensions\StringExtensions.cs" />
+    <Compile Include="..\Maze.Maui.App\Models\GameType.cs"
+             Link="LinkedSource\Models\GameType.cs" />
+    <Compile Include="..\Maze.Maui.App\Models\MazeItem.cs"
+             Link="LinkedSource\Models\MazeItem.cs" />
+    <Compile Include="..\Maze.Maui.App\Messages\MazesInvalidatedMessage.cs"
+             Link="LinkedSource\Messages\MazesInvalidatedMessage.cs" />
+    <Compile Include="..\Maze.Maui.App\Messages\NewMazeItemMessage.cs"
+             Link="LinkedSource\Messages\NewMazeItemMessage.cs" />
     <Compile Include="..\Maze.Maui.App\Messages\PasswordSetMessage.cs"
              Link="LinkedSource\Messages\PasswordSetMessage.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\BaseViewModel.cs"
@@ -43,6 +63,20 @@
              Link="LinkedSource\ViewModels\EmailAddressesViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\ChangePasswordViewModel.cs"
              Link="LinkedSource\ViewModels\ChangePasswordViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\AccountViewModel.cs"
+             Link="LinkedSource\ViewModels\AccountViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\LoginViewModel.cs"
+             Link="LinkedSource\ViewModels\LoginViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\SignUpViewModel.cs"
+             Link="LinkedSource\ViewModels\SignUpViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\MazesViewModel.cs"
+             Link="LinkedSource\ViewModels\MazesViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\MazeViewModel.cs"
+             Link="LinkedSource\ViewModels\MazeViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\MazeGameViewModel.cs"
+             Link="LinkedSource\ViewModels\MazeGameViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\Services\IMazeGridView.cs"
+             Link="LinkedSource\Services\IMazeGridView.cs" />
   </ItemGroup>
 
 </Project>

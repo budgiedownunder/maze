@@ -16,6 +16,7 @@ namespace Maze.Maui.App.ViewModels
     {
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
+        private readonly INavigationService _navigationService;
 
         private string _loadedUsername = "";
         private string _loadedFullName = "";
@@ -62,11 +63,13 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         /// <param name="authService">Injected auth service</param>
         /// <param name="dialogService">Injected dialog service</param>
-        public AccountViewModel(IAuthService authService, IDialogService dialogService)
+        /// <param name="navigationService">Injected navigation service</param>
+        public AccountViewModel(IAuthService authService, IDialogService dialogService, INavigationService navigationService)
         {
             Title = "Account";
             _authService = authService;
             _dialogService = dialogService;
+            _navigationService = navigationService;
             // Subscribe to in-process pub/sub so a successful Set/Change in
             // the password popup flips the local HasPassword without a
             // re-fetch. Singleton lifetime guarantees we outlive any sender.
@@ -163,7 +166,7 @@ namespace Maze.Maui.App.ViewModels
         [RelayCommand]
         private async Task ChangePassword()
         {
-            await Shell.Current.GoToAsync(nameof(ChangePasswordPage), new Dictionary<string, object>
+            await _navigationService.GoToAsync(nameof(ChangePasswordPage), new Dictionary<string, object>
             {
                 { "HasPassword", HasPassword }
             });
@@ -192,7 +195,7 @@ namespace Maze.Maui.App.ViewModels
                 await _authService.DeleteMyAccountAsync();
                 WeakReferenceMessenger.Default.Send(new MazesInvalidatedMessage());
                 ClearProfile();
-                await Shell.Current.GoToAsync("//LoginPage");
+                await _navigationService.GoToRootAsync("//LoginPage");
             }
             catch
             {

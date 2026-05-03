@@ -6,6 +6,7 @@ using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
 using Maze.Maui.Services;
 using Maze.Maui.App.Extensions;
+using Microsoft.Maui.Controls;
 
 namespace Maze.Maui.App.ViewModels
 {
