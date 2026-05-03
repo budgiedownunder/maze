@@ -408,8 +408,12 @@ namespace Maze.Interop
             IntPtr buffer = Marshal.AllocHGlobal(length);
             try
             {
-                WasmerInterop.wasmer_last_error_message(buffer, length);
-                return Marshal.PtrToStringAnsi(buffer) ?? "Failed to retrieve error message.";
+                int written = WasmerInterop.wasmer_last_error_message(buffer, length);
+                if (written <= 0)
+                {
+                    return "Failed to retrieve error message.";
+                }
+                return Marshal.PtrToStringAnsi(buffer, written) ?? "Failed to retrieve error message.";
             }
             finally
             {

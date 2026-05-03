@@ -34,7 +34,7 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern byte maze_c_maze_delete_rows(IntPtr ptr, UInt32 startRow, UInt32 count);
         [DllImport("__Internal")] private static extern byte maze_c_maze_insert_cols(IntPtr ptr, UInt32 startCol, UInt32 count);
         [DllImport("__Internal")] private static extern byte maze_c_maze_delete_cols(IntPtr ptr, UInt32 startCol, UInt32 count);
-        [DllImport("__Internal")] private static extern byte maze_c_maze_from_json(IntPtr ptr, [MarshalAs(UnmanagedType.LPStr)] string json);
+        [DllImport("__Internal")] private static extern byte maze_c_maze_from_json(IntPtr ptr, [MarshalAs(UnmanagedType.LPUTF8Str)] string json);
         [DllImport("__Internal")] private static extern IntPtr maze_c_maze_to_json(IntPtr ptr);
         [DllImport("__Internal")] private static extern IntPtr maze_c_maze_solve(IntPtr ptr);
         [DllImport("__Internal")] private static extern void maze_c_free_maze_solution(IntPtr ptr);
@@ -52,7 +52,7 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_max_retries(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_branch_from_finish(IntPtr ptr, byte value);
         [DllImport("__Internal")] private static extern byte maze_c_maze_generate(IntPtr mazePtr, IntPtr optsPtr);
-        [DllImport("__Internal")] private static extern IntPtr maze_c_new_maze_game([MarshalAs(UnmanagedType.LPStr)] string json);
+        [DllImport("__Internal")] private static extern IntPtr maze_c_new_maze_game([MarshalAs(UnmanagedType.LPUTF8Str)] string json);
         [DllImport("__Internal")] private static extern void   maze_c_free_maze_game(IntPtr ptr);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_move_player(IntPtr ptr, int dir);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_player_row(IntPtr ptr);
