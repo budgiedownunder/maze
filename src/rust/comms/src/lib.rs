@@ -10,6 +10,7 @@ pub mod provider;
 pub mod recipient;
 pub mod retry;
 pub mod sms;
+pub mod template;
 
 pub use email::{EmailAddress, EmailMessage, EmailProvider};
 pub use error::CommsError;
@@ -17,3 +18,8 @@ pub use provider::{DeliveryReceipt, Provider};
 pub use recipient::Recipient;
 pub use retry::RetryPolicy;
 pub use sms::{PhoneNumber, SmsMessage, SmsProvider};
+pub use template::{
+    AppContext, BrandingContext, Channel, EmbeddedTemplateLoader, FsTemplateLoader,
+    LayeredTemplateLoader, RenderedTemplate, TemplateContext, TemplateLoader, TemplateRenderer,
+    TemplateSource,
+};
