@@ -1,0 +1,25 @@
+channel = "email"
+subject = "You've been invited to join {{ app_name }}"
+text = """
+{{ header }}
+
+Hi {{ first_name }},
+
+{{ invited_by }} has invited you to join {{ app_name }}.
+To accept the invitation and set up your account, click the link below:
+
+{{ accept_link }}
+
+This invitation expires on {{ expires_at }}.
+
+{{ footer }}
+"""
+html = """
+{{ header }}
+<p>Hi {{ first_name }},</p>
+<p>{{ invited_by }} has invited you to join {{ app_name }}.</p>
+<p>To accept the invitation and set up your account, click the link below:</p>
+<p><a href="{{ accept_link }}">{{ accept_link }}</a></p>
+<p>This invitation expires on {{ expires_at }}.</p>
+{{ footer }}
+"""

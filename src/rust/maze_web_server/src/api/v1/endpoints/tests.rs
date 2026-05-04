@@ -5,7 +5,7 @@ mod test_definitions {
     // **************************************************************************************************
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
-    use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, SharedFeatures};
+    use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::build_comms, SharedFeatures};
     
     use actix_http;
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
@@ -835,8 +835,9 @@ mod test_definitions {
 
         let (shared_mock_store, mock_users, api_key, login_id) = create_shared_mock_store(user_defs, caller_username, add_login);
         let connector: SharedOAuthConnector = Arc::new(NoOpConnector);
+        let comms = web::Data::new(build_comms(&app_config.comms).expect("test comms"));
         let app = test::init_service(
-            create_app(&app_config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(features), web::Data::new(connector), ".".to_string())
+            create_app(&app_config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(features), web::Data::new(connector), comms, ".".to_string())
             .app_data(web::Data::new(app_config))
         )
         .await;
@@ -4420,12 +4421,14 @@ mod test_definitions {
         let features: SharedFeatures = Arc::new(RwLock::new(app_config.features.clone()));
         set_valid_password_hashes(&app_config.security.password_hash, &mut user_defs);
         let (shared_mock_store, _, _, _) = create_shared_mock_store(&user_defs, None, false);
+        let comms = web::Data::new(build_comms(&app_config.comms).expect("test comms"));
         test::init_service(
             create_app(
                 &app_config.security.password_hash,
                 web::Data::new(shared_mock_store),
                 web::Data::new(features),
                 web::Data::new(connector as crate::oauth::SharedOAuthConnector),
+                comms,
                 ".".to_string(),
             )
             .app_data(web::Data::new(app_config)),

@@ -4320,6 +4320,7 @@ dependencies = [
  "auth",
  "base64 0.22.1",
  "chrono",
+ "comms",
  "config",
  "data_model",
  "fern",

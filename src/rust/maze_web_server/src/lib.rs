@@ -10,7 +10,9 @@ use actix_service::Service;
 use actix_web::{ App, HttpRequest, middleware::Logger, HttpServer, web};
 use actix_web::http::header::{CACHE_CONTROL, HeaderName, HeaderValue};
 use auth::{config::PasswordHashConfig, hashing::hash_password};
+use comms::Comms;
 use config::app::{AppConfig, AppFeaturesConfig, SqlStorageConfig, StorageConfig, StorageKind};
+use service::notifications::build_comms;
 use rustls::{ServerConfig, Certificate, PrivateKey};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use service::auth::AuthService;
@@ -85,6 +87,7 @@ pub fn create_app(
     store: web::Data<SharedStore>,
     features: web::Data<SharedFeatures>,
     oauth_connector: web::Data<oauth::SharedOAuthConnector>,
+    comms: web::Data<Comms>,
     static_dir: String,
 ) -> App<impl actix_service::ServiceFactory<
     actix_web::dev::ServiceRequest,
@@ -100,6 +103,7 @@ pub fn create_app(
         .app_data(store)
         .app_data(features)
         .app_data(oauth_connector)
+        .app_data(comms)
         .service(api::register_api())
         .service(api::register_redoc())
         .service(api::register_rapidoc())
@@ -239,9 +243,13 @@ pub async fn run_server() -> std::io::Result<()> {
     let shared_store: SharedStore = Arc::new(AsyncRwLock::new(store));
     let features: SharedFeatures = Arc::new(RwLock::new(config.features.clone()));
     let oauth_connector: oauth::SharedOAuthConnector = build_oauth_connector(&config)?;
+    let comms: Arc<Comms> = Arc::new(
+        build_comms(&config.comms)
+            .map_err(|e| std::io::Error::other(format!("comms: {e}")))?,
+    );
 
     HttpServer::new(move || {
-        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()), web::Data::new(features.clone()), web::Data::new(oauth_connector.clone()), config.static_dir.clone())
+        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()), web::Data::new(features.clone()), web::Data::new(oauth_connector.clone()), web::Data::from(comms.clone()), config.static_dir.clone())
         .app_data(web::Data::new(config.clone()))
         .wrap(Logger::default())
     })
