@@ -92,7 +92,7 @@ pub fn build_comms(cfg: &CommsAppConfig) -> Result<Comms, String> {
         ))
     };
 
-    Ok(Comms::new(renderer, email, None, default_from_email, None))
+    Ok(Comms::new(renderer, email, default_from_email))
 }
 
 fn build_email_provider(

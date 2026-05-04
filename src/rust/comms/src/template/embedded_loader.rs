@@ -53,14 +53,11 @@ mod tests {
     #[test]
     fn from_pairs_round_trips() {
         let loader = EmbeddedTemplateLoader::from_pairs(&[
-            ("a", "channel = \"email\"\nsubject = \"\"\ntext = \"\""),
-            ("b", "channel = \"sms\"\ntext = \"\""),
+            ("a", "subject = \"\"\ntext = \"\""),
+            ("b", "subject = \"\"\ntext = \"hi\""),
         ]);
         assert_eq!(loader.names(), vec!["a".to_owned(), "b".to_owned()]);
-        assert_eq!(
-            loader.load("a").unwrap(),
-            "channel = \"email\"\nsubject = \"\"\ntext = \"\""
-        );
+        assert_eq!(loader.load("a").unwrap(), "subject = \"\"\ntext = \"\"");
     }
 
     #[test]

@@ -6,42 +6,34 @@ use serde_json::Value;
 use crate::email::{EmailAddress, EmailMessage, EmailProvider};
 use crate::error::CommsError;
 use crate::provider::DeliveryReceipt;
-use crate::recipient::Recipient;
 use crate::retry::RetryPolicy;
-use crate::sms::{PhoneNumber, SmsMessage, SmsProvider};
-use crate::template::{Channel, TemplateContext, TemplateRenderer};
+use crate::template::{TemplateContext, TemplateRenderer};
 
-/// Top-level dispatcher. Holds typed slots for each medium (`email`, `sms`),
-/// the shared `TemplateRenderer`, and the default sender identities used when
+/// Top-level dispatcher. Holds the email provider slot, the shared
+/// `TemplateRenderer`, and the default sender identity used when
 /// `send_template` synthesises a message.
 ///
-/// Provider slots are `Option`: a deployment can omit any medium it doesn't
-/// use, and a mismatched send returns `EmailNotConfigured` / `SmsNotConfigured`
-/// rather than panicking. The retry policy in use for a given send is read
-/// from the dispatched provider's `Provider::retry_policy()`, so different
-/// providers can have different policies side-by-side.
+/// The provider slot is `Option`: a deployment can omit it (e.g. when
+/// notifications are disabled) and `send_email` returns `EmailNotConfigured`
+/// rather than panicking. The retry policy applied to a send is read from
+/// the dispatched provider's `Provider::retry_policy()`, so different
+/// providers can carry different policies side-by-side.
 pub struct Comms {
     email: Option<Arc<dyn EmailProvider>>,
-    sms: Option<Arc<dyn SmsProvider>>,
     renderer: TemplateRenderer,
     default_from_email: Option<EmailAddress>,
-    default_sms_from: Option<PhoneNumber>,
 }
 
 impl Comms {
     pub fn new(
         renderer: TemplateRenderer,
         email: Option<Arc<dyn EmailProvider>>,
-        sms: Option<Arc<dyn SmsProvider>>,
         default_from_email: Option<EmailAddress>,
-        default_sms_from: Option<PhoneNumber>,
     ) -> Self {
         Self {
             renderer,
             email,
-            sms,
             default_from_email,
-            default_sms_from,
         }
     }
 
@@ -49,13 +41,13 @@ impl Comms {
         &self.renderer
     }
 
-    /// Render `template_id` against `context` and dispatch the result to the
-    /// medium matching `recipient`. Returns `ChannelMismatch` if the rendered
-    /// template's channel does not match the recipient's variant.
+    /// Render `template_id` against `context` and dispatch the result as an
+    /// email to `to`. The `from` address is taken from the configured
+    /// `default_from_email`; if unset, returns `Config`.
     pub async fn send_template<C: Serialize>(
         &self,
         template_id: &str,
-        recipient: Recipient,
+        to: EmailAddress,
         context: &C,
     ) -> Result<DeliveryReceipt, CommsError> {
         let value = serde_json::to_value(context)
@@ -71,46 +63,22 @@ impl Comms {
         let ctx = TemplateContext { vars };
         let rendered = self.renderer.render(template_id, &ctx)?;
 
-        match (rendered.channel, recipient) {
-            (Channel::Email, Recipient::Email(to)) => {
-                let from = self.default_from_email.clone().ok_or_else(|| {
-                    CommsError::Config(
-                        "send_template: no default_from_email configured".into(),
-                    )
-                })?;
-                let msg = EmailMessage {
-                    from,
-                    to: vec![to],
-                    cc: vec![],
-                    bcc: vec![],
-                    reply_to: None,
-                    subject: rendered.subject.unwrap_or_default(),
-                    body_text: rendered.text,
-                    body_html: rendered.html,
-                    headers: vec![],
-                    idempotency_key: None,
-                };
-                self.send_email(msg).await
-            }
-            (Channel::Sms, Recipient::Sms(to)) => {
-                let from = self.default_sms_from.clone().ok_or_else(|| {
-                    CommsError::Config(
-                        "send_template: no default_sms_from configured".into(),
-                    )
-                })?;
-                let msg = SmsMessage {
-                    from,
-                    to,
-                    body: rendered.text,
-                    idempotency_key: None,
-                };
-                self.send_sms(msg).await
-            }
-            (template_ch, recip) => Err(CommsError::ChannelMismatch {
-                template_channel: channel_label(template_ch).into(),
-                recipient_channel: recipient_label(&recip).into(),
-            }),
-        }
+        let from = self.default_from_email.clone().ok_or_else(|| {
+            CommsError::Config("send_template: no default_from_email configured".into())
+        })?;
+        let msg = EmailMessage {
+            from,
+            to: vec![to],
+            cc: vec![],
+            bcc: vec![],
+            reply_to: None,
+            subject: rendered.subject.unwrap_or_default(),
+            body_text: rendered.text,
+            body_html: rendered.html,
+            headers: vec![],
+            idempotency_key: None,
+        };
+        self.send_email(msg).await
     }
 
     pub async fn send_email(
@@ -122,28 +90,6 @@ impl Comms {
             .as_ref()
             .ok_or(CommsError::EmailNotConfigured)?;
         dispatch_with_retry(provider.retry_policy(), || provider.send_email(&msg)).await
-    }
-
-    pub async fn send_sms(
-        &self,
-        msg: SmsMessage,
-    ) -> Result<DeliveryReceipt, CommsError> {
-        let provider = self.sms.as_ref().ok_or(CommsError::SmsNotConfigured)?;
-        dispatch_with_retry(provider.retry_policy(), || provider.send_sms(&msg)).await
-    }
-}
-
-fn channel_label(ch: Channel) -> &'static str {
-    match ch {
-        Channel::Email => "email",
-        Channel::Sms => "sms",
-    }
-}
-
-fn recipient_label(r: &Recipient) -> &'static str {
-    match r {
-        Recipient::Email(_) => "email",
-        Recipient::Sms(_) => "sms",
     }
 }
 
@@ -193,13 +139,11 @@ mod tests {
     use crate::email::{EmailAddress, EmailMessage, EmailProvider};
     use crate::error::CommsError;
     use crate::provider::{DeliveryReceipt, Provider};
-    use crate::recipient::Recipient;
     use crate::retry::RetryPolicy;
-    use crate::sms::{PhoneNumber, SmsMessage, SmsProvider};
+    use crate::template::renderer::BrandingPartialSources;
     use crate::template::{
         AppContext, BrandingContext, EmbeddedTemplateLoader, TemplateLoader, TemplateRenderer,
     };
-    use crate::template::renderer::BrandingPartialSources;
 
     /// Test-only provider that records every received message and pops a
     /// pre-programmed response off a queue. When the queue is empty it falls
@@ -265,56 +209,6 @@ mod tests {
         }
     }
 
-    struct RecordingSmsProvider {
-        retry_policy: RetryPolicy,
-        received: Mutex<Vec<SmsMessage>>,
-        responses: Mutex<VecDeque<Result<DeliveryReceipt, CommsError>>>,
-    }
-
-    impl RecordingSmsProvider {
-        fn new() -> Self {
-            Self {
-                retry_policy: RetryPolicy::no_retry(),
-                received: Mutex::new(Vec::new()),
-                responses: Mutex::new(VecDeque::new()),
-            }
-        }
-
-        fn received(&self) -> Vec<SmsMessage> {
-            self.received.lock().expect("received poisoned").clone()
-        }
-    }
-
-    impl Provider for RecordingSmsProvider {
-        fn name(&self) -> &'static str {
-            "recording_sms"
-        }
-        fn retry_policy(&self) -> &RetryPolicy {
-            &self.retry_policy
-        }
-    }
-
-    #[async_trait]
-    impl SmsProvider for RecordingSmsProvider {
-        async fn send_sms(&self, msg: &SmsMessage) -> Result<DeliveryReceipt, CommsError> {
-            self.received
-                .lock()
-                .expect("received poisoned")
-                .push(msg.clone());
-            self.responses
-                .lock()
-                .expect("responses poisoned")
-                .pop_front()
-                .unwrap_or_else(|| {
-                    Ok(DeliveryReceipt {
-                        provider: "recording_sms".into(),
-                        provider_message_id: Some("default-sms-id".into()),
-                        accepted_at: Utc::now(),
-                    })
-                })
-        }
-    }
-
     fn sample_app_context() -> AppContext {
         AppContext {
             app_name: "Maze".into(),
@@ -339,26 +233,16 @@ mod tests {
     }
 
     fn build_renderer() -> TemplateRenderer {
-        let loader: Arc<dyn TemplateLoader> = Arc::new(EmbeddedTemplateLoader::from_pairs(&[
-            (
-                "welcome",
-                "channel = \"email\"\nsubject = \"Hello {{ name }}\"\ntext = \"Hi {{ name }}, welcome.\"\n",
-            ),
-            (
-                "ping",
-                "channel = \"sms\"\ntext = \"Maze: hi {{ name }}\"\n",
-            ),
-        ]));
+        let loader: Arc<dyn TemplateLoader> = Arc::new(EmbeddedTemplateLoader::from_pairs(&[(
+            "welcome",
+            "subject = \"Hello {{ name }}\"\ntext = \"Hi {{ name }}, welcome.\"\n",
+        )]));
         TemplateRenderer::new(sample_app_context(), loader, sample_partials())
             .expect("renderer construction")
     }
 
     fn from_email() -> EmailAddress {
         EmailAddress::with_name("noreply@example.com", "Maze")
-    }
-
-    fn from_sms() -> PhoneNumber {
-        PhoneNumber::new("+15550001111")
     }
 
     fn email_msg() -> EmailMessage {
@@ -376,15 +260,6 @@ mod tests {
         }
     }
 
-    fn sms_msg() -> SmsMessage {
-        SmsMessage {
-            from: from_sms(),
-            to: PhoneNumber::new("+15555550100"),
-            body: "x".into(),
-            idempotency_key: None,
-        }
-    }
-
     fn fixed_accepted_at() -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 5, 4, 12, 0, 0).unwrap()
     }
@@ -395,19 +270,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn email_recipient_routes_to_email_slot() {
+    async fn send_template_dispatches_to_email_provider() {
         let provider = Arc::new(RecordingEmailProvider::with_retry(RetryPolicy::no_retry()));
         let comms = Comms::new(
             build_renderer(),
             Some(provider.clone()),
-            None,
             Some(from_email()),
-            None,
         );
         comms
             .send_template(
                 "welcome",
-                Recipient::Email(EmailAddress::new("alice@example.com")),
+                EmailAddress::new("alice@example.com"),
                 &NameCtx { name: "Alice" },
             )
             .await
@@ -422,78 +295,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sms_recipient_routes_to_sms_slot() {
-        let provider = Arc::new(RecordingSmsProvider::new());
-        let comms = Comms::new(
-            build_renderer(),
-            None,
-            Some(provider.clone()),
-            None,
-            Some(from_sms()),
-        );
-        comms
-            .send_template(
-                "ping",
-                Recipient::Sms(PhoneNumber::new("+15555550100")),
-                &NameCtx { name: "Alice" },
-            )
-            .await
-            .expect("send");
-
-        let received = provider.received();
-        assert_eq!(received.len(), 1);
-        assert_eq!(received[0].body, "Maze: hi Alice");
-        assert_eq!(received[0].to.as_str(), "+15555550100");
-        assert_eq!(received[0].from.as_str(), "+15550001111");
-    }
-
-    #[tokio::test]
     async fn missing_email_slot_returns_email_not_configured() {
-        let comms = Comms::new(build_renderer(), None, None, Some(from_email()), None);
+        let comms = Comms::new(build_renderer(), None, Some(from_email()));
         let err = comms.send_email(email_msg()).await.expect_err("must fail");
         assert!(matches!(err, CommsError::EmailNotConfigured));
-    }
-
-    #[tokio::test]
-    async fn missing_sms_slot_returns_sms_not_configured() {
-        let comms = Comms::new(build_renderer(), None, None, None, Some(from_sms()));
-        let err = comms.send_sms(sms_msg()).await.expect_err("must fail");
-        assert!(matches!(err, CommsError::SmsNotConfigured));
-    }
-
-    #[tokio::test]
-    async fn channel_mismatch_returns_channel_mismatch_error() {
-        let email_provider = Arc::new(RecordingEmailProvider::with_retry(RetryPolicy::no_retry()));
-        let sms_provider = Arc::new(RecordingSmsProvider::new());
-        let comms = Comms::new(
-            build_renderer(),
-            Some(email_provider.clone()),
-            Some(sms_provider.clone()),
-            Some(from_email()),
-            Some(from_sms()),
-        );
-        // Email-channel template + SMS recipient.
-        let err = comms
-            .send_template(
-                "welcome",
-                Recipient::Sms(PhoneNumber::new("+15555550100")),
-                &NameCtx { name: "Alice" },
-            )
-            .await
-            .expect_err("must fail");
-        match err {
-            CommsError::ChannelMismatch {
-                template_channel,
-                recipient_channel,
-            } => {
-                assert_eq!(template_channel, "email");
-                assert_eq!(recipient_channel, "sms");
-            }
-            other => panic!("unexpected variant: {other:?}"),
-        }
-        // Neither provider was dispatched.
-        assert_eq!(email_provider.attempts(), 0);
-        assert_eq!(sms_provider.received().len(), 0);
     }
 
     #[tokio::test(start_paused = true)]
@@ -515,9 +320,7 @@ mod tests {
         let comms = Comms::new(
             build_renderer(),
             Some(provider.clone()),
-            None,
             Some(from_email()),
-            None,
         );
         let receipt = comms.send_email(email_msg()).await.expect("eventually ok");
         assert_eq!(receipt.provider, "recording_email");
@@ -540,9 +343,7 @@ mod tests {
         let comms = Comms::new(
             build_renderer(),
             Some(provider.clone()),
-            None,
             Some(from_email()),
-            None,
         );
         let err = comms.send_email(email_msg()).await.expect_err("exhausted");
         assert!(err.is_transient());
@@ -560,9 +361,7 @@ mod tests {
         let comms = Comms::new(
             build_renderer(),
             Some(provider.clone()),
-            None,
             Some(from_email()),
-            None,
         );
         let err = comms.send_email(email_msg()).await.expect_err("permanent");
         assert!(!err.is_transient(), "{err:?}");
@@ -581,9 +380,7 @@ mod tests {
         let comms = Comms::new(
             build_renderer(),
             Some(provider.clone()),
-            None,
             Some(from_email()),
-            None,
         );
         let receipt = comms.send_email(email_msg()).await.expect("send");
         assert_eq!(receipt.provider, "recording_email");

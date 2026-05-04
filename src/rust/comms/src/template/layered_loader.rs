@@ -55,10 +55,10 @@ mod tests {
     #[test]
     fn fs_overrides_embedded_for_same_name() {
         let embedded = Arc::new(EmbeddedTemplateLoader::from_pairs(&[
-            ("greet", "channel = \"email\"\nsubject = \"baked\"\ntext = \"\""),
+            ("greet", "subject = \"baked\"\ntext = \"\""),
         ]));
         let fs = Arc::new(EmbeddedTemplateLoader::from_pairs(&[
-            ("greet", "channel = \"email\"\nsubject = \"override\"\ntext = \"\""),
+            ("greet", "subject = \"override\"\ntext = \"\""),
         ]));
         let layered = LayeredTemplateLoader::new(Some(fs), embedded);
         assert!(layered.load("greet").unwrap().contains("override"));
@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn falls_back_to_embedded_when_fs_misses() {
         let embedded = Arc::new(EmbeddedTemplateLoader::from_pairs(&[
-            ("only_embedded", "channel = \"email\"\nsubject = \"e\"\ntext = \"\""),
+            ("only_embedded", "subject = \"e\"\ntext = \"\""),
         ]));
         let fs = Arc::new(EmbeddedTemplateLoader::new());
         let layered = LayeredTemplateLoader::new(Some(fs), embedded);
@@ -102,9 +102,9 @@ mod tests {
     #[test]
     fn no_fs_layer_falls_through_to_embedded() {
         let embedded = Arc::new(EmbeddedTemplateLoader::from_pairs(&[
-            ("hello", "channel = \"sms\"\ntext = \"hi\""),
+            ("hello", "subject = \"x\"\ntext = \"hi\""),
         ]));
         let layered = LayeredTemplateLoader::new(None, embedded);
-        assert!(layered.load("hello").unwrap().contains("channel = \"sms\""));
+        assert!(layered.load("hello").unwrap().contains("text = \"hi\""));
     }
 }

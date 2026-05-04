@@ -6,9 +6,9 @@ description = "Outbound communications crate for the maze project"
 
 [features]
 default = []
-# Enables `StubEmailProvider` / `StubSmsProvider` — in-memory provider impls
-# that capture dispatched messages instead of sending them. Intended for use
-# in downstream test crates' `dev-dependencies`.
+# Enables `StubEmailProvider` — an in-memory provider impl that captures
+# dispatched messages instead of sending them. Intended for use in
+# downstream test crates' `dev-dependencies`.
 stub = []
 # Enables `ClientCredentialsTokenSource` — Microsoft Azure AD OAuth2
 # client_credentials flow, used by Microsoft 365 / Microsoft Graph providers.

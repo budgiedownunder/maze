@@ -5,12 +5,11 @@ use crate::retry::RetryPolicy;
 
 /// Cross-cutting concerns shared by every provider, regardless of medium.
 ///
-/// Per-medium traits (`EmailProvider`, `SmsProvider`) extend `Provider` and
-/// add the typed `send_*` method for their message shape. This split lets
-/// the type system prevent wiring a provider into the wrong medium's slot.
+/// Per-medium traits (currently `EmailProvider`) extend `Provider` and add
+/// the typed `send_*` method for their message shape. This split lets the
+/// type system prevent wiring a provider into the wrong medium's slot.
 pub trait Provider: Send + Sync {
-    /// Stable identifier used in logs and metrics labels
-    /// (e.g. `"mailgun"`, `"smtp_oauth2"`, `"twilio"`).
+    /// Stable identifier used in logs and metrics labels (e.g. `"mailgun"`).
     fn name(&self) -> &'static str;
 
     /// Retry policy applied to a single send when the provider returns a

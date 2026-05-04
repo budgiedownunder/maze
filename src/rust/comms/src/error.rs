@@ -10,17 +10,8 @@ pub enum CommsError {
     #[error("email provider not configured")]
     EmailNotConfigured,
 
-    #[error("sms provider not configured")]
-    SmsNotConfigured,
-
     #[error("template '{0}' not found")]
     TemplateNotFound(String),
-
-    #[error("template channel mismatch: template channel is {template_channel}, recipient is {recipient_channel}")]
-    ChannelMismatch {
-        template_channel: String,
-        recipient_channel: String,
-    },
 
     #[error("template render error: {0}")]
     TemplateRender(String),
@@ -61,20 +52,8 @@ mod tests {
             "email provider not configured"
         );
         assert_eq!(
-            CommsError::SmsNotConfigured.to_string(),
-            "sms provider not configured"
-        );
-        assert_eq!(
             CommsError::TemplateNotFound("password_reset".into()).to_string(),
             "template 'password_reset' not found"
-        );
-        assert_eq!(
-            CommsError::ChannelMismatch {
-                template_channel: "email".into(),
-                recipient_channel: "sms".into(),
-            }
-            .to_string(),
-            "template channel mismatch: template channel is email, recipient is sms"
         );
         assert_eq!(
             CommsError::TemplateRender("missing token: foo".into()).to_string(),
@@ -110,13 +89,7 @@ mod tests {
         assert!(CommsError::ProviderHttp { status: 599, body: "".into() }.is_transient());
 
         assert!(!CommsError::EmailNotConfigured.is_transient());
-        assert!(!CommsError::SmsNotConfigured.is_transient());
         assert!(!CommsError::TemplateNotFound("x".into()).is_transient());
-        assert!(!CommsError::ChannelMismatch {
-            template_channel: "email".into(),
-            recipient_channel: "sms".into()
-        }
-        .is_transient());
         assert!(!CommsError::TemplateRender("x".into()).is_transient());
         assert!(!CommsError::ProviderHttp { status: 400, body: "".into() }.is_transient());
         assert!(!CommsError::ProviderHttp { status: 401, body: "".into() }.is_transient());

@@ -10,73 +10,45 @@ pub use renderer::{
     AppContext, BrandingContext, RenderedTemplate, TemplateContext, TemplateRenderer,
 };
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::error::CommsError;
 
-/// Which medium a template targets. Determines which fields are required and
-/// which `*Message` shape the renderer produces.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Channel {
-    Email,
-    Sms,
-}
-
 /// Raw, unvalidated TOML form of a template file. Internal; the public API
-/// works through `TemplateSource` which has been validated for consistency
-/// with its declared channel.
+/// works through `TemplateSource` which has been validated.
 #[derive(Debug, Clone, Deserialize)]
 struct TemplateFile {
-    channel: Channel,
     subject: Option<String>,
     text: String,
     html: Option<String>,
 }
 
-/// A loaded, channel-validated template. The strings are raw `minijinja`
-/// source — substitution happens in the renderer.
+/// A loaded, validated template. The strings are raw `minijinja` source —
+/// substitution happens in the renderer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TemplateSource {
-    pub channel: Channel,
     pub subject: Option<String>,
     pub text: String,
     pub html: Option<String>,
 }
 
 impl TemplateSource {
-    /// Parse and validate a template TOML document.
-    ///
-    /// Email templates require `subject` and `text`, accept optional `html`.
-    /// SMS templates require `text` only and reject `subject` / `html`.
+    /// Parse and validate a template TOML document. Templates require
+    /// `subject` and `text`; `html` is optional. Unknown top-level TOML
+    /// fields are silently ignored, so an operator can annotate a template
+    /// file with metadata fields the parser doesn't recognise without
+    /// breaking the load.
     pub fn parse(name: &str, toml_text: &str) -> Result<Self, CommsError> {
         let file: TemplateFile = toml::from_str(toml_text)
             .map_err(|e| CommsError::Config(format!("template '{name}': {e}")))?;
 
-        match file.channel {
-            Channel::Email => {
-                if file.subject.is_none() {
-                    return Err(CommsError::Config(format!(
-                        "template '{name}': email channel requires a 'subject' field"
-                    )));
-                }
-            }
-            Channel::Sms => {
-                if file.subject.is_some() {
-                    return Err(CommsError::Config(format!(
-                        "template '{name}': sms channel must not carry a 'subject' field"
-                    )));
-                }
-                if file.html.is_some() {
-                    return Err(CommsError::Config(format!(
-                        "template '{name}': sms channel must not carry an 'html' field"
-                    )));
-                }
-            }
+        if file.subject.is_none() {
+            return Err(CommsError::Config(format!(
+                "template '{name}': a 'subject' field is required"
+            )));
         }
 
         Ok(Self {
-            channel: file.channel,
             subject: file.subject,
             text: file.text,
             html: file.html,
@@ -101,24 +73,21 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn parse_accepts_email_with_subject_text_and_html() {
+    fn parse_accepts_template_with_subject_text_and_html() {
         let toml = r#"
-            channel = "email"
             subject = "Hi {{ name }}"
             text = "Hello {{ name }}"
             html = "<p>Hello {{ name }}</p>"
         "#;
         let t = TemplateSource::parse("greet", toml).expect("parse");
-        assert_eq!(t.channel, Channel::Email);
         assert_eq!(t.subject.as_deref(), Some("Hi {{ name }}"));
         assert_eq!(t.text, "Hello {{ name }}");
         assert_eq!(t.html.as_deref(), Some("<p>Hello {{ name }}</p>"));
     }
 
     #[test]
-    fn parse_accepts_email_without_html() {
+    fn parse_accepts_template_without_html() {
         let toml = r#"
-            channel = "email"
             subject = "Hi"
             text = "body"
         "#;
@@ -127,56 +96,28 @@ mod tests {
     }
 
     #[test]
-    fn parse_rejects_email_without_subject() {
+    fn parse_rejects_template_without_subject() {
         let toml = r#"
-            channel = "email"
             text = "body"
         "#;
         let err = TemplateSource::parse("greet", toml).expect_err("must reject");
-        assert!(err.to_string().contains("requires a 'subject'"), "{err}");
+        let msg = err.to_string();
+        assert!(msg.contains("subject"), "{msg}");
+        assert!(msg.contains("required"), "{msg}");
     }
 
+    /// Unknown top-level TOML fields are silently ignored. This keeps the
+    /// parser forgiving: an operator can annotate a template file with
+    /// arbitrary metadata fields without breaking the load.
     #[test]
-    fn parse_accepts_sms_with_text_only() {
+    fn parse_ignores_unknown_top_level_fields() {
         let toml = r#"
-            channel = "sms"
-            text = "Maze: {{ link }}"
-        "#;
-        let t = TemplateSource::parse("ping", toml).expect("parse");
-        assert_eq!(t.channel, Channel::Sms);
-        assert_eq!(t.subject, None);
-        assert_eq!(t.html, None);
-    }
-
-    #[test]
-    fn parse_rejects_sms_with_subject() {
-        let toml = r#"
-            channel = "sms"
-            subject = "uh oh"
+            comment = "hand-edited 2026-04-09 by @cbudg"
+            subject = "Hi"
             text = "body"
         "#;
-        let err = TemplateSource::parse("ping", toml).expect_err("must reject");
-        assert!(err.to_string().contains("must not carry a 'subject'"), "{err}");
-    }
-
-    #[test]
-    fn parse_rejects_sms_with_html() {
-        let toml = r#"
-            channel = "sms"
-            text = "body"
-            html = "<p>nope</p>"
-        "#;
-        let err = TemplateSource::parse("ping", toml).expect_err("must reject");
-        assert!(err.to_string().contains("must not carry an 'html'"), "{err}");
-    }
-
-    #[test]
-    fn parse_rejects_invalid_channel() {
-        let toml = r#"
-            channel = "carrier_pigeon"
-            text = "body"
-        "#;
-        let err = TemplateSource::parse("strange", toml).expect_err("must reject");
-        assert!(err.to_string().contains("template 'strange'"), "{err}");
+        let t = TemplateSource::parse("greet", toml).expect("parse");
+        assert_eq!(t.subject.as_deref(), Some("Hi"));
+        assert_eq!(t.text, "body");
     }
 }

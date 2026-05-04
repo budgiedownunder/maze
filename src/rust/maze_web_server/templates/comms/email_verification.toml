@@ -1,4 +1,3 @@
-channel = "email"
 subject = "Verify your {{ app_name }} email address"
 text = """
 {{ header }}

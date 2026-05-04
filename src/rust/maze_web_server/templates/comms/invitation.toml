@@ -1,4 +1,3 @@
-channel = "email"
 subject = "You've been invited to join {{ app_name }}"
 text = """
 {{ header }}

@@ -523,8 +523,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub storage: StorageConfig,
 
-    /// Outbound communications configuration: email/SMS providers, branding,
-    /// and templates
+    /// Outbound communications configuration: email provider settings,
+    /// branding, and templates.
     #[serde(default)]
     pub comms: CommsAppConfig,
 

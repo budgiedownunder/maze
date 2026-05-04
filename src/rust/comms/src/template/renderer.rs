@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::error::CommsError;
-use crate::template::{Channel, TemplateLoader, TemplateSource};
+use crate::template::{TemplateLoader, TemplateSource};
 
 /// Application-level branding values that feed the partial templates.
 /// Identical for every recipient; bound at renderer construction time.
@@ -55,11 +55,11 @@ impl Default for TemplateContext {
     }
 }
 
-/// Result of a successful render. The set of populated fields matches the
-/// template's declared channel.
+/// Result of a successful render. `subject` is always populated (templates
+/// require one); `html` is populated when the template carries an html
+/// section.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderedTemplate {
-    pub channel: Channel,
     pub subject: Option<String>,
     pub text: String,
     pub html: Option<String>,
@@ -218,32 +218,18 @@ impl TemplateRenderer {
             .get(template_name)
             .ok_or_else(|| CommsError::TemplateNotFound(template_name.to_owned()))?;
 
-        match src.channel {
-            Channel::Email => {
-                let subject = self.render_field(template_name, "subject", &ctx.vars, false)?;
-                let text = self.render_field(template_name, "text", &ctx.vars, false)?;
-                let html = if src.html.is_some() {
-                    Some(self.render_field(template_name, "html", &ctx.vars, true)?)
-                } else {
-                    None
-                };
-                Ok(RenderedTemplate {
-                    channel: Channel::Email,
-                    subject: Some(subject),
-                    text,
-                    html,
-                })
-            }
-            Channel::Sms => {
-                let text = self.render_field(template_name, "text", &ctx.vars, false)?;
-                Ok(RenderedTemplate {
-                    channel: Channel::Sms,
-                    subject: None,
-                    text,
-                    html: None,
-                })
-            }
-        }
+        let subject = self.render_field(template_name, "subject", &ctx.vars, false)?;
+        let text = self.render_field(template_name, "text", &ctx.vars, false)?;
+        let html = if src.html.is_some() {
+            Some(self.render_field(template_name, "html", &ctx.vars, true)?)
+        } else {
+            None
+        };
+        Ok(RenderedTemplate {
+            subject: Some(subject),
+            text,
+            html,
+        })
     }
 
     fn render_field(
@@ -370,9 +356,8 @@ mod tests {
     }
 
     #[test]
-    fn renders_email_template_subject_text_and_html() {
+    fn renders_template_subject_text_and_html() {
         let toml = r#"
-            channel = "email"
             subject = "Hi {{ first_name }} from {{ app_name }}"
             text = "Hello {{ first_name }}, click {{ reset_link }}"
             html = "<p>Hello {{ first_name }}, <a href=\"{{ reset_link }}\">click</a></p>"
@@ -382,7 +367,6 @@ mod tests {
             .insert("first_name", "Alice")
             .insert("reset_link", "https://example.com/r/abc");
         let out = r.render("greet", &ctx).expect("render");
-        assert_eq!(out.channel, Channel::Email);
         assert_eq!(out.subject.as_deref(), Some("Hi Alice from Maze"));
         assert_eq!(out.text, "Hello Alice, click https://example.com/r/abc");
         // The html field auto-escapes per-message vars (defense in depth);
@@ -398,16 +382,15 @@ mod tests {
     }
 
     #[test]
-    fn renders_sms_template_with_text_only() {
+    fn renders_template_without_html_section() {
         let toml = r#"
-            channel = "sms"
+            subject = "{{ app_name }} update"
             text = "{{ app_name }}: visit {{ reset_link }}"
         "#;
         let r = build_renderer("ping", toml);
         let ctx = TemplateContext::new().insert("reset_link", "https://example.com/r/abc");
         let out = r.render("ping", &ctx).expect("render");
-        assert_eq!(out.channel, Channel::Sms);
-        assert_eq!(out.subject, None);
+        assert_eq!(out.subject.as_deref(), Some("Maze update"));
         assert_eq!(out.text, "Maze: visit https://example.com/r/abc");
         assert_eq!(out.html, None);
     }
@@ -415,7 +398,6 @@ mod tests {
     #[test]
     fn logo_token_is_field_aware() {
         let toml = r#"
-            channel = "email"
             subject = "{{ logo }} subject"
             text = "{{ logo }} body"
             html = "{{ logo }}"
@@ -445,7 +427,6 @@ mod tests {
     #[test]
     fn footer_and_header_tokens_are_field_aware() {
         let toml = r#"
-            channel = "email"
             subject = "ignore"
             text = "{{ header }}\n{{ footer }}"
             html = "<header>{{ header }}</header><footer>{{ footer }}</footer>"
@@ -467,7 +448,6 @@ mod tests {
         // auto-escaped to prevent injection if the consumer ever passes
         // unsanitised content.
         let toml = r#"
-            channel = "email"
             subject = "x"
             text = "x"
             html = "<p>{{ note }}</p>"
@@ -483,7 +463,6 @@ mod tests {
     #[test]
     fn company_name_substitutes_in_per_message_template() {
         let toml = r#"
-            channel = "email"
             subject = "From {{ company_name }}"
             text = "Sent by {{ company_name }}"
         "#;
@@ -496,7 +475,6 @@ mod tests {
     #[test]
     fn per_message_context_cannot_shadow_app_token() {
         let toml = r#"
-            channel = "email"
             subject = "x"
             text = "x"
         "#;
@@ -532,7 +510,7 @@ mod tests {
 
     #[test]
     fn unknown_template_returns_not_found() {
-        let r = build_renderer("greet", "channel = \"sms\"\ntext = \"hi\"");
+        let r = build_renderer("greet", "subject = \"x\"\ntext = \"hi\"");
         let err = r
             .render("absent", &TemplateContext::new())
             .expect_err("must miss");
@@ -543,7 +521,7 @@ mod tests {
     fn malformed_template_fails_at_construction() {
         let templates: Arc<dyn TemplateLoader> = Arc::new(EmbeddedTemplateLoader::from_pairs(&[(
             "broken",
-            "channel = \"email\"\nsubject = \"hi {{ unterminated\"\ntext = \"x\"",
+            "subject = \"hi {{ unterminated\"\ntext = \"x\"",
         )]));
         let err = TemplateRenderer::new(sample_app_context(), templates, sample_partials())
             .expect_err("must fail");

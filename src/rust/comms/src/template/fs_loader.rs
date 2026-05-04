@@ -83,9 +83,9 @@ mod tests {
     #[test]
     fn loads_template_from_disk() {
         let dir = tempdir();
-        write_file(&dir, "greet.toml", "channel = \"email\"\nsubject = \"\"\ntext = \"\"");
+        write_file(&dir, "greet.toml", "subject = \"\"\ntext = \"hi\"");
         let loader = FsTemplateLoader::new(&dir);
-        assert!(loader.load("greet").unwrap().contains("channel = \"email\""));
+        assert!(loader.load("greet").unwrap().contains("text = \"hi\""));
     }
 
     #[test]
