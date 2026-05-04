@@ -37,6 +37,7 @@ System_Boundary(b_rust_core, "Rust core") {
     Container(data_model, "data_model", "", "Data model", $tags="rust")
     Container(utils, "utils", "", "Utility functions", $tags="rust")
     Container(auth, "auth", "", "Authentication library", $tags="rust")
+    Container(comms, "comms", "", "Outbound communications library", $tags="rust")
     Container(storage, "storage", "", "Data storage", $tags="rust")
 }
 
@@ -97,6 +98,7 @@ Rel(maze_react_web, maze_web_server, "Served by")
 Rel(browser, maze_web_api, "")
 Rel(maze_web_api, maze_web_server, "Hosted By")
 Rel(maze_web_server, auth, "")
+Rel(maze_web_server, comms, "")
 Rel(maze_web_server, data_model, "")
 Rel(maze_web_server, maze, "")
 Rel(maze_web_server, storage, "")

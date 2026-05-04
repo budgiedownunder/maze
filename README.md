@@ -89,6 +89,7 @@ The following components are present:
 | `src/graphics`                 | [`graphics`](./src/graphics/README.md)                                        | Source graphic assets (sprites, animation frames)
 | `src/react`                    | [`maze_web_server`](./src/react/maze_web_server/README.md)                    | React SPA frontend for Rust `maze_web_server`
 | `src/rust`                     | [`auth`](./src/rust/auth/README.md)                                           | Authentication library
+|                                | [`comms`](./src/rust/comms/README.md)                                         | Outbound communications library
 |                                | [`data_model`](./src/rust/data_model/README.md)                               | Data model library
 |                                | [`maze`](./src/rust/maze/README.md)                                           | Maze definition, calculation, and gaming engine library
 |                                | [`maze_c`](./src/rust/maze_c/README.md)                                       | Maze C API library

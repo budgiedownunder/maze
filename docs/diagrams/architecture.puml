@@ -34,6 +34,7 @@ Container(api, "API", ".NET / JavaScript / Rust / Web", "Cross-platform Maze API
 System_Boundary(b_rust_core, "Rust core") {
     Container(maze, "maze", "", "Maze library", $tags="rust")
     Container(auth, "auth", "", "Authentication library", $tags="rust")
+    Container(comms, "comms", "", "Outbound communications library", $tags="rust")
     Container(storage, "storage", "", "Data storage", $tags="rust")
 }
 
@@ -89,6 +90,7 @@ Rel(api, maze_c, "iOS")
 Rel(api, maze_web_server, "")
 Rel(maze_web_server, maze_wasm, "")
 Rel(maze_web_server, auth, "")
+Rel(maze_web_server, comms, "")
 Rel(maze_web_server, storage, "")
 Rel(storage, filesystem, "")
 Rel(storage, database, "")
