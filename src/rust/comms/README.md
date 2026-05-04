@@ -24,6 +24,9 @@ The crate currently defines the following modules:
   the per-medium `send_email` / `send_sms` apply each provider's
   `RetryPolicy` (bounded retry on transient errors, immediate return on
   permanent ones).
+- `providers` - per-provider `EmailProvider` / `SmsProvider`
+  implementations. Each provider lives in a sibling module gated by its
+  own `provider-*` feature flag.
 
 ## Cargo features
 
@@ -38,6 +41,9 @@ The crate currently defines the following modules:
   Workspace JWT-bearer OAuth2 flow (with optional domain-wide delegation
   via the `subject` claim). Pulls in `reqwest` with `rustls-tls` and
   `jsonwebtoken`. Used by Gmail API providers.
+- `provider-mailgun` - exposes `MailgunProvider`, an `EmailProvider`
+  backed by the Mailgun HTTP API (US or EU regional host, HTTP Basic
+  auth with `api:<api_key>`). Pulls in `reqwest` with `rustls-tls`.
 
 ## Getting Started
 

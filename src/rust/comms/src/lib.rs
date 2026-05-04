@@ -9,6 +9,7 @@ pub mod error;
 pub mod oauth;
 pub mod orchestrator;
 pub mod provider;
+pub mod providers;
 pub mod recipient;
 pub mod retry;
 pub mod sms;
@@ -25,6 +26,8 @@ pub use oauth::{ClientCredentialsConfig, ClientCredentialsTokenSource};
 #[cfg(feature = "oauth2-google")]
 pub use oauth::{ServiceAccountConfig, ServiceAccountTokenSource};
 pub use provider::{DeliveryReceipt, Provider};
+#[cfg(feature = "provider-mailgun")]
+pub use providers::{MailgunConfig, MailgunProvider, MailgunRegion};
 pub use recipient::Recipient;
 pub use retry::RetryPolicy;
 pub use sms::{PhoneNumber, SmsMessage, SmsProvider};
