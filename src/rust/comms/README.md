@@ -18,6 +18,12 @@ The crate currently defines the following modules:
 - `oauth` - `OAuthTokenSource` trait, `Clock`/`SystemClock` abstraction, and
   `RefreshTokenStore` trait surface. Per-flow token sources (e.g.
   `ClientCredentialsTokenSource`) live in submodules behind feature flags.
+- `orchestrator` - `Comms` dispatcher. Holds typed `email`/`sms` provider
+  slots, the shared `TemplateRenderer`, and default sender identities;
+  `send_template` routes a rendered template to the matching slot, and
+  the per-medium `send_email` / `send_sms` apply each provider's
+  `RetryPolicy` (bounded retry on transient errors, immediate return on
+  permanent ones).
 
 ## Cargo features
 

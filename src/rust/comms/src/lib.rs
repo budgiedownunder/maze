@@ -7,6 +7,7 @@
 pub mod email;
 pub mod error;
 pub mod oauth;
+pub mod orchestrator;
 pub mod provider;
 pub mod recipient;
 pub mod retry;
@@ -18,6 +19,7 @@ pub use email::{EmailAddress, EmailMessage, EmailProvider};
 pub use email::StubEmailProvider;
 pub use error::CommsError;
 pub use oauth::{Clock, OAuthTokenSource, RefreshToken, RefreshTokenStore, SystemClock};
+pub use orchestrator::Comms;
 #[cfg(feature = "oauth2-microsoft")]
 pub use oauth::{ClientCredentialsConfig, ClientCredentialsTokenSource};
 #[cfg(feature = "oauth2-google")]
