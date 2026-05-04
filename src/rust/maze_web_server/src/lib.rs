@@ -214,9 +214,17 @@ pub fn create_app(
 /// for use in third party products such as `Swagger`. In addition, the server also publishes its own 
 /// Swagger-related endpoints that can be used to manually test the API in user-friendly web pages (e.g. `/api-docs/v1/swagger-ui/`). 
 pub async fn run_server() -> std::io::Result<()> {
-    let config = AppConfig::load().expect("Failed to load configuration settings");
+    let mut config = AppConfig::load().expect("Failed to load configuration settings");
     utils::logger::init(&config.logging.log_dir, &config.logging.log_level, &config.logging.log_file_prefix)
         .expect("Failed to initialise logger");
+    // Resolve env-only comms secrets into the config and surface validation
+    // warnings via the logger. Validation is intentionally soft: missing or
+    // empty required env vars produce warnings rather than blocking
+    // startup, so operators see the full set of misconfigurations in one
+    // log pass.
+    for warning in config.comms.resolve_and_validate().warnings {
+        log::warn!("{warning}");
+    }
     config.log_config();
   
     let bind_address = construct_bind_address(config.port);

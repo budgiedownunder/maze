@@ -131,3 +131,38 @@ redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 # client_secret_env = "MAZE_AUTH0_SECRET"
 # audience = "https://your-host/api"
 
+# ---- Outbound communications ----
+# Email-provider settings and branding values for templated messages.
+# Provider secrets (api keys) are read from environment variables only —
+# never from this file.
+#
+# `comms.enabled` is the master switch. When false (the default), startup
+# validation skips the per-provider env-var checks. When true, missing
+# required env vars produce startup warnings (logged, not fatal).
+# [comms]
+# enabled = false
+# templates_dir = "data/comms_templates"
+# public_base_url = "https://your-host:8443"
+# default_from_email = "noreply@example.com"
+# default_from_name = "Maze"
+
+# Branding values referenced by the templated-message partials
+# ({{ logo }}, {{ header }}, {{ footer }}). copyright_year is taken
+# from the current UTC year at render time and is not configurable here.
+# [comms.branding]
+# company_name = "Acme, Inc."
+# company_address = "123 Example St, City, Country"
+# logo_url = "https://your-host:8443/static/logo.png"
+
+# Email-medium config. `provider` selects the active sub-table:
+# "stub" (in-memory capture) or "mailgun".
+# [comms.email]
+# provider = "mailgun"
+
+# Mailgun-specific settings. Consulted only when provider = "mailgun".
+# api_key is read from MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY at
+# startup and is never read from this file.
+# [comms.email.mailgun]
+# domain = "mg.example.com"
+# region = "us"  # "us" or "eu"
+

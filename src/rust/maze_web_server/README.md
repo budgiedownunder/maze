@@ -102,6 +102,18 @@ The following configuration settings exist:
 |          | `storage.sql.connect_timeout_secs` | Integer | `10` | `MAZE_WEB_SERVER_STORAGE_SQL_CONNECT_TIMEOUT_SECS`
 |          | `storage.sql.idle_timeout_secs` | Integer | `600` | `MAZE_WEB_SERVER_STORAGE_SQL_IDLE_TIMEOUT_SECS`
 |          | `storage.sql.acquire_timeout_secs` | Integer | `30` | `MAZE_WEB_SERVER_STORAGE_SQL_ACQUIRE_TIMEOUT_SECS`
+| Comms    | `comms.enabled`              | Boolean | `false` | `MAZE_WEB_SERVER_COMMS_ENABLED`
+|          | `comms.templates_dir`        | Text    | `data/comms_templates` | `MAZE_WEB_SERVER_COMMS_TEMPLATES_DIR`
+|          | `comms.public_base_url`      | Text    | (empty) | `MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL`
+|          | `comms.default_from_email`   | Text    | (empty) | `MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_EMAIL`
+|          | `comms.default_from_name`    | Text    | (empty) | `MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_NAME`
+|          | `comms.branding.company_name`    | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_NAME`
+|          | `comms.branding.company_address` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_ADDRESS`
+|          | `comms.branding.logo_url`        | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_LOGO_URL`
+|          | `comms.email.provider`           | Text (`stub` / `mailgun`) | `stub` | `MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER`
+|          | `comms.email.mailgun.domain`     | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN`
+|          | `comms.email.mailgun.region`     | Text (`us` / `eu`) | `us` | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_REGION`
+|          | `comms.email.mailgun.api_key`    | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY`
 
 These can also be set in a local configuration file called `config.toml` as follows
 
@@ -178,6 +190,30 @@ display_name = "Facebook"
 client_id = ""
 client_secret_env = "MAZE_OAUTH_FACEBOOK_SECRET"
 redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
+
+# ---- Outbound communications ----
+# Disabled by default. Provider secrets are read from environment
+# variables only — see the env-var column in the table above.
+[comms]
+enabled = false
+templates_dir = "data/comms_templates"
+public_base_url = "https://your-host:8443"
+default_from_email = "noreply@example.com"
+default_from_name = "Maze"
+
+[comms.branding]
+company_name = "Acme, Inc."
+company_address = "123 Example St, City, Country"
+logo_url = "https://your-host:8443/static/logo.png"
+
+[comms.email]
+provider = "mailgun"   # "stub" (default) or "mailgun"
+
+# Provider sub-table consulted only when provider matches. The api_key is
+# *never* read from this file — set MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY.
+[comms.email.mailgun]
+domain = "mg.example.com"
+region = "us"          # "us" or "eu"
 ```
 
 Notes:
@@ -191,6 +227,7 @@ Notes:
 - `oauth.connector` selects the implementation. `internal` ships in v1; `auth0` is reserved for a future drop-in and will error with a clear "not yet implemented" message at startup.
 - OAuth client secrets are **always** read from the environment variable named in `client_secret_env`, never from `config.toml`. On startup the server walks every enabled provider and reports *all* misconfigurations in one error (empty `client_id`, missing env var, etc.) rather than fix-restart-fix-restart looping. See the **OAuth Sign-In** subsection below for full setup steps.
 - The `[storage]` section selects between the file-backed (`type = "file"`, the default) and SQL-backed (`type = "sql"`) implementations. The SQL backend supports SQLite, PostgreSQL, and MySQL via SQLx's `Any` driver — all three engines are compiled into the same binary; selection happens at runtime via `storage.sql.driver` and the connection details. See **Storage Backend** below for setup recipes per backend.
+- The `[comms]` section configures outbound email — provider settings, templated-message branding, and template-source paths. `comms.enabled = false` (the default) skips the per-provider env-var checks at startup. Provider secrets — currently `comms.email.mailgun.api_key` — are **environment-only**: read from `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY` at startup and never from `config.toml`. Unlike `[oauth]`, missing comms secrets are **soft warnings**: the server still starts and logs a warning naming each unset env var so the operator can see the full set of misconfigurations in one log pass. Setting `comms.email.provider` to a value other than `"stub"` or `"mailgun"` is a hard deserialisation error at startup, not a runtime panic.
 
 ## Storage Backend
 
