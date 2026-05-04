@@ -15,6 +15,9 @@ The crate currently defines the following modules:
 - `recipient` - `Recipient` enum used for per-medium routing
 - `error` - `CommsError` taxonomy with `is_transient()` classification
 - `retry` - `RetryPolicy` with bounded exponential backoff
+- `oauth` - `OAuthTokenSource` trait, `Clock`/`SystemClock` abstraction, and
+  `RefreshTokenStore` trait surface. Per-flow token sources (e.g.
+  `ClientCredentialsTokenSource`) live in submodules behind feature flags.
 
 ## Cargo features
 
@@ -22,6 +25,9 @@ The crate currently defines the following modules:
   provider impls that capture dispatched messages instead of sending them.
   Intended for use in downstream test crates' `dev-dependencies`:
   `comms = { path = "../comms", features = ["stub"] }`.
+- `oauth2-microsoft` - exposes `ClientCredentialsTokenSource` for the
+  Microsoft Azure AD `client_credentials` OAuth2 flow. Pulls in `reqwest`
+  with `rustls-tls`. Used by Microsoft 365 / Microsoft Graph providers.
 
 ## Getting Started
 

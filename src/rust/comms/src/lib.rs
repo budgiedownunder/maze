@@ -6,6 +6,7 @@
 
 pub mod email;
 pub mod error;
+pub mod oauth;
 pub mod provider;
 pub mod recipient;
 pub mod retry;
@@ -16,6 +17,9 @@ pub use email::{EmailAddress, EmailMessage, EmailProvider};
 #[cfg(feature = "stub")]
 pub use email::StubEmailProvider;
 pub use error::CommsError;
+pub use oauth::{Clock, OAuthTokenSource, RefreshToken, RefreshTokenStore, SystemClock};
+#[cfg(feature = "oauth2-microsoft")]
+pub use oauth::{ClientCredentialsConfig, ClientCredentialsTokenSource};
 pub use provider::{DeliveryReceipt, Provider};
 pub use recipient::Recipient;
 pub use retry::RetryPolicy;
