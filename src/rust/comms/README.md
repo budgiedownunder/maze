@@ -28,6 +28,10 @@ The crate currently defines the following modules:
 - `oauth2-microsoft` - exposes `ClientCredentialsTokenSource` for the
   Microsoft Azure AD `client_credentials` OAuth2 flow. Pulls in `reqwest`
   with `rustls-tls`. Used by Microsoft 365 / Microsoft Graph providers.
+- `oauth2-google` - exposes `ServiceAccountTokenSource` for the Google
+  Workspace JWT-bearer OAuth2 flow (with optional domain-wide delegation
+  via the `subject` claim). Pulls in `reqwest` with `rustls-tls` and
+  `jsonwebtoken`. Used by Gmail API providers.
 
 ## Getting Started
 

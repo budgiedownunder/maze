@@ -20,6 +20,8 @@ pub use error::CommsError;
 pub use oauth::{Clock, OAuthTokenSource, RefreshToken, RefreshTokenStore, SystemClock};
 #[cfg(feature = "oauth2-microsoft")]
 pub use oauth::{ClientCredentialsConfig, ClientCredentialsTokenSource};
+#[cfg(feature = "oauth2-google")]
+pub use oauth::{ServiceAccountConfig, ServiceAccountTokenSource};
 pub use provider::{DeliveryReceipt, Provider};
 pub use recipient::Recipient;
 pub use retry::RetryPolicy;

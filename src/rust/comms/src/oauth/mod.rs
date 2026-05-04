@@ -6,6 +6,8 @@
 //!
 //! - `client_credentials` (`oauth2-microsoft`) — Microsoft Azure AD
 //!   client_credentials flow for app-only access to a fixed mailbox.
+//! - `service_account` (`oauth2-google`) — Google Workspace JWT-bearer
+//!   flow with optional domain-wide delegation.
 //!
 //! `RefreshTokenStore` is a trait surface only — no implementations ship
 //! today. It exists so that, if a future flow needs persisted refresh
@@ -22,6 +24,11 @@ pub use refresh_store::{RefreshToken, RefreshTokenStore};
 pub mod client_credentials;
 #[cfg(feature = "oauth2-microsoft")]
 pub use client_credentials::{ClientCredentialsConfig, ClientCredentialsTokenSource};
+
+#[cfg(feature = "oauth2-google")]
+pub mod service_account;
+#[cfg(feature = "oauth2-google")]
+pub use service_account::{ServiceAccountConfig, ServiceAccountTokenSource};
 
 use async_trait::async_trait;
 

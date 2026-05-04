@@ -13,10 +13,14 @@ stub = []
 # Enables `ClientCredentialsTokenSource` — Microsoft Azure AD OAuth2
 # client_credentials flow, used by Microsoft 365 / Microsoft Graph providers.
 oauth2-microsoft = ["dep:reqwest"]
+# Enables `ServiceAccountTokenSource` — Google Workspace OAuth2 JWT-bearer
+# flow, used by Gmail API providers (with optional domain-wide delegation).
+oauth2-google = ["dep:reqwest", "dep:jsonwebtoken"]
 
 [dependencies]
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
+jsonwebtoken = { version = "9", optional = true }
 minijinja = { version = "2", default-features = false, features = ["builtins", "serde"] }
 reqwest = { version = "0.11", default-features = false, features = ["rustls-tls", "json"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
