@@ -13,11 +13,15 @@ pub mod sms;
 pub mod template;
 
 pub use email::{EmailAddress, EmailMessage, EmailProvider};
+#[cfg(feature = "stub")]
+pub use email::StubEmailProvider;
 pub use error::CommsError;
 pub use provider::{DeliveryReceipt, Provider};
 pub use recipient::Recipient;
 pub use retry::RetryPolicy;
 pub use sms::{PhoneNumber, SmsMessage, SmsProvider};
+#[cfg(feature = "stub")]
+pub use sms::StubSmsProvider;
 pub use template::{
     AppContext, BrandingContext, Channel, EmbeddedTemplateLoader, FsTemplateLoader,
     LayeredTemplateLoader, RenderedTemplate, TemplateContext, TemplateLoader, TemplateRenderer,

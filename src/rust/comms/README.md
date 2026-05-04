@@ -16,6 +16,13 @@ The crate currently defines the following modules:
 - `error` - `CommsError` taxonomy with `is_transient()` classification
 - `retry` - `RetryPolicy` with bounded exponential backoff
 
+## Cargo features
+
+- `stub` - exposes `StubEmailProvider` and `StubSmsProvider`, in-memory
+  provider impls that capture dispatched messages instead of sending them.
+  Intended for use in downstream test crates' `dev-dependencies`:
+  `comms = { path = "../comms", features = ["stub"] }`.
+
 ## Getting Started
 
 ### Build

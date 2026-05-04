@@ -4,6 +4,13 @@ version = "0.1.0"
 edition = "2021"
 description = "Outbound communications crate for the maze project"
 
+[features]
+default = []
+# Enables `StubEmailProvider` / `StubSmsProvider` — in-memory provider impls
+# that capture dispatched messages instead of sending them. Intended for use
+# in downstream test crates' `dev-dependencies`.
+stub = []
+
 [dependencies]
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }

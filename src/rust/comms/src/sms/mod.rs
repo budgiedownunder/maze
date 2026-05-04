@@ -1,6 +1,10 @@
 pub mod message;
+#[cfg(feature = "stub")]
+pub mod stub;
 
 pub use message::SmsMessage;
+#[cfg(feature = "stub")]
+pub use stub::StubSmsProvider;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
