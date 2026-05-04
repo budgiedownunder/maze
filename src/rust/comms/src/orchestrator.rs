@@ -216,6 +216,7 @@ mod tests {
             branding: BrandingContext {
                 company_name: "Maze, Inc.".into(),
                 company_address: "123 Example St".into(),
+                company_url: "https://example.com".into(),
                 logo_url: "https://example.com/logo.png".into(),
             },
         }

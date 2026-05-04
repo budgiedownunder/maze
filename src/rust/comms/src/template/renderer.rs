@@ -16,6 +16,7 @@ use crate::template::{TemplateLoader, TemplateSource};
 pub struct BrandingContext {
     pub company_name: String,
     pub company_address: String,
+    pub company_url: String,
     pub logo_url: String,
 }
 
@@ -89,6 +90,7 @@ const BRANDING_TOKENS: &[&str] = &[
     "server_url",
     "company_name",
     "company_address",
+    "company_url",
     "copyright_year",
     "logo_url",
 ];
@@ -170,6 +172,10 @@ impl TemplateRenderer {
         app_common.insert(
             "company_address".into(),
             MjValue::from(app.branding.company_address.clone()),
+        );
+        app_common.insert(
+            "company_url".into(),
+            MjValue::from(app.branding.company_url.clone()),
         );
         app_common.insert("copyright_year".into(), MjValue::from(copyright_year));
         app_common.insert(
@@ -275,6 +281,10 @@ fn build_branding_context(app: &AppContext, copyright_year: i32) -> MjValue {
             "company_address".to_owned(),
             MjValue::from(app.branding.company_address.clone()),
         ),
+        (
+            "company_url".to_owned(),
+            MjValue::from(app.branding.company_url.clone()),
+        ),
         ("copyright_year".to_owned(), MjValue::from(copyright_year)),
         (
             "logo_url".to_owned(),
@@ -331,6 +341,7 @@ mod tests {
             branding: BrandingContext {
                 company_name: "Maze, Inc.".into(),
                 company_address: "123 Example St".into(),
+                company_url: "https://example.com".into(),
                 logo_url: "https://example.com/logo.png".into(),
             },
         }
@@ -470,6 +481,23 @@ mod tests {
         let out = r.render("brand", &TemplateContext::new()).expect("render");
         assert_eq!(out.subject.as_deref(), Some("From Maze, Inc."));
         assert_eq!(out.text, "Sent by Maze, Inc.");
+    }
+
+    #[test]
+    fn company_url_substitutes_in_per_message_template() {
+        let toml = r#"
+            subject = "x"
+            text = "Visit {{ company_url }}"
+            html = "<a href=\"{{ company_url }}\">{{ company_name }}</a>"
+        "#;
+        let r = build_renderer("brand", toml);
+        let out = r.render("brand", &TemplateContext::new()).expect("render");
+        assert_eq!(out.text, "Visit https://example.com");
+        // html field auto-escapes per-OWASP, so the URL appears with `/`
+        // entities. Browsers decode them transparently when navigating.
+        let html = out.html.expect("html");
+        assert!(html.contains("&#x2f;&#x2f;example.com"), "{html}");
+        assert!(html.contains("Maze, Inc."), "{html}");
     }
 
     #[test]

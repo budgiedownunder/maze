@@ -17,17 +17,17 @@ use comms::{
 use crate::config::comms::{CommsAppConfig, CommsEmailProvider};
 
 const PASSWORD_RESET_TOML: &str =
-    include_str!("../../templates/comms/password_reset.toml");
-const INVITATION_TOML: &str = include_str!("../../templates/comms/invitation.toml");
+    include_str!("../../templates/email/password_reset.toml");
+const INVITATION_TOML: &str = include_str!("../../templates/email/invitation.toml");
 const EMAIL_VERIFICATION_TOML: &str =
-    include_str!("../../templates/comms/email_verification.toml");
+    include_str!("../../templates/email/email_verification.toml");
 
-const LOGO_HTML: &str = include_str!("../../templates/comms/partials/logo.html");
-const LOGO_TEXT: &str = include_str!("../../templates/comms/partials/logo.text");
-const HEADER_HTML: &str = include_str!("../../templates/comms/partials/header.html");
-const HEADER_TEXT: &str = include_str!("../../templates/comms/partials/header.text");
-const FOOTER_HTML: &str = include_str!("../../templates/comms/partials/footer.html");
-const FOOTER_TEXT: &str = include_str!("../../templates/comms/partials/footer.text");
+const LOGO_HTML: &str = include_str!("../../templates/email/partials/logo.html");
+const LOGO_TEXT: &str = include_str!("../../templates/email/partials/logo.text");
+const HEADER_HTML: &str = include_str!("../../templates/email/partials/header.html");
+const HEADER_TEXT: &str = include_str!("../../templates/email/partials/header.text");
+const FOOTER_HTML: &str = include_str!("../../templates/email/partials/footer.html");
+const FOOTER_TEXT: &str = include_str!("../../templates/email/partials/footer.text");
 
 /// Build a `Comms` instance from the supplied configuration.
 ///
@@ -46,10 +46,10 @@ const FOOTER_TEXT: &str = include_str!("../../templates/comms/partials/footer.te
 /// - template-renderer construction failures (parse errors in the embedded
 ///   templates or partial-rendering errors against the supplied branding).
 pub fn build_comms(cfg: &CommsAppConfig) -> Result<Comms, String> {
-    let app_name = if cfg.default_from_name.is_empty() {
+    let app_name = if cfg.email.default_from_name.is_empty() {
         cfg.branding.company_name.clone()
     } else {
-        cfg.default_from_name.clone()
+        cfg.email.default_from_name.clone()
     };
     let app = AppContext {
         app_name,
@@ -57,6 +57,7 @@ pub fn build_comms(cfg: &CommsAppConfig) -> Result<Comms, String> {
         branding: BrandingContext {
             company_name: cfg.branding.company_name.clone(),
             company_address: cfg.branding.company_address.clone(),
+            company_url: cfg.branding.company_url.clone(),
             logo_url: cfg.branding.logo_url.clone(),
         },
     };
@@ -81,18 +82,18 @@ pub fn build_comms(cfg: &CommsAppConfig) -> Result<Comms, String> {
 
     let email = build_email_provider(cfg)?;
 
-    let default_from_email = if cfg.default_from_email.is_empty() {
+    let default_from = if cfg.email.default_from.is_empty() {
         None
-    } else if cfg.default_from_name.is_empty() {
-        Some(EmailAddress::new(cfg.default_from_email.clone()))
+    } else if cfg.email.default_from_name.is_empty() {
+        Some(EmailAddress::new(cfg.email.default_from.clone()))
     } else {
         Some(EmailAddress::with_name(
-            cfg.default_from_email.clone(),
-            cfg.default_from_name.clone(),
+            cfg.email.default_from.clone(),
+            cfg.email.default_from_name.clone(),
         ))
     };
 
-    Ok(Comms::new(renderer, email, default_from_email))
+    Ok(Comms::new(renderer, email, default_from))
 }
 
 fn build_email_provider(
@@ -153,17 +154,18 @@ mod tests {
     fn enabled_mailgun_config_with_api_key() -> CommsAppConfig {
         CommsAppConfig {
             enabled: true,
-            templates_dir: "data/comms_templates".into(),
             public_base_url: "https://maze.example.com".into(),
-            default_from_email: "noreply@example.com".into(),
-            default_from_name: "Maze".into(),
             branding: CommsBrandingConfig {
                 company_name: "Maze, Inc.".into(),
                 company_address: "123 Example St".into(),
+                company_url: "https://maze.example.com".into(),
                 logo_url: "https://maze.example.com/static/logo.png".into(),
             },
             email: CommsEmailConfig {
                 provider: CommsEmailProvider::Mailgun,
+                default_from: "noreply@example.com".into(),
+                default_from_name: "The Maze Team".into(),
+                templates_dir: "config/email_templates".into(),
                 mailgun: MailgunAppConfig {
                     domain: "mg.example.com".into(),
                     region: "us".into(),

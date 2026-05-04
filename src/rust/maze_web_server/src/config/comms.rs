@@ -20,13 +20,6 @@ pub struct CommsAppConfig {
     #[serde(default = "default_comms_enabled")]
     pub enabled: bool,
 
-    /// Directory holding filesystem-override templates and partials.
-    /// Templates here override embedded defaults; templates not present
-    /// here fall back to the embedded copies.
-    /// Can be overridden with `MAZE_WEB_SERVER_COMMS_TEMPLATES_DIR`.
-    #[serde(default = "default_comms_templates_dir")]
-    pub templates_dir: String,
-
     /// Public base URL the server is reachable at, used to build links
     /// inside templates (e.g. `{{ reset_link }}`, `{{ verification_link }}`).
     /// Required when `enabled = true`.
@@ -34,25 +27,14 @@ pub struct CommsAppConfig {
     #[serde(default)]
     pub public_base_url: String,
 
-    /// Default from-address used when `send_template` synthesises an
-    /// email message. Required when `enabled = true`.
-    /// Can be overridden with `MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_EMAIL`.
-    #[serde(default)]
-    pub default_from_email: String,
-
-    /// Default display name paired with `default_from_email`.
-    /// Can be overridden with `MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_NAME`.
-    #[serde(default)]
-    pub default_from_name: String,
-
     /// Branding values fed into the partial templates (`{{ logo }}`,
     /// `{{ header }}`, `{{ footer }}`).
     #[serde(default)]
     pub branding: CommsBrandingConfig,
 
-    /// Email-medium configuration: provider discriminator + per-provider
-    /// sub-tables. Only the section matching `provider` is consulted at
-    /// dispatch time.
+    /// Email-medium configuration: provider discriminator, default sender
+    /// identity, templates directory, and per-provider sub-tables. Only the
+    /// section matching `provider` is consulted at dispatch time.
     #[serde(default)]
     pub email: CommsEmailConfig,
 }
@@ -61,10 +43,7 @@ impl Default for CommsAppConfig {
     fn default() -> Self {
         Self {
             enabled: default_comms_enabled(),
-            templates_dir: default_comms_templates_dir(),
             public_base_url: String::new(),
-            default_from_email: String::new(),
-            default_from_name: String::new(),
             branding: CommsBrandingConfig::default(),
             email: CommsEmailConfig::default(),
         }
@@ -83,6 +62,20 @@ pub struct CommsBrandingConfig {
     /// Can be overridden with `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_ADDRESS`.
     #[serde(default)]
     pub company_address: String,
+    /// Public URL for the company's website (the brand's home on the web).
+    /// Distinct from `[comms].public_base_url`, which is where this server
+    /// deployment is reachable. Templates can reference `{{ company_url }}`
+    /// for ad-hoc links to the company site that aren't tied to a specific
+    /// server endpoint.
+    ///
+    /// If left empty, `resolve_and_validate` populates it from
+    /// `[comms].public_base_url` at startup, so single-tenant deployments
+    /// where the marketing site and the server share a domain don't have
+    /// to set both.
+    ///
+    /// Can be overridden with `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_URL`.
+    #[serde(default)]
+    pub company_url: String,
     /// Absolute URL of the logo referenced from the HTML logo partial.
     /// Can be overridden with `MAZE_WEB_SERVER_COMMS_BRANDING_LOGO_URL`.
     #[serde(default)]
@@ -99,6 +92,21 @@ pub struct CommsEmailConfig {
     /// Can be overridden with `MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER`.
     #[serde(default = "default_comms_email_provider")]
     pub provider: CommsEmailProvider,
+    /// Default from-address used when `send_template` synthesises an
+    /// email message. Required when `[comms].enabled = true`.
+    /// Can be overridden with `MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM`.
+    #[serde(default)]
+    pub default_from: String,
+    /// Default display name paired with `default_from`.
+    /// Can be overridden with `MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME`.
+    #[serde(default = "default_comms_email_default_from_name")]
+    pub default_from_name: String,
+    /// Directory holding filesystem-override templates and partials for
+    /// the email medium. Templates here override embedded defaults;
+    /// templates not present here fall back to the embedded copies.
+    /// Can be overridden with `MAZE_WEB_SERVER_COMMS_EMAIL_TEMPLATES_DIR`.
+    #[serde(default = "default_comms_email_templates_dir")]
+    pub templates_dir: String,
     /// Mailgun-specific settings; consulted only when `provider = "mailgun"`.
     #[serde(default)]
     pub mailgun: MailgunAppConfig,
@@ -108,6 +116,9 @@ impl Default for CommsEmailConfig {
     fn default() -> Self {
         Self {
             provider: default_comms_email_provider(),
+            default_from: String::new(),
+            default_from_name: default_comms_email_default_from_name(),
+            templates_dir: default_comms_email_templates_dir(),
             mailgun: MailgunAppConfig::default(),
         }
     }
@@ -171,16 +182,30 @@ pub struct CommsValidation {
 }
 
 impl CommsAppConfig {
-    /// Resolve env-only secrets into the config and collect warnings.
+    /// Resolve env-only secrets and derived defaults into the config, and
+    /// collect warnings.
+    ///
+    /// Always applied (regardless of `enabled`): if `branding.company_url`
+    /// is empty, it inherits the value of `public_base_url`. This keeps
+    /// the logged config (`AppConfig::log_config`) honest about what
+    /// `{{ company_url }}` will render as.
     ///
     /// When `enabled = false`, returns an empty validation without
-    /// inspecting anything. When `enabled = true`, reads each required env
-    /// var for the active provider, populates the corresponding `#[serde(skip)]`
-    /// fields, and accumulates a warning for every missing or empty value
-    /// rather than returning early — so the operator sees the full set of
-    /// problems in one log pass.
+    /// inspecting anything else. When `enabled = true`, reads each required
+    /// env var for the active provider, populates the corresponding
+    /// `#[serde(skip)]` fields, and accumulates a warning for every
+    /// missing or empty value rather than returning early — so the
+    /// operator sees the full set of problems in one log pass.
     pub fn resolve_and_validate(&mut self) -> CommsValidation {
         let mut warnings = Vec::new();
+
+        // Branding fallback: if the operator didn't set company_url, use
+        // public_base_url. Useful for single-tenant deployments where the
+        // marketing site and the server share a domain.
+        if self.branding.company_url.is_empty() {
+            self.branding.company_url = self.public_base_url.clone();
+        }
+
         if !self.enabled {
             return CommsValidation { warnings };
         }
@@ -215,9 +240,9 @@ impl CommsAppConfig {
                 "[comms].public_base_url is empty; template links will be malformed".to_string(),
             );
         }
-        if self.default_from_email.trim().is_empty() {
+        if self.email.default_from.trim().is_empty() {
             warnings.push(
-                "[comms].default_from_email is empty; send_template calls will fail".to_string(),
+                "[comms.email].default_from is empty; send_template calls will fail".to_string(),
             );
         }
         CommsValidation { warnings }
@@ -239,17 +264,8 @@ pub(crate) fn apply_env_overrides(
     if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_ENABLED") {
         builder = builder.set_override("comms.enabled", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_TEMPLATES_DIR") {
-        builder = builder.set_override("comms.templates_dir", v)?;
-    }
     if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL") {
         builder = builder.set_override("comms.public_base_url", v)?;
-    }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_EMAIL") {
-        builder = builder.set_override("comms.default_from_email", v)?;
-    }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_NAME") {
-        builder = builder.set_override("comms.default_from_name", v)?;
     }
     if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_NAME") {
         builder = builder.set_override("comms.branding.company_name", v)?;
@@ -257,11 +273,23 @@ pub(crate) fn apply_env_overrides(
     if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_ADDRESS") {
         builder = builder.set_override("comms.branding.company_address", v)?;
     }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_URL") {
+        builder = builder.set_override("comms.branding.company_url", v)?;
+    }
     if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_LOGO_URL") {
         builder = builder.set_override("comms.branding.logo_url", v)?;
     }
     if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER") {
         builder = builder.set_override("comms.email.provider", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM") {
+        builder = builder.set_override("comms.email.default_from", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME") {
+        builder = builder.set_override("comms.email.default_from_name", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_TEMPLATES_DIR") {
+        builder = builder.set_override("comms.email.templates_dir", v)?;
     }
     if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN") {
         builder = builder.set_override("comms.email.mailgun.domain", v)?;
@@ -272,16 +300,19 @@ pub(crate) fn apply_env_overrides(
     Ok(builder)
 }
 
-fn default_comms_enabled() -> bool {
+pub(crate) fn default_comms_enabled() -> bool {
     false
-}
-fn default_comms_templates_dir() -> String {
-    "data/comms_templates".to_string()
 }
 fn default_comms_email_provider() -> CommsEmailProvider {
     CommsEmailProvider::Stub
 }
-fn default_comms_email_mailgun_region() -> String {
+pub(crate) fn default_comms_email_default_from_name() -> String {
+    "The Maze Team".to_string()
+}
+pub(crate) fn default_comms_email_templates_dir() -> String {
+    "config/email_templates".to_string()
+}
+pub(crate) fn default_comms_email_mailgun_region() -> String {
     "us".to_string()
 }
 
@@ -303,18 +334,19 @@ mod tests {
         let toml = r#"
             [comms]
             enabled = true
-            templates_dir = "data/comms_templates"
             public_base_url = "https://maze.example.com"
-            default_from_email = "noreply@example.com"
-            default_from_name = "Maze"
 
             [comms.branding]
             company_name = "Maze, Inc."
             company_address = "123 Example St"
+            company_url = "https://acme.example.com"
             logo_url = "https://maze.example.com/static/logo.png"
 
             [comms.email]
             provider = "mailgun"
+            default_from = "noreply@example.com"
+            default_from_name = "Maze"
+            templates_dir = "config/email_templates"
 
             [comms.email.mailgun]
             domain = "mg.example.com"
@@ -323,14 +355,15 @@ mod tests {
         let env: Envelope = toml::from_str(toml).expect("parse");
         let cfg = env.comms;
         assert!(cfg.enabled);
-        assert_eq!(cfg.templates_dir, "data/comms_templates");
         assert_eq!(cfg.public_base_url, "https://maze.example.com");
-        assert_eq!(cfg.default_from_email, "noreply@example.com");
-        assert_eq!(cfg.default_from_name, "Maze");
         assert_eq!(cfg.branding.company_name, "Maze, Inc.");
         assert_eq!(cfg.branding.company_address, "123 Example St");
+        assert_eq!(cfg.branding.company_url, "https://acme.example.com");
         assert_eq!(cfg.branding.logo_url, "https://maze.example.com/static/logo.png");
         assert_eq!(cfg.email.provider, CommsEmailProvider::Mailgun);
+        assert_eq!(cfg.email.default_from, "noreply@example.com");
+        assert_eq!(cfg.email.default_from_name, "Maze");
+        assert_eq!(cfg.email.templates_dir, "config/email_templates");
         assert_eq!(cfg.email.mailgun.domain, "mg.example.com");
         assert_eq!(cfg.email.mailgun.region, "eu");
         // api_key is env-only — never deserialised from TOML.
@@ -342,14 +375,15 @@ mod tests {
         let env: Envelope = toml::from_str("").expect("parse");
         let cfg = env.comms;
         assert!(!cfg.enabled);
-        assert_eq!(cfg.templates_dir, "data/comms_templates");
         assert!(cfg.public_base_url.is_empty());
-        assert!(cfg.default_from_email.is_empty());
-        assert!(cfg.default_from_name.is_empty());
         assert!(cfg.branding.company_name.is_empty());
         assert!(cfg.branding.company_address.is_empty());
+        assert!(cfg.branding.company_url.is_empty());
         assert!(cfg.branding.logo_url.is_empty());
         assert_eq!(cfg.email.provider, CommsEmailProvider::Stub);
+        assert!(cfg.email.default_from.is_empty());
+        assert_eq!(cfg.email.default_from_name, "The Maze Team");
+        assert_eq!(cfg.email.templates_dir, "config/email_templates");
         assert!(cfg.email.mailgun.domain.is_empty());
         assert_eq!(cfg.email.mailgun.region, "us");
         assert!(cfg.email.mailgun.api_key.is_empty());
@@ -360,9 +394,38 @@ mod tests {
         let env: Envelope = toml::from_str("[comms]\n").expect("parse");
         let cfg = env.comms;
         assert!(!cfg.enabled);
-        assert_eq!(cfg.templates_dir, "data/comms_templates");
         assert_eq!(cfg.email.provider, CommsEmailProvider::Stub);
+        assert_eq!(cfg.email.default_from_name, "The Maze Team");
+        assert_eq!(cfg.email.templates_dir, "config/email_templates");
         assert_eq!(cfg.email.mailgun.region, "us");
+    }
+
+    #[test]
+    fn resolve_and_validate_falls_back_company_url_to_public_base_url_when_empty() {
+        let mut cfg = CommsAppConfig {
+            public_base_url: "https://maze.example.com".into(),
+            branding: CommsBrandingConfig {
+                company_url: String::new(),
+                ..CommsBrandingConfig::default()
+            },
+            ..CommsAppConfig::default()
+        };
+        let _ = cfg.resolve_and_validate();
+        assert_eq!(cfg.branding.company_url, "https://maze.example.com");
+    }
+
+    #[test]
+    fn resolve_and_validate_keeps_explicit_company_url() {
+        let mut cfg = CommsAppConfig {
+            public_base_url: "https://maze.example.com".into(),
+            branding: CommsBrandingConfig {
+                company_url: "https://acme.example.com".into(),
+                ..CommsBrandingConfig::default()
+            },
+            ..CommsAppConfig::default()
+        };
+        let _ = cfg.resolve_and_validate();
+        assert_eq!(cfg.branding.company_url, "https://acme.example.com");
     }
 
     #[test]
@@ -395,9 +458,11 @@ mod tests {
         CommsAppConfig {
             enabled: true,
             public_base_url: "https://maze.example.com".into(),
-            default_from_email: "noreply@example.com".into(),
             email: CommsEmailConfig {
                 provider: CommsEmailProvider::Mailgun,
+                default_from: "noreply@example.com".into(),
+                default_from_name: "The Maze Team".into(),
+                templates_dir: "config/email_templates".into(),
                 mailgun: MailgunAppConfig {
                     domain: "mg.example.com".into(),
                     region: "us".into(),
@@ -459,8 +524,10 @@ mod tests {
         let mut cfg = CommsAppConfig {
             enabled: true,
             public_base_url: String::new(),
-            default_from_email: "noreply@example.com".into(),
-            email: CommsEmailConfig::default(), // Stub provider, no env var needed
+            email: CommsEmailConfig {
+                default_from: "noreply@example.com".into(),
+                ..CommsEmailConfig::default()
+            },
             ..CommsAppConfig::default()
         };
         let result = cfg.resolve_and_validate();
@@ -472,19 +539,21 @@ mod tests {
     }
 
     #[test]
-    fn resolve_and_validate_warns_about_missing_default_from_email_when_enabled() {
+    fn resolve_and_validate_warns_about_missing_default_from_when_enabled() {
         let mut cfg = CommsAppConfig {
             enabled: true,
             public_base_url: "https://maze.example.com".into(),
-            default_from_email: String::new(),
-            email: CommsEmailConfig::default(),
+            email: CommsEmailConfig {
+                default_from: String::new(),
+                ..CommsEmailConfig::default()
+            },
             ..CommsAppConfig::default()
         };
         let result = cfg.resolve_and_validate();
         let joined = result.warnings.join("\n");
         assert!(
-            joined.contains("default_from_email"),
-            "should warn about empty default_from_email; got: {joined}"
+            joined.contains("default_from"),
+            "should warn about empty default_from; got: {joined}"
         );
     }
 
@@ -494,13 +563,24 @@ mod tests {
         toml: &str,
     ) -> config::ConfigBuilder<config::builder::DefaultState> {
         config::Config::builder()
-            .set_default("comms.enabled", false)
-            .unwrap()
-            .set_default("comms.templates_dir", "data/comms_templates")
+            .set_default("comms.enabled", default_comms_enabled())
             .unwrap()
             .set_default("comms.email.provider", "stub")
             .unwrap()
-            .set_default("comms.email.mailgun.region", "us")
+            .set_default(
+                "comms.email.default_from_name",
+                default_comms_email_default_from_name(),
+            )
+            .unwrap()
+            .set_default(
+                "comms.email.templates_dir",
+                default_comms_email_templates_dir(),
+            )
+            .unwrap()
+            .set_default(
+                "comms.email.mailgun.region",
+                default_comms_email_mailgun_region(),
+            )
             .unwrap()
             .add_source(config::File::from_str(toml, config::FileFormat::Toml))
     }
@@ -557,18 +637,18 @@ mod tests {
         let toml = r#"
             [comms]
             enabled = false
-            default_from_email = "noreply@from-toml.example.com"
-            default_from_name = "Maze (TOML)"
 
             [comms.email]
             provider = "stub"
+            default_from = "noreply@from-toml.example.com"
+            default_from_name = "Maze (TOML)"
 
             [comms.email.mailgun]
             domain = "from-toml.mg.example.com"
         "#;
         with_env_vars(
             &[
-                ("MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_NAME", "Maze (env)"),
+                ("MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME", "Maze (env)"),
                 ("MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER", "mailgun"),
                 (
                     "MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN",
@@ -582,17 +662,17 @@ mod tests {
                 let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
 
                 // env wins over TOML where both are present
-                assert_eq!(cfg.default_from_name, "Maze (env)");
+                assert_eq!(cfg.email.default_from_name, "Maze (env)");
                 assert_eq!(cfg.email.provider, CommsEmailProvider::Mailgun);
                 assert_eq!(cfg.email.mailgun.domain, "from-env.mg.example.com");
                 // TOML wins over default where env is unset
                 assert_eq!(
-                    cfg.default_from_email,
+                    cfg.email.default_from,
                     "noreply@from-toml.example.com"
                 );
                 // default wins where neither TOML nor env is set
                 assert_eq!(cfg.email.mailgun.region, "us");
-                assert_eq!(cfg.templates_dir, "data/comms_templates");
+                assert_eq!(cfg.email.templates_dir, "config/email_templates");
             },
         );
     }

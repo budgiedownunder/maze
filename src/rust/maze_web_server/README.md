@@ -103,14 +103,15 @@ The following configuration settings exist:
 |          | `storage.sql.idle_timeout_secs` | Integer | `600` | `MAZE_WEB_SERVER_STORAGE_SQL_IDLE_TIMEOUT_SECS`
 |          | `storage.sql.acquire_timeout_secs` | Integer | `30` | `MAZE_WEB_SERVER_STORAGE_SQL_ACQUIRE_TIMEOUT_SECS`
 | Comms    | `comms.enabled`              | Boolean | `false` | `MAZE_WEB_SERVER_COMMS_ENABLED`
-|          | `comms.templates_dir`        | Text    | `data/comms_templates` | `MAZE_WEB_SERVER_COMMS_TEMPLATES_DIR`
 |          | `comms.public_base_url`      | Text    | (empty) | `MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL`
-|          | `comms.default_from_email`   | Text    | (empty) | `MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_EMAIL`
-|          | `comms.default_from_name`    | Text    | (empty) | `MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_NAME`
 |          | `comms.branding.company_name`    | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_NAME`
 |          | `comms.branding.company_address` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_ADDRESS`
+|          | `comms.branding.company_url`     | Text | (falls back to `comms.public_base_url`) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_URL`
 |          | `comms.branding.logo_url`        | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_LOGO_URL`
 |          | `comms.email.provider`           | Text (`stub` / `mailgun`) | `stub` | `MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER`
+|          | `comms.email.default_from`       | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM`
+|          | `comms.email.default_from_name`  | Text | `The Maze Team` | `MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME`
+|          | `comms.email.templates_dir`      | Text | `config/email_templates` | `MAZE_WEB_SERVER_COMMS_EMAIL_TEMPLATES_DIR`
 |          | `comms.email.mailgun.domain`     | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN`
 |          | `comms.email.mailgun.region`     | Text (`us` / `eu`) | `us` | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_REGION`
 |          | `comms.email.mailgun.api_key`    | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY`
@@ -196,24 +197,25 @@ redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 # variables only — see the env-var column in the table above.
 [comms]
 enabled = false
-templates_dir = "data/comms_templates"
 public_base_url = "https://your-host:8443"
-default_from_email = "noreply@example.com"
-default_from_name = "Maze"
 
 [comms.branding]
 company_name = "Acme, Inc."
 company_address = "123 Example St, City, Country"
+company_url = "https://acme.example.com"        # defaults to comms.public_base_url
 logo_url = "https://your-host:8443/static/logo.png"
 
 [comms.email]
-provider = "mailgun"   # "stub" (default) or "mailgun"
+provider = "mailgun"               # "stub" (default) or "mailgun"
+default_from = "noreply@example.com"
+default_from_name = "The Maze Team"
+templates_dir = "config/email_templates"
 
 # Provider sub-table consulted only when provider matches. The api_key is
 # *never* read from this file — set MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY.
 [comms.email.mailgun]
 domain = "mg.example.com"
-region = "us"          # "us" or "eu"
+region = "us"                      # "us" or "eu"
 ```
 
 Notes:

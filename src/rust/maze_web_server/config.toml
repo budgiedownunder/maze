@@ -141,23 +141,32 @@ redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 # required env vars produce startup warnings (logged, not fatal).
 # [comms]
 # enabled = false
-# templates_dir = "data/comms_templates"
 # public_base_url = "https://your-host:8443"
-# default_from_email = "noreply@example.com"
-# default_from_name = "Maze"
 
 # Branding values referenced by the templated-message partials
-# ({{ logo }}, {{ header }}, {{ footer }}). copyright_year is taken
-# from the current UTC year at render time and is not configurable here.
+# ({{ logo }}, {{ header }}, {{ footer }}) and templates ({{ company_url }}).
+# copyright_year is taken from the current UTC year at render time and is
+# not configurable here. company_url defaults to public_base_url when left
+# unset; set it explicitly only if the company website lives at a
+# different domain from the server deployment.
 # [comms.branding]
 # company_name = "Acme, Inc."
 # company_address = "123 Example St, City, Country"
+# company_url = "https://acme.example.com"
 # logo_url = "https://your-host:8443/static/logo.png"
 
 # Email-medium config. `provider` selects the active sub-table:
-# "stub" (in-memory capture) or "mailgun".
+# "stub" (in-memory capture) or "mailgun". `default_from` /
+# `default_from_name` are the sender identity used when send_template
+# synthesises a message; `default_from_name` defaults to "The Maze Team"
+# if omitted. `templates_dir` is the directory holding filesystem-override
+# templates and partials for the email medium; templates not present
+# there fall back to the embedded defaults compiled into the server.
 # [comms.email]
 # provider = "mailgun"
+# default_from = "noreply@example.com"
+# default_from_name = "The Maze Team"
+# templates_dir = "config/email_templates"
 
 # Mailgun-specific settings. Consulted only when provider = "mailgun".
 # api_key is read from MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY at

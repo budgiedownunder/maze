@@ -606,10 +606,20 @@ impl AppConfig {
                 "storage.sql.acquire_timeout_secs",
                 default_storage_sql_acquire_timeout_secs(),
             )?
-            .set_default("comms.enabled", false)?
-            .set_default("comms.templates_dir", "data/comms_templates")?
+            .set_default("comms.enabled", comms::default_comms_enabled())?
             .set_default("comms.email.provider", "stub")?
-            .set_default("comms.email.mailgun.region", "us")?
+            .set_default(
+                "comms.email.default_from_name",
+                comms::default_comms_email_default_from_name(),
+            )?
+            .set_default(
+                "comms.email.templates_dir",
+                comms::default_comms_email_templates_dir(),
+            )?
+            .set_default(
+                "comms.email.mailgun.region",
+                comms::default_comms_email_mailgun_region(),
+            )?
             .add_source(File::with_name("config.toml").required(false));
 
         builder = set_env_overrides(builder)?;
