@@ -4,6 +4,8 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::config::comms::{self, CommsAppConfig};
+
 /// Security configuration including TLS certificate paths and password hashing parameters.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SecurityConfig {
@@ -521,6 +523,11 @@ pub struct AppConfig {
     #[serde(default)]
     pub storage: StorageConfig,
 
+    /// Outbound communications configuration: email/SMS providers, branding,
+    /// and templates
+    #[serde(default)]
+    pub comms: CommsAppConfig,
+
     /// Path to the config file that was loaded. Not read from the config file itself —
     /// used by the admin API to persist runtime feature-flag changes back to disk.
     #[serde(skip, default = "default_config_path")]
@@ -537,6 +544,7 @@ impl Default for AppConfig {
             features: AppFeaturesConfig::default(),
             oauth: OAuthConfig::default(),
             storage: StorageConfig::default(),
+            comms: CommsAppConfig::default(),
             config_path: default_config_path(),
         }
     }
@@ -598,6 +606,10 @@ impl AppConfig {
                 "storage.sql.acquire_timeout_secs",
                 default_storage_sql_acquire_timeout_secs(),
             )?
+            .set_default("comms.enabled", false)?
+            .set_default("comms.templates_dir", "data/comms_templates")?
+            .set_default("comms.email.provider", "stub")?
+            .set_default("comms.email.mailgun.region", "us")?
             .add_source(File::with_name("config.toml").required(false));
 
         builder = set_env_overrides(builder)?;
@@ -720,6 +732,12 @@ fn set_env_overrides(mut builder: ConfigBuilder<DefaultState>) -> Result<ConfigB
     if let Ok(v) = std::env::var(get_app_env_name("STORAGE_SQL_ACQUIRE_TIMEOUT_SECS")) {
         builder = builder.set_override("storage.sql.acquire_timeout_secs", v)?;
     }
+
+    // Comms section overrides. Note: COMMS_EMAIL_MAILGUN_API_KEY and other
+    // provider secrets are *not* read here — `CommsAppConfig::resolve_and_validate`
+    // handles them after deserialise so secrets never live inside the
+    // `config` crate's value tree (which gets serialised via `log_config`).
+    builder = comms::apply_env_overrides(builder)?;
 
     Ok(builder)
 }

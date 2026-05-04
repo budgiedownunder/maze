@@ -1,6 +1,7 @@
-//! `[comms]` configuration: types and validation only. Wiring into
-//! `AppConfig`'s load pipeline happens in a follow-up sub-step.
+//! `[comms]` configuration: types, validation, and env-override wiring
+//! consumed by `AppConfig::load`.
 
+use config::{ConfigBuilder, builder::DefaultState};
 use serde::{Deserialize, Serialize};
 
 /// Top-level `[comms]` configuration block.
@@ -223,6 +224,54 @@ impl CommsAppConfig {
     }
 }
 
+/// Apply `MAZE_WEB_SERVER_COMMS_*` environment-variable overrides to the
+/// supplied config builder. Called from `AppConfig::set_env_overrides` so
+/// every comms key participates in the same precedence pipeline as the
+/// rest of the config (defaults < TOML < env).
+///
+/// The api-key-like env vars (`*_API_KEY`, future passwords) are **not**
+/// handled here — they're resolved into the `#[serde(skip)]` fields by
+/// `resolve_and_validate` so secrets never live in the `config` crate's
+/// value tree (which gets logged via `AppConfig::log_config`).
+pub(crate) fn apply_env_overrides(
+    mut builder: ConfigBuilder<DefaultState>,
+) -> Result<ConfigBuilder<DefaultState>, config::ConfigError> {
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_ENABLED") {
+        builder = builder.set_override("comms.enabled", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_TEMPLATES_DIR") {
+        builder = builder.set_override("comms.templates_dir", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL") {
+        builder = builder.set_override("comms.public_base_url", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_EMAIL") {
+        builder = builder.set_override("comms.default_from_email", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_NAME") {
+        builder = builder.set_override("comms.default_from_name", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_NAME") {
+        builder = builder.set_override("comms.branding.company_name", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_ADDRESS") {
+        builder = builder.set_override("comms.branding.company_address", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_LOGO_URL") {
+        builder = builder.set_override("comms.branding.logo_url", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER") {
+        builder = builder.set_override("comms.email.provider", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN") {
+        builder = builder.set_override("comms.email.mailgun.domain", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_REGION") {
+        builder = builder.set_override("comms.email.mailgun.region", v)?;
+    }
+    Ok(builder)
+}
+
 fn default_comms_enabled() -> bool {
     false
 }
@@ -436,6 +485,115 @@ mod tests {
         assert!(
             joined.contains("default_from_email"),
             "should warn about empty default_from_email; got: {joined}"
+        );
+    }
+
+    /// Build a builder seeded with the same defaults `AppConfig::load` uses
+    /// for the comms keys, plus the supplied inline TOML.
+    fn builder_with_defaults_and_toml(
+        toml: &str,
+    ) -> config::ConfigBuilder<config::builder::DefaultState> {
+        config::Config::builder()
+            .set_default("comms.enabled", false)
+            .unwrap()
+            .set_default("comms.templates_dir", "data/comms_templates")
+            .unwrap()
+            .set_default("comms.email.provider", "stub")
+            .unwrap()
+            .set_default("comms.email.mailgun.region", "us")
+            .unwrap()
+            .add_source(config::File::from_str(toml, config::FileFormat::Toml))
+    }
+
+    /// Snapshot/restore helper for env-var mutation tests. Replaces the
+    /// pre-existing values during the closure and restores them on exit so
+    /// other parallel tests aren't perturbed by leftover state.
+    fn with_env_vars<F: FnOnce()>(vars: &[(&str, &str)], f: F) {
+        let priors: Vec<_> = vars
+            .iter()
+            .map(|(k, _)| (*k, std::env::var(k).ok()))
+            .collect();
+        for (k, v) in vars {
+            unsafe { std::env::set_var(k, v) };
+        }
+        f();
+        for (k, prior) in priors {
+            match prior {
+                Some(v) => unsafe { std::env::set_var(k, v) },
+                None => unsafe { std::env::remove_var(k) },
+            }
+        }
+    }
+
+    /// Sole owner of `MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL` in the test
+    /// suite — no other test reads or writes this variable, so the snapshot
+    /// pattern is safe under `cargo test`'s default thread pool.
+    #[test]
+    fn apply_env_overrides_lets_env_var_win_over_toml() {
+        let toml = r#"
+            [comms]
+            public_base_url = "https://from-toml.example.com"
+        "#;
+        with_env_vars(
+            &[(
+                "MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL",
+                "https://from-env.example.com",
+            )],
+            || {
+                let builder = builder_with_defaults_and_toml(toml);
+                let builder = apply_env_overrides(builder).expect("apply env overrides");
+                let settings = builder.build().expect("build");
+                let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
+                assert_eq!(cfg.public_base_url, "https://from-env.example.com");
+            },
+        );
+    }
+
+    /// Round-trip test through the full builder pipeline. Uses a distinct
+    /// set of env vars from the other env-touching tests in this module so
+    /// the suite is safe to run with the default parallel thread pool.
+    #[test]
+    fn apply_env_overrides_full_pipeline_propagates_multiple_keys() {
+        let toml = r#"
+            [comms]
+            enabled = false
+            default_from_email = "noreply@from-toml.example.com"
+            default_from_name = "Maze (TOML)"
+
+            [comms.email]
+            provider = "stub"
+
+            [comms.email.mailgun]
+            domain = "from-toml.mg.example.com"
+        "#;
+        with_env_vars(
+            &[
+                ("MAZE_WEB_SERVER_COMMS_DEFAULT_FROM_NAME", "Maze (env)"),
+                ("MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER", "mailgun"),
+                (
+                    "MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN",
+                    "from-env.mg.example.com",
+                ),
+            ],
+            || {
+                let builder = builder_with_defaults_and_toml(toml);
+                let builder = apply_env_overrides(builder).expect("apply env overrides");
+                let settings = builder.build().expect("build");
+                let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
+
+                // env wins over TOML where both are present
+                assert_eq!(cfg.default_from_name, "Maze (env)");
+                assert_eq!(cfg.email.provider, CommsEmailProvider::Mailgun);
+                assert_eq!(cfg.email.mailgun.domain, "from-env.mg.example.com");
+                // TOML wins over default where env is unset
+                assert_eq!(
+                    cfg.default_from_email,
+                    "noreply@from-toml.example.com"
+                );
+                // default wins where neither TOML nor env is set
+                assert_eq!(cfg.email.mailgun.region, "us");
+                assert_eq!(cfg.templates_dir, "data/comms_templates");
+            },
         );
     }
 }
