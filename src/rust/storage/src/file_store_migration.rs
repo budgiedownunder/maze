@@ -1,11 +1,24 @@
-//! On-startup migration for FileStore `user.json` files.
+//! On-startup migrations for FileStore.
 //!
-//! Old-shape JSON carried `email: String`; the current shape carries
-//! `emails: Vec<UserEmail>`. `FileStore::new()` walks the users directory,
-//! rewrites any old-shape file in place to the new shape, and saves the
-//! original alongside as `user.json.bak`. The conversion is idempotent —
-//! running against already-migrated data is a no-op (every file parses
-//! straight as the new shape).
+//! Two pieces live here:
+//!
+//! 1. **`migrate_users_dir`** — a one-shot, idempotent rewrite of any
+//!    legacy single-email `user.json` files into the multi-email shape.
+//!    Runs unconditionally on every `FileStore::new()`. Old-shape files
+//!    get rewritten and the original kept alongside as `user.json.bak`;
+//!    new-shape files parse straight through and are left alone.
+//!
+//! 2. **Schema-versioned migration framework** — `apply_pending_migrations`
+//!    reads `<data_dir>/.schema_version` (defaulting to `0` if absent),
+//!    runs every registered migration with a higher version in order,
+//!    and writes the new version after each successful migration so a
+//!    failure mid-batch leaves the schema at the last successful step.
+//!    The version-counter aligns with the SQL migration numbers
+//!    (`0001_initial.sql` / `0002_user_emails.sql`); 0001 and 0002 are
+//!    no-op entries in the FileStore registry to bring the version
+//!    counter in step without re-doing work — existing deployments that
+//!    have run `migrate_users_dir` are already in the post-0002 shape.
+//!    Real FileStore migrations register at 0003 and above.
 
 use std::fs;
 use std::io::Write;
@@ -148,6 +161,122 @@ fn migrate_user_file(path: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+// ─────────────────────────── Schema-version framework ───────────────────────────
+
+/// Filename of the schema-version marker inside `data_dir`.
+const SCHEMA_VERSION_FILE: &str = ".schema_version";
+
+/// Highest schema version the framework currently knows about. Used only
+/// by tests today; bumping this is `MIGRATIONS`'s job — never edit it
+/// by hand.
+#[cfg(test)]
+const CURRENT_SCHEMA_VERSION: u32 = max_registered_version(MIGRATIONS);
+
+/// Per-migration runner signature. Each migration receives the data
+/// directory and applies its transformation against on-disk state. Errors
+/// halt the framework before the next version is written.
+type MigrationFn = fn(&Path) -> Result<(), Error>;
+
+/// Ordered registry of FileStore migrations. The framework runs every
+/// migration whose version is greater than the value stored in
+/// `<data_dir>/.schema_version`, in ascending order, writing the new
+/// version after each one.
+///
+/// **Versions 1 and 2 are intentional no-ops.** They align the FileStore
+/// counter with the SQL `0001_initial.sql` and `0002_user_emails.sql`
+/// migrations already applied to existing deployments. Existing
+/// deployments are already in the post-0002 shape (the predecessor's
+/// `migrate_users_dir` ran on every startup); brand-new `data_dir`s have
+/// no users to migrate. Either way the no-op entries cleanly bring the
+/// version counter to 2 without doing redundant work.
+///
+/// Real FileStore migrations register at 3 and above (added in subsequent
+/// steps).
+const MIGRATIONS: &[(u32, MigrationFn)] = &[(1, no_op_migration), (2, no_op_migration)];
+
+const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
+    let mut max = 0u32;
+    let mut i = 0;
+    while i < migrations.len() {
+        let (v, _) = migrations[i];
+        if v > max {
+            max = v;
+        }
+        i += 1;
+    }
+    max
+}
+
+fn no_op_migration(_data_dir: &Path) -> Result<(), Error> {
+    Ok(())
+}
+
+/// Run every pending migration in `MIGRATIONS` against `data_dir`.
+///
+/// Behaviour:
+/// - `<data_dir>/.schema_version` missing → treat as 0 (run every migration).
+/// - Each migration runs in order; after success its version is written
+///   atomically so a subsequent failure doesn't lose progress already made.
+/// - A migration that returns `Err` aborts the run; the error propagates
+///   and `.schema_version` reflects the last migration that succeeded.
+/// - `.schema_version` higher than the registry's max version is rejected
+///   with a clear error rather than silently downgrading the counter.
+pub fn apply_pending_migrations(data_dir: &str) -> Result<(), Error> {
+    apply_migrations_to(data_dir, MIGRATIONS)
+}
+
+/// Internal worker: same contract as `apply_pending_migrations` but takes
+/// the registry as a parameter so tests can inject custom migration sets
+/// without mutating the const.
+fn apply_migrations_to(
+    data_dir: &str,
+    migrations: &[(u32, MigrationFn)],
+) -> Result<(), Error> {
+    let path = Path::new(data_dir);
+    let mut current = read_schema_version(path)?;
+    let max = max_registered_version(migrations);
+    if current > max {
+        return Err(Error::Other(format!(
+            "{SCHEMA_VERSION_FILE} ({current}) is higher than the migration runner's max version ({max}); refusing to downgrade"
+        )));
+    }
+    for (version, runner) in migrations {
+        if *version <= current {
+            continue;
+        }
+        runner(path)?;
+        write_schema_version(path, *version)?;
+        current = *version;
+        log::info!("FileStore migration {version} applied");
+    }
+    Ok(())
+}
+
+fn read_schema_version(data_dir: &Path) -> Result<u32, Error> {
+    let path = data_dir.join(SCHEMA_VERSION_FILE);
+    match fs::read_to_string(&path) {
+        Ok(s) => s.trim().parse::<u32>().map_err(|e| {
+            Error::Other(format!(
+                "failed to parse {}: {e}",
+                path.display()
+            ))
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn write_schema_version(data_dir: &Path, version: u32) -> Result<(), Error> {
+    let target = data_dir.join(SCHEMA_VERSION_FILE);
+    let tmp = data_dir.join(".schema_version.tmp");
+    {
+        let mut file = fs::File::create(&tmp)?;
+        file.write_all(version.to_string().as_bytes())?;
+    }
+    fs::rename(&tmp, &target)?;
+    Ok(())
+}
+
 /// Writes `original_json` to `<path>.bak`, then atomically rewrites `path`
 /// with `new_json` via tempfile + rename.
 fn write_backup_then_rewrite(
@@ -265,5 +394,119 @@ mod tests {
         let missing = temp.path().join("missing");
         // Must not error on a non-existent directory.
         migrate_users_dir(missing.to_str().unwrap()).expect("migrate");
+    }
+
+    // ───────────────────── Schema-version framework tests ─────────────────────
+
+    fn schema_version_path(data_dir: &Path) -> PathBuf {
+        data_dir.join(SCHEMA_VERSION_FILE)
+    }
+
+    fn read_version_file(data_dir: &Path) -> String {
+        std::fs::read_to_string(schema_version_path(data_dir))
+            .expect("read .schema_version")
+            .trim()
+            .to_string()
+    }
+
+    #[test]
+    fn apply_pending_migrations_writes_current_version_on_empty_data_dir() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        apply_pending_migrations(temp.path().to_str().unwrap())
+            .expect("migrations must succeed");
+        assert!(schema_version_path(temp.path()).exists());
+        assert_eq!(
+            read_version_file(temp.path()),
+            CURRENT_SCHEMA_VERSION.to_string()
+        );
+    }
+
+    #[test]
+    fn apply_pending_migrations_is_idempotent_when_at_current_version() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        // First run brings the counter to the current version.
+        apply_pending_migrations(temp.path().to_str().unwrap()).expect("first run");
+        let mtime_before = std::fs::metadata(schema_version_path(temp.path()))
+            .expect("metadata")
+            .modified()
+            .expect("modified time");
+
+        // Second run should detect current >= max and do nothing — neither
+        // run a migration nor rewrite the version file.
+        apply_pending_migrations(temp.path().to_str().unwrap())
+            .expect("second run must be a no-op");
+
+        let mtime_after = std::fs::metadata(schema_version_path(temp.path()))
+            .expect("metadata")
+            .modified()
+            .expect("modified time");
+        assert_eq!(
+            read_version_file(temp.path()),
+            CURRENT_SCHEMA_VERSION.to_string()
+        );
+        assert_eq!(
+            mtime_before, mtime_after,
+            ".schema_version must not be rewritten when no migrations are pending"
+        );
+    }
+
+    #[test]
+    fn rejects_schema_version_higher_than_runners_max() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(schema_version_path(temp.path()), "999")
+            .expect("seed schema version");
+        let err = apply_pending_migrations(temp.path().to_str().unwrap())
+            .expect_err("must reject downgrade");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("999"),
+            "error should name the on-disk version: {msg}"
+        );
+        assert!(
+            msg.contains("downgrade") || msg.contains("higher"),
+            "error should explain the refusal: {msg}"
+        );
+    }
+
+    /// Test-only registry containing a deliberately failing migration to
+    /// verify per-step version-write semantics: migrations 1 and 2 succeed
+    /// (writing the version to 2 along the way), migration 3 fails, and
+    /// the schema version stays at 2 — the last successful step.
+    #[test]
+    fn failing_migration_leaves_schema_at_last_successful_version() {
+        fn ok(_: &Path) -> Result<(), Error> {
+            Ok(())
+        }
+        fn fail(_: &Path) -> Result<(), Error> {
+            Err(Error::Other("synthetic failure".into()))
+        }
+        let migrations: &[(u32, MigrationFn)] = &[(1, ok), (2, ok), (3, fail), (4, ok)];
+
+        let temp = tempfile::tempdir().expect("tempdir");
+        let err = apply_migrations_to(temp.path().to_str().unwrap(), migrations)
+            .expect_err("must surface migration failure");
+        assert!(format!("{err}").contains("synthetic failure"), "{err}");
+        // After the failure, the schema version reflects the highest
+        // migration that actually succeeded — 2 here.
+        assert_eq!(read_version_file(temp.path()), "2");
+    }
+
+    #[test]
+    fn skips_migrations_already_recorded_at_or_below_current_version() {
+        fn ok(_: &Path) -> Result<(), Error> {
+            Ok(())
+        }
+        fn must_not_run(_: &Path) -> Result<(), Error> {
+            panic!("migration ran when current version should have skipped it");
+        }
+        let temp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(schema_version_path(temp.path()), "5")
+            .expect("seed schema version");
+        // Versions 1..=5 must be skipped because current = 5; 6 must run.
+        let migrations: &[(u32, MigrationFn)] =
+            &[(1, must_not_run), (5, must_not_run), (6, ok)];
+        apply_migrations_to(temp.path().to_str().unwrap(), migrations)
+            .expect("migrations must succeed");
+        assert_eq!(read_version_file(temp.path()), "6");
     }
 }

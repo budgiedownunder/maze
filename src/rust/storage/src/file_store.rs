@@ -142,6 +142,11 @@ impl FileStore {
         // already-migrated files parse straight as the new shape and are
         // left alone).
         file_store_migration::migrate_users_dir(&self.users_dir)?;
+        // Run the schema-versioned migration framework. On a fresh data_dir
+        // this writes `.schema_version` to the current value via no-op
+        // migrations; on an existing data_dir already at the current
+        // version the call is cheap and rewrites nothing.
+        file_store_migration::apply_pending_migrations(&self.data_dir)?;
         Ok(())
     }
 
