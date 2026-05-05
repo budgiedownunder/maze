@@ -18,7 +18,6 @@ use crate::config::comms::{CommsAppConfig, CommsEmailProvider};
 
 const PASSWORD_RESET_TOML: &str =
     include_str!("../../templates/email/password_reset.toml");
-const INVITATION_TOML: &str = include_str!("../../templates/email/invitation.toml");
 const EMAIL_VERIFICATION_TOML: &str =
     include_str!("../../templates/email/email_verification.toml");
 
@@ -78,7 +77,6 @@ pub fn build_renderer(cfg: &CommsAppConfig) -> Result<TemplateRenderer, String> 
 
     let templates: Arc<dyn TemplateLoader> = Arc::new(EmbeddedTemplateLoader::from_pairs(&[
         ("password_reset", PASSWORD_RESET_TOML),
-        ("invitation", INVITATION_TOML),
         ("email_verification", EMAIL_VERIFICATION_TOML),
     ]));
 

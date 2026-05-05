@@ -8,7 +8,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// What flow this one-time token enables. Storage backends serialise the
-/// variant as the kebab-case strings shown in the discriminant comments
+/// variant as the snake_case strings shown in the discriminant comments
 /// below — matching the values written into the SQL `purpose` column so
 /// FileStore JSON files and SQL rows agree on the wire format.
 #[derive(Serialize, Deserialize, ToSchema, Debug, PartialEq, Eq, Copy, Clone)]
@@ -17,23 +17,20 @@ pub enum TokenPurpose {
     /// Forgot-password reset flow. 1 hour expiry. Consumption invalidates
     /// every entry in `User.logins`.
     PasswordReset,
-    /// Admin-initiated invitation flow. 7 day expiry. Acceptance sets the
-    /// invited email to `verified = true, verified_at = now()`.
-    Invite,
     /// Self-service or signup-time email verification. 24 hour expiry.
     /// Re-issuing supersedes any outstanding token for the same address.
     EmailVerification,
 }
 
 /// A single-use, time-bounded token used to authorise an out-of-band
-/// action — password reset, invitation acceptance, or email verification.
+/// action — password reset or email verification.
 ///
 /// Lifecycle:
 ///   * Created by a handler that has authenticated the *intent* of the
 ///     action (e.g. a `POST /password-reset/request` handler that found a
 ///     verified email match).
 ///   * Sent to the user via email; the `id` is the secret carried in the
-///     reset/verify/invite link.
+///     reset/verify link.
 ///   * Consumed exactly once when the link is followed: `consumed_at` is
 ///     atomically populated. A second consume attempt fails.
 ///   * Expires after the per-purpose TTL; expired tokens are invisible to
@@ -174,25 +171,12 @@ mod tests {
     }
 
     #[test]
-    fn can_serialize_and_deserialize_invite() {
-        let token = fresh(TokenPurpose::Invite, None, 24 * 7);
-        let json = token.to_json().expect("serialize");
-        let mut back = fresh(TokenPurpose::PasswordReset, None, 0);
-        back.from_json(&json).expect("deserialize");
-        assert_eq!(back, token);
-    }
-
-    #[test]
     fn purpose_serialises_as_snake_case() {
         // Lock in the wire-format strings so FileStore JSON files and SQL
         // `purpose` rows agree across backends.
         let token = fresh(TokenPurpose::PasswordReset, None, 1);
         let json = token.to_json().expect("serialize");
         assert!(json.contains("\"purpose\":\"password_reset\""), "{json}");
-
-        let token = fresh(TokenPurpose::Invite, None, 1);
-        let json = token.to_json().expect("serialize");
-        assert!(json.contains("\"purpose\":\"invite\""), "{json}");
 
         let token = fresh(TokenPurpose::EmailVerification, None, 1);
         let json = token.to_json().expect("serialize");

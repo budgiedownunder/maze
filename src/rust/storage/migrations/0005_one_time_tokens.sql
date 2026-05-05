@@ -11,7 +11,7 @@
 -- discriminator (room for "email_verification" plus headroom).
 --
 -- `purpose` is a free-form string at the schema level — the application
--- maps it to the `TokenPurpose` enum (`password_reset` | `invite` |
+-- maps it to the `TokenPurpose` enum (`password_reset` |
 -- `email_verification`). Application code is the single source of truth
 -- for the variant set; portable enum types across PostgreSQL/MySQL/SQLite
 -- via SQLx Any aren't expressible in one migration file.

@@ -2754,12 +2754,11 @@ impl Manage for SqlStore {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Maps a [`TokenPurpose`] to the lowercase string written into the
-/// `purpose` column. Mirrors the kebab-case wire form used by the
+/// `purpose` column. Mirrors the snake_case wire form used by the
 /// FileStore JSON files so both backends agree.
 fn token_purpose_to_sql(purpose: TokenPurpose) -> &'static str {
     match purpose {
         TokenPurpose::PasswordReset => "password_reset",
-        TokenPurpose::Invite => "invite",
         TokenPurpose::EmailVerification => "email_verification",
     }
 }
@@ -2771,7 +2770,6 @@ fn token_purpose_to_sql(purpose: TokenPurpose) -> &'static str {
 fn token_purpose_from_sql(raw: &str) -> Result<TokenPurpose, Error> {
     match raw {
         "password_reset" => Ok(TokenPurpose::PasswordReset),
-        "invite" => Ok(TokenPurpose::Invite),
         "email_verification" => Ok(TokenPurpose::EmailVerification),
         other => Err(integrity_violation(&format!(
             "unknown token purpose '{other}' in one_time_tokens"

@@ -3,9 +3,11 @@ mod test_definitions {
     // **************************************************************************************************
     // Unit tests for API and documentation endpoints, via injection of MockStore
     // **************************************************************************************************
+    use crate::api::v1::endpoints::auth_reset::{PasswordResetConfirmRequest, PasswordResetRequest};
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
-    use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::build_comms, SharedFeatures};
+    use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
+    use comms::{Comms, StubEmailProvider};
     
     use actix_http;
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
@@ -111,12 +113,14 @@ mod test_definitions {
     /**************/
     struct MockStore {
         users: HashMap<Uuid, MockUser>,
+        tokens: HashMap<Uuid, OneTimeToken>,
     }
 
     impl MockStore {
         pub fn new(user_defs: &Vec<UserDefinition>) -> Self {
             MockStore {
-                users: new_users_map(user_defs)
+                users: new_users_map(user_defs),
+                tokens: HashMap::new(),
             }
         }
 
@@ -536,23 +540,47 @@ mod test_definitions {
         }
     }
 
-    // Stub TokenStore — none of the existing handler tests exercise the
-    // token flows (those live in storage/ contract tests). Once the
-    // password-reset / verification handlers land, these stubs gain
-    // an in-memory backing map.
+    // In-memory TokenStore that mirrors the real storage backends'
+    // behavioural contract closely enough for handler-level integration
+    // tests. The `consume_token` race-free guarantee is provided by the
+    // outer `RwLock<Box<dyn Store>>` + the per-method `&mut self` — at
+    // that point the test runner already holds an exclusive lock so no
+    // two `consume_token` calls can interleave.
     #[async_trait]
     impl TokenStore for MockStore {
-        async fn create_token(&mut self, _t: &OneTimeToken) -> Result<(), StoreError> {
-            Err(StoreError::Other("create_token() not implemented for MockStore".to_string()))
+        async fn create_token(&mut self, token: &OneTimeToken) -> Result<(), StoreError> {
+            if token.id == Uuid::nil() {
+                return Err(StoreError::Other("token id must not be nil".to_string()));
+            }
+            if self.tokens.contains_key(&token.id) {
+                return Err(StoreError::TokenIdExists(token.id.to_string()));
+            }
+            self.tokens.insert(token.id, token.clone());
+            Ok(())
         }
-        async fn find_token(&self, _id: Uuid) -> Result<OneTimeToken, StoreError> {
-            Err(StoreError::Other("find_token() not implemented for MockStore".to_string()))
+        async fn find_token(&self, id: Uuid) -> Result<OneTimeToken, StoreError> {
+            match self.tokens.get(&id) {
+                Some(t) if t.is_expired() => Err(StoreError::TokenIdNotFound(id.to_string())),
+                Some(t) => Ok(t.clone()),
+                None => Err(StoreError::TokenIdNotFound(id.to_string())),
+            }
         }
-        async fn consume_token(&mut self, _id: Uuid) -> Result<OneTimeToken, StoreError> {
-            Err(StoreError::Other("consume_token() not implemented for MockStore".to_string()))
+        async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, StoreError> {
+            let token = self.tokens.get_mut(&id)
+                .ok_or_else(|| StoreError::TokenIdNotFound(id.to_string()))?;
+            if token.is_consumed() {
+                return Err(StoreError::TokenAlreadyConsumed());
+            }
+            if token.is_expired() {
+                return Err(StoreError::TokenExpired());
+            }
+            token.consumed_at = Some(Utc::now());
+            Ok(token.clone())
         }
         async fn purge_expired(&mut self) -> Result<u64, StoreError> {
-            Ok(0)
+            let before = self.tokens.len() as u64;
+            self.tokens.retain(|_, t| !t.is_expired() || t.is_consumed());
+            Ok(before - self.tokens.len() as u64)
         }
     }
 
@@ -935,6 +963,60 @@ mod test_definitions {
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, SharedStore, HashMap<Uuid, MockUser>, Option<Uuid>, Option<Uuid>) {
         let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
         create_test_app_with_features(user_defs, caller_username, add_login, features).await
+    }
+
+    /// Variant of `create_test_app` that wires a freshly-constructed
+    /// `StubEmailProvider` into the `Comms` orchestrator and returns a
+    /// clone alongside the app so the test can inspect captured sends.
+    /// Used by the password-reset / email-verification integration tests
+    /// that need to assert on outbound emails.
+    async fn create_test_app_with_stub_email(
+        user_defs: &mut Vec<UserDefinition>,
+        caller_username: Option<&str>,
+        add_login: bool,
+    ) -> (
+        impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        SharedStore,
+        HashMap<Uuid, MockUser>,
+        Option<Uuid>,
+        Option<Uuid>,
+        StubEmailProvider,
+    ) {
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let mut app_config = AppConfig::default();
+        app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        // Drive a stable `public_base_url` so the reset-link assertion has
+        // something deterministic to check against. Likewise pin a
+        // `default_from` — without it, `comms.send_template` fails the
+        // dispatch with `Config("no default_from_email configured")`
+        // and the stub never sees a message.
+        app_config.comms.public_base_url = "https://maze.test".to_string();
+        app_config.comms.email.default_from = "noreply@maze.test".to_string();
+
+        set_valid_password_hashes(&app_config.security.password_hash, user_defs);
+        let (shared_mock_store, mock_users, api_key, login_id) =
+            create_shared_mock_store(user_defs, caller_username, add_login);
+        let connector: SharedOAuthConnector = Arc::new(NoOpConnector);
+
+        let renderer = build_renderer(&app_config.comms).expect("test renderer");
+        let default_from = build_default_from(&app_config.comms);
+        let stub = StubEmailProvider::new();
+        let comms = Comms::new(renderer, Some(Arc::new(stub.clone())), default_from);
+
+        let app = test::init_service(
+            create_app(
+                &app_config.security.password_hash,
+                web::Data::new(shared_mock_store.clone()),
+                web::Data::new(features),
+                web::Data::new(connector),
+                web::Data::new(comms),
+                ".".to_string(),
+            )
+            .app_data(web::Data::new(app_config)),
+        )
+        .await;
+
+        (app, shared_mock_store, mock_users, Some(api_key), login_id, stub)
     }
 
     fn get_invalid_email_or_password_error_str() -> String {
@@ -3470,6 +3552,373 @@ mod test_definitions {
         let post_req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
         let post_resp = test::call_service(&app, post_req).await;
         assert_eq!(post_resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // **************************************************************************************************
+    // Tests: POST /api/v1/password-reset/{request,confirm}
+    // **************************************************************************************************
+
+    /// Spin briefly until the captured-stub buffer has at least `min` rows
+    /// or the budget elapses. The reset-request handler dispatches the
+    /// email on a `tokio::spawn` task, so the HTTP response comes back
+    /// before the send resolves.
+    async fn await_stub_capture(stub: &StubEmailProvider, min: usize, max_ms: u64) {
+        let start = std::time::Instant::now();
+        while stub.len() < min && start.elapsed().as_millis() < u128::from(max_ms) {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    }
+
+    fn extract_reset_token(url: &str) -> Option<Uuid> {
+        let q = url.split_once('?')?.1;
+        for pair in q.split('&') {
+            let (k, v) = pair.split_once('=')?;
+            if k == "token" {
+                return Uuid::parse_str(v).ok();
+            }
+        }
+        None
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_happy_path_dispatches_email_with_reset_link() {
+        // Real verified-email match → token created, send fired through stub.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/request",
+            None,
+            None,
+            Some(&PasswordResetRequest { email: email.clone() }),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        await_stub_capture(&stub, 1, 1000).await;
+        assert_eq!(stub.len(), 1, "stub should have captured exactly one message");
+        let captured = stub.last().expect("captured message");
+        assert_eq!(captured.to.len(), 1);
+        assert_eq!(captured.to[0].address, email);
+        assert!(
+            captured.body_text.contains("https://maze.test/reset-password?token="),
+            "reset link should appear in body_text: {}",
+            captured.body_text
+        );
+    }
+
+    #[actix_web::test]
+    async fn password_reset_confirm_updates_password_and_clears_logins() {
+        // The post-reset "old login id rejected" assertion can't go through
+        // `test::call_service` because the auth-middleware's
+        // `ErrorUnauthorized` return propagates as `Err` rather than as a
+        // 401 `ServiceResponse`, which makes `test::call_service` panic.
+        // The cleared-`user.logins` invariant is covered by the storage
+        // crate's contract tests; here we verify the contract-visible
+        // surface — the password was actually rotated — via /login.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+
+        // Sanity: the original credentials work before the reset.
+        let original_login = LoginRequest {
+            email: email.clone(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/login",
+                    None,
+                    None,
+                    Some(&original_login),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        // Request the reset, harvest the token from the captured email.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/password-reset/request",
+                    None,
+                    None,
+                    Some(&PasswordResetRequest { email: email.clone() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        let captured = stub.last().expect("captured");
+        let link = captured
+            .body_text
+            .lines()
+            .find(|l| l.contains("https://maze.test/reset-password?token="))
+            .expect("reset link line");
+        let token_id = extract_reset_token(link.trim()).expect("token in link");
+
+        // Confirm with a fresh password.
+        let new_password = "NewPassword1!";
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/password-reset/confirm",
+                    None,
+                    None,
+                    Some(&PasswordResetConfirmRequest {
+                        token: token_id.to_string(),
+                        new_password: new_password.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+
+        // The new password lets the user log in.
+        let new_login = LoginRequest {
+            email: email.clone(),
+            password: new_password.to_string(),
+        };
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request("/api/v1/login", None, None, Some(&new_login)),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        // The old password must be rejected.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request("/api/v1/login", None, None, Some(&original_login)),
+            )
+            .await
+            .status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_for_unknown_email_returns_200_with_no_send() {
+        // Reconnaissance / anti-enumeration: an email that doesn't match
+        // any user must return the same 200 as a real match, with no send.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/request",
+            None,
+            None,
+            Some(&PasswordResetRequest {
+                email: "ghost@example.com".to_string(),
+            }),
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+
+        // Give any in-flight spawn a moment to flush before asserting.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(stub.len(), 0, "no send should fire for an unknown email");
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_for_unverified_email_returns_200_with_no_send() {
+        // The handler relies on `find_user_by_verified_email` which the
+        // storage layer filters to verified rows only. An attacker who
+        // squats an unverified address on a victim's account must not be
+        // able to redirect resets to it.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        // Attach an unverified email to the existing user. We mutate the
+        // store directly because the API requires bearer auth and we
+        // want to keep this test focused on the reset-request behaviour.
+        let user = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user_1")
+        };
+        {
+            let mut store_lock = shared_store.write().await;
+            store_lock
+                .add_user_email(user.id, "shadow@example.com", false)
+                .await
+                .expect("add unverified email");
+        }
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/request",
+            None,
+            None,
+            Some(&PasswordResetRequest {
+                email: "shadow@example.com".to_string(),
+            }),
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(stub.len(), 0, "unverified email must not trigger a send");
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_for_oauth_only_user_returns_200_with_no_send() {
+        // OAuth-only users have an empty `password_hash` — there's no
+        // password to reset, so the request silently no-ops. The 200
+        // response is identical to the unknown-email path.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        // Seed an OAuth-only user via the store directly.
+        let mut oauth_user = User {
+            id: Uuid::nil(),
+            is_admin: false,
+            username: "oauth_user".to_string(),
+            full_name: "OAuth User".to_string(),
+            emails: vec![data_model::UserEmail::new_primary_verified("oauth@example.com")],
+            password_hash: String::new(),
+            api_key: Uuid::nil(),
+            logins: vec![],
+            oauth_identities: vec![data_model::OAuthIdentity::new(
+                "google".to_string(),
+                "google-sub-1".to_string(),
+                Some("oauth@example.com".to_string()),
+            )],
+            deleted_at: None,
+        };
+        {
+            let mut store_lock = shared_store.write().await;
+            store_lock.create_user(&mut oauth_user).await.expect("create OAuth user");
+        }
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/request",
+            None,
+            None,
+            Some(&PasswordResetRequest {
+                email: "oauth@example.com".to_string(),
+            }),
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(stub.len(), 0, "OAuth-only user must not trigger a send");
+    }
+
+    #[actix_web::test]
+    async fn password_reset_confirm_rejects_second_consume_attempt() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+
+        // Issue + harvest the token.
+        let req = create_test_post_request(
+            "/api/v1/password-reset/request",
+            None,
+            None,
+            Some(&PasswordResetRequest { email }),
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        await_stub_capture(&stub, 1, 1000).await;
+        let captured = stub.last().expect("captured");
+        let link = captured
+            .body_text
+            .lines()
+            .find(|l| l.contains("https://maze.test/reset-password?token="))
+            .expect("reset link line");
+        let token_id = extract_reset_token(link.trim()).expect("token");
+
+        // First consume succeeds.
+        let confirm = PasswordResetConfirmRequest {
+            token: token_id.to_string(),
+            new_password: "NewPassword1!".to_string(),
+        };
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&confirm),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::NO_CONTENT
+        );
+
+        // Second attempt with the same token must fail with 400.
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&confirm),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[actix_web::test]
+    async fn password_reset_confirm_rejects_unknown_token() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, _stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        let body = PasswordResetConfirmRequest {
+            token: Uuid::new_v4().to_string(),
+            new_password: "NewPassword1!".to_string(),
+        };
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&body),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[actix_web::test]
+    async fn password_reset_confirm_rejects_weak_new_password() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, _stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        let body = PasswordResetConfirmRequest {
+            token: Uuid::new_v4().to_string(),
+            new_password: "weak".to_string(),
+        };
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&body),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST
+        );
     }
 
     #[actix_web::test]

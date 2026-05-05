@@ -1,6 +1,6 @@
 use actix_web::web;
 use actix_web::middleware::from_fn;
-use crate::api::v1::endpoints::{handlers, user_emails};
+use crate::api::v1::endpoints::{auth_reset, handlers, user_emails};
 use crate::middleware::auth::auth_middleware;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -9,6 +9,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(handlers::get_features)
         .service(handlers::login)
         .service(handlers::signup)
+        // Password reset (unguarded — the secret reset-token id is the credential)
+        .service(auth_reset::request_password_reset)
+        .service(auth_reset::confirm_password_reset)
         // OAuth (unguarded — the cookie + state nonce are the CSRF protection)
         .service(handlers::oauth_start)
         .service(handlers::oauth_callback)
