@@ -1,6 +1,6 @@
 use crate::Error;
 use async_trait::async_trait;
-use data_model::{Maze, OneTimeToken, User, UserEmail};
+use data_model::{AuditOutcome, EmailAuditEntry, Maze, OneTimeToken, User, UserEmail};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -157,6 +157,47 @@ pub trait TokenStore {
     async fn purge_expired(&mut self) -> Result<u64, Error>;
 }
 
+/// Append-only audit log of every email send attempt — captures intent
+/// and authorization, complementing provider-side delivery telemetry
+/// (out of scope for this trait). Rows are written in two stages:
+///
+///   * `record_pending` synchronously inserts the row before the send
+///     is attempted, returning the assigned id.
+///   * `update_outcome` flips the row to `Accepted` (with
+///     `provider_message_id`) or `Failed` (with `error_class`) when the
+///     provider responds.
+#[async_trait]
+pub trait EmailAuditLog {
+    /// Inserts a new audit row. The caller passes a populated
+    /// [`EmailAuditEntry`] — typically built via
+    /// [`EmailAuditEntry::new_pending`]. Returns the row's id on
+    /// success.
+    async fn record_pending(&mut self, entry: &EmailAuditEntry) -> Result<Uuid, Error>;
+    /// Updates the row's outcome. `provider_message_id` populates the
+    /// matching column on `Accepted`; `error_class` populates on
+    /// `Failed`. Passing `Pending` is a programmer error and rejected
+    /// with [`Error::Other`] — once written, a row only moves
+    /// forwards.
+    async fn update_outcome(
+        &mut self,
+        id: Uuid,
+        outcome: AuditOutcome,
+        provider_message_id: Option<&str>,
+        error_class: Option<&str>,
+    ) -> Result<(), Error>;
+    /// Loads a single audit row by id.
+    async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, Error>;
+    /// Returns the most recent audit rows for a user (`recipient_user_id =
+    /// ?`), sorted by `created_at` descending, capped at `limit`. An
+    /// implementation that returns more than `limit` rows is
+    /// non-conformant.
+    async fn find_recent_audit_entries_for_user(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+    ) -> Result<Vec<EmailAuditEntry>, Error>;
+}
+
 // Store management
 #[async_trait]
 pub trait Manage {
@@ -165,7 +206,7 @@ pub trait Manage {
 }
 
 /// Represents a store
-pub trait Store: UserStore + MazeStore + TokenStore + Manage + Send + Sync {}
+pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + Manage + Send + Sync {}
 
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;

@@ -44,8 +44,8 @@ This runs:
 - FileStore inline unit tests
 - SqlStore inline unit tests (datetime helpers — gated by `sql-store`)
 - Validation tests
-- The contract suite against FileStore (`tests/file_store_contract.rs` — 99 scenarios)
-- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 99 scenarios)
+- The contract suite against FileStore (`tests/file_store_contract.rs` — 112 scenarios)
+- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 112 scenarios)
 - Doc tests
 
 Tests run in parallel — every FileStore test is rooted at its own `tempfile::TempDir`, and every SqlStore test creates its own in-memory SQLite, so there's no shared state to serialise around.
@@ -121,6 +121,8 @@ data_dir/
         <maze-id>.json
   one_time_tokens/
     <token-id>.json          single-use, time-bounded token (password reset / invite / email verification)
+  email_audit_log/
+    <entry-id>.json          one row per email send attempt (intent + outcome)
 ```
 
 `FileStore::new` runs two startup passes against `data_dir` in order:
@@ -137,6 +139,7 @@ The migration registry lives in `src/file_store_migration.rs`:
 | 3       | `migrate_0003_user_emails_verified_reset` — for every non-admin user, sets `verified = false, verified_at = None` on each email **not** matched by an `oauth_identities[*].provider_email` for that user. Admin users are skipped wholesale. Counterpart to the SQL `0003_user_emails_verified_reset.sql` migration described below. |
 | 4       | No-op. The matching SQL migration adds a `users.deleted_at` column. The FileStore data shape is updated by `#[serde(default, skip_serializing_if = "Option::is_none")]` on the new `User.deleted_at` field — existing `user.json` files round-trip without rewriting; new files written after version-4-applied include the field only when populated. |
 | 5       | `migrate_0005_create_one_time_tokens_dir` — creates `<data_dir>/one_time_tokens/`. Each token is one file `<token-id>.json`; the FileStore `TokenStore` impl reads/writes via tempfile + rename. |
+| 6       | `migrate_0006_create_email_audit_log_dir` — creates `<data_dir>/email_audit_log/`. One file per audit row keyed by id; the FileStore `EmailAuditLog` impl reads/writes via tempfile + rename. `purge_user` walks the directory and clears `recipient_user_id` / `triggered_by_user_id` on rows referencing the purged user — the FileStore counterpart to the SQL `ON DELETE SET NULL` FK behaviour. |
 
 Behaviour properties:
 
@@ -147,7 +150,7 @@ Behaviour properties:
 
 ## SqlStore schema and migrations
 
-The SqlStore schema is defined across the migration files in [`migrations/`](./migrations/). It creates six tables:
+The SqlStore schema is defined across the migration files in [`migrations/`](./migrations/). It creates seven tables:
 
 | Table | Purpose |
 |:------|:--------|
@@ -157,6 +160,7 @@ The SqlStore schema is defined across the migration files in [`migrations/`](./m
 | `oauth_identities` | Provider-linked identities (Google, GitHub, Facebook), FK to `users` |
 | `mazes` | Maze definitions (JSON), FK to owner `users` |
 | `one_time_tokens` | Single-use, time-bounded tokens for password-reset / invite / email-verification flows (added in `0005_one_time_tokens.sql`). FK to `users` with `ON DELETE CASCADE`. Single-use enforcement is application-driven via `UPDATE ... WHERE consumed_at IS NULL`. |
+| `email_audit_log` | Append-only log of every email send attempt (added in `0006_email_audit_log.sql`). Two FKs to `users` — `recipient_user_id` and `triggered_by_user_id` — both `ON DELETE SET NULL` so the audit history survives a hard-delete (`purge_user`) without re-identifying the user. Soft-delete leaves the FK untouched. |
 
 Plus the standard SQLx migration tracking table `_sqlx_migrations`, created automatically.
 
@@ -171,6 +175,7 @@ The migration files in [`migrations/`](./migrations/):
 | `0003_user_emails_verified_reset.sql` | One-sweep flip from "verified by default" to "verification required". Sets `verified = 0, verified_at = NULL` on every `user_emails` row whose owning user is not an admin AND no matching `oauth_identities.provider_email` row exists for that (user, email) pair. |
 | `0004_users_soft_delete.sql` | Adds `users.deleted_at VARCHAR(32)` (RFC 3339 timestamp, nullable) and the supporting `idx_users_deleted_at` index. `deleted_at IS NULL` marks an active user; a populated timestamp marks a soft-deleted user. The trait surface enforces the filter — see "Soft-delete behaviour" below. |
 | `0005_one_time_tokens.sql` | Creates the `one_time_tokens` table (`id`, `user_id`, `purpose`, `target_email`, `created_at`, `expires_at`, `consumed_at`) plus `idx_one_time_tokens_user_id` and `idx_one_time_tokens_expires_at`. FK to `users(id)` with `ON DELETE CASCADE`. The trait `TokenStore` ([`store.rs`](./src/store.rs)) sits on top: `create_token`, `find_token` (filters expired), `consume_token` (race-free single-use via `UPDATE ... WHERE consumed_at IS NULL`), `purge_expired`. |
+| `0006_email_audit_log.sql` | Creates the `email_audit_log` table (`id`, `created_at`, `recipient_user_id`, `recipient_email`, `template_id`, `token_id`, `triggered_by_user_id`, `triggered_by_ip`, `provider`, `provider_message_id`, `outcome`, `error_class`) plus four lookup indexes. Two FKs to `users(id)` — `recipient_user_id` and `triggered_by_user_id`, both `ON DELETE SET NULL`. The trait `EmailAuditLog` ([`store.rs`](./src/store.rs)) provides `record_pending` (synchronous insert before the send), `update_outcome` (asynchronous flip to `accepted`/`failed`), `find_audit_entry`, and `find_recent_audit_entries_for_user`. The body of every send and any expansion containing a secret token is *deliberately not stored* — the log records intent and authorization, not credentials. |
 
 ### Soft-delete behaviour
 

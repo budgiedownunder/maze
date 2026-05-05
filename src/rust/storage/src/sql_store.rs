@@ -11,14 +11,17 @@
 //! range queries (`WHERE expires_at < ?`, `ORDER BY last_seen_at DESC`)
 //! portable. See `migrations/0001_initial.sql` for the full design rationale.
 
-use crate::store::{Manage, MazeStore, TokenStore, UserStore};
+use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
 use crate::{
     validation::{validate_email_format, validate_user_fields},
     Error, MazeItem, Store,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, Utc};
-use data_model::{Maze, OAuthIdentity, OneTimeToken, TokenPurpose, User, UserEmail, UserLogin};
+use data_model::{
+    AuditOutcome, EmailAuditEntry, Maze, OAuthIdentity, OneTimeToken, TokenPurpose, User,
+    UserEmail, UserLogin,
+};
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{AnyPool, Row};
@@ -2725,7 +2728,12 @@ impl Manage for SqlStore {
         // Delete in FK-safe order (children first). A single TRUNCATE-equivalent
         // would be faster but TRUNCATE syntax differs across backends; portable
         // DELETEs are fine for the test/reset use case.
+        //
+        // `email_audit_log` is cleared first because it FKs into `users`
+        // with `ON DELETE SET NULL` — clearing it explicitly avoids the
+        // SET NULL fanning out across every audit row when users go.
         for sql in [
+            "DELETE FROM email_audit_log",
             "DELETE FROM user_logins",
             "DELETE FROM oauth_identities",
             "DELETE FROM one_time_tokens",
@@ -2924,6 +2932,192 @@ impl TokenStore for SqlStore {
         .await
         .map_err(map_sqlx_err)?;
         Ok(result.rows_affected())
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EmailAuditLog
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn audit_outcome_to_sql(outcome: AuditOutcome) -> &'static str {
+    match outcome {
+        AuditOutcome::Pending => "pending",
+        AuditOutcome::Accepted => "accepted",
+        AuditOutcome::Failed => "failed",
+    }
+}
+
+fn audit_outcome_from_sql(raw: &str) -> Result<AuditOutcome, Error> {
+    match raw {
+        "pending" => Ok(AuditOutcome::Pending),
+        "accepted" => Ok(AuditOutcome::Accepted),
+        "failed" => Ok(AuditOutcome::Failed),
+        other => Err(integrity_violation(&format!(
+            "unknown audit outcome '{other}' in email_audit_log"
+        ))),
+    }
+}
+
+async fn audit_entry_from_row(row: &AnyRow) -> Result<EmailAuditEntry, Error> {
+    let id_str: String = row.try_get("id").map_err(map_sqlx_err)?;
+    let id = parse_uuid("audit id", &id_str)?;
+    let created_at_str: String = row.try_get("created_at").map_err(map_sqlx_err)?;
+    let created_at = datetime_from_sql(&created_at_str)?;
+    let recipient_user_id_str: Option<String> =
+        row.try_get("recipient_user_id").map_err(map_sqlx_err)?;
+    let recipient_user_id = match recipient_user_id_str {
+        Some(s) => Some(parse_uuid("audit recipient_user_id", &s)?),
+        None => None,
+    };
+    let recipient_email: String = row.try_get("recipient_email").map_err(map_sqlx_err)?;
+    let template_id: String = row.try_get("template_id").map_err(map_sqlx_err)?;
+    let token_id_str: Option<String> = row.try_get("token_id").map_err(map_sqlx_err)?;
+    let token_id = match token_id_str {
+        Some(s) => Some(parse_uuid("audit token_id", &s)?),
+        None => None,
+    };
+    let triggered_by_user_id_str: Option<String> =
+        row.try_get("triggered_by_user_id").map_err(map_sqlx_err)?;
+    let triggered_by_user_id = match triggered_by_user_id_str {
+        Some(s) => Some(parse_uuid("audit triggered_by_user_id", &s)?),
+        None => None,
+    };
+    let provider: String = row.try_get("provider").map_err(map_sqlx_err)?;
+    let provider_message_id: Option<String> =
+        row.try_get("provider_message_id").map_err(map_sqlx_err)?;
+    let outcome_raw: String = row.try_get("outcome").map_err(map_sqlx_err)?;
+    let outcome = audit_outcome_from_sql(&outcome_raw)?;
+    let error_class: Option<String> = row.try_get("error_class").map_err(map_sqlx_err)?;
+    Ok(EmailAuditEntry {
+        id,
+        created_at,
+        recipient_user_id,
+        recipient_email,
+        template_id,
+        token_id,
+        triggered_by_user_id,
+        provider,
+        provider_message_id,
+        outcome,
+        error_class,
+    })
+}
+
+#[async_trait]
+impl EmailAuditLog for SqlStore {
+    async fn record_pending(&mut self, entry: &EmailAuditEntry) -> Result<Uuid, Error> {
+        if entry.id.is_nil() {
+            return Err(Error::Other(
+                "audit entry id must not be nil".to_string(),
+            ));
+        }
+        // Surface a clean duplicate-id error rather than the raw sqlx
+        // unique-violation. Callers building rows via
+        // `EmailAuditEntry::new_pending` won't hit this; it guards
+        // against accidental re-record.
+        let existing = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 FROM email_audit_log WHERE id = ?",
+        ))
+        .bind(entry.id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if existing.is_some() {
+            return Err(Error::AuditEntryIdExists(entry.id.to_string()));
+        }
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO email_audit_log \
+                 (id, created_at, recipient_user_id, recipient_email, template_id, \
+                  token_id, triggered_by_user_id, provider, \
+                  provider_message_id, outcome, error_class) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ))
+        .bind(entry.id.to_string())
+        .bind(datetime_to_sql(entry.created_at))
+        .bind(entry.recipient_user_id.map(|id| id.to_string()))
+        .bind(&entry.recipient_email)
+        .bind(&entry.template_id)
+        .bind(entry.token_id.map(|id| id.to_string()))
+        .bind(entry.triggered_by_user_id.map(|id| id.to_string()))
+        .bind(&entry.provider)
+        .bind(entry.provider_message_id.as_deref())
+        .bind(audit_outcome_to_sql(entry.outcome))
+        .bind(entry.error_class.as_deref())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(entry.id)
+    }
+
+    async fn update_outcome(
+        &mut self,
+        id: Uuid,
+        outcome: AuditOutcome,
+        provider_message_id: Option<&str>,
+        error_class: Option<&str>,
+    ) -> Result<(), Error> {
+        if matches!(outcome, AuditOutcome::Pending) {
+            return Err(Error::Other(
+                "update_outcome cannot move a row back to pending".to_string(),
+            ));
+        }
+        let result = sqlx::query(&q(
+            self.kind,
+            "UPDATE email_audit_log \
+             SET outcome = ?, provider_message_id = ?, error_class = ? \
+             WHERE id = ?",
+        ))
+        .bind(audit_outcome_to_sql(outcome))
+        .bind(provider_message_id)
+        .bind(error_class)
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            return Err(Error::AuditEntryIdNotFound(id.to_string()));
+        }
+        Ok(())
+    }
+
+    async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, Error> {
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM email_audit_log WHERE id = ?",
+        ))
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        match row {
+            Some(row) => audit_entry_from_row(&row).await,
+            None => Err(Error::AuditEntryIdNotFound(id.to_string())),
+        }
+    }
+
+    async fn find_recent_audit_entries_for_user(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+    ) -> Result<Vec<EmailAuditEntry>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM email_audit_log \
+             WHERE recipient_user_id = ? \
+             ORDER BY created_at DESC, id DESC LIMIT ?",
+        ))
+        .bind(user_id.to_string())
+        .bind(i64::from(limit))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let mut entries = Vec::with_capacity(rows.len());
+        for row in &rows {
+            entries.push(audit_entry_from_row(row).await?);
+        }
+        Ok(entries)
     }
 }
 

@@ -18,8 +18,8 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
-    use data_model::OneTimeToken;
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
+    use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
     const ADMIN_USERNAME_PREFIX:&str = "admin_";
@@ -553,6 +553,35 @@ mod test_definitions {
         }
         async fn purge_expired(&mut self) -> Result<u64, StoreError> {
             Ok(0)
+        }
+    }
+
+    // Stub EmailAuditLog — same rationale as TokenStore: real audit-log
+    // assertions live in storage/ contract tests; handler tests gain an
+    // in-memory backing map once the audit-log integration lands.
+    #[async_trait]
+    impl EmailAuditLog for MockStore {
+        async fn record_pending(&mut self, _e: &EmailAuditEntry) -> Result<Uuid, StoreError> {
+            Err(StoreError::Other("record_pending() not implemented for MockStore".to_string()))
+        }
+        async fn update_outcome(
+            &mut self,
+            _id: Uuid,
+            _outcome: AuditOutcome,
+            _provider_message_id: Option<&str>,
+            _error_class: Option<&str>,
+        ) -> Result<(), StoreError> {
+            Err(StoreError::Other("update_outcome() not implemented for MockStore".to_string()))
+        }
+        async fn find_audit_entry(&self, _id: Uuid) -> Result<EmailAuditEntry, StoreError> {
+            Err(StoreError::Other("find_audit_entry() not implemented for MockStore".to_string()))
+        }
+        async fn find_recent_audit_entries_for_user(
+            &self,
+            _user_id: Uuid,
+            _limit: u32,
+        ) -> Result<Vec<EmailAuditEntry>, StoreError> {
+            Ok(Vec::new())
         }
     }
 

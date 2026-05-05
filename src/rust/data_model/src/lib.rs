@@ -1,4 +1,5 @@
 // Re-export modules
+mod email_audit;
 mod error;
 mod maze;
 mod maze_cell_state;
@@ -12,6 +13,7 @@ mod user_login;
 mod wrappers;
 
 // Re-export traits and structs
+pub use email_audit::{AuditOutcome, EmailAuditEntry};
 pub use error::{Error, UserValidationError};
 pub use maze_definition::MazeDefinition;
 pub use maze::Maze;

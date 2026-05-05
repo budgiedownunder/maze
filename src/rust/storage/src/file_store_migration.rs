@@ -201,12 +201,17 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// **Version 5** creates the `<data_dir>/one_time_tokens/` directory used
 /// by the FileStore `TokenStore` impl (one file per token). Idempotent —
 /// `fs::create_dir_all` is a no-op if the directory already exists.
+///
+/// **Version 6** creates the `<data_dir>/email_audit_log/` directory used
+/// by the FileStore `EmailAuditLog` impl (one file per audit entry).
+/// Idempotent.
 const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (1, no_op_migration),
     (2, no_op_migration),
     (3, migrate_0003_user_emails_verified_reset),
     (4, no_op_migration),
     (5, migrate_0005_create_one_time_tokens_dir),
+    (6, migrate_0006_create_email_audit_log_dir),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
@@ -233,6 +238,16 @@ fn no_op_migration(_data_dir: &Path) -> Result<(), Error> {
 /// is a no-op.
 fn migrate_0005_create_one_time_tokens_dir(data_dir: &Path) -> Result<(), Error> {
     let dir = data_dir.join("one_time_tokens");
+    fs::create_dir_all(&dir)?;
+    Ok(())
+}
+
+/// FileStore migration 0006 — counterpart to
+/// `migrations/0006_email_audit_log.sql`. The SQL side creates a table;
+/// the FileStore side creates the per-row directory used by the
+/// `EmailAuditLog` impl. Idempotent.
+fn migrate_0006_create_email_audit_log_dir(data_dir: &Path) -> Result<(), Error> {
+    let dir = data_dir.join("email_audit_log");
     fs::create_dir_all(&dir)?;
     Ok(())
 }

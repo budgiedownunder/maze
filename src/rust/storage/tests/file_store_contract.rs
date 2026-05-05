@@ -632,6 +632,86 @@ async fn consume_token_concurrent_race_has_exactly_one_winner() {
     contract::consume_token_concurrent_race_has_exactly_one_winner(s).await;
 }
 
+// ─── EmailAuditLog ───────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn record_pending_returns_id_and_inserts_pending_row() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::record_pending_returns_id_and_inserts_pending_row(&mut s).await;
+}
+
+#[tokio::test]
+async fn record_pending_rejects_duplicate_id() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::record_pending_rejects_duplicate_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_audit_entry_returns_not_found_for_unknown_id() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::find_audit_entry_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn update_outcome_to_accepted_populates_provider_message_id() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::update_outcome_to_accepted_populates_provider_message_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn update_outcome_to_failed_populates_error_class() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::update_outcome_to_failed_populates_error_class(&mut s).await;
+}
+
+#[tokio::test]
+async fn update_outcome_rejects_pending_target() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::update_outcome_rejects_pending_target(&mut s).await;
+}
+
+#[tokio::test]
+async fn update_outcome_returns_not_found_for_unknown_id() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::update_outcome_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_recent_audit_entries_returns_user_rows_descending_capped_at_limit() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::find_recent_audit_entries_returns_user_rows_descending_capped_at_limit(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_recent_audit_entries_is_empty_when_user_has_none() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::find_recent_audit_entries_is_empty_when_user_has_none(&mut s).await;
+}
+
+#[tokio::test]
+async fn audit_log_supports_anti_enumeration_null_recipient() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::audit_log_supports_anti_enumeration_null_recipient(&mut s).await;
+}
+
+#[tokio::test]
+async fn audit_log_survives_soft_delete_pointing_at_user() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::audit_log_survives_soft_delete_pointing_at_user(&mut s).await;
+}
+
+#[tokio::test]
+async fn audit_log_clears_recipient_user_id_under_purge() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::audit_log_clears_recipient_user_id_under_purge(&mut s).await;
+}
+
+#[tokio::test]
+async fn audit_log_clears_triggered_by_user_id_under_purge() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::audit_log_clears_triggered_by_user_id_under_purge(&mut s).await;
+}
+
 // ─── Manage ──────────────────────────────────────────────────────────────
 
 #[tokio::test]

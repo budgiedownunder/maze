@@ -7,10 +7,10 @@ use async_trait::async_trait;
 use unicase::UniCase;
 use uuid::Uuid;
 
-use data_model::{Maze, OneTimeToken, User, UserEmail};
+use data_model::{AuditOutcome, EmailAuditEntry, Maze, OneTimeToken, User, UserEmail};
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
-use crate::store::{Manage, MazeStore, TokenStore, UserStore};
+use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
 use crate::{
     file_store_migration,
     validation::{validate_email_format, validate_user_fields},
@@ -46,6 +46,8 @@ pub struct FileStore {
     users_dir: String,
     /// Full path to the one-time-tokens directory (one file per token).
     tokens_dir: String,
+    /// Full path to the email audit log directory (one file per entry).
+    audit_log_dir: String,
 }
 
 // Private trait used for accessing struct fields
@@ -129,6 +131,7 @@ impl FileStore {
             data_dir: "".to_string(),
             users_dir: "".to_string(),
             tokens_dir: "".to_string(),
+            audit_log_dir: "".to_string(),
         };
 
         match store.init() {
@@ -154,6 +157,10 @@ impl FileStore {
         file_store_migration::apply_pending_migrations(&self.data_dir)?;
         self.tokens_dir = Path::new(&self.data_dir)
             .join("one_time_tokens")
+            .to_string_lossy()
+            .to_string();
+        self.audit_log_dir = Path::new(&self.data_dir)
+            .join("email_audit_log")
             .to_string_lossy()
             .to_string();
         Ok(())
@@ -213,6 +220,98 @@ impl FileStore {
             })
             .collect();
         Ok(ids)
+    }
+
+    // Returns the file path for a given audit entry id.
+    fn audit_entry_file_path(&self, id: Uuid) -> String {
+        Path::new(&self.audit_log_dir)
+            .join(format!("{id}.json"))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Reads an audit row's JSON file from disk.
+    fn read_audit_entry_raw(&self, id: Uuid) -> Result<EmailAuditEntry, Error> {
+        let path = self.audit_entry_file_path(id);
+        if !file_exists(&path) {
+            return Err(Error::AuditEntryIdNotFound(id.to_string()));
+        }
+        let file = File::open(&path)?;
+        let reader = BufReader::new(file);
+        serde_json::from_reader::<BufReader<File>, EmailAuditEntry>(reader).map_err(Error::from)
+    }
+
+    // Atomically writes an audit row JSON via tempfile + rename.
+    fn write_audit_entry_file(
+        &self,
+        entry: &EmailAuditEntry,
+        overwrite: bool,
+    ) -> Result<(), Error> {
+        let target = self.audit_entry_file_path(entry.id);
+        if !overwrite && file_exists(&target) {
+            return Err(Error::AuditEntryIdExists(entry.id.to_string()));
+        }
+        let json = entry.to_json()?;
+        let tmp = format!("{target}.tmp");
+        {
+            let mut file = File::create(&tmp)?;
+            file.write_all(json.as_bytes())?;
+        }
+        fs::rename(&tmp, &target)?;
+        Ok(())
+    }
+
+    // Enumerates audit entry ids in the email_audit_log directory.
+    fn get_audit_entry_ids(&self) -> Result<Vec<Uuid>, Error> {
+        if !dir_exists(&self.audit_log_dir) {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<Uuid> = fs::read_dir(&self.audit_log_dir)?
+            .filter_map(|entry| {
+                entry.ok().and_then(|e| {
+                    let path = e.path();
+                    if !path.is_file() {
+                        return None;
+                    }
+                    let name = path.file_stem()?.to_str()?;
+                    Uuid::parse_str(name).ok()
+                })
+            })
+            .collect();
+        Ok(ids)
+    }
+
+    // Walks the audit log and clears `recipient_user_id` and
+    // `triggered_by_user_id` columns equal to `id` — the FileStore
+    // counterpart to the SQL `ON DELETE SET NULL` FK behaviour. Run by
+    // `purge_user` so a hard-deleted user's audit history survives but
+    // no longer re-identifies the user.
+    fn null_audit_user_id_references(&self, id: Uuid) -> Result<(), Error> {
+        for entry_id in self.get_audit_entry_ids()? {
+            let mut entry = match self.read_audit_entry_raw(entry_id) {
+                Ok(e) => e,
+                Err(Error::AuditEntryIdNotFound(_)) => continue,
+                Err(error) => {
+                    log::warn!(
+                        "FileStore purge_user: skipping unreadable audit entry '{entry_id}' - {error}"
+                    );
+                    continue;
+                }
+            };
+            let mut mutated = false;
+            if entry.recipient_user_id == Some(id) {
+                entry.recipient_user_id = None;
+                mutated = true;
+            }
+            if entry.triggered_by_user_id == Some(id) {
+                entry.triggered_by_user_id = None;
+                mutated = true;
+            }
+            if mutated {
+                self.write_audit_entry_file(&entry, true)?;
+            }
+        }
+        Ok(())
     }
 
     fn make_dir(dir: &str) -> Result<String, Error> {
@@ -863,6 +962,11 @@ impl UserStore for FileStore {
         if !self.user_dir_exists(id) {
             return Err(Error::UserIdNotFound(id.to_string()));
         }
+        // FileStore counterpart to the SQL `ON DELETE SET NULL` FK on
+        // `email_audit_log` — purge clears user-id columns on every
+        // audit row that referenced this user, so the audit history
+        // survives but no longer re-identifies them.
+        self.null_audit_user_id_references(id)?;
         delete_dir(&self.user_dir_path(id));
         if self.user_dir_exists(id) {
             return Err(Error::Other(format!(
@@ -2268,6 +2372,72 @@ impl TokenStore for FileStore {
             }
         }
         Ok(purged)
+    }
+}
+
+#[async_trait]
+impl EmailAuditLog for FileStore {
+    async fn record_pending(&mut self, entry: &EmailAuditEntry) -> Result<Uuid, Error> {
+        if entry.id.is_nil() {
+            return Err(Error::Other("audit entry id must not be nil".to_string()));
+        }
+        if !dir_exists(&self.audit_log_dir) {
+            fs::create_dir_all(&self.audit_log_dir)?;
+        }
+        self.write_audit_entry_file(entry, false)?;
+        Ok(entry.id)
+    }
+
+    async fn update_outcome(
+        &mut self,
+        id: Uuid,
+        outcome: AuditOutcome,
+        provider_message_id: Option<&str>,
+        error_class: Option<&str>,
+    ) -> Result<(), Error> {
+        if matches!(outcome, AuditOutcome::Pending) {
+            return Err(Error::Other(
+                "update_outcome cannot move a row back to pending".to_string(),
+            ));
+        }
+        let mut entry = self.read_audit_entry_raw(id)?;
+        entry.outcome = outcome;
+        entry.provider_message_id = provider_message_id.map(|s| s.to_string());
+        entry.error_class = error_class.map(|s| s.to_string());
+        self.write_audit_entry_file(&entry, true)
+    }
+
+    async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, Error> {
+        self.read_audit_entry_raw(id)
+    }
+
+    async fn find_recent_audit_entries_for_user(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+    ) -> Result<Vec<EmailAuditEntry>, Error> {
+        let mut matches: Vec<EmailAuditEntry> = Vec::new();
+        for entry_id in self.get_audit_entry_ids()? {
+            match self.read_audit_entry_raw(entry_id) {
+                Ok(entry) if entry.recipient_user_id == Some(user_id) => matches.push(entry),
+                Ok(_) => {}
+                Err(Error::AuditEntryIdNotFound(_)) => {}
+                Err(error) => {
+                    log::warn!(
+                        "FileStore find_recent_audit_entries_for_user: skipping unreadable entry '{entry_id}' - {error}"
+                    );
+                }
+            }
+        }
+        // Sort by created_at descending; tie-break on id for determinism
+        // when multiple rows land in the same millisecond bucket.
+        matches.sort_by(|a, b| {
+            b.created_at
+                .cmp(&a.created_at)
+                .then_with(|| b.id.cmp(&a.id))
+        });
+        matches.truncate(limit as usize);
+        Ok(matches)
     }
 }
 

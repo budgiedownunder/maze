@@ -11,7 +11,10 @@
 #![allow(dead_code)] // Some helpers may not yet be wired into every backend's runner.
 
 use chrono::{Duration, SubsecRound, Utc};
-use data_model::{Maze, MazeDefinition, OAuthIdentity, OneTimeToken, TokenPurpose, User, UserEmail, UserLogin};
+use data_model::{
+    AuditOutcome, EmailAuditEntry, Maze, MazeDefinition, OAuthIdentity, OneTimeToken,
+    TokenPurpose, User, UserEmail, UserLogin,
+};
 use storage::{Error, Store};
 use uuid::Uuid;
 
@@ -1417,6 +1420,272 @@ pub async fn consume_token_concurrent_race_has_exactly_one_winner(store: Box<dyn
     };
     // Silence the unused-variable warning if the test ever needs alice_id later.
     let _ = alice_id;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// EmailAuditLog
+// ─────────────────────────────────────────────────────────────────────────
+
+fn pending_entry_for(user_id: Option<Uuid>, email: &str, template_id: &str) -> EmailAuditEntry {
+    EmailAuditEntry::new_pending(
+        user_id,
+        email,
+        template_id,
+        None,
+        None,
+        "stub",
+    )
+}
+
+pub async fn record_pending_returns_id_and_inserts_pending_row(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+    assert_eq!(id, entry.id);
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert_eq!(loaded.outcome, AuditOutcome::Pending);
+    assert!(loaded.provider_message_id.is_none());
+    assert!(loaded.error_class.is_none());
+    assert_eq!(loaded, entry);
+}
+
+pub async fn record_pending_rejects_duplicate_id(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    store.record_pending(&entry).await.expect("first record_pending");
+    let err = store
+        .record_pending(&entry)
+        .await
+        .expect_err("duplicate id must be rejected");
+    assert!(matches!(err, Error::AuditEntryIdExists(_)), "got {err:?}");
+}
+
+pub async fn find_audit_entry_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .find_audit_entry(id)
+        .await
+        .expect_err("unknown id must surface NotFound");
+    assert!(
+        matches!(err, Error::AuditEntryIdNotFound(ref s) if s == &id.to_string()),
+        "got {err:?}"
+    );
+}
+
+pub async fn update_outcome_to_accepted_populates_provider_message_id(
+    store: &mut Box<dyn Store>,
+) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    store
+        .update_outcome(id, AuditOutcome::Accepted, Some("provider-123"), None)
+        .await
+        .expect("update_outcome");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert_eq!(loaded.outcome, AuditOutcome::Accepted);
+    assert_eq!(loaded.provider_message_id.as_deref(), Some("provider-123"));
+    assert!(loaded.error_class.is_none());
+}
+
+pub async fn update_outcome_to_failed_populates_error_class(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    store
+        .update_outcome(id, AuditOutcome::Failed, None, Some("provider_unavailable"))
+        .await
+        .expect("update_outcome");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert_eq!(loaded.outcome, AuditOutcome::Failed);
+    assert!(loaded.provider_message_id.is_none());
+    assert_eq!(loaded.error_class.as_deref(), Some("provider_unavailable"));
+}
+
+pub async fn update_outcome_rejects_pending_target(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    let err = store
+        .update_outcome(id, AuditOutcome::Pending, None, None)
+        .await
+        .expect_err("must not allow re-targeting pending");
+    assert!(matches!(err, Error::Other(_)), "got {err:?}");
+}
+
+pub async fn update_outcome_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .update_outcome(id, AuditOutcome::Accepted, Some("p"), None)
+        .await
+        .expect_err("unknown id must fail");
+    assert!(matches!(err, Error::AuditEntryIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn find_recent_audit_entries_returns_user_rows_descending_capped_at_limit(
+    store: &mut Box<dyn Store>,
+) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let bob = fixture_user(store, "bob", "bob@example.com").await;
+
+    // Three rows for alice with strictly increasing created_at, plus one
+    // for bob that must NOT appear in alice's results.
+    let now = Utc::now().trunc_subsecs(3);
+    let mut rows = Vec::new();
+    for (offset_secs, template) in [(-30, "a"), (-20, "b"), (-10, "c")] {
+        let mut e = pending_entry_for(Some(alice.id), "alice@example.com", template);
+        e.created_at = now + Duration::seconds(offset_secs);
+        rows.push(e);
+    }
+    for entry in &rows {
+        store.record_pending(entry).await.expect("record_pending");
+    }
+    let mut bob_entry = pending_entry_for(Some(bob.id), "bob@example.com", "z");
+    bob_entry.created_at = now;
+    store
+        .record_pending(&bob_entry)
+        .await
+        .expect("record_pending bob");
+
+    // Latest 2 alice rows by created_at descending.
+    let recent = store
+        .find_recent_audit_entries_for_user(alice.id, 2)
+        .await
+        .expect("find_recent_audit_entries_for_user");
+    assert_eq!(recent.len(), 2, "limit must cap result size");
+    assert_eq!(recent[0].template_id, "c", "newest first");
+    assert_eq!(recent[1].template_id, "b");
+    assert!(recent[0].created_at >= recent[1].created_at);
+
+    // limit larger than the row count just returns them all.
+    let all = store
+        .find_recent_audit_entries_for_user(alice.id, 100)
+        .await
+        .expect("find_recent_audit_entries_for_user (large limit)");
+    assert_eq!(all.len(), 3);
+    assert!(all.iter().all(|e| e.recipient_user_id == Some(alice.id)));
+}
+
+pub async fn find_recent_audit_entries_is_empty_when_user_has_none(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let recent = store
+        .find_recent_audit_entries_for_user(alice.id, 10)
+        .await
+        .expect("find_recent_audit_entries_for_user");
+    assert!(recent.is_empty());
+}
+
+pub async fn audit_log_supports_anti_enumeration_null_recipient(store: &mut Box<dyn Store>) {
+    // Reset request for a non-existent email — no send happens but the
+    // audit row is still recorded with `recipient_user_id = NULL`.
+    let entry = pending_entry_for(None, "ghost@example.com", "password_reset");
+    let id = store.record_pending(&entry).await.expect("record_pending");
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert!(loaded.recipient_user_id.is_none());
+    assert_eq!(loaded.recipient_email, "ghost@example.com");
+    assert_eq!(loaded.outcome, AuditOutcome::Pending);
+}
+
+pub async fn audit_log_survives_soft_delete_pointing_at_user(store: &mut Box<dyn Store>) {
+    // Soft-delete keeps the users row alive (only `deleted_at` is set);
+    // the FK still resolves and the audit row continues to point at the
+    // soft-deleted user. The whole purpose of soft-delete is to keep
+    // audit-log FKs valid.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    store.delete_user(alice.id).await.expect("soft-delete");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert_eq!(
+        loaded.recipient_user_id,
+        Some(alice.id),
+        "audit row must still reference the soft-deleted user"
+    );
+}
+
+pub async fn audit_log_clears_recipient_user_id_under_purge(store: &mut Box<dyn Store>) {
+    // Hard-delete via `purge_user` is the right-to-erasure path: the FK
+    // must SET NULL so the audit row's *fact* survives without
+    // re-identifying the user.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    store.purge_user(alice.id).await.expect("purge_user");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert!(
+        loaded.recipient_user_id.is_none(),
+        "purge_user must NULL the recipient_user_id FK"
+    );
+    assert_eq!(
+        loaded.recipient_email, "alice@example.com",
+        "the recipient email survives as the audit anchor"
+    );
+}
+
+pub async fn audit_log_clears_triggered_by_user_id_under_purge(store: &mut Box<dyn Store>) {
+    // Same SET NULL behaviour for `triggered_by_user_id` — covers the
+    // admin-invite path where the trigger user is the admin and the
+    // recipient is someone else.
+    let admin = fixture_admin(store, "admin", "admin@example.com").await;
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let mut entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "invitation",
+    );
+    entry.triggered_by_user_id = Some(admin.id);
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    store.purge_user(admin.id).await.expect("purge_user");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert!(
+        loaded.triggered_by_user_id.is_none(),
+        "purge of trigger user must NULL the triggered_by_user_id FK"
+    );
+    assert_eq!(
+        loaded.recipient_user_id,
+        Some(alice.id),
+        "recipient FK is unrelated and must be unaffected"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
