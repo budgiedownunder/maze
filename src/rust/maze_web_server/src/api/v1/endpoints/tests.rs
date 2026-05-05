@@ -4,6 +4,9 @@ mod test_definitions {
     // Unit tests for API and documentation endpoints, via injection of MockStore
     // **************************************************************************************************
     use crate::api::v1::endpoints::auth_reset::{PasswordResetConfirmRequest, PasswordResetRequest};
+    use crate::api::v1::endpoints::email_verification::{
+        EmailVerificationConfirmRequest, EmailVerificationRequest,
+    };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
@@ -576,6 +579,22 @@ mod test_definitions {
             }
             token.consumed_at = Some(Utc::now());
             Ok(token.clone())
+        }
+        async fn purge_email_verification_tokens(
+            &mut self,
+            user_id: Uuid,
+            target_email: &str,
+        ) -> Result<u64, StoreError> {
+            let before = self.tokens.len() as u64;
+            self.tokens.retain(|_, t| {
+                !(t.user_id == user_id
+                    && t.purpose == data_model::TokenPurpose::EmailVerification
+                    && t.target_email
+                        .as_deref()
+                        .map(|s| s.eq_ignore_ascii_case(target_email))
+                        .unwrap_or(false))
+            });
+            Ok(before - self.tokens.len() as u64)
         }
         async fn purge_expired(&mut self) -> Result<u64, StoreError> {
             let before = self.tokens.len() as u64;
@@ -3286,12 +3305,12 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn signup_creates_user_with_one_primary_verified_email_row() {
-        // The store-side `create_user` is exercised by the storage crate's
-        // contract suite; this test guards the *web layer's* invariant — a
-        // fresh signup must produce exactly one `UserEmail` row, marked both
-        // primary and verified, with the address echoed verbatim from the
-        // signup request.
+    async fn signup_creates_user_with_one_primary_unverified_email_row() {
+        // Self-service signup creates the email row as the user's *claim*,
+        // not as a verified address — the verification handler flips it
+        // once the user clicks the link. (Admin-side `CreateUserRequest`
+        // keeps the trusted-seed path with `verified = true`; that's
+        // covered by separate tests.)
         let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
         let (app, shared_store, _, _, _) = create_test_app(&mut user_defs, None, false).await;
         let signup_email = new_email(NEW_USERNAME_1);
@@ -3304,12 +3323,25 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
 
-        // Round-trip through the store to inspect the persisted shape.
+        // The email is unverified, so `find_user_by_verified_email`
+        // intentionally returns NotFound — that's the security contract
+        // (an unverified address must be invisible to the lookup).
         let store_lock = shared_store.read().await;
+        assert!(
+            matches!(
+                store_lock.find_user_by_verified_email(&signup_email).await,
+                Err(StoreError::UserNotFound())
+            ),
+            "signup-seeded email must be unverified and therefore invisible to find_user_by_verified_email"
+        );
+
+        // The user row exists (locate by username instead) and carries
+        // exactly one primary, unverified email matching the signup.
+        let base_username = signup_email.split('@').next().unwrap();
         let user = store_lock
-            .find_user_by_verified_email(&signup_email)
+            .find_user_by_name(base_username)
             .await
-            .expect("signup must produce a user findable by verified email");
+            .expect("signup must produce a findable user");
         assert_eq!(
             user.emails.len(),
             1,
@@ -3319,7 +3351,11 @@ mod test_definitions {
         let row = &user.emails[0];
         assert_eq!(row.email, signup_email, "stored email must match signup request");
         assert!(row.is_primary, "signup-seeded email must be primary");
-        assert!(row.verified, "signup-seeded email must be verified");
+        assert!(!row.verified, "signup-seeded email must start unverified");
+        assert!(
+            row.verified_at.is_none(),
+            "signup-seeded email verified_at must be None until the user verifies"
+        );
     }
 
     #[actix_web::test]
@@ -3917,6 +3953,373 @@ mod test_definitions {
         );
         assert_eq!(
             test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    // **************************************************************************************************
+    // Tests: POST /api/v1/email-verifications/{request,confirm}
+    // **************************************************************************************************
+
+    fn extract_verification_token(url: &str) -> Option<Uuid> {
+        let q = url.split_once('?')?.1;
+        for pair in q.split('&') {
+            let (k, v) = pair.split_once('=')?;
+            if k == "token" {
+                return Uuid::parse_str(v).ok();
+            }
+        }
+        None
+    }
+
+    fn harvest_verification_token(stub: &StubEmailProvider) -> Uuid {
+        let captured = stub.last().expect("captured verification email");
+        let link = captured
+            .body_text
+            .lines()
+            .find(|l| l.contains("https://maze.test/verify-email?token="))
+            .expect("verification link line");
+        extract_verification_token(link.trim()).expect("token in link")
+    }
+
+    #[actix_web::test]
+    async fn signup_dispatches_verification_email_and_confirm_flips_verified_flag() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let signup_email = new_email(NEW_USERNAME_1);
+
+        // Signup → 201 + verification email captured.
+        let signup_resp = test::call_service(
+            &app,
+            create_test_post_request(
+                "/api/v1/signup",
+                None,
+                None,
+                Some(&new_signup_request(&signup_email, false)),
+            ),
+        )
+        .await;
+        assert_eq!(signup_resp.status(), StatusCode::CREATED);
+        await_stub_capture(&stub, 1, 1000).await;
+        let token_id = harvest_verification_token(&stub);
+
+        // The user_emails row starts unverified.
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            let user = store_lock
+                .find_user_by_name(signup_email.split('@').next().unwrap())
+                .await
+                .expect("signup user");
+            assert!(!user.emails[0].verified);
+            assert!(user.emails[0].verified_at.is_none());
+            user.id
+        };
+
+        // Confirm → 204 + the row flips.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&EmailVerificationConfirmRequest {
+                        token: token_id.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+
+        let store_lock = shared_store.read().await;
+        let user = store_lock.get_user(user_id).await.expect("user");
+        assert!(user.emails[0].verified, "row must be verified after confirm");
+        assert!(
+            user.emails[0].verified_at.is_some(),
+            "verified_at must be populated after confirm"
+        );
+    }
+
+    #[actix_web::test]
+    async fn add_email_dispatches_verification_email_and_confirm_flips_secondary() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let secondary = "alice-secondary@example.com";
+
+        // Add a secondary email via the handler.
+        let add_resp = test::call_service(
+            &app,
+            create_test_post_request(
+                "/api/v1/users/me/emails",
+                api_key,
+                None,
+                Some(&AddUserEmailRequest {
+                    email: secondary.to_string(),
+                }),
+            ),
+        )
+        .await;
+        assert_eq!(add_resp.status(), StatusCode::CREATED);
+        await_stub_capture(&stub, 1, 1000).await;
+        let token_id = harvest_verification_token(&stub);
+
+        // Sanity: the secondary lands unverified.
+        {
+            let store_lock = shared_store.read().await;
+            let user = store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("alice");
+            let row = user
+                .emails
+                .iter()
+                .find(|r| r.email == secondary)
+                .expect("secondary row");
+            assert!(!row.verified);
+        }
+
+        // Confirm → row flips.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&EmailVerificationConfirmRequest {
+                        token: token_id.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+
+        let store_lock = shared_store.read().await;
+        let user = store_lock
+            .find_user_by_name(VALID_USERNAME_1)
+            .await
+            .expect("alice");
+        let row = user
+            .emails
+            .iter()
+            .find(|r| r.email == secondary)
+            .expect("secondary row");
+        assert!(row.verified, "secondary must be verified after confirm");
+    }
+
+    #[actix_web::test]
+    async fn email_verification_request_supersedes_prior_token() {
+        // Re-issuing supersedes the previous outstanding token: the old
+        // link stops working, only the latest one consumes successfully.
+        // Use a seeded verified user + add an unverified secondary so we
+        // have an authenticated caller (the seeded user's primary is
+        // verified) and an address to verify (the secondary).
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let secondary = "alice-supersede@example.com";
+
+        // Add the secondary — handler issues token #1 + dispatches.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/users/me/emails",
+                    api_key,
+                    None,
+                    Some(&AddUserEmailRequest {
+                        email: secondary.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        let first_token = harvest_verification_token(&stub);
+        stub.clear();
+
+        // Re-request via /email-verifications/request — supersedes #1.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/request",
+                    api_key,
+                    None,
+                    Some(&EmailVerificationRequest {
+                        email: secondary.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        let second_token = harvest_verification_token(&stub);
+        assert_ne!(
+            first_token, second_token,
+            "re-issuance must produce a fresh token id"
+        );
+
+        // The first token is now superseded — confirm fails.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&EmailVerificationConfirmRequest {
+                        token: first_token.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+
+        // The second token still works.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&EmailVerificationConfirmRequest {
+                        token: second_token.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+    }
+
+    #[actix_web::test]
+    async fn email_verification_request_for_already_verified_is_idempotent_no_send() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let primary = new_email(VALID_USERNAME_1);
+
+        // The seeded primary is already verified. Re-requesting must
+        // return 200 with no send.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/request",
+                    api_key,
+                    None,
+                    Some(&EmailVerificationRequest { email: primary }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(
+            stub.len(),
+            0,
+            "already-verified email must not trigger a send"
+        );
+    }
+
+    #[actix_web::test]
+    async fn email_verification_confirm_rejects_unknown_token() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, _stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        let body = EmailVerificationConfirmRequest {
+            token: Uuid::new_v4().to_string(),
+        };
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&body),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[actix_web::test]
+    async fn email_verification_confirm_with_password_reset_token_rejected() {
+        // A consumed-token path that uses the wrong purpose must not
+        // verify an email — defense-in-depth against stray cross-flow
+        // tokens. (Storage is responsible for the cross-user case via
+        // the user_id field of the token; that's exercised in the
+        // storage contract suite.)
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+
+        // Issue a password-reset token.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/password-reset/request",
+                    None,
+                    None,
+                    Some(&PasswordResetRequest { email }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        let captured = stub.last().expect("captured");
+        let link = captured
+            .body_text
+            .lines()
+            .find(|l| l.contains("https://maze.test/reset-password?token="))
+            .expect("reset link line");
+        let q = link.split_once('?').unwrap().1;
+        let token_id = q
+            .split('&')
+            .find_map(|p| p.split_once('=').filter(|(k, _)| *k == "token").map(|(_, v)| v))
+            .and_then(|v| Uuid::parse_str(v).ok())
+            .expect("token");
+
+        // Now try to use it as a verification token.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&EmailVerificationConfirmRequest {
+                        token: token_id.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
             StatusCode::BAD_REQUEST
         );
     }
@@ -4679,9 +5082,19 @@ mod test_definitions {
     async fn set_primary_email_promotes_verified_secondary() {
         let (app, shared_store, user_id, api_key, login_id) = me_emails_test_app().await;
 
-        // Add a secondary (created with verified = true by the handler).
+        // Add a secondary via the handler — it lands `verified = false`
+        // and a verification email is dispatched. Mark it verified
+        // directly via the store to simulate the user clicking the
+        // verification link, then promote it.
         let secondary = "alice2@example.com";
         let _ = seed_secondary_email_via_handler(&app, api_key, login_id, secondary).await;
+        {
+            let mut store_lock = shared_store.write().await;
+            store_lock
+                .mark_email_verified(user_id, secondary)
+                .await
+                .expect("mark secondary verified");
+        }
 
         // Promote it.
         let req = create_test_put_request(

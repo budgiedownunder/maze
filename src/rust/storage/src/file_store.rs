@@ -2354,6 +2354,38 @@ impl TokenStore for FileStore {
         Ok(token)
     }
 
+    async fn purge_email_verification_tokens(
+        &mut self,
+        user_id: Uuid,
+        target_email: &str,
+    ) -> Result<u64, Error> {
+        let mut purged: u64 = 0;
+        for id in self.get_token_ids()? {
+            match self.read_token_raw(id) {
+                Ok(token)
+                    if token.user_id == user_id
+                        && token.purpose == data_model::TokenPurpose::EmailVerification
+                        && token
+                            .target_email
+                            .as_deref()
+                            .map(|t| t.eq_ignore_ascii_case(target_email))
+                            .unwrap_or(false) =>
+                {
+                    delete_file(&self.token_file_path(id));
+                    purged += 1;
+                }
+                Ok(_) => {}
+                Err(Error::TokenIdNotFound(_)) => {}
+                Err(error) => {
+                    log::warn!(
+                        "FileStore purge_email_verification_tokens: skipping unreadable token '{id}' - {error}"
+                    );
+                }
+            }
+        }
+        Ok(purged)
+    }
+
     async fn purge_expired(&mut self) -> Result<u64, Error> {
         let mut purged: u64 = 0;
         for id in self.get_token_ids()? {

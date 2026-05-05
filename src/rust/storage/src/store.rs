@@ -129,7 +129,7 @@ pub trait MazeStore {
     async fn get_maze_items(&self, owner: &User, include_definitions: bool) -> Result<Vec<MazeItem>, Error>;
 }
 /// Represents a store for holding single-use, time-bounded tokens
-/// (password reset, email verification, invitation).
+/// (password reset, email verification).
 #[async_trait]
 pub trait TokenStore {
     /// Persists a new token. The caller is responsible for assigning the
@@ -151,6 +151,16 @@ pub trait TokenStore {
     /// concurrent `consume_token` calls against the same id must produce
     /// exactly one winner.
     async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, Error>;
+    /// Removes every outstanding [`TokenPurpose::EmailVerification`] token
+    /// belonging to `user_id` whose `target_email` matches the supplied
+    /// address (case-insensitive). Returns the number of tokens removed.
+    /// Used by the verification re-send handler so re-issuing supersedes
+    /// any prior token — only the most recent link works.
+    async fn purge_email_verification_tokens(
+        &mut self,
+        user_id: Uuid,
+        target_email: &str,
+    ) -> Result<u64, Error>;
     /// Removes every token whose `expires_at` is in the past AND that has
     /// not been consumed. Returns the number of tokens deleted. Intended
     /// as a periodic housekeeping sweep.

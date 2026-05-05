@@ -2919,6 +2919,25 @@ impl TokenStore for SqlStore {
         token_from_row(&row).await
     }
 
+    async fn purge_email_verification_tokens(
+        &mut self,
+        user_id: Uuid,
+        target_email: &str,
+    ) -> Result<u64, Error> {
+        let result = sqlx::query(&q(
+            self.kind,
+            "DELETE FROM one_time_tokens \
+             WHERE user_id = ? AND purpose = ? AND LOWER(target_email) = LOWER(?)",
+        ))
+        .bind(user_id.to_string())
+        .bind(token_purpose_to_sql(TokenPurpose::EmailVerification))
+        .bind(target_email)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(result.rows_affected())
+    }
+
     async fn purge_expired(&mut self) -> Result<u64, Error> {
         let now = datetime_to_sql(Utc::now());
         let result = sqlx::query(&q(

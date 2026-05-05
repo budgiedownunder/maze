@@ -28,13 +28,26 @@ impl UserEmail {
     /// truncated to millisecond precision so it round-trips losslessly through
     /// the SQL store's RFC 3339 storage format (the SqlStore writes timestamps
     /// at millisecond precision per the `0001_initial.sql` design).
-    /// Used when seeding accounts created via signup, OAuth, or admin-init.
+    /// Used by trusted seed paths — admin-init, OAuth-link (the provider
+    /// already attests to ownership), test fixtures.
     pub fn new_primary_verified(email: &str) -> Self {
         Self {
             email: email.to_string(),
             is_primary: true,
             verified: true,
             verified_at: Some(generate_now().trunc_subsecs(3)),
+        }
+    }
+
+    /// Builds a primary, unverified email row. Used by self-service signup
+    /// — the address is just the user's claim until they prove ownership
+    /// by clicking the verification link.
+    pub fn new_primary_unverified(email: &str) -> Self {
+        Self {
+            email: email.to_string(),
+            is_primary: true,
+            verified: false,
+            verified_at: None,
         }
     }
 

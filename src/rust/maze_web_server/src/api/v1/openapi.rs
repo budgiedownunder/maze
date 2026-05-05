@@ -7,6 +7,9 @@ use utoipa::{
 };
 
 use crate::api::v1::endpoints::auth_reset::{PasswordResetConfirmRequest, PasswordResetRequest};
+use crate::api::v1::endpoints::email_verification::{
+    EmailVerificationConfirmRequest, EmailVerificationRequest,
+};
 use crate::api::v1::endpoints::handlers::{
     AppFeaturesResponse,
     LoginRequest, LoginResponse, RenewResponse,
@@ -72,6 +75,9 @@ impl utoipa::Modify for LoginTokenAuth {
         // Password reset
         crate::api::v1::endpoints::auth_reset::request_password_reset,
         crate::api::v1::endpoints::auth_reset::confirm_password_reset,
+        // Email verification
+        crate::api::v1::endpoints::email_verification::request_email_verification,
+        crate::api::v1::endpoints::email_verification::confirm_email_verification,
         // OAuth sign-in
         crate::api::v1::endpoints::handlers::oauth_start,
         crate::api::v1::endpoints::handlers::oauth_callback,
@@ -110,6 +116,7 @@ impl utoipa::Modify for LoginTokenAuth {
             SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
             ChangePasswordRequest, UpdateProfileRequest,
             PasswordResetRequest, PasswordResetConfirmRequest,
+            EmailVerificationRequest, EmailVerificationConfirmRequest,
             UserEmail, UserEmailsResponse, AddUserEmailRequest,
             Maze, MazeDefinition, MazeItem, MazePath, MazeSolution,
             GeneratorOptions, GenerationAlgorithm),
