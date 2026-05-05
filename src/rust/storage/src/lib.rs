@@ -12,11 +12,13 @@ pub use error::Error;
 pub use file_store::{FileStore, FileStoreConfig};
 #[cfg(feature = "sql-store")]
 pub use sql_store::{SqlStore, SqlStoreConfig};
+pub use store::EmailAuditLog;
 pub use store::Manage;
 pub use store::MazeItem;
 pub use store::MazeStore;
-pub use store::Store;
 pub use store::SharedStore;
+pub use store::Store;
+pub use store::TokenStore;
 pub use store::UserStore;
 
 /// Represents the supported store configurations

@@ -11,6 +11,17 @@ use crate::Error;
 /// `Ok(())` if the address is non-empty and well-formed,
 /// `Err(Error::UserEmailMissing)` if blank,
 /// `Err(Error::UserEmailInvalid)` otherwise.
+///
+/// # Examples
+///
+/// Probe a few candidate addresses before passing them to a store method
+/// ```
+/// use storage::validation::validate_email_format;
+///
+/// assert!(validate_email_format("alice@example.com").is_ok());
+/// assert!(validate_email_format("").is_err());
+/// assert!(validate_email_format("not-an-email").is_err());
+/// ```
 pub fn validate_email_format(email: &str) -> Result<(), Error> {
     if email.trim().is_empty() {
         return Err(Error::UserEmailMissing());

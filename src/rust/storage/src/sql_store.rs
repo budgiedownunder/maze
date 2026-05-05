@@ -2000,6 +2000,43 @@ impl UserStore for SqlStore {
         Ok(row.is_some())
     }
 
+    /// Adds a non-primary email row to the user. See the `UserStore`
+    /// trait doc-comment for the full contract; pass `verified = true`
+    /// for trusted sources (OAuth-link, admin seed) and `verified = false`
+    /// for self-asserted user-typed emails.
+    ///
+    /// # Examples
+    ///
+    /// Add a secondary unverified email to an existing user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let row = store
+    ///     .add_user_email(user.id, "alice2@example.com", false)
+    ///     .await
+    ///     .expect("add secondary");
+    /// assert!(!row.verified);
+    /// # });
+    /// ```
     async fn add_user_email(
         &mut self,
         user_id: Uuid,
@@ -2047,6 +2084,38 @@ impl UserStore for SqlStore {
         })
     }
 
+    /// Removes a non-primary, non-last email row from the user. See the
+    /// trait doc-comment for the rejection rules.
+    ///
+    /// # Examples
+    ///
+    /// Add a secondary email then remove it
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
+    /// store.remove_user_email(user.id, "alice2@example.com").await.expect("remove");
+    /// # });
+    /// ```
     async fn remove_user_email(
         &mut self,
         user_id: Uuid,
@@ -2086,6 +2155,40 @@ impl UserStore for SqlStore {
         Ok(())
     }
 
+    /// Promotes the named email row to primary. The target must already
+    /// be `verified = true`; promoting an unverified row is rejected to
+    /// stop a session-hijacker from redirecting password resets to an
+    /// attacker-controlled mailbox.
+    ///
+    /// # Examples
+    ///
+    /// Promote a verified secondary to primary
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
+    /// store.set_primary_email(user.id, "alice2@example.com").await.expect("promote");
+    /// # });
+    /// ```
     async fn set_primary_email(
         &mut self,
         user_id: Uuid,
@@ -2123,6 +2226,39 @@ impl UserStore for SqlStore {
         Ok(())
     }
 
+    /// Marks the named email row verified, refreshing `verified_at` to
+    /// the current time. Idempotent — re-marking an already-verified row
+    /// just updates the timestamp.
+    ///
+    /// # Examples
+    ///
+    /// Add an unverified secondary and then verify it
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.add_user_email(user.id, "alice2@example.com", false).await.expect("add");
+    /// store.mark_email_verified(user.id, "alice2@example.com").await.expect("mark verified");
+    /// # });
+    /// ```
     async fn mark_email_verified(
         &mut self,
         user_id: Uuid,
@@ -2807,6 +2943,40 @@ async fn token_from_row(row: &AnyRow) -> Result<OneTimeToken, Error> {
 
 #[async_trait]
 impl TokenStore for SqlStore {
+    /// Persists a one-time token. The caller is responsible for
+    /// assigning the `id` and timestamps — typically via
+    /// [`OneTimeToken::new`]. Rejects with [`Error::TokenIdExists`] on a
+    /// duplicate id.
+    ///
+    /// # Examples
+    ///
+    /// Issue a password-reset token for a freshly-created user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
+    /// store.create_token(&token).await.expect("create_token");
+    /// # });
+    /// ```
     async fn create_token(&mut self, token: &OneTimeToken) -> Result<(), Error> {
         if token.id.is_nil() {
             return Err(Error::Other("token id must not be nil".to_string()));
@@ -2846,6 +3016,41 @@ impl TokenStore for SqlStore {
         Ok(())
     }
 
+    /// Loads an active (non-expired, non-consumed) token by id. Returns
+    /// `Err(TokenIdNotFound)` for unknown ids and for tokens past their
+    /// `expires_at`.
+    ///
+    /// # Examples
+    ///
+    /// Round-trip a token through `create_token` + `find_token`
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
+    /// store.create_token(&token).await.expect("create_token");
+    /// let loaded = store.find_token(token.id).await.expect("find_token");
+    /// assert_eq!(loaded.user_id, user.id);
+    /// # });
+    /// ```
     async fn find_token(&self, id: Uuid) -> Result<OneTimeToken, Error> {
         // Filter expired tokens at the storage layer so handlers can treat
         // "find_token Ok" as "active and consumable". Soft-deleted users
@@ -2867,6 +3072,46 @@ impl TokenStore for SqlStore {
         }
     }
 
+    /// Atomically marks the token consumed via
+    /// `UPDATE ... WHERE consumed_at IS NULL` so concurrent calls
+    /// against the same id produce exactly one winner. Race losses,
+    /// expired tokens, and unknown ids are distinguished by a
+    /// follow-up read on the slow path.
+    ///
+    /// # Examples
+    ///
+    /// Single-use enforcement: the second consume call fails
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{Error, SqlStore, SqlStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
+    /// store.create_token(&token).await.expect("create_token");
+    /// store.consume_token(token.id).await.expect("first consume");
+    /// assert!(matches!(
+    ///     store.consume_token(token.id).await,
+    ///     Err(Error::TokenAlreadyConsumed())
+    /// ));
+    /// # });
+    /// ```
     async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, Error> {
         // Race-free single-use enforcement: the UPDATE only matches when
         // the token is unconsumed. A losing concurrent UPDATE matches zero
@@ -2919,6 +3164,51 @@ impl TokenStore for SqlStore {
         token_from_row(&row).await
     }
 
+    /// Removes every outstanding [`TokenPurpose::EmailVerification`]
+    /// token belonging to `user_id` whose `target_email` matches the
+    /// supplied address (case-insensitive). Used by the verification
+    /// re-send handler so re-issuing supersedes prior tokens.
+    ///
+    /// # Examples
+    ///
+    /// Two verification tokens issued for the same address — purging
+    /// removes both
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// for _ in 0..2 {
+    ///     let t = OneTimeToken::new(
+    ///         user.id, TokenPurpose::EmailVerification,
+    ///         Some("alice@example.com".into()), 24,
+    ///     );
+    ///     store.create_token(&t).await.expect("create_token");
+    /// }
+    /// let purged = store
+    ///     .purge_email_verification_tokens(user.id, "alice@example.com")
+    ///     .await
+    ///     .expect("purge");
+    /// assert_eq!(purged, 2);
+    /// # });
+    /// ```
     async fn purge_email_verification_tokens(
         &mut self,
         user_id: Uuid,
@@ -2938,6 +3228,28 @@ impl TokenStore for SqlStore {
         Ok(result.rows_affected())
     }
 
+    /// Removes every token whose `expires_at` is in the past AND that
+    /// has not been consumed. Returns the number of rows deleted.
+    /// Intended as a periodic housekeeping sweep.
+    ///
+    /// # Examples
+    ///
+    /// Purging a fresh store is a no-op
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{SqlStore, SqlStoreConfig, Store, TokenStore};
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// assert_eq!(store.purge_expired().await.expect("purge"), 0);
+    /// # });
+    /// ```
     async fn purge_expired(&mut self) -> Result<u64, Error> {
         let now = datetime_to_sql(Utc::now());
         let result = sqlx::query(&q(
@@ -3022,6 +3334,36 @@ async fn audit_entry_from_row(row: &AnyRow) -> Result<EmailAuditEntry, Error> {
 
 #[async_trait]
 impl EmailAuditLog for SqlStore {
+    /// Inserts a new audit row synchronously, before the actual send is
+    /// attempted. Caller builds the entry via
+    /// [`EmailAuditEntry::new_pending`]; this method just persists it.
+    /// Returns the assigned id on success.
+    ///
+    /// # Examples
+    ///
+    /// Record a pending password-reset send
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::EmailAuditEntry;
+    /// use storage::{EmailAuditLog, SqlStore, SqlStoreConfig, Store};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     None, "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// let id = store.record_pending(&entry).await.expect("record_pending");
+    /// assert_eq!(id, entry.id);
+    /// # });
+    /// ```
     async fn record_pending(&mut self, entry: &EmailAuditEntry) -> Result<Uuid, Error> {
         if entry.id.is_nil() {
             return Err(Error::Other(
@@ -3068,6 +3410,39 @@ impl EmailAuditLog for SqlStore {
         Ok(entry.id)
     }
 
+    /// Flips a previously-recorded `pending` row to `accepted` (with
+    /// `provider_message_id`) or `failed` (with `error_class`). Once
+    /// written, an audit row only moves forward — passing
+    /// `AuditOutcome::Pending` is rejected.
+    ///
+    /// # Examples
+    ///
+    /// Mark the audit row as accepted after the provider responds
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{AuditOutcome, EmailAuditEntry};
+    /// use storage::{EmailAuditLog, SqlStore, SqlStoreConfig, Store};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     None, "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// store.record_pending(&entry).await.expect("record_pending");
+    /// store
+    ///     .update_outcome(entry.id, AuditOutcome::Accepted, Some("provider-123"), None)
+    ///     .await
+    ///     .expect("update_outcome");
+    /// # });
+    /// ```
     async fn update_outcome(
         &mut self,
         id: Uuid,
@@ -3099,6 +3474,34 @@ impl EmailAuditLog for SqlStore {
         Ok(())
     }
 
+    /// Loads a single audit row by id. Returns
+    /// `Err(AuditEntryIdNotFound)` for unknown ids.
+    ///
+    /// # Examples
+    ///
+    /// Load back a recorded row
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::EmailAuditEntry;
+    /// use storage::{EmailAuditLog, SqlStore, SqlStoreConfig, Store};
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     None, "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// store.record_pending(&entry).await.expect("record_pending");
+    /// let loaded = store.find_audit_entry(entry.id).await.expect("find");
+    /// assert_eq!(loaded.recipient_email, "alice@example.com");
+    /// # });
+    /// ```
     async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, Error> {
         let row = sqlx::query(&q(
             self.kind,
@@ -3114,6 +3517,51 @@ impl EmailAuditLog for SqlStore {
         }
     }
 
+    /// Returns the `limit` most recent audit rows for a user
+    /// (`recipient_user_id = user_id`), sorted by `created_at`
+    /// descending with `id` as a deterministic tie-breaker.
+    ///
+    /// # Examples
+    ///
+    /// Read back the most recent two audit entries for a user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::EmailAuditEntry;
+    /// use storage::{EmailAuditLog, SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use data_model::{User, UserEmail};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// // Recipient must exist for the FK; create the user first.
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// for template in ["password_reset", "email_verification"] {
+    ///     let e = EmailAuditEntry::new_pending(
+    ///         Some(user.id), "alice@example.com", template,
+    ///         None, None, "stub",
+    ///     );
+    ///     store.record_pending(&e).await.expect("record_pending");
+    /// }
+    /// let recent = store
+    ///     .find_recent_audit_entries_for_user(user.id, 5)
+    ///     .await
+    ///     .expect("find_recent");
+    /// assert_eq!(recent.len(), 2);
+    /// # });
+    /// ```
     async fn find_recent_audit_entries_for_user(
         &self,
         user_id: Uuid,

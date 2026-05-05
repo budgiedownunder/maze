@@ -25,6 +25,19 @@ pub struct FileStoreConfig {
 }
 
 impl FileStoreConfig {
+    /// Builds a config that points at a `data/` directory under the
+    /// process's current working directory. Convenient for ad-hoc CLI
+    /// usage; production deployments should construct the config
+    /// explicitly with an absolute path.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use storage::FileStoreConfig;
+    ///
+    /// let cfg = FileStoreConfig::default();
+    /// assert_eq!(cfg.data_dir, "data");
+    /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
         FileStoreConfig {
@@ -593,7 +606,43 @@ impl FileStore {
         format!("{name}.json")
     }
 
-    // Returns the mazes directory for a given owner
+    /// Returns the absolute path to `owner`'s mazes directory under the
+    /// configured data directory. Used by callers that need to list /
+    /// snapshot the on-disk maze files outside of the `MazeStore` trait
+    /// surface (e.g. backup tooling).
+    ///
+    /// # Examples
+    ///
+    /// Locate the mazes directory for a freshly-created user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    ///
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    ///
+    /// let dir = store.get_mazes_dir(&user);
+    /// println!("Mazes for {} live at {}", user.username, dir);
+    /// # });
+    /// ```
     pub fn get_mazes_dir(&self, owner: &User) -> String {
         Path::new(&self.user_dir_path(owner.id))
             .join("mazes")
@@ -1706,6 +1755,44 @@ impl UserStore for FileStore {
         Ok(false)
     }
 
+    /// Adds a non-primary email row to the user. See the `UserStore`
+    /// trait doc-comment for the full contract; pass `verified = true`
+    /// for trusted sources (OAuth-link, admin seed) and `verified = false`
+    /// for self-asserted user-typed emails.
+    ///
+    /// # Examples
+    ///
+    /// Add a secondary unverified email to an existing user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "alice".to_string(),
+    ///     full_name: "Alice".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let row = store
+    ///     .add_user_email(user.id, "alice2@example.com", false)
+    ///     .await
+    ///     .expect("add secondary");
+    /// assert!(!row.verified);
+    /// # });
+    /// ```
     async fn add_user_email(
         &mut self,
         user_id: Uuid,
@@ -1746,6 +1833,34 @@ impl UserStore for FileStore {
         Ok(row)
     }
 
+    /// Removes a non-primary, non-last email row from the user. See the
+    /// trait doc-comment for the rejection rules.
+    ///
+    /// # Examples
+    ///
+    /// Add a secondary email then remove it
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
+    /// store.remove_user_email(user.id, "alice2@example.com").await.expect("remove");
+    /// # });
+    /// ```
     async fn remove_user_email(
         &mut self,
         user_id: Uuid,
@@ -1764,6 +1879,36 @@ impl UserStore for FileStore {
         Ok(())
     }
 
+    /// Promotes the named email row to primary. The target must already
+    /// be `verified = true`; promoting an unverified row is rejected to
+    /// stop a session-hijacker from redirecting password resets to an
+    /// attacker-controlled mailbox.
+    ///
+    /// # Examples
+    ///
+    /// Promote a verified secondary to primary
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
+    /// store.set_primary_email(user.id, "alice2@example.com").await.expect("promote");
+    /// # });
+    /// ```
     async fn set_primary_email(
         &mut self,
         user_id: Uuid,
@@ -1784,6 +1929,35 @@ impl UserStore for FileStore {
         Ok(())
     }
 
+    /// Marks the named email row verified, refreshing `verified_at` to
+    /// the current time. Idempotent — re-marking an already-verified row
+    /// just updates the timestamp.
+    ///
+    /// # Examples
+    ///
+    /// Add an unverified secondary and then verify it
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.add_user_email(user.id, "alice2@example.com", false).await.expect("add");
+    /// store.mark_email_verified(user.id, "alice2@example.com").await.expect("mark verified");
+    /// # });
+    /// ```
     async fn mark_email_verified(
         &mut self,
         user_id: Uuid,
@@ -2311,6 +2485,35 @@ impl Manage for FileStore {
 
 #[async_trait]
 impl TokenStore for FileStore {
+    /// Persists a one-time token. The caller is responsible for assigning
+    /// the `id` and timestamps — typically via [`OneTimeToken::new`].
+    /// Rejects with [`Error::TokenIdExists`] on a duplicate id.
+    ///
+    /// # Examples
+    ///
+    /// Issue a password-reset token for a freshly-created user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
+    /// store.create_token(&token).await.expect("create_token");
+    /// # });
+    /// ```
     async fn create_token(&mut self, token: &OneTimeToken) -> Result<(), Error> {
         if token.id.is_nil() {
             return Err(Error::Other("token id must not be nil".to_string()));
@@ -2327,6 +2530,37 @@ impl TokenStore for FileStore {
         self.write_token_file(token, false)
     }
 
+    /// Loads an active (non-expired, non-consumed) token by id. Returns
+    /// `Err(TokenIdNotFound)` for unknown ids and for tokens past their
+    /// `expires_at`.
+    ///
+    /// # Examples
+    ///
+    /// Round-trip a token through `create_token` + `find_token`
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
+    /// store.create_token(&token).await.expect("create_token");
+    /// let loaded = store.find_token(token.id).await.expect("find_token");
+    /// assert_eq!(loaded.user_id, user.id);
+    /// # });
+    /// ```
     async fn find_token(&self, id: Uuid) -> Result<OneTimeToken, Error> {
         let token = self.read_token_raw(id)?;
         if token.is_expired() {
@@ -2335,6 +2569,40 @@ impl TokenStore for FileStore {
         Ok(token)
     }
 
+    /// Marks the token consumed and returns the consumed row. A second
+    /// call against the same id surfaces `Err(TokenAlreadyConsumed)`.
+    /// Expired tokens fail with `Err(TokenExpired)`.
+    ///
+    /// # Examples
+    ///
+    /// Single-use enforcement: the second consume call fails
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{Error, FileStore, FileStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
+    /// store.create_token(&token).await.expect("create_token");
+    /// store.consume_token(token.id).await.expect("first consume");
+    /// assert!(matches!(
+    ///     store.consume_token(token.id).await,
+    ///     Err(Error::TokenAlreadyConsumed())
+    /// ));
+    /// # });
+    /// ```
     async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, Error> {
         // FileStore consumption is read-modify-write: read the file,
         // reject if already consumed or expired, populate `consumed_at`,
@@ -2354,6 +2622,47 @@ impl TokenStore for FileStore {
         Ok(token)
     }
 
+    /// Removes every outstanding [`TokenPurpose::EmailVerification`]
+    /// token belonging to `user_id` whose `target_email` matches the
+    /// supplied address (case-insensitive). Used by the verification
+    /// re-send handler so re-issuing supersedes prior tokens.
+    ///
+    /// # Examples
+    ///
+    /// Two verification tokens issued for the same address — purging
+    /// removes both
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// for _ in 0..2 {
+    ///     let t = OneTimeToken::new(
+    ///         user.id, TokenPurpose::EmailVerification,
+    ///         Some("alice@example.com".into()), 24,
+    ///     );
+    ///     store.create_token(&t).await.expect("create_token");
+    /// }
+    /// let purged = store
+    ///     .purge_email_verification_tokens(user.id, "alice@example.com")
+    ///     .await
+    ///     .expect("purge");
+    /// assert_eq!(purged, 2);
+    /// # });
+    /// ```
     async fn purge_email_verification_tokens(
         &mut self,
         user_id: Uuid,
@@ -2386,6 +2695,24 @@ impl TokenStore for FileStore {
         Ok(purged)
     }
 
+    /// Removes every token whose `expires_at` is in the past AND that
+    /// has not been consumed. Returns the number of rows deleted.
+    /// Intended as a periodic housekeeping sweep.
+    ///
+    /// # Examples
+    ///
+    /// Purging a fresh store is a no-op
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{FileStore, FileStoreConfig, Store, TokenStore};
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// assert_eq!(store.purge_expired().await.expect("purge"), 0);
+    /// # });
+    /// ```
     async fn purge_expired(&mut self) -> Result<u64, Error> {
         let mut purged: u64 = 0;
         for id in self.get_token_ids()? {
@@ -2409,6 +2736,32 @@ impl TokenStore for FileStore {
 
 #[async_trait]
 impl EmailAuditLog for FileStore {
+    /// Inserts a new audit row synchronously, before the actual send is
+    /// attempted. Caller builds the entry via
+    /// [`EmailAuditEntry::new_pending`]; this method just persists it.
+    /// Returns the assigned id on success.
+    ///
+    /// # Examples
+    ///
+    /// Record a pending password-reset send
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::EmailAuditEntry;
+    /// use storage::{EmailAuditLog, FileStore, FileStoreConfig, Store};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     Some(Uuid::new_v4()), "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// let id = store.record_pending(&entry).await.expect("record_pending");
+    /// assert_eq!(id, entry.id);
+    /// # });
+    /// ```
     async fn record_pending(&mut self, entry: &EmailAuditEntry) -> Result<Uuid, Error> {
         if entry.id.is_nil() {
             return Err(Error::Other("audit entry id must not be nil".to_string()));
@@ -2420,6 +2773,35 @@ impl EmailAuditLog for FileStore {
         Ok(entry.id)
     }
 
+    /// Flips a previously-recorded `pending` row to `accepted` (with
+    /// `provider_message_id`) or `failed` (with `error_class`). Once
+    /// written, an audit row only moves forward — passing
+    /// `AuditOutcome::Pending` is rejected.
+    ///
+    /// # Examples
+    ///
+    /// Mark the audit row as accepted after the provider responds
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{AuditOutcome, EmailAuditEntry};
+    /// use storage::{EmailAuditLog, FileStore, FileStoreConfig, Store};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     Some(Uuid::new_v4()), "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// store.record_pending(&entry).await.expect("record_pending");
+    /// store
+    ///     .update_outcome(entry.id, AuditOutcome::Accepted, Some("provider-123"), None)
+    ///     .await
+    ///     .expect("update_outcome");
+    /// # });
+    /// ```
     async fn update_outcome(
         &mut self,
         id: Uuid,
@@ -2439,10 +2821,67 @@ impl EmailAuditLog for FileStore {
         self.write_audit_entry_file(&entry, true)
     }
 
+    /// Loads a single audit row by id. Returns
+    /// `Err(AuditEntryIdNotFound)` for unknown ids.
+    ///
+    /// # Examples
+    ///
+    /// Load back a recorded row
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::EmailAuditEntry;
+    /// use storage::{EmailAuditLog, FileStore, FileStoreConfig, Store};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     Some(Uuid::new_v4()), "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// store.record_pending(&entry).await.expect("record_pending");
+    /// let loaded = store.find_audit_entry(entry.id).await.expect("find");
+    /// assert_eq!(loaded.recipient_email, "alice@example.com");
+    /// # });
+    /// ```
     async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, Error> {
         self.read_audit_entry_raw(id)
     }
 
+    /// Returns the `limit` most recent audit rows for a user,
+    /// `recipient_user_id = user_id`, sorted by `created_at` descending
+    /// with id as a deterministic tie-breaker.
+    ///
+    /// # Examples
+    ///
+    /// Read back the most recent two audit entries for a user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::EmailAuditEntry;
+    /// use storage::{EmailAuditLog, FileStore, FileStoreConfig, Store};
+    /// use uuid::Uuid;
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    /// let user_id = Uuid::new_v4();
+    /// for template in ["password_reset", "email_verification"] {
+    ///     let e = EmailAuditEntry::new_pending(
+    ///         Some(user_id), "alice@example.com", template,
+    ///         None, None, "stub",
+    ///     );
+    ///     store.record_pending(&e).await.expect("record_pending");
+    /// }
+    /// let recent = store
+    ///     .find_recent_audit_entries_for_user(user_id, 5)
+    ///     .await
+    ///     .expect("find_recent");
+    /// assert_eq!(recent.len(), 2);
+    /// # });
+    /// ```
     async fn find_recent_audit_entries_for_user(
         &self,
         user_id: Uuid,
