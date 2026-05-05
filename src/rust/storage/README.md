@@ -44,8 +44,8 @@ This runs:
 - FileStore inline unit tests
 - SqlStore inline unit tests (datetime helpers — gated by `sql-store`)
 - Validation tests
-- The contract suite against FileStore (`tests/file_store_contract.rs` — 49 scenarios)
-- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 49 scenarios)
+- The contract suite against FileStore (`tests/file_store_contract.rs` — 67 scenarios)
+- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 67 scenarios)
 - Doc tests
 
 Tests run in parallel — every FileStore test is rooted at its own `tempfile::TempDir`, and every SqlStore test creates its own in-memory SQLite, so there's no shared state to serialise around.
@@ -107,6 +107,40 @@ No benchmarking tests are currently implemented for the crate.
 cargo doc --features sql-store --open
 ```
 
+## FileStore data layout and migrations
+
+`FileStore` writes one JSON file per record under `data_dir/`:
+
+```
+data_dir/
+  .schema_version            single integer, written atomically (tempfile + rename)
+  users/
+    <uuid>/
+      user.json              user record (multi-email shape)
+      mazes/
+        <maze-id>.json
+```
+
+`FileStore::new` runs two startup passes against `data_dir` in order:
+
+1. **`migrate_users_dir`** — a one-shot, idempotent rewrite of any pre-multi-email `user.json` files into the current shape. New-shape files parse straight through and are left alone; legacy single-email files are rewritten and the original kept alongside as `user.json.bak`. Runs unconditionally on every startup.
+
+2. **`apply_pending_migrations`** — the schema-versioned migration framework. Reads `<data_dir>/.schema_version` (defaulting to `0` if absent), runs every registered migration with a higher version in order, and writes the new version atomically **after each successful migration** so a failure mid-batch leaves the schema at the last successful step (not at zero).
+
+The migration registry lives in `src/file_store_migration.rs`:
+
+| Version | Effect |
+|:--------|:-------|
+| 1, 2    | No-ops. Align the FileStore counter with the SQL `0001_initial.sql` and `0002_user_emails.sql` migrations already applied to existing deployments. |
+| 3       | `migrate_0003_user_emails_verified_reset` — for every non-admin user, sets `verified = false, verified_at = None` on each email **not** matched by an `oauth_identities[*].provider_email` for that user. Admin users are skipped wholesale. Counterpart to the SQL `0003_user_emails_verified_reset.sql` migration described below. |
+
+Behaviour properties:
+
+- **Idempotent**: re-running a migration on already-migrated data has no effect (each migration's logic is a deterministic transform; `mutated` flags suppress unnecessary file rewrites).
+- **Atomic per file**: every `user.json` rewrite uses tempfile + rename.
+- **No silent downgrade**: a `.schema_version` value higher than the registry's max version returns a clear error rather than re-running migrations against a newer schema.
+- **Schema version persists across restarts**: an existing deployment that's already at the current version sees the second-pass framework as a near-zero-cost check (read the file, compare, exit).
+
 ## SqlStore schema and migrations
 
 The SqlStore schema is defined across the migration files in [`migrations/`](./migrations/). It creates five tables:
@@ -122,6 +156,14 @@ The SqlStore schema is defined across the migration files in [`migrations/`](./m
 Plus the standard SQLx migration tracking table `_sqlx_migrations`, created automatically.
 
 `SqlStore::new` runs any pending migrations on startup. SQLx tracks applied migrations in `_sqlx_migrations` so subsequent runs are idempotent — the schema is set up exactly once per database.
+
+The migration files in [`migrations/`](./migrations/):
+
+| File | Effect |
+|:-----|:-------|
+| `0001_initial.sql` | Creates `users`, `user_logins`, `oauth_identities`, `mazes`. The `users.email UNIQUE NOT NULL` column from this migration is later retired by `retire_legacy_users_email_column` in `SqlStore::new` (post-`0002`). |
+| `0002_user_emails.sql` | Creates `user_emails` and seeds it from each user's `users.email`. Each seeded row is `is_primary = 1, verified = 1, verified_at = NULL`. |
+| `0003_user_emails_verified_reset.sql` | One-sweep flip from "verified by default" to "verification required". Sets `verified = 0, verified_at = NULL` on every `user_emails` row whose owning user is not an admin AND no matching `oauth_identities.provider_email` row exists for that (user, email) pair. The FileStore migration framework registers an equivalent `migrate_0003_user_emails_verified_reset` at version 3 — see "FileStore data layout and migrations" above for the framework's mechanics. |
 
 ### Schema portability rules
 

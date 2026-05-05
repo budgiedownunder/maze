@@ -2654,4 +2654,226 @@ mod tests {
             "users.email must remain gone on subsequent SqlStore::new calls"
         );
     }
+
+    /// SQL of `migrations/0003_user_emails_verified_reset.sql` embedded at
+    /// compile time so the test runs the exact statement `sqlx::migrate!`
+    /// applies — no copy-paste drift between this assertion and the
+    /// production migration.
+    const MIGRATION_0003_SQL: &str =
+        include_str!("../migrations/0003_user_emails_verified_reset.sql");
+
+    /// Pre/post snapshot of migration 0003 against a seeded fixture:
+    /// admin user, OAuth-verified user, two plain users — all with
+    /// `verified = 1`. After re-applying the migration SQL: admin and
+    /// OAuth-matched rows stay verified; the two plain rows flip to
+    /// `verified = 0, verified_at = NULL`.
+    ///
+    /// `SqlStore::new` runs migrations 0001/0002/0003 against an empty
+    /// schema (so 0003 is a no-op there); the test then seeds with
+    /// `verified = 1` rows and re-applies 0003's SQL, exercising the
+    /// transformation against realistic state.
+    #[tokio::test]
+    async fn migration_0003_resets_verified_except_admin_and_oauth_matched() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db_path = temp.path().join("verified-reset-test.db");
+        let url = format!("sqlite:{}", db_path.to_string_lossy());
+        let store = SqlStore::new(SqlStoreConfig {
+            url,
+            max_connections: 1,
+            auto_create_database: true,
+            ..SqlStoreConfig::default()
+        })
+        .await
+        .expect("SqlStore::new");
+
+        let admin_id = Uuid::new_v4().to_string();
+        let oauth_id = Uuid::new_v4().to_string();
+        let plain1_id = Uuid::new_v4().to_string();
+        let plain2_id = Uuid::new_v4().to_string();
+
+        // Insert four users; verified = 1 on every email.
+        for (id, is_admin, username, email) in &[
+            (&admin_id, 1, "admin", "admin@example.com"),
+            (&oauth_id, 0, "alice", "alice@gmail.com"),
+            (&plain1_id, 0, "bob", "bob@example.com"),
+            (&plain2_id, 0, "carol", "carol@example.com"),
+        ] {
+            sqlx::query(
+                "INSERT INTO users (id, is_admin, username, full_name, password_hash, api_key) \
+                 VALUES (?, ?, ?, ?, ?, ?)",
+            )
+            .bind(*id)
+            .bind(*is_admin)
+            .bind(*username)
+            .bind(*username)
+            .bind("hash")
+            .bind(Uuid::new_v4().to_string())
+            .execute(&store.pool)
+            .await
+            .expect("insert user");
+            sqlx::query(
+                "INSERT INTO user_emails (user_id, email, is_primary, verified, verified_at) \
+                 VALUES (?, ?, 1, 1, ?)",
+            )
+            .bind(*id)
+            .bind(*email)
+            .bind("2026-01-01T00:00:00.000Z")
+            .execute(&store.pool)
+            .await
+            .expect("insert user_emails");
+        }
+        // OAuth identity for the OAuth user; provider_email matches the
+        // user's email, so the carve-out applies.
+        sqlx::query(
+            "INSERT INTO oauth_identities \
+             (user_id, provider, provider_user_id, provider_email, linked_at, last_seen_at) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&oauth_id)
+        .bind("google")
+        .bind("google-sub-1")
+        .bind("alice@gmail.com")
+        .bind("2026-01-01T00:00:00.000Z")
+        .bind("2026-01-01T00:00:00.000Z")
+        .execute(&store.pool)
+        .await
+        .expect("insert oauth_identities");
+
+        // Re-apply migration 0003 SQL against the now-seeded fixture.
+        sqlx::query(MIGRATION_0003_SQL)
+            .execute(&store.pool)
+            .await
+            .expect("re-run migration 0003");
+
+        // Verify each user's verified flag.
+        for (id, expected_verified) in &[
+            (&admin_id, 1i64),
+            (&oauth_id, 1),
+            (&plain1_id, 0),
+            (&plain2_id, 0),
+        ] {
+            let row: (i64, Option<String>) = sqlx::query_as(
+                "SELECT verified, verified_at FROM user_emails WHERE user_id = ?",
+            )
+            .bind(*id)
+            .fetch_one(&store.pool)
+            .await
+            .expect("fetch user_email");
+            assert_eq!(
+                row.0, *expected_verified,
+                "user {id}: verified = {} expected {expected_verified}",
+                row.0
+            );
+            if *expected_verified == 0 {
+                assert!(
+                    row.1.is_none(),
+                    "user {id}: verified_at should be NULL after reset, got {:?}",
+                    row.1
+                );
+            } else {
+                assert!(
+                    row.1.is_some(),
+                    "user {id}: verified_at should be preserved, got NULL"
+                );
+            }
+        }
+    }
+
+    /// Idempotency for the SQL migration: re-running on already-flipped
+    /// data leaves the rows untouched (the WHERE clause's NOT IN /
+    /// NOT EXISTS conditions still match, but `verified` is already 0,
+    /// so the UPDATE writes the same value — no functional change).
+    #[tokio::test]
+    async fn migration_0003_is_idempotent_when_re_run() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db_path = temp.path().join("verified-reset-idempotent.db");
+        let url = format!("sqlite:{}", db_path.to_string_lossy());
+        let store = SqlStore::new(SqlStoreConfig {
+            url,
+            max_connections: 1,
+            auto_create_database: true,
+            ..SqlStoreConfig::default()
+        })
+        .await
+        .expect("SqlStore::new");
+
+        let id = Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO users (id, is_admin, username, full_name, password_hash, api_key) \
+             VALUES (?, 0, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind("dave")
+        .bind("dave")
+        .bind("hash")
+        .bind(Uuid::new_v4().to_string())
+        .execute(&store.pool)
+        .await
+        .expect("insert user");
+        sqlx::query(
+            "INSERT INTO user_emails (user_id, email, is_primary, verified, verified_at) \
+             VALUES (?, ?, 1, 1, ?)",
+        )
+        .bind(&id)
+        .bind("dave@example.com")
+        .bind("2026-01-01T00:00:00.000Z")
+        .execute(&store.pool)
+        .await
+        .expect("insert user_emails");
+
+        // First re-application flips the row.
+        sqlx::query(MIGRATION_0003_SQL)
+            .execute(&store.pool)
+            .await
+            .expect("first re-run");
+        let (verified, verified_at): (i64, Option<String>) = sqlx::query_as(
+            "SELECT verified, verified_at FROM user_emails WHERE user_id = ?",
+        )
+        .bind(&id)
+        .fetch_one(&store.pool)
+        .await
+        .expect("fetch after first run");
+        assert_eq!(verified, 0);
+        assert!(verified_at.is_none());
+
+        // Second re-application is a no-op semantically.
+        sqlx::query(MIGRATION_0003_SQL)
+            .execute(&store.pool)
+            .await
+            .expect("second re-run");
+        let (verified, verified_at): (i64, Option<String>) = sqlx::query_as(
+            "SELECT verified, verified_at FROM user_emails WHERE user_id = ?",
+        )
+        .bind(&id)
+        .fetch_one(&store.pool)
+        .await
+        .expect("fetch after second run");
+        assert_eq!(verified, 0);
+        assert!(verified_at.is_none());
+    }
+
+    /// Empty `user_emails` table → migration succeeds without error.
+    /// Already exercised implicitly by `SqlStore::new` (which runs 0003
+    /// against an empty schema), but a focused test makes the contract
+    /// explicit.
+    #[tokio::test]
+    async fn migration_0003_succeeds_on_empty_user_emails_table() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db_path = temp.path().join("verified-reset-empty.db");
+        let url = format!("sqlite:{}", db_path.to_string_lossy());
+        let store = SqlStore::new(SqlStoreConfig {
+            url,
+            max_connections: 1,
+            auto_create_database: true,
+            ..SqlStoreConfig::default()
+        })
+        .await
+        .expect("SqlStore::new");
+        // `SqlStore::new` already ran 0003; a manual re-run on an empty
+        // table must also succeed cleanly.
+        sqlx::query(MIGRATION_0003_SQL)
+            .execute(&store.pool)
+            .await
+            .expect("re-run on empty table");
+    }
 }

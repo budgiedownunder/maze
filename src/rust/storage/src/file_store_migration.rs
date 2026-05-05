@@ -190,9 +190,12 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// no users to migrate. Either way the no-op entries cleanly bring the
 /// version counter to 2 without doing redundant work.
 ///
-/// Real FileStore migrations register at 3 and above (added in subsequent
-/// steps).
-const MIGRATIONS: &[(u32, MigrationFn)] = &[(1, no_op_migration), (2, no_op_migration)];
+/// Real FileStore migrations register at 3 and above.
+const MIGRATIONS: &[(u32, MigrationFn)] = &[
+    (1, no_op_migration),
+    (2, no_op_migration),
+    (3, migrate_0003_user_emails_verified_reset),
+];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
     let mut max = 0u32;
@@ -249,6 +252,113 @@ fn apply_migrations_to(
         current = *version;
         log::info!("FileStore migration {version} applied");
     }
+    Ok(())
+}
+
+/// FileStore migration 0003 — counterpart to
+/// `migrations/0003_user_emails_verified_reset.sql`. Walks every
+/// `users/<uuid>/user.json` and, for non-admin users, sets
+/// `verified = false, verified_at = None` on every email that is **not**
+/// matched by an OAuth identity's `provider_email` for the same user.
+///
+/// Admin users are skipped wholesale (their emails stay verified).
+/// OAuth-matched emails on non-admin users stay verified — the OAuth
+/// provider has attested to the address.
+///
+/// Idempotent: re-running against already-flipped data is a no-op (admin
+/// and OAuth-matched emails were untouched on the first pass; other
+/// emails are already `verified = false` and stay so).
+fn migrate_0003_user_emails_verified_reset(data_dir: &Path) -> Result<(), Error> {
+    let users_dir = data_dir.join("users");
+    if !users_dir.is_dir() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(&users_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if Uuid::parse_str(name).is_err() {
+            continue;
+        }
+        let user_file = path.join("user.json");
+        if !user_file.is_file() {
+            continue;
+        }
+        migrate_0003_user_file(&user_file)?;
+    }
+    Ok(())
+}
+
+fn migrate_0003_user_file(path: &Path) -> Result<(), Error> {
+    let raw = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(error) => {
+            log::warn!(
+                "FileStore migration 0003: skipping unreadable file {} - {}",
+                path.display(),
+                error
+            );
+            return Ok(());
+        }
+    };
+    let mut user: User = match serde_json::from_str(&raw) {
+        Ok(u) => u,
+        Err(error) => {
+            log::warn!(
+                "FileStore migration 0003: skipping unparseable file {} - {}",
+                path.display(),
+                error
+            );
+            return Ok(());
+        }
+    };
+    if user.is_admin {
+        return Ok(());
+    }
+    let oauth_emails: std::collections::HashSet<String> = user
+        .oauth_identities
+        .iter()
+        .filter_map(|oi| oi.provider_email.clone())
+        .collect();
+    let mut mutated = false;
+    for email in &mut user.emails {
+        if oauth_emails.contains(&email.email) {
+            continue;
+        }
+        if email.verified || email.verified_at.is_some() {
+            email.verified = false;
+            email.verified_at = None;
+            mutated = true;
+        }
+    }
+    if mutated {
+        let new_json = serde_json::to_string(&user)?;
+        rewrite_atomically(path, &new_json)?;
+    }
+    Ok(())
+}
+
+/// Atomically rewrite `path` with `new_json` via tempfile + rename.
+/// Used by per-version migrations that need to update `user.json` files
+/// without leaving a partial write on disk if the process is killed.
+fn rewrite_atomically(path: &Path, new_json: &str) -> Result<(), Error> {
+    let parent = path.parent().ok_or_else(|| {
+        Error::Other(format!(
+            "user.json has no parent directory: {}",
+            path.display()
+        ))
+    })?;
+    let tmp = parent.join("user.json.tmp");
+    {
+        let mut tmp_file = fs::File::create(&tmp)?;
+        tmp_file.write_all(new_json.as_bytes())?;
+    }
+    fs::rename(&tmp, path)?;
     Ok(())
 }
 
@@ -508,5 +618,228 @@ mod tests {
         apply_migrations_to(temp.path().to_str().unwrap(), migrations)
             .expect("migrations must succeed");
         assert_eq!(read_version_file(temp.path()), "6");
+    }
+
+    // ───────────────────── 0003 verified-reset migration ─────────────────────
+
+    use chrono::TimeZone;
+
+    fn write_user_json(data_dir: &Path, user: &User) {
+        let user_dir = data_dir.join("users").join(user.id.to_string());
+        std::fs::create_dir_all(&user_dir).expect("create user dir");
+        let json = serde_json::to_string(user).expect("serialize user");
+        std::fs::write(user_dir.join("user.json"), json).expect("write user.json");
+    }
+
+    fn read_user_json(data_dir: &Path, id: Uuid) -> User {
+        let path = data_dir
+            .join("users")
+            .join(id.to_string())
+            .join("user.json");
+        let raw = std::fs::read_to_string(&path).expect("read user.json");
+        serde_json::from_str(&raw).expect("parse user.json")
+    }
+
+    fn make_user(id: Uuid, username: &str, is_admin: bool, emails: Vec<UserEmail>) -> User {
+        User {
+            id,
+            is_admin,
+            username: username.into(),
+            full_name: username.into(),
+            emails,
+            password_hash: "hash".into(),
+            api_key: Uuid::new_v4(),
+            logins: vec![],
+            oauth_identities: vec![],
+        }
+    }
+
+    fn verified_email(email: &str, primary: bool) -> UserEmail {
+        UserEmail {
+            email: email.into(),
+            is_primary: primary,
+            verified: true,
+            verified_at: Some(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()),
+        }
+    }
+
+    /// Pre/post snapshot test: 1 admin + 1 OAuth-verified + 2 plain users.
+    /// After migration: admin and OAuth-verified emails stay verified;
+    /// the other two are flipped to verified = false / verified_at = None.
+    #[test]
+    fn migrate_0003_resets_verified_except_admin_and_oauth_matched() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let data_dir = temp.path();
+
+        let admin_id = Uuid::new_v4();
+        let admin = make_user(
+            admin_id,
+            "admin",
+            true,
+            vec![verified_email("admin@example.com", true)],
+        );
+
+        let oauth_id = Uuid::new_v4();
+        let mut oauth_user = make_user(
+            oauth_id,
+            "oauth_alice",
+            false,
+            vec![verified_email("alice@gmail.com", true)],
+        );
+        oauth_user.oauth_identities.push(OAuthIdentity::new(
+            "google".into(),
+            "google-sub-1".into(),
+            Some("alice@gmail.com".into()),
+        ));
+
+        let plain1_id = Uuid::new_v4();
+        let plain1 = make_user(
+            plain1_id,
+            "bob",
+            false,
+            vec![verified_email("bob@example.com", true)],
+        );
+
+        let plain2_id = Uuid::new_v4();
+        let plain2 = make_user(
+            plain2_id,
+            "carol",
+            false,
+            vec![verified_email("carol@example.com", true)],
+        );
+
+        write_user_json(data_dir, &admin);
+        write_user_json(data_dir, &oauth_user);
+        write_user_json(data_dir, &plain1);
+        write_user_json(data_dir, &plain2);
+
+        migrate_0003_user_emails_verified_reset(data_dir).expect("migration must succeed");
+
+        // Admin email — untouched.
+        let admin_after = read_user_json(data_dir, admin_id);
+        assert!(admin_after.emails[0].verified);
+        assert!(admin_after.emails[0].verified_at.is_some());
+
+        // OAuth-matched email — untouched.
+        let oauth_after = read_user_json(data_dir, oauth_id);
+        assert!(oauth_after.emails[0].verified);
+        assert!(oauth_after.emails[0].verified_at.is_some());
+
+        // Plain users — flipped.
+        for id in [plain1_id, plain2_id] {
+            let after = read_user_json(data_dir, id);
+            assert!(
+                !after.emails[0].verified,
+                "plain user email should be flipped to verified=false"
+            );
+            assert!(
+                after.emails[0].verified_at.is_none(),
+                "plain user verified_at should be cleared"
+            );
+        }
+    }
+
+    /// Idempotency: re-running the migration on already-migrated data
+    /// produces the same result. Verifies that the second invocation
+    /// doesn't accidentally re-flip already-flipped rows or re-clear
+    /// already-cleared timestamps in a destructive way.
+    #[test]
+    fn migrate_0003_is_idempotent_when_re_run() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let data_dir = temp.path();
+
+        let plain_id = Uuid::new_v4();
+        let plain = make_user(
+            plain_id,
+            "dave",
+            false,
+            vec![verified_email("dave@example.com", true)],
+        );
+        write_user_json(data_dir, &plain);
+
+        migrate_0003_user_emails_verified_reset(data_dir).expect("first run");
+        let after_first = read_user_json(data_dir, plain_id);
+        assert!(!after_first.emails[0].verified);
+        assert!(after_first.emails[0].verified_at.is_none());
+
+        // Capture the user.json mtime before the second run.
+        let user_path = data_dir.join("users").join(plain_id.to_string()).join("user.json");
+        let mtime_before = std::fs::metadata(&user_path)
+            .expect("metadata")
+            .modified()
+            .expect("modified time");
+
+        migrate_0003_user_emails_verified_reset(data_dir).expect("second run");
+        let after_second = read_user_json(data_dir, plain_id);
+        assert!(!after_second.emails[0].verified);
+        assert!(after_second.emails[0].verified_at.is_none());
+
+        // The second run shouldn't have rewritten the file — values were
+        // already correct, so `mutated` stayed false.
+        let mtime_after = std::fs::metadata(&user_path)
+            .expect("metadata")
+            .modified()
+            .expect("modified time");
+        assert_eq!(
+            mtime_before, mtime_after,
+            "idempotent re-run should not rewrite an already-flipped user.json"
+        );
+    }
+
+    /// Empty users directory → migration succeeds without error.
+    #[test]
+    fn migrate_0003_empty_users_dir_is_no_op() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        // Don't create users/ at all.
+        migrate_0003_user_emails_verified_reset(temp.path())
+            .expect("must succeed on missing users dir");
+
+        // Also verify "users dir exists but is empty" path.
+        std::fs::create_dir_all(temp.path().join("users")).expect("mkdir");
+        migrate_0003_user_emails_verified_reset(temp.path())
+            .expect("must succeed on empty users dir");
+    }
+
+    /// User with multiple emails: only the OAuth-matched one stays verified;
+    /// other emails are flipped, even on the same user.
+    #[test]
+    fn migrate_0003_per_email_carve_out_within_one_user() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let data_dir = temp.path();
+
+        let id = Uuid::new_v4();
+        let mut user = make_user(
+            id,
+            "multi",
+            false,
+            vec![
+                verified_email("primary@gmail.com", true),
+                verified_email("secondary@example.com", false),
+                verified_email("tertiary@example.com", false),
+            ],
+        );
+        // OAuth provider knows about primary@gmail.com; the other two are
+        // self-asserted plain emails.
+        user.oauth_identities.push(OAuthIdentity::new(
+            "google".into(),
+            "sub-multi".into(),
+            Some("primary@gmail.com".into()),
+        ));
+        write_user_json(data_dir, &user);
+
+        migrate_0003_user_emails_verified_reset(data_dir).expect("migration must succeed");
+
+        let after = read_user_json(data_dir, id);
+        // primary@gmail.com — OAuth-matched, stays verified.
+        assert!(after.emails[0].verified);
+        assert!(after.emails[0].verified_at.is_some());
+        // The other two — flipped.
+        for i in 1..=2 {
+            assert!(
+                !after.emails[i].verified,
+                "non-OAuth email at index {i} should be flipped"
+            );
+            assert!(after.emails[i].verified_at.is_none());
+        }
     }
 }
