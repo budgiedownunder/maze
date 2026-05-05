@@ -17,7 +17,7 @@ use crate::config::PasswordHashConfig;
 ///
 /// A `Result` containing the encoded password hash on success, or a `argon2::password_hash::Error` on failure.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```rust
 /// use auth::hashing::hash_password;
@@ -67,7 +67,7 @@ pub fn hash_password(password: &str, cfg: &PasswordHashConfig) -> Result<String,
 /// A `Result` containing `true` if the password matches the hash, or `false` if it does not.
 /// Returns an error if the hash cannot be parsed or if verification fails unexpectedly.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```rust
 /// use auth::hashing::{hash_password, verify_password};

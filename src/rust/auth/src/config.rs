@@ -37,6 +37,17 @@ impl Default for PasswordHashConfig {
 impl PasswordHashConfig {
     /// Returns a minimal-cost configuration suitable for use in tests only.
     /// Never use this in production — the parameters provide no real security.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use auth::config::PasswordHashConfig;
+    ///
+    /// let cfg = PasswordHashConfig::for_testing();
+    /// assert_eq!(cfg.mem_cost, 8);
+    /// assert_eq!(cfg.time_cost, 1);
+    /// assert_eq!(cfg.lanes, 1);
+    /// ```
     pub fn for_testing() -> Self {
         Self {
             mem_cost: 8,
