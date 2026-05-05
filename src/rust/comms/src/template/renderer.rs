@@ -40,10 +40,38 @@ pub struct TemplateContext {
 }
 
 impl TemplateContext {
+    /// Build an empty per-message context. Add fields with
+    /// [`TemplateContext::insert`] (builder-style) or by mutating
+    /// `vars` directly.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::TemplateContext;
+    ///
+    /// let ctx = TemplateContext::new();
+    /// assert!(ctx.vars.is_empty());
+    /// ```
     pub fn new() -> Self {
         Self { vars: Map::new() }
     }
 
+    /// Builder-style setter that inserts `key` into `vars` and returns
+    /// `self` so calls can be chained. Reserved tokens (`logo`,
+    /// `header`, `footer`, branding tokens) are NOT rejected here —
+    /// the renderer rejects them at render time so a caller can't
+    /// silently shadow application-level state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::TemplateContext;
+    ///
+    /// let ctx = TemplateContext::new()
+    ///     .insert("first_name", "Alice")
+    ///     .insert("reset_link", "https://maze.example/reset?token=abc");
+    /// assert_eq!(ctx.vars.get("first_name").unwrap().as_str(), Some("Alice"));
+    /// ```
     pub fn insert(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         self.vars.insert(key.into(), value.into());
         self
@@ -125,6 +153,38 @@ impl TemplateRenderer {
     /// front so validation errors surface at construction rather than at the
     /// first send. All six branding partials are pre-rendered against
     /// `branding` and cached.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{AppContext, BrandingContext, BrandingPartialSources,
+    ///             EmbeddedTemplateLoader, TemplateLoader, TemplateRenderer};
+    /// use std::sync::Arc;
+    ///
+    /// let templates = Arc::new(EmbeddedTemplateLoader::from_pairs(&[
+    ///     ("hello", "subject = \"Hi {{ name }}\"\ntext = \"Hello {{ name }}\""),
+    /// ])) as Arc<dyn TemplateLoader>;
+    /// let renderer = TemplateRenderer::new(
+    ///     AppContext {
+    ///         app_name: "Maze".into(),
+    ///         server_url: "https://maze.example".into(),
+    ///         branding: BrandingContext {
+    ///             company_name: "Maze, Inc.".into(),
+    ///             company_address: "123 Example St".into(),
+    ///             company_url: "https://maze.example".into(),
+    ///             logo_url: "https://maze.example/logo.png".into(),
+    ///         },
+    ///     },
+    ///     templates,
+    ///     BrandingPartialSources {
+    ///         logo_html: String::new(), logo_text: String::new(),
+    ///         header_html: String::new(), header_text: String::new(),
+    ///         footer_html: String::new(), footer_text: String::new(),
+    ///     },
+    /// )
+    /// .expect("renderer construction validates each template");
+    /// drop(renderer);
+    /// ```
     pub fn new(
         app: AppContext,
         templates: Arc<dyn TemplateLoader>,
@@ -204,6 +264,45 @@ impl TemplateRenderer {
     }
 
     /// Render the named template against the supplied per-message context.
+    ///
+    /// Returns `Err(TemplateNotFound)` when the template was not registered
+    /// at construction. Returns `Err(TemplateRender)` when the per-message
+    /// context tries to shadow an application-level token (`logo`,
+    /// `header`, `footer`, or any branding token).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{AppContext, BrandingContext, BrandingPartialSources,
+    ///             EmbeddedTemplateLoader, TemplateContext, TemplateLoader,
+    ///             TemplateRenderer};
+    /// use std::sync::Arc;
+    ///
+    /// let templates = Arc::new(EmbeddedTemplateLoader::from_pairs(&[
+    ///     ("hello", "subject = \"Hi {{ name }}\"\ntext = \"Hello {{ name }}\""),
+    /// ])) as Arc<dyn TemplateLoader>;
+    /// let renderer = TemplateRenderer::new(
+    ///     AppContext {
+    ///         app_name: "Maze".into(), server_url: "https://maze.example".into(),
+    ///         branding: BrandingContext {
+    ///             company_name: "Maze".into(), company_address: "Addr".into(),
+    ///             company_url: "https://maze.example".into(),
+    ///             logo_url: "https://maze.example/logo.png".into(),
+    ///         },
+    ///     },
+    ///     templates,
+    ///     BrandingPartialSources {
+    ///         logo_html: String::new(), logo_text: String::new(),
+    ///         header_html: String::new(), header_text: String::new(),
+    ///         footer_html: String::new(), footer_text: String::new(),
+    ///     },
+    /// ).expect("renderer");
+    ///
+    /// let ctx = TemplateContext::new().insert("name", "Alice");
+    /// let rendered = renderer.render("hello", &ctx).expect("render");
+    /// assert_eq!(rendered.subject.as_deref(), Some("Hi Alice"));
+    /// assert_eq!(rendered.text, "Hello Alice");
+    /// ```
     pub fn render(
         &self,
         template_name: &str,

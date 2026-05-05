@@ -15,6 +15,19 @@ pub struct FsTemplateLoader {
 }
 
 impl FsTemplateLoader {
+    /// Build a loader rooted at `root`. The directory is not validated
+    /// at construction time — call [`FsTemplateLoader::dir_exists`] to
+    /// probe.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::FsTemplateLoader;
+    ///
+    /// let loader = FsTemplateLoader::new("config/email_templates");
+    /// // No I/O happens here; failures show up on `load` or `names`.
+    /// drop(loader);
+    /// ```
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
@@ -25,10 +38,33 @@ impl FsTemplateLoader {
 
     /// Returns true if the directory exists and is readable. Used by
     /// `LayeredTemplateLoader` to decide whether the FS layer is active.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::FsTemplateLoader;
+    ///
+    /// let loader = FsTemplateLoader::new(std::env::temp_dir());
+    /// assert!(loader.dir_exists());
+    ///
+    /// let absent = FsTemplateLoader::new(std::env::temp_dir().join("comms-no-such-dir-xyz"));
+    /// assert!(!absent.dir_exists());
+    /// ```
     pub fn dir_exists(&self) -> bool {
         self.root.is_dir()
     }
 
+    /// Returns the configured root directory.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::FsTemplateLoader;
+    /// use std::path::Path;
+    ///
+    /// let loader = FsTemplateLoader::new("config/email_templates");
+    /// assert_eq!(loader.root(), Path::new("config/email_templates"));
+    /// ```
     pub fn root(&self) -> &Path {
         &self.root
     }

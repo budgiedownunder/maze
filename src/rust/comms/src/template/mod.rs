@@ -7,7 +7,8 @@ pub use embedded_loader::EmbeddedTemplateLoader;
 pub use fs_loader::FsTemplateLoader;
 pub use layered_loader::LayeredTemplateLoader;
 pub use renderer::{
-    AppContext, BrandingContext, RenderedTemplate, TemplateContext, TemplateRenderer,
+    AppContext, BrandingContext, BrandingPartialSources, RenderedTemplate, TemplateContext,
+    TemplateRenderer,
 };
 
 use serde::Deserialize;
@@ -38,6 +39,21 @@ impl TemplateSource {
     /// fields are silently ignored, so an operator can annotate a template
     /// file with metadata fields the parser doesn't recognise without
     /// breaking the load.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::TemplateSource;
+    ///
+    /// let toml = r#"
+    ///     subject = "Hi {{ name }}"
+    ///     text = "Hello {{ name }}"
+    /// "#;
+    /// let t = TemplateSource::parse("greet", toml).expect("parse");
+    /// assert_eq!(t.subject.as_deref(), Some("Hi {{ name }}"));
+    /// assert_eq!(t.text, "Hello {{ name }}");
+    /// assert!(t.html.is_none());
+    /// ```
     pub fn parse(name: &str, toml_text: &str) -> Result<Self, CommsError> {
         let file: TemplateFile = toml::from_str(toml_text)
             .map_err(|e| CommsError::Config(format!("template '{name}': {e}")))?;

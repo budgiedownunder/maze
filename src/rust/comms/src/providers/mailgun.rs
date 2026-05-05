@@ -42,6 +42,19 @@ pub struct MailgunConfig {
 }
 
 impl MailgunConfig {
+    /// Build a Mailgun config defaulted to the US region with no
+    /// `base_url_override`. Use [`MailgunConfig::with_region`] to switch
+    /// to the EU host.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::MailgunConfig;
+    ///
+    /// let cfg = MailgunConfig::new("mg.example.com", "key-secret");
+    /// assert_eq!(cfg.domain, "mg.example.com");
+    /// assert!(cfg.base_url_override.is_none());
+    /// ```
     pub fn new(domain: impl Into<String>, api_key: impl Into<String>) -> Self {
         Self {
             domain: domain.into(),
@@ -51,6 +64,17 @@ impl MailgunConfig {
         }
     }
 
+    /// Builder-style setter for [`MailgunRegion`]. Chain after `new`:
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{MailgunConfig, MailgunRegion};
+    ///
+    /// let cfg = MailgunConfig::new("mg.example.com", "key-secret")
+    ///     .with_region(MailgunRegion::Eu);
+    /// assert_eq!(cfg.region, MailgunRegion::Eu);
+    /// ```
     pub fn with_region(mut self, region: MailgunRegion) -> Self {
         self.region = region;
         self
@@ -72,6 +96,23 @@ pub struct MailgunProvider {
 }
 
 impl MailgunProvider {
+    /// Construct a `MailgunProvider` with the default `reqwest` client.
+    /// Returns `CommsError::Config` if the underlying HTTP client fails
+    /// to build. No network calls happen at construction time — the
+    /// provider lazily issues `POST` against Mailgun on the first
+    /// `send_email`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{MailgunConfig, MailgunProvider};
+    ///
+    /// let provider = MailgunProvider::new(
+    ///     MailgunConfig::new("mg.example.com", "key-secret"),
+    /// )
+    /// .expect("build provider");
+    /// drop(provider);
+    /// ```
     pub fn new(config: MailgunConfig) -> Result<Self, CommsError> {
         let http = reqwest::Client::builder()
             .build()
@@ -79,6 +120,21 @@ impl MailgunProvider {
         Ok(Self::with_http(config, http))
     }
 
+    /// Inject a pre-built `reqwest::Client` instead of letting the
+    /// provider create its own. Useful for tests that route through
+    /// wiremock, or for sharing a connection pool across providers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{MailgunConfig, MailgunProvider};
+    ///
+    /// let http = reqwest::Client::new();
+    /// let _provider = MailgunProvider::with_http(
+    ///     MailgunConfig::new("mg.example.com", "key-secret"),
+    ///     http,
+    /// );
+    /// ```
     pub fn with_http(config: MailgunConfig, http: reqwest::Client) -> Self {
         Self {
             config,
@@ -87,6 +143,21 @@ impl MailgunProvider {
         }
     }
 
+    /// Builder-style setter for the retry policy applied to transient
+    /// `send_email` failures (HTTP 5xx, connect timeouts).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{MailgunConfig, MailgunProvider, RetryPolicy};
+    ///
+    /// let provider = MailgunProvider::new(
+    ///     MailgunConfig::new("mg.example.com", "key-secret"),
+    /// )
+    /// .expect("build provider")
+    /// .with_retry_policy(RetryPolicy::no_retry());
+    /// drop(provider);
+    /// ```
     pub fn with_retry_policy(mut self, retry_policy: RetryPolicy) -> Self {
         self.retry_policy = retry_policy;
         self

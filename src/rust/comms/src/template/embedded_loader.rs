@@ -11,12 +11,35 @@ pub struct EmbeddedTemplateLoader {
 }
 
 impl EmbeddedTemplateLoader {
+    /// Build an empty loader. Use [`EmbeddedTemplateLoader::insert`] or
+    /// [`EmbeddedTemplateLoader::from_pairs`] to populate it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{EmbeddedTemplateLoader, TemplateLoader};
+    ///
+    /// let loader = EmbeddedTemplateLoader::new();
+    /// assert!(loader.names().is_empty());
+    /// ```
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Construct from a slice of `(name, toml_source)` pairs. Common pattern:
     /// `EmbeddedTemplateLoader::from_pairs(&[("password_reset", include_str!("../templates/password_reset.toml"))])`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{EmbeddedTemplateLoader, TemplateLoader};
+    ///
+    /// let loader = EmbeddedTemplateLoader::from_pairs(&[
+    ///     ("welcome", "subject = \"Welcome\"\ntext = \"Hello\""),
+    ///     ("goodbye", "subject = \"Bye\"\ntext = \"See you\""),
+    /// ]);
+    /// assert_eq!(loader.names(), vec!["goodbye".to_string(), "welcome".to_string()]);
+    /// ```
     pub fn from_pairs(pairs: &[(&str, &str)]) -> Self {
         let sources = pairs
             .iter()
@@ -25,6 +48,18 @@ impl EmbeddedTemplateLoader {
         Self { sources }
     }
 
+    /// Add a template after construction. Inserting a name that already
+    /// exists overwrites the previous source.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{EmbeddedTemplateLoader, TemplateLoader};
+    ///
+    /// let mut loader = EmbeddedTemplateLoader::new();
+    /// loader.insert("hello", "subject = \"Hi\"\ntext = \"Hello\"");
+    /// assert_eq!(loader.names(), vec!["hello".to_string()]);
+    /// ```
     pub fn insert(&mut self, name: impl Into<String>, source: impl Into<String>) {
         self.sources.insert(name.into(), source.into());
     }

@@ -29,6 +29,15 @@ impl Default for RetryPolicy {
 
 impl RetryPolicy {
     /// A policy that performs no retries (the first attempt is the only attempt).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::RetryPolicy;
+    ///
+    /// let p = RetryPolicy::no_retry();
+    /// assert_eq!(p.max_attempts, 1);
+    /// ```
     pub fn no_retry() -> Self {
         Self {
             max_attempts: 1,
@@ -40,6 +49,19 @@ impl RetryPolicy {
 
     /// Compute the backoff duration before attempt number `attempt` (1-indexed).
     /// Attempt 1 is always immediate (returns `Duration::ZERO`).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::RetryPolicy;
+    /// use std::time::Duration;
+    ///
+    /// let p = RetryPolicy::default();
+    /// assert_eq!(p.backoff_before_attempt(1), Duration::ZERO);
+    /// assert_eq!(p.backoff_before_attempt(2), Duration::from_millis(100));
+    /// // Far-future attempt caps at max_backoff.
+    /// assert_eq!(p.backoff_before_attempt(50), Duration::from_secs(10));
+    /// ```
     pub fn backoff_before_attempt(&self, attempt: u32) -> Duration {
         if attempt <= 1 {
             return Duration::ZERO;

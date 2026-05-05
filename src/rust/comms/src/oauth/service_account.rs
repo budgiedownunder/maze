@@ -54,6 +54,26 @@ impl ServiceAccountConfig {
     ///
     /// Missing or empty `private_key`, `client_email`, or `token_uri`
     /// fields surface as `CommsError::Config` here, not at first send.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::ServiceAccountConfig;
+    ///
+    /// let json = r#"{
+    ///   "client_email": "svc@project.iam.gserviceaccount.com",
+    ///   "private_key": "-----BEGIN PRIVATE KEY-----\nstub\n-----END PRIVATE KEY-----\n",
+    ///   "token_uri": "https://oauth2.googleapis.com/token",
+    ///   "private_key_id": "abc123"
+    /// }"#;
+    /// let cfg = ServiceAccountConfig::from_json_str(
+    ///     json,
+    ///     vec!["https://www.googleapis.com/auth/gmail.send".into()],
+    /// )
+    /// .expect("parse JSON");
+    /// assert_eq!(cfg.client_email, "svc@project.iam.gserviceaccount.com");
+    /// assert!(cfg.subject.is_none());
+    /// ```
     pub fn from_json_str(json: &str, scopes: Vec<String>) -> Result<Self, CommsError> {
         let parsed: GoogleServiceAccountJson = serde_json::from_str(json)
             .map_err(|e| CommsError::Config(format!("service account JSON: {e}")))?;
@@ -124,6 +144,23 @@ impl ServiceAccountTokenSource {
     /// Construct with the default `reqwest` client and `SystemClock`. The
     /// PEM is validated up-front so a malformed `private_key_pem` surfaces
     /// here rather than at first send.
+    ///
+    /// # Examples
+    ///
+    /// Shape of the call (no_run because a real RSA PEM is required for
+    /// the `EncodingKey` validation to succeed)
+    /// ```no_run
+    /// use comms::{ServiceAccountConfig, ServiceAccountTokenSource};
+    ///
+    /// let json = std::fs::read_to_string("svc-account.json")
+    ///     .expect("read service-account JSON");
+    /// let cfg = ServiceAccountConfig::from_json_str(
+    ///     &json,
+    ///     vec!["https://www.googleapis.com/auth/gmail.send".into()],
+    /// )
+    /// .expect("parse JSON");
+    /// let _source = ServiceAccountTokenSource::new(cfg).expect("build");
+    /// ```
     pub fn new(config: ServiceAccountConfig) -> Result<Self, CommsError> {
         let encoding_key = EncodingKey::from_rsa_pem(config.private_key_pem.as_bytes())
             .map_err(|e| CommsError::Config(format!("service account private_key: {e}")))?;

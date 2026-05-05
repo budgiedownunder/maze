@@ -32,6 +32,17 @@ pub enum CommsError {
 impl CommsError {
     /// Returns true if the error is worth retrying under a `RetryPolicy`.
     /// HTTP 5xx and explicit `Transient` are retryable; everything else is permanent.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::CommsError;
+    ///
+    /// assert!(CommsError::Transient("connection reset".into()).is_transient());
+    /// assert!(CommsError::ProviderHttp { status: 503, body: "Unavailable".into() }.is_transient());
+    /// assert!(!CommsError::ProviderHttp { status: 401, body: "Unauthorized".into() }.is_transient());
+    /// assert!(!CommsError::Config("missing api_key".into()).is_transient());
+    /// ```
     pub fn is_transient(&self) -> bool {
         matches!(
             self,

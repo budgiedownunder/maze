@@ -21,6 +21,17 @@ pub struct EmailAddress {
 }
 
 impl EmailAddress {
+    /// Builds an `EmailAddress` carrying just the address, no display name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::EmailAddress;
+    ///
+    /// let to = EmailAddress::new("alice@example.com");
+    /// assert_eq!(to.address, "alice@example.com");
+    /// assert!(to.display_name.is_none());
+    /// ```
     pub fn new(address: impl Into<String>) -> Self {
         Self {
             address: address.into(),
@@ -28,6 +39,19 @@ impl EmailAddress {
         }
     }
 
+    /// Builds an `EmailAddress` with a paired display name. Renders as
+    /// `"Display Name" <address>` on the wire when the provider supports
+    /// the RFC 5322 mailbox form.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::EmailAddress;
+    ///
+    /// let to = EmailAddress::with_name("alice@example.com", "Alice Example");
+    /// assert_eq!(to.address, "alice@example.com");
+    /// assert_eq!(to.display_name.as_deref(), Some("Alice Example"));
+    /// ```
     pub fn with_name(address: impl Into<String>, display_name: impl Into<String>) -> Self {
         Self {
             address: address.into(),

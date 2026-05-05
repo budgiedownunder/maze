@@ -30,6 +30,29 @@ pub struct ClientCredentialsConfig {
 }
 
 impl ClientCredentialsConfig {
+    /// Returns the resolved Azure AD token endpoint URL.
+    /// `token_endpoint_url` overrides the default if set; otherwise the
+    /// URL is derived from `tenant_id`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::ClientCredentialsConfig;
+    /// use std::time::Duration;
+    ///
+    /// let cfg = ClientCredentialsConfig {
+    ///     tenant_id: "00000000-0000-0000-0000-000000000000".into(),
+    ///     client_id: "app-id".into(),
+    ///     client_secret: "secret".into(),
+    ///     scope: "https://graph.microsoft.com/.default".into(),
+    ///     token_endpoint_url: None,
+    ///     refresh_skew: Duration::from_secs(60),
+    /// };
+    /// assert_eq!(
+    ///     cfg.token_endpoint(),
+    ///     "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/oauth2/v2.0/token"
+    /// );
+    /// ```
     pub fn token_endpoint(&self) -> String {
         self.token_endpoint_url.clone().unwrap_or_else(|| {
             format!(
@@ -66,6 +89,27 @@ pub struct ClientCredentialsTokenSource {
 
 impl ClientCredentialsTokenSource {
     /// Construct with the default `reqwest` client and `SystemClock`.
+    /// Returns an error if the underlying HTTP client fails to build.
+    /// Tokens are minted lazily on the first `OAuthTokenSource::get_access_token`
+    /// call against the configured Azure AD tenant; nothing happens on the
+    /// network at construction time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{ClientCredentialsConfig, ClientCredentialsTokenSource};
+    /// use std::time::Duration;
+    ///
+    /// let cfg = ClientCredentialsConfig {
+    ///     tenant_id: "00000000-0000-0000-0000-000000000000".into(),
+    ///     client_id: "app-id".into(),
+    ///     client_secret: "secret".into(),
+    ///     scope: "https://graph.microsoft.com/.default".into(),
+    ///     token_endpoint_url: None,
+    ///     refresh_skew: Duration::from_secs(60),
+    /// };
+    /// let _source = ClientCredentialsTokenSource::new(cfg).expect("build token source");
+    /// ```
     pub fn new(config: ClientCredentialsConfig) -> Result<Self, CommsError> {
         let http = reqwest::Client::builder()
             .build()

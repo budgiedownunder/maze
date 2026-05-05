@@ -24,10 +24,34 @@ struct Inner {
 }
 
 impl StubEmailProvider {
+    /// Builds a stub configured with `RetryPolicy::no_retry()`. Use
+    /// [`StubEmailProvider::with_retry_policy`] to override.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::StubEmailProvider;
+    ///
+    /// let stub = StubEmailProvider::new();
+    /// assert!(stub.is_empty());
+    /// ```
     pub fn new() -> Self {
         Self::with_retry_policy(RetryPolicy::no_retry())
     }
 
+    /// Builds a stub with a custom retry policy. The orchestrator reads
+    /// the policy via the `Provider::retry_policy` accessor when
+    /// dispatching, so changing it here changes how the system under
+    /// test behaves on transient errors (the stub itself never fails).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::{RetryPolicy, StubEmailProvider};
+    ///
+    /// let stub = StubEmailProvider::with_retry_policy(RetryPolicy::no_retry());
+    /// assert!(stub.is_empty());
+    /// ```
     pub fn with_retry_policy(retry_policy: RetryPolicy) -> Self {
         Self {
             inner: Arc::new(Inner {
@@ -38,28 +62,76 @@ impl StubEmailProvider {
     }
 
     /// Number of messages currently in the capture buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::StubEmailProvider;
+    ///
+    /// let stub = StubEmailProvider::new();
+    /// assert_eq!(stub.len(), 0);
+    /// ```
     pub fn len(&self) -> usize {
         self.lock_captures().len()
     }
 
     /// True when the capture buffer is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::StubEmailProvider;
+    ///
+    /// let stub = StubEmailProvider::new();
+    /// assert!(stub.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.lock_captures().is_empty()
     }
 
     /// Most recent captured message, cloned. `None` if nothing has been sent.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::StubEmailProvider;
+    ///
+    /// let stub = StubEmailProvider::new();
+    /// assert!(stub.last().is_none());
+    /// ```
     pub fn last(&self) -> Option<EmailMessage> {
         self.lock_captures().last().cloned()
     }
 
     /// Drain the capture buffer and return the messages as an iterator.
     /// After this call the buffer is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::StubEmailProvider;
+    ///
+    /// let stub = StubEmailProvider::new();
+    /// let drained: Vec<_> = stub.into_iter().collect();
+    /// assert!(drained.is_empty());
+    /// assert!(stub.is_empty());
+    /// ```
     pub fn into_iter(&self) -> std::vec::IntoIter<EmailMessage> {
         let drained: Vec<EmailMessage> = std::mem::take(&mut *self.lock_captures());
         drained.into_iter()
     }
 
     /// Reset the capture buffer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::StubEmailProvider;
+    ///
+    /// let stub = StubEmailProvider::new();
+    /// stub.clear();
+    /// assert!(stub.is_empty());
+    /// ```
     pub fn clear(&self) {
         self.lock_captures().clear();
     }

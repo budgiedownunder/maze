@@ -31,6 +31,7 @@ pub use provider::{DeliveryReceipt, Provider};
 pub use providers::{MailgunConfig, MailgunProvider, MailgunRegion};
 pub use retry::RetryPolicy;
 pub use template::{
-    AppContext, BrandingContext, EmbeddedTemplateLoader, FsTemplateLoader, LayeredTemplateLoader,
-    RenderedTemplate, TemplateContext, TemplateLoader, TemplateRenderer, TemplateSource,
+    AppContext, BrandingContext, BrandingPartialSources, EmbeddedTemplateLoader, FsTemplateLoader,
+    LayeredTemplateLoader, RenderedTemplate, TemplateContext, TemplateLoader, TemplateRenderer,
+    TemplateSource,
 };

@@ -25,6 +25,28 @@ pub struct Comms {
 }
 
 impl Comms {
+    /// Build a `Comms` from a renderer, an optional email provider, and
+    /// an optional default-from address. Pass `None` for `email` to leave
+    /// the email slot unconfigured (subsequent `send_email` /
+    /// `send_template` calls will return [`CommsError::EmailNotConfigured`]).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use comms::{AppContext, BrandingContext, BrandingPartialSources, Comms,
+    /// #             EmbeddedTemplateLoader, TemplateLoader, TemplateRenderer};
+    /// # use std::sync::Arc;
+    /// # let renderer = TemplateRenderer::new(
+    /// #     AppContext { app_name: "App".into(), server_url: "https://x".into(),
+    /// #         branding: BrandingContext { company_name: "X".into(), company_address: "A".into(),
+    /// #             company_url: "https://x".into(), logo_url: "https://x".into() } },
+    /// #     Arc::new(EmbeddedTemplateLoader::new()) as Arc<dyn TemplateLoader>,
+    /// #     BrandingPartialSources { logo_html: String::new(), logo_text: String::new(),
+    /// #         header_html: String::new(), header_text: String::new(),
+    /// #         footer_html: String::new(), footer_text: String::new() },
+    /// # ).expect("renderer");
+    /// let comms = Comms::new(renderer, None, None);
+    /// ```
     pub fn new(
         renderer: TemplateRenderer,
         email: Option<Arc<dyn EmailProvider>>,
@@ -37,6 +59,27 @@ impl Comms {
         }
     }
 
+    /// Returns a borrow of the underlying `TemplateRenderer` so callers
+    /// can probe template metadata without dispatching anything.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use comms::{AppContext, BrandingContext, BrandingPartialSources, Comms,
+    /// #             EmbeddedTemplateLoader, TemplateLoader, TemplateRenderer};
+    /// # use std::sync::Arc;
+    /// # let renderer = TemplateRenderer::new(
+    /// #     AppContext { app_name: "App".into(), server_url: "https://x".into(),
+    /// #         branding: BrandingContext { company_name: "X".into(), company_address: "A".into(),
+    /// #             company_url: "https://x".into(), logo_url: "https://x".into() } },
+    /// #     Arc::new(EmbeddedTemplateLoader::new()) as Arc<dyn TemplateLoader>,
+    /// #     BrandingPartialSources { logo_html: String::new(), logo_text: String::new(),
+    /// #         header_html: String::new(), header_text: String::new(),
+    /// #         footer_html: String::new(), footer_text: String::new() },
+    /// # ).expect("renderer");
+    /// let comms = Comms::new(renderer, None, None);
+    /// let _renderer = comms.renderer();
+    /// ```
     pub fn renderer(&self) -> &TemplateRenderer {
         &self.renderer
     }
@@ -81,6 +124,42 @@ impl Comms {
         self.send_email(msg).await
     }
 
+    /// Dispatch a fully-formed [`EmailMessage`] through the configured
+    /// email provider, applying the provider's `RetryPolicy` to transient
+    /// failures. Returns [`CommsError::EmailNotConfigured`] if no email
+    /// provider is wired.
+    ///
+    /// # Examples
+    ///
+    /// Dispatching against a `Comms` with no email provider returns a
+    /// clean `EmailNotConfigured` error
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// # use comms::{AppContext, BrandingContext, BrandingPartialSources, Comms,
+    /// #             CommsError, EmailAddress, EmailMessage, EmbeddedTemplateLoader,
+    /// #             TemplateLoader, TemplateRenderer};
+    /// # use std::sync::Arc;
+    /// # let renderer = TemplateRenderer::new(
+    /// #     AppContext { app_name: "App".into(), server_url: "https://x".into(),
+    /// #         branding: BrandingContext { company_name: "X".into(), company_address: "A".into(),
+    /// #             company_url: "https://x".into(), logo_url: "https://x".into() } },
+    /// #     Arc::new(EmbeddedTemplateLoader::new()) as Arc<dyn TemplateLoader>,
+    /// #     BrandingPartialSources { logo_html: String::new(), logo_text: String::new(),
+    /// #         header_html: String::new(), header_text: String::new(),
+    /// #         footer_html: String::new(), footer_text: String::new() },
+    /// # ).expect("renderer");
+    /// let comms = Comms::new(renderer, None, None);
+    /// let msg = EmailMessage {
+    ///     from: EmailAddress::new("noreply@example.com"),
+    ///     to: vec![EmailAddress::new("alice@example.com")],
+    ///     cc: vec![], bcc: vec![], reply_to: None,
+    ///     subject: "Hi".into(), body_text: "Hi".into(), body_html: None,
+    ///     headers: vec![], idempotency_key: None,
+    /// };
+    /// let err = comms.send_email(msg).await.expect_err("no provider");
+    /// assert!(matches!(err, CommsError::EmailNotConfigured));
+    /// # });
+    /// ```
     pub async fn send_email(
         &self,
         msg: EmailMessage,

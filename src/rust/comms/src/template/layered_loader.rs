@@ -17,6 +17,27 @@ pub struct LayeredTemplateLoader {
 }
 
 impl LayeredTemplateLoader {
+    /// Build a layered loader. Pass `None` for `fs` if the consumer
+    /// doesn't expose an override directory; the embedded defaults are
+    /// then the only source.
+    ///
+    /// # Examples
+    ///
+    /// FS overrides take precedence over embedded defaults
+    /// ```
+    /// use comms::{EmbeddedTemplateLoader, LayeredTemplateLoader, TemplateLoader};
+    /// use std::sync::Arc;
+    ///
+    /// let embedded = Arc::new(EmbeddedTemplateLoader::from_pairs(&[
+    ///     ("greet", "subject = \"baked\"\ntext = \"\""),
+    /// ])) as Arc<dyn TemplateLoader>;
+    /// let fs = Arc::new(EmbeddedTemplateLoader::from_pairs(&[
+    ///     ("greet", "subject = \"override\"\ntext = \"\""),
+    /// ])) as Arc<dyn TemplateLoader>;
+    ///
+    /// let layered = LayeredTemplateLoader::new(Some(fs), embedded);
+    /// assert!(layered.load("greet").unwrap().contains("override"));
+    /// ```
     pub fn new(
         fs: Option<Arc<dyn TemplateLoader>>,
         embedded: Arc<dyn TemplateLoader>,
