@@ -46,6 +46,20 @@ const FOOTER_TEXT: &str = include_str!("../../templates/email/partials/footer.te
 /// - template-renderer construction failures (parse errors in the embedded
 ///   templates or partial-rendering errors against the supplied branding).
 pub fn build_comms(cfg: &CommsAppConfig) -> Result<Comms, String> {
+    let renderer = build_renderer(cfg)?;
+    let email = build_email_provider(cfg)?;
+    let default_from = build_default_from(cfg);
+    Ok(Comms::new(renderer, email, default_from))
+}
+
+/// Build the templated-message renderer from the supplied config: embedded
+/// default templates compiled in via `include_str!`, plus the branding
+/// partials pre-rendered against `cfg.branding`.
+///
+/// Exposed publicly so integration tests can construct a `Comms` with their
+/// own `StubEmailProvider` (held by the test for capture inspection) without
+/// having to duplicate the embedded-templates wiring.
+pub fn build_renderer(cfg: &CommsAppConfig) -> Result<TemplateRenderer, String> {
     let app_name = if cfg.email.default_from_name.is_empty() {
         cfg.branding.company_name.clone()
     } else {
@@ -77,12 +91,16 @@ pub fn build_comms(cfg: &CommsAppConfig) -> Result<Comms, String> {
         footer_text: FOOTER_TEXT.to_string(),
     };
 
-    let renderer = TemplateRenderer::new(app, templates, partials)
-        .map_err(|e| format!("comms template renderer: {e}"))?;
+    TemplateRenderer::new(app, templates, partials)
+        .map_err(|e| format!("comms template renderer: {e}"))
+}
 
-    let email = build_email_provider(cfg)?;
-
-    let default_from = if cfg.email.default_from.is_empty() {
+/// Build the default `from` `EmailAddress` from `cfg.email.default_from`
+/// and `cfg.email.default_from_name`. Returns `None` if `default_from` is
+/// empty (operator hasn't configured a sender), in which case
+/// `Comms::send_template` will surface a `Config` error at first call.
+pub fn build_default_from(cfg: &CommsAppConfig) -> Option<EmailAddress> {
+    if cfg.email.default_from.is_empty() {
         None
     } else if cfg.email.default_from_name.is_empty() {
         Some(EmailAddress::new(cfg.email.default_from.clone()))
@@ -91,9 +109,7 @@ pub fn build_comms(cfg: &CommsAppConfig) -> Result<Comms, String> {
             cfg.email.default_from.clone(),
             cfg.email.default_from_name.clone(),
         ))
-    };
-
-    Ok(Comms::new(renderer, email, default_from))
+    }
 }
 
 fn build_email_provider(
