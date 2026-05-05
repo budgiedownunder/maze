@@ -104,21 +104,68 @@ impl OneTimeToken {
     }
 
     /// Returns true if `now > expires_at`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{OneTimeToken, TokenPurpose};
+    /// use uuid::Uuid;
+    ///
+    /// let token = OneTimeToken::new(Uuid::new_v4(), TokenPurpose::PasswordReset, None, 1);
+    /// assert!(!token.is_expired());
+    /// ```
     pub fn is_expired(&self) -> bool {
         generate_now() > self.expires_at
     }
 
     /// Returns true if `consumed_at` is populated.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{OneTimeToken, TokenPurpose};
+    /// use uuid::Uuid;
+    ///
+    /// let mut token = OneTimeToken::new(Uuid::new_v4(), TokenPurpose::PasswordReset, None, 1);
+    /// assert!(!token.is_consumed());
+    /// token.consumed_at = Some(chrono::Utc::now());
+    /// assert!(token.is_consumed());
+    /// ```
     pub fn is_consumed(&self) -> bool {
         self.consumed_at.is_some()
     }
 
     /// Generates the JSON string representation for the token.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{OneTimeToken, TokenPurpose};
+    /// use uuid::Uuid;
+    ///
+    /// let token = OneTimeToken::new(Uuid::new_v4(), TokenPurpose::PasswordReset, None, 1);
+    /// let json = token.to_json().expect("serialize");
+    /// assert!(json.contains("\"purpose\":\"password_reset\""));
+    /// ```
     pub fn to_json(&self) -> Result<String, Error> {
         Ok(serde_json::to_string(&self)?)
     }
 
     /// Initialises a token instance by reading a JSON string.
+    ///
+    /// # Examples
+    ///
+    /// Round-trip a token through `to_json` + `from_json`
+    /// ```
+    /// use data_model::{OneTimeToken, TokenPurpose};
+    /// use uuid::Uuid;
+    ///
+    /// let original = OneTimeToken::new(Uuid::new_v4(), TokenPurpose::PasswordReset, None, 1);
+    /// let json = original.to_json().expect("serialize");
+    /// let mut back = OneTimeToken::new(Uuid::new_v4(), TokenPurpose::PasswordReset, None, 1);
+    /// back.from_json(&json).expect("deserialize");
+    /// assert_eq!(back, original);
+    /// ```
     pub fn from_json(&mut self, json: &str) -> Result<(), Error> {
         let temp: OneTimeToken = serde_json::from_str(json)?;
         *self = temp;

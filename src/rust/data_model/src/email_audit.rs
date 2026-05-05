@@ -90,6 +90,25 @@ impl EmailAuditEntry {
     /// truncated to millisecond precision so the in-memory value
     /// round-trips bit-exactly through both backends (`SqlStore` writes
     /// `to_rfc3339_opts(Millis, true)`).
+    ///
+    /// # Examples
+    ///
+    /// Build a pending audit row for a password-reset send
+    /// ```
+    /// use data_model::{AuditOutcome, EmailAuditEntry};
+    /// use uuid::Uuid;
+    ///
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     Some(Uuid::new_v4()),
+    ///     "alice@example.com",
+    ///     "password_reset",
+    ///     Some(Uuid::new_v4()),
+    ///     None,
+    ///     "stub",
+    /// );
+    /// assert_eq!(entry.outcome, AuditOutcome::Pending);
+    /// assert!(entry.provider_message_id.is_none());
+    /// ```
     pub fn new_pending(
         recipient_user_id: Option<Uuid>,
         recipient_email: &str,
@@ -114,11 +133,42 @@ impl EmailAuditEntry {
     }
 
     /// Generates the JSON representation of the audit row.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::EmailAuditEntry;
+    ///
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     None, "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// let json = entry.to_json().expect("serialize");
+    /// assert!(json.contains("\"outcome\":\"pending\""));
+    /// ```
     pub fn to_json(&self) -> Result<String, Error> {
         Ok(serde_json::to_string(&self)?)
     }
 
     /// Initialises a row by reading a JSON string.
+    ///
+    /// # Examples
+    ///
+    /// Round-trip an audit row through `to_json` + `from_json`
+    /// ```
+    /// use data_model::EmailAuditEntry;
+    ///
+    /// let original = EmailAuditEntry::new_pending(
+    ///     None, "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// let json = original.to_json().expect("serialize");
+    /// let mut back = EmailAuditEntry::new_pending(
+    ///     None, "x@y.com", "x", None, None, "stub",
+    /// );
+    /// back.from_json(&json).expect("deserialize");
+    /// assert_eq!(back, original);
+    /// ```
     pub fn from_json(&mut self, json: &str) -> Result<(), Error> {
         let temp: EmailAuditEntry = serde_json::from_str(json)?;
         *self = temp;

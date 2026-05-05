@@ -30,6 +30,18 @@ impl UserEmail {
     /// at millisecond precision per the `0001_initial.sql` design).
     /// Used by trusted seed paths — admin-init, OAuth-link (the provider
     /// already attests to ownership), test fixtures.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::UserEmail;
+    ///
+    /// let row = UserEmail::new_primary_verified("alice@example.com");
+    /// assert_eq!(row.email, "alice@example.com");
+    /// assert!(row.is_primary);
+    /// assert!(row.verified);
+    /// assert!(row.verified_at.is_some());
+    /// ```
     pub fn new_primary_verified(email: &str) -> Self {
         Self {
             email: email.to_string(),
@@ -42,6 +54,17 @@ impl UserEmail {
     /// Builds a primary, unverified email row. Used by self-service signup
     /// — the address is just the user's claim until they prove ownership
     /// by clicking the verification link.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::UserEmail;
+    ///
+    /// let row = UserEmail::new_primary_unverified("alice@example.com");
+    /// assert!(row.is_primary);
+    /// assert!(!row.verified);
+    /// assert!(row.verified_at.is_none());
+    /// ```
     pub fn new_primary_unverified(email: &str) -> Self {
         Self {
             email: email.to_string(),
@@ -55,6 +78,18 @@ impl UserEmail {
     /// to millisecond precision to match the SQL store's RFC 3339 storage
     /// shape). Idempotent: re-marking an already-verified row simply updates
     /// the timestamp to reflect the fresh observation.
+    ///
+    /// # Examples
+    ///
+    /// Flip an unverified row after the user clicks the verification link
+    /// ```
+    /// use data_model::UserEmail;
+    ///
+    /// let mut row = UserEmail::new_primary_unverified("alice@example.com");
+    /// row.mark_verified();
+    /// assert!(row.verified);
+    /// assert!(row.verified_at.is_some());
+    /// ```
     pub fn mark_verified(&mut self) {
         self.verified = true;
         self.verified_at = Some(generate_now().trunc_subsecs(3));

@@ -10,6 +10,17 @@ use uuid::Uuid;
 /// whitespace in any part. Exposed for storage backends and other layers
 /// that need to validate user-supplied addresses outside of the full
 /// [`User::validate`] flow.
+///
+/// # Examples
+///
+/// ```
+/// use data_model::is_valid_email_format;
+///
+/// assert!(is_valid_email_format("alice@example.com"));
+/// assert!(!is_valid_email_format(""));
+/// assert!(!is_valid_email_format("not-an-email"));
+/// assert!(!is_valid_email_format("alice @example.com"));
+/// ```
 pub fn is_valid_email_format(email: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").expect("Invalid email regex"));
@@ -142,6 +153,17 @@ impl User {
     /// in practice loaded users are always active; this helper exists for
     /// callers that hold a `User` from another source and want to assert
     /// the invariant explicitly.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::User;
+    ///
+    /// let mut user = User::default();
+    /// assert!(user.is_active());
+    /// user.deleted_at = Some(chrono::Utc::now());
+    /// assert!(!user.is_active());
+    /// ```
     pub fn is_active(&self) -> bool {
         self.deleted_at.is_none()
     }
@@ -152,17 +174,53 @@ impl User {
     /// `Option` is returned because the type system can't prove the
     /// invariant — callers that don't know they have a primary acknowledge
     /// the case statically rather than risking a panic.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{User, UserEmail};
+    ///
+    /// let mut user = User::default();
+    /// assert!(user.primary_email().is_none());
+    ///
+    /// user.emails.push(UserEmail::new_primary_verified("alice@example.com"));
+    /// let primary = user.primary_email().expect("primary set");
+    /// assert!(primary.is_primary);
+    /// assert_eq!(primary.email, "alice@example.com");
+    /// ```
     pub fn primary_email(&self) -> Option<&UserEmail> {
         self.emails.iter().find(|e| e.is_primary)
     }
     /// Returns the user's primary email address, or an empty string if no
     /// primary is set. Convenience accessor for callers that previously
     /// read `user.email` directly.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{User, UserEmail};
+    ///
+    /// let mut user = User::default();
+    /// assert_eq!(user.email(), "");
+    /// user.emails.push(UserEmail::new_primary_verified("alice@example.com"));
+    /// assert_eq!(user.email(), "alice@example.com");
+    /// ```
     pub fn email(&self) -> &str {
         self.primary_email().map(|e| e.email.as_str()).unwrap_or("")
     }
     /// Returns true if the user has a verified email row matching the given
     /// address (case-insensitive).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{User, UserEmail};
+    ///
+    /// let mut user = User::default();
+    /// user.emails.push(UserEmail::new_primary_verified("alice@example.com"));
+    /// assert!(user.has_verified_email("ALICE@example.com"));
+    /// assert!(!user.has_verified_email("bob@example.com"));
+    /// ```
     pub fn has_verified_email(&self, email: &str) -> bool {
         self.emails
             .iter()
@@ -173,6 +231,19 @@ impl User {
     /// are unchanged — callers in the email-management API decide whether a
     /// change should flip the verified flag). If no rows exist yet, a new
     /// primary, verified row is added (used during signup-style flows).
+    ///
+    /// # Examples
+    ///
+    /// Seeding the primary email on a fresh `User::default`
+    /// ```
+    /// use data_model::User;
+    ///
+    /// let mut user = User::default();
+    /// user.set_primary_email_address("alice@example.com");
+    /// assert_eq!(user.email(), "alice@example.com");
+    /// assert_eq!(user.emails.len(), 1);
+    /// assert!(user.emails[0].is_primary);
+    /// ```
     pub fn set_primary_email_address(&mut self, email: &str) {
         if let Some(row) = self.emails.iter_mut().find(|e| e.is_primary) {
             row.email = email.to_string();

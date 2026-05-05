@@ -28,6 +28,15 @@ impl MazeCellState {
     /// # Returns
     ///
     /// The step value (if variant is of type `SolutionStep`) else `None`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::MazeCellState;
+    ///
+    /// assert_eq!(MazeCellState::SolutionStep { value: 7 }.step_value(), Some(7));
+    /// assert_eq!(MazeCellState::Wall.step_value(), None);
+    /// ```
     pub fn step_value(&self) -> Option<usize> {
         match self {
             MazeCellState::SolutionStep { value } => Some(*value),

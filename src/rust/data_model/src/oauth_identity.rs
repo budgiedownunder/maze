@@ -26,6 +26,27 @@ pub struct OAuthIdentity {
 }
 
 impl OAuthIdentity {
+    /// Builds a fresh `OAuthIdentity` with `linked_at` and `last_seen_at`
+    /// both set to `now`. `provider` is the canonical lower-case provider
+    /// name (`"google"`, `"github"`, ...); `provider_user_id` is the
+    /// opaque, stable identifier the provider returns for the user (the
+    /// `sub` claim in OIDC). `provider_email` is the address the
+    /// provider asserts for this user, if any.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::OAuthIdentity;
+    ///
+    /// let identity = OAuthIdentity::new(
+    ///     "google".to_string(),
+    ///     "google-sub-123".to_string(),
+    ///     Some("alice@example.com".to_string()),
+    /// );
+    /// assert_eq!(identity.provider, "google");
+    /// assert_eq!(identity.provider_user_id, "google-sub-123");
+    /// assert_eq!(identity.linked_at, identity.last_seen_at);
+    /// ```
     pub fn new(provider: String, provider_user_id: String, provider_email: Option<String>) -> Self {
         let now = generate_now();
         Self {
