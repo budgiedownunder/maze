@@ -48,4 +48,5 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 [dev-dependencies]
 actix-http = "3.9"
 pretty_assertions = "1"
+tempfile = "3"
 toml = "0.8"

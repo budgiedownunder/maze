@@ -3389,6 +3389,66 @@ mod test_definitions {
         run_can_delete_me_when_not_last_admin(true).await;
     }
 
+    #[actix_web::test]
+    async fn delete_me_invalidates_subsequent_login_attempt() {
+        // Pin the soft-delete contract at the handler layer: after the
+        // account is deleted, a fresh login attempt with the original
+        // email + password must fail with 401. Backed by the trait's
+        // soft-delete read filter — `find_user_by_verified_email` no
+        // longer sees the row, so the login lookup falls through to the
+        // anti-enumeration "Invalid email or password" branch.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let original_email = new_email(VALID_USERNAME_1);
+        let login_request = LoginRequest {
+            email: original_email.clone(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+
+        // Sanity: the credentials work before the delete.
+        let pre_req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let pre_resp = test::call_service(&app, pre_req).await;
+        assert_eq!(pre_resp.status(), StatusCode::OK);
+
+        // Delete the caller via their API key.
+        let del_req = create_test_delete_request("/api/v1/users/me", api_key, None);
+        let del_resp = test::call_service(&app, del_req).await;
+        assert_eq!(del_resp.status(), StatusCode::NO_CONTENT);
+
+        // The same credentials must now be rejected.
+        let post_req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let post_resp = test::call_service(&app, post_req).await;
+        assert_eq!(post_resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    async fn delete_me_frees_email_for_resignup() {
+        // After a soft-delete the email is hard-deleted in the cascade, so a
+        // brand-new signup with the same address must succeed.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let original_email = new_email(VALID_USERNAME_1);
+
+        let del_req = create_test_delete_request("/api/v1/users/me", api_key, None);
+        let del_resp = test::call_service(&app, del_req).await;
+        assert_eq!(del_resp.status(), StatusCode::NO_CONTENT);
+
+        let signup_req = create_test_post_request(
+            "/api/v1/signup",
+            None,
+            None,
+            Some(&new_signup_request(&original_email, false)),
+        );
+        let signup_resp = test::call_service(&app, signup_req).await;
+        assert_eq!(
+            signup_resp.status(),
+            StatusCode::CREATED,
+            "the original email must be re-claimable after the original user is soft-deleted"
+        );
+    }
+
     // **************************************************************************************************
     // change_password_me / update_profile_me helpers
     // **************************************************************************************************
