@@ -457,6 +457,7 @@ impl SignupRequest {
                 api_key: Uuid::nil(),
                 logins: vec![],
                 oauth_identities: vec![],
+                deleted_at: None,
             }
         )
     }
@@ -1461,6 +1462,7 @@ impl CreateUserRequest {
                 api_key: Uuid::nil(),
                 logins: vec![],
                 oauth_identities: vec![],
+                deleted_at: None,
             }
         )
     }

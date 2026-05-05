@@ -83,6 +83,7 @@ impl LegacyUser {
             api_key: self.api_key,
             logins: self.logins,
             oauth_identities: self.oauth_identities,
+            deleted_at: None,
         }
     }
 }
@@ -190,11 +191,20 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// no users to migrate. Either way the no-op entries cleanly bring the
 /// version counter to 2 without doing redundant work.
 ///
-/// Real FileStore migrations register at 3 and above.
+/// **Version 4 is also a no-op.** The matching SQL migration adds a new
+/// `users.deleted_at` column. The FileStore data shape is updated by the
+/// `#[serde(default, skip_serializing_if = "Option::is_none")]` on the
+/// new `User.deleted_at` field — existing `user.json` files round-trip
+/// without rewriting. The framework entry exists to advance the version
+/// counter in step with the SQL backend.
+///
+/// Real FileStore migrations (versions that mutate on-disk data) so far
+/// register only at 3.
 const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (1, no_op_migration),
     (2, no_op_migration),
     (3, migrate_0003_user_emails_verified_reset),
+    (4, no_op_migration),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
@@ -651,6 +661,7 @@ mod tests {
             api_key: Uuid::new_v4(),
             logins: vec![],
             oauth_identities: vec![],
+            deleted_at: None,
         }
     }
 

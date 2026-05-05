@@ -1,4 +1,5 @@
 use crate::{Error, UserEmail, wrappers::{generate_now, generate_uuid}, OAuthIdentity, UserLogin, UserValidationError};
+use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -42,6 +43,15 @@ pub struct User {
     /// JSON files (written before this field existed) readable without migration.
     #[serde(default)]
     pub oauth_identities: Vec<OAuthIdentity>,
+    /// Soft-delete marker. `None` for active users; `Some(timestamp)` for
+    /// soft-deleted users. Storage backends apply a `deleted_at IS NULL`
+    /// filter on every read path so soft-deleted users are invisible to
+    /// the application layer. `serde(default)` keeps user JSON files
+    /// written before this field existed readable without migration;
+    /// `skip_serializing_if = Option::is_none` keeps the absent case out
+    /// of the serialised form for active users.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 impl User {
@@ -66,6 +76,7 @@ impl User {
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     /// println!("User: {:?}", user);
     pub fn new_id() -> Uuid {
@@ -92,6 +103,7 @@ impl User {
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     /// println!("User: {:?}", user);
     pub fn new_api_key() -> Uuid {
@@ -122,6 +134,7 @@ impl User {
             api_key: Uuid::nil(),
             logins: vec![],
             oauth_identities: vec![],
+            deleted_at: None,
         }
     }
     /// Returns the user's primary [`UserEmail`] row, if any.
@@ -180,6 +193,7 @@ impl User {
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     /// match user.to_json() {
     ///     Ok(json) => {
@@ -248,6 +262,7 @@ impl User {
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     /// match user.validate() {
     ///     Ok(_) => {
@@ -312,6 +327,7 @@ impl User {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Peform a login
@@ -353,6 +369,7 @@ impl User {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Peform a login
@@ -391,6 +408,7 @@ impl User {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// let login = user.create_login(24, None, None);
@@ -435,6 +453,7 @@ impl User {
     ///     api_key: Uuid::nil(),
     ///     logins,
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Verify that the login is valid
@@ -455,7 +474,7 @@ impl User {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Duration;
+    use chrono::{Duration, TimeZone};
     use pretty_assertions::{assert_eq, assert_ne};
 
     #[test]
@@ -501,6 +520,43 @@ mod tests {
         loaded.from_json(legacy).expect("Failed to deserialize legacy user JSON");
         assert_eq!(loaded, compare);
         assert!(loaded.oauth_identities.is_empty());
+    }
+
+    #[test]
+    fn can_deserialize_user_without_deleted_at_field() {
+        // User JSON written before the deleted_at field existed must continue
+        // to deserialize cleanly thanks to #[serde(default)] — the field is
+        // populated with `None` (active user).
+        let mut loaded = User::default();
+        let pre_field = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#;
+        loaded.from_json(pre_field).expect("deserialize pre-deleted_at user");
+        assert!(loaded.deleted_at.is_none());
+    }
+
+    #[test]
+    fn deleted_at_round_trips_through_json() {
+        let mut user = create_valid_user();
+        let when = chrono::Utc.with_ymd_and_hms(2026, 5, 5, 12, 0, 0).unwrap();
+        user.deleted_at = Some(when);
+        let json = user.to_json().expect("serialize");
+        // Field appears in the wire form when populated.
+        assert!(json.contains("\"deleted_at\""), "{json}");
+        let mut back = User::default();
+        back.from_json(&json).expect("deserialize");
+        assert_eq!(user, back);
+        assert_eq!(back.deleted_at, Some(when));
+    }
+
+    #[test]
+    fn deleted_at_omitted_from_serialised_form_when_none() {
+        // skip_serializing_if = "Option::is_none" keeps the absent case out
+        // of the wire form for active users.
+        let user = create_valid_user();
+        let json = user.to_json().expect("serialize");
+        assert!(
+            !json.contains("\"deleted_at\""),
+            "active user should not carry deleted_at in the wire form: {json}"
+        );
     }
 
     #[test]
@@ -630,6 +686,7 @@ mod tests {
             api_key: User::new_api_key(),
             logins: vec![],
             oauth_identities: vec![],
+            deleted_at: None,
         }
     }
 

@@ -133,6 +133,7 @@ The migration registry lives in `src/file_store_migration.rs`:
 |:--------|:-------|
 | 1, 2    | No-ops. Align the FileStore counter with the SQL `0001_initial.sql` and `0002_user_emails.sql` migrations already applied to existing deployments. |
 | 3       | `migrate_0003_user_emails_verified_reset` — for every non-admin user, sets `verified = false, verified_at = None` on each email **not** matched by an `oauth_identities[*].provider_email` for that user. Admin users are skipped wholesale. Counterpart to the SQL `0003_user_emails_verified_reset.sql` migration described below. |
+| 4       | No-op. The matching SQL migration adds a `users.deleted_at` column. The FileStore data shape is updated by `#[serde(default, skip_serializing_if = "Option::is_none")]` on the new `User.deleted_at` field — existing `user.json` files round-trip without rewriting; new files written after version-4-applied include the field only when populated. |
 
 Behaviour properties:
 
@@ -147,7 +148,7 @@ The SqlStore schema is defined across the migration files in [`migrations/`](./m
 
 | Table | Purpose |
 |:------|:--------|
-| `users` | User records with admin flag, username, full name, password hash, API key (added in `0001_initial.sql`). The `email` column was retired post-`0002_user_emails.sql` by per-backend cleanup in `SqlStore::new` (`retire_legacy_users_email_column`) — portable column-drop on a `UNIQUE NOT NULL` column isn't expressible in a single migration file across SQLite, PostgreSQL, and MySQL |
+| `users` | User records with admin flag, username, full name, password hash, API key (added in `0001_initial.sql`), plus a nullable `deleted_at` soft-delete marker (added in `0004_users_soft_delete.sql`). The `email` column was retired post-`0002_user_emails.sql` by per-backend cleanup in `SqlStore::new` (`retire_legacy_users_email_column`) — portable column-drop on a `UNIQUE NOT NULL` column isn't expressible in a single migration file across SQLite, PostgreSQL, and MySQL |
 | `user_emails` | Email addresses attached to a user — `email`, `is_primary`, `verified`, `verified_at` (added in `0002_user_emails.sql`). Globally unique on `email`; one row per user has `is_primary = 1`, enforced in application code |
 | `user_logins` | Active and expired bearer-token login sessions, FK to `users` |
 | `oauth_identities` | Provider-linked identities (Google, GitHub, Facebook), FK to `users` |
@@ -164,6 +165,7 @@ The migration files in [`migrations/`](./migrations/):
 | `0001_initial.sql` | Creates `users`, `user_logins`, `oauth_identities`, `mazes`. The `users.email UNIQUE NOT NULL` column from this migration is later retired by `retire_legacy_users_email_column` in `SqlStore::new` (post-`0002`). |
 | `0002_user_emails.sql` | Creates `user_emails` and seeds it from each user's `users.email`. Each seeded row is `is_primary = 1, verified = 1, verified_at = NULL`. |
 | `0003_user_emails_verified_reset.sql` | One-sweep flip from "verified by default" to "verification required". Sets `verified = 0, verified_at = NULL` on every `user_emails` row whose owning user is not an admin AND no matching `oauth_identities.provider_email` row exists for that (user, email) pair. The FileStore migration framework registers an equivalent `migrate_0003_user_emails_verified_reset` at version 3 — see "FileStore data layout and migrations" above for the framework's mechanics. |
+| `0004_users_soft_delete.sql` | Adds `users.deleted_at VARCHAR(32)` (RFC 3339 timestamp, nullable) and the supporting `idx_users_deleted_at` index. `deleted_at IS NULL` marks an active user; a populated timestamp marks a soft-deleted user. The application layer applies the filter on every find/get path. FileStore-side, `User.deleted_at` is added with `#[serde(default)]` so existing `user.json` files round-trip; the FileStore framework registers a no-op `migrate_0004` at version 4 to advance the counter in step. |
 
 ### Schema portability rules
 

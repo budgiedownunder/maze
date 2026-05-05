@@ -442,15 +442,16 @@ async fn retire_legacy_users_email_column(
                     username      VARCHAR(64)  NOT NULL UNIQUE,\
                     full_name     VARCHAR(255) NOT NULL,\
                     password_hash VARCHAR(255) NOT NULL,\
-                    api_key       VARCHAR(36)  NOT NULL UNIQUE\
+                    api_key       VARCHAR(36)  NOT NULL UNIQUE,\
+                    deleted_at    VARCHAR(32)\
                 )",
             )
             .execute(&mut *conn)
             .await
             .map_err(map_sqlx_err)?;
             sqlx::query(
-                "INSERT INTO users_new (id, is_admin, username, full_name, password_hash, api_key) \
-                 SELECT id, is_admin, username, full_name, password_hash, api_key FROM users",
+                "INSERT INTO users_new (id, is_admin, username, full_name, password_hash, api_key, deleted_at) \
+                 SELECT id, is_admin, username, full_name, password_hash, api_key, deleted_at FROM users",
             )
             .execute(&mut *conn)
             .await
@@ -460,6 +461,15 @@ async fn retire_legacy_users_email_column(
                 .await
                 .map_err(map_sqlx_err)?;
             sqlx::query("ALTER TABLE users_new RENAME TO users")
+                .execute(&mut *conn)
+                .await
+                .map_err(map_sqlx_err)?;
+            // The supporting index on the rebuilt `users` table.
+            // CREATE INDEX is not idempotent across all backends, but
+            // because we just DROPped the old `users` table and renamed
+            // `users_new` into place, no `idx_users_deleted_at` exists
+            // on the new table — emit it here.
+            sqlx::query("CREATE INDEX idx_users_deleted_at ON users(deleted_at)")
                 .execute(&mut *conn)
                 .await
                 .map_err(map_sqlx_err)?;
@@ -600,6 +610,11 @@ async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result
     let api_key_str: String = row.try_get("api_key").map_err(map_sqlx_err)?;
     let api_key = parse_uuid("api_key", &api_key_str)?;
     let is_admin_raw: i32 = row.try_get("is_admin").map_err(map_sqlx_err)?;
+    let deleted_at_str: Option<String> = row.try_get("deleted_at").map_err(map_sqlx_err)?;
+    let deleted_at = match deleted_at_str {
+        Some(s) => Some(datetime_from_sql(&s)?),
+        None => None,
+    };
     Ok(User {
         id,
         is_admin: int_to_bool(is_admin_raw),
@@ -610,6 +625,7 @@ async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result
         api_key,
         logins: fetch_user_logins(pool, kind, id).await?,
         oauth_identities: fetch_user_oauth_identities(pool, kind, id).await?,
+        deleted_at,
     })
 }
 
@@ -850,6 +866,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -928,6 +945,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1005,6 +1023,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1119,6 +1138,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1194,6 +1214,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1278,6 +1299,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1361,6 +1383,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1448,6 +1471,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins,
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1546,6 +1570,7 @@ impl UserStore for SqlStore {
     ///         "google-sub-jsmith".to_string(),
     ///         Some("jsmith@company.com".to_string()),
     ///     )],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1635,6 +1660,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1710,6 +1736,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the admin user within the SQL store

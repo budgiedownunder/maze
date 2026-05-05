@@ -135,6 +135,7 @@ pub async fn resolve(
             identity.provider_user_id.clone(),
             Some(email),
         )],
+        deleted_at: None,
     };
     store.create_user(&mut new_user).await?;
     Ok(ResolveOutcome::Created(new_user))
@@ -297,6 +298,7 @@ mod tests {
             api_key: User::new_api_key(),
             logins: vec![],
             oauth_identities: vec![],
+            deleted_at: None,
         }
     }
 
@@ -440,6 +442,7 @@ mod tests {
             api_key: User::new_api_key(),
             logins: vec![],
             oauth_identities: vec![],
+            deleted_at: None,
         }
     }
 

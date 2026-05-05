@@ -31,6 +31,7 @@ pub fn make_user(username: &str, email: &str) -> User {
         api_key: Uuid::nil(),
         logins: vec![],
         oauth_identities: vec![],
+        deleted_at: None,
     }
 }
 

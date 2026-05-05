@@ -588,6 +588,7 @@ impl UserStore for FileStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -644,6 +645,7 @@ impl UserStore for FileStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -718,6 +720,7 @@ impl UserStore for FileStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -790,6 +793,7 @@ impl UserStore for FileStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -853,6 +857,7 @@ impl UserStore for FileStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -919,6 +924,7 @@ impl UserStore for FileStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -982,6 +988,7 @@ impl UserStore for FileStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1058,6 +1065,7 @@ impl UserStore for FileStore {
     ///     api_key: Uuid::nil(),
     ///     logins,
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1137,6 +1145,7 @@ impl UserStore for FileStore {
     ///         "google-sub-jsmith".to_string(),
     ///         Some("jsmith@company.com".to_string()),
     ///     )],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1212,6 +1221,7 @@ impl UserStore for FileStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1284,6 +1294,7 @@ impl UserStore for FileStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the admin user within the file store
@@ -2008,6 +2019,7 @@ mod tests {
             api_key: User::new_api_key(),
             logins: vec![],
             oauth_identities: vec![],
+            deleted_at: None,
         }
     }
 
