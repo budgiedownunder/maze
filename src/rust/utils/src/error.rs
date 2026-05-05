@@ -1,6 +1,22 @@
 use std::io::ErrorKind;
 
 /// Converts an ErrorKind to a string
+///
+/// # Examples
+///
+/// ```
+/// use std::io::ErrorKind;
+/// use utils::error::io_error_kind_to_string;
+///
+/// assert_eq!(
+///     io_error_kind_to_string(ErrorKind::NotFound),
+///     "File or directory not found"
+/// );
+/// assert_eq!(
+///     io_error_kind_to_string(ErrorKind::PermissionDenied),
+///     "Permission denied"
+/// );
+/// ```
 pub fn io_error_kind_to_string(kind: ErrorKind) -> &'static str {
     match kind {
         ErrorKind::NotFound => "File or directory not found",
