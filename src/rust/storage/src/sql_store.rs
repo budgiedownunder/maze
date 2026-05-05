@@ -11,14 +11,14 @@
 //! range queries (`WHERE expires_at < ?`, `ORDER BY last_seen_at DESC`)
 //! portable. See `migrations/0001_initial.sql` for the full design rationale.
 
-use crate::store::{Manage, MazeStore, UserStore};
+use crate::store::{Manage, MazeStore, TokenStore, UserStore};
 use crate::{
     validation::{validate_email_format, validate_user_fields},
     Error, MazeItem, Store,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, Utc};
-use data_model::{Maze, OAuthIdentity, User, UserEmail, UserLogin};
+use data_model::{Maze, OAuthIdentity, OneTimeToken, TokenPurpose, User, UserEmail, UserLogin};
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{AnyPool, Row};
@@ -1011,6 +1011,11 @@ impl UserStore for SqlStore {
             .await
             .map_err(map_sqlx_err)?;
         sqlx::query(&q(self.kind, "DELETE FROM user_emails WHERE user_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        sqlx::query(&q(self.kind, "DELETE FROM one_time_tokens WHERE user_id = ?"))
             .bind(id.to_string())
             .execute(&self.pool)
             .await
@@ -2723,6 +2728,7 @@ impl Manage for SqlStore {
         for sql in [
             "DELETE FROM user_logins",
             "DELETE FROM oauth_identities",
+            "DELETE FROM one_time_tokens",
             "DELETE FROM mazes",
             "DELETE FROM users",
         ] {
@@ -2732,6 +2738,192 @@ impl Manage for SqlStore {
                 .map_err(map_sqlx_err)?;
         }
         Ok(())
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TokenStore
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maps a [`TokenPurpose`] to the lowercase string written into the
+/// `purpose` column. Mirrors the kebab-case wire form used by the
+/// FileStore JSON files so both backends agree.
+fn token_purpose_to_sql(purpose: TokenPurpose) -> &'static str {
+    match purpose {
+        TokenPurpose::PasswordReset => "password_reset",
+        TokenPurpose::Invite => "invite",
+        TokenPurpose::EmailVerification => "email_verification",
+    }
+}
+
+/// Reverse of [`token_purpose_to_sql`]. Unknown values surface a loud
+/// `Error::Other` rather than silently defaulting — a stored row with an
+/// unknown discriminator is a data-corruption signal, not something to
+/// paper over.
+fn token_purpose_from_sql(raw: &str) -> Result<TokenPurpose, Error> {
+    match raw {
+        "password_reset" => Ok(TokenPurpose::PasswordReset),
+        "invite" => Ok(TokenPurpose::Invite),
+        "email_verification" => Ok(TokenPurpose::EmailVerification),
+        other => Err(integrity_violation(&format!(
+            "unknown token purpose '{other}' in one_time_tokens"
+        ))),
+    }
+}
+
+async fn token_from_row(row: &AnyRow) -> Result<OneTimeToken, Error> {
+    let id_str: String = row.try_get("id").map_err(map_sqlx_err)?;
+    let id = parse_uuid("token id", &id_str)?;
+    let user_id_str: String = row.try_get("user_id").map_err(map_sqlx_err)?;
+    let user_id = parse_uuid("token user_id", &user_id_str)?;
+    let purpose_raw: String = row.try_get("purpose").map_err(map_sqlx_err)?;
+    let purpose = token_purpose_from_sql(&purpose_raw)?;
+    let target_email: Option<String> = row.try_get("target_email").map_err(map_sqlx_err)?;
+    let created_at_str: String = row.try_get("created_at").map_err(map_sqlx_err)?;
+    let created_at = datetime_from_sql(&created_at_str)?;
+    let expires_at_str: String = row.try_get("expires_at").map_err(map_sqlx_err)?;
+    let expires_at = datetime_from_sql(&expires_at_str)?;
+    let consumed_at_str: Option<String> = row.try_get("consumed_at").map_err(map_sqlx_err)?;
+    let consumed_at = match consumed_at_str {
+        Some(s) => Some(datetime_from_sql(&s)?),
+        None => None,
+    };
+    Ok(OneTimeToken {
+        id,
+        user_id,
+        purpose,
+        target_email,
+        created_at,
+        expires_at,
+        consumed_at,
+    })
+}
+
+#[async_trait]
+impl TokenStore for SqlStore {
+    async fn create_token(&mut self, token: &OneTimeToken) -> Result<(), Error> {
+        if token.id.is_nil() {
+            return Err(Error::Other("token id must not be nil".to_string()));
+        }
+        if token.user_id.is_nil() {
+            return Err(Error::UserIdMissing());
+        }
+        // Surface a clean error if the id is already taken — gives callers
+        // a deterministic signal rather than the raw sqlx unique-violation.
+        let existing = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 FROM one_time_tokens WHERE id = ?",
+        ))
+        .bind(token.id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if existing.is_some() {
+            return Err(Error::TokenIdExists(token.id.to_string()));
+        }
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO one_time_tokens \
+                 (id, user_id, purpose, target_email, created_at, expires_at, consumed_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ))
+        .bind(token.id.to_string())
+        .bind(token.user_id.to_string())
+        .bind(token_purpose_to_sql(token.purpose))
+        .bind(token.target_email.as_deref())
+        .bind(datetime_to_sql(token.created_at))
+        .bind(datetime_to_sql(token.expires_at))
+        .bind(token.consumed_at.map(datetime_to_sql))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    async fn find_token(&self, id: Uuid) -> Result<OneTimeToken, Error> {
+        // Filter expired tokens at the storage layer so handlers can treat
+        // "find_token Ok" as "active and consumable". Soft-deleted users
+        // are filtered via the FK + the application-level cascade in
+        // delete_user — once the row is hard-deleted, the token is gone.
+        let now = datetime_to_sql(Utc::now());
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM one_time_tokens WHERE id = ? AND expires_at > ?",
+        ))
+        .bind(id.to_string())
+        .bind(now)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        match row {
+            Some(row) => token_from_row(&row).await,
+            None => Err(Error::TokenIdNotFound(id.to_string())),
+        }
+    }
+
+    async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, Error> {
+        // Race-free single-use enforcement: the UPDATE only matches when
+        // the token is unconsumed. A losing concurrent UPDATE matches zero
+        // rows and surfaces TokenAlreadyConsumed (or NotFound / Expired).
+        let now_dt = Utc::now();
+        let now_sql = datetime_to_sql(now_dt);
+        let result = sqlx::query(&q(
+            self.kind,
+            "UPDATE one_time_tokens \
+             SET consumed_at = ? \
+             WHERE id = ? AND consumed_at IS NULL AND expires_at > ?",
+        ))
+        .bind(&now_sql)
+        .bind(id.to_string())
+        .bind(&now_sql)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            // Distinguish the failure modes by re-reading the row. This
+            // second probe runs only on the race-loss / expiry / missing
+            // path, so it doesn't tax the happy path.
+            let row = sqlx::query(&q(
+                self.kind,
+                "SELECT * FROM one_time_tokens WHERE id = ?",
+            ))
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+            return match row {
+                None => Err(Error::TokenIdNotFound(id.to_string())),
+                Some(row) => {
+                    let token = token_from_row(&row).await?;
+                    if token.consumed_at.is_some() {
+                        Err(Error::TokenAlreadyConsumed())
+                    } else {
+                        Err(Error::TokenExpired())
+                    }
+                }
+            };
+        }
+        // Re-read to return the updated row as the trait contract requires.
+        let row = sqlx::query(&q(self.kind, "SELECT * FROM one_time_tokens WHERE id = ?"))
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?
+            .ok_or_else(|| Error::TokenIdNotFound(id.to_string()))?;
+        token_from_row(&row).await
+    }
+
+    async fn purge_expired(&mut self) -> Result<u64, Error> {
+        let now = datetime_to_sql(Utc::now());
+        let result = sqlx::query(&q(
+            self.kind,
+            "DELETE FROM one_time_tokens WHERE expires_at <= ? AND consumed_at IS NULL",
+        ))
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(result.rows_affected())
     }
 }
 

@@ -7,10 +7,10 @@ use async_trait::async_trait;
 use unicase::UniCase;
 use uuid::Uuid;
 
-use data_model::{Maze, User, UserEmail};
+use data_model::{Maze, OneTimeToken, User, UserEmail};
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
-use crate::store::{Manage, MazeStore, UserStore};
+use crate::store::{Manage, MazeStore, TokenStore, UserStore};
 use crate::{
     file_store_migration,
     validation::{validate_email_format, validate_user_fields},
@@ -44,6 +44,8 @@ pub struct FileStore {
     data_dir: String,
     /// Full path to the root users directory
     users_dir: String,
+    /// Full path to the one-time-tokens directory (one file per token).
+    tokens_dir: String,
 }
 
 // Private trait used for accessing struct fields
@@ -126,6 +128,7 @@ impl FileStore {
             config: config.clone(),
             data_dir: "".to_string(),
             users_dir: "".to_string(),
+            tokens_dir: "".to_string(),
         };
 
         match store.init() {
@@ -145,9 +148,71 @@ impl FileStore {
         // Run the schema-versioned migration framework. On a fresh data_dir
         // this writes `.schema_version` to the current value via no-op
         // migrations; on an existing data_dir already at the current
-        // version the call is cheap and rewrites nothing.
+        // version the call is cheap and rewrites nothing. Migration 0005
+        // creates `<data_dir>/one_time_tokens/` so the path below always
+        // resolves to an existing directory afterwards.
         file_store_migration::apply_pending_migrations(&self.data_dir)?;
+        self.tokens_dir = Path::new(&self.data_dir)
+            .join("one_time_tokens")
+            .to_string_lossy()
+            .to_string();
         Ok(())
+    }
+
+    // Returns the file path for a given token id
+    fn token_file_path(&self, id: Uuid) -> String {
+        Path::new(&self.tokens_dir)
+            .join(format!("{id}.json"))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    // Reads a token's JSON file from disk. Returns `TokenIdNotFound` if the
+    // file does not exist (treats that as the canonical missing-token signal).
+    fn read_token_raw(&self, id: Uuid) -> Result<OneTimeToken, Error> {
+        let path = self.token_file_path(id);
+        if !file_exists(&path) {
+            return Err(Error::TokenIdNotFound(id.to_string()));
+        }
+        let file = File::open(&path)?;
+        let reader = BufReader::new(file);
+        serde_json::from_reader::<BufReader<File>, OneTimeToken>(reader).map_err(Error::from)
+    }
+
+    // Atomically writes a token JSON via tempfile + rename.
+    fn write_token_file(&self, token: &OneTimeToken, overwrite: bool) -> Result<(), Error> {
+        let target = self.token_file_path(token.id);
+        if !overwrite && file_exists(&target) {
+            return Err(Error::TokenIdExists(token.id.to_string()));
+        }
+        let json = token.to_json()?;
+        let tmp = format!("{target}.tmp");
+        {
+            let mut file = File::create(&tmp)?;
+            file.write_all(json.as_bytes())?;
+        }
+        fs::rename(&tmp, &target)?;
+        Ok(())
+    }
+
+    // Enumerates token ids in the one_time_tokens directory.
+    fn get_token_ids(&self) -> Result<Vec<Uuid>, Error> {
+        if !dir_exists(&self.tokens_dir) {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<Uuid> = fs::read_dir(&self.tokens_dir)?
+            .filter_map(|entry| {
+                entry.ok().and_then(|e| {
+                    let path = e.path();
+                    if !path.is_file() {
+                        return None;
+                    }
+                    let name = path.file_stem()?.to_str()?;
+                    Uuid::parse_str(name).ok()
+                })
+            })
+            .collect();
+        Ok(ids)
     }
 
     fn make_dir(dir: &str) -> Result<String, Error> {
@@ -726,6 +791,25 @@ impl UserStore for FileStore {
             .to_string();
         if dir_exists(&mazes_dir) {
             delete_dir(&mazes_dir);
+        }
+        // Hard-delete the user's pending one-time tokens. A live reset or
+        // invite token belonging to a deleted account is a phishing
+        // vector. Mirrors `one_time_tokens ON DELETE CASCADE` in the SQL
+        // schema, run explicitly here because soft-delete updates
+        // `users.deleted_at` rather than removing the users row.
+        for token_id in self.get_token_ids()? {
+            match self.read_token_raw(token_id) {
+                Ok(token) if token.user_id == id => {
+                    delete_file(&self.token_file_path(token_id));
+                }
+                Ok(_) => {}
+                Err(Error::TokenIdNotFound(_)) => {}
+                Err(error) => {
+                    log::warn!(
+                        "FileStore delete_user: skipping unreadable token '{token_id}' - {error}"
+                    );
+                }
+            }
         }
         Ok(())
     }
@@ -2118,6 +2202,72 @@ impl Manage for FileStore {
             )));
         }
         Ok(())
+    }
+}
+
+#[async_trait]
+impl TokenStore for FileStore {
+    async fn create_token(&mut self, token: &OneTimeToken) -> Result<(), Error> {
+        if token.id.is_nil() {
+            return Err(Error::Other("token id must not be nil".to_string()));
+        }
+        if token.user_id.is_nil() {
+            return Err(Error::UserIdMissing());
+        }
+        // Ensure the directory exists; it normally does (created by
+        // migration 0005) but covers the edge case where empty() ran
+        // between init and create.
+        if !dir_exists(&self.tokens_dir) {
+            fs::create_dir_all(&self.tokens_dir)?;
+        }
+        self.write_token_file(token, false)
+    }
+
+    async fn find_token(&self, id: Uuid) -> Result<OneTimeToken, Error> {
+        let token = self.read_token_raw(id)?;
+        if token.is_expired() {
+            return Err(Error::TokenIdNotFound(id.to_string()));
+        }
+        Ok(token)
+    }
+
+    async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, Error> {
+        // FileStore consumption is read-modify-write: read the file,
+        // reject if already consumed or expired, populate `consumed_at`,
+        // and atomically rewrite via tempfile + rename. The race window
+        // between read and rename is small in practice and is accepted
+        // for FileStore (single-process dev / small-scale deployments).
+        // SqlStore is the correct answer where consume races matter.
+        let mut token = self.read_token_raw(id)?;
+        if token.is_consumed() {
+            return Err(Error::TokenAlreadyConsumed());
+        }
+        if token.is_expired() {
+            return Err(Error::TokenExpired());
+        }
+        token.consumed_at = Some(generate_now_millis());
+        self.write_token_file(&token, true)?;
+        Ok(token)
+    }
+
+    async fn purge_expired(&mut self) -> Result<u64, Error> {
+        let mut purged: u64 = 0;
+        for id in self.get_token_ids()? {
+            match self.read_token_raw(id) {
+                Ok(token) if token.is_expired() && !token.is_consumed() => {
+                    delete_file(&self.token_file_path(id));
+                    purged += 1;
+                }
+                Ok(_) => {}
+                Err(Error::TokenIdNotFound(_)) => {}
+                Err(error) => {
+                    log::warn!(
+                        "FileStore purge_expired: skipping unreadable token '{id}' - {error}"
+                    );
+                }
+            }
+        }
+        Ok(purged)
     }
 }
 

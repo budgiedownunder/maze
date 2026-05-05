@@ -1,6 +1,6 @@
 use crate::Error;
 use async_trait::async_trait;
-use data_model::{Maze, User, UserEmail};
+use data_model::{Maze, OneTimeToken, User, UserEmail};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -128,6 +128,35 @@ pub trait MazeStore {
     /// alphabetically in ascending order
     async fn get_maze_items(&self, owner: &User, include_definitions: bool) -> Result<Vec<MazeItem>, Error>;
 }
+/// Represents a store for holding single-use, time-bounded tokens
+/// (password reset, email verification, invitation).
+#[async_trait]
+pub trait TokenStore {
+    /// Persists a new token. The caller is responsible for assigning the
+    /// `id`, `created_at`, and `expires_at` fields — typically via
+    /// [`OneTimeToken::new`]. Rejects with [`Error::Other`] if a token with
+    /// the same id already exists.
+    async fn create_token(&mut self, token: &OneTimeToken) -> Result<(), Error>;
+    /// Loads an active (non-expired, non-consumed) token by id. Expired
+    /// tokens and tokens belonging to soft-deleted users are invisible to
+    /// this lookup.
+    async fn find_token(&self, id: Uuid) -> Result<OneTimeToken, Error>;
+    /// Atomically marks the token consumed. Returns the consumed token on
+    /// success. Fails with [`Error::TokenAlreadyConsumed`] when the token
+    /// has already been consumed; with [`Error::TokenIdNotFound`] when no
+    /// such token exists; with [`Error::TokenExpired`] when the token has
+    /// passed its expiry.
+    ///
+    /// Implementations must enforce single-use atomically: a race of
+    /// concurrent `consume_token` calls against the same id must produce
+    /// exactly one winner.
+    async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, Error>;
+    /// Removes every token whose `expires_at` is in the past AND that has
+    /// not been consumed. Returns the number of tokens deleted. Intended
+    /// as a periodic housekeeping sweep.
+    async fn purge_expired(&mut self) -> Result<u64, Error>;
+}
+
 // Store management
 #[async_trait]
 pub trait Manage {
@@ -136,7 +165,7 @@ pub trait Manage {
 }
 
 /// Represents a store
-pub trait Store: UserStore + MazeStore + Manage + Send + Sync {}
+pub trait Store: UserStore + MazeStore + TokenStore + Manage + Send + Sync {}
 
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;

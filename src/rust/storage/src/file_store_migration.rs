@@ -198,13 +198,15 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// without rewriting. The framework entry exists to advance the version
 /// counter in step with the SQL backend.
 ///
-/// Real FileStore migrations (versions that mutate on-disk data) so far
-/// register only at 3.
+/// **Version 5** creates the `<data_dir>/one_time_tokens/` directory used
+/// by the FileStore `TokenStore` impl (one file per token). Idempotent —
+/// `fs::create_dir_all` is a no-op if the directory already exists.
 const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (1, no_op_migration),
     (2, no_op_migration),
     (3, migrate_0003_user_emails_verified_reset),
     (4, no_op_migration),
+    (5, migrate_0005_create_one_time_tokens_dir),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
@@ -221,6 +223,17 @@ const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
 }
 
 fn no_op_migration(_data_dir: &Path) -> Result<(), Error> {
+    Ok(())
+}
+
+/// FileStore migration 0005 — counterpart to
+/// `migrations/0005_one_time_tokens.sql`. The SQL side creates a table;
+/// the FileStore side creates the per-token directory used by the
+/// `TokenStore` impl. Idempotent — re-running on an existing directory
+/// is a no-op.
+fn migrate_0005_create_one_time_tokens_dir(data_dir: &Path) -> Result<(), Error> {
+    let dir = data_dir.join("one_time_tokens");
+    fs::create_dir_all(&dir)?;
     Ok(())
 }
 

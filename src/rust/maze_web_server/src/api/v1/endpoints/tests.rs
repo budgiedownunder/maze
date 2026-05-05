@@ -18,7 +18,8 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
+    use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
+    use data_model::OneTimeToken;
     use uuid::Uuid;
 
     const ADMIN_USERNAME_PREFIX:&str = "admin_";
@@ -532,6 +533,26 @@ mod test_definitions {
         async fn empty(&mut self) -> Result<(), StoreError> {
             self.users = HashMap::new();
             Ok(())
+        }
+    }
+
+    // Stub TokenStore — none of the existing handler tests exercise the
+    // token flows (those live in storage/ contract tests). Once the
+    // password-reset / verification handlers land, these stubs gain
+    // an in-memory backing map.
+    #[async_trait]
+    impl TokenStore for MockStore {
+        async fn create_token(&mut self, _t: &OneTimeToken) -> Result<(), StoreError> {
+            Err(StoreError::Other("create_token() not implemented for MockStore".to_string()))
+        }
+        async fn find_token(&self, _id: Uuid) -> Result<OneTimeToken, StoreError> {
+            Err(StoreError::Other("find_token() not implemented for MockStore".to_string()))
+        }
+        async fn consume_token(&mut self, _id: Uuid) -> Result<OneTimeToken, StoreError> {
+            Err(StoreError::Other("consume_token() not implemented for MockStore".to_string()))
+        }
+        async fn purge_expired(&mut self) -> Result<u64, StoreError> {
+            Ok(0)
         }
     }
 

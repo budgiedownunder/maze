@@ -580,6 +580,80 @@ async fn has_active_admin_user_ignores_non_admin_users() {
     contract::has_active_admin_user_ignores_non_admin_users(&mut s).await;
 }
 
+// ─── TokenStore ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn create_token_round_trips_via_find() {
+    let mut s = fresh_store().await;
+    contract::create_token_round_trips_via_find(&mut s).await;
+}
+
+#[tokio::test]
+async fn create_token_preserves_target_email_for_verification() {
+    let mut s = fresh_store().await;
+    contract::create_token_preserves_target_email_for_verification(&mut s).await;
+}
+
+#[tokio::test]
+async fn create_token_rejects_duplicate_id() {
+    let mut s = fresh_store().await;
+    contract::create_token_rejects_duplicate_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_token_returns_not_found_for_unknown_id() {
+    let mut s = fresh_store().await;
+    contract::find_token_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_token_filters_expired_tokens() {
+    let mut s = fresh_store().await;
+    contract::find_token_filters_expired_tokens(&mut s).await;
+}
+
+#[tokio::test]
+async fn consume_token_marks_consumed_at() {
+    let mut s = fresh_store().await;
+    contract::consume_token_marks_consumed_at(&mut s).await;
+}
+
+#[tokio::test]
+async fn consume_token_twice_rejects_second_call() {
+    let mut s = fresh_store().await;
+    contract::consume_token_twice_rejects_second_call(&mut s).await;
+}
+
+#[tokio::test]
+async fn consume_token_returns_not_found_for_unknown_id() {
+    let mut s = fresh_store().await;
+    contract::consume_token_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn consume_token_rejects_expired_token() {
+    let mut s = fresh_store().await;
+    contract::consume_token_rejects_expired_token(&mut s).await;
+}
+
+#[tokio::test]
+async fn delete_user_cascades_to_one_time_tokens() {
+    let mut s = fresh_store().await;
+    contract::delete_user_cascades_to_one_time_tokens(&mut s).await;
+}
+
+#[tokio::test]
+async fn purge_expired_removes_only_expired_unconsumed_rows() {
+    let mut s = fresh_store().await;
+    contract::purge_expired_removes_only_expired_unconsumed_rows(&mut s).await;
+}
+
+#[tokio::test]
+async fn consume_token_concurrent_race_has_exactly_one_winner() {
+    let s = fresh_store().await;
+    contract::consume_token_concurrent_race_has_exactly_one_winner(s).await;
+}
+
 // ─── Manage ──────────────────────────────────────────────────────────────
 
 #[tokio::test]

@@ -10,7 +10,8 @@
 
 #![allow(dead_code)] // Some helpers may not yet be wired into every backend's runner.
 
-use data_model::{Maze, MazeDefinition, OAuthIdentity, User, UserEmail, UserLogin};
+use chrono::{Duration, SubsecRound, Utc};
+use data_model::{Maze, MazeDefinition, OAuthIdentity, OneTimeToken, TokenPurpose, User, UserEmail, UserLogin};
 use storage::{Error, Store};
 use uuid::Uuid;
 
@@ -1171,6 +1172,251 @@ pub async fn has_active_admin_user_ignores_non_admin_users(store: &mut Box<dyn S
             .expect("has_active_admin_user"),
         "non-admin user must not satisfy has_active_admin_user"
     );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// TokenStore — create / find / consume / purge_expired
+// ─────────────────────────────────────────────────────────────────────────
+
+fn make_password_reset_token(user_id: Uuid) -> OneTimeToken {
+    OneTimeToken::new(user_id, TokenPurpose::PasswordReset, None, 1)
+}
+
+fn make_email_verification_token(user_id: Uuid, target_email: &str) -> OneTimeToken {
+    OneTimeToken::new(
+        user_id,
+        TokenPurpose::EmailVerification,
+        Some(target_email.to_string()),
+        24,
+    )
+}
+
+/// Builds a token whose `expires_at` is already in the past. Timestamps are
+/// truncated to millisecond precision to match the storage layer's canonical
+/// shape, so round-trip equality holds across both backends.
+fn make_expired_token(user_id: Uuid) -> OneTimeToken {
+    let now = Utc::now().trunc_subsecs(3);
+    OneTimeToken {
+        id: Uuid::new_v4(),
+        user_id,
+        purpose: TokenPurpose::PasswordReset,
+        target_email: None,
+        created_at: now - Duration::hours(2),
+        expires_at: now - Duration::hours(1),
+        consumed_at: None,
+    }
+}
+
+pub async fn create_token_round_trips_via_find(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_password_reset_token(alice.id);
+    store.create_token(&token).await.expect("create_token");
+    let loaded = store.find_token(token.id).await.expect("find_token");
+    assert_eq!(loaded, token);
+}
+
+pub async fn create_token_preserves_target_email_for_verification(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_email_verification_token(alice.id, "alice2@example.com");
+    store.create_token(&token).await.expect("create_token");
+    let loaded = store.find_token(token.id).await.expect("find_token");
+    assert_eq!(loaded.target_email.as_deref(), Some("alice2@example.com"));
+    assert_eq!(loaded.purpose, TokenPurpose::EmailVerification);
+}
+
+pub async fn create_token_rejects_duplicate_id(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_password_reset_token(alice.id);
+    store.create_token(&token).await.expect("first create_token");
+    let err = store
+        .create_token(&token)
+        .await
+        .expect_err("duplicate id must be rejected");
+    assert!(matches!(err, Error::TokenIdExists(_)), "got {err:?}");
+}
+
+pub async fn find_token_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .find_token(id)
+        .await
+        .expect_err("unknown id must surface NotFound");
+    assert!(
+        matches!(err, Error::TokenIdNotFound(ref s) if s == &id.to_string()),
+        "got {err:?}"
+    );
+}
+
+pub async fn find_token_filters_expired_tokens(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let expired = make_expired_token(alice.id);
+    store.create_token(&expired).await.expect("create_token");
+    let err = store
+        .find_token(expired.id)
+        .await
+        .expect_err("expired token must be invisible to find_token");
+    assert!(matches!(err, Error::TokenIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn consume_token_marks_consumed_at(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_password_reset_token(alice.id);
+    store.create_token(&token).await.expect("create_token");
+    let consumed = store
+        .consume_token(token.id)
+        .await
+        .expect("consume_token");
+    assert_eq!(consumed.id, token.id);
+    assert!(consumed.consumed_at.is_some(), "consumed_at must be populated");
+}
+
+pub async fn consume_token_twice_rejects_second_call(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_password_reset_token(alice.id);
+    store.create_token(&token).await.expect("create_token");
+    store
+        .consume_token(token.id)
+        .await
+        .expect("first consume succeeds");
+    let err = store
+        .consume_token(token.id)
+        .await
+        .expect_err("second consume must fail");
+    assert!(
+        matches!(err, Error::TokenAlreadyConsumed()),
+        "expected TokenAlreadyConsumed, got {err:?}"
+    );
+}
+
+pub async fn consume_token_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .consume_token(id)
+        .await
+        .expect_err("unknown id must surface NotFound");
+    assert!(matches!(err, Error::TokenIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn consume_token_rejects_expired_token(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let expired = make_expired_token(alice.id);
+    store.create_token(&expired).await.expect("create_token");
+    let err = store
+        .consume_token(expired.id)
+        .await
+        .expect_err("expired token must not consume");
+    assert!(matches!(err, Error::TokenExpired()), "got {err:?}");
+}
+
+pub async fn delete_user_cascades_to_one_time_tokens(store: &mut Box<dyn Store>) {
+    // Soft-deleting a user must clear their pending tokens — leaving live
+    // reset/invite tokens alive is a phishing vector.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_password_reset_token(alice.id);
+    store.create_token(&token).await.expect("create_token");
+
+    store.delete_user(alice.id).await.expect("soft-delete");
+
+    let err = store
+        .find_token(token.id)
+        .await
+        .expect_err("token must be gone after the owner is soft-deleted");
+    assert!(matches!(err, Error::TokenIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn purge_expired_removes_only_expired_unconsumed_rows(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+
+    // Three tokens: an active one, an expired-unconsumed one, and an
+    // expired-but-consumed one (which must NOT be purged — its row is
+    // historical evidence that the token was used).
+    let active = make_password_reset_token(alice.id);
+    let expired_unconsumed = make_expired_token(alice.id);
+    let expired_consumed = OneTimeToken {
+        consumed_at: Some((Utc::now() - Duration::hours(1)).trunc_subsecs(3)),
+        ..make_expired_token(alice.id)
+    };
+
+    store.create_token(&active).await.expect("create active");
+    store
+        .create_token(&expired_unconsumed)
+        .await
+        .expect("create expired-unconsumed");
+    store
+        .create_token(&expired_consumed)
+        .await
+        .expect("create expired-consumed");
+
+    let purged = store.purge_expired().await.expect("purge_expired");
+    assert_eq!(purged, 1, "exactly the expired-unconsumed row must be purged");
+
+    // Active token still findable.
+    store
+        .find_token(active.id)
+        .await
+        .expect("active token must survive purge_expired");
+
+    // Expired-unconsumed token gone.
+    let err = store
+        .find_token(expired_unconsumed.id)
+        .await
+        .expect_err("expired-unconsumed token must be gone");
+    assert!(matches!(err, Error::TokenIdNotFound(_)), "got {err:?}");
+
+    // A second purge run is a clean no-op.
+    let again = store.purge_expired().await.expect("purge_expired idempotent");
+    assert_eq!(again, 0, "no further rows to purge");
+}
+
+/// 8 concurrent tasks race to consume the same token. Exactly one must
+/// win; the other seven must surface `TokenAlreadyConsumed`. Pins the
+/// race-free single-use semantics of `consume_token`.
+pub async fn consume_token_concurrent_race_has_exactly_one_winner(store: Box<dyn Store>) {
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    // Wrap the box in an `Arc<Mutex<...>>` so multiple tasks can each take
+    // an exclusive lock when they call `consume_token`. The lock simulates
+    // the per-connection serialisation that the real store provides via
+    // its connection pool — without it, the FileStore impl would have
+    // multiple tasks holding their own &mut and trample each other.
+    let alice_id = {
+        // Limited scope: the mutable borrow ends before the Arc is built.
+        let mut store = store;
+        let alice = fixture_user(&mut store, "alice", "alice@example.com").await;
+        let token = make_password_reset_token(alice.id);
+        store.create_token(&token).await.expect("create_token");
+        let token_id = token.id;
+        let user_id = alice.id;
+
+        let shared = Arc::new(Mutex::new(store));
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let shared = shared.clone();
+            handles.push(tokio::spawn(async move {
+                let mut guard = shared.lock().await;
+                guard.consume_token(token_id).await
+            }));
+        }
+        let mut wins = 0;
+        let mut losses = 0;
+        for h in handles {
+            match h.await.expect("join task") {
+                Ok(consumed) => {
+                    assert_eq!(consumed.id, token_id);
+                    assert!(consumed.consumed_at.is_some());
+                    wins += 1;
+                }
+                Err(Error::TokenAlreadyConsumed()) => losses += 1,
+                Err(other) => panic!("unexpected error from concurrent consume: {other:?}"),
+            }
+        }
+        assert_eq!(wins, 1, "exactly one task must win the consume race");
+        assert_eq!(losses, 7, "the other seven tasks must lose with TokenAlreadyConsumed");
+        user_id
+    };
+    // Silence the unused-variable warning if the test ever needs alice_id later.
+    let _ = alice_id;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
