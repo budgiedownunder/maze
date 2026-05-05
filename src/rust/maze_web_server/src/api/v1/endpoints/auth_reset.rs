@@ -4,20 +4,18 @@
 //!   * `POST /api/v1/password-reset/request` — anti-enumeration request.
 //!     Always returns 200 regardless of whether the email matches a user,
 //!     whether the matching email is verified, or whether the user has a
-//!     password to reset (OAuth-only accounts). Successful matches fire a
-//!     reset email via `Comms::send_template` on a `tokio::spawn` task.
+//!     password to reset (OAuth-only accounts). Every request is recorded
+//!     in the email audit log: known-recipient requests record a Pending
+//!     row that the spawned send task flips to Accepted/Failed; the
+//!     anti-enumeration unknown-email path records a Pending-only row
+//!     with `recipient_user_id = None` (no send is attempted).
 //!   * `POST /api/v1/password-reset/confirm` — consume token, update
 //!     password, clear `user.logins`. Returns 204 on success, 400 on a
 //!     missing/expired/already-consumed token or a weak new password.
 //!
-//! The audit-log integration that records every reset attempt (whether or
-//! not a send happens) lands in Step 3.8.
-//!
 //! Reset tokens carry `TokenPurpose::PasswordReset` with a 1-hour TTL.
 //! The token id is the secret carried in the reset link sent to the user;
 //! storage is responsible for race-free single-use enforcement.
-
-use std::sync::Arc;
 
 use actix_web::{
     error::{ErrorBadRequest, ErrorInternalServerError},
@@ -33,6 +31,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::config::app::AppConfig;
+use crate::service::audit::{record_and_dispatch, record_pending_only};
 use crate::service::auth::AuthService;
 
 /// Reset tokens live for one hour. Long enough that a user can step away
@@ -147,6 +146,8 @@ pub async fn request_password_reset(
         return Ok(HttpResponse::Ok().json(json!({"status": "ok"})));
     }
 
+    let provider_name = comms.email_provider_name().unwrap_or("none");
+
     // Locate the user via verified-email lookup. Unverified rows are
     // already invisible to `find_user_by_verified_email` at the storage
     // layer, so we don't need a second filter here.
@@ -166,6 +167,19 @@ pub async fn request_password_reset(
 
     let Some(user) = user_opt else {
         info!("password-reset request: no verified-email match for the supplied address");
+        // Anti-enumeration recon row: we record the request itself with
+        // `recipient_user_id = None` for rate-limit / abuse forensics,
+        // even though no send fires.
+        if let Err(err) = record_pending_only(
+            store.get_ref().clone(),
+            RESET_TEMPLATE_ID,
+            &email,
+            provider_name,
+        )
+        .await
+        {
+            warn!("password-reset request: recon audit row failed: {err}");
+        }
         return Ok(HttpResponse::Ok().json(json!({"status": "ok"})));
     };
 
@@ -191,8 +205,10 @@ pub async fn request_password_reset(
         }
     }
 
-    // Render and dispatch the email on a fire-and-forget task. The HTTP
-    // response is already committed by the time the send resolves.
+    // Record the audit row + dispatch the send on a fire-and-forget
+    // task. `record_and_dispatch` writes a Pending row first, then the
+    // spawned task updates it to Accepted (with provider_message_id) on
+    // success or Failed (with an error_class) on provider failure.
     let reset_link = build_reset_link(&config.comms.public_base_url, token.id);
     let to = EmailAddress::with_name(user.email().to_string(), user.full_name.clone());
     let context = json!({
@@ -202,17 +218,21 @@ pub async fn request_password_reset(
         "email": user.email(),
         "reset_link": reset_link,
     });
-    let comms_arc: Arc<Comms> = comms.clone().into_inner();
     let user_id = user.id;
-    tokio::spawn(async move {
-        match comms_arc
-            .send_template(RESET_TEMPLATE_ID, to, &context)
-            .await
-        {
-            Ok(_receipt) => info!("password-reset send succeeded for user {user_id}"),
-            Err(err) => warn!("password-reset send failed for user {user_id}: {err}"),
-        }
-    });
+    if let Err(err) = record_and_dispatch(
+        store.get_ref().clone(),
+        comms.clone().into_inner(),
+        RESET_TEMPLATE_ID,
+        Some(user_id),
+        None,
+        Some(token.id),
+        to,
+        context,
+    )
+    .await
+    {
+        warn!("password-reset request: record_and_dispatch failed for user {user_id}: {err}");
+    }
 
     Ok(HttpResponse::Ok().json(json!({"status": "ok"})))
 }

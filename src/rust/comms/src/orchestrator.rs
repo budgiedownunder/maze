@@ -59,6 +59,33 @@ impl Comms {
         }
     }
 
+    /// Returns the configured email provider's name (e.g. `"mailgun"`,
+    /// `"stub_email"`), or `None` when the email slot is unconfigured.
+    /// Used by the audit-log path so each row records which provider
+    /// actually carried the send.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use comms::{AppContext, BrandingContext, BrandingPartialSources, Comms,
+    /// #             EmbeddedTemplateLoader, TemplateLoader, TemplateRenderer};
+    /// # use std::sync::Arc;
+    /// # let renderer = TemplateRenderer::new(
+    /// #     AppContext { app_name: "App".into(), server_url: "https://x".into(),
+    /// #         branding: BrandingContext { company_name: "X".into(), company_address: "A".into(),
+    /// #             company_url: "https://x".into(), logo_url: "https://x".into() } },
+    /// #     Arc::new(EmbeddedTemplateLoader::new()) as Arc<dyn TemplateLoader>,
+    /// #     BrandingPartialSources { logo_html: String::new(), logo_text: String::new(),
+    /// #         header_html: String::new(), header_text: String::new(),
+    /// #         footer_html: String::new(), footer_text: String::new() },
+    /// # ).expect("renderer");
+    /// let comms = Comms::new(renderer, None, None);
+    /// assert_eq!(comms.email_provider_name(), None);
+    /// ```
+    pub fn email_provider_name(&self) -> Option<&'static str> {
+        self.email.as_ref().map(|p| p.name())
+    }
+
     /// Returns a borrow of the underlying `TemplateRenderer` so callers
     /// can probe template metadata without dispatching anything.
     ///

@@ -207,12 +207,14 @@ pub async fn add_email(
     {
         Ok(token) => {
             crate::api::v1::endpoints::email_verification::dispatch_verification_email(
+                store.get_ref().clone(),
                 comms.clone().into_inner(),
                 updated.clone(),
                 &new_email,
                 &config.comms.public_base_url,
                 token.id,
-            );
+            )
+            .await;
         }
         Err(err) => log::warn!(
             "add_email: verification token issue failed for user {} email {}: {err}",

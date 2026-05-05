@@ -13,8 +13,11 @@
 //!     because the consumed token's `user_id` is the source of truth for
 //!     which user's email row to flip.
 //!
-//! The audit-log integration that records every verification attempt
-//! (whether or not a send happens) lands in Step 3.8.
+//! Every dispatched verification email is recorded in the email audit
+//! log via [`dispatch_verification_email`]: a Pending row is written
+//! synchronously, then the spawned send task updates it to
+//! Accepted/Failed once the provider responds. Already-verified
+//! requests no-op without recording (there's nothing to send).
 //!
 //! Verification tokens carry [`TokenPurpose::EmailVerification`] with a
 //! 24-hour TTL and a `target_email` populated.
@@ -35,6 +38,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::config::app::AppConfig;
+use crate::service::audit::record_and_dispatch;
 
 const VERIFICATION_TOKEN_TTL_HOURS: u32 = 24;
 const VERIFICATION_TEMPLATE_ID: &str = "email_verification";
@@ -111,11 +115,16 @@ pub(crate) async fn issue_verification_token(
     Ok(token)
 }
 
-/// Renders the verification email and dispatches it via `Comms` on a
-/// fire-and-forget task. Errors from the spawn are logged, not surfaced
+/// Records a Pending audit row + dispatches the verification email via
+/// `Comms` on a fire-and-forget task. The spawned task updates the
+/// audit row to Accepted (with `provider_message_id`) on success or
+/// Failed (with an `error_class`) on provider failure.
+///
+/// Errors from the synchronous Pending insert are logged, not surfaced
 /// — the verification flow is self-service so the sender response
 /// already returned by the time the send resolves.
-pub(crate) fn dispatch_verification_email(
+pub(crate) async fn dispatch_verification_email(
+    store: SharedStore,
     comms: Arc<Comms>,
     user: User,
     email: &str,
@@ -133,19 +142,22 @@ pub(crate) fn dispatch_verification_email(
     });
     let user_id = user.id;
     let target = email.to_string();
-    tokio::spawn(async move {
-        match comms
-            .send_template(VERIFICATION_TEMPLATE_ID, to, &context)
-            .await
-        {
-            Ok(_) => info!(
-                "email-verification send succeeded for user {user_id} address {target}"
-            ),
-            Err(err) => warn!(
-                "email-verification send failed for user {user_id} address {target}: {err}"
-            ),
-        }
-    });
+    if let Err(err) = record_and_dispatch(
+        store,
+        comms,
+        VERIFICATION_TEMPLATE_ID,
+        Some(user_id),
+        None,
+        Some(token_id),
+        to,
+        context,
+    )
+    .await
+    {
+        warn!(
+            "email-verification: record_and_dispatch failed for user {user_id} address {target}: {err}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -217,12 +229,14 @@ pub async fn request_email_verification(
         })?;
 
     dispatch_verification_email(
+        store.get_ref().clone(),
         comms.clone().into_inner(),
         caller,
         &row_email,
         &config.comms.public_base_url,
         token.id,
-    );
+    )
+    .await;
 
     Ok(HttpResponse::Ok().json(json!({"status": "ok"})))
 }

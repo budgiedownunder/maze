@@ -556,12 +556,14 @@ pub async fn signup(
     {
         Ok(token) => {
             crate::api::v1::endpoints::email_verification::dispatch_verification_email(
+                store.get_ref().clone(),
                 comms.clone().into_inner(),
                 store_user.clone(),
                 &signup_req_data.email,
                 &config.comms.public_base_url,
                 token.id,
-            );
+            )
+            .await;
         }
         Err(err) => log::warn!(
             "signup: verification token issue failed for user {}: {err}",

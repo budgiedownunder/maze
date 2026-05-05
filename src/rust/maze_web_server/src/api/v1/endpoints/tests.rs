@@ -117,6 +117,7 @@ mod test_definitions {
     struct MockStore {
         users: HashMap<Uuid, MockUser>,
         tokens: HashMap<Uuid, OneTimeToken>,
+        audit_entries: HashMap<Uuid, EmailAuditEntry>,
     }
 
     impl MockStore {
@@ -124,6 +125,7 @@ mod test_definitions {
             MockStore {
                 users: new_users_map(user_defs),
                 tokens: HashMap::new(),
+                audit_entries: HashMap::new(),
             }
         }
 
@@ -603,32 +605,65 @@ mod test_definitions {
         }
     }
 
-    // Stub EmailAuditLog — same rationale as TokenStore: real audit-log
-    // assertions live in storage/ contract tests; handler tests gain an
-    // in-memory backing map once the audit-log integration lands.
+    // In-memory EmailAuditLog. Mirrors the real backends' contract closely
+    // enough for handler-level integration tests — happy path, recon row,
+    // and provider-failure assertions all need to read back rows the
+    // dispatch helpers wrote.
     #[async_trait]
     impl EmailAuditLog for MockStore {
-        async fn record_pending(&mut self, _e: &EmailAuditEntry) -> Result<Uuid, StoreError> {
-            Err(StoreError::Other("record_pending() not implemented for MockStore".to_string()))
+        async fn record_pending(&mut self, entry: &EmailAuditEntry) -> Result<Uuid, StoreError> {
+            if entry.id == Uuid::nil() {
+                return Err(StoreError::Other("audit entry id must not be nil".to_string()));
+            }
+            if self.audit_entries.contains_key(&entry.id) {
+                return Err(StoreError::AuditEntryIdExists(entry.id.to_string()));
+            }
+            self.audit_entries.insert(entry.id, entry.clone());
+            Ok(entry.id)
         }
         async fn update_outcome(
             &mut self,
-            _id: Uuid,
-            _outcome: AuditOutcome,
-            _provider_message_id: Option<&str>,
-            _error_class: Option<&str>,
+            id: Uuid,
+            outcome: AuditOutcome,
+            provider_message_id: Option<&str>,
+            error_class: Option<&str>,
         ) -> Result<(), StoreError> {
-            Err(StoreError::Other("update_outcome() not implemented for MockStore".to_string()))
+            if matches!(outcome, AuditOutcome::Pending) {
+                return Err(StoreError::Other(
+                    "update_outcome cannot move a row back to pending".to_string(),
+                ));
+            }
+            let row = self.audit_entries.get_mut(&id)
+                .ok_or_else(|| StoreError::AuditEntryIdNotFound(id.to_string()))?;
+            row.outcome = outcome;
+            row.provider_message_id = provider_message_id.map(|s| s.to_string());
+            row.error_class = error_class.map(|s| s.to_string());
+            Ok(())
         }
-        async fn find_audit_entry(&self, _id: Uuid) -> Result<EmailAuditEntry, StoreError> {
-            Err(StoreError::Other("find_audit_entry() not implemented for MockStore".to_string()))
+        async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, StoreError> {
+            self.audit_entries
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| StoreError::AuditEntryIdNotFound(id.to_string()))
         }
         async fn find_recent_audit_entries_for_user(
             &self,
-            _user_id: Uuid,
-            _limit: u32,
+            user_id: Uuid,
+            limit: u32,
         ) -> Result<Vec<EmailAuditEntry>, StoreError> {
-            Ok(Vec::new())
+            let mut matches: Vec<EmailAuditEntry> = self
+                .audit_entries
+                .values()
+                .filter(|e| e.recipient_user_id == Some(user_id))
+                .cloned()
+                .collect();
+            matches.sort_by(|a, b| {
+                b.created_at
+                    .cmp(&a.created_at)
+                    .then_with(|| b.id.cmp(&a.id))
+            });
+            matches.truncate(limit as usize);
+            Ok(matches)
         }
     }
 
@@ -4322,6 +4357,366 @@ mod test_definitions {
             .status(),
             StatusCode::BAD_REQUEST
         );
+    }
+
+    // **************************************************************************************************
+    // Audit-log integration tests
+    //
+    // Every send goes through service::audit::record_and_dispatch (or
+    // record_pending_only for the unknown-email recon path). The pending row
+    // is written synchronously, then the spawn settles to Accepted/Failed
+    // when the provider responds. These tests assert each write path lands
+    // a row, and that the outcome / error_class / template_id match.
+    // **************************************************************************************************
+
+    /// Spin briefly until `find_recent_audit_entries_for_user(user_id, _)`
+    /// surfaces a row matching `template_id` whose outcome is no longer
+    /// `Pending`. The dispatch helper writes Pending synchronously and
+    /// updates the outcome from inside `tokio::spawn`, so the HTTP
+    /// response returns before the row settles.
+    async fn await_audit_settled(
+        shared_store: &SharedStore,
+        user_id: Uuid,
+        template_id: &str,
+        max_ms: u64,
+    ) -> EmailAuditEntry {
+        let start = std::time::Instant::now();
+        loop {
+            {
+                let store_lock = shared_store.read().await;
+                let entries = store_lock
+                    .find_recent_audit_entries_for_user(user_id, 10)
+                    .await
+                    .expect("find_recent_audit_entries_for_user");
+                if let Some(entry) = entries.into_iter().find(|e| {
+                    e.template_id == template_id && e.outcome != AuditOutcome::Pending
+                }) {
+                    return entry;
+                }
+            }
+            if start.elapsed().as_millis() >= u128::from(max_ms) {
+                let store_lock = shared_store.read().await;
+                let entries = store_lock
+                    .find_recent_audit_entries_for_user(user_id, 10)
+                    .await
+                    .expect("find_recent_audit_entries_for_user");
+                panic!(
+                    "audit row never settled (template={template_id}) for user {user_id}; latest entries: {entries:?}"
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_records_pending_then_accepted_audit_row() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user")
+                .id
+        };
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/password-reset/request",
+                    None,
+                    None,
+                    Some(&PasswordResetRequest { email: email.clone() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+
+        let row = await_audit_settled(&shared_store, user_id, "password_reset", 1000).await;
+        assert_eq!(row.outcome, AuditOutcome::Accepted);
+        assert_eq!(row.template_id, "password_reset");
+        assert_eq!(row.recipient_email, email);
+        assert_eq!(row.recipient_user_id, Some(user_id));
+        assert_eq!(row.provider, "stub_email");
+        assert!(
+            row.error_class.is_none(),
+            "Accepted rows must not carry error_class: {:?}",
+            row.error_class
+        );
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_records_failed_audit_row_on_provider_error() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user")
+                .id
+        };
+
+        // Pre-load a permanent provider failure. RetryPolicy::no_retry()
+        // (the stub default) means the orchestrator surfaces it on the
+        // first attempt without re-driving the queue.
+        stub.enqueue_failure(comms::CommsError::Provider("synthetic".into()));
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/password-reset/request",
+                    None,
+                    None,
+                    Some(&PasswordResetRequest { email: email.clone() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        let row = await_audit_settled(&shared_store, user_id, "password_reset", 1000).await;
+        assert_eq!(row.outcome, AuditOutcome::Failed);
+        assert_eq!(row.error_class.as_deref(), Some("provider"));
+        assert!(
+            row.provider_message_id.is_none(),
+            "Failed rows must not carry a provider_message_id"
+        );
+        assert_eq!(stub.len(), 0, "failed sends must not capture the message");
+    }
+
+    #[actix_web::test]
+    async fn email_verification_request_records_accepted_audit_row() {
+        // Use a verified-primary user as the caller, then request
+        // verification of a freshly-added secondary so there's an
+        // unverified row to act on.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let secondary = "alice-verify-audit@example.com";
+
+        // Add the secondary — this dispatches its own verification email
+        // (also audit-logged). Drain captures + the implicit audit row by
+        // remembering the user id for filtering by template_id later.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/users/me/emails",
+                    api_key,
+                    None,
+                    Some(&AddUserEmailRequest { email: secondary.to_string() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        stub.clear();
+
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user")
+                .id
+        };
+
+        // Now re-request verification for the secondary.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/request",
+                    api_key,
+                    None,
+                    Some(&EmailVerificationRequest { email: secondary.to_string() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+
+        let row = await_audit_settled(&shared_store, user_id, "email_verification", 1000).await;
+        assert_eq!(row.outcome, AuditOutcome::Accepted);
+        assert_eq!(row.template_id, "email_verification");
+        assert_eq!(row.recipient_email, secondary);
+        assert_eq!(row.recipient_user_id, Some(user_id));
+        assert_eq!(row.provider, "stub_email");
+    }
+
+    #[actix_web::test]
+    async fn email_verification_request_records_failed_audit_row_on_provider_error() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let secondary = "alice-verify-fail@example.com";
+
+        // Add the secondary first — that dispatch is allowed to succeed.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/users/me/emails",
+                    api_key,
+                    None,
+                    Some(&AddUserEmailRequest { email: secondary.to_string() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        stub.clear();
+
+        // Now arm the next dispatch to fail with a 502-like upstream error
+        // — the row should land Failed with `provider_5xx`.
+        stub.enqueue_failure(comms::CommsError::ProviderHttp {
+            status: 502,
+            body: "bad gateway".into(),
+        });
+
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user")
+                .id
+        };
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/request",
+                    api_key,
+                    None,
+                    Some(&EmailVerificationRequest { email: secondary.to_string() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        // The Failed row carries error_class = "provider_5xx". Filter on
+        // template_id so the earlier add_email Accepted row is ignored.
+        let start = std::time::Instant::now();
+        let failed = loop {
+            let store_lock = shared_store.read().await;
+            let entries = store_lock
+                .find_recent_audit_entries_for_user(user_id, 10)
+                .await
+                .expect("find_recent_audit_entries_for_user");
+            if let Some(row) = entries
+                .into_iter()
+                .find(|e| e.template_id == "email_verification" && e.outcome == AuditOutcome::Failed)
+            {
+                break row;
+            }
+            drop(store_lock);
+            if start.elapsed().as_millis() > 1000 {
+                panic!("Failed audit row never appeared for user {user_id}");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        };
+        assert_eq!(failed.error_class.as_deref(), Some("provider_5xx"));
+        assert!(failed.provider_message_id.is_none());
+    }
+
+    #[actix_web::test]
+    async fn signup_records_accepted_audit_row_for_dispatched_verification_email() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let signup_email = new_email(NEW_USERNAME_1);
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/signup",
+                    None,
+                    None,
+                    Some(&new_signup_request(&signup_email, false)),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(signup_email.split('@').next().unwrap())
+                .await
+                .expect("signup user")
+                .id
+        };
+
+        let row = await_audit_settled(&shared_store, user_id, "email_verification", 1000).await;
+        assert_eq!(row.outcome, AuditOutcome::Accepted);
+        assert_eq!(row.recipient_email, signup_email);
+        assert_eq!(row.recipient_user_id, Some(user_id));
+        assert!(row.token_id.is_some(), "verification rows carry the token id");
+    }
+
+    #[actix_web::test]
+    async fn add_email_records_accepted_audit_row_for_secondary_dispatch() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let secondary = "alice-add-audit@example.com";
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/users/me/emails",
+                    api_key,
+                    None,
+                    Some(&AddUserEmailRequest { email: secondary.to_string() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user")
+                .id
+        };
+
+        let row = await_audit_settled(&shared_store, user_id, "email_verification", 1000).await;
+        assert_eq!(row.outcome, AuditOutcome::Accepted);
+        assert_eq!(row.recipient_email, secondary);
+        assert_eq!(row.recipient_user_id, Some(user_id));
     }
 
     #[actix_web::test]

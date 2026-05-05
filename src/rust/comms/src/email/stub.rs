@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
@@ -12,14 +13,21 @@ use crate::retry::RetryPolicy;
 /// instead of sending it. Construct one in a test, hand a clone to the system
 /// under test, and inspect captures via `last()` / `len()` / `into_iter()`.
 ///
+/// Tests that need the provider to fail can pre-load the failure queue via
+/// [`StubEmailProvider::enqueue_failure`]. Each `send_email` call first
+/// pops one entry off the queue: if it's `Some(err)`, the call returns
+/// that error and the message is **not** captured. With an empty queue
+/// the call captures and returns `Ok` as normal.
+///
 /// Cloning the stub is an `Arc` clone — every clone shares the same capture
-/// buffer and retry policy.
+/// buffer, failure queue, and retry policy.
 pub struct StubEmailProvider {
     inner: Arc<Inner>,
 }
 
 struct Inner {
     captures: Mutex<Vec<EmailMessage>>,
+    failures: Mutex<VecDeque<CommsError>>,
     retry_policy: RetryPolicy,
 }
 
@@ -56,9 +64,52 @@ impl StubEmailProvider {
         Self {
             inner: Arc::new(Inner {
                 captures: Mutex::new(Vec::new()),
+                failures: Mutex::new(VecDeque::new()),
                 retry_policy,
             }),
         }
+    }
+
+    /// Push a failure onto the response queue. The next call to
+    /// `send_email` (after any previously-queued failures) returns the
+    /// supplied error and does **not** capture the message. With the
+    /// queue drained, subsequent calls capture and return `Ok` again.
+    ///
+    /// Combine with the orchestrator's [`crate::RetryPolicy`] to test
+    /// transient-then-success flows by enqueueing one or more
+    /// [`CommsError::Transient`] entries and letting retry exhaust them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use comms::{CommsError, EmailAddress, EmailMessage, EmailProvider, StubEmailProvider};
+    ///
+    /// let stub = StubEmailProvider::new();
+    /// stub.enqueue_failure(CommsError::Provider("synthetic permanent failure".into()));
+    ///
+    /// let msg = EmailMessage {
+    ///     from: EmailAddress::new("noreply@example.com"),
+    ///     to: vec![EmailAddress::new("alice@example.com")],
+    ///     cc: vec![], bcc: vec![], reply_to: None,
+    ///     subject: "Hi".into(), body_text: "Hi".into(), body_html: None,
+    ///     headers: vec![], idempotency_key: None,
+    /// };
+    /// let err = stub.send_email(&msg).await.expect_err("queued failure");
+    /// assert!(matches!(err, CommsError::Provider(_)));
+    /// assert!(stub.is_empty(), "failed sends must not be captured");
+    ///
+    /// // Queue drained — next call succeeds and captures normally.
+    /// stub.send_email(&msg).await.expect("ok after queue drained");
+    /// assert_eq!(stub.len(), 1);
+    /// # });
+    /// ```
+    pub fn enqueue_failure(&self, err: CommsError) {
+        self.inner
+            .failures
+            .lock()
+            .expect("StubEmailProvider failures mutex poisoned")
+            .push_back(err);
     }
 
     /// Number of messages currently in the capture buffer.
@@ -171,6 +222,17 @@ impl Provider for StubEmailProvider {
 #[async_trait]
 impl EmailProvider for StubEmailProvider {
     async fn send_email(&self, msg: &EmailMessage) -> Result<DeliveryReceipt, CommsError> {
+        // Queued failures take precedence — return without capturing so
+        // the audit-log "failed" path can be exercised in tests.
+        if let Some(err) = self
+            .inner
+            .failures
+            .lock()
+            .expect("StubEmailProvider failures mutex poisoned")
+            .pop_front()
+        {
+            return Err(err);
+        }
         self.lock_captures().push(msg.clone());
         Ok(DeliveryReceipt {
             provider: "stub_email".into(),
