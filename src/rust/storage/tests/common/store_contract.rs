@@ -941,6 +941,239 @@ pub async fn get_maze_items_is_scoped_to_owner(store: &mut Box<dyn Store>) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// UserStore — soft-delete behaviour
+// ─────────────────────────────────────────────────────────────────────────
+
+pub async fn delete_user_soft_deletes_and_scrambles_username(store: &mut Box<dyn Store>) {
+    // After a soft-delete the original username is freed (scrambled to
+    // `deleted-<uuid>`), so a brand-new account can claim the same handle.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let mut reborn = make_user("alice", "alice2@example.com");
+    store.create_user(&mut reborn).await.expect("username freed for reuse");
+    assert_ne!(reborn.id, alice.id, "rebirth must be a brand-new row");
+}
+
+pub async fn delete_user_frees_email_for_reuse(store: &mut Box<dyn Store>) {
+    // Email rows are hard-deleted on cascade so the address is freed for the
+    // next signup.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let mut reborn = make_user("bob", "alice@example.com");
+    store.create_user(&mut reborn).await.expect("email freed for reuse");
+    assert_ne!(reborn.id, alice.id);
+}
+
+pub async fn delete_user_is_idempotent_per_row(store: &mut Box<dyn Store>) {
+    // Calling delete_user twice on the same row must surface the second
+    // attempt as UserIdNotFound — guard against double-soft-deleting.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("first delete");
+    let err = store
+        .delete_user(alice.id)
+        .await
+        .expect_err("second delete must fail");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn get_user_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .get_user(alice.id)
+        .await
+        .expect_err("soft-deleted user must be invisible to get_user");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn find_user_by_name_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .find_user_by_name("alice")
+        .await
+        .expect_err("soft-deleted user must be invisible to find_user_by_name");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+}
+
+pub async fn find_user_by_verified_email_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .find_user_by_verified_email("alice@example.com")
+        .await
+        .expect_err("soft-deleted user must be invisible to find_user_by_verified_email");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+}
+
+pub async fn find_user_by_api_key_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let api_key = alice.api_key;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .find_user_by_api_key(api_key)
+        .await
+        .expect_err("soft-deleted user must be invisible to find_user_by_api_key");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+}
+
+pub async fn find_user_by_login_id_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let mut alice = fixture_user(store, "alice", "alice@example.com").await;
+    let login = UserLogin::new(24, None, None);
+    let login_id = login.id;
+    alice.logins.push(login);
+    store.update_user(&mut alice).await.expect("update_user");
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .find_user_by_login_id(login_id)
+        .await
+        .expect_err("soft-deleted user must be invisible to find_user_by_login_id");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+}
+
+pub async fn find_user_by_oauth_identity_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let mut alice = make_oauth_user("alice", "alice@example.com", "google", "sub-alice");
+    store.create_user(&mut alice).await.expect("create_user");
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .find_user_by_oauth_identity("google", "sub-alice")
+        .await
+        .expect_err("soft-deleted user must be invisible to find_user_by_oauth_identity");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+}
+
+pub async fn get_users_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let _bob = fixture_user(store, "bob", "bob@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let users = store.get_users().await.expect("get_users");
+    let names: Vec<&str> = users.iter().map(|u| u.username.as_str()).collect();
+    assert_eq!(names, vec!["bob"], "soft-deleted alice must not appear");
+}
+
+pub async fn get_admin_users_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let admin = fixture_admin(store, "root", "root@example.com").await;
+    let _other_admin = fixture_admin(store, "second", "second@example.com").await;
+    store.delete_user(admin.id).await.expect("soft-delete");
+    let admins = store.get_admin_users().await.expect("get_admin_users");
+    let names: Vec<&str> = admins.iter().map(|u| u.username.as_str()).collect();
+    assert_eq!(names, vec!["second"], "soft-deleted root must not appear");
+}
+
+pub async fn has_users_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    assert!(
+        !store.has_users().await.expect("has_users"),
+        "soft-deleted lone user must not register as present"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UserStore — purge_user
+// ─────────────────────────────────────────────────────────────────────────
+
+pub async fn purge_user_truly_removes_row(store: &mut Box<dyn Store>) {
+    // Soft-delete first, then purge — the contract-visible signal is that a
+    // second purge against the same id surfaces UserIdNotFound (the row is
+    // really gone, not just hidden behind the soft-delete read filter).
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    store.purge_user(alice.id).await.expect("purge_user");
+    let err = store
+        .purge_user(alice.id)
+        .await
+        .expect_err("second purge must fail — row is gone");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+    let err = store
+        .delete_user(alice.id)
+        .await
+        .expect_err("soft-delete after purge must fail — row is gone");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn purge_user_works_on_active_user(store: &mut Box<dyn Store>) {
+    // No prior soft-delete required — purge_user accepts an active row too.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.purge_user(alice.id).await.expect("purge_user (active)");
+    let err = store
+        .get_user(alice.id)
+        .await
+        .expect_err("user must be gone after purge");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn purge_user_rejects_nil_id(store: &mut Box<dyn Store>) {
+    let err = store
+        .purge_user(Uuid::nil())
+        .await
+        .expect_err("nil id must be rejected");
+    assert!(matches!(err, Error::UserIdMissing()), "got {err:?}");
+}
+
+pub async fn purge_user_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .purge_user(id)
+        .await
+        .expect_err("unknown id must surface NotFound");
+    assert!(
+        matches!(err, Error::UserIdNotFound(ref s) if s == &id.to_string()),
+        "got {err:?}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UserStore — has_active_admin_user
+// ─────────────────────────────────────────────────────────────────────────
+
+pub async fn has_active_admin_user_returns_true_when_active_admin_exists(
+    store: &mut Box<dyn Store>,
+) {
+    let _ = fixture_admin(store, "root", "root@example.com").await;
+    assert!(
+        store
+            .has_active_admin_user()
+            .await
+            .expect("has_active_admin_user")
+    );
+}
+
+pub async fn has_active_admin_user_returns_false_when_only_admin_is_soft_deleted(
+    store: &mut Box<dyn Store>,
+) {
+    let admin = fixture_admin(store, "root", "root@example.com").await;
+    store.delete_user(admin.id).await.expect("soft-delete");
+    assert!(
+        !store
+            .has_active_admin_user()
+            .await
+            .expect("has_active_admin_user"),
+        "soft-deleted lone admin must not register as active"
+    );
+}
+
+pub async fn has_active_admin_user_returns_false_when_no_users_exist(store: &mut Box<dyn Store>) {
+    assert!(
+        !store
+            .has_active_admin_user()
+            .await
+            .expect("has_active_admin_user")
+    );
+}
+
+pub async fn has_active_admin_user_ignores_non_admin_users(store: &mut Box<dyn Store>) {
+    let _ = fixture_user(store, "alice", "alice@example.com").await;
+    assert!(
+        !store
+            .has_active_admin_user()
+            .await
+            .expect("has_active_admin_user"),
+        "non-admin user must not satisfy has_active_admin_user"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Manage
 // ─────────────────────────────────────────────────────────────────────────
 

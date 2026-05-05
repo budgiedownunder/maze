@@ -44,8 +44,8 @@ This runs:
 - FileStore inline unit tests
 - SqlStore inline unit tests (datetime helpers — gated by `sql-store`)
 - Validation tests
-- The contract suite against FileStore (`tests/file_store_contract.rs` — 67 scenarios)
-- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 67 scenarios)
+- The contract suite against FileStore (`tests/file_store_contract.rs` — 87 scenarios)
+- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 87 scenarios)
 - Doc tests
 
 Tests run in parallel — every FileStore test is rooted at its own `tempfile::TempDir`, and every SqlStore test creates its own in-memory SQLite, so there's no shared state to serialise around.
@@ -165,7 +165,18 @@ The migration files in [`migrations/`](./migrations/):
 | `0001_initial.sql` | Creates `users`, `user_logins`, `oauth_identities`, `mazes`. The `users.email UNIQUE NOT NULL` column from this migration is later retired by `retire_legacy_users_email_column` in `SqlStore::new` (post-`0002`). |
 | `0002_user_emails.sql` | Creates `user_emails` and seeds it from each user's `users.email`. Each seeded row is `is_primary = 1, verified = 1, verified_at = NULL`. |
 | `0003_user_emails_verified_reset.sql` | One-sweep flip from "verified by default" to "verification required". Sets `verified = 0, verified_at = NULL` on every `user_emails` row whose owning user is not an admin AND no matching `oauth_identities.provider_email` row exists for that (user, email) pair. The FileStore migration framework registers an equivalent `migrate_0003_user_emails_verified_reset` at version 3 — see "FileStore data layout and migrations" above for the framework's mechanics. |
-| `0004_users_soft_delete.sql` | Adds `users.deleted_at VARCHAR(32)` (RFC 3339 timestamp, nullable) and the supporting `idx_users_deleted_at` index. `deleted_at IS NULL` marks an active user; a populated timestamp marks a soft-deleted user. The application layer applies the filter on every find/get path. FileStore-side, `User.deleted_at` is added with `#[serde(default)]` so existing `user.json` files round-trip; the FileStore framework registers a no-op `migrate_0004` at version 4 to advance the counter in step. |
+| `0004_users_soft_delete.sql` | Adds `users.deleted_at VARCHAR(32)` (RFC 3339 timestamp, nullable) and the supporting `idx_users_deleted_at` index. `deleted_at IS NULL` marks an active user; a populated timestamp marks a soft-deleted user. The trait surface enforces the filter — see "Soft-delete behaviour" below. FileStore-side, `User.deleted_at` is added with `#[serde(default)]` so existing `user.json` files round-trip; the FileStore framework registers a no-op `migrate_0004` at version 4 to advance the counter in step. |
+
+### Soft-delete behaviour
+
+`UserStore::delete_user(id)` performs a **soft-delete**: the `users` row is kept (so audit-log foreign keys stay valid) with `deleted_at` populated and `username` rewritten to `deleted-<uuid>` to free the original handle for reuse. Related rows that have no audit value are hard-deleted in the same call: `user_logins`, `oauth_identities`, `user_emails`, and the user's `mazes`. After the call, every read path (`get_user`, `get_users`, `get_admin_users`, `has_users`, `find_user_by_name`, `find_user_by_verified_email`, `find_user_by_api_key`, `find_user_by_login_id`, `find_user_by_oauth_identity`) treats the user as if it never existed by applying a `deleted_at IS NULL` filter.
+
+Two additional methods round out the surface:
+
+- `UserStore::purge_user(id)` — true hard-delete of the `users` row. Intended for retention / right-to-erasure flows where the soft-deleted row must also be cleared. Reachable on either an active or already-soft-deleted user.
+- `UserStore::has_active_admin_user()` — `is_admin = true AND deleted_at IS NULL`. Used by startup so a soft-deleted lone admin doesn't prevent the default admin from being recreated on next launch.
+
+The username scramble form `deleted-<uuid>` is 44 chars, fitting comfortably within the `VARCHAR(64)` cap on `users.username` regardless of the original username's length, and works identically on FileStore (where the scramble is written directly to `user.json`).
 
 ### Schema portability rules
 

@@ -323,6 +323,21 @@ mod test_definitions {
                 Err(StoreError::UserIdNotFound(id.to_string()))
             }
         }
+        /// Purges a user from the store. The MockStore collapses soft-delete
+        /// + purge into a single hard-remove because the integration tests
+        /// that use this fake exercise endpoint behaviour, not the storage
+        /// layer's soft-delete semantics — those are covered by the storage
+        /// crate's contract tests.
+        async fn purge_user(&mut self, id: Uuid) -> Result<(), StoreError> {
+            if id.is_nil() {
+                return Err(StoreError::UserIdMissing());
+            }
+            if self.users.remove(&id).is_some() {
+                Ok(())
+            } else {
+                Err(StoreError::UserIdNotFound(id.to_string()))
+            }
+        }
         /// Updates a user within the store
         async fn update_user(&mut self, user: &mut User) -> Result<(), StoreError> {
             self.validate_user(user, user.id)?;
@@ -407,6 +422,13 @@ mod test_definitions {
 
         async fn has_users(&self) -> Result<bool, StoreError> {
             Ok(!self.users.is_empty())
+        }
+
+        async fn has_active_admin_user(&self) -> Result<bool, StoreError> {
+            Ok(self
+                .users
+                .values()
+                .any(|v| v.user.is_admin && v.user.is_active()))
         }
 
         async fn add_user_email(

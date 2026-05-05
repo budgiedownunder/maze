@@ -14,8 +14,19 @@ pub trait UserStore {
     async fn init_default_admin_user(&mut self, username: &str, email: &str, password_hash: &str) -> Result<User, Error>;
     /// Adds a new user to the store and sets the allocated `id` within the user object
     async fn create_user(&mut self, user: &mut User) -> Result<(), Error>;
-    /// Deletes a user from the store
+    /// Soft-deletes a user. The `users` row is preserved so audit-log
+    /// foreign keys remain valid, with `deleted_at` populated and the
+    /// username scrambled to `deleted-<uuid>` so the original value is
+    /// freed for reuse by a future signup. Related rows/fields that have no
+    /// audit value are hard-deleted in the same transaction:
+    /// `user_logins`, `oauth_identities`, `user_emails`, and the user's
+    /// mazes. After this returns, every read path on this trait treats
+    /// the user as if it never existed.
     async fn delete_user(&mut self, id: Uuid) -> Result<(), Error>;
+    /// True hard-delete: removes the `users` row outright. Intended for
+    /// retention / right-to-erasure flows where the soft-delete data must
+    /// also be cleared.
+    async fn purge_user(&mut self, id: Uuid) -> Result<(), Error>;
     /// Updates a user within the store
     async fn update_user(&mut self, user: &mut User) -> Result<(), Error>;
     /// Loads a user from the store
@@ -43,6 +54,11 @@ pub trait UserStore {
     async fn get_admin_users(&self) -> Result<Vec<User>, Error>;
     /// Returns whether at least one user exists in the store
     async fn has_users(&self) -> Result<bool, Error>;
+    /// Returns whether at least one *active* admin user exists in the
+    /// store (i.e. `is_admin = true` AND `deleted_at IS NULL`). Used by
+    /// startup so that a soft-deleted lone admin doesn't prevent the
+    /// default admin from being recreated on next launch.
+    async fn has_active_admin_user(&self) -> Result<bool, Error>;
     /// Adds a new email row to the user. The new row is non-primary; pass
     /// `verified = true` for trusted sources (OAuth-link, admin seed) and
     /// `verified = false` for self-asserted user-typed emails. The store

@@ -267,8 +267,12 @@ impl FileStore {
         Ok(())
     }
 
-    // Read a user definition
-    fn read_user(&self, id: Uuid) -> Result<User, Error> {
+    // Read a user definition without applying the soft-delete read filter.
+    // Internal use only — the delete/purge paths need to see the row even
+    // after `delete_at` has been set. Public callers must go through
+    // [`read_user`] (or [`load_user_if_present`]) so that soft-deleted users
+    // are invisible at the trait surface.
+    fn read_user_raw(&self, id: Uuid) -> Result<User, Error> {
         if !self.user_exists(id) {
             return Err(Error::UserIdNotFound(id.to_string()));
         }
@@ -279,6 +283,16 @@ impl FileStore {
             Ok(user) => Ok(user),
             Err(error) => Err(Error::from(error)),
         }
+    }
+
+    // Read a user definition, treating soft-deleted users as if they did not
+    // exist — every UserStore read path goes through this entrypoint.
+    fn read_user(&self, id: Uuid) -> Result<User, Error> {
+        let user = self.read_user_raw(id)?;
+        if !user.is_active() {
+            return Err(Error::UserIdNotFound(id.to_string()));
+        }
+        Ok(user)
     }
 
     // Locate the first user with a given string field value
@@ -374,10 +388,14 @@ impl FileStore {
         Err(Error::UserNotFound())
     }
 
-    // Loads a user by id, returning None (with a warning) if the user directory exists
-    // but user.json is missing or unreadable, and Err for all other failures.
+    // Loads a user by id for iterator-style read paths, returning `None`
+    // both for soft-deleted users (silent — that is normal state) and for
+    // user directories whose `user.json` is missing or unreadable (with a
+    // warning — that is a corruption-style symptom). All other errors
+    // propagate.
     fn load_user_if_present(&self, id: Uuid) -> Result<Option<User>, Error> {
-        match self.read_user(id) {
+        match self.read_user_raw(id) {
+            Ok(user) if !user.is_active() => Ok(None),
             Ok(user) => Ok(Some(user)),
             Err(Error::UserIdNotFound(_)) => {
                 log::warn!("Skipping user directory '{id}': user.json is missing or unreadable");
@@ -680,15 +698,93 @@ impl UserStore for FileStore {
         if id.is_nil() {
             return Err(Error::UserIdMissing());
         }
+        // Read the row through the raw path so an idempotent re-call on an
+        // already-soft-deleted user surfaces UserIdNotFound rather than a
+        // double-soft-delete (mirrors the SqlStore `WHERE deleted_at IS NULL`
+        // guard on the UPDATE).
+        let mut user = self.read_user_raw(id)?;
+        if !user.is_active() {
+            return Err(Error::UserIdNotFound(id.to_string()));
+        }
+        user.deleted_at = Some(generate_now_millis());
+        // Scramble username to free the original value for reuse by a future
+        // signup. The form `deleted-<uuid>` is 44 chars, well under
+        // VARCHAR(64), and independent of the original username's length.
+        user.username = format!("deleted-{id}");
+        // Hard-clear cascaded data that has no audit value: pending sessions,
+        // OAuth identities, email rows. These mirror the SqlStore cascade.
+        user.logins.clear();
+        user.oauth_identities.clear();
+        user.emails.clear();
+        self.write_user_file(&user, true)?;
+        // Hard-delete the user's mazes — the user asked to delete the
+        // account, their content goes with it. Mirrors `mazes ON DELETE
+        // CASCADE` in the SQL schema.
+        let mazes_dir = Path::new(&self.user_dir_path(id))
+            .join("mazes")
+            .to_string_lossy()
+            .to_string();
+        if dir_exists(&mazes_dir) {
+            delete_dir(&mazes_dir);
+        }
+        Ok(())
+    }
+    /// True hard-delete: removes the user directory outright. Mirrors the
+    /// SqlStore `purge_user` semantics — intended for retention /
+    /// right-to-erasure flows where the soft-deleted row must also be
+    /// cleared. Reachable on either an active or already-soft-deleted user.
+    ///
+    /// # Examples
+    ///
+    /// Soft-delete a user, then purge them so the row is truly gone
+    /// ```
+    /// # tokio_test::block_on(async {
+    ///
+    /// use data_model::{User, UserEmail};
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the file store
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let mut store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    /// };
+    ///
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.delete_user(user.id).await.expect("soft-delete");
+    /// match store.purge_user(user.id).await {
+    ///     Ok(_) => println!("User purged from the file store"),
+    ///     Err(error) => println!("Failed to purge user => {}", error),
+    /// }
+    /// # });
+    /// ```
+    async fn purge_user(&mut self, id: Uuid) -> Result<(), Error> {
+        if id.is_nil() {
+            return Err(Error::UserIdMissing());
+        }
         if !self.user_dir_exists(id) {
             return Err(Error::UserIdNotFound(id.to_string()));
         }
         delete_dir(&self.user_dir_path(id));
-
         if self.user_dir_exists(id) {
-            panic!("User directory {id} still exists XXX");
+            return Err(Error::Other(format!(
+                "user directory {id} still exists after purge_user"
+            )));
         }
-
         Ok(())
     }
     /// Updates a user within the store
@@ -1371,6 +1467,51 @@ impl UserStore for FileStore {
     async fn has_users(&self) -> Result<bool, Error> {
         for id in self.get_user_ids()? {
             if self.load_user_if_present(id)?.is_some() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Returns whether at least one *active* admin user is present in the
+    /// file store (`is_admin = true` AND `deleted_at IS NULL`).
+    ///
+    /// `load_user_if_present` already filters soft-deleted users out of the
+    /// iteration, so the body only needs to check `is_admin`. Used by
+    /// startup so a soft-deleted lone admin doesn't prevent the default
+    /// admin from being recreated on next launch.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(true)` if at least one active admin user exists, `Ok(false)`
+    /// otherwise (no users, no admins, or every admin has been soft-deleted).
+    ///
+    /// # Examples
+    ///
+    /// Probe the store before deciding whether to seed a default admin
+    /// ```
+    /// # tokio_test::block_on(async {
+    ///
+    /// use storage::{FileStore, FileStoreConfig, Store, UserStore};
+    ///
+    /// // Create the file store
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    ///
+    /// match store.has_active_admin_user().await {
+    ///     Ok(true) => println!("Active admin already present — skip bootstrap"),
+    ///     Ok(false) => println!("No active admin — seed a default admin"),
+    ///     Err(error) => println!("Failed to check store: {}", error),
+    /// }
+    /// # });
+    /// ```
+    async fn has_active_admin_user(&self) -> Result<bool, Error> {
+        for id in self.get_user_ids()? {
+            if let Some(user) = self.load_user_if_present(id)?
+                && user.is_admin
+            {
                 return Ok(true);
             }
         }

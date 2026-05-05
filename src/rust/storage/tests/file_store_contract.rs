@@ -432,6 +432,132 @@ async fn get_maze_items_is_scoped_to_owner() {
     contract::get_maze_items_is_scoped_to_owner(&mut s).await;
 }
 
+// ─── UserStore — soft-delete behaviour ───────────────────────────────────
+
+#[tokio::test]
+async fn delete_user_soft_deletes_and_scrambles_username() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::delete_user_soft_deletes_and_scrambles_username(&mut s).await;
+}
+
+#[tokio::test]
+async fn delete_user_frees_email_for_reuse() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::delete_user_frees_email_for_reuse(&mut s).await;
+}
+
+#[tokio::test]
+async fn delete_user_is_idempotent_per_row() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::delete_user_is_idempotent_per_row(&mut s).await;
+}
+
+#[tokio::test]
+async fn get_user_filters_soft_deleted() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::get_user_filters_soft_deleted(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_user_by_name_filters_soft_deleted() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::find_user_by_name_filters_soft_deleted(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_user_by_verified_email_filters_soft_deleted() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::find_user_by_verified_email_filters_soft_deleted(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_user_by_api_key_filters_soft_deleted() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::find_user_by_api_key_filters_soft_deleted(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_user_by_login_id_filters_soft_deleted() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::find_user_by_login_id_filters_soft_deleted(&mut s).await;
+}
+
+#[tokio::test]
+async fn find_user_by_oauth_identity_filters_soft_deleted() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::find_user_by_oauth_identity_filters_soft_deleted(&mut s).await;
+}
+
+#[tokio::test]
+async fn get_users_filters_soft_deleted() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::get_users_filters_soft_deleted(&mut s).await;
+}
+
+#[tokio::test]
+async fn get_admin_users_filters_soft_deleted() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::get_admin_users_filters_soft_deleted(&mut s).await;
+}
+
+#[tokio::test]
+async fn has_users_filters_soft_deleted() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::has_users_filters_soft_deleted(&mut s).await;
+}
+
+// ─── UserStore — purge_user ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn purge_user_truly_removes_row() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::purge_user_truly_removes_row(&mut s).await;
+}
+
+#[tokio::test]
+async fn purge_user_works_on_active_user() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::purge_user_works_on_active_user(&mut s).await;
+}
+
+#[tokio::test]
+async fn purge_user_rejects_nil_id() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::purge_user_rejects_nil_id(&mut s).await;
+}
+
+#[tokio::test]
+async fn purge_user_returns_not_found_for_unknown_id() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::purge_user_returns_not_found_for_unknown_id(&mut s).await;
+}
+
+// ─── UserStore — has_active_admin_user ───────────────────────────────────
+
+#[tokio::test]
+async fn has_active_admin_user_returns_true_when_active_admin_exists() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::has_active_admin_user_returns_true_when_active_admin_exists(&mut s).await;
+}
+
+#[tokio::test]
+async fn has_active_admin_user_returns_false_when_only_admin_is_soft_deleted() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::has_active_admin_user_returns_false_when_only_admin_is_soft_deleted(&mut s).await;
+}
+
+#[tokio::test]
+async fn has_active_admin_user_returns_false_when_no_users_exist() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::has_active_admin_user_returns_false_when_no_users_exist(&mut s).await;
+}
+
+#[tokio::test]
+async fn has_active_admin_user_ignores_non_admin_users() {
+    let (mut s, _temp) = fresh_store().await;
+    contract::has_active_admin_user_ignores_non_admin_users(&mut s).await;
+}
+
 // ─── Manage ──────────────────────────────────────────────────────────────
 
 #[tokio::test]

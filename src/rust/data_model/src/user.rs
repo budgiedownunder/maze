@@ -137,6 +137,14 @@ impl User {
             deleted_at: None,
         }
     }
+    /// Returns true if the user is active (i.e. not soft-deleted). Storage
+    /// backends already filter soft-deleted rows out of every read path, so
+    /// in practice loaded users are always active; this helper exists for
+    /// callers that hold a `User` from another source and want to assert
+    /// the invariant explicitly.
+    pub fn is_active(&self) -> bool {
+        self.deleted_at.is_none()
+    }
     /// Returns the user's primary [`UserEmail`] row, if any.
     ///
     /// A well-formed user loaded from a `UserStore` always has exactly one
@@ -531,6 +539,14 @@ mod tests {
         let pre_field = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#;
         loaded.from_json(pre_field).expect("deserialize pre-deleted_at user");
         assert!(loaded.deleted_at.is_none());
+    }
+
+    #[test]
+    fn is_active_reflects_deleted_at_state() {
+        let mut user = create_valid_user();
+        assert!(user.is_active());
+        user.deleted_at = Some(chrono::Utc.with_ymd_and_hms(2026, 5, 5, 12, 0, 0).unwrap());
+        assert!(!user.is_active());
     }
 
     #[test]

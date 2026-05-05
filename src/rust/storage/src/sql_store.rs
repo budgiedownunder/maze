@@ -980,6 +980,107 @@ impl UserStore for SqlStore {
         if id.is_nil() {
             return Err(Error::UserIdMissing());
         }
+        let now = datetime_to_sql(Utc::now());
+        let scrambled = format!("deleted-{id}");
+        let result = sqlx::query(&q(
+            self.kind,
+            "UPDATE users SET deleted_at = ?, username = ? \
+             WHERE id = ? AND deleted_at IS NULL",
+        ))
+        .bind(&now)
+        .bind(&scrambled)
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            return Err(Error::UserIdNotFound(id.to_string()));
+        }
+        // Hard-delete cascaded data that has no audit value: pending sessions,
+        // OAuth identities (frees `(provider, provider_user_id)` for reuse),
+        // email rows (frees the address for reuse), and the user's mazes.
+        // The audit log row, when added, intentionally survives.
+        sqlx::query(&q(self.kind, "DELETE FROM user_logins WHERE user_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        sqlx::query(&q(self.kind, "DELETE FROM oauth_identities WHERE user_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        sqlx::query(&q(self.kind, "DELETE FROM user_emails WHERE user_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        sqlx::query(&q(self.kind, "DELETE FROM mazes WHERE owner_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    /// True hard-delete: removes the `users` row outright. Intended for
+    /// retention / right-to-erasure flows where the soft-deleted row must
+    /// also be cleared. `ON DELETE CASCADE` on `user_logins`,
+    /// `oauth_identities`, `user_emails`, and `mazes` clears every
+    /// related row in the same transaction. Reachable on either an active
+    /// or already-soft-deleted user.
+    ///
+    /// # Examples
+    ///
+    /// Soft-delete a user, then purge them so the row is truly gone
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    /// };
+    ///
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.delete_user(user.id).await.expect("soft-delete");
+    /// match store.purge_user(user.id).await {
+    ///     Ok(_) => println!("User purged from the SQL store"),
+    ///     Err(error) => println!("Failed to purge user => {}", error),
+    /// }
+    /// # });
+    /// ```
+    async fn purge_user(&mut self, id: Uuid) -> Result<(), Error> {
+        if id.is_nil() {
+            return Err(Error::UserIdMissing());
+        }
+        // True hard-delete. ON DELETE CASCADE on user_logins, oauth_identities,
+        // user_emails, and mazes clears every related row. Reachable in two
+        // legitimate cases: (1) the row is already soft-deleted and operations
+        // is purging it; (2) right-to-erasure called directly on an active
+        // user. The trait does not require a prior soft-delete, so the
+        // `deleted_at IS NULL` filter is intentionally omitted here.
         let result = sqlx::query(&q(self.kind, "DELETE FROM users WHERE id = ?"))
             .bind(id.to_string())
             .execute(&self.pool)
@@ -1171,11 +1272,14 @@ impl UserStore for SqlStore {
     /// # });
     /// ```
     async fn get_user(&self, id: Uuid) -> Result<User, Error> {
-        let row = sqlx::query(&q(self.kind, "SELECT * FROM users WHERE id = ?"))
-            .bind(id.to_string())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM users WHERE id = ? AND deleted_at IS NULL",
+        ))
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         match row {
             Some(row) => user_from_row(&self.pool, self.kind, &row).await,
             None => Err(Error::UserIdNotFound(id.to_string())),
@@ -1249,7 +1353,7 @@ impl UserStore for SqlStore {
     async fn find_user_by_name(&self, name: &str) -> Result<User, Error> {
         let mut rows = sqlx::query(&q(
             self.kind,
-            "SELECT * FROM users WHERE LOWER(username) = LOWER(?)",
+            "SELECT * FROM users WHERE LOWER(username) = LOWER(?) AND deleted_at IS NULL",
         ))
         .bind(name)
         .fetch_all(&self.pool)
@@ -1336,7 +1440,8 @@ impl UserStore for SqlStore {
             self.kind,
             "SELECT u.* FROM users u \
              JOIN user_emails ue ON ue.user_id = u.id \
-             WHERE LOWER(ue.email) = LOWER(?) AND ue.verified <> 0",
+             WHERE LOWER(ue.email) = LOWER(?) AND ue.verified <> 0 \
+               AND u.deleted_at IS NULL",
         ))
         .bind(email)
         .fetch_all(&self.pool)
@@ -1420,11 +1525,14 @@ impl UserStore for SqlStore {
         // return at most one row by construction. The multi-row guard is here
         // for parity with the rest of the `find_user_by_*` family and to fail
         // loudly if a future migration ever weakens the unique index.
-        let mut rows = sqlx::query(&q(self.kind, "SELECT * FROM users WHERE api_key = ?"))
-            .bind(api_key.to_string())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
+        let mut rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM users WHERE api_key = ? AND deleted_at IS NULL",
+        ))
+        .bind(api_key.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         match rows.len() {
             0 => Err(Error::UserNotFound()),
             1 => user_from_row(&self.pool, self.kind, &rows.pop().expect("len==1")).await,
@@ -1514,7 +1622,7 @@ impl UserStore for SqlStore {
             self.kind,
             "SELECT u.* FROM users u \
              JOIN user_logins l ON l.user_id = u.id \
-             WHERE l.id = ? AND l.expires_at > ?",
+             WHERE l.id = ? AND l.expires_at > ? AND u.deleted_at IS NULL",
         ))
         .bind(login_id.to_string())
         .bind(now)
@@ -1611,7 +1719,8 @@ impl UserStore for SqlStore {
             self.kind,
             "SELECT u.* FROM users u \
              JOIN oauth_identities oi ON oi.user_id = u.id \
-             WHERE LOWER(oi.provider) = LOWER(?) AND oi.provider_user_id = ?",
+             WHERE LOWER(oi.provider) = LOWER(?) AND oi.provider_user_id = ? \
+               AND u.deleted_at IS NULL",
         ))
         .bind(provider)
         .bind(provider_user_id)
@@ -1693,10 +1802,13 @@ impl UserStore for SqlStore {
     /// # });
     /// ```
     async fn get_users(&self) -> Result<Vec<User>, Error> {
-        let rows = sqlx::query(&q(self.kind, "SELECT * FROM users ORDER BY username"))
-            .fetch_all(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY username",
+        ))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         let mut users = Vec::with_capacity(rows.len());
         for row in &rows {
             users.push(user_from_row(&self.pool, self.kind, row).await?);
@@ -1771,7 +1883,8 @@ impl UserStore for SqlStore {
     async fn get_admin_users(&self) -> Result<Vec<User>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
-            "SELECT * FROM users WHERE is_admin <> 0 ORDER BY username",
+            "SELECT * FROM users WHERE is_admin <> 0 AND deleted_at IS NULL \
+             ORDER BY username",
         ))
         .fetch_all(&self.pool)
         .await
@@ -1820,10 +1933,62 @@ impl UserStore for SqlStore {
     /// # });
     /// ```
     async fn has_users(&self) -> Result<bool, Error> {
-        let row = sqlx::query(&q(self.kind, "SELECT 1 FROM users LIMIT 1"))
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 FROM users WHERE deleted_at IS NULL LIMIT 1",
+        ))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(row.is_some())
+    }
+
+    /// Returns whether at least one *active* admin user exists in the SQL
+    /// store (`is_admin <> 0` AND `deleted_at IS NULL`).
+    ///
+    /// Implemented as a `SELECT 1 ... LIMIT 1` existence probe so the
+    /// engine can return on the first matching row (covered by the
+    /// `idx_users_deleted_at` index). Used by startup so a soft-deleted
+    /// lone admin doesn't prevent the default admin from being recreated
+    /// on next launch.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(true)` if at least one active admin user exists, `Ok(false)`
+    /// otherwise (no users, no admins, or every admin has been soft-deleted).
+    ///
+    /// # Examples
+    ///
+    /// Probe the store before deciding whether to seed a default admin
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// match store.has_active_admin_user().await {
+    ///     Ok(true) => println!("Active admin already present — skip bootstrap"),
+    ///     Ok(false) => println!("No active admin — seed a default admin"),
+    ///     Err(error) => println!("Failed to check store: {}", error),
+    /// }
+    /// # });
+    /// ```
+    async fn has_active_admin_user(&self) -> Result<bool, Error> {
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 FROM users WHERE is_admin <> 0 AND deleted_at IS NULL LIMIT 1",
+        ))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         Ok(row.is_some())
     }
 
