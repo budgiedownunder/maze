@@ -177,6 +177,7 @@ jobs:
         cargo test --locked -p utils
         cargo test --locked -p data_model
         cargo test --locked -p auth
+        cargo test --locked -p comms --all-features
         cargo test --locked -p maze_openapi_generator
         cargo test --locked -p maze_game_bevy
         cargo test --locked -p maze
