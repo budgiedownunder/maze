@@ -208,7 +208,7 @@ namespace Maze.Maui.App.Tests.ViewModels
         public async Task VerifyEmail_Surfaces501AsNotYetAvailable()
         {
             var auth = new Mock<IAuthService>();
-            auth.Setup(s => s.VerifyEmailAsync(It.IsAny<string>()))
+            auth.Setup(s => s.RequestEmailVerificationAsync(It.IsAny<string>()))
                 .ThrowsAsync(new HttpRequestException("stub", null, HttpStatusCode.NotImplemented));
             var vm = SeedTwoRowVm(auth);
             var row = vm.Emails.First();

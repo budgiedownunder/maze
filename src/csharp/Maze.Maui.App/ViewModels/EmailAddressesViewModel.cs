@@ -191,7 +191,7 @@ namespace Maze.Maui.App.ViewModels
             ErrorMessage = "";
             try
             {
-                await _authService.VerifyEmailAsync(row.Email);
+                await _authService.RequestEmailVerificationAsync(row.Email);
             }
             catch (HttpRequestException ex) when ((int?)ex.StatusCode == 501)
             {
