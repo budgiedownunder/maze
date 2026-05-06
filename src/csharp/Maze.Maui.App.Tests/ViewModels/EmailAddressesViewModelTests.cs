@@ -205,17 +205,84 @@ namespace Maze.Maui.App.Tests.ViewModels
         // ---- VerifyEmail ---------------------------------------------------
 
         [Fact]
-        public async Task VerifyEmail_Surfaces501AsNotYetAvailable()
+        public async Task VerifyEmail_CallsRequestEmailVerificationOnceWithEmail()
         {
             var auth = new Mock<IAuthService>();
-            auth.Setup(s => s.RequestEmailVerificationAsync(It.IsAny<string>()))
-                .ThrowsAsync(new HttpRequestException("stub", null, HttpStatusCode.NotImplemented));
+            auth.Setup(s => s.RequestEmailVerificationAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
             var vm = SeedTwoRowVm(auth);
+            var row = vm.Emails.First(r => r.Email == "second@example.com");
+
+            await vm.VerifyEmailCommand.ExecuteAsync(row);
+
+            auth.Verify(s => s.RequestEmailVerificationAsync("second@example.com"), Times.Once);
+        }
+
+        [Fact]
+        public async Task VerifyEmail_SuccessSetsResendFlashWithEmail()
+        {
+            var auth = new Mock<IAuthService>();
+            auth.Setup(s => s.RequestEmailVerificationAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+            var vm = SeedTwoRowVm(auth);
+            var row = vm.Emails.First(r => r.Email == "second@example.com");
+
+            await vm.VerifyEmailCommand.ExecuteAsync(row);
+
+            Assert.Contains("second@example.com", vm.ResendFlash);
+            Assert.Equal("", vm.ErrorMessage);
+        }
+
+        [Fact]
+        public async Task VerifyEmail_SuccessClearsPriorErrorMessage()
+        {
+            var auth = new Mock<IAuthService>();
+            auth.Setup(s => s.RequestEmailVerificationAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+            var vm = SeedTwoRowVm(auth);
+            vm.ErrorMessage = "stale error from a previous action";
             var row = vm.Emails.First();
 
             await vm.VerifyEmailCommand.ExecuteAsync(row);
 
-            Assert.Contains("not yet available", vm.ErrorMessage);
+            Assert.Equal("", vm.ErrorMessage);
+        }
+
+        [Fact]
+        public async Task VerifyEmail_FailureSetsErrorAndClearsResendFlash()
+        {
+            var auth = new Mock<IAuthService>();
+            auth.Setup(s => s.RequestEmailVerificationAsync(It.IsAny<string>()))
+                .ThrowsAsync(new HttpRequestException("boom"));
+            var vm = SeedTwoRowVm(auth);
+            vm.ResendFlash = "stale flash from a previous resend";
+            var row = vm.Emails.First();
+
+            await vm.VerifyEmailCommand.ExecuteAsync(row);
+
+            Assert.Contains("Failed to resend", vm.ErrorMessage);
+            Assert.Equal("", vm.ResendFlash);
+        }
+
+        [Fact]
+        public async Task VerifyEmail_RapidReResendReplacesFlashWithSecondAddress()
+        {
+            var auth = new Mock<IAuthService>();
+            auth.Setup(s => s.RequestEmailVerificationAsync(It.IsAny<string>())).Returns(Task.CompletedTask);
+            var vm = SeedTwoRowVm(auth);
+            var firstRow = vm.Emails.First(r => r.Email == "primary@example.com");
+            var secondRow = vm.Emails.First(r => r.Email == "second@example.com");
+
+            await vm.VerifyEmailCommand.ExecuteAsync(firstRow);
+            // Sanity: first invocation set the flash for the primary row.
+            Assert.Contains("primary@example.com", vm.ResendFlash);
+
+            await vm.VerifyEmailCommand.ExecuteAsync(secondRow);
+
+            // Second invocation cancels the first auto-clear and replaces
+            // the flash with the second address. The first timer firing 5s
+            // later will see the message no longer matches its email and
+            // no-op (covered by ScheduleResendFlashClearAsync's identity
+            // check).
+            Assert.Contains("second@example.com", vm.ResendFlash);
+            Assert.DoesNotContain("primary@example.com", vm.ResendFlash);
         }
 
         // ---- helpers -------------------------------------------------------
