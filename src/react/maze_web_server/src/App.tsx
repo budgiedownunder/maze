@@ -8,6 +8,7 @@ import { LoginPage } from './pages/LoginPage'
 import { SignUpPage } from './pages/SignUpPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
+import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import { OAuthCallbackPage } from './pages/OAuthCallbackPage'
 import { MazesPage } from './pages/MazesPage'
 import { MazePage } from './pages/MazePage'
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
   { path: '/signup', element: <SignupRoute /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
   { path: '/reset-password', element: <ResetPasswordPage /> },
+  { path: '/verify-email', element: <VerifyEmailPage /> },
   { path: '/oauth/callback', element: <OAuthCallbackPage /> },
   { path: '/mazes', element: <ProtectedRoute><MazesPage /></ProtectedRoute> },
   { path: '/mazes/new', element: <ProtectedRoute><MazePage /></ProtectedRoute> },

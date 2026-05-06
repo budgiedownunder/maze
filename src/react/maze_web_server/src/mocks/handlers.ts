@@ -64,12 +64,43 @@ export function resetMockMazes(): void {
 
 // In-memory mock token stores (token → target email). Confirm endpoints look
 // up the token, mutate the matching mock state, and delete the entry on use.
-export const mockResetTokens = new Map<string, string>()
-export const mockVerificationTokens = new Map<string, string>()
+//
+// Mirrored into sessionStorage so the e2e specs survive `page.goto`
+// navigations — without it, every reload re-imports this module and wipes
+// the Maps before the confirm endpoint can validate the token. jsdom and
+// real browsers both have sessionStorage; the typeof guard keeps the
+// module portable to environments that don't.
+const RESET_TOKEN_STORAGE_KEY = '__msw_mock_reset_tokens'
+const VERIFICATION_TOKEN_STORAGE_KEY = '__msw_mock_verification_tokens'
+
+function loadTokenMap(key: string): Map<string, string> {
+  if (typeof sessionStorage === 'undefined') return new Map()
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (!raw) return new Map()
+    return new Map(JSON.parse(raw) as [string, string][])
+  } catch {
+    return new Map()
+  }
+}
+
+function saveTokenMap(key: string, map: Map<string, string>): void {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(key, JSON.stringify([...map.entries()]))
+  } catch { /* ignore quota / serialization errors */ }
+}
+
+export const mockResetTokens = loadTokenMap(RESET_TOKEN_STORAGE_KEY)
+export const mockVerificationTokens = loadTokenMap(VERIFICATION_TOKEN_STORAGE_KEY)
 
 export function resetMockTokens(): void {
   mockResetTokens.clear()
   mockVerificationTokens.clear()
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem(RESET_TOKEN_STORAGE_KEY)
+    sessionStorage.removeItem(VERIFICATION_TOKEN_STORAGE_KEY)
+  }
 }
 
 let tokenCounter = 0
@@ -164,7 +195,10 @@ export const handlers = [
     const body = await request.json() as { email: string }
     const known = body.email.toLowerCase() === mockProfile.email.toLowerCase()
       || mockEmails.some(e => e.email.toLowerCase() === body.email.toLowerCase())
-    if (known) mockResetTokens.set(mintToken('reset'), body.email)
+    if (known) {
+      mockResetTokens.set(mintToken('reset'), body.email)
+      saveTokenMap(RESET_TOKEN_STORAGE_KEY, mockResetTokens)
+    }
     return new HttpResponse(null, { status: 200 })
   }),
 
@@ -174,13 +208,17 @@ export const handlers = [
       return new HttpResponse('Invalid or expired token', { status: 400 })
     }
     mockResetTokens.delete(body.token)
+    saveTokenMap(RESET_TOKEN_STORAGE_KEY, mockResetTokens)
     return new HttpResponse(null, { status: 200 })
   }),
 
   http.post(`${BASE}/email-verifications/request`, async ({ request }) => {
     const body = await request.json() as { email: string }
     const onUser = mockEmails.some(e => e.email.toLowerCase() === body.email.toLowerCase())
-    if (onUser) mockVerificationTokens.set(mintToken('verify'), body.email)
+    if (onUser) {
+      mockVerificationTokens.set(mintToken('verify'), body.email)
+      saveTokenMap(VERIFICATION_TOKEN_STORAGE_KEY, mockVerificationTokens)
+    }
     return new HttpResponse(null, { status: 200 })
   }),
 
@@ -189,6 +227,7 @@ export const handlers = [
     const target = mockVerificationTokens.get(body.token)
     if (!target) return new HttpResponse('Invalid or expired token', { status: 400 })
     mockVerificationTokens.delete(body.token)
+    saveTokenMap(VERIFICATION_TOKEN_STORAGE_KEY, mockVerificationTokens)
     mockEmails = mockEmails.map(e =>
       e.email.toLowerCase() === target.toLowerCase()
         ? { ...e, verified: true, verified_at: new Date().toISOString() }
