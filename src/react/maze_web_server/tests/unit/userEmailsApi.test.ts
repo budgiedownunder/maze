@@ -1,11 +1,21 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { addMyEmail, getMyEmails, removeMyEmail, setPrimaryEmail, verifyMyEmail } from '../../src/api/client'
-import { resetMockEmails } from '../../src/mocks/handlers'
+import {
+  addMyEmail,
+  confirmEmailVerification,
+  confirmPasswordReset,
+  getMyEmails,
+  removeMyEmail,
+  requestEmailVerification,
+  requestPasswordReset,
+  setPrimaryEmail,
+} from '../../src/api/client'
+import { mockResetTokens, mockVerificationTokens, resetMockEmails, resetMockTokens } from '../../src/mocks/handlers'
 
 const TOKEN = 'test-token'
 
 beforeEach(() => {
   resetMockEmails()
+  resetMockTokens()
 })
 
 describe('getMyEmails', () => {
@@ -86,8 +96,60 @@ describe('setPrimaryEmail', () => {
   })
 })
 
-describe('verifyMyEmail', () => {
-  it('throws 501 — verification stub until email-send-support ships', async () => {
-    await expect(verifyMyEmail(TOKEN, 'test@example.com')).rejects.toMatchObject({ status: 501 })
+describe('requestPasswordReset', () => {
+  it('always returns 200 (anti-enumeration) and mints a token for known emails', async () => {
+    await requestPasswordReset('test@example.com')
+
+    expect([...mockResetTokens.values()]).toContain('test@example.com')
+  })
+
+  it('returns 200 even for unknown emails (no enumeration)', async () => {
+    await expect(requestPasswordReset('unknown@example.com')).resolves.toBeUndefined()
+    expect([...mockResetTokens.values()]).not.toContain('unknown@example.com')
+  })
+})
+
+describe('confirmPasswordReset', () => {
+  it('consumes the minted token on success', async () => {
+    await requestPasswordReset('test@example.com')
+    const token = [...mockResetTokens.keys()][0]
+
+    await confirmPasswordReset(token, 'NewPassword1!')
+
+    expect(mockResetTokens.has(token)).toBe(false)
+  })
+
+  it('throws 400 for an invalid or expired token', async () => {
+    await expect(confirmPasswordReset('not-a-real-token', 'NewPassword1!'))
+      .rejects.toMatchObject({ status: 400 })
+  })
+})
+
+describe('requestEmailVerification', () => {
+  it('mints a token for an email on the current user', async () => {
+    await requestEmailVerification(TOKEN, 'test@example.com')
+
+    expect([...mockVerificationTokens.values()]).toContain('test@example.com')
+  })
+
+  it('returns 200 even for an email not on the user (anti-enumeration)', async () => {
+    await expect(requestEmailVerification(TOKEN, 'stranger@example.com')).resolves.toBeUndefined()
+    expect([...mockVerificationTokens.values()]).not.toContain('stranger@example.com')
+  })
+})
+
+describe('confirmEmailVerification', () => {
+  it('consumes the minted verification token on success', async () => {
+    await requestEmailVerification(TOKEN, 'test@example.com')
+    const verificationToken = [...mockVerificationTokens.keys()][0]
+
+    await confirmEmailVerification(verificationToken)
+
+    expect(mockVerificationTokens.has(verificationToken)).toBe(false)
+  })
+
+  it('throws 400 for an invalid or already-used token', async () => {
+    await expect(confirmEmailVerification('not-a-real-token'))
+      .rejects.toMatchObject({ status: 400 })
   })
 })
