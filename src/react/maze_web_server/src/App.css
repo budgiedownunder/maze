@@ -199,6 +199,11 @@
   margin: 0;
 }
 
+.auth-form .error-msg,
+.auth-form .success-msg {
+  text-align: center;
+}
+
 .danger-msg {
   color: var(--danger);
   margin: 0.5rem 0;
