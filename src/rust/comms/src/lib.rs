@@ -29,6 +29,8 @@ pub use oauth::{ServiceAccountConfig, ServiceAccountTokenSource};
 pub use provider::{DeliveryReceipt, Provider};
 #[cfg(feature = "provider-mailgun")]
 pub use providers::{MailgunConfig, MailgunProvider, MailgunRegion};
+#[cfg(feature = "provider-smtp-oauth2")]
+pub use providers::{SmtpOAuth2Config, SmtpOAuth2Provider, SmtpTls};
 pub use retry::RetryPolicy;
 pub use template::{
     AppContext, BrandingContext, BrandingPartialSources, EmbeddedTemplateLoader, FsTemplateLoader,

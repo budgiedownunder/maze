@@ -46,6 +46,12 @@ The crate currently defines the following modules:
 - `provider-mailgun` - exposes `MailgunProvider`, an `EmailProvider`
   backed by the Mailgun HTTP API (US or EU regional host, HTTP Basic
   auth with `api:<api_key>`). Pulls in `reqwest` with `rustls-tls`.
+- `provider-smtp-oauth2` - exposes `SmtpOAuth2Provider`, an `EmailProvider`
+  that ships messages over SMTP and authenticates with XOAUTH2 using any
+  `OAuthTokenSource`. Pairs naturally with `oauth2-microsoft` (Microsoft
+  365 client-credentials) or `oauth2-google` (Google Workspace
+  service-account); the consumer enables those features separately.
+  Pulls in `lettre` with `tokio1-rustls-tls`.
 
 ## Getting Started
 

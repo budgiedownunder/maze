@@ -19,11 +19,17 @@ oauth2-google = ["dep:reqwest", "dep:jsonwebtoken"]
 # Enables `MailgunProvider` — `EmailProvider` impl backed by the Mailgun
 # HTTP API (https://api.mailgun.net or the EU regional host).
 provider-mailgun = ["dep:reqwest"]
+# Enables `SmtpOAuth2Provider` — `EmailProvider` impl that authenticates
+# over SMTP via XOAUTH2, using any `OAuthTokenSource` to mint the bearer
+# access token. Consumers enable a matching `oauth2-microsoft` /
+# `oauth2-google` feature separately for the token source.
+provider-smtp-oauth2 = ["dep:lettre"]
 
 [dependencies]
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 jsonwebtoken = { version = "9", optional = true }
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "tokio1-rustls-tls", "builder"], optional = true }
 minijinja = { version = "2", default-features = false, features = ["builtins", "serde"] }
 reqwest = { version = "0.11", default-features = false, features = ["rustls-tls", "json"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
@@ -35,7 +41,8 @@ url = { version = "2", features = ["serde"] }
 uuid = { version = "1.7", features = ["serde", "v4"] }
 
 [dev-dependencies]
+base64 = "0.22"
 pretty_assertions = "1"
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "net", "test-util"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "net", "test-util", "io-util"] }
 tokio-test = "0.4"
 wiremock = "0.6"
