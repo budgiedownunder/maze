@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as api from '../api/client'
 import type { UserEmail } from '../types/api'
 import { isValidEmail } from '../utils/validation'
@@ -7,12 +7,20 @@ interface Props {
   token: string
 }
 
+const RESEND_FLASH_MS = 5000
+
 export function EmailAddressesPanel({ token }: Props) {
   const [emails, setEmails] = useState<UserEmail[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyEmail, setBusyEmail] = useState<string | null>(null)
+  const [resendFlash, setResendFlash] = useState<string | null>(null)
   const [newEmail, setNewEmail] = useState('')
   const [isAdding, setIsAdding] = useState(false)
+  const resendFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (resendFlashTimer.current !== null) clearTimeout(resendFlashTimer.current)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -56,6 +64,22 @@ export function EmailAddressesPanel({ token }: Props) {
     return runWrite(email, optimistic, () => api.removeMyEmail(token, email), 'Failed to remove email')
   }
 
+  async function handleResendVerification(email: string) {
+    setBusyEmail(email)
+    setError(null)
+    setResendFlash(null)
+    if (resendFlashTimer.current !== null) clearTimeout(resendFlashTimer.current)
+    try {
+      await api.requestEmailVerification(token, email)
+      setResendFlash(`Verification link sent to ${email}.`)
+      resendFlashTimer.current = setTimeout(() => setResendFlash(null), RESEND_FLASH_MS)
+    } catch {
+      setError('Failed to resend verification link')
+    } finally {
+      setBusyEmail(null)
+    }
+  }
+
   // The add-form path doesn't lend itself to optimistic update — the row's
   // verified/verified_at fields come from the server and we don't want to
   // fabricate them. Send first, set the list from the response.
@@ -87,6 +111,7 @@ export function EmailAddressesPanel({ token }: Props) {
       <h3 className="email-section-title">Email Addresses</h3>
       {emails === null && !error && <p>Loading emails...</p>}
       {error && <p role="alert" className="error-msg">{error}</p>}
+      {resendFlash && <p role="status" className="success-msg">{resendFlash}</p>}
       {emails !== null && (
         <ul className="email-list">
           {emails.map(row => {
@@ -131,8 +156,8 @@ export function EmailAddressesPanel({ token }: Props) {
                     <button
                       type="button"
                       className="btn-link"
-                      disabled
-                      title="Email verification is not yet available"
+                      disabled={busyEmail !== null}
+                      onClick={() => handleResendVerification(row.email)}
                     >
                       Resend Verification
                     </button>

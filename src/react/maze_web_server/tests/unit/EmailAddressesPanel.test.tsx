@@ -154,7 +154,7 @@ describe('EmailAddressesPanel', () => {
     expect(within(oneRow).getByText('Primary')).toBeInTheDocument()
   })
 
-  it('renders a disabled Resend Verification button on unverified rows', async () => {
+  it('renders an enabled Resend Verification button on unverified rows', async () => {
     server.use(
       http.get('/api/v1/users/me/emails', () => {
         const emails: UserEmailsResponse = {
@@ -171,10 +171,54 @@ describe('EmailAddressesPanel', () => {
 
     const twoRow = screen.getByText('two@example.com').closest('li')!
     expect(within(twoRow).getByText('Unverified')).toBeInTheDocument()
-    const resend = within(twoRow).getByRole('button', { name: /Resend Verification/ })
-    expect(resend).toBeDisabled()
-    // Make Primary is also disabled when the row is unverified.
+    expect(within(twoRow).getByRole('button', { name: /Resend Verification/ })).toBeEnabled()
+    // Make Primary is still disabled when the row is unverified.
     expect(within(twoRow).getByRole('button', { name: /Make Primary/ })).toBeDisabled()
+  })
+
+  it('clicking Resend Verification surfaces a transient success message', async () => {
+    server.use(
+      http.get('/api/v1/users/me/emails', () => {
+        const emails: UserEmailsResponse = {
+          emails: [
+            { email: 'one@example.com', is_primary: true,  verified: true,  verified_at: '2026-01-01T00:00:00.000Z' },
+            { email: 'two@example.com', is_primary: false, verified: false, verified_at: null },
+          ],
+        }
+        return HttpResponse.json(emails)
+      }),
+    )
+
+    await renderPanel()
+
+    const twoRow = screen.getByText('two@example.com').closest('li')!
+    await userEvent.click(within(twoRow).getByRole('button', { name: /Resend Verification/ }))
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/verification link sent to two@example\.com/i))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('surfaces a panel-level error when Resend Verification fails', async () => {
+    server.use(
+      http.get('/api/v1/users/me/emails', () => {
+        const emails: UserEmailsResponse = {
+          emails: [
+            { email: 'one@example.com', is_primary: true,  verified: true,  verified_at: '2026-01-01T00:00:00.000Z' },
+            { email: 'two@example.com', is_primary: false, verified: false, verified_at: null },
+          ],
+        }
+        return HttpResponse.json(emails)
+      }),
+      http.post('/api/v1/email-verifications/request', () => new HttpResponse(null, { status: 500 })),
+    )
+
+    await renderPanel()
+
+    const twoRow = screen.getByText('two@example.com').closest('li')!
+    await userEvent.click(within(twoRow).getByRole('button', { name: /Resend Verification/ }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/failed to resend/i))
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('shows a load error when the initial GET fails', async () => {
