@@ -37,7 +37,7 @@ System_Boundary(b_rust_core, "Rust core") {
     Container(data_model, "data_model", "", "Data model", $tags="rust")
     Container(utils, "utils", "", "Utility functions", $tags="rust")
     Container(auth, "auth", "", "Authentication library", $tags="rust")
-    Container(comms, "comms", "", "Outbound communications library", $tags="rust")
+    Container(comms, "comms", "", "Outbound email communications library", $tags="rust")
     Container(storage, "storage", "", "Data storage", $tags="rust")
 }
 
@@ -83,6 +83,8 @@ System_Boundary(b_persistence, "Persistence") {
     ContainerDb_Ext(database, "Database", "", "SQLite / PostgreSQL / MySQL")
 }
 
+Container_Ext(email_providers, "Email providers", "HTTPS / SMTP + XOAUTH2", "Mailgun, Microsoft 365, Google Workspace")
+
 Rel(user, browser, "")
 Rel(browser, html_help, "")
 Rel(maze_react_web, maze_wasm_js, "")
@@ -126,6 +128,7 @@ Rel(storage, maze, "")
 Rel(storage, utils, "")
 Rel(storage, filesystem, "")
 Rel(storage, database, "")
+Rel(comms, email_providers, "")
 Rel(maze, data_model, "")
 Rel(maze, utils, "")
 Rel(maze_game_bevy, maze, "")
