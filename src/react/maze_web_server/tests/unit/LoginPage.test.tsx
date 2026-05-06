@@ -72,4 +72,10 @@ describe('LoginPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/invalid email or password/i))
   })
+
+  it('navigates to /forgot-password from the Forgot password? link', async () => {
+    renderLoginPage()
+    await userEvent.click(screen.getByRole('button', { name: /forgot password/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/forgot-password')
+  })
 })

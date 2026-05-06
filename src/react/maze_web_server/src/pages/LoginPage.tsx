@@ -86,6 +86,9 @@ export function LoginPage() {
         <button type="submit" disabled={submitDisabled} className="btn-submit">
           Sign In
         </button>
+        <button type="button" onClick={() => navigate('/forgot-password')} disabled={isBusy} className="btn-link">
+          Forgot password?
+        </button>
         {allow_signup && (
           <button type="button" onClick={() => navigate('/signup')} disabled={isBusy} className="btn-link">
             Sign Up
