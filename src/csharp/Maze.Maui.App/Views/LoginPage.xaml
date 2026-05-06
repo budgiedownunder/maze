@@ -103,6 +103,12 @@
                         Command="{Binding SignInCommand}"
                         HorizontalOptions="Fill" />
 
+                <Button Text="Forgot password?"
+                        Command="{Binding GoToForgotPasswordCommand}"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
+
                 <Button Text="Sign Up"
                         Command="{Binding GoToSignUpCommand}"
                         IsVisible="{Binding AllowSignUp}"

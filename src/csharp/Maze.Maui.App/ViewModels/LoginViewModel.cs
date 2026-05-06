@@ -145,6 +145,12 @@ namespace Maze.Maui.App.ViewModels
         }
 
         [RelayCommand]
+        private async Task GoToForgotPassword()
+        {
+            await _navigationService.GoToAsync(nameof(ForgotPasswordPage));
+        }
+
+        [RelayCommand]
         private async Task SignInWithOAuth(string? providerName)
         {
             if (string.IsNullOrWhiteSpace(providerName)) return;

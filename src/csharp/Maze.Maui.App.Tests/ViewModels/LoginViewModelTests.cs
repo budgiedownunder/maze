@@ -135,6 +135,14 @@ namespace Maze.Maui.App.Tests.ViewModels
             nav.Verify(n => n.GoToAsync(nameof(SignUpPage), null), Times.Once);
         }
 
+        [Fact]
+        public async Task GoToForgotPassword_NavigatesToForgotPasswordPage()
+        {
+            var (vm, _, _, nav, _) = BuildVm();
+            await vm.GoToForgotPasswordCommand.ExecuteAsync(null);
+            nav.Verify(n => n.GoToAsync(nameof(ForgotPasswordPage), null), Times.Once);
+        }
+
         // ---- TryRestoreSessionAsync -----------------------------------------
 
         [Fact]
