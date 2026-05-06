@@ -9,7 +9,8 @@ The following `Rust` crates are present:
 
 | Folder | Crate | Description
 |--------|-----------|---------------
-| `src/rust` | [`maze`](./maze/README.md) | Maze definition, calculation, and gaming engine library
+| `src/rust` | [`comms`](./comms/README.md) | Outbound email communications library
+|            | [`maze`](./maze/README.md) | Maze definition, calculation, and gaming engine library
 |            | [`maze_c`](./maze_c/README.md) | Maze C API library
 |            | [`maze_console`](./maze_console/README.md) | Maze console application
 |            | [`maze_game_bevy`](./maze_game_bevy/README.md) | Maze game Bevy application (native binary and shared library)
