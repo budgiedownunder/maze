@@ -26,3 +26,24 @@ test('Forgot Password Back to sign in returns to /login', async ({ page }) => {
   await page.getByRole('button', { name: /back to sign in/i }).click()
   await expect(page).toHaveURL(/\/login/)
 })
+
+test('Reset Password without a token shows the invalid-link state', async ({ page }) => {
+  await page.goto('/reset-password')
+  await expect(page.getByRole('alert')).toContainText(/invalid/i)
+})
+
+test('Reset Password with an unknown token surfaces an inline error', async ({ page }) => {
+  await page.goto('/reset-password?token=not-a-real-token')
+  await page.getByLabel('New password', { exact: true }).fill('Password1!')
+  await page.getByLabel('Confirm new password', { exact: true }).fill('Password1!')
+  await page.getByRole('button', { name: /set new password/i }).click()
+  await expect(page.getByRole('alert')).toContainText(/invalid or has expired/i)
+})
+
+test('Reset Password mismatched confirmation blocks the submit before any network call', async ({ page }) => {
+  await page.goto('/reset-password?token=irrelevant')
+  await page.getByLabel('New password', { exact: true }).fill('Password1!')
+  await page.getByLabel('Confirm new password', { exact: true }).fill('Different1!')
+  await page.getByRole('button', { name: /set new password/i }).click()
+  await expect(page.getByRole('alert')).toContainText(/match/i)
+})

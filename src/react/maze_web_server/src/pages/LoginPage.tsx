@@ -12,6 +12,7 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [flash, setFlash] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const { login, isLoading } = useAuth()
   const navigate = useNavigate()
@@ -22,14 +23,18 @@ export function LoginPage() {
   // Surface OAuth-flow errors that the server (or the OAuthCallbackPage)
   // delivers via `?error=<code>` on this URL. Strip the query param after
   // reading so a refresh or a follow-up successful sign-in doesn't keep the
-  // stale error visible.
+  // stale error visible. The same channel carries `?message=` flashes from
+  // sibling pages (e.g. successful password reset).
   useEffect(() => {
     const code = searchParams.get('error')
     const message = getOAuthErrorMessage(code)
-    if (message) {
-      setError(message)
+    const flashMessage = searchParams.get('message')
+    if (message || flashMessage) {
+      if (message) setError(message)
+      if (flashMessage) setFlash(flashMessage)
       const next = new URLSearchParams(searchParams)
       next.delete('error')
+      next.delete('message')
       setSearchParams(next, { replace: true })
     }
   }, [searchParams, setSearchParams])
@@ -81,6 +86,7 @@ export function LoginPage() {
         <label htmlFor="password">Password</label>
         <PasswordInput id="password" value={password} onChange={setPassword} disabled={isBusy} />
 
+        {flash && <p role="status" className="success-msg">{flash}</p>}
         {error && <p role="alert" className="error-msg">{error}</p>}
 
         <button type="submit" disabled={submitDisabled} className="btn-submit">

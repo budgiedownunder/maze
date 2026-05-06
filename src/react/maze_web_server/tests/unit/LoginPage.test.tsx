@@ -27,9 +27,9 @@ vi.mock('../../src/context/AuthContext', async () => {
   }
 })
 
-function renderLoginPage() {
+function renderLoginPage(initialEntry = '/login') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <ThemeProvider>
         <LoginPage />
       </ThemeProvider>
@@ -77,5 +77,10 @@ describe('LoginPage', () => {
     renderLoginPage()
     await userEvent.click(screen.getByRole('button', { name: /forgot password/i }))
     expect(mockNavigate).toHaveBeenCalledWith('/forgot-password')
+  })
+
+  it('surfaces the ?message= flash and clears it from the URL', async () => {
+    renderLoginPage('/login?message=Password+reset+successful')
+    expect(await screen.findByRole('status')).toHaveTextContent(/password reset successful/i)
   })
 })
