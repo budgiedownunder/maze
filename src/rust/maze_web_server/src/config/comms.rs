@@ -110,6 +110,9 @@ pub struct CommsEmailConfig {
     /// Mailgun-specific settings; consulted only when `provider = "mailgun"`.
     #[serde(default)]
     pub mailgun: MailgunAppConfig,
+    /// SMTP+XOAUTH2 settings; consulted only when `provider = "smtp_oauth2"`.
+    #[serde(default)]
+    pub smtp_oauth2: SmtpOauth2AppConfig,
 }
 
 impl Default for CommsEmailConfig {
@@ -120,6 +123,7 @@ impl Default for CommsEmailConfig {
             default_from_name: default_comms_email_default_from_name(),
             templates_dir: default_comms_email_templates_dir(),
             mailgun: MailgunAppConfig::default(),
+            smtp_oauth2: SmtpOauth2AppConfig::default(),
         }
     }
 }
@@ -136,6 +140,16 @@ pub enum CommsEmailProvider {
     /// Mailgun HTTP API. Sub-config in `[comms.email.mailgun]`. The API key
     /// is environment-only — `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY`.
     Mailgun,
+    /// SMTP transport authenticated with XOAUTH2 against an OAuth token
+    /// source. Sub-config in `[comms.email.smtp_oauth2]`, with per-flow
+    /// `[comms.email.smtp_oauth2.microsoft]` (Azure AD client-credentials)
+    /// and `[comms.email.smtp_oauth2.google]` (Workspace service-account
+    /// with optional domain-wide delegation) sub-tables. The Microsoft
+    /// client secret is environment-only —
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET`.
+    /// The Google service-account private key lives in the JSON file at
+    /// `service_account_json_path`.
+    SmtpOauth2,
 }
 
 /// `[comms.email.mailgun]` sub-table.
@@ -166,6 +180,154 @@ impl Default for MailgunAppConfig {
             domain: String::new(),
             region: default_comms_email_mailgun_region(),
             api_key: String::new(),
+        }
+    }
+}
+
+/// `[comms.email.smtp_oauth2]` sub-table.
+///
+/// Selects the SMTP relay (`host` / `port` / `tls`), the SASL identity
+/// (`username` — typically the From-address mailbox), and which OAuth
+/// token-source vendor to use (`vendor`). Each vendor has its own
+/// per-vendor sub-table; only the one matching `vendor` is consulted at
+/// dispatch time.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SmtpOauth2AppConfig {
+    /// SMTP relay hostname (e.g. `smtp.office365.com`, `smtp.gmail.com`).
+    /// Can be overridden with `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_HOST`.
+    #[serde(default)]
+    pub host: String,
+    /// SMTP submission port. Defaults to 587 (STARTTLS); use 465 for
+    /// implicit TLS. Can be overridden with
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_PORT`.
+    #[serde(default = "default_smtp_oauth2_port")]
+    pub port: u16,
+    /// Transport-security mode: `"starttls"` (default — port 587),
+    /// `"implicit"` (port 465), or `"plain"` (no TLS — dev/test only).
+    /// Can be overridden with `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_TLS`.
+    #[serde(default = "default_smtp_oauth2_tls")]
+    pub tls: String,
+    /// SASL identity presented during AUTH XOAUTH2. For company-mailbox
+    /// flows this is the mailbox address being sent from.
+    /// Can be overridden with
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_USERNAME`.
+    #[serde(default)]
+    pub username: String,
+    /// Discriminator selecting which per-vendor sub-table is active.
+    /// Can be overridden with
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR`.
+    #[serde(default)]
+    pub vendor: SmtpOauth2Vendor,
+    /// Microsoft Azure AD client-credentials settings.
+    #[serde(default)]
+    pub microsoft: SmtpOauth2MicrosoftConfig,
+    /// Google Workspace service-account settings.
+    #[serde(default)]
+    pub google: SmtpOauth2GoogleConfig,
+}
+
+impl Default for SmtpOauth2AppConfig {
+    fn default() -> Self {
+        Self {
+            host: String::new(),
+            port: default_smtp_oauth2_port(),
+            tls: default_smtp_oauth2_tls(),
+            username: String::new(),
+            vendor: SmtpOauth2Vendor::default(),
+            microsoft: SmtpOauth2MicrosoftConfig::default(),
+            google: SmtpOauth2GoogleConfig::default(),
+        }
+    }
+}
+
+/// OAuth vendor used to obtain the bearer token presented to the SMTP
+/// server via XOAUTH2. Each variant pins a single OAuth flow chosen for
+/// its server-side bulk-send fitness — `client_credentials` for Microsoft,
+/// `service_account` (JWT-bearer) for Google. If a vendor ever offers a
+/// second viable flow we'd want to support, that's a separate
+/// discriminator alongside this one rather than a new variant.
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SmtpOauth2Vendor {
+    /// Microsoft Azure AD `client_credentials` flow against a registered
+    /// app with `Mail.Send` (or equivalent) constrained to a single
+    /// mailbox by Application Access Policy. Used by Microsoft 365.
+    #[default]
+    Microsoft,
+    /// Google service-account JWT-bearer flow with optional domain-wide
+    /// delegation. Used by Google Workspace.
+    Google,
+}
+
+/// `[comms.email.smtp_oauth2.microsoft]` sub-table.
+///
+/// `client_secret` is **never** read from `config.toml`. It is sourced
+/// exclusively from
+/// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET` so
+/// secrets never land in committed files or container images.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SmtpOauth2MicrosoftConfig {
+    /// Azure AD tenant identifier (a UUID, or `common` / `organizations`).
+    /// Can be overridden with
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_TENANT_ID`.
+    #[serde(default)]
+    pub tenant_id: String,
+    /// Azure AD application (client) identifier. Can be overridden with
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_ID`.
+    #[serde(default)]
+    pub client_id: String,
+    /// OAuth scopes to request. Defaults to
+    /// `["https://outlook.office.com/SMTP.Send"]`.
+    #[serde(default = "default_smtp_oauth2_microsoft_scopes")]
+    pub scopes: Vec<String>,
+    /// Resolved at startup from the env var listed above. Skipped during
+    /// (de)serialisation — never read from or written to the config file.
+    #[serde(skip)]
+    pub client_secret: String,
+}
+
+impl Default for SmtpOauth2MicrosoftConfig {
+    fn default() -> Self {
+        Self {
+            tenant_id: String::new(),
+            client_id: String::new(),
+            scopes: default_smtp_oauth2_microsoft_scopes(),
+            client_secret: String::new(),
+        }
+    }
+}
+
+/// `[comms.email.smtp_oauth2.google]` sub-table.
+///
+/// The service-account private key is read from the JSON key file at
+/// `service_account_json_path` at first send. The path itself is fine to
+/// keep in the config file; the key material lives on disk and is access-
+/// controlled via the deployment's filesystem permissions.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SmtpOauth2GoogleConfig {
+    /// Filesystem path to the GCP service-account JSON key file.
+    /// Can be overridden with
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_SERVICE_ACCOUNT_JSON_PATH`.
+    #[serde(default)]
+    pub service_account_json_path: String,
+    /// Workspace mailbox the service account impersonates via domain-wide
+    /// delegation (e.g. `noreply@company.com`). Empty disables impersonation.
+    /// Can be overridden with
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT`.
+    #[serde(default)]
+    pub delegated_subject: String,
+    /// OAuth scopes to request. Defaults to
+    /// `["https://www.googleapis.com/auth/gmail.send"]`.
+    #[serde(default = "default_smtp_oauth2_google_scopes")]
+    pub scopes: Vec<String>,
+}
+
+impl Default for SmtpOauth2GoogleConfig {
+    fn default() -> Self {
+        Self {
+            service_account_json_path: String::new(),
+            delegated_subject: String::new(),
+            scopes: default_smtp_oauth2_google_scopes(),
         }
     }
 }
@@ -234,6 +396,71 @@ impl CommsAppConfig {
                     );
                 }
             }
+            CommsEmailProvider::SmtpOauth2 => {
+                if self.email.smtp_oauth2.host.trim().is_empty() {
+                    warnings.push(
+                        "[comms.email.smtp_oauth2] host is empty; sends will fail".to_string(),
+                    );
+                }
+                if self.email.smtp_oauth2.port == 0 {
+                    warnings.push(
+                        "[comms.email.smtp_oauth2] port is 0; sends will fail".to_string(),
+                    );
+                }
+                if self.email.smtp_oauth2.username.trim().is_empty() {
+                    warnings.push(
+                        "[comms.email.smtp_oauth2] username is empty; sends will fail".to_string(),
+                    );
+                }
+                match self.email.smtp_oauth2.vendor {
+                    SmtpOauth2Vendor::Microsoft => {
+                        let env =
+                            "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET";
+                        match std::env::var(env) {
+                            Ok(v) if !v.is_empty() => {
+                                self.email.smtp_oauth2.microsoft.client_secret = v;
+                            }
+                            Ok(_) => {
+                                warnings.push(format!(
+                                    "[comms.email.smtp_oauth2.microsoft] env var \"{env}\" is set but empty; sends will fail"
+                                ));
+                            }
+                            Err(_) => {
+                                warnings.push(format!(
+                                    "[comms.email.smtp_oauth2.microsoft] env var \"{env}\" is not set; sends will fail"
+                                ));
+                            }
+                        }
+                        if self.email.smtp_oauth2.microsoft.tenant_id.trim().is_empty() {
+                            warnings.push(
+                                "[comms.email.smtp_oauth2.microsoft] tenant_id is empty; sends will fail"
+                                    .to_string(),
+                            );
+                        }
+                        if self.email.smtp_oauth2.microsoft.client_id.trim().is_empty() {
+                            warnings.push(
+                                "[comms.email.smtp_oauth2.microsoft] client_id is empty; sends will fail"
+                                    .to_string(),
+                            );
+                        }
+                    }
+                    SmtpOauth2Vendor::Google => {
+                        if self
+                            .email
+                            .smtp_oauth2
+                            .google
+                            .service_account_json_path
+                            .trim()
+                            .is_empty()
+                        {
+                            warnings.push(
+                                "[comms.email.smtp_oauth2.google] service_account_json_path is empty; sends will fail"
+                                    .to_string(),
+                            );
+                        }
+                    }
+                }
+            }
         }
         if self.public_base_url.trim().is_empty() {
             warnings.push(
@@ -297,6 +524,36 @@ pub(crate) fn apply_env_overrides(
     if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_REGION") {
         builder = builder.set_override("comms.email.mailgun.region", v)?;
     }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_HOST") {
+        builder = builder.set_override("comms.email.smtp_oauth2.host", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_PORT") {
+        builder = builder.set_override("comms.email.smtp_oauth2.port", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_TLS") {
+        builder = builder.set_override("comms.email.smtp_oauth2.tls", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_USERNAME") {
+        builder = builder.set_override("comms.email.smtp_oauth2.username", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR") {
+        builder = builder.set_override("comms.email.smtp_oauth2.vendor", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_TENANT_ID") {
+        builder = builder.set_override("comms.email.smtp_oauth2.microsoft.tenant_id", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_ID") {
+        builder = builder.set_override("comms.email.smtp_oauth2.microsoft.client_id", v)?;
+    }
+    if let Ok(v) =
+        std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_SERVICE_ACCOUNT_JSON_PATH")
+    {
+        builder = builder.set_override("comms.email.smtp_oauth2.google.service_account_json_path", v)?;
+    }
+    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT")
+    {
+        builder = builder.set_override("comms.email.smtp_oauth2.google.delegated_subject", v)?;
+    }
     Ok(builder)
 }
 
@@ -314,6 +571,18 @@ pub(crate) fn default_comms_email_templates_dir() -> String {
 }
 pub(crate) fn default_comms_email_mailgun_region() -> String {
     "us".to_string()
+}
+pub(crate) fn default_smtp_oauth2_port() -> u16 {
+    587
+}
+pub(crate) fn default_smtp_oauth2_tls() -> String {
+    "starttls".to_string()
+}
+pub(crate) fn default_smtp_oauth2_microsoft_scopes() -> Vec<String> {
+    vec!["https://outlook.office.com/SMTP.Send".to_string()]
+}
+pub(crate) fn default_smtp_oauth2_google_scopes() -> Vec<String> {
+    vec!["https://www.googleapis.com/auth/gmail.send".to_string()]
 }
 
 #[cfg(test)]
@@ -468,6 +737,64 @@ mod tests {
                     region: "us".into(),
                     api_key: String::new(),
                 },
+                smtp_oauth2: SmtpOauth2AppConfig::default(),
+            },
+            ..CommsAppConfig::default()
+        }
+    }
+
+    fn enabled_smtp_oauth2_microsoft_config() -> CommsAppConfig {
+        CommsAppConfig {
+            enabled: true,
+            public_base_url: "https://maze.example.com".into(),
+            email: CommsEmailConfig {
+                provider: CommsEmailProvider::SmtpOauth2,
+                default_from: "noreply@contoso.com".into(),
+                default_from_name: "The Maze Team".into(),
+                templates_dir: "config/email_templates".into(),
+                mailgun: MailgunAppConfig::default(),
+                smtp_oauth2: SmtpOauth2AppConfig {
+                    host: "smtp.office365.com".into(),
+                    port: 587,
+                    tls: "starttls".into(),
+                    username: "noreply@contoso.com".into(),
+                    vendor: SmtpOauth2Vendor::Microsoft,
+                    microsoft: SmtpOauth2MicrosoftConfig {
+                        tenant_id: "00000000-0000-0000-0000-000000000000".into(),
+                        client_id: "00000000-0000-0000-0000-000000000000".into(),
+                        scopes: vec!["https://outlook.office.com/SMTP.Send".into()],
+                        client_secret: String::new(),
+                    },
+                    google: SmtpOauth2GoogleConfig::default(),
+                },
+            },
+            ..CommsAppConfig::default()
+        }
+    }
+
+    fn enabled_smtp_oauth2_google_config() -> CommsAppConfig {
+        CommsAppConfig {
+            enabled: true,
+            public_base_url: "https://maze.example.com".into(),
+            email: CommsEmailConfig {
+                provider: CommsEmailProvider::SmtpOauth2,
+                default_from: "noreply@company.com".into(),
+                default_from_name: "The Maze Team".into(),
+                templates_dir: "config/email_templates".into(),
+                mailgun: MailgunAppConfig::default(),
+                smtp_oauth2: SmtpOauth2AppConfig {
+                    host: "smtp.gmail.com".into(),
+                    port: 587,
+                    tls: "starttls".into(),
+                    username: "noreply@company.com".into(),
+                    vendor: SmtpOauth2Vendor::Google,
+                    microsoft: SmtpOauth2MicrosoftConfig::default(),
+                    google: SmtpOauth2GoogleConfig {
+                        service_account_json_path: "/etc/maze/gcp-service-account.json".into(),
+                        delegated_subject: "noreply@company.com".into(),
+                        scopes: vec!["https://www.googleapis.com/auth/gmail.send".into()],
+                    },
+                },
             },
             ..CommsAppConfig::default()
         }
@@ -536,6 +863,164 @@ mod tests {
             joined.contains("public_base_url"),
             "should warn about empty public_base_url; got: {joined}"
         );
+    }
+
+    #[test]
+    fn full_smtp_oauth2_block_with_microsoft_and_google_subtables_deserialises() {
+        let toml = r#"
+            [comms]
+            enabled = true
+            public_base_url = "https://maze.example.com"
+
+            [comms.email]
+            provider = "smtp_oauth2"
+            default_from = "noreply@contoso.com"
+
+            [comms.email.smtp_oauth2]
+            host = "smtp.office365.com"
+            port = 587
+            tls = "starttls"
+            username = "noreply@contoso.com"
+            vendor = "microsoft"
+
+            [comms.email.smtp_oauth2.microsoft]
+            tenant_id = "00000000-0000-0000-0000-000000000000"
+            client_id = "11111111-1111-1111-1111-111111111111"
+            scopes = ["https://outlook.office.com/SMTP.Send"]
+
+            [comms.email.smtp_oauth2.google]
+            service_account_json_path = "/etc/maze/gcp-service-account.json"
+            delegated_subject = "noreply@company.com"
+            scopes = ["https://www.googleapis.com/auth/gmail.send"]
+        "#;
+        let env: Envelope = toml::from_str(toml).expect("parse");
+        let cfg = env.comms;
+        assert_eq!(cfg.email.provider, CommsEmailProvider::SmtpOauth2);
+        assert_eq!(cfg.email.smtp_oauth2.host, "smtp.office365.com");
+        assert_eq!(cfg.email.smtp_oauth2.port, 587);
+        assert_eq!(cfg.email.smtp_oauth2.tls, "starttls");
+        assert_eq!(cfg.email.smtp_oauth2.username, "noreply@contoso.com");
+        assert_eq!(
+            cfg.email.smtp_oauth2.vendor,
+            SmtpOauth2Vendor::Microsoft
+        );
+        assert_eq!(
+            cfg.email.smtp_oauth2.microsoft.tenant_id,
+            "00000000-0000-0000-0000-000000000000"
+        );
+        assert_eq!(
+            cfg.email.smtp_oauth2.microsoft.client_id,
+            "11111111-1111-1111-1111-111111111111"
+        );
+        assert_eq!(
+            cfg.email.smtp_oauth2.microsoft.scopes,
+            vec!["https://outlook.office.com/SMTP.Send".to_string()]
+        );
+        // client_secret is env-only — never deserialised from TOML.
+        assert!(cfg.email.smtp_oauth2.microsoft.client_secret.is_empty());
+        // Both per-vendor sub-tables parse even when only one is active.
+        assert_eq!(
+            cfg.email.smtp_oauth2.google.service_account_json_path,
+            "/etc/maze/gcp-service-account.json"
+        );
+        assert_eq!(
+            cfg.email.smtp_oauth2.google.delegated_subject,
+            "noreply@company.com"
+        );
+    }
+
+    #[test]
+    fn smtp_oauth2_defaults_apply_when_section_absent() {
+        let env: Envelope = toml::from_str("").expect("parse");
+        let cfg = env.comms;
+        assert!(cfg.email.smtp_oauth2.host.is_empty());
+        assert_eq!(cfg.email.smtp_oauth2.port, 587);
+        assert_eq!(cfg.email.smtp_oauth2.tls, "starttls");
+        assert!(cfg.email.smtp_oauth2.username.is_empty());
+        assert_eq!(
+            cfg.email.smtp_oauth2.vendor,
+            SmtpOauth2Vendor::Microsoft
+        );
+        assert_eq!(
+            cfg.email.smtp_oauth2.microsoft.scopes,
+            vec!["https://outlook.office.com/SMTP.Send".to_string()]
+        );
+        assert_eq!(
+            cfg.email.smtp_oauth2.google.scopes,
+            vec!["https://www.googleapis.com/auth/gmail.send".to_string()]
+        );
+    }
+
+    /// Single test for the Microsoft client_secret env var so the two
+    /// states (unset / set) run sequentially. Splitting them across tests
+    /// would race under `cargo test`'s default thread pool.
+    #[test]
+    fn resolve_and_validate_handles_smtp_oauth2_microsoft_client_secret_env_var() {
+        let env_var = "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET";
+        let prior = std::env::var(env_var).ok();
+
+        unsafe { std::env::remove_var(env_var) };
+        let mut cfg = enabled_smtp_oauth2_microsoft_config();
+        let result = cfg.resolve_and_validate();
+        let joined = result.warnings.join("\n");
+        assert!(joined.contains(env_var), "{joined}");
+        assert!(cfg.email.smtp_oauth2.microsoft.client_secret.is_empty());
+
+        unsafe { std::env::set_var(env_var, "test-resolved-secret") };
+        let mut cfg = enabled_smtp_oauth2_microsoft_config();
+        let result = cfg.resolve_and_validate();
+        assert_eq!(
+            cfg.email.smtp_oauth2.microsoft.client_secret,
+            "test-resolved-secret"
+        );
+        let joined = result.warnings.join("\n");
+        assert!(!joined.contains(env_var), "{joined}");
+
+        match prior {
+            Some(v) => unsafe { std::env::set_var(env_var, v) },
+            None => unsafe { std::env::remove_var(env_var) },
+        }
+    }
+
+    #[test]
+    fn resolve_and_validate_does_not_read_microsoft_secret_when_google_flow_active() {
+        let env_var = "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET";
+        let prior = std::env::var(env_var).ok();
+
+        unsafe { std::env::set_var(env_var, "should-not-be-read") };
+        let mut cfg = enabled_smtp_oauth2_google_config();
+        let _ = cfg.resolve_and_validate();
+        // Microsoft secret stays empty — the active flow is Google.
+        assert!(cfg.email.smtp_oauth2.microsoft.client_secret.is_empty());
+
+        match prior {
+            Some(v) => unsafe { std::env::set_var(env_var, v) },
+            None => unsafe { std::env::remove_var(env_var) },
+        }
+    }
+
+    #[test]
+    fn resolve_and_validate_warns_about_missing_smtp_oauth2_host_username_and_microsoft_fields() {
+        let mut cfg = enabled_smtp_oauth2_microsoft_config();
+        cfg.email.smtp_oauth2.host = String::new();
+        cfg.email.smtp_oauth2.username = String::new();
+        cfg.email.smtp_oauth2.microsoft.tenant_id = String::new();
+        cfg.email.smtp_oauth2.microsoft.client_id = String::new();
+        let result = cfg.resolve_and_validate();
+        let joined = result.warnings.join("\n");
+        assert!(joined.contains("host"), "{joined}");
+        assert!(joined.contains("username"), "{joined}");
+        assert!(joined.contains("tenant_id"), "{joined}");
+        assert!(joined.contains("client_id"), "{joined}");
+    }
+
+    #[test]
+    fn resolve_and_validate_warns_about_missing_google_service_account_json_path() {
+        let mut cfg = enabled_smtp_oauth2_google_config();
+        cfg.email.smtp_oauth2.google.service_account_json_path = String::new();
+        let result = cfg.resolve_and_validate();
+        let joined = result.warnings.join("\n");
+        assert!(joined.contains("service_account_json_path"), "{joined}");
     }
 
     #[test]
@@ -625,6 +1110,64 @@ mod tests {
                 let settings = builder.build().expect("build");
                 let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
                 assert_eq!(cfg.public_base_url, "https://from-env.example.com");
+            },
+        );
+    }
+
+    /// Round-trip test for the smtp_oauth2-specific env vars. Uses a
+    /// disjoint set of env vars from the other env-touching tests in this
+    /// module so the suite stays safe under the default parallel thread
+    /// pool.
+    #[test]
+    fn apply_env_overrides_propagates_smtp_oauth2_keys() {
+        let toml = r#"
+            [comms]
+            enabled = true
+
+            [comms.email]
+            provider = "smtp_oauth2"
+
+            [comms.email.smtp_oauth2]
+            host = "from-toml.example.com"
+            username = "from-toml@example.com"
+        "#;
+        with_env_vars(
+            &[
+                (
+                    "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_HOST",
+                    "from-env.example.com",
+                ),
+                (
+                    "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR",
+                    "google",
+                ),
+                (
+                    "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT",
+                    "delegate@example.com",
+                ),
+            ],
+            || {
+                let builder = builder_with_defaults_and_toml(toml);
+                let builder = apply_env_overrides(builder).expect("apply env overrides");
+                let settings = builder.build().expect("build");
+                let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
+                // env wins over TOML where both are present
+                assert_eq!(cfg.email.smtp_oauth2.host, "from-env.example.com");
+                // TOML wins over default where env is unset
+                assert_eq!(cfg.email.smtp_oauth2.username, "from-toml@example.com");
+                // env reaches into the discriminator
+                assert_eq!(
+                    cfg.email.smtp_oauth2.vendor,
+                    SmtpOauth2Vendor::Google
+                );
+                // env reaches into per-vendor sub-tables
+                assert_eq!(
+                    cfg.email.smtp_oauth2.google.delegated_subject,
+                    "delegate@example.com"
+                );
+                // serde defaults still apply for absent fields
+                assert_eq!(cfg.email.smtp_oauth2.port, 587);
+                assert_eq!(cfg.email.smtp_oauth2.tls, "starttls");
             },
         );
     }

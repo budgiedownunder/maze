@@ -108,13 +108,25 @@ The following configuration settings exist:
 |          | `comms.branding.company_address` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_ADDRESS`
 |          | `comms.branding.company_url`     | Text | (falls back to `comms.public_base_url`) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_URL`
 |          | `comms.branding.logo_url`        | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_LOGO_URL`
-|          | `comms.email.provider`           | Text (`stub` / `mailgun`) | `stub` | `MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER`
+|          | `comms.email.provider`           | Text (`stub` / `mailgun` / `smtp_oauth2`) | `stub` | `MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER`
 |          | `comms.email.default_from`       | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM`
 |          | `comms.email.default_from_name`  | Text | `The Maze Team` | `MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME`
 |          | `comms.email.templates_dir`      | Text | `config/email_templates` | `MAZE_WEB_SERVER_COMMS_EMAIL_TEMPLATES_DIR`
 |          | `comms.email.mailgun.domain`     | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN`
 |          | `comms.email.mailgun.region`     | Text (`us` / `eu`) | `us` | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_REGION`
 |          | `comms.email.mailgun.api_key`    | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY`
+|          | `comms.email.smtp_oauth2.host`   | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_HOST`
+|          | `comms.email.smtp_oauth2.port`   | Integer | `587` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_PORT`
+|          | `comms.email.smtp_oauth2.tls`    | Text (`starttls` / `implicit` / `plain`) | `starttls` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_TLS`
+|          | `comms.email.smtp_oauth2.username` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_USERNAME`
+|          | `comms.email.smtp_oauth2.vendor` | Text (`microsoft` / `google`) | `microsoft` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR`
+|          | `comms.email.smtp_oauth2.microsoft.tenant_id` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_TENANT_ID`
+|          | `comms.email.smtp_oauth2.microsoft.client_id` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_ID`
+|          | `comms.email.smtp_oauth2.microsoft.scopes`    | Array of Text | `["https://outlook.office.com/SMTP.Send"]` | (config-file only)
+|          | `comms.email.smtp_oauth2.microsoft.client_secret` | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET`
+|          | `comms.email.smtp_oauth2.google.service_account_json_path` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_SERVICE_ACCOUNT_JSON_PATH`
+|          | `comms.email.smtp_oauth2.google.delegated_subject` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT`
+|          | `comms.email.smtp_oauth2.google.scopes`            | Array of Text | `["https://www.googleapis.com/auth/gmail.send"]` | (config-file only)
 
 These can also be set in a local configuration file called `config.toml` as follows
 
@@ -206,7 +218,7 @@ company_url = "https://acme.example.com"        # defaults to comms.public_base_
 logo_url = "https://your-host:8443/static/logo.png"
 
 [comms.email]
-provider = "mailgun"               # "stub" (default) or "mailgun"
+provider = "mailgun"               # "stub" (default), "mailgun", or "smtp_oauth2"
 default_from = "noreply@example.com"
 default_from_name = "The Maze Team"
 templates_dir = "config/email_templates"
@@ -216,6 +228,31 @@ templates_dir = "config/email_templates"
 [comms.email.mailgun]
 domain = "mg.example.com"
 region = "us"                      # "us" or "eu"
+
+# SMTP+XOAUTH2 sub-table — consulted only when provider = "smtp_oauth2".
+# Pairs an SMTP relay with the OAuth vendor that mints bearer tokens,
+# selected by `vendor`:
+#   "microsoft" → Microsoft 365 (Azure AD client-credentials, app-only token)
+#   "google"    → Google Workspace (service-account JWT-bearer)
+# The Microsoft client_secret is *never* read from this file — set
+# MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET. The
+# Google private key lives in the JSON file at service_account_json_path.
+[comms.email.smtp_oauth2]
+host = "smtp.office365.com"        # M365: smtp.office365.com  | Workspace: smtp.gmail.com
+port = 587                         # 587 = STARTTLS, 465 = implicit TLS
+tls = "starttls"                   # "starttls", "implicit", or "plain"
+username = "noreply@contoso.com"   # SASL identity (typically the From mailbox)
+vendor = "microsoft"               # | "google"
+
+[comms.email.smtp_oauth2.microsoft]
+tenant_id = "00000000-0000-0000-0000-000000000000"
+client_id = "00000000-0000-0000-0000-000000000000"
+scopes    = ["https://outlook.office.com/SMTP.Send"]
+
+[comms.email.smtp_oauth2.google]
+service_account_json_path = "/etc/maze/gcp-service-account.json"
+delegated_subject         = "noreply@company.com"
+scopes                    = ["https://www.googleapis.com/auth/gmail.send"]
 ```
 
 Notes:

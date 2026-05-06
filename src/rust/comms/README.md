@@ -58,20 +58,28 @@ The crate currently defines the following modules:
 ### Build
 To build the `comms` crate, run the following from within the `comms` directory:
 ```
-cargo build
+cargo build --all-features
 ```
 
 ### Testing
 To test the `comms` crate, run the following from within the `comms` directory:
 ```
-cargo test
+cargo test --all-features
 ```
 
+### Linting
+To lint the `comms` crate, run the following from within the `comms` directory:
+```
+cargo clippy --all-targets --all-features
+```
+
+Expected: zero errors, zero warnings.
+
 ### Benchmarking
-No benchmarking tests are currently implemented for the crate
+No benchmarking tests are currently implemented for the crate.
 
 ### Generating Documentation
 To generate and view `Rust` documentation for the crate in your default browser, run the following from within the `comms` directory:
 ```
-cargo doc --open
+cargo doc --all-features --open
 ```

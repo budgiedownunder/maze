@@ -124,7 +124,7 @@ client_id = ""
 client_secret_env = "MAZE_OAUTH_FACEBOOK_SECRET"
 redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 
-# ---- Auth0 connector (placeholder, not implemented in v1) ----
+# ---- Auth0 connector (placeholder, not implemented yet) ----
 # [oauth.auth0]
 # domain = "your-tenant.auth0.com"
 # client_id = ""
@@ -174,4 +174,35 @@ redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 # [comms.email.mailgun]
 # domain = "mg.example.com"
 # region = "us"  # "us" or "eu"
+
+# SMTP+XOAUTH2 settings. Consulted only when provider = "smtp_oauth2".
+# Pairs the SMTP relay (host/port/tls/username) with the OAuth vendor that
+# mints bearer tokens, selected by `vendor`:
+#   "microsoft" — Azure AD client-credentials flow against a registered app
+#       with Mail.Send (or equivalent) constrained to a single mailbox.
+#       Typical for Microsoft 365. The client secret is environment-only —
+#       MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET.
+#   "google"    — Workspace service-account JWT-bearer flow, typically with
+#       domain-wide delegation. The private key lives in the JSON key file
+#       at service_account_json_path.
+# [comms.email.smtp_oauth2]
+# host = "smtp.office365.com"          # M365: smtp.office365.com  | Workspace: smtp.gmail.com
+# port = 587                           # 587 = STARTTLS, 465 = implicit TLS
+# tls = "starttls"                     # "starttls" | "implicit" | "plain"
+# username = "noreply@contoso.com"     # SASL identity (typically the From mailbox)
+# vendor = "microsoft"                 # | "google"
+#
+# # ---- Microsoft 365 (Azure AD client-credentials) ----
+# [comms.email.smtp_oauth2.microsoft]
+# tenant_id = "00000000-0000-0000-0000-000000000000"
+# client_id = "00000000-0000-0000-0000-000000000000"
+# scopes    = ["https://outlook.office.com/SMTP.Send"]
+# # client_secret — env-only:
+# #   MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET
+#
+# # ---- Google Workspace (service-account + domain-wide delegation) ----
+# [comms.email.smtp_oauth2.google]
+# service_account_json_path = "/etc/maze/gcp-service-account.json"
+# delegated_subject         = "noreply@company.com"
+# scopes                    = ["https://www.googleapis.com/auth/gmail.send"]
 

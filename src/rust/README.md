@@ -89,6 +89,7 @@ cd src/rust
 cargo test --locked -p utils
 cargo test --locked -p data_model
 cargo test --locked -p auth
+cargo test --locked -p comms --all-features
 cargo test --locked -p maze_openapi_generator
 cargo test --locked -p maze_game_bevy
 cargo test --locked -p maze
@@ -115,11 +116,8 @@ To run Clippy across all crates and targets:
 
 ```
 cd src/rust
-cargo clippy --all-targets
-cargo clippy -p storage --features sql-store --all-targets
+cargo clippy --workspace --all-targets --all-features
 ```
-
-The second line covers the SQL-feature-gated tests and examples inside the `storage` crate (e.g. `sql_store_smoke`, `verify_migration`), which are skipped by the workspace-level run because they declare `required-features = ["sql-store"]`.
 
 Expected: zero errors, zero warnings.
 

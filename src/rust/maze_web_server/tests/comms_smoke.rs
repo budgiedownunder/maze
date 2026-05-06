@@ -8,6 +8,7 @@ use std::sync::Arc;
 use comms::{Comms, EmailAddress, EmailProvider, StubEmailProvider};
 use maze_web_server::config::comms::{
     CommsAppConfig, CommsBrandingConfig, CommsEmailConfig, CommsEmailProvider, MailgunAppConfig,
+    SmtpOauth2AppConfig,
 };
 use maze_web_server::service::notifications::{
     build_comms, build_default_from, build_renderer,
@@ -33,6 +34,7 @@ fn populated_config() -> CommsAppConfig {
             default_from_name: "The Maze Team".into(),
             templates_dir: "config/email_templates".into(),
             mailgun: MailgunAppConfig::default(),
+            smtp_oauth2: SmtpOauth2AppConfig::default(),
         },
     }
 }
