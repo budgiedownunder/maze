@@ -33,7 +33,10 @@ export function SignUpPage() {
     setError(null)
     try {
       await api.signup(email, password)
-      navigate('/login', { replace: true })
+      navigate(
+        '/login?message=Account+created.+Check+your+inbox+for+a+verification+email+before+signing+in.',
+        { replace: true },
+      )
     } catch (ex: unknown) {
       const status = (ex as { status?: number }).status
       setError(status === 409 ? 'Email already in use' : 'Sign up failed. Please try again.')

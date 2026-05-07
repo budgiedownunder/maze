@@ -74,11 +74,14 @@ describe('SignUpPage', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('navigates to /login on successful signup', async () => {
+  it('navigates to /login with inbox-check flash on successful signup', async () => {
     renderSignUpPage()
     await fillForm()
     await userEvent.click(screen.getByRole('button', { name: /sign up/i }))
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true }))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/login\?message=Account\+created/),
+      { replace: true },
+    ))
   })
 
   it('shows error on 409 conflict', async () => {
