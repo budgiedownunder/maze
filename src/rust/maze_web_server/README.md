@@ -119,9 +119,10 @@ The following configuration settings exist:
 |          | `comms.branding.company_address` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_ADDRESS`
 |          | `comms.branding.company_url`     | Text | (falls back to `comms.public_base_url`) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_URL`
 |          | `comms.branding.logo_url`        | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_LOGO_URL`
+|          | `comms.branding.app_name`        | Text | (empty — falls back to `comms.email.from_name`, then `comms.branding.company_name`) | `MAZE_WEB_SERVER_COMMS_BRANDING_APP_NAME`
 |          | `comms.email.provider`           | Text (`stub` / `mailgun` / `smtp_oauth2`) | `stub` | `MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER`
-|          | `comms.email.default_from`       | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM`
-|          | `comms.email.default_from_name`  | Text | `The Maze Team` | `MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME`
+|          | `comms.email.from`               | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_FROM`
+|          | `comms.email.from_name`          | Text | `The Maze Team` | `MAZE_WEB_SERVER_COMMS_EMAIL_FROM_NAME`
 |          | `comms.email.templates_dir`      | Text | `config/email_templates` | `MAZE_WEB_SERVER_COMMS_EMAIL_TEMPLATES_DIR`
 |          | `comms.email.audit.record_unknown_password_reset_requests` | Boolean | `false` | `MAZE_WEB_SERVER_COMMS_EMAIL_AUDIT_RECORD_UNKNOWN_PASSWORD_RESET_REQUESTS`
 |          | `comms.email.mailgun.domain`     | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN`
@@ -224,15 +225,16 @@ enabled = false
 public_base_url = "https://your-host:8443"
 
 [comms.branding]
+app_name = "Acme"                                # product name in {{ app_name }} (subjects/bodies); falls back to from_name / company_name
 company_name = "Acme, Inc."
 company_address = "123 Example St, City, Country"
-company_url = "https://acme.example.com"        # defaults to comms.public_base_url
+company_url = "https://acme.example.com"         # defaults to comms.public_base_url
 logo_url = "https://your-host:8443/static/logo.png"
 
 [comms.email]
-provider = "mailgun"               # "stub" (default), "mailgun", or "smtp_oauth2"
-default_from = "noreply@example.com"
-default_from_name = "The Maze Team"
+provider = "mailgun"                # "stub" (default), "mailgun", or "smtp_oauth2"
+from = "noreply@example.com"
+from_name = "The Maze Team"         # display name in From: header
 templates_dir = "config/email_templates"
 
 # Email audit-log behaviour. Applies to every provider — medium-level,

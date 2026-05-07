@@ -10,6 +10,8 @@ Please confirm this email address belongs to you by clicking the link below:
 
 If you didn't request this, you can ignore this message.
 
+— {{ from_name }}
+
 {{ footer }}
 """
 html = """
@@ -18,5 +20,6 @@ html = """
 <p>Please confirm this email address belongs to you by clicking the link below:</p>
 <p><a href="{{ verification_link }}">{{ verification_link }}</a></p>
 <p>If you didn't request this, you can ignore this message.</p>
+<p>— {{ from_name }}</p>
 {{ footer }}
 """

@@ -27,11 +27,12 @@ fn populated_config() -> CommsAppConfig {
             company_address: "123 Example St, City, Country".into(),
             company_url: "https://maze.example.com".into(),
             logo_url: "https://maze.example.com/static/logo.png".into(),
+            app_name: String::new(),
         },
         email: CommsEmailConfig {
             provider: CommsEmailProvider::Stub,
-            default_from: "noreply@maze.example.com".into(),
-            default_from_name: "The Maze Team".into(),
+            from: "noreply@maze.example.com".into(),
+            from_name: "The Maze Team".into(),
             templates_dir: "config/email_templates".into(),
             mailgun: MailgunAppConfig::default(),
             smtp_oauth2: SmtpOauth2AppConfig::default(),
@@ -77,8 +78,10 @@ async fn password_reset_template_renders_subject_text_and_html_with_branding_par
     assert_eq!(captured.from.address, "noreply@maze.example.com");
     assert_eq!(captured.from.display_name.as_deref(), Some("The Maze Team"));
 
-    // Subject substitutes `{{ app_name }}` (defaults to `default_from_name`
-    // when set, so "The Maze Team" here).
+    // Subject substitutes `{{ app_name }}` (resolves to
+    // `branding.app_name` if set, else `email.from_name`, else
+    // `branding.company_name` — here from_name is "The Maze Team" and
+    // app_name/company_name aren't set, so subject reads "The Maze Team".)
     assert_eq!(captured.subject, "Reset your The Maze Team password");
 
     // Plain-text body substitutes `{{ first_name }}` and `{{ reset_link }}`,
@@ -206,6 +209,18 @@ async fn mailgun_sandbox_delivers_when_env_vars_set() {
         region: "us".into(),
         api_key,
     };
+    // Align From-header with the sandbox domain so the message is
+    // SPF/DKIM/DMARC-aligned and EOP / Gmail don't silently drop it as
+    // high-confidence phish. The default in `populated_config()` is
+    // `noreply@maze.example.com` — RFC 2606 reserved, no records, fails
+    // every alignment check. Mirror the production env-var override
+    // (`MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM`) when it's set,
+    // otherwise derive `noreply@<sandbox-domain>` so the test produces a
+    // sendable message even without an explicit env var.
+    cfg.email.from = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_FROM")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| format!("noreply@{}", cfg.email.mailgun.domain));
 
     let comms = build_comms(&cfg).expect("mailgun comms must build with credentials");
     let ctx = json!({

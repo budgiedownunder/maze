@@ -72,13 +72,23 @@ pub fn build_comms(cfg: &CommsAppConfig) -> Result<Comms, String> {
 /// own `StubEmailProvider` (held by the test for capture inspection) without
 /// having to duplicate the embedded-templates wiring.
 pub fn build_renderer(cfg: &CommsAppConfig) -> Result<TemplateRenderer, String> {
-    let app_name = if cfg.email.default_from_name.is_empty() {
-        cfg.branding.company_name.clone()
+    // Resolution order for the `{{ app_name }}` template token:
+    //   1. comms.branding.app_name  — explicit product name (preferred)
+    //   2. comms.email.from_name    — From-header display name fallback
+    //   3. comms.branding.company_name — final fallback
+    // Lets operators set "Maze" for the in-body product name distinct
+    // from "The Maze Team" for the From-header signature, while keeping
+    // existing configs (which only set from_name) working unchanged.
+    let app_name = if !cfg.branding.app_name.is_empty() {
+        cfg.branding.app_name.clone()
+    } else if !cfg.email.from_name.is_empty() {
+        cfg.email.from_name.clone()
     } else {
-        cfg.email.default_from_name.clone()
+        cfg.branding.company_name.clone()
     };
     let app = AppContext {
         app_name,
+        from_name: cfg.email.from_name.clone(),
         server_url: cfg.public_base_url.clone(),
         branding: BrandingContext {
             company_name: cfg.branding.company_name.clone(),
@@ -106,19 +116,19 @@ pub fn build_renderer(cfg: &CommsAppConfig) -> Result<TemplateRenderer, String> 
         .map_err(|e| format!("comms template renderer: {e}"))
 }
 
-/// Build the default `from` `EmailAddress` from `cfg.email.default_from`
-/// and `cfg.email.default_from_name`. Returns `None` if `default_from` is
-/// empty (operator hasn't configured a sender), in which case
-/// `Comms::send_template` will surface a `Config` error at first call.
+/// Build the From `EmailAddress` from `cfg.email.from` and
+/// `cfg.email.from_name`. Returns `None` if `from` is empty (operator
+/// hasn't configured a sender), in which case `Comms::send_template`
+/// will surface a `Config` error at first call.
 pub fn build_default_from(cfg: &CommsAppConfig) -> Option<EmailAddress> {
-    if cfg.email.default_from.is_empty() {
+    if cfg.email.from.is_empty() {
         None
-    } else if cfg.email.default_from_name.is_empty() {
-        Some(EmailAddress::new(cfg.email.default_from.clone()))
+    } else if cfg.email.from_name.is_empty() {
+        Some(EmailAddress::new(cfg.email.from.clone()))
     } else {
         Some(EmailAddress::with_name(
-            cfg.email.default_from.clone(),
-            cfg.email.default_from_name.clone(),
+            cfg.email.from.clone(),
+            cfg.email.from_name.clone(),
         ))
     }
 }
@@ -288,11 +298,12 @@ mod tests {
                 company_address: "123 Example St".into(),
                 company_url: "https://maze.example.com".into(),
                 logo_url: "https://maze.example.com/static/logo.png".into(),
+                app_name: String::new(),
             },
             email: CommsEmailConfig {
                 provider: CommsEmailProvider::Mailgun,
-                default_from: "noreply@example.com".into(),
-                default_from_name: "The Maze Team".into(),
+                from: "noreply@example.com".into(),
+                from_name: "The Maze Team".into(),
                 templates_dir: "config/email_templates".into(),
                 mailgun: MailgunAppConfig {
                     domain: "mg.example.com".into(),
@@ -314,11 +325,12 @@ mod tests {
                 company_address: "123 Example St".into(),
                 company_url: "https://maze.example.com".into(),
                 logo_url: "https://maze.example.com/static/logo.png".into(),
+                app_name: String::new(),
             },
             email: CommsEmailConfig {
                 provider: CommsEmailProvider::SmtpOauth2,
-                default_from: "noreply@contoso.com".into(),
-                default_from_name: "The Maze Team".into(),
+                from: "noreply@contoso.com".into(),
+                from_name: "The Maze Team".into(),
                 templates_dir: "config/email_templates".into(),
                 mailgun: MailgunAppConfig::default(),
                 smtp_oauth2: SmtpOauth2AppConfig {

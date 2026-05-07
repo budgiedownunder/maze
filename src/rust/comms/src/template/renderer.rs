@@ -24,6 +24,12 @@ pub struct BrandingContext {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppContext {
     pub app_name: String,
+    /// Display name paired with the From-address in the email's `From:`
+    /// header, also exposed as `{{ from_name }}` for sign-off lines in
+    /// templated bodies (e.g. `"— {{ from_name }}"`). Distinct from
+    /// `app_name`, which is the product name used as a noun in subjects
+    /// and bodies (e.g. `"Reset your {{ app_name }} password"`).
+    pub from_name: String,
     pub server_url: String,
     pub branding: BrandingContext,
 }
@@ -115,6 +121,7 @@ const PARTIAL_TOKENS: &[&str] = &["logo", "header", "footer"];
 /// render time. Per-message contexts are checked against this set too.
 const BRANDING_TOKENS: &[&str] = &[
     "app_name",
+    "from_name",
     "server_url",
     "company_name",
     "company_address",
@@ -167,6 +174,7 @@ impl TemplateRenderer {
     /// let renderer = TemplateRenderer::new(
     ///     AppContext {
     ///         app_name: "Maze".into(),
+    ///         from_name: "The Maze Team".into(),
     ///         server_url: "https://maze.example".into(),
     ///         branding: BrandingContext {
     ///             company_name: "Maze, Inc.".into(),
@@ -224,6 +232,7 @@ impl TemplateRenderer {
 
         let mut app_common: BTreeMap<String, MjValue> = BTreeMap::new();
         app_common.insert("app_name".into(), MjValue::from(app.app_name.clone()));
+        app_common.insert("from_name".into(), MjValue::from(app.from_name.clone()));
         app_common.insert("server_url".into(), MjValue::from(app.server_url.clone()));
         app_common.insert(
             "company_name".into(),
@@ -283,7 +292,9 @@ impl TemplateRenderer {
     /// ])) as Arc<dyn TemplateLoader>;
     /// let renderer = TemplateRenderer::new(
     ///     AppContext {
-    ///         app_name: "Maze".into(), server_url: "https://maze.example".into(),
+    ///         app_name: "Maze".into(),
+    ///         from_name: "The Maze Team".into(),
+    ///         server_url: "https://maze.example".into(),
     ///         branding: BrandingContext {
     ///             company_name: "Maze".into(), company_address: "Addr".into(),
     ///             company_url: "https://maze.example".into(),
@@ -371,6 +382,7 @@ impl TemplateRenderer {
 fn build_branding_context(app: &AppContext, copyright_year: i32) -> MjValue {
     [
         ("app_name".to_owned(), MjValue::from(app.app_name.clone())),
+        ("from_name".to_owned(), MjValue::from(app.from_name.clone())),
         ("server_url".to_owned(), MjValue::from(app.server_url.clone())),
         (
             "company_name".to_owned(),
@@ -436,6 +448,7 @@ mod tests {
     fn sample_app_context() -> AppContext {
         AppContext {
             app_name: "Maze".into(),
+            from_name: "The Maze Team".into(),
             server_url: "https://example.com".into(),
             branding: BrandingContext {
                 company_name: "Maze, Inc.".into(),

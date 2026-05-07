@@ -137,35 +137,44 @@ redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 # never from this file.
 #
 # `comms.enabled` is the master switch. When false (the default), startup
-# validation skips the per-provider env-var checks. When true, missing
-# required env vars produce startup warnings (logged, not fatal).
+# validation skips both the universal-field check and the per-provider
+# env-var checks. When true, the universal file-only fields
+# (`public_base_url` + `email.from`) hard-fail config load if empty;
+# env-var-sourced provider secrets (Mailgun API key, SMTP+OAuth2 client
+# secret) emit startup warnings rather than blocking startup.
 # [comms]
 # enabled = false
 # public_base_url = "https://your-host:8443"
 
 # Branding values referenced by the templated-message partials
-# ({{ logo }}, {{ header }}, {{ footer }}) and templates ({{ company_url }}).
-# copyright_year is taken from the current UTC year at render time and is
-# not configurable here. company_url defaults to public_base_url when left
-# unset; set it explicitly only if the company website lives at a
-# different domain from the server deployment.
+# ({{ logo }}, {{ header }}, {{ footer }}) and templates ({{ app_name }},
+# {{ company_url }}). copyright_year is taken from the current UTC year
+# at render time and is not configurable here. company_url defaults to
+# public_base_url when left unset; set it explicitly only if the company
+# website lives at a different domain from the server deployment.
+# `app_name` is the product name used in template subjects/bodies (e.g.
+# "Maze"). It is distinct from `comms.email.from_name` (the From-header
+# display name, e.g. "The Maze Team") so the body can read "Reset your
+# Maze password" while the From header still reads "The Maze Team
+# <noreply@…>". When unset, falls back to from_name, then company_name.
 # [comms.branding]
+# app_name = "Acme"
 # company_name = "Acme, Inc."
 # company_address = "123 Example St, City, Country"
 # company_url = "https://acme.example.com"
 # logo_url = "https://your-host:8443/static/logo.png"
 
 # Email-medium config. `provider` selects the active sub-table:
-# "stub" (in-memory capture) or "mailgun". `default_from` /
-# `default_from_name` are the sender identity used when send_template
-# synthesises a message; `default_from_name` defaults to "The Maze Team"
-# if omitted. `templates_dir` is the directory holding filesystem-override
-# templates and partials for the email medium; templates not present
-# there fall back to the embedded defaults compiled into the server.
+# "stub" (in-memory capture) or "mailgun". `from` / `from_name` are the
+# sender identity used when send_template synthesises a message;
+# `from_name` defaults to "The Maze Team" if omitted. `templates_dir`
+# is the directory holding filesystem-override templates and partials
+# for the email medium; templates not present there fall back to the
+# embedded defaults compiled into the server.
 # [comms.email]
 # provider = "mailgun"
-# default_from = "noreply@example.com"
-# default_from_name = "The Maze Team"
+# from = "noreply@example.com"
+# from_name = "The Maze Team"
 # templates_dir = "config/email_templates"
 
 # Email audit-log behaviour. Applies to every provider — medium-level,

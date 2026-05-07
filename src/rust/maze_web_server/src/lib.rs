@@ -225,7 +225,7 @@ pub async fn run_server() -> std::io::Result<()> {
         .expect("Failed to initialise logger");
     // Surface env-resolution warnings via the logger. The hard-fail check
     // already ran inside `AppConfig::load` (universally-required file-only
-    // fields like public_base_url / default_from); calling here again is
+    // fields like public_base_url / from); calling here again is
     // idempotent and just collects the soft warnings now that the logger
     // is initialised. The Err arm is unreachable in practice because load
     // would have returned the same error first, but a defensive log keeps

@@ -609,8 +609,8 @@ impl AppConfig {
             .set_default("comms.enabled", comms::default_comms_enabled())?
             .set_default("comms.email.provider", "stub")?
             .set_default(
-                "comms.email.default_from_name",
-                comms::default_comms_email_default_from_name(),
+                "comms.email.from_name",
+                comms::default_comms_email_from_name(),
             )?
             .set_default(
                 "comms.email.templates_dir",

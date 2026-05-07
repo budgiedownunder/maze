@@ -37,7 +37,7 @@ impl Comms {
     /// #             EmbeddedTemplateLoader, TemplateLoader, TemplateRenderer};
     /// # use std::sync::Arc;
     /// # let renderer = TemplateRenderer::new(
-    /// #     AppContext { app_name: "App".into(), server_url: "https://x".into(),
+    /// #     AppContext { app_name: "App".into(), from_name: "T".into(), server_url: "https://x".into(),
     /// #         branding: BrandingContext { company_name: "X".into(), company_address: "A".into(),
     /// #             company_url: "https://x".into(), logo_url: "https://x".into() } },
     /// #     Arc::new(EmbeddedTemplateLoader::new()) as Arc<dyn TemplateLoader>,
@@ -71,7 +71,7 @@ impl Comms {
     /// #             EmbeddedTemplateLoader, TemplateLoader, TemplateRenderer};
     /// # use std::sync::Arc;
     /// # let renderer = TemplateRenderer::new(
-    /// #     AppContext { app_name: "App".into(), server_url: "https://x".into(),
+    /// #     AppContext { app_name: "App".into(), from_name: "T".into(), server_url: "https://x".into(),
     /// #         branding: BrandingContext { company_name: "X".into(), company_address: "A".into(),
     /// #             company_url: "https://x".into(), logo_url: "https://x".into() } },
     /// #     Arc::new(EmbeddedTemplateLoader::new()) as Arc<dyn TemplateLoader>,
@@ -96,7 +96,7 @@ impl Comms {
     /// #             EmbeddedTemplateLoader, TemplateLoader, TemplateRenderer};
     /// # use std::sync::Arc;
     /// # let renderer = TemplateRenderer::new(
-    /// #     AppContext { app_name: "App".into(), server_url: "https://x".into(),
+    /// #     AppContext { app_name: "App".into(), from_name: "T".into(), server_url: "https://x".into(),
     /// #         branding: BrandingContext { company_name: "X".into(), company_address: "A".into(),
     /// #             company_url: "https://x".into(), logo_url: "https://x".into() } },
     /// #     Arc::new(EmbeddedTemplateLoader::new()) as Arc<dyn TemplateLoader>,
@@ -167,7 +167,7 @@ impl Comms {
     /// #             TemplateLoader, TemplateRenderer};
     /// # use std::sync::Arc;
     /// # let renderer = TemplateRenderer::new(
-    /// #     AppContext { app_name: "App".into(), server_url: "https://x".into(),
+    /// #     AppContext { app_name: "App".into(), from_name: "T".into(), server_url: "https://x".into(),
     /// #         branding: BrandingContext { company_name: "X".into(), company_address: "A".into(),
     /// #             company_url: "https://x".into(), logo_url: "https://x".into() } },
     /// #     Arc::new(EmbeddedTemplateLoader::new()) as Arc<dyn TemplateLoader>,
@@ -318,6 +318,7 @@ mod tests {
     fn sample_app_context() -> AppContext {
         AppContext {
             app_name: "Maze".into(),
+            from_name: "The Maze Team".into(),
             server_url: "https://example.com".into(),
             branding: BrandingContext {
                 company_name: "Maze, Inc.".into(),

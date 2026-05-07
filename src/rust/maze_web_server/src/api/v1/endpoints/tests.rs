@@ -1040,12 +1040,12 @@ mod test_definitions {
         let mut app_config = AppConfig::default();
         app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
         // Drive a stable `public_base_url` so the reset-link assertion has
-        // something deterministic to check against. Likewise pin a
-        // `default_from` — without it, `comms.send_template` fails the
-        // dispatch with `Config("no default_from_email configured")`
-        // and the stub never sees a message.
+        // something deterministic to check against. Likewise pin a `from`
+        // — without it, `comms.send_template` fails the dispatch with
+        // `Config("no default_from_email configured")` and the stub
+        // never sees a message.
         app_config.comms.public_base_url = "https://maze.test".to_string();
-        app_config.comms.email.default_from = "noreply@maze.test".to_string();
+        app_config.comms.email.from = "noreply@maze.test".to_string();
 
         set_valid_password_hashes(&app_config.security.password_hash, user_defs);
         let (shared_mock_store, mock_users, api_key, login_id) =
