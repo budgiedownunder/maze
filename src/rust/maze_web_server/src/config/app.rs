@@ -633,6 +633,10 @@ impl AppConfig {
         cfg.storage
             .resolve_password_from_env()
             .map_err(config::ConfigError::Message)?;
+        cfg.comms
+            .resolve_and_validate()
+            .map(|_| ())
+            .map_err(config::ConfigError::Message)?;
         Ok(cfg)
     }
 

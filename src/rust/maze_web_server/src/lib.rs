@@ -223,13 +223,22 @@ pub async fn run_server() -> std::io::Result<()> {
     let mut config = AppConfig::load().expect("Failed to load configuration settings");
     utils::logger::init(&config.logging.log_dir, &config.logging.log_level, &config.logging.log_file_prefix)
         .expect("Failed to initialise logger");
-    // Resolve env-only comms secrets into the config and surface validation
-    // warnings via the logger. Validation is intentionally soft: missing or
-    // empty required env vars produce warnings rather than blocking
-    // startup, so operators see the full set of misconfigurations in one
-    // log pass.
-    for warning in config.comms.resolve_and_validate().warnings {
-        log::warn!("{warning}");
+    // Surface env-resolution warnings via the logger. The hard-fail check
+    // already ran inside `AppConfig::load` (universally-required file-only
+    // fields like public_base_url / default_from); calling here again is
+    // idempotent and just collects the soft warnings now that the logger
+    // is initialised. The Err arm is unreachable in practice because load
+    // would have returned the same error first, but a defensive log keeps
+    // the panic-message decipherable if the contract ever drifts.
+    match config.comms.resolve_and_validate() {
+        Ok(validation) => {
+            for warning in validation.warnings {
+                log::warn!("{warning}");
+            }
+        }
+        Err(err) => {
+            log::error!("comms validation drifted between AppConfig::load and run_server: {err}");
+        }
     }
     config.log_config();
   

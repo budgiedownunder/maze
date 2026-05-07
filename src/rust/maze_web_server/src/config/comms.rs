@@ -335,9 +335,15 @@ impl Default for SmtpOauth2GoogleConfig {
 /// Outcome of `CommsAppConfig::resolve_and_validate`. Carries any
 /// environment-resolution warnings that should be logged at startup.
 ///
-/// `comms` is treated as soft state: failures degrade the notifications
-/// surface but don't block server startup. That contrasts with `[oauth]`
-/// and `[storage.sql]`, where missing secrets hard-fail `AppConfig::load`.
+/// Two failure tiers:
+///   * Universally-required, file-only TOML fields (`public_base_url`,
+///     `email.default_from`) hard-fail config load via the `Err` arm of
+///     the function's `Result`, mirroring how `[oauth]` and
+///     `[storage.sql]` handle their required values.
+///   * Env-var-sourced provider secrets (Mailgun API key, SmtpOauth2
+///     client secret, etc.) emit warnings that go into this struct.
+///     They're soft because operators legitimately defer secret setup
+///     (CI smoke tests, secret managers, sidecars).
 #[derive(Debug, Default, Clone)]
 pub struct CommsValidation {
     pub warnings: Vec<String>,
@@ -353,12 +359,18 @@ impl CommsAppConfig {
     /// `{{ company_url }}` will render as.
     ///
     /// When `enabled = false`, returns an empty validation without
-    /// inspecting anything else. When `enabled = true`, reads each required
-    /// env var for the active provider, populates the corresponding
-    /// `#[serde(skip)]` fields, and accumulates a warning for every
-    /// missing or empty value rather than returning early — so the
-    /// operator sees the full set of problems in one log pass.
-    pub fn resolve_and_validate(&mut self) -> CommsValidation {
+    /// inspecting anything else. When `enabled = true`:
+    ///   * Hard-fails (returns `Err`) if `public_base_url` or
+    ///     `email.default_from` are empty — both are required by every
+    ///     provider for `send_template` to synthesise an outbound
+    ///     message, and neither has an env-var deferral path. Both
+    ///     errors are reported in one message so the operator sees the
+    ///     full set in one log pass.
+    ///   * Reads each required env var for the active provider and
+    ///     populates the corresponding `#[serde(skip)]` fields.
+    ///   * Accumulates warnings for empty / missing env-var-sourced
+    ///     secrets rather than returning early — same one-pass rationale.
+    pub fn resolve_and_validate(&mut self) -> Result<CommsValidation, String> {
         let mut warnings = Vec::new();
 
         // Branding fallback: if the operator didn't set company_url, use
@@ -369,7 +381,25 @@ impl CommsAppConfig {
         }
 
         if !self.enabled {
-            return CommsValidation { warnings };
+            return Ok(CommsValidation { warnings });
+        }
+
+        // Universally-required, file-only fields. Collect both before
+        // failing so the operator sees the full picture instead of
+        // having to fix one, restart, fix the next.
+        let mut hard_errors: Vec<String> = Vec::new();
+        if self.public_base_url.trim().is_empty() {
+            hard_errors.push(
+                "[comms].public_base_url is required when comms.enabled = true (used to build verification / reset links inside templates)".to_string(),
+            );
+        }
+        if self.email.default_from.trim().is_empty() {
+            hard_errors.push(
+                "[comms.email].default_from is required when comms.enabled = true (used as the sender identity for every outbound message)".to_string(),
+            );
+        }
+        if !hard_errors.is_empty() {
+            return Err(hard_errors.join("; "));
         }
         match self.email.provider {
             CommsEmailProvider::Stub => {}
@@ -462,17 +492,7 @@ impl CommsAppConfig {
                 }
             }
         }
-        if self.public_base_url.trim().is_empty() {
-            warnings.push(
-                "[comms].public_base_url is empty; template links will be malformed".to_string(),
-            );
-        }
-        if self.email.default_from.trim().is_empty() {
-            warnings.push(
-                "[comms.email].default_from is empty; send_template calls will fail".to_string(),
-            );
-        }
-        CommsValidation { warnings }
+        Ok(CommsValidation { warnings })
     }
 }
 
@@ -719,8 +739,25 @@ mod tests {
             enabled: false,
             ..CommsAppConfig::default()
         };
-        let result = cfg.resolve_and_validate();
+        let result = cfg.resolve_and_validate().expect("disabled never hard-fails");
         assert!(result.warnings.is_empty(), "got warnings: {:?}", result.warnings);
+    }
+
+    #[test]
+    fn resolve_and_validate_when_disabled_does_not_check_universals() {
+        // Both universals empty + enabled = false → still Ok. The
+        // hard-fail tier only applies when sends are about to actually run.
+        let mut cfg = CommsAppConfig {
+            enabled: false,
+            public_base_url: String::new(),
+            email: CommsEmailConfig {
+                default_from: String::new(),
+                ..CommsEmailConfig::default()
+            },
+            ..CommsAppConfig::default()
+        };
+        let result = cfg.resolve_and_validate();
+        assert!(result.is_ok(), "disabled comms must never hard-fail; got: {result:?}");
     }
 
     fn enabled_mailgun_config() -> CommsAppConfig {
@@ -815,7 +852,7 @@ mod tests {
             std::env::remove_var(env_var);
         }
         let mut cfg = enabled_mailgun_config();
-        let result = cfg.resolve_and_validate();
+        let result = cfg.resolve_and_validate().expect("universals satisfied");
         let joined = result.warnings.join("\n");
         assert!(
             joined.contains(env_var),
@@ -831,7 +868,7 @@ mod tests {
             std::env::set_var(env_var, "test-resolved-api-key");
         }
         let mut cfg = enabled_mailgun_config();
-        let result = cfg.resolve_and_validate();
+        let result = cfg.resolve_and_validate().expect("universals satisfied");
         assert_eq!(cfg.email.mailgun.api_key, "test-resolved-api-key");
         let joined = result.warnings.join("\n");
         assert!(
@@ -847,7 +884,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_and_validate_warns_about_missing_public_base_url_when_enabled() {
+    fn resolve_and_validate_hard_fails_for_missing_public_base_url_when_enabled() {
         let mut cfg = CommsAppConfig {
             enabled: true,
             public_base_url: String::new(),
@@ -857,12 +894,78 @@ mod tests {
             },
             ..CommsAppConfig::default()
         };
-        let result = cfg.resolve_and_validate();
-        let joined = result.warnings.join("\n");
+        let err = cfg
+            .resolve_and_validate()
+            .expect_err("missing public_base_url must hard-fail when enabled");
         assert!(
-            joined.contains("public_base_url"),
-            "should warn about empty public_base_url; got: {joined}"
+            err.contains("public_base_url"),
+            "error should name the missing field; got: {err}"
         );
+    }
+
+    #[test]
+    fn resolve_and_validate_hard_fails_for_missing_default_from_when_enabled() {
+        let mut cfg = CommsAppConfig {
+            enabled: true,
+            public_base_url: "https://maze.example.com".into(),
+            email: CommsEmailConfig {
+                default_from: String::new(),
+                ..CommsEmailConfig::default()
+            },
+            ..CommsAppConfig::default()
+        };
+        let err = cfg
+            .resolve_and_validate()
+            .expect_err("missing default_from must hard-fail when enabled");
+        assert!(
+            err.contains("default_from"),
+            "error should name the missing field; got: {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_and_validate_reports_both_universal_errors_in_one_message() {
+        let mut cfg = CommsAppConfig {
+            enabled: true,
+            public_base_url: String::new(),
+            email: CommsEmailConfig {
+                default_from: String::new(),
+                ..CommsEmailConfig::default()
+            },
+            ..CommsAppConfig::default()
+        };
+        let err = cfg
+            .resolve_and_validate()
+            .expect_err("both universals empty must hard-fail");
+        // Single error string covers both so the operator sees the full
+        // picture in one log line instead of fix-restart-fix-restart.
+        assert!(
+            err.contains("public_base_url"),
+            "combined error should include public_base_url; got: {err}"
+        );
+        assert!(
+            err.contains("default_from"),
+            "combined error should include default_from; got: {err}"
+        );
+    }
+
+    #[test]
+    fn resolve_and_validate_hard_fails_only_when_universals_empty() {
+        // Whitespace-only is treated the same as empty — `.trim()` first.
+        let mut cfg = CommsAppConfig {
+            enabled: true,
+            public_base_url: "   ".into(),
+            email: CommsEmailConfig {
+                default_from: "\t\n".into(),
+                ..CommsEmailConfig::default()
+            },
+            ..CommsAppConfig::default()
+        };
+        let err = cfg
+            .resolve_and_validate()
+            .expect_err("whitespace-only universals must hard-fail");
+        assert!(err.contains("public_base_url"));
+        assert!(err.contains("default_from"));
     }
 
     #[test]
@@ -961,14 +1064,14 @@ mod tests {
 
         unsafe { std::env::remove_var(env_var) };
         let mut cfg = enabled_smtp_oauth2_microsoft_config();
-        let result = cfg.resolve_and_validate();
+        let result = cfg.resolve_and_validate().expect("universals satisfied");
         let joined = result.warnings.join("\n");
         assert!(joined.contains(env_var), "{joined}");
         assert!(cfg.email.smtp_oauth2.microsoft.client_secret.is_empty());
 
         unsafe { std::env::set_var(env_var, "test-resolved-secret") };
         let mut cfg = enabled_smtp_oauth2_microsoft_config();
-        let result = cfg.resolve_and_validate();
+        let result = cfg.resolve_and_validate().expect("universals satisfied");
         assert_eq!(
             cfg.email.smtp_oauth2.microsoft.client_secret,
             "test-resolved-secret"
@@ -1006,7 +1109,7 @@ mod tests {
         cfg.email.smtp_oauth2.username = String::new();
         cfg.email.smtp_oauth2.microsoft.tenant_id = String::new();
         cfg.email.smtp_oauth2.microsoft.client_id = String::new();
-        let result = cfg.resolve_and_validate();
+        let result = cfg.resolve_and_validate().expect("universals satisfied");
         let joined = result.warnings.join("\n");
         assert!(joined.contains("host"), "{joined}");
         assert!(joined.contains("username"), "{joined}");
@@ -1018,28 +1121,9 @@ mod tests {
     fn resolve_and_validate_warns_about_missing_google_service_account_json_path() {
         let mut cfg = enabled_smtp_oauth2_google_config();
         cfg.email.smtp_oauth2.google.service_account_json_path = String::new();
-        let result = cfg.resolve_and_validate();
+        let result = cfg.resolve_and_validate().expect("universals satisfied");
         let joined = result.warnings.join("\n");
         assert!(joined.contains("service_account_json_path"), "{joined}");
-    }
-
-    #[test]
-    fn resolve_and_validate_warns_about_missing_default_from_when_enabled() {
-        let mut cfg = CommsAppConfig {
-            enabled: true,
-            public_base_url: "https://maze.example.com".into(),
-            email: CommsEmailConfig {
-                default_from: String::new(),
-                ..CommsEmailConfig::default()
-            },
-            ..CommsAppConfig::default()
-        };
-        let result = cfg.resolve_and_validate();
-        let joined = result.warnings.join("\n");
-        assert!(
-            joined.contains("default_from"),
-            "should warn about empty default_from; got: {joined}"
-        );
     }
 
     /// Build a builder seeded with the same defaults `AppConfig::load` uses
