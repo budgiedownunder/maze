@@ -1,5 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using Maze.Maui.App.Messages;
 using Maze.Maui.App.Services;
 using System.Collections.ObjectModel;
 using System.Net;
@@ -134,6 +136,11 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 await _authService.SignUpAsync(Email, Password);
+                // Tell LoginViewModel to surface a "check your inbox" flash
+                // before we pop back. WeakReferenceMessenger is fire-and-forget
+                // — we don't hold a reference across the navigation pop.
+                WeakReferenceMessenger.Default.Send(new LoginFlashMessage(
+                    "Account created. Check your inbox for a verification email before signing in."));
                 await _navigationService.GoBackAsync();
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)

@@ -1,4 +1,6 @@
 using System.Net;
+using CommunityToolkit.Mvvm.Messaging;
+using Maze.Maui.App.Messages;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;
 using Moq;
@@ -109,6 +111,59 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             auth.Verify(a => a.SignUpAsync("alice@example.com", ValidPassword), Times.Once);
             nav.Verify(n => n.GoBackAsync(), Times.Once);
+        }
+
+        [Fact]
+        public async Task SignUp_HappyPath_SendsLoginFlashMessageBeforeNavigatingBack()
+        {
+            var (vm, _, _, _, _) = BuildVm();
+            vm.Email = "alice@example.com";
+            vm.Password = ValidPassword;
+            vm.ConfirmPassword = ValidPassword;
+
+            string? captured = null;
+            object recipient = new();
+            WeakReferenceMessenger.Default.Register<LoginFlashMessage>(
+                recipient,
+                (_, m) => captured = m.Message);
+            try
+            {
+                await vm.SignUpCommand.ExecuteAsync(null);
+            }
+            finally
+            {
+                WeakReferenceMessenger.Default.Unregister<LoginFlashMessage>(recipient);
+            }
+
+            Assert.NotNull(captured);
+            Assert.Contains("Check your inbox", captured!);
+        }
+
+        [Fact]
+        public async Task SignUp_OnFailure_DoesNotSendLoginFlashMessage()
+        {
+            var (vm, auth, _, _, _) = BuildVm();
+            auth.Setup(a => a.SignUpAsync(It.IsAny<string>(), It.IsAny<string>()))
+                .ThrowsAsync(new HttpRequestException("conflict", null, HttpStatusCode.Conflict));
+            vm.Email = "taken@example.com";
+            vm.Password = ValidPassword;
+            vm.ConfirmPassword = ValidPassword;
+
+            int messages = 0;
+            object recipient = new();
+            WeakReferenceMessenger.Default.Register<LoginFlashMessage>(
+                recipient,
+                (_, _) => messages++);
+            try
+            {
+                await vm.SignUpCommand.ExecuteAsync(null);
+            }
+            finally
+            {
+                WeakReferenceMessenger.Default.Unregister<LoginFlashMessage>(recipient);
+            }
+
+            Assert.Equal(0, messages);
         }
 
         // ---- Server error handling -------------------------------------------
