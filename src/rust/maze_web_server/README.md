@@ -78,6 +78,11 @@ The following configuration settings exist:
 | Global   | `port`             | Integer | `8443`   | `MAZE_WEB_SERVER_PORT`
 | Security | `cert_file`        | Text    | `cert.pem` | `MAZE_WEB_SERVER_SECURITY_CERT_FILE`
 |          | `key_file`         | Text    | `key.pem`  | `MAZE_WEB_SERVER_SECURITY_KEY_FILE`
+|          | `security.login_expiry_hours` | Integer | `24`  | (config-file only)
+|          | `security.password_hash.mem_cost`    | Integer | `65536` | (config-file only)
+|          | `security.password_hash.time_cost`   | Integer | `3`     | (config-file only)
+|          | `security.password_hash.lanes`       | Integer | `4`     | (config-file only)
+|          | `security.password_hash.hash_length` | Integer | `32`    | (config-file only)
 | Static   | `static_dir`       | Text    | `static`          | `MAZE_WEB_SERVER_STATIC_DIR`
 | Logging  | `log_dir`          | Text    | `logs`            | `MAZE_WEB_SERVER_LOGGING_LOG_DIR`
 |          | `log_level`        | Text    | `info`            | `MAZE_WEB_SERVER_LOGGING_LOG_LEVEL`
@@ -86,6 +91,12 @@ The following configuration settings exist:
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
+|          | `oauth.internal.providers.<name>.enabled` | Boolean | `false` | (config-file only)
+|          | `oauth.internal.providers.<name>.display_name` | Text | (empty) | (config-file only)
+|          | `oauth.internal.providers.<name>.client_id` | Text | (empty) | (config-file only)
+|          | `oauth.internal.providers.<name>.client_secret_env` | Text | (empty) | (config-file only — names the env var that holds the secret)
+|          | `oauth.internal.providers.<name>.redirect_uri` | Text | (empty) | (config-file only)
+|          | `oauth.internal.providers.<name>.client_secret` | Text | (env-var only — never read from config files) | named by `client_secret_env`
 | Storage  | `storage.type`               | Text (`file` / `sql`) | `file` | `MAZE_WEB_SERVER_STORAGE_TYPE`
 |          | `storage.file.data_dir`      | Text    | `data`  | `MAZE_WEB_SERVER_STORAGE_FILE_DATA_DIR`
 |          | `storage.sql.driver`         | Text (`sqlite` / `postgres` / `mysql`) | `sqlite` | `MAZE_WEB_SERVER_STORAGE_SQL_DRIVER`
@@ -112,6 +123,7 @@ The following configuration settings exist:
 |          | `comms.email.default_from`       | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM`
 |          | `comms.email.default_from_name`  | Text | `The Maze Team` | `MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME`
 |          | `comms.email.templates_dir`      | Text | `config/email_templates` | `MAZE_WEB_SERVER_COMMS_EMAIL_TEMPLATES_DIR`
+|          | `comms.email.audit.record_unknown_password_reset_requests` | Boolean | `false` | `MAZE_WEB_SERVER_COMMS_EMAIL_AUDIT_RECORD_UNKNOWN_PASSWORD_RESET_REQUESTS`
 |          | `comms.email.mailgun.domain`     | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN`
 |          | `comms.email.mailgun.region`     | Text (`us` / `eu`) | `us` | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_REGION`
 |          | `comms.email.mailgun.api_key`    | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY`
@@ -223,6 +235,14 @@ default_from = "noreply@example.com"
 default_from_name = "The Maze Team"
 templates_dir = "config/email_templates"
 
+# Email audit-log behaviour. Applies to every provider — medium-level,
+# not provider-specific. Default off so small / dev installs don't
+# accumulate one audit-log entry per typo or probe; flip on for
+# rate-limit / abuse forensics. Anti-enumeration timing and the 200
+# response are unaffected either way.
+[comms.email.audit]
+record_unknown_password_reset_requests = false
+
 # Provider sub-table consulted only when provider matches. The api_key is
 # *never* read from this file — set MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY.
 [comms.email.mailgun]
@@ -267,6 +287,7 @@ Notes:
 - OAuth client secrets are **always** read from the environment variable named in `client_secret_env`, never from `config.toml`. On startup the server walks every enabled provider and reports *all* misconfigurations in one error (empty `client_id`, missing env var, etc.) rather than fix-restart-fix-restart looping. See the **OAuth Sign-In** subsection below for full setup steps.
 - The `[storage]` section selects between the file-backed (`type = "file"`, the default) and SQL-backed (`type = "sql"`) implementations. The SQL backend supports SQLite, PostgreSQL, and MySQL via SQLx's `Any` driver — all three engines are compiled into the same binary; selection happens at runtime via `storage.sql.driver` and the connection details. See **Storage Backend** below for setup recipes per backend.
 - The `[comms]` section configures outbound email — provider settings, templated-message branding, and template-source paths. `comms.enabled = false` (the default) skips the per-provider env-var checks at startup. Provider secrets — currently `comms.email.mailgun.api_key` — are **environment-only**: read from `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY` at startup and never from `config.toml`. Unlike `[oauth]`, missing comms secrets are **soft warnings**: the server still starts and logs a warning naming each unset env var so the operator can see the full set of misconfigurations in one log pass. Setting `comms.email.provider` to a value other than `"stub"` or `"mailgun"` is a hard deserialisation error at startup, not a runtime panic.
+- `comms.email.audit.record_unknown_password_reset_requests` (default `false`) controls whether `/password-reset/request` writes an anti-enumeration "recon row" to the email audit log when the supplied email doesn't match a verified user. Off by default so small / dev installs don't accumulate one audit-log entry per typo or probe; flip on for rate-limit / abuse forensics. The 200 response and timing floor are unaffected either way.
 
 ## Storage Backend
 

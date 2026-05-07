@@ -50,6 +50,30 @@ impl Default for CommsAppConfig {
     }
 }
 
+/// `[comms.email.audit]` sub-table. Controls anti-enumeration "recon"
+/// rows in the email audit log — anonymous entries written when a
+/// request doesn't resolve to a real recipient (today only the
+/// `/password-reset/request` unknown-email path).
+///
+/// Default off so small / dev installs don't accumulate one
+/// audit-log entry per typo, probe, or accidental wrong-address. Flip
+/// on when forensics across enumeration attempts matter more than
+/// log volume.
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct CommsEmailAuditConfig {
+    /// When `true`, every `/password-reset/request` hit with an email
+    /// that doesn't match a verified user creates a recon row in the
+    /// email audit log (`recipient_user_id = None`). Useful for
+    /// rate-limit / abuse forensics. When `false` (default), the row is
+    /// skipped — the 200 anti-enumeration response and timing floor are
+    /// unaffected; only requests that resolve to a real recipient
+    /// produce audit rows.
+    /// Can be overridden with
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_AUDIT_RECORD_UNKNOWN_PASSWORD_RESET_REQUESTS`.
+    #[serde(default)]
+    pub record_unknown_password_reset_requests: bool,
+}
+
 /// `[comms.branding]` sub-table. Values are surfaced verbatim in the
 /// branding partial templates.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
@@ -113,6 +137,10 @@ pub struct CommsEmailConfig {
     /// SMTP+XOAUTH2 settings; consulted only when `provider = "smtp_oauth2"`.
     #[serde(default)]
     pub smtp_oauth2: SmtpOauth2AppConfig,
+    /// Audit-log behaviour controls (currently just the recon-row toggle
+    /// for unknown password-reset recipients).
+    #[serde(default)]
+    pub audit: CommsEmailAuditConfig,
 }
 
 impl Default for CommsEmailConfig {
@@ -124,6 +152,7 @@ impl Default for CommsEmailConfig {
             templates_dir: default_comms_email_templates_dir(),
             mailgun: MailgunAppConfig::default(),
             smtp_oauth2: SmtpOauth2AppConfig::default(),
+            audit: CommsEmailAuditConfig::default(),
         }
     }
 }
@@ -371,6 +400,19 @@ impl CommsAppConfig {
     ///   * Accumulates warnings for empty / missing env-var-sourced
     ///     secrets rather than returning early — same one-pass rationale.
     pub fn resolve_and_validate(&mut self) -> Result<CommsValidation, String> {
+        self.resolve_and_validate_with(|k| std::env::var(k).ok())
+    }
+
+    /// Variant of [`resolve_and_validate`] that takes an injectable env
+    /// reader. The production wrapper passes `|k| std::env::var(k).ok()`;
+    /// tests pass a synthetic reader (typically built via the
+    /// `build_env` test helper) so they don't have to mutate process
+    /// environment to exercise the secret-resolution paths. Same
+    /// behaviour, same return type — only the env-source differs.
+    pub(crate) fn resolve_and_validate_with(
+        &mut self,
+        env: impl Fn(&str) -> Option<String>,
+    ) -> Result<CommsValidation, String> {
         let mut warnings = Vec::new();
 
         // Branding fallback: if the operator didn't set company_url, use
@@ -404,19 +446,19 @@ impl CommsAppConfig {
         match self.email.provider {
             CommsEmailProvider::Stub => {}
             CommsEmailProvider::Mailgun => {
-                let env = "MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY";
-                match std::env::var(env) {
-                    Ok(v) if !v.is_empty() => {
+                let key = "MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY";
+                match env(key) {
+                    Some(v) if !v.is_empty() => {
                         self.email.mailgun.api_key = v;
                     }
-                    Ok(_) => {
+                    Some(_) => {
                         warnings.push(format!(
-                            "[comms.email.mailgun] env var \"{env}\" is set but empty; sends will fail"
+                            "[comms.email.mailgun] env var \"{key}\" is set but empty; sends will fail"
                         ));
                     }
-                    Err(_) => {
+                    None => {
                         warnings.push(format!(
-                            "[comms.email.mailgun] env var \"{env}\" is not set; sends will fail"
+                            "[comms.email.mailgun] env var \"{key}\" is not set; sends will fail"
                         ));
                     }
                 }
@@ -444,20 +486,20 @@ impl CommsAppConfig {
                 }
                 match self.email.smtp_oauth2.vendor {
                     SmtpOauth2Vendor::Microsoft => {
-                        let env =
+                        let key =
                             "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET";
-                        match std::env::var(env) {
-                            Ok(v) if !v.is_empty() => {
+                        match env(key) {
+                            Some(v) if !v.is_empty() => {
                                 self.email.smtp_oauth2.microsoft.client_secret = v;
                             }
-                            Ok(_) => {
+                            Some(_) => {
                                 warnings.push(format!(
-                                    "[comms.email.smtp_oauth2.microsoft] env var \"{env}\" is set but empty; sends will fail"
+                                    "[comms.email.smtp_oauth2.microsoft] env var \"{key}\" is set but empty; sends will fail"
                                 ));
                             }
-                            Err(_) => {
+                            None => {
                                 warnings.push(format!(
-                                    "[comms.email.smtp_oauth2.microsoft] env var \"{env}\" is not set; sends will fail"
+                                    "[comms.email.smtp_oauth2.microsoft] env var \"{key}\" is not set; sends will fail"
                                 ));
                             }
                         }
@@ -506,71 +548,90 @@ impl CommsAppConfig {
 /// `resolve_and_validate` so secrets never live in the `config` crate's
 /// value tree (which gets logged via `AppConfig::log_config`).
 pub(crate) fn apply_env_overrides(
-    mut builder: ConfigBuilder<DefaultState>,
+    builder: ConfigBuilder<DefaultState>,
 ) -> Result<ConfigBuilder<DefaultState>, config::ConfigError> {
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_ENABLED") {
+    apply_env_overrides_with(builder, |k| std::env::var(k).ok())
+}
+
+/// Variant of [`apply_env_overrides`] that takes an injectable env
+/// reader. The production wrapper passes `|k| std::env::var(k).ok()`;
+/// tests pass a synthetic reader (typically built via the `build_env`
+/// test helper) so they don't have to mutate process environment to
+/// exercise the override pipeline. Same behaviour, same return type —
+/// only the env-source differs.
+pub(crate) fn apply_env_overrides_with(
+    mut builder: ConfigBuilder<DefaultState>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<ConfigBuilder<DefaultState>, config::ConfigError> {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_ENABLED") {
         builder = builder.set_override("comms.enabled", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL") {
         builder = builder.set_override("comms.public_base_url", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_NAME") {
+    if let Some(v) =
+        env("MAZE_WEB_SERVER_COMMS_EMAIL_AUDIT_RECORD_UNKNOWN_PASSWORD_RESET_REQUESTS")
+    {
+        builder =
+            builder.set_override("comms.email.audit.record_unknown_password_reset_requests", v)?;
+    }
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_NAME") {
         builder = builder.set_override("comms.branding.company_name", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_ADDRESS") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_ADDRESS") {
         builder = builder.set_override("comms.branding.company_address", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_URL") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_URL") {
         builder = builder.set_override("comms.branding.company_url", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_BRANDING_LOGO_URL") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_BRANDING_LOGO_URL") {
         builder = builder.set_override("comms.branding.logo_url", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER") {
         builder = builder.set_override("comms.email.provider", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM") {
         builder = builder.set_override("comms.email.default_from", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME") {
         builder = builder.set_override("comms.email.default_from_name", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_TEMPLATES_DIR") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_TEMPLATES_DIR") {
         builder = builder.set_override("comms.email.templates_dir", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN") {
         builder = builder.set_override("comms.email.mailgun.domain", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_REGION") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_REGION") {
         builder = builder.set_override("comms.email.mailgun.region", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_HOST") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_HOST") {
         builder = builder.set_override("comms.email.smtp_oauth2.host", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_PORT") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_PORT") {
         builder = builder.set_override("comms.email.smtp_oauth2.port", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_TLS") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_TLS") {
         builder = builder.set_override("comms.email.smtp_oauth2.tls", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_USERNAME") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_USERNAME") {
         builder = builder.set_override("comms.email.smtp_oauth2.username", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR") {
         builder = builder.set_override("comms.email.smtp_oauth2.vendor", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_TENANT_ID") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_TENANT_ID") {
         builder = builder.set_override("comms.email.smtp_oauth2.microsoft.tenant_id", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_ID") {
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_ID") {
         builder = builder.set_override("comms.email.smtp_oauth2.microsoft.client_id", v)?;
     }
-    if let Ok(v) =
-        std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_SERVICE_ACCOUNT_JSON_PATH")
+    if let Some(v) =
+        env("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_SERVICE_ACCOUNT_JSON_PATH")
     {
         builder = builder.set_override("comms.email.smtp_oauth2.google.service_account_json_path", v)?;
     }
-    if let Ok(v) = std::env::var("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT")
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT")
     {
         builder = builder.set_override("comms.email.smtp_oauth2.google.delegated_subject", v)?;
     }
@@ -775,6 +836,7 @@ mod tests {
                     api_key: String::new(),
                 },
                 smtp_oauth2: SmtpOauth2AppConfig::default(),
+                audit: CommsEmailAuditConfig::default(),
             },
             ..CommsAppConfig::default()
         }
@@ -804,6 +866,7 @@ mod tests {
                     },
                     google: SmtpOauth2GoogleConfig::default(),
                 },
+                audit: CommsEmailAuditConfig::default(),
             },
             ..CommsAppConfig::default()
         }
@@ -832,27 +895,19 @@ mod tests {
                         scopes: vec!["https://www.googleapis.com/auth/gmail.send".into()],
                     },
                 },
+                audit: CommsEmailAuditConfig::default(),
             },
             ..CommsAppConfig::default()
         }
     }
 
-    /// Combined into a single test so the two env-var states (unset / set)
-    /// run sequentially. Splitting them across tests would race each other
-    /// since cargo runs tests in parallel by default and they share the
-    /// same canonical env-var name.
     #[test]
-    fn resolve_and_validate_handles_mailgun_api_key_env_var() {
+    fn resolve_and_validate_warns_when_mailgun_api_key_env_unset() {
         let env_var = "MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY";
-        // Snapshot any prior value so we can restore it on exit.
-        let prior = std::env::var(env_var).ok();
-
-        // Case 1: env var unset → warning, api_key remains empty.
-        unsafe {
-            std::env::remove_var(env_var);
-        }
         let mut cfg = enabled_mailgun_config();
-        let result = cfg.resolve_and_validate().expect("universals satisfied");
+        let result = cfg
+            .resolve_and_validate_with(build_env(&[]))
+            .expect("universals satisfied");
         let joined = result.warnings.join("\n");
         assert!(
             joined.contains(env_var),
@@ -862,25 +917,21 @@ mod tests {
             cfg.email.mailgun.api_key.is_empty(),
             "api_key should remain empty when env var is unset"
         );
+    }
 
-        // Case 2: env var set → no warning, api_key populated.
-        unsafe {
-            std::env::set_var(env_var, "test-resolved-api-key");
-        }
+    #[test]
+    fn resolve_and_validate_populates_mailgun_api_key_from_env() {
+        let env_var = "MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY";
         let mut cfg = enabled_mailgun_config();
-        let result = cfg.resolve_and_validate().expect("universals satisfied");
+        let result = cfg
+            .resolve_and_validate_with(build_env(&[(env_var, "test-resolved-api-key")]))
+            .expect("universals satisfied");
         assert_eq!(cfg.email.mailgun.api_key, "test-resolved-api-key");
         let joined = result.warnings.join("\n");
         assert!(
             !joined.contains(env_var),
             "no warning should mention the env var when it's set; got: {joined}"
         );
-
-        // Restore prior state so other tests in this binary aren't affected.
-        match prior {
-            Some(v) => unsafe { std::env::set_var(env_var, v) },
-            None => unsafe { std::env::remove_var(env_var) },
-        }
     }
 
     #[test]
@@ -1054,52 +1105,41 @@ mod tests {
         );
     }
 
-    /// Single test for the Microsoft client_secret env var so the two
-    /// states (unset / set) run sequentially. Splitting them across tests
-    /// would race under `cargo test`'s default thread pool.
     #[test]
-    fn resolve_and_validate_handles_smtp_oauth2_microsoft_client_secret_env_var() {
+    fn resolve_and_validate_warns_when_smtp_oauth2_microsoft_client_secret_env_unset() {
         let env_var = "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET";
-        let prior = std::env::var(env_var).ok();
-
-        unsafe { std::env::remove_var(env_var) };
         let mut cfg = enabled_smtp_oauth2_microsoft_config();
-        let result = cfg.resolve_and_validate().expect("universals satisfied");
+        let result = cfg
+            .resolve_and_validate_with(build_env(&[]))
+            .expect("universals satisfied");
         let joined = result.warnings.join("\n");
         assert!(joined.contains(env_var), "{joined}");
         assert!(cfg.email.smtp_oauth2.microsoft.client_secret.is_empty());
+    }
 
-        unsafe { std::env::set_var(env_var, "test-resolved-secret") };
+    #[test]
+    fn resolve_and_validate_populates_smtp_oauth2_microsoft_client_secret_from_env() {
+        let env_var = "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET";
         let mut cfg = enabled_smtp_oauth2_microsoft_config();
-        let result = cfg.resolve_and_validate().expect("universals satisfied");
+        let result = cfg
+            .resolve_and_validate_with(build_env(&[(env_var, "test-resolved-secret")]))
+            .expect("universals satisfied");
         assert_eq!(
             cfg.email.smtp_oauth2.microsoft.client_secret,
             "test-resolved-secret"
         );
         let joined = result.warnings.join("\n");
         assert!(!joined.contains(env_var), "{joined}");
-
-        match prior {
-            Some(v) => unsafe { std::env::set_var(env_var, v) },
-            None => unsafe { std::env::remove_var(env_var) },
-        }
     }
 
     #[test]
     fn resolve_and_validate_does_not_read_microsoft_secret_when_google_flow_active() {
         let env_var = "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET";
-        let prior = std::env::var(env_var).ok();
-
-        unsafe { std::env::set_var(env_var, "should-not-be-read") };
         let mut cfg = enabled_smtp_oauth2_google_config();
-        let _ = cfg.resolve_and_validate();
-        // Microsoft secret stays empty — the active flow is Google.
+        // Even with the microsoft secret available, the google flow path
+        // must not read it.
+        let _ = cfg.resolve_and_validate_with(build_env(&[(env_var, "should-not-be-read")]));
         assert!(cfg.email.smtp_oauth2.microsoft.client_secret.is_empty());
-
-        match prior {
-            Some(v) => unsafe { std::env::set_var(env_var, v) },
-            None => unsafe { std::env::remove_var(env_var) },
-        }
     }
 
     #[test]
@@ -1125,6 +1165,45 @@ mod tests {
         let joined = result.warnings.join("\n");
         assert!(joined.contains("service_account_json_path"), "{joined}");
     }
+
+    #[test]
+    fn comms_email_audit_record_unknown_password_reset_requests_defaults_to_false() {
+        // Default-off so dev / small installs don't write an audit row
+        // per probe. Forensics is opt-in.
+        let cfg = CommsAppConfig::default();
+        assert!(!cfg.email.audit.record_unknown_password_reset_requests);
+    }
+
+    #[test]
+    fn comms_email_audit_record_unknown_password_reset_requests_defaults_when_section_absent() {
+        let env: Envelope = toml::from_str("").expect("parse");
+        assert!(
+            !env.comms.email.audit.record_unknown_password_reset_requests,
+            "absent [comms.email.audit] must default to false"
+        );
+    }
+
+    #[test]
+    fn comms_email_audit_record_unknown_password_reset_requests_round_trips_via_toml() {
+        let toml = r#"
+            [comms]
+            enabled = true
+            public_base_url = "https://maze.example.com"
+
+            [comms.email]
+            default_from = "noreply@example.com"
+
+            [comms.email.audit]
+            record_unknown_password_reset_requests = true
+        "#;
+        let env: Envelope = toml::from_str(toml).expect("parse");
+        assert!(
+            env.comms.email.audit.record_unknown_password_reset_requests,
+            "explicit true must round-trip"
+        );
+    }
+
+
 
     /// Build a builder seeded with the same defaults `AppConfig::load` uses
     /// for the comms keys, plus the supplied inline TOML.
@@ -1157,51 +1236,37 @@ mod tests {
     /// Snapshot/restore helper for env-var mutation tests. Replaces the
     /// pre-existing values during the closure and restores them on exit so
     /// other parallel tests aren't perturbed by leftover state.
-    fn with_env_vars<F: FnOnce()>(vars: &[(&str, &str)], f: F) {
-        let priors: Vec<_> = vars
+    /// Builds a synthetic env reader from a slice of `(key, value)`
+    /// pairs. Used in place of `std::env::set_var`+`std::env::var` to
+    /// exercise `apply_env_overrides_with` and `resolve_and_validate_with`
+    /// deterministically — no process-global mutation, no race with
+    /// other tests in the same binary.
+    fn build_env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let map: std::collections::HashMap<String, String> = pairs
             .iter()
-            .map(|(k, _)| (*k, std::env::var(k).ok()))
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
-        for (k, v) in vars {
-            unsafe { std::env::set_var(k, v) };
-        }
-        f();
-        for (k, prior) in priors {
-            match prior {
-                Some(v) => unsafe { std::env::set_var(k, v) },
-                None => unsafe { std::env::remove_var(k) },
-            }
-        }
+        move |k| map.get(k).cloned()
     }
 
-    /// Sole owner of `MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL` in the test
-    /// suite — no other test reads or writes this variable, so the snapshot
-    /// pattern is safe under `cargo test`'s default thread pool.
     #[test]
     fn apply_env_overrides_lets_env_var_win_over_toml() {
         let toml = r#"
             [comms]
             public_base_url = "https://from-toml.example.com"
         "#;
-        with_env_vars(
-            &[(
-                "MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL",
-                "https://from-env.example.com",
-            )],
-            || {
-                let builder = builder_with_defaults_and_toml(toml);
-                let builder = apply_env_overrides(builder).expect("apply env overrides");
-                let settings = builder.build().expect("build");
-                let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
-                assert_eq!(cfg.public_base_url, "https://from-env.example.com");
-            },
-        );
+        let env = build_env(&[(
+            "MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL",
+            "https://from-env.example.com",
+        )]);
+        let builder = builder_with_defaults_and_toml(toml);
+        let builder = apply_env_overrides_with(builder, env).expect("apply env overrides");
+        let settings = builder.build().expect("build");
+        let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
+        assert_eq!(cfg.public_base_url, "https://from-env.example.com");
     }
 
-    /// Round-trip test for the smtp_oauth2-specific env vars. Uses a
-    /// disjoint set of env vars from the other env-touching tests in this
-    /// module so the suite stays safe under the default parallel thread
-    /// pool.
+    /// Round-trip test for the smtp_oauth2-specific env vars.
     #[test]
     fn apply_env_overrides_propagates_smtp_oauth2_keys() {
         let toml = r#"
@@ -1215,50 +1280,38 @@ mod tests {
             host = "from-toml.example.com"
             username = "from-toml@example.com"
         "#;
-        with_env_vars(
-            &[
-                (
-                    "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_HOST",
-                    "from-env.example.com",
-                ),
-                (
-                    "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR",
-                    "google",
-                ),
-                (
-                    "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT",
-                    "delegate@example.com",
-                ),
-            ],
-            || {
-                let builder = builder_with_defaults_and_toml(toml);
-                let builder = apply_env_overrides(builder).expect("apply env overrides");
-                let settings = builder.build().expect("build");
-                let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
-                // env wins over TOML where both are present
-                assert_eq!(cfg.email.smtp_oauth2.host, "from-env.example.com");
-                // TOML wins over default where env is unset
-                assert_eq!(cfg.email.smtp_oauth2.username, "from-toml@example.com");
-                // env reaches into the discriminator
-                assert_eq!(
-                    cfg.email.smtp_oauth2.vendor,
-                    SmtpOauth2Vendor::Google
-                );
-                // env reaches into per-vendor sub-tables
-                assert_eq!(
-                    cfg.email.smtp_oauth2.google.delegated_subject,
-                    "delegate@example.com"
-                );
-                // serde defaults still apply for absent fields
-                assert_eq!(cfg.email.smtp_oauth2.port, 587);
-                assert_eq!(cfg.email.smtp_oauth2.tls, "starttls");
-            },
+        let env = build_env(&[
+            (
+                "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_HOST",
+                "from-env.example.com",
+            ),
+            ("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR", "google"),
+            (
+                "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT",
+                "delegate@example.com",
+            ),
+        ]);
+        let builder = builder_with_defaults_and_toml(toml);
+        let builder = apply_env_overrides_with(builder, env).expect("apply env overrides");
+        let settings = builder.build().expect("build");
+        let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
+        // env wins over TOML where both are present
+        assert_eq!(cfg.email.smtp_oauth2.host, "from-env.example.com");
+        // TOML wins over default where env is unset
+        assert_eq!(cfg.email.smtp_oauth2.username, "from-toml@example.com");
+        // env reaches into the discriminator
+        assert_eq!(cfg.email.smtp_oauth2.vendor, SmtpOauth2Vendor::Google);
+        // env reaches into per-vendor sub-tables
+        assert_eq!(
+            cfg.email.smtp_oauth2.google.delegated_subject,
+            "delegate@example.com"
         );
+        // serde defaults still apply for absent fields
+        assert_eq!(cfg.email.smtp_oauth2.port, 587);
+        assert_eq!(cfg.email.smtp_oauth2.tls, "starttls");
     }
 
-    /// Round-trip test through the full builder pipeline. Uses a distinct
-    /// set of env vars from the other env-touching tests in this module so
-    /// the suite is safe to run with the default parallel thread pool.
+    /// Round-trip test through the full builder pipeline.
     #[test]
     fn apply_env_overrides_full_pipeline_propagates_multiple_keys() {
         let toml = r#"
@@ -1273,34 +1326,43 @@ mod tests {
             [comms.email.mailgun]
             domain = "from-toml.mg.example.com"
         "#;
-        with_env_vars(
-            &[
-                ("MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME", "Maze (env)"),
-                ("MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER", "mailgun"),
-                (
-                    "MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN",
-                    "from-env.mg.example.com",
-                ),
-            ],
-            || {
-                let builder = builder_with_defaults_and_toml(toml);
-                let builder = apply_env_overrides(builder).expect("apply env overrides");
-                let settings = builder.build().expect("build");
-                let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
+        let env = build_env(&[
+            ("MAZE_WEB_SERVER_COMMS_EMAIL_DEFAULT_FROM_NAME", "Maze (env)"),
+            ("MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER", "mailgun"),
+            (
+                "MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN",
+                "from-env.mg.example.com",
+            ),
+        ]);
+        let builder = builder_with_defaults_and_toml(toml);
+        let builder = apply_env_overrides_with(builder, env).expect("apply env overrides");
+        let settings = builder.build().expect("build");
+        let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
 
-                // env wins over TOML where both are present
-                assert_eq!(cfg.email.default_from_name, "Maze (env)");
-                assert_eq!(cfg.email.provider, CommsEmailProvider::Mailgun);
-                assert_eq!(cfg.email.mailgun.domain, "from-env.mg.example.com");
-                // TOML wins over default where env is unset
-                assert_eq!(
-                    cfg.email.default_from,
-                    "noreply@from-toml.example.com"
-                );
-                // default wins where neither TOML nor env is set
-                assert_eq!(cfg.email.mailgun.region, "us");
-                assert_eq!(cfg.email.templates_dir, "config/email_templates");
-            },
-        );
+        // env wins over TOML where both are present
+        assert_eq!(cfg.email.default_from_name, "Maze (env)");
+        assert_eq!(cfg.email.provider, CommsEmailProvider::Mailgun);
+        assert_eq!(cfg.email.mailgun.domain, "from-env.mg.example.com");
+        // TOML wins over default where env is unset
+        assert_eq!(cfg.email.default_from, "noreply@from-toml.example.com");
+        // default wins where neither TOML nor env is set
+        assert_eq!(cfg.email.mailgun.region, "us");
+        assert_eq!(cfg.email.templates_dir, "config/email_templates");
+    }
+
+    #[test]
+    fn apply_env_overrides_propagates_email_audit_record_unknown_password_reset_requests() {
+        // The unique-to-this-flag end-to-end check: the env var name and
+        // the field path string both have to match for the override to
+        // land. Synthetic env reader keeps it deterministic.
+        let env = build_env(&[(
+            "MAZE_WEB_SERVER_COMMS_EMAIL_AUDIT_RECORD_UNKNOWN_PASSWORD_RESET_REQUESTS",
+            "true",
+        )]);
+        let builder = builder_with_defaults_and_toml("");
+        let builder = apply_env_overrides_with(builder, env).expect("apply env overrides");
+        let settings = builder.build().expect("build");
+        let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
+        assert!(cfg.email.audit.record_unknown_password_reset_requests);
     }
 }

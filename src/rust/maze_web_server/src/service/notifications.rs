@@ -267,9 +267,9 @@ fn build_smtp_oauth2_token_source(
 mod tests {
     use super::*;
     use crate::config::comms::{
-        CommsAppConfig, CommsBrandingConfig, CommsEmailConfig, CommsEmailProvider,
-        MailgunAppConfig, SmtpOauth2AppConfig, SmtpOauth2Vendor, SmtpOauth2GoogleConfig,
-        SmtpOauth2MicrosoftConfig,
+        CommsAppConfig, CommsBrandingConfig, CommsEmailAuditConfig, CommsEmailConfig,
+        CommsEmailProvider, MailgunAppConfig, SmtpOauth2AppConfig, SmtpOauth2Vendor,
+        SmtpOauth2GoogleConfig, SmtpOauth2MicrosoftConfig,
     };
 
     fn disabled_config() -> CommsAppConfig {
@@ -300,6 +300,7 @@ mod tests {
                     api_key: "test-resolved-api-key".into(),
                 },
                 smtp_oauth2: SmtpOauth2AppConfig::default(),
+                audit: CommsEmailAuditConfig::default(),
             },
         }
     }
@@ -334,6 +335,7 @@ mod tests {
                     },
                     google: SmtpOauth2GoogleConfig::default(),
                 },
+                audit: CommsEmailAuditConfig::default(),
             },
         }
     }

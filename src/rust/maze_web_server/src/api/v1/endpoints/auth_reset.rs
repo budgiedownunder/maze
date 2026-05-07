@@ -167,18 +167,23 @@ pub async fn request_password_reset(
 
     let Some(user) = user_opt else {
         info!("password-reset request: no verified-email match for the supplied address");
-        // Anti-enumeration recon row: we record the request itself with
-        // `recipient_user_id = None` for rate-limit / abuse forensics,
-        // even though no send fires.
-        if let Err(err) = record_pending_only(
-            store.get_ref().clone(),
-            RESET_TEMPLATE_ID,
-            &email,
-            provider_name,
-        )
-        .await
-        {
-            warn!("password-reset request: recon audit row failed: {err}");
+        // Anti-enumeration recon row: opt-in via
+        // [comms.email.audit].record_unknown_password_reset_requests.
+        // Default off so small / dev installs don't accumulate audit-log
+        // entries for every typo or probe; flip on for rate-limit /
+        // abuse forensics. Either way the 200 response + timing floor
+        // are unaffected and no send fires.
+        if config.comms.email.audit.record_unknown_password_reset_requests {
+            if let Err(err) = record_pending_only(
+                store.get_ref().clone(),
+                RESET_TEMPLATE_ID,
+                &email,
+                provider_name,
+            )
+            .await
+            {
+                warn!("password-reset request: recon audit row failed: {err}");
+            }
         }
         return Ok(HttpResponse::Ok().json(json!({"status": "ok"})));
     };
