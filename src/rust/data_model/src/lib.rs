@@ -13,7 +13,10 @@ mod user_login;
 mod wrappers;
 
 // Re-export traits and structs
-pub use email_audit::{AuditOutcome, EmailAuditEntry};
+pub use email_audit::{
+    AuditOutcome, EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS, ERROR_MESSAGE_TRUNCATION_MARKER,
+    EmailAuditEntry, truncate_email_audit_error_message,
+};
 pub use error::{Error, UserValidationError};
 pub use maze_definition::MazeDefinition;
 pub use maze::Maze;

@@ -12,8 +12,9 @@
 
 use chrono::{Duration, SubsecRound, Utc};
 use data_model::{
-    AuditOutcome, EmailAuditEntry, Maze, MazeDefinition, OAuthIdentity, OneTimeToken,
-    TokenPurpose, User, UserEmail, UserLogin,
+    AuditOutcome, EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS, ERROR_MESSAGE_TRUNCATION_MARKER,
+    EmailAuditEntry, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, TokenPurpose, User,
+    UserEmail, UserLogin,
 };
 use storage::{Error, Store};
 use uuid::Uuid;
@@ -1550,6 +1551,60 @@ pub async fn update_outcome_to_failed_populates_error_message(store: &mut Box<dy
     assert_eq!(loaded.outcome, AuditOutcome::Failed);
     assert_eq!(loaded.error_class.as_deref(), Some("provider_4xx"));
     assert_eq!(loaded.error_message.as_deref(), Some(detail));
+}
+
+pub async fn update_outcome_truncates_oversize_error_message(store: &mut Box<dyn Store>) {
+    // Verifies the audit-write path doesn't fail on a verbose upstream
+    // body (which would hit MySQL's 65,535-byte VARCHAR check or PG's
+    // varchar(N) overflow). The store layer truncates with a marker so
+    // the audit row always lands.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    let huge = "x".repeat(EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS * 3);
+    store
+        .update_outcome(
+            id,
+            AuditOutcome::Failed,
+            None,
+            Some("provider_4xx"),
+            Some(&huge),
+        )
+        .await
+        .expect("update_outcome must succeed even on oversize body");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    let stored = loaded.error_message.expect("error_message present");
+    assert_eq!(stored.chars().count(), EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS);
+    assert!(stored.ends_with(ERROR_MESSAGE_TRUNCATION_MARKER));
+}
+
+pub async fn record_pending_truncates_oversize_error_message(store: &mut Box<dyn Store>) {
+    // Same protection as `update_outcome_truncates_oversize_error_message`
+    // but on the synchronous-insert side: an audit row constructed with an
+    // oversize `error_message` (e.g. from a future caller that sets it
+    // directly on the entry rather than via update_outcome) still lands.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let mut entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    entry.error_message = Some("y".repeat(EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS * 3));
+    let id = store
+        .record_pending(&entry)
+        .await
+        .expect("record_pending must succeed even on oversize body");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    let stored = loaded.error_message.expect("error_message present");
+    assert_eq!(stored.chars().count(), EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS);
+    assert!(stored.ends_with(ERROR_MESSAGE_TRUNCATION_MARKER));
 }
 
 pub async fn update_outcome_rejects_pending_target(store: &mut Box<dyn Store>) {

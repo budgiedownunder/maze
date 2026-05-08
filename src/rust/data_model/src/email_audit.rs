@@ -7,6 +7,65 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+/// Maximum number of characters stored in
+/// [`EmailAuditEntry::error_message`]. Matches the
+/// `email_audit_log.error_message` column width in the SQL schema (see
+/// `storage/migrations/0007_email_audit_log_error_message.sql`). Bodies
+/// longer than this are truncated by the store layer at write time via
+/// [`truncate_email_audit_error_message`] so a verbose upstream response
+/// never fails the audit write.
+pub const EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS: usize = 2000;
+
+/// Suffix appended in place of the dropped tail when
+/// [`truncate_email_audit_error_message`] clips an oversize message.
+/// Public so consumers (UI, logs, tests) can detect "this message was
+/// truncated" without a length-equality check.
+pub const ERROR_MESSAGE_TRUNCATION_MARKER: &str = "…[truncated]";
+
+/// Truncates a free-form `error_message` value to fit the
+/// `email_audit_log.error_message` column. Returns `msg` unchanged when
+/// it is at or under [`EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS`]; otherwise
+/// returns a string clipped to the cap with
+/// [`ERROR_MESSAGE_TRUNCATION_MARKER`] appended in place of the dropped
+/// tail. Counts and clips by Unicode scalar values, not bytes, so a
+/// multi-byte character is never split mid-codepoint.
+///
+/// Called by every store implementation (`SqlStore`, `FileStore`)
+/// before persisting `error_message`, so the audit log layer is the
+/// single source of truth for the cap.
+///
+/// # Examples
+///
+/// ```
+/// use data_model::{
+///     truncate_email_audit_error_message,
+///     EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS,
+///     ERROR_MESSAGE_TRUNCATION_MARKER,
+/// };
+///
+/// // Short messages pass through unchanged.
+/// let short = "AADSTS70011: scope is not valid";
+/// assert_eq!(truncate_email_audit_error_message(short), short);
+///
+/// // Oversize messages are clipped with a marker; total length stays
+/// // exactly at the cap.
+/// let huge = "x".repeat(EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS * 2);
+/// let out = truncate_email_audit_error_message(&huge);
+/// assert_eq!(out.chars().count(), EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS);
+/// assert!(out.ends_with(ERROR_MESSAGE_TRUNCATION_MARKER));
+/// ```
+pub fn truncate_email_audit_error_message(msg: &str) -> String {
+    let len = msg.chars().count();
+    if len <= EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS {
+        return msg.to_string();
+    }
+    let marker_len = ERROR_MESSAGE_TRUNCATION_MARKER.chars().count();
+    let keep = EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS - marker_len;
+    let mut out: String = msg.chars().take(keep).collect();
+    out.push_str(ERROR_MESSAGE_TRUNCATION_MARKER);
+    out
+}
+
 /// Final state of an email send attempt. Backends serialise the variant as
 /// the snake_case strings shown in the comments below — matching the values
 /// written into the SQL `outcome` column so FileStore JSON files and SQL
@@ -285,6 +344,41 @@ mod tests {
             .from_json(bogus)
             .expect_err("unknown field must fail");
         assert!(format!("{err}").contains("unknown field"), "got {err}");
+    }
+
+    #[test]
+    fn truncate_error_message_passes_through_short_input() {
+        let short = "AADSTS70011: scope is not valid";
+        assert_eq!(truncate_email_audit_error_message(short), short);
+    }
+
+    #[test]
+    fn truncate_error_message_passes_through_at_cap() {
+        let exact = "y".repeat(EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS);
+        let out = truncate_email_audit_error_message(&exact);
+        assert_eq!(out, exact);
+        assert!(!out.ends_with(ERROR_MESSAGE_TRUNCATION_MARKER));
+    }
+
+    #[test]
+    fn truncate_error_message_clips_oversize_with_marker() {
+        let huge = "x".repeat(EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS * 3 + 17);
+        let out = truncate_email_audit_error_message(&huge);
+        assert_eq!(out.chars().count(), EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS);
+        assert!(out.ends_with(ERROR_MESSAGE_TRUNCATION_MARKER));
+    }
+
+    #[test]
+    fn truncate_error_message_respects_codepoint_boundaries() {
+        // Multi-byte characters must not be split mid-codepoint. Build an
+        // input larger than the cap entirely from a 4-byte UTF-8 char so
+        // a byte-based clip would split the boundary.
+        let oversize = "🦀".repeat(EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS + 10);
+        let out = truncate_email_audit_error_message(&oversize);
+        assert_eq!(out.chars().count(), EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS);
+        assert!(out.ends_with(ERROR_MESSAGE_TRUNCATION_MARKER));
+        // No partial codepoint at the boundary — re-encoding round-trips.
+        let _round_trip = String::from_utf8(out.into_bytes()).expect("valid utf-8");
     }
 
     #[test]

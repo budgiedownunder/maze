@@ -693,6 +693,18 @@ async fn update_outcome_to_failed_populates_error_message() {
 }
 
 #[tokio::test]
+async fn update_outcome_truncates_oversize_error_message() {
+    let mut s = fresh_store().await;
+    contract::update_outcome_truncates_oversize_error_message(&mut s).await;
+}
+
+#[tokio::test]
+async fn record_pending_truncates_oversize_error_message() {
+    let mut s = fresh_store().await;
+    contract::record_pending_truncates_oversize_error_message(&mut s).await;
+}
+
+#[tokio::test]
 async fn update_outcome_rejects_pending_target() {
     let mut s = fresh_store().await;
     contract::update_outcome_rejects_pending_target(&mut s).await;

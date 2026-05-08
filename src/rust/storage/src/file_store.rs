@@ -7,7 +7,10 @@ use async_trait::async_trait;
 use unicase::UniCase;
 use uuid::Uuid;
 
-use data_model::{AuditOutcome, EmailAuditEntry, Maze, OneTimeToken, User, UserEmail};
+use data_model::{
+    AuditOutcome, EmailAuditEntry, Maze, OneTimeToken, User, UserEmail,
+    truncate_email_audit_error_message,
+};
 use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 
 use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
@@ -2769,7 +2772,12 @@ impl EmailAuditLog for FileStore {
         if !dir_exists(&self.audit_log_dir) {
             fs::create_dir_all(&self.audit_log_dir)?;
         }
-        self.write_audit_entry_file(entry, false)?;
+        let mut to_write = entry.clone();
+        to_write.error_message = to_write
+            .error_message
+            .as_deref()
+            .map(truncate_email_audit_error_message);
+        self.write_audit_entry_file(&to_write, false)?;
         Ok(entry.id)
     }
 
@@ -2819,7 +2827,7 @@ impl EmailAuditLog for FileStore {
         entry.outcome = outcome;
         entry.provider_message_id = provider_message_id.map(|s| s.to_string());
         entry.error_class = error_class.map(|s| s.to_string());
-        entry.error_message = error_message.map(|s| s.to_string());
+        entry.error_message = error_message.map(truncate_email_audit_error_message);
         self.write_audit_entry_file(&entry, true)
     }
 

@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, Utc};
 use data_model::{
     AuditOutcome, EmailAuditEntry, Maze, OAuthIdentity, OneTimeToken, TokenPurpose, User,
-    UserEmail, UserLogin,
+    UserEmail, UserLogin, truncate_email_audit_error_message,
 };
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
@@ -3387,6 +3387,10 @@ impl EmailAuditLog for SqlStore {
         if existing.is_some() {
             return Err(Error::AuditEntryIdExists(entry.id.to_string()));
         }
+        let truncated_error_message = entry
+            .error_message
+            .as_deref()
+            .map(truncate_email_audit_error_message);
         sqlx::query(&q(
             self.kind,
             "INSERT INTO email_audit_log \
@@ -3406,7 +3410,7 @@ impl EmailAuditLog for SqlStore {
         .bind(entry.provider_message_id.as_deref())
         .bind(audit_outcome_to_sql(entry.outcome))
         .bind(entry.error_class.as_deref())
-        .bind(entry.error_message.as_deref())
+        .bind(truncated_error_message.as_deref())
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
@@ -3459,6 +3463,7 @@ impl EmailAuditLog for SqlStore {
                 "update_outcome cannot move a row back to pending".to_string(),
             ));
         }
+        let truncated_error_message = error_message.map(truncate_email_audit_error_message);
         let result = sqlx::query(&q(
             self.kind,
             "UPDATE email_audit_log \
@@ -3468,7 +3473,7 @@ impl EmailAuditLog for SqlStore {
         .bind(audit_outcome_to_sql(outcome))
         .bind(provider_message_id)
         .bind(error_class)
-        .bind(error_message)
+        .bind(truncated_error_message.as_deref())
         .bind(id.to_string())
         .execute(&self.pool)
         .await
