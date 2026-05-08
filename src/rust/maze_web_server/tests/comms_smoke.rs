@@ -120,10 +120,11 @@ async fn password_reset_template_renders_subject_text_and_html_with_branding_par
         html.contains("Hi Alice,"),
         "body_html missing first_name substitution: {html}"
     );
-    // header.html contains `<img ... alt="{{ company_name }}" ...>`.
+    // header.html conatins an `<img src="{{ logo_url }}">` with the logo
+    // URL substituted
     assert!(
-        html.contains("alt=\"Maze, Inc.\""),
-        "body_html missing rendered header partial: {html}"
+        html.contains("logo.png"),
+        "body_html missing rendered header partial (expected substituted logo_url): {html}"
     );
     // footer.html contains `&copy; <year> <company_name>`.
     assert!(

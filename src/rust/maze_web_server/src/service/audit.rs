@@ -97,7 +97,8 @@ const PROVIDER_NAME_UNCONFIGURED: &str = "none";
 /// #     })) as Box<dyn Store>,
 /// # ));
 /// # let renderer = TemplateRenderer::new(
-/// #     AppContext { app_name: "App".into(), server_url: "https://x".into(),
+/// #     AppContext { app_name: "App".into(), from_name: "App Team".into(),
+/// #         server_url: "https://x".into(),
 /// #         branding: BrandingContext { company_name: "X".into(), company_address: "A".into(),
 /// #             company_url: "https://x".into(), logo_url: "https://x".into() } },
 /// #     Arc::new(EmbeddedTemplateLoader::from_pairs(&[("greet", "subject = \"Hi\"\ntext = \"Hi\"")]))
