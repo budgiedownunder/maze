@@ -9,13 +9,17 @@
 --   * For SMTP send failures, this is the SMTP enhanced status response
 --     (e.g. `535 5.7.3 Authentication unsuccessful [server-id ...]`).
 --
--- The column is TEXT (not VARCHAR(N)) because upstream bodies are
--- unbounded — Azure AD JSON bodies are typically ~1 KB but provider
--- error pages can be larger. Per the schema rules in `0001_initial.sql`,
--- TEXT-affinity columns carry no literal `DEFAULT`; the column is added
--- nullable so existing rows stay valid as-is.
+-- Sized at VARCHAR(16000) — same precedent as `mazes.definition` — so
+-- the column survives the schema rule "every string column is VARCHAR(N),
+-- never bare TEXT" (see `0001_initial.sql`). SQLx 0.8's `Any` driver
+-- classifies MySQL TEXT as BLOB, which breaks `Option<String>` decoding;
+-- VARCHAR is unambiguously Text on every backend. 16000 chars at utf8mb4
+-- (~64 KB) matches the historical TEXT cap and is plenty for AAD JSON
+-- bodies (~1 KB typical) and verbose provider error pages alike — InnoDB
+-- DYNAMIC row format pushes large values off-page so the row-size budget
+-- is unaffected. The column is nullable; existing rows stay valid as-is.
 --
 -- `error_class` remains the stable, low-cardinality dashboard signal
 -- (a fixed taxonomy in `service::audit::error_class_for`); the new
 -- `error_message` column is the human-readable why and is never aggregated.
-ALTER TABLE email_audit_log ADD COLUMN error_message TEXT;
+ALTER TABLE email_audit_log ADD COLUMN error_message VARCHAR(16000);
