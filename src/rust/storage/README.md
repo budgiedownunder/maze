@@ -44,8 +44,8 @@ This runs:
 - FileStore inline unit tests
 - SqlStore inline unit tests (datetime helpers — gated by `sql-store`)
 - Validation tests
-- The contract suite against FileStore (`tests/file_store_contract.rs` — 49 scenarios)
-- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 49 scenarios)
+- The contract suite against FileStore (`tests/file_store_contract.rs` — 113 scenarios)
+- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 113 scenarios)
 - Doc tests
 
 Tests run in parallel — every FileStore test is rooted at its own `tempfile::TempDir`, and every SqlStore test creates its own in-memory SQLite, so there's no shared state to serialise around.
@@ -107,21 +107,88 @@ No benchmarking tests are currently implemented for the crate.
 cargo doc --features sql-store --open
 ```
 
+## FileStore data layout and migrations
+
+`FileStore` writes one JSON file per record under `data_dir/`:
+
+```
+data_dir/
+  .schema_version            single integer, written atomically (tempfile + rename)
+  users/
+    <uuid>/
+      user.json              user record (multi-email shape)
+      mazes/
+        <maze-id>.json
+  one_time_tokens/
+    <token-id>.json          single-use, time-bounded token (password reset / invite / email verification)
+  email_audit_log/
+    <entry-id>.json          one row per email send attempt (intent + outcome)
+```
+
+`FileStore::new` runs two startup passes against `data_dir` in order:
+
+1. **`migrate_users_dir`** — a one-shot, idempotent rewrite of any pre-multi-email `user.json` files into the current shape. New-shape files parse straight through and are left alone; legacy single-email files are rewritten and the original kept alongside as `user.json.bak`. Runs unconditionally on every startup.
+
+2. **`apply_pending_migrations`** — the schema-versioned migration framework. Reads `<data_dir>/.schema_version` (defaulting to `0` if absent), runs every registered migration with a higher version in order, and writes the new version atomically **after each successful migration** so a failure mid-batch leaves the schema at the last successful step (not at zero).
+
+The migration registry lives in `src/file_store_migration.rs`:
+
+| Version | Effect |
+|:--------|:-------|
+| 1, 2    | No-ops. Align the FileStore counter with the SQL `0001_initial.sql` and `0002_user_emails.sql` migrations already applied to existing deployments. |
+| 3       | `migrate_0003_user_emails_verified_reset` — for every non-admin user, sets `verified = false, verified_at = None` on each email **not** matched by an `oauth_identities[*].provider_email` for that user. Admin users are skipped wholesale. Counterpart to the SQL `0003_user_emails_verified_reset.sql` migration described below. |
+| 4       | No-op. The matching SQL migration adds a `users.deleted_at` column. The FileStore data shape is updated by `#[serde(default, skip_serializing_if = "Option::is_none")]` on the new `User.deleted_at` field — existing `user.json` files round-trip without rewriting; new files written after version-4-applied include the field only when populated. |
+| 5       | `migrate_0005_create_one_time_tokens_dir` — creates `<data_dir>/one_time_tokens/`. Each token is one file `<token-id>.json`; the FileStore `TokenStore` impl reads/writes via tempfile + rename. |
+| 6       | `migrate_0006_create_email_audit_log_dir` — creates `<data_dir>/email_audit_log/`. One file per audit row keyed by id; the FileStore `EmailAuditLog` impl reads/writes via tempfile + rename. `purge_user` walks the directory and clears `recipient_user_id` / `triggered_by_user_id` on rows referencing the purged user — the FileStore counterpart to the SQL `ON DELETE SET NULL` FK behaviour. |
+| 7       | No-op. The matching SQL migration adds an `error_message VARCHAR(2000)` column to `email_audit_log` for verbose upstream-error capture. The FileStore data shape is updated by `#[serde(default, skip_serializing_if = "Option::is_none")]` on the new `EmailAuditEntry.error_message` field — existing audit-row JSON files round-trip without rewriting; new files written after version-7-applied include the field only when populated. Both stores truncate oversize values at write time via `data_model::truncate_email_audit_error_message` so a verbose upstream body never fails the audit write. |
+
+Behaviour properties:
+
+- **Idempotent**: re-running a migration on already-migrated data has no effect (each migration's logic is a deterministic transform; `mutated` flags suppress unnecessary file rewrites).
+- **Atomic per file**: every `user.json` rewrite uses tempfile + rename.
+- **No silent downgrade**: a `.schema_version` value higher than the registry's max version returns a clear error rather than re-running migrations against a newer schema.
+- **Schema version persists across restarts**: an existing deployment that's already at the current version sees the second-pass framework as a near-zero-cost check (read the file, compare, exit).
+
 ## SqlStore schema and migrations
 
-The SqlStore schema is defined across the migration files in [`migrations/`](./migrations/). It creates five tables:
+The SqlStore schema is defined across the migration files in [`migrations/`](./migrations/). It creates seven tables:
 
 | Table | Purpose |
 |:------|:--------|
-| `users` | User records with admin flag, username, full name, password hash, API key (added in `0001_initial.sql`). The `email` column was retired post-`0002_user_emails.sql` by per-backend cleanup in `SqlStore::new` (`retire_legacy_users_email_column`) — portable column-drop on a `UNIQUE NOT NULL` column isn't expressible in a single migration file across SQLite, PostgreSQL, and MySQL |
+| `users` | User records with admin flag, username, full name, password hash, API key (added in `0001_initial.sql`), plus a nullable `deleted_at` soft-delete marker (added in `0004_users_soft_delete.sql`). The `email` column was retired post-`0002_user_emails.sql` by per-backend cleanup in `SqlStore::new` (`retire_legacy_users_email_column`) — portable column-drop on a `UNIQUE NOT NULL` column isn't expressible in a single migration file across SQLite, PostgreSQL, and MySQL |
 | `user_emails` | Email addresses attached to a user — `email`, `is_primary`, `verified`, `verified_at` (added in `0002_user_emails.sql`). Globally unique on `email`; one row per user has `is_primary = 1`, enforced in application code |
 | `user_logins` | Active and expired bearer-token login sessions, FK to `users` |
 | `oauth_identities` | Provider-linked identities (Google, GitHub, Facebook), FK to `users` |
 | `mazes` | Maze definitions (JSON), FK to owner `users` |
+| `one_time_tokens` | Single-use, time-bounded tokens for password-reset / invite / email-verification flows (added in `0005_one_time_tokens.sql`). FK to `users` with `ON DELETE CASCADE`. Single-use enforcement is application-driven via `UPDATE ... WHERE consumed_at IS NULL`. |
+| `email_audit_log` | Append-only log of every email send attempt (added in `0006_email_audit_log.sql`). Two FKs to `users` — `recipient_user_id` and `triggered_by_user_id` — both `ON DELETE SET NULL` so the audit history survives a hard-delete (`purge_user`) without re-identifying the user. Soft-delete leaves the FK untouched. |
 
 Plus the standard SQLx migration tracking table `_sqlx_migrations`, created automatically.
 
 `SqlStore::new` runs any pending migrations on startup. SQLx tracks applied migrations in `_sqlx_migrations` so subsequent runs are idempotent — the schema is set up exactly once per database.
+
+The migration files in [`migrations/`](./migrations/):
+
+| File | Effect |
+|:-----|:-------|
+| `0001_initial.sql` | Creates `users`, `user_logins`, `oauth_identities`, `mazes`. The `users.email UNIQUE NOT NULL` column from this migration is later retired by `retire_legacy_users_email_column` in `SqlStore::new` (post-`0002`). |
+| `0002_user_emails.sql` | Creates `user_emails` and seeds it from each user's `users.email`. Each seeded row is `is_primary = 1, verified = 1, verified_at = NULL`. |
+| `0003_user_emails_verified_reset.sql` | One-sweep flip from "verified by default" to "verification required". Sets `verified = 0, verified_at = NULL` on every `user_emails` row whose owning user is not an admin AND no matching `oauth_identities.provider_email` row exists for that (user, email) pair. |
+| `0004_users_soft_delete.sql` | Adds `users.deleted_at VARCHAR(32)` (RFC 3339 timestamp, nullable) and the supporting `idx_users_deleted_at` index. `deleted_at IS NULL` marks an active user; a populated timestamp marks a soft-deleted user. The trait surface enforces the filter — see "Soft-delete behaviour" below. |
+| `0005_one_time_tokens.sql` | Creates the `one_time_tokens` table (`id`, `user_id`, `purpose`, `target_email`, `created_at`, `expires_at`, `consumed_at`) plus `idx_one_time_tokens_user_id` and `idx_one_time_tokens_expires_at`. FK to `users(id)` with `ON DELETE CASCADE`. The trait `TokenStore` ([`store.rs`](./src/store.rs)) sits on top: `create_token`, `find_token` (filters expired), `consume_token` (race-free single-use via `UPDATE ... WHERE consumed_at IS NULL`), `purge_email_verification_tokens` (used by the verification re-send handler so re-issuing supersedes any prior token), `purge_expired`. |
+| `0006_email_audit_log.sql` | Creates the `email_audit_log` table (`id`, `created_at`, `recipient_user_id`, `recipient_email`, `template_id`, `token_id`, `triggered_by_user_id`, `triggered_by_ip`, `provider`, `provider_message_id`, `outcome`, `error_class`) plus four lookup indexes. Two FKs to `users(id)` — `recipient_user_id` and `triggered_by_user_id`, both `ON DELETE SET NULL`. The trait `EmailAuditLog` ([`store.rs`](./src/store.rs)) provides `record_pending` (synchronous insert before the send), `update_outcome` (asynchronous flip to `accepted`/`failed`), `find_audit_entry`, and `find_recent_audit_entries_for_user`. The body of every send and any expansion containing a secret token is *deliberately not stored* — the log records intent and authorization, not credentials. |
+| `0007_email_audit_log_error_message.sql` | Adds a nullable `error_message VARCHAR(2000)` column to `email_audit_log` for free-form diagnostic detail captured alongside `error_class` when a send fails (e.g. an Azure AD `AADSTS70011` body for token-mint failures, or the SMTP enhanced status response for SMTP send failures). `error_class` remains the stable, low-cardinality dashboard signal; `error_message` is the human-readable why. VARCHAR (not bare TEXT) per the rule in [`0001_initial.sql`](./migrations/0001_initial.sql) — SQLx-Any classifies MySQL TEXT as BLOB and breaks `Option<String>` decoding. Sized at 2000 (~8 KB at utf8mb4): well above the AAD JSON / SMTP responses this column actually stores, but small enough to leave ~24 KB of row-size headroom for future columns. The store layer truncates oversize values at write time via `data_model::truncate_email_audit_error_message` (with the `…[truncated]` marker), so an unusually verbose upstream body never fails the audit write — the audit row is only useful if it always lands. |
+
+### Soft-delete behaviour
+
+`UserStore::delete_user(id)` performs a **soft-delete**: the `users` row is kept (so audit-log foreign keys stay valid) with `deleted_at` populated and `username` rewritten to `deleted-<uuid>` to free the original handle for reuse. Related rows that have no audit value are hard-deleted in the same call: `user_logins`, `oauth_identities`, `user_emails`, and the user's `mazes`. After the call, every read path (`get_user`, `get_users`, `get_admin_users`, `has_users`, `find_user_by_name`, `find_user_by_verified_email`, `find_user_by_api_key`, `find_user_by_login_id`, `find_user_by_oauth_identity`) treats the user as if it never existed by applying a `deleted_at IS NULL` filter.
+
+Two additional methods round out the surface:
+
+- `UserStore::purge_user(id)` — true hard-delete of the `users` row. Intended for retention / right-to-erasure flows where the soft-deleted row must also be cleared. Reachable on either an active or already-soft-deleted user.
+- `UserStore::has_active_admin_user()` — `is_admin = true AND deleted_at IS NULL`. Used by startup so a soft-deleted lone admin doesn't prevent the default admin from being recreated on next launch.
+
+The username scramble form `deleted-<uuid>` is 44 chars, fitting comfortably within the `VARCHAR(64)` cap on `users.username` regardless of the original username's length, and works identically on FileStore (where the scramble is written directly to `user.json`).
 
 ### Schema portability rules
 

@@ -130,12 +130,35 @@ export function setPrimaryEmail(token: string, email: string): Promise<UserEmail
   })
 }
 
-// Server returns 501 until the email-send infrastructure is in place; the
-// caller surfaces that as a thrown error with `status === 501`.
-export function verifyMyEmail(token: string, email: string): Promise<void> {
-  return requestEmpty(`/users/me/emails/${encodeURIComponent(email)}/verify`, {
+export function requestPasswordReset(email: string): Promise<void> {
+  return requestEmpty('/password-reset/request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function confirmPasswordReset(token: string, newPassword: string): Promise<void> {
+  return requestEmpty('/password-reset/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  })
+}
+
+export function requestEmailVerification(token: string, email: string): Promise<void> {
+  return requestEmpty('/email-verifications/request', {
     method: 'POST',
     headers: authHeaders(token),
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function confirmEmailVerification(verificationToken: string): Promise<void> {
+  return requestEmpty('/email-verifications/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: verificationToken }),
   })
 }
 

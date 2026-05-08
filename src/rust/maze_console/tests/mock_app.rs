@@ -77,6 +77,7 @@ impl MockApp {
     }
 
     #[cfg(feature = "print_output")]
+    #[allow(dead_code)]
     pub fn print_output(&self) {
         println!("Captured output:\n");
         for line in &self.output {

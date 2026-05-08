@@ -1,0 +1,41 @@
+-- Adds `error_message` to `email_audit_log` — a free-form diagnostic
+-- detail captured alongside `error_class` when a send fails. Stores
+-- the upstream response body so operators can see the actual rejection
+-- reason without scraping server logs:
+--
+--   * For token-mint failures (HTTP 4xx/5xx from an OAuth token endpoint
+--     such as Azure AD), this is the response body (e.g. an `AADSTS70011`
+--     scope-validation message).
+--   * For SMTP send failures, this is the SMTP enhanced status response
+--     (e.g. `535 5.7.3 Authentication unsuccessful [server-id ...]`).
+--
+-- Column type is VARCHAR(N), not bare TEXT, per the schema rule in
+-- `0001_initial.sql` ("every string column is VARCHAR(N), never bare
+-- TEXT"). SQLx 0.8's `Any` driver classifies MySQL TEXT as BLOB
+-- (TEXT and BLOB share the wire type), which breaks `Option<String>`
+-- decoding; VARCHAR is unambiguously Text on every backend.
+--
+-- Sized at 2000 (~8 KB at utf8mb4) — well above the typical AAD JSON
+-- body (~1 KB) and SMTP response string (<1 KB) this column stores. The
+-- store layer truncates oversize values at write time with a marker (see
+-- `data_model::truncate_email_audit_error_message` and the
+-- `EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS` constant), so a verbose upstream
+-- response never fails the audit write — the audit row is only useful if
+-- it always lands.
+--
+-- We deliberately do NOT match `mazes.definition`'s VARCHAR(16000): every
+-- VARCHAR contributes its full declared length × bytes-per-character to
+-- MySQL's 65,535-byte row-size budget at table-definition time, and
+-- `email_audit_log` already has eleven columns. A 16000-char
+-- `error_message` would trip MySQL error 1118 "Row size too large".
+-- BLOB/TEXT-affinity columns only contribute ~9-12 bytes each, but using
+-- those types here would hit the SQLx-Any decoding bug above. 2000 also
+-- leaves comfortable headroom (~24 KB at utf8mb4) for future columns on
+-- the same table.
+--
+-- The column is nullable; existing rows stay valid as-is.
+--
+-- `error_class` remains the stable, low-cardinality dashboard signal
+-- (a fixed taxonomy in `service::audit::error_class_for`); the new
+-- `error_message` column is the human-readable why and is never aggregated.
+ALTER TABLE email_audit_log ADD COLUMN error_message VARCHAR(2000);

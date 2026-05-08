@@ -452,11 +452,17 @@ impl SignupRequest {
                 is_admin: false,
                 username: "".to_string(),
                 full_name: "".to_string(),
-                emails: vec![data_model::UserEmail::new_primary_verified(&self.email)],
+                // Self-service signup: the email is just a claim. The
+                // verification handler flips the row to `verified = true`
+                // once the user clicks the link sent in the verification
+                // email. Admin-side `CreateUserRequest` keeps the trusted
+                // seed path with `new_primary_verified`.
+                emails: vec![data_model::UserEmail::new_primary_unverified(&self.email)],
                 password_hash,
                 api_key: Uuid::nil(),
                 logins: vec![],
                 oauth_identities: vec![],
+                deleted_at: None,
             }
         )
     }
@@ -495,6 +501,8 @@ pub async fn signup(
     auth_service: web::Data<AuthService>,
     store: web::Data<SharedStore>,
     features: web::Data<SharedFeatures>,
+    config: web::Data<AppConfig>,
+    comms: web::Data<comms::Comms>,
 ) -> Result<HttpResponse, Error> {
     let allow_signup = {
         let features_lock = features.read().map_err(|_| {
@@ -506,32 +514,66 @@ pub async fn signup(
         return Err(ErrorForbidden("Signup is disabled on this server"));
     }
 
-    let mut store_lock = get_store_write_lock(&store).await;
     let signup_req_data: SignupRequest = signup_req.into_inner();
     let mut store_user = signup_req_data.into_user(&auth_service)?;
     let base_username = generate_username_from_email(&signup_req_data.email);
 
-    for attempt in 0u8..=5 {
-        store_user.username = if attempt == 0 {
-            base_username.clone()
-        } else {
-            format!("{}_{}", base_username, &Uuid::new_v4().to_string().replace('-', "")[..6])
-        };
-        match store_lock.create_user(&mut store_user).await {
-            Ok(()) => return Ok(
-                HttpResponse::Created()
-                .insert_header(("Location", "/api/v1/users/me"))
-                .json(UserItem::from_store_user(&store_user))
-            ),
-            Err(StoreError::UserNameExists()) if attempt < 5 => continue,
-            Err(err) => return match err {
-                StoreError::UserEmailExists() | StoreError::UserNameExists() => Err(get_user_exists_error()),
-                StoreError::UserPasswordMissing() => Err(get_missing_password_request_error()),
-                _ => Err(get_user_create_internal_error(&err))
+    let create_outcome = {
+        let mut store_lock = get_store_write_lock(&store).await;
+        let mut outcome: Result<(), StoreError> = Ok(());
+        for attempt in 0u8..=5 {
+            store_user.username = if attempt == 0 {
+                base_username.clone()
+            } else {
+                format!("{}_{}", base_username, &Uuid::new_v4().to_string().replace('-', "")[..6])
+            };
+            match store_lock.create_user(&mut store_user).await {
+                Ok(()) => break,
+                Err(StoreError::UserNameExists()) if attempt < 5 => continue,
+                Err(err) => {
+                    outcome = Err(err);
+                    break;
+                }
             }
         }
+        outcome
+    };
+    create_outcome.map_err(|err| match err {
+        StoreError::UserEmailExists() | StoreError::UserNameExists() => get_user_exists_error(),
+        StoreError::UserPasswordMissing() => get_missing_password_request_error(),
+        other => get_user_create_internal_error(&other),
+    })?;
+
+    // Issue + dispatch the verification token. A failure here doesn't
+    // unwind the signup — the user is created either way and can
+    // request a fresh verification email via /email-verifications/request.
+    match crate::api::v1::endpoints::email_verification::issue_verification_token(
+        &store,
+        store_user.id,
+        &signup_req_data.email,
+    )
+    .await
+    {
+        Ok(token) => {
+            crate::api::v1::endpoints::email_verification::dispatch_verification_email(
+                store.get_ref().clone(),
+                comms.clone().into_inner(),
+                store_user.clone(),
+                &signup_req_data.email,
+                &config.comms.public_base_url,
+                token.id,
+            )
+            .await;
+        }
+        Err(err) => log::warn!(
+            "signup: verification token issue failed for user {}: {err}",
+            store_user.id
+        ),
     }
-    unreachable!()
+
+    Ok(HttpResponse::Created()
+        .insert_header(("Location", "/api/v1/users/me"))
+        .json(UserItem::from_store_user(&store_user)))
 }
 // **************************************************************************************************
 // Endpoints: GET /api/v1/auth/oauth/{provider}/start
@@ -1461,6 +1503,7 @@ impl CreateUserRequest {
                 api_key: Uuid::nil(),
                 logins: vec![],
                 oauth_identities: vec![],
+                deleted_at: None,
             }
         )
     }

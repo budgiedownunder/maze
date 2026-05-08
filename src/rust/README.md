@@ -9,7 +9,8 @@ The following `Rust` crates are present:
 
 | Folder | Crate | Description
 |--------|-----------|---------------
-| `src/rust` | [`maze`](./maze/README.md) | Maze definition, calculation, and gaming engine library
+| `src/rust` | [`comms`](./comms/README.md) | Outbound email communications library
+|            | [`maze`](./maze/README.md) | Maze definition, calculation, and gaming engine library
 |            | [`maze_c`](./maze_c/README.md) | Maze C API library
 |            | [`maze_console`](./maze_console/README.md) | Maze console application
 |            | [`maze_game_bevy`](./maze_game_bevy/README.md) | Maze game Bevy application (native binary and shared library)
@@ -89,6 +90,7 @@ cd src/rust
 cargo test --locked -p utils
 cargo test --locked -p data_model
 cargo test --locked -p auth
+cargo test --locked -p comms --all-features
 cargo test --locked -p maze_openapi_generator
 cargo test --locked -p maze_game_bevy
 cargo test --locked -p maze
@@ -115,11 +117,8 @@ To run Clippy across all crates and targets:
 
 ```
 cd src/rust
-cargo clippy --all-targets
-cargo clippy -p storage --features sql-store --all-targets
+cargo clippy --workspace --all-targets --all-features
 ```
-
-The second line covers the SQL-feature-gated tests and examples inside the `storage` crate (e.g. `sql_store_smoke`, `verify_migration`), which are skipped by the workspace-level run because they declare `required-features = ["sql-store"]`.
 
 Expected: zero errors, zero warnings.
 

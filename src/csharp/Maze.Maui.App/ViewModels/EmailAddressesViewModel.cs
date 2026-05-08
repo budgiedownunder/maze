@@ -4,6 +4,7 @@ using Maze.Maui.App.Services;
 using System.Collections.ObjectModel;
 using System.Net;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace Maze.Maui.App.ViewModels
 {
@@ -32,6 +33,20 @@ namespace Maze.Maui.App.ViewModels
 
         [ObservableProperty]
         private string loadStatus = "";
+
+        /// <summary>Transient panel-level success message shown after a
+        /// Resend Verification request succeeds. Auto-clears after
+        /// <see cref="ResendFlashDuration"/> via a cancellable Task.Delay
+        /// — a fresh Resend invocation cancels any in-flight clear so the
+        /// new message isn't wiped by the previous timer firing.</summary>
+        [ObservableProperty]
+        private string resendFlash = "";
+
+        // 5 seconds is the same fade window used by the React panel — long
+        // enough to read, short enough that two consecutive Resends don't
+        // pile up.
+        internal static readonly TimeSpan ResendFlashDuration = TimeSpan.FromSeconds(5);
+        private CancellationTokenSource? _resendFlashCts;
 
         public EmailAddressesViewModel(IAuthService authService)
         {
@@ -189,21 +204,43 @@ namespace Maze.Maui.App.ViewModels
             if (row is null || IsBusy) return;
             IsBusy = true;
             ErrorMessage = "";
+            ResendFlash = "";
+            // Cancel any prior auto-clear so a rapid second Resend doesn't
+            // see its own message wiped by the first timer firing.
+            _resendFlashCts?.Cancel();
             try
             {
-                await _authService.VerifyEmailAsync(row.Email);
-            }
-            catch (HttpRequestException ex) when ((int?)ex.StatusCode == 501)
-            {
-                ErrorMessage = "Email verification is not yet available";
+                await _authService.RequestEmailVerificationAsync(row.Email);
+                ResendFlash = $"Verification link sent to {row.Email}.";
+                _resendFlashCts = new CancellationTokenSource();
+                _ = ScheduleResendFlashClearAsync(row.Email, _resendFlashCts.Token);
             }
             catch
             {
-                ErrorMessage = "Failed to verify email. Please try again.";
+                ErrorMessage = "Failed to resend verification link";
             }
             finally
             {
                 IsBusy = false;
+            }
+        }
+
+        private async Task ScheduleResendFlashClearAsync(string email, CancellationToken ct)
+        {
+            try
+            {
+                await Task.Delay(ResendFlashDuration, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            // Only clear if the message we set is still the one on screen —
+            // a subsequent Resend may have replaced it with a different
+            // address before the timer fired.
+            if (ResendFlash == $"Verification link sent to {email}.")
+            {
+                ResendFlash = "";
             }
         }
 

@@ -1,0 +1,25 @@
+subject = "Verify your {{ app_name }} email address"
+text = """
+{{ header }}
+
+Hi {{ first_name }},
+
+Please confirm this email address belongs to you by clicking the link below:
+
+{{ verification_link }}
+
+If you didn't request this, you can ignore this message.
+
+— {{ from_name }}
+
+{{ footer }}
+"""
+html = """
+{{ header }}
+<p>Hi {{ first_name }},</p>
+<p>Please confirm this email address belongs to you by clicking the link below:</p>
+<p><a href="{{ verification_link }}">{{ verification_link }}</a></p>
+<p>If you didn't request this, you can ignore this message.</p>
+<p>— {{ from_name }}</p>
+{{ footer }}
+"""

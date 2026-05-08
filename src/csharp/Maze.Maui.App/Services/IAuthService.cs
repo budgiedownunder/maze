@@ -145,10 +145,20 @@ namespace Maze.Maui.App.Services
         /// 404 (not registered) or 409 (target is unverified).</summary>
         Task<List<UserEmail>> SetPrimaryEmailAsync(string email);
 
-        /// <summary>Triggers verification for an email. Until the
-        /// email-send infrastructure ships this throws
-        /// <see cref="HttpRequestException"/> with status 501.</summary>
-        Task VerifyEmailAsync(string email);
+        /// <summary>Requests a password-reset email for the given address.
+        /// Always succeeds at the HTTP layer (anti-enumeration: the server
+        /// returns 200 whether or not the address is registered). Throws
+        /// <see cref="HttpRequestException"/> only on transport failures.
+        /// No bearer required.</summary>
+        Task RequestPasswordResetAsync(string email);
+
+        /// <summary>Re-sends the verification email for an address attached
+        /// to the currently authenticated user. Throws
+        /// <see cref="HttpRequestException"/> with status 404 if the address
+        /// is not on the caller's account, or transport-level failures. The
+        /// server is idempotent: re-requesting verification for an already
+        /// verified address is a 200 no-op.</summary>
+        Task RequestEmailVerificationAsync(string email);
 
         /// <summary>
         /// Attempts to renew the current bearer login token, extending its lifetime without

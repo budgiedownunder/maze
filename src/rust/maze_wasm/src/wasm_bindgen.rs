@@ -1314,6 +1314,7 @@ impl MazeWasm {
     /// }
     /// run();
     /// ```
+    #[allow(clippy::too_many_arguments)]
     pub fn generate(
         &mut self,
         row_count: JsValue,

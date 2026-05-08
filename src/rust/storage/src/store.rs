@@ -1,6 +1,6 @@
 use crate::Error;
 use async_trait::async_trait;
-use data_model::{Maze, User, UserEmail};
+use data_model::{AuditOutcome, EmailAuditEntry, Maze, OneTimeToken, User, UserEmail};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -14,8 +14,19 @@ pub trait UserStore {
     async fn init_default_admin_user(&mut self, username: &str, email: &str, password_hash: &str) -> Result<User, Error>;
     /// Adds a new user to the store and sets the allocated `id` within the user object
     async fn create_user(&mut self, user: &mut User) -> Result<(), Error>;
-    /// Deletes a user from the store
+    /// Soft-deletes a user. The `users` row is preserved so audit-log
+    /// foreign keys remain valid, with `deleted_at` populated and the
+    /// username scrambled to `deleted-<uuid>` so the original value is
+    /// freed for reuse by a future signup. Related rows/fields that have no
+    /// audit value are hard-deleted in the same transaction:
+    /// `user_logins`, `oauth_identities`, `user_emails`, and the user's
+    /// mazes. After this returns, every read path on this trait treats
+    /// the user as if it never existed.
     async fn delete_user(&mut self, id: Uuid) -> Result<(), Error>;
+    /// True hard-delete: removes the `users` row outright. Intended for
+    /// retention / right-to-erasure flows where the soft-delete data must
+    /// also be cleared.
+    async fn purge_user(&mut self, id: Uuid) -> Result<(), Error>;
     /// Updates a user within the store
     async fn update_user(&mut self, user: &mut User) -> Result<(), Error>;
     /// Loads a user from the store
@@ -43,6 +54,11 @@ pub trait UserStore {
     async fn get_admin_users(&self) -> Result<Vec<User>, Error>;
     /// Returns whether at least one user exists in the store
     async fn has_users(&self) -> Result<bool, Error>;
+    /// Returns whether at least one *active* admin user exists in the
+    /// store (i.e. `is_admin = true` AND `deleted_at IS NULL`). Used by
+    /// startup so that a soft-deleted lone admin doesn't prevent the
+    /// default admin from being recreated on next launch.
+    async fn has_active_admin_user(&self) -> Result<bool, Error>;
     /// Adds a new email row to the user. The new row is non-primary; pass
     /// `verified = true` for trusted sources (OAuth-link, admin seed) and
     /// `verified = false` for self-asserted user-typed emails. The store
@@ -112,6 +128,90 @@ pub trait MazeStore {
     /// alphabetically in ascending order
     async fn get_maze_items(&self, owner: &User, include_definitions: bool) -> Result<Vec<MazeItem>, Error>;
 }
+/// Represents a store for holding single-use, time-bounded tokens
+/// (password reset, email verification).
+#[async_trait]
+pub trait TokenStore {
+    /// Persists a new token. The caller is responsible for assigning the
+    /// `id`, `created_at`, and `expires_at` fields — typically via
+    /// [`OneTimeToken::new`]. Rejects with [`Error::Other`] if a token with
+    /// the same id already exists.
+    async fn create_token(&mut self, token: &OneTimeToken) -> Result<(), Error>;
+    /// Loads an active (non-expired, non-consumed) token by id. Expired
+    /// tokens and tokens belonging to soft-deleted users are invisible to
+    /// this lookup.
+    async fn find_token(&self, id: Uuid) -> Result<OneTimeToken, Error>;
+    /// Atomically marks the token consumed. Returns the consumed token on
+    /// success. Fails with [`Error::TokenAlreadyConsumed`] when the token
+    /// has already been consumed; with [`Error::TokenIdNotFound`] when no
+    /// such token exists; with [`Error::TokenExpired`] when the token has
+    /// passed its expiry.
+    ///
+    /// Implementations must enforce single-use atomically: a race of
+    /// concurrent `consume_token` calls against the same id must produce
+    /// exactly one winner.
+    async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, Error>;
+    /// Removes every outstanding [`TokenPurpose::EmailVerification`] token
+    /// belonging to `user_id` whose `target_email` matches the supplied
+    /// address (case-insensitive). Returns the number of tokens removed.
+    /// Used by the verification re-send handler so re-issuing supersedes
+    /// any prior token — only the most recent link works.
+    async fn purge_email_verification_tokens(
+        &mut self,
+        user_id: Uuid,
+        target_email: &str,
+    ) -> Result<u64, Error>;
+    /// Removes every token whose `expires_at` is in the past AND that has
+    /// not been consumed. Returns the number of tokens deleted. Intended
+    /// as a periodic housekeeping sweep.
+    async fn purge_expired(&mut self) -> Result<u64, Error>;
+}
+
+/// Append-only audit log of every email send attempt — captures intent
+/// and authorization, complementing provider-side delivery telemetry
+/// (out of scope for this trait). Rows are written in two stages:
+///
+///   * `record_pending` synchronously inserts the row before the send
+///     is attempted, returning the assigned id.
+///   * `update_outcome` flips the row to `Accepted` (with
+///     `provider_message_id`) or `Failed` (with `error_class`) when the
+///     provider responds.
+#[async_trait]
+pub trait EmailAuditLog {
+    /// Inserts a new audit row. The caller passes a populated
+    /// [`EmailAuditEntry`] — typically built via
+    /// [`EmailAuditEntry::new_pending`]. Returns the row's id on
+    /// success.
+    async fn record_pending(&mut self, entry: &EmailAuditEntry) -> Result<Uuid, Error>;
+    /// Updates the row's outcome. `provider_message_id` populates the
+    /// matching column on `Accepted`; `error_class` and `error_message`
+    /// populate on `Failed`. `error_class` is the stable, low-cardinality
+    /// dashboard signal; `error_message` carries the upstream diagnostic
+    /// detail (e.g. an Azure AD `AADSTS70011` body or an SMTP enhanced
+    /// status response). Passing `Pending` is a programmer error and
+    /// rejected with [`Error::Other`] — once written, a row only moves
+    /// forwards.
+    async fn update_outcome(
+        &mut self,
+        id: Uuid,
+        outcome: AuditOutcome,
+        provider_message_id: Option<&str>,
+        error_class: Option<&str>,
+        error_message: Option<&str>,
+    ) -> Result<(), Error>;
+    /// Loads a single audit row by id.
+    async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, Error>;
+    /// Returns the most recent audit rows for a user (`recipient_user_id =
+    /// ?`), sorted by `created_at` descending, capped at `limit`. An
+    /// implementation that returns more than `limit` rows is
+    /// non-conformant.
+    async fn find_recent_audit_entries_for_user(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+    ) -> Result<Vec<EmailAuditEntry>, Error>;
+}
+
 // Store management
 #[async_trait]
 pub trait Manage {
@@ -120,7 +220,7 @@ pub trait Manage {
 }
 
 /// Represents a store
-pub trait Store: UserStore + MazeStore + Manage + Send + Sync {}
+pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + Manage + Send + Sync {}
 
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;

@@ -104,6 +104,28 @@ namespace Maze.Maui.App.Services
     }
 
     /// <summary>
+    /// Request body for <c>POST /api/v1/password-reset/request</c>. The
+    /// server returns 200 unconditionally so callers cannot enumerate
+    /// registered addresses.
+    /// </summary>
+    internal class PasswordResetRequest
+    {
+        [JsonPropertyName("email")]
+        public string Email { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Request body for <c>POST /api/v1/email-verifications/request</c>.
+    /// Bearer-authenticated; the address must already be on the caller's
+    /// account.
+    /// </summary>
+    internal class EmailVerificationRequest
+    {
+        [JsonPropertyName("email")]
+        public string Email { get; set; } = "";
+    }
+
+    /// <summary>
     /// Represents an HTTP client service for authentication operations
     /// </summary>
     public class AuthHttpClientService : IAuthService
@@ -385,16 +407,23 @@ namespace Maze.Maui.App.Services
         }
 
         /// <inheritdoc/>
-        public async Task VerifyEmailAsync(string email)
+        public async Task RequestPasswordResetAsync(string email)
         {
-            // The server returns 501 here until the email-send infrastructure
-            // ships; EnsureSuccessAsync surfaces that as an
-            // HttpRequestException whose Status the caller can check.
-            var path = $"users/me/emails/{Uri.EscapeDataString(email)}/verify";
-            using var request = new HttpRequestMessage(HttpMethod.Post, path);
+            var body = JsonSerializer.Serialize(new PasswordResetRequest { Email = email });
+            var content = new StringContent(body, Encoding.UTF8, "application/json");
+            var response = await _httpClient.PostAsync("password-reset/request", content);
+            await EnsureSuccessAsync(response, "Failed to request password reset");
+        }
+
+        /// <inheritdoc/>
+        public async Task RequestEmailVerificationAsync(string email)
+        {
+            var body = JsonSerializer.Serialize(new EmailVerificationRequest { Email = email });
+            using var request = new HttpRequestMessage(HttpMethod.Post, "email-verifications/request");
             await AuthHttpClientService.AddBearerHeaderAsync(request);
+            request.Content = new StringContent(body, Encoding.UTF8, "application/json");
             var response = await _httpClient.SendAsync(request);
-            await EnsureSuccessAsync(response, "Failed to verify email");
+            await EnsureSuccessAsync(response, "Failed to resend verification");
         }
 
         private static async Task<List<UserEmail>> ReadEmailsResponseAsync(HttpResponseMessage response)

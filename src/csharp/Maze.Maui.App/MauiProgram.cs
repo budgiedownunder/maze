@@ -93,6 +93,7 @@ namespace Maze.Maui.App
             builder.Services.AddTransient<LoginViewModel>();
             builder.Services.AddTransient<SignUpViewModel>();
             builder.Services.AddTransient<ChangePasswordViewModel>();
+            builder.Services.AddTransient<ForgotPasswordViewModel>();
             builder.Services.AddSingleton<MazesViewModel>();
             builder.Services.AddTransient<MazeViewModel>();
             builder.Services.AddTransient<MazeGameViewModel>();
@@ -102,6 +103,7 @@ namespace Maze.Maui.App
             builder.Services.AddTransient<LoginPage>();
             builder.Services.AddTransient<SignUpPage>();
             builder.Services.AddTransient<ChangePasswordPage>();
+            builder.Services.AddTransient<ForgotPasswordPage>();
             builder.Services.AddSingleton<AppShell>();
             builder.Services.AddSingleton<MazesPage>();
             builder.Services.AddTransient<MazePage>();

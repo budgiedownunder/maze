@@ -10,6 +10,14 @@ impl StdoutLinePrinter {
     /// # Returns
     ///
     /// A new stdout line printer instance
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use utils::StdoutLinePrinter;
+    ///
+    /// let _printer = StdoutLinePrinter::new();
+    /// ```
     pub fn new() -> StdoutLinePrinter {
         StdoutLinePrinter {}
     }

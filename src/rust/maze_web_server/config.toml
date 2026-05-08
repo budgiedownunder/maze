@@ -124,10 +124,118 @@ client_id = ""
 client_secret_env = "MAZE_OAUTH_FACEBOOK_SECRET"
 redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 
-# ---- Auth0 connector (placeholder, not implemented in v1) ----
+# ---- Auth0 connector (placeholder, not implemented yet) ----
 # [oauth.auth0]
 # domain = "your-tenant.auth0.com"
 # client_id = ""
 # client_secret_env = "MAZE_AUTH0_SECRET"
 # audience = "https://your-host/api"
+
+# ---- Outbound communications ----
+# Email-provider settings and branding values for templated messages.
+# Provider secrets (api keys) are read from environment variables only —
+# never from this file.
+#
+# `comms.enabled` is the master switch. When false (the default), startup
+# validation skips both the universal-field check and the per-provider
+# env-var checks. When true, the universal file-only fields
+# (`public_base_url` + `email.from`) hard-fail config load if empty;
+# env-var-sourced provider secrets (Mailgun API key, SMTP+OAuth2 client
+# secret) emit startup warnings rather than blocking startup.
+# [comms]
+# enabled = false
+# public_base_url = "https://your-host:8443"
+
+# Branding values referenced by the templated-message partials
+# ({{ logo }}, {{ header }}, {{ footer }}) and templates ({{ app_name }},
+# {{ company_url }}). copyright_year is taken from the current UTC year
+# at render time and is not configurable here. company_url defaults to
+# public_base_url when left unset; set it explicitly only if the company
+# website lives at a different domain from the server deployment.
+# `app_name` is the product name used in template subjects/bodies (e.g.
+# "Maze"). It is distinct from `comms.email.from_name` (the From-header
+# display name, e.g. "The Maze Team") so the body can read "Reset your
+# Maze password" while the From header still reads "The Maze Team
+# <noreply@…>". When unset, falls back to from_name, then company_name.
+# [comms.branding]
+# app_name = "Acme"
+# company_name = "Acme, Inc."
+# company_address = "123 Example St, City, Country"
+# company_url = "https://acme.example.com"
+# logo_url = "https://your-host:8443/static/logo.png"
+
+# Email-medium config. `provider` selects the active sub-table:
+# "stub" (in-memory capture) or "mailgun". `from` / `from_name` are the
+# sender identity used when send_template synthesises a message;
+# `from_name` defaults to "The Maze Team" if omitted. `templates_dir`
+# is the directory holding filesystem-override templates and partials
+# for the email medium; templates not present there fall back to the
+# embedded defaults compiled into the server.
+# [comms.email]
+# provider = "mailgun"
+# from = "noreply@example.com"
+# from_name = "The Maze Team"
+# templates_dir = "config/email_templates"
+
+# Email audit-log behaviour. Applies to every provider — medium-level,
+# not provider-specific. Currently a single toggle for the
+# anti-enumeration "recon row" written when /password-reset/request is
+# hit with an email that doesn't match a verified user. Default off so
+# small / dev installs don't accumulate one audit-log entry per typo or
+# probe; flip on for rate-limit / abuse forensics. The 200 response and
+# anti-enumeration timing floor are unaffected either way.
+# [comms.email.audit]
+# record_unknown_password_reset_requests = false
+
+# Mailgun-specific settings. Consulted only when provider = "mailgun".
+# api_key is read from MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY at
+# startup and is never read from this file.
+# [comms.email.mailgun]
+# domain = "mg.example.com"
+# region = "us"  # "us" or "eu"
+
+# SMTP+XOAUTH2 settings. Consulted only when provider = "smtp_oauth2".
+# Pairs the SMTP relay (host/port/tls/username) with the OAuth vendor that
+# mints bearer tokens, selected by `vendor`:
+#   "microsoft"        — Azure AD client-credentials flow against a registered
+#       app with Mail.Send (or equivalent) constrained to a single mailbox.
+#       Typical for Microsoft 365. The client secret is environment-only —
+#       MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET.
+#   "google"           — Workspace service-account JWT-bearer flow, typically
+#       with domain-wide delegation. The private key lives in the JSON key
+#       file at service_account_json_path.
+#   "google_personal"  — per-user OAuth refresh-token flow for personal
+#       @gmail.com accounts (Workspace's domain-wide delegation isn't
+#       available against consumer Gmail). The operator does the consent
+#       dance once out-of-band (e.g. via Google's OAuth Playground) and
+#       supplies the resulting refresh token via the env var below.
+# [comms.email.smtp_oauth2]
+# host = "smtp.office365.com"          # M365: smtp.office365.com  | Gmail: smtp.gmail.com
+# port = 587                           # 587 = STARTTLS, 465 = implicit TLS
+# tls = "starttls"                     # "starttls" | "implicit" | "plain"
+# username = "noreply@contoso.com"     # SASL identity (typically the From mailbox)
+# vendor = "microsoft"                 # | "google" | "google_personal"
+#
+# # ---- Microsoft 365 (Azure AD client-credentials) ----
+# [comms.email.smtp_oauth2.microsoft]
+# tenant_id = "00000000-0000-0000-0000-000000000000"
+# client_id = "00000000-0000-0000-0000-000000000000"
+# scopes    = ["https://outlook.office.com/.default"]
+# # client_secret — env-only:
+# #   MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET
+#
+# # ---- Google Workspace (service-account + domain-wide delegation) ----
+# [comms.email.smtp_oauth2.google]
+# service_account_json_path = "/etc/maze/gcp-service-account.json"
+# delegated_subject         = "noreply@company.com"
+# scopes                    = ["https://www.googleapis.com/auth/gmail.send"]
+#
+# # ---- Personal Gmail (OAuth refresh-token flow) ----
+# [comms.email.smtp_oauth2.google_personal]
+# client_id = "1234567890-abc.apps.googleusercontent.com"
+# scopes    = ["https://mail.google.com/"]   # required for SMTP — gmail.send is API-only
+# # client_secret  — env-only:
+# #   MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET
+# # refresh_token  — env-only:
+# #   MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN
 

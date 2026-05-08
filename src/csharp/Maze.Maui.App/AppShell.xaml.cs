@@ -45,6 +45,7 @@ namespace Maze.Maui.App
             Routing.RegisterRoute(nameof(Play3dGamePage), typeof(Play3dGamePage));
             Routing.RegisterRoute(nameof(SignUpPage), typeof(SignUpPage));
             Routing.RegisterRoute(nameof(ChangePasswordPage), typeof(ChangePasswordPage));
+            Routing.RegisterRoute(nameof(ForgotPasswordPage), typeof(ForgotPasswordPage));
         }
 
         /// <summary>

@@ -11,14 +11,17 @@
 //! range queries (`WHERE expires_at < ?`, `ORDER BY last_seen_at DESC`)
 //! portable. See `migrations/0001_initial.sql` for the full design rationale.
 
-use crate::store::{Manage, MazeStore, UserStore};
+use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
 use crate::{
     validation::{validate_email_format, validate_user_fields},
     Error, MazeItem, Store,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, Utc};
-use data_model::{Maze, OAuthIdentity, User, UserEmail, UserLogin};
+use data_model::{
+    AuditOutcome, EmailAuditEntry, Maze, OAuthIdentity, OneTimeToken, TokenPurpose, User,
+    UserEmail, UserLogin, truncate_email_audit_error_message,
+};
 use sqlx::any::{install_default_drivers, AnyPoolOptions, AnyRow};
 use sqlx::migrate::MigrateDatabase;
 use sqlx::{AnyPool, Row};
@@ -442,15 +445,16 @@ async fn retire_legacy_users_email_column(
                     username      VARCHAR(64)  NOT NULL UNIQUE,\
                     full_name     VARCHAR(255) NOT NULL,\
                     password_hash VARCHAR(255) NOT NULL,\
-                    api_key       VARCHAR(36)  NOT NULL UNIQUE\
+                    api_key       VARCHAR(36)  NOT NULL UNIQUE,\
+                    deleted_at    VARCHAR(32)\
                 )",
             )
             .execute(&mut *conn)
             .await
             .map_err(map_sqlx_err)?;
             sqlx::query(
-                "INSERT INTO users_new (id, is_admin, username, full_name, password_hash, api_key) \
-                 SELECT id, is_admin, username, full_name, password_hash, api_key FROM users",
+                "INSERT INTO users_new (id, is_admin, username, full_name, password_hash, api_key, deleted_at) \
+                 SELECT id, is_admin, username, full_name, password_hash, api_key, deleted_at FROM users",
             )
             .execute(&mut *conn)
             .await
@@ -460,6 +464,15 @@ async fn retire_legacy_users_email_column(
                 .await
                 .map_err(map_sqlx_err)?;
             sqlx::query("ALTER TABLE users_new RENAME TO users")
+                .execute(&mut *conn)
+                .await
+                .map_err(map_sqlx_err)?;
+            // The supporting index on the rebuilt `users` table.
+            // CREATE INDEX is not idempotent across all backends, but
+            // because we just DROPped the old `users` table and renamed
+            // `users_new` into place, no `idx_users_deleted_at` exists
+            // on the new table — emit it here.
+            sqlx::query("CREATE INDEX idx_users_deleted_at ON users(deleted_at)")
                 .execute(&mut *conn)
                 .await
                 .map_err(map_sqlx_err)?;
@@ -600,6 +613,11 @@ async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result
     let api_key_str: String = row.try_get("api_key").map_err(map_sqlx_err)?;
     let api_key = parse_uuid("api_key", &api_key_str)?;
     let is_admin_raw: i32 = row.try_get("is_admin").map_err(map_sqlx_err)?;
+    let deleted_at_str: Option<String> = row.try_get("deleted_at").map_err(map_sqlx_err)?;
+    let deleted_at = match deleted_at_str {
+        Some(s) => Some(datetime_from_sql(&s)?),
+        None => None,
+    };
     Ok(User {
         id,
         is_admin: int_to_bool(is_admin_raw),
@@ -610,6 +628,7 @@ async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result
         api_key,
         logins: fetch_user_logins(pool, kind, id).await?,
         oauth_identities: fetch_user_oauth_identities(pool, kind, id).await?,
+        deleted_at,
     })
 }
 
@@ -850,6 +869,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -928,6 +948,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -962,6 +983,112 @@ impl UserStore for SqlStore {
         if id.is_nil() {
             return Err(Error::UserIdMissing());
         }
+        let now = datetime_to_sql(Utc::now());
+        let scrambled = format!("deleted-{id}");
+        let result = sqlx::query(&q(
+            self.kind,
+            "UPDATE users SET deleted_at = ?, username = ? \
+             WHERE id = ? AND deleted_at IS NULL",
+        ))
+        .bind(&now)
+        .bind(&scrambled)
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            return Err(Error::UserIdNotFound(id.to_string()));
+        }
+        // Hard-delete cascaded data that has no audit value: pending sessions,
+        // OAuth identities (frees `(provider, provider_user_id)` for reuse),
+        // email rows (frees the address for reuse), and the user's mazes.
+        // The audit log row, when added, intentionally survives.
+        sqlx::query(&q(self.kind, "DELETE FROM user_logins WHERE user_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        sqlx::query(&q(self.kind, "DELETE FROM oauth_identities WHERE user_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        sqlx::query(&q(self.kind, "DELETE FROM user_emails WHERE user_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        sqlx::query(&q(self.kind, "DELETE FROM one_time_tokens WHERE user_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        sqlx::query(&q(self.kind, "DELETE FROM mazes WHERE owner_id = ?"))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    /// True hard-delete: removes the `users` row outright. Intended for
+    /// retention / right-to-erasure flows where the soft-deleted row must
+    /// also be cleared. `ON DELETE CASCADE` on `user_logins`,
+    /// `oauth_identities`, `user_emails`, and `mazes` clears every
+    /// related row in the same transaction. Reachable on either an active
+    /// or already-soft-deleted user.
+    ///
+    /// # Examples
+    ///
+    /// Soft-delete a user, then purge them so the row is truly gone
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// // Create the user definition
+    /// let mut user = User {
+    ///     id: Uuid::nil(),
+    ///     is_admin: false,
+    ///     username: "jsmith".to_string(),
+    ///     full_name: "John Smith".to_string(),
+    ///     emails: vec![UserEmail::new_primary_verified("jsmith@company.com")],
+    ///     password_hash: "Hashed password".to_string(),
+    ///     api_key: Uuid::nil(),
+    ///     logins: vec![],
+    ///     oauth_identities: vec![],
+    ///     deleted_at: None,
+    /// };
+    ///
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.delete_user(user.id).await.expect("soft-delete");
+    /// match store.purge_user(user.id).await {
+    ///     Ok(_) => println!("User purged from the SQL store"),
+    ///     Err(error) => println!("Failed to purge user => {}", error),
+    /// }
+    /// # });
+    /// ```
+    async fn purge_user(&mut self, id: Uuid) -> Result<(), Error> {
+        if id.is_nil() {
+            return Err(Error::UserIdMissing());
+        }
+        // True hard-delete. ON DELETE CASCADE on user_logins, oauth_identities,
+        // user_emails, and mazes clears every related row. Reachable in two
+        // legitimate cases: (1) the row is already soft-deleted and operations
+        // is purging it; (2) right-to-erasure called directly on an active
+        // user. The trait does not require a prior soft-delete, so the
+        // `deleted_at IS NULL` filter is intentionally omitted here.
         let result = sqlx::query(&q(self.kind, "DELETE FROM users WHERE id = ?"))
             .bind(id.to_string())
             .execute(&self.pool)
@@ -1005,6 +1132,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1119,6 +1247,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1151,11 +1280,14 @@ impl UserStore for SqlStore {
     /// # });
     /// ```
     async fn get_user(&self, id: Uuid) -> Result<User, Error> {
-        let row = sqlx::query(&q(self.kind, "SELECT * FROM users WHERE id = ?"))
-            .bind(id.to_string())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM users WHERE id = ? AND deleted_at IS NULL",
+        ))
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         match row {
             Some(row) => user_from_row(&self.pool, self.kind, &row).await,
             None => Err(Error::UserIdNotFound(id.to_string())),
@@ -1194,6 +1326,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1228,7 +1361,7 @@ impl UserStore for SqlStore {
     async fn find_user_by_name(&self, name: &str) -> Result<User, Error> {
         let mut rows = sqlx::query(&q(
             self.kind,
-            "SELECT * FROM users WHERE LOWER(username) = LOWER(?)",
+            "SELECT * FROM users WHERE LOWER(username) = LOWER(?) AND deleted_at IS NULL",
         ))
         .bind(name)
         .fetch_all(&self.pool)
@@ -1278,6 +1411,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1314,7 +1448,8 @@ impl UserStore for SqlStore {
             self.kind,
             "SELECT u.* FROM users u \
              JOIN user_emails ue ON ue.user_id = u.id \
-             WHERE LOWER(ue.email) = LOWER(?) AND ue.verified <> 0",
+             WHERE LOWER(ue.email) = LOWER(?) AND ue.verified <> 0 \
+               AND u.deleted_at IS NULL",
         ))
         .bind(email)
         .fetch_all(&self.pool)
@@ -1361,6 +1496,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1397,11 +1533,14 @@ impl UserStore for SqlStore {
         // return at most one row by construction. The multi-row guard is here
         // for parity with the rest of the `find_user_by_*` family and to fail
         // loudly if a future migration ever weakens the unique index.
-        let mut rows = sqlx::query(&q(self.kind, "SELECT * FROM users WHERE api_key = ?"))
-            .bind(api_key.to_string())
-            .fetch_all(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
+        let mut rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM users WHERE api_key = ? AND deleted_at IS NULL",
+        ))
+        .bind(api_key.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         match rows.len() {
             0 => Err(Error::UserNotFound()),
             1 => user_from_row(&self.pool, self.kind, &rows.pop().expect("len==1")).await,
@@ -1448,6 +1587,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins,
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1490,7 +1630,7 @@ impl UserStore for SqlStore {
             self.kind,
             "SELECT u.* FROM users u \
              JOIN user_logins l ON l.user_id = u.id \
-             WHERE l.id = ? AND l.expires_at > ?",
+             WHERE l.id = ? AND l.expires_at > ? AND u.deleted_at IS NULL",
         ))
         .bind(login_id.to_string())
         .bind(now)
@@ -1546,6 +1686,7 @@ impl UserStore for SqlStore {
     ///         "google-sub-jsmith".to_string(),
     ///         Some("jsmith@company.com".to_string()),
     ///     )],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1586,7 +1727,8 @@ impl UserStore for SqlStore {
             self.kind,
             "SELECT u.* FROM users u \
              JOIN oauth_identities oi ON oi.user_id = u.id \
-             WHERE LOWER(oi.provider) = LOWER(?) AND oi.provider_user_id = ?",
+             WHERE LOWER(oi.provider) = LOWER(?) AND oi.provider_user_id = ? \
+               AND u.deleted_at IS NULL",
         ))
         .bind(provider)
         .bind(provider_user_id)
@@ -1635,6 +1777,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1667,10 +1810,13 @@ impl UserStore for SqlStore {
     /// # });
     /// ```
     async fn get_users(&self) -> Result<Vec<User>, Error> {
-        let rows = sqlx::query(&q(self.kind, "SELECT * FROM users ORDER BY username"))
-            .fetch_all(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY username",
+        ))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         let mut users = Vec::with_capacity(rows.len());
         for row in &rows {
             users.push(user_from_row(&self.pool, self.kind, row).await?);
@@ -1710,6 +1856,7 @@ impl UserStore for SqlStore {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Create the admin user within the SQL store
@@ -1744,7 +1891,8 @@ impl UserStore for SqlStore {
     async fn get_admin_users(&self) -> Result<Vec<User>, Error> {
         let rows = sqlx::query(&q(
             self.kind,
-            "SELECT * FROM users WHERE is_admin <> 0 ORDER BY username",
+            "SELECT * FROM users WHERE is_admin <> 0 AND deleted_at IS NULL \
+             ORDER BY username",
         ))
         .fetch_all(&self.pool)
         .await
@@ -1793,13 +1941,102 @@ impl UserStore for SqlStore {
     /// # });
     /// ```
     async fn has_users(&self) -> Result<bool, Error> {
-        let row = sqlx::query(&q(self.kind, "SELECT 1 FROM users LIMIT 1"))
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 FROM users WHERE deleted_at IS NULL LIMIT 1",
+        ))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         Ok(row.is_some())
     }
 
+    /// Returns whether at least one *active* admin user exists in the SQL
+    /// store (`is_admin <> 0` AND `deleted_at IS NULL`).
+    ///
+    /// Implemented as a `SELECT 1 ... LIMIT 1` existence probe so the
+    /// engine can return on the first matching row (covered by the
+    /// `idx_users_deleted_at` index). Used by startup so a soft-deleted
+    /// lone admin doesn't prevent the default admin from being recreated
+    /// on next launch.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(true)` if at least one active admin user exists, `Ok(false)`
+    /// otherwise (no users, no admins, or every admin has been soft-deleted).
+    ///
+    /// # Examples
+    ///
+    /// Probe the store before deciding whether to seed a default admin
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    ///
+    /// // Create the SQL store (in-memory SQLite for the example)
+    /// let store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// match store.has_active_admin_user().await {
+    ///     Ok(true) => println!("Active admin already present — skip bootstrap"),
+    ///     Ok(false) => println!("No active admin — seed a default admin"),
+    ///     Err(error) => println!("Failed to check store: {}", error),
+    /// }
+    /// # });
+    /// ```
+    async fn has_active_admin_user(&self) -> Result<bool, Error> {
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 FROM users WHERE is_admin <> 0 AND deleted_at IS NULL LIMIT 1",
+        ))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(row.is_some())
+    }
+
+    /// Adds a non-primary email row to the user. See the `UserStore`
+    /// trait doc-comment for the full contract; pass `verified = true`
+    /// for trusted sources (OAuth-link, admin seed) and `verified = false`
+    /// for self-asserted user-typed emails.
+    ///
+    /// # Examples
+    ///
+    /// Add a secondary unverified email to an existing user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let row = store
+    ///     .add_user_email(user.id, "alice2@example.com", false)
+    ///     .await
+    ///     .expect("add secondary");
+    /// assert!(!row.verified);
+    /// # });
+    /// ```
     async fn add_user_email(
         &mut self,
         user_id: Uuid,
@@ -1847,6 +2084,38 @@ impl UserStore for SqlStore {
         })
     }
 
+    /// Removes a non-primary, non-last email row from the user. See the
+    /// trait doc-comment for the rejection rules.
+    ///
+    /// # Examples
+    ///
+    /// Add a secondary email then remove it
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
+    /// store.remove_user_email(user.id, "alice2@example.com").await.expect("remove");
+    /// # });
+    /// ```
     async fn remove_user_email(
         &mut self,
         user_id: Uuid,
@@ -1886,6 +2155,40 @@ impl UserStore for SqlStore {
         Ok(())
     }
 
+    /// Promotes the named email row to primary. The target must already
+    /// be `verified = true`; promoting an unverified row is rejected to
+    /// stop a session-hijacker from redirecting password resets to an
+    /// attacker-controlled mailbox.
+    ///
+    /// # Examples
+    ///
+    /// Promote a verified secondary to primary
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
+    /// store.set_primary_email(user.id, "alice2@example.com").await.expect("promote");
+    /// # });
+    /// ```
     async fn set_primary_email(
         &mut self,
         user_id: Uuid,
@@ -1923,6 +2226,39 @@ impl UserStore for SqlStore {
         Ok(())
     }
 
+    /// Marks the named email row verified, refreshing `verified_at` to
+    /// the current time. Idempotent — re-marking an already-verified row
+    /// just updates the timestamp.
+    ///
+    /// # Examples
+    ///
+    /// Add an unverified secondary and then verify it
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// store.add_user_email(user.id, "alice2@example.com", false).await.expect("add");
+    /// store.mark_email_verified(user.id, "alice2@example.com").await.expect("mark verified");
+    /// # });
+    /// ```
     async fn mark_email_verified(
         &mut self,
         user_id: Uuid,
@@ -2528,9 +2864,15 @@ impl Manage for SqlStore {
         // Delete in FK-safe order (children first). A single TRUNCATE-equivalent
         // would be faster but TRUNCATE syntax differs across backends; portable
         // DELETEs are fine for the test/reset use case.
+        //
+        // `email_audit_log` is cleared first because it FKs into `users`
+        // with `ON DELETE SET NULL` — clearing it explicitly avoids the
+        // SET NULL fanning out across every audit row when users go.
         for sql in [
+            "DELETE FROM email_audit_log",
             "DELETE FROM user_logins",
             "DELETE FROM oauth_identities",
+            "DELETE FROM one_time_tokens",
             "DELETE FROM mazes",
             "DELETE FROM users",
         ] {
@@ -2540,6 +2882,717 @@ impl Manage for SqlStore {
                 .map_err(map_sqlx_err)?;
         }
         Ok(())
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TokenStore
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Maps a [`TokenPurpose`] to the lowercase string written into the
+/// `purpose` column. Mirrors the snake_case wire form used by the
+/// FileStore JSON files so both backends agree.
+fn token_purpose_to_sql(purpose: TokenPurpose) -> &'static str {
+    match purpose {
+        TokenPurpose::PasswordReset => "password_reset",
+        TokenPurpose::EmailVerification => "email_verification",
+    }
+}
+
+/// Reverse of [`token_purpose_to_sql`]. Unknown values surface a loud
+/// `Error::Other` rather than silently defaulting — a stored row with an
+/// unknown discriminator is a data-corruption signal, not something to
+/// paper over.
+fn token_purpose_from_sql(raw: &str) -> Result<TokenPurpose, Error> {
+    match raw {
+        "password_reset" => Ok(TokenPurpose::PasswordReset),
+        "email_verification" => Ok(TokenPurpose::EmailVerification),
+        other => Err(integrity_violation(&format!(
+            "unknown token purpose '{other}' in one_time_tokens"
+        ))),
+    }
+}
+
+async fn token_from_row(row: &AnyRow) -> Result<OneTimeToken, Error> {
+    let id_str: String = row.try_get("id").map_err(map_sqlx_err)?;
+    let id = parse_uuid("token id", &id_str)?;
+    let user_id_str: String = row.try_get("user_id").map_err(map_sqlx_err)?;
+    let user_id = parse_uuid("token user_id", &user_id_str)?;
+    let purpose_raw: String = row.try_get("purpose").map_err(map_sqlx_err)?;
+    let purpose = token_purpose_from_sql(&purpose_raw)?;
+    let target_email: Option<String> = row.try_get("target_email").map_err(map_sqlx_err)?;
+    let created_at_str: String = row.try_get("created_at").map_err(map_sqlx_err)?;
+    let created_at = datetime_from_sql(&created_at_str)?;
+    let expires_at_str: String = row.try_get("expires_at").map_err(map_sqlx_err)?;
+    let expires_at = datetime_from_sql(&expires_at_str)?;
+    let consumed_at_str: Option<String> = row.try_get("consumed_at").map_err(map_sqlx_err)?;
+    let consumed_at = match consumed_at_str {
+        Some(s) => Some(datetime_from_sql(&s)?),
+        None => None,
+    };
+    Ok(OneTimeToken {
+        id,
+        user_id,
+        purpose,
+        target_email,
+        created_at,
+        expires_at,
+        consumed_at,
+    })
+}
+
+#[async_trait]
+impl TokenStore for SqlStore {
+    /// Persists a one-time token. The caller is responsible for
+    /// assigning the `id` and timestamps — typically via
+    /// [`OneTimeToken::new`]. Rejects with [`Error::TokenIdExists`] on a
+    /// duplicate id.
+    ///
+    /// # Examples
+    ///
+    /// Issue a password-reset token for a freshly-created user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
+    /// store.create_token(&token).await.expect("create_token");
+    /// # });
+    /// ```
+    async fn create_token(&mut self, token: &OneTimeToken) -> Result<(), Error> {
+        if token.id.is_nil() {
+            return Err(Error::Other("token id must not be nil".to_string()));
+        }
+        if token.user_id.is_nil() {
+            return Err(Error::UserIdMissing());
+        }
+        // Surface a clean error if the id is already taken — gives callers
+        // a deterministic signal rather than the raw sqlx unique-violation.
+        let existing = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 FROM one_time_tokens WHERE id = ?",
+        ))
+        .bind(token.id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if existing.is_some() {
+            return Err(Error::TokenIdExists(token.id.to_string()));
+        }
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO one_time_tokens \
+                 (id, user_id, purpose, target_email, created_at, expires_at, consumed_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        ))
+        .bind(token.id.to_string())
+        .bind(token.user_id.to_string())
+        .bind(token_purpose_to_sql(token.purpose))
+        .bind(token.target_email.as_deref())
+        .bind(datetime_to_sql(token.created_at))
+        .bind(datetime_to_sql(token.expires_at))
+        .bind(token.consumed_at.map(datetime_to_sql))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    /// Loads an active (non-expired, non-consumed) token by id. Returns
+    /// `Err(TokenIdNotFound)` for unknown ids and for tokens past their
+    /// `expires_at`.
+    ///
+    /// # Examples
+    ///
+    /// Round-trip a token through `create_token` + `find_token`
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
+    /// store.create_token(&token).await.expect("create_token");
+    /// let loaded = store.find_token(token.id).await.expect("find_token");
+    /// assert_eq!(loaded.user_id, user.id);
+    /// # });
+    /// ```
+    async fn find_token(&self, id: Uuid) -> Result<OneTimeToken, Error> {
+        // Filter expired tokens at the storage layer so handlers can treat
+        // "find_token Ok" as "active and consumable". Soft-deleted users
+        // are filtered via the FK + the application-level cascade in
+        // delete_user — once the row is hard-deleted, the token is gone.
+        let now = datetime_to_sql(Utc::now());
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM one_time_tokens WHERE id = ? AND expires_at > ?",
+        ))
+        .bind(id.to_string())
+        .bind(now)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        match row {
+            Some(row) => token_from_row(&row).await,
+            None => Err(Error::TokenIdNotFound(id.to_string())),
+        }
+    }
+
+    /// Atomically marks the token consumed via
+    /// `UPDATE ... WHERE consumed_at IS NULL` so concurrent calls
+    /// against the same id produce exactly one winner. Race losses,
+    /// expired tokens, and unknown ids are distinguished by a
+    /// follow-up read on the slow path.
+    ///
+    /// # Examples
+    ///
+    /// Single-use enforcement: the second consume call fails
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{Error, SqlStore, SqlStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
+    /// store.create_token(&token).await.expect("create_token");
+    /// store.consume_token(token.id).await.expect("first consume");
+    /// assert!(matches!(
+    ///     store.consume_token(token.id).await,
+    ///     Err(Error::TokenAlreadyConsumed())
+    /// ));
+    /// # });
+    /// ```
+    async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, Error> {
+        // Race-free single-use enforcement: the UPDATE only matches when
+        // the token is unconsumed. A losing concurrent UPDATE matches zero
+        // rows and surfaces TokenAlreadyConsumed (or NotFound / Expired).
+        let now_dt = Utc::now();
+        let now_sql = datetime_to_sql(now_dt);
+        let result = sqlx::query(&q(
+            self.kind,
+            "UPDATE one_time_tokens \
+             SET consumed_at = ? \
+             WHERE id = ? AND consumed_at IS NULL AND expires_at > ?",
+        ))
+        .bind(&now_sql)
+        .bind(id.to_string())
+        .bind(&now_sql)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            // Distinguish the failure modes by re-reading the row. This
+            // second probe runs only on the race-loss / expiry / missing
+            // path, so it doesn't tax the happy path.
+            let row = sqlx::query(&q(
+                self.kind,
+                "SELECT * FROM one_time_tokens WHERE id = ?",
+            ))
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+            return match row {
+                None => Err(Error::TokenIdNotFound(id.to_string())),
+                Some(row) => {
+                    let token = token_from_row(&row).await?;
+                    if token.consumed_at.is_some() {
+                        Err(Error::TokenAlreadyConsumed())
+                    } else {
+                        Err(Error::TokenExpired())
+                    }
+                }
+            };
+        }
+        // Re-read to return the updated row as the trait contract requires.
+        let row = sqlx::query(&q(self.kind, "SELECT * FROM one_time_tokens WHERE id = ?"))
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?
+            .ok_or_else(|| Error::TokenIdNotFound(id.to_string()))?;
+        token_from_row(&row).await
+    }
+
+    /// Removes every outstanding [`TokenPurpose::EmailVerification`]
+    /// token belonging to `user_id` whose `target_email` matches the
+    /// supplied address (case-insensitive). Used by the verification
+    /// re-send handler so re-issuing supersedes prior tokens.
+    ///
+    /// # Examples
+    ///
+    /// Two verification tokens issued for the same address — purging
+    /// removes both
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{OneTimeToken, TokenPurpose, User, UserEmail};
+    /// use storage::{SqlStore, SqlStoreConfig, Store, TokenStore, UserStore};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// for _ in 0..2 {
+    ///     let t = OneTimeToken::new(
+    ///         user.id, TokenPurpose::EmailVerification,
+    ///         Some("alice@example.com".into()), 24,
+    ///     );
+    ///     store.create_token(&t).await.expect("create_token");
+    /// }
+    /// let purged = store
+    ///     .purge_email_verification_tokens(user.id, "alice@example.com")
+    ///     .await
+    ///     .expect("purge");
+    /// assert_eq!(purged, 2);
+    /// # });
+    /// ```
+    async fn purge_email_verification_tokens(
+        &mut self,
+        user_id: Uuid,
+        target_email: &str,
+    ) -> Result<u64, Error> {
+        let result = sqlx::query(&q(
+            self.kind,
+            "DELETE FROM one_time_tokens \
+             WHERE user_id = ? AND purpose = ? AND LOWER(target_email) = LOWER(?)",
+        ))
+        .bind(user_id.to_string())
+        .bind(token_purpose_to_sql(TokenPurpose::EmailVerification))
+        .bind(target_email)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(result.rows_affected())
+    }
+
+    /// Removes every token whose `expires_at` is in the past AND that
+    /// has not been consumed. Returns the number of rows deleted.
+    /// Intended as a periodic housekeeping sweep.
+    ///
+    /// # Examples
+    ///
+    /// Purging a fresh store is a no-op
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{SqlStore, SqlStoreConfig, Store, TokenStore};
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// assert_eq!(store.purge_expired().await.expect("purge"), 0);
+    /// # });
+    /// ```
+    async fn purge_expired(&mut self) -> Result<u64, Error> {
+        let now = datetime_to_sql(Utc::now());
+        let result = sqlx::query(&q(
+            self.kind,
+            "DELETE FROM one_time_tokens WHERE expires_at <= ? AND consumed_at IS NULL",
+        ))
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(result.rows_affected())
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EmailAuditLog
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn audit_outcome_to_sql(outcome: AuditOutcome) -> &'static str {
+    match outcome {
+        AuditOutcome::Pending => "pending",
+        AuditOutcome::Accepted => "accepted",
+        AuditOutcome::Failed => "failed",
+    }
+}
+
+fn audit_outcome_from_sql(raw: &str) -> Result<AuditOutcome, Error> {
+    match raw {
+        "pending" => Ok(AuditOutcome::Pending),
+        "accepted" => Ok(AuditOutcome::Accepted),
+        "failed" => Ok(AuditOutcome::Failed),
+        other => Err(integrity_violation(&format!(
+            "unknown audit outcome '{other}' in email_audit_log"
+        ))),
+    }
+}
+
+async fn audit_entry_from_row(row: &AnyRow) -> Result<EmailAuditEntry, Error> {
+    let id_str: String = row.try_get("id").map_err(map_sqlx_err)?;
+    let id = parse_uuid("audit id", &id_str)?;
+    let created_at_str: String = row.try_get("created_at").map_err(map_sqlx_err)?;
+    let created_at = datetime_from_sql(&created_at_str)?;
+    let recipient_user_id_str: Option<String> =
+        row.try_get("recipient_user_id").map_err(map_sqlx_err)?;
+    let recipient_user_id = match recipient_user_id_str {
+        Some(s) => Some(parse_uuid("audit recipient_user_id", &s)?),
+        None => None,
+    };
+    let recipient_email: String = row.try_get("recipient_email").map_err(map_sqlx_err)?;
+    let template_id: String = row.try_get("template_id").map_err(map_sqlx_err)?;
+    let token_id_str: Option<String> = row.try_get("token_id").map_err(map_sqlx_err)?;
+    let token_id = match token_id_str {
+        Some(s) => Some(parse_uuid("audit token_id", &s)?),
+        None => None,
+    };
+    let triggered_by_user_id_str: Option<String> =
+        row.try_get("triggered_by_user_id").map_err(map_sqlx_err)?;
+    let triggered_by_user_id = match triggered_by_user_id_str {
+        Some(s) => Some(parse_uuid("audit triggered_by_user_id", &s)?),
+        None => None,
+    };
+    let provider: String = row.try_get("provider").map_err(map_sqlx_err)?;
+    let provider_message_id: Option<String> =
+        row.try_get("provider_message_id").map_err(map_sqlx_err)?;
+    let outcome_raw: String = row.try_get("outcome").map_err(map_sqlx_err)?;
+    let outcome = audit_outcome_from_sql(&outcome_raw)?;
+    let error_class: Option<String> = row.try_get("error_class").map_err(map_sqlx_err)?;
+    let error_message: Option<String> = row.try_get("error_message").map_err(map_sqlx_err)?;
+    Ok(EmailAuditEntry {
+        id,
+        created_at,
+        recipient_user_id,
+        recipient_email,
+        template_id,
+        token_id,
+        triggered_by_user_id,
+        provider,
+        provider_message_id,
+        outcome,
+        error_class,
+        error_message,
+    })
+}
+
+#[async_trait]
+impl EmailAuditLog for SqlStore {
+    /// Inserts a new audit row synchronously, before the actual send is
+    /// attempted. Caller builds the entry via
+    /// [`EmailAuditEntry::new_pending`]; this method just persists it.
+    /// Returns the assigned id on success.
+    ///
+    /// # Examples
+    ///
+    /// Record a pending password-reset send
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::EmailAuditEntry;
+    /// use storage::{EmailAuditLog, SqlStore, SqlStoreConfig, Store};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     None, "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// let id = store.record_pending(&entry).await.expect("record_pending");
+    /// assert_eq!(id, entry.id);
+    /// # });
+    /// ```
+    async fn record_pending(&mut self, entry: &EmailAuditEntry) -> Result<Uuid, Error> {
+        if entry.id.is_nil() {
+            return Err(Error::Other(
+                "audit entry id must not be nil".to_string(),
+            ));
+        }
+        // Surface a clean duplicate-id error rather than the raw sqlx
+        // unique-violation. Callers building rows via
+        // `EmailAuditEntry::new_pending` won't hit this; it guards
+        // against accidental re-record.
+        let existing = sqlx::query(&q(
+            self.kind,
+            "SELECT 1 FROM email_audit_log WHERE id = ?",
+        ))
+        .bind(entry.id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if existing.is_some() {
+            return Err(Error::AuditEntryIdExists(entry.id.to_string()));
+        }
+        let truncated_error_message = entry
+            .error_message
+            .as_deref()
+            .map(truncate_email_audit_error_message);
+        sqlx::query(&q(
+            self.kind,
+            "INSERT INTO email_audit_log \
+                 (id, created_at, recipient_user_id, recipient_email, template_id, \
+                  token_id, triggered_by_user_id, provider, \
+                  provider_message_id, outcome, error_class, error_message) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ))
+        .bind(entry.id.to_string())
+        .bind(datetime_to_sql(entry.created_at))
+        .bind(entry.recipient_user_id.map(|id| id.to_string()))
+        .bind(&entry.recipient_email)
+        .bind(&entry.template_id)
+        .bind(entry.token_id.map(|id| id.to_string()))
+        .bind(entry.triggered_by_user_id.map(|id| id.to_string()))
+        .bind(&entry.provider)
+        .bind(entry.provider_message_id.as_deref())
+        .bind(audit_outcome_to_sql(entry.outcome))
+        .bind(entry.error_class.as_deref())
+        .bind(truncated_error_message.as_deref())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(entry.id)
+    }
+
+    /// Flips a previously-recorded `pending` row to `accepted` (with
+    /// `provider_message_id`) or `failed` (with `error_class` and
+    /// `error_message`). Once written, an audit row only moves forward —
+    /// passing `AuditOutcome::Pending` is rejected.
+    ///
+    /// # Examples
+    ///
+    /// Mark the audit row as accepted after the provider responds
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::{AuditOutcome, EmailAuditEntry};
+    /// use storage::{EmailAuditLog, SqlStore, SqlStoreConfig, Store};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     None, "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// store.record_pending(&entry).await.expect("record_pending");
+    /// store
+    ///     .update_outcome(entry.id, AuditOutcome::Accepted, Some("provider-123"), None, None)
+    ///     .await
+    ///     .expect("update_outcome");
+    /// # });
+    /// ```
+    async fn update_outcome(
+        &mut self,
+        id: Uuid,
+        outcome: AuditOutcome,
+        provider_message_id: Option<&str>,
+        error_class: Option<&str>,
+        error_message: Option<&str>,
+    ) -> Result<(), Error> {
+        if matches!(outcome, AuditOutcome::Pending) {
+            return Err(Error::Other(
+                "update_outcome cannot move a row back to pending".to_string(),
+            ));
+        }
+        let truncated_error_message = error_message.map(truncate_email_audit_error_message);
+        let result = sqlx::query(&q(
+            self.kind,
+            "UPDATE email_audit_log \
+             SET outcome = ?, provider_message_id = ?, error_class = ?, error_message = ? \
+             WHERE id = ?",
+        ))
+        .bind(audit_outcome_to_sql(outcome))
+        .bind(provider_message_id)
+        .bind(error_class)
+        .bind(truncated_error_message.as_deref())
+        .bind(id.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            return Err(Error::AuditEntryIdNotFound(id.to_string()));
+        }
+        Ok(())
+    }
+
+    /// Loads a single audit row by id. Returns
+    /// `Err(AuditEntryIdNotFound)` for unknown ids.
+    ///
+    /// # Examples
+    ///
+    /// Load back a recorded row
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::EmailAuditEntry;
+    /// use storage::{EmailAuditLog, SqlStore, SqlStoreConfig, Store};
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// let entry = EmailAuditEntry::new_pending(
+    ///     None, "alice@example.com", "password_reset",
+    ///     None, None, "stub",
+    /// );
+    /// store.record_pending(&entry).await.expect("record_pending");
+    /// let loaded = store.find_audit_entry(entry.id).await.expect("find");
+    /// assert_eq!(loaded.recipient_email, "alice@example.com");
+    /// # });
+    /// ```
+    async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, Error> {
+        let row = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM email_audit_log WHERE id = ?",
+        ))
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        match row {
+            Some(row) => audit_entry_from_row(&row).await,
+            None => Err(Error::AuditEntryIdNotFound(id.to_string())),
+        }
+    }
+
+    /// Returns the `limit` most recent audit rows for a user
+    /// (`recipient_user_id = user_id`), sorted by `created_at`
+    /// descending with `id` as a deterministic tie-breaker.
+    ///
+    /// # Examples
+    ///
+    /// Read back the most recent two audit entries for a user
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use data_model::EmailAuditEntry;
+    /// use storage::{EmailAuditLog, SqlStore, SqlStoreConfig, Store, UserStore};
+    /// use data_model::{User, UserEmail};
+    /// use uuid::Uuid;
+    ///
+    /// let mut store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    /// // Recipient must exist for the FK; create the user first.
+    /// let mut user = User {
+    ///     id: Uuid::nil(), is_admin: false, username: "alice".into(),
+    ///     full_name: "Alice".into(),
+    ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
+    ///     password_hash: "hash".into(), api_key: Uuid::nil(),
+    ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    /// };
+    /// store.create_user(&mut user).await.expect("create_user");
+    /// for template in ["password_reset", "email_verification"] {
+    ///     let e = EmailAuditEntry::new_pending(
+    ///         Some(user.id), "alice@example.com", template,
+    ///         None, None, "stub",
+    ///     );
+    ///     store.record_pending(&e).await.expect("record_pending");
+    /// }
+    /// let recent = store
+    ///     .find_recent_audit_entries_for_user(user.id, 5)
+    ///     .await
+    ///     .expect("find_recent");
+    /// assert_eq!(recent.len(), 2);
+    /// # });
+    /// ```
+    async fn find_recent_audit_entries_for_user(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+    ) -> Result<Vec<EmailAuditEntry>, Error> {
+        let rows = sqlx::query(&q(
+            self.kind,
+            "SELECT * FROM email_audit_log \
+             WHERE recipient_user_id = ? \
+             ORDER BY created_at DESC, id DESC LIMIT ?",
+        ))
+        .bind(user_id.to_string())
+        .bind(i64::from(limit))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let mut entries = Vec::with_capacity(rows.len());
+        for row in &rows {
+            entries.push(audit_entry_from_row(row).await?);
+        }
+        Ok(entries)
     }
 }
 
@@ -2653,5 +3706,227 @@ mod tests {
             still_has_email.is_none(),
             "users.email must remain gone on subsequent SqlStore::new calls"
         );
+    }
+
+    /// SQL of `migrations/0003_user_emails_verified_reset.sql` embedded at
+    /// compile time so the test runs the exact statement `sqlx::migrate!`
+    /// applies — no copy-paste drift between this assertion and the
+    /// production migration.
+    const MIGRATION_0003_SQL: &str =
+        include_str!("../migrations/0003_user_emails_verified_reset.sql");
+
+    /// Pre/post snapshot of migration 0003 against a seeded fixture:
+    /// admin user, OAuth-verified user, two plain users — all with
+    /// `verified = 1`. After re-applying the migration SQL: admin and
+    /// OAuth-matched rows stay verified; the two plain rows flip to
+    /// `verified = 0, verified_at = NULL`.
+    ///
+    /// `SqlStore::new` runs migrations 0001/0002/0003 against an empty
+    /// schema (so 0003 is a no-op there); the test then seeds with
+    /// `verified = 1` rows and re-applies 0003's SQL, exercising the
+    /// transformation against realistic state.
+    #[tokio::test]
+    async fn migration_0003_resets_verified_except_admin_and_oauth_matched() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db_path = temp.path().join("verified-reset-test.db");
+        let url = format!("sqlite:{}", db_path.to_string_lossy());
+        let store = SqlStore::new(SqlStoreConfig {
+            url,
+            max_connections: 1,
+            auto_create_database: true,
+            ..SqlStoreConfig::default()
+        })
+        .await
+        .expect("SqlStore::new");
+
+        let admin_id = Uuid::new_v4().to_string();
+        let oauth_id = Uuid::new_v4().to_string();
+        let plain1_id = Uuid::new_v4().to_string();
+        let plain2_id = Uuid::new_v4().to_string();
+
+        // Insert four users; verified = 1 on every email.
+        for (id, is_admin, username, email) in &[
+            (&admin_id, 1, "admin", "admin@example.com"),
+            (&oauth_id, 0, "alice", "alice@gmail.com"),
+            (&plain1_id, 0, "bob", "bob@example.com"),
+            (&plain2_id, 0, "carol", "carol@example.com"),
+        ] {
+            sqlx::query(
+                "INSERT INTO users (id, is_admin, username, full_name, password_hash, api_key) \
+                 VALUES (?, ?, ?, ?, ?, ?)",
+            )
+            .bind(*id)
+            .bind(*is_admin)
+            .bind(*username)
+            .bind(*username)
+            .bind("hash")
+            .bind(Uuid::new_v4().to_string())
+            .execute(&store.pool)
+            .await
+            .expect("insert user");
+            sqlx::query(
+                "INSERT INTO user_emails (user_id, email, is_primary, verified, verified_at) \
+                 VALUES (?, ?, 1, 1, ?)",
+            )
+            .bind(*id)
+            .bind(*email)
+            .bind("2026-01-01T00:00:00.000Z")
+            .execute(&store.pool)
+            .await
+            .expect("insert user_emails");
+        }
+        // OAuth identity for the OAuth user; provider_email matches the
+        // user's email, so the carve-out applies.
+        sqlx::query(
+            "INSERT INTO oauth_identities \
+             (user_id, provider, provider_user_id, provider_email, linked_at, last_seen_at) \
+             VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&oauth_id)
+        .bind("google")
+        .bind("google-sub-1")
+        .bind("alice@gmail.com")
+        .bind("2026-01-01T00:00:00.000Z")
+        .bind("2026-01-01T00:00:00.000Z")
+        .execute(&store.pool)
+        .await
+        .expect("insert oauth_identities");
+
+        // Re-apply migration 0003 SQL against the now-seeded fixture.
+        sqlx::query(MIGRATION_0003_SQL)
+            .execute(&store.pool)
+            .await
+            .expect("re-run migration 0003");
+
+        // Verify each user's verified flag.
+        for (id, expected_verified) in &[
+            (&admin_id, 1i64),
+            (&oauth_id, 1),
+            (&plain1_id, 0),
+            (&plain2_id, 0),
+        ] {
+            let row: (i64, Option<String>) = sqlx::query_as(
+                "SELECT verified, verified_at FROM user_emails WHERE user_id = ?",
+            )
+            .bind(*id)
+            .fetch_one(&store.pool)
+            .await
+            .expect("fetch user_email");
+            assert_eq!(
+                row.0, *expected_verified,
+                "user {id}: verified = {} expected {expected_verified}",
+                row.0
+            );
+            if *expected_verified == 0 {
+                assert!(
+                    row.1.is_none(),
+                    "user {id}: verified_at should be NULL after reset, got {:?}",
+                    row.1
+                );
+            } else {
+                assert!(
+                    row.1.is_some(),
+                    "user {id}: verified_at should be preserved, got NULL"
+                );
+            }
+        }
+    }
+
+    /// Idempotency for the SQL migration: re-running on already-flipped
+    /// data leaves the rows untouched (the WHERE clause's NOT IN /
+    /// NOT EXISTS conditions still match, but `verified` is already 0,
+    /// so the UPDATE writes the same value — no functional change).
+    #[tokio::test]
+    async fn migration_0003_is_idempotent_when_re_run() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db_path = temp.path().join("verified-reset-idempotent.db");
+        let url = format!("sqlite:{}", db_path.to_string_lossy());
+        let store = SqlStore::new(SqlStoreConfig {
+            url,
+            max_connections: 1,
+            auto_create_database: true,
+            ..SqlStoreConfig::default()
+        })
+        .await
+        .expect("SqlStore::new");
+
+        let id = Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO users (id, is_admin, username, full_name, password_hash, api_key) \
+             VALUES (?, 0, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind("dave")
+        .bind("dave")
+        .bind("hash")
+        .bind(Uuid::new_v4().to_string())
+        .execute(&store.pool)
+        .await
+        .expect("insert user");
+        sqlx::query(
+            "INSERT INTO user_emails (user_id, email, is_primary, verified, verified_at) \
+             VALUES (?, ?, 1, 1, ?)",
+        )
+        .bind(&id)
+        .bind("dave@example.com")
+        .bind("2026-01-01T00:00:00.000Z")
+        .execute(&store.pool)
+        .await
+        .expect("insert user_emails");
+
+        // First re-application flips the row.
+        sqlx::query(MIGRATION_0003_SQL)
+            .execute(&store.pool)
+            .await
+            .expect("first re-run");
+        let (verified, verified_at): (i64, Option<String>) = sqlx::query_as(
+            "SELECT verified, verified_at FROM user_emails WHERE user_id = ?",
+        )
+        .bind(&id)
+        .fetch_one(&store.pool)
+        .await
+        .expect("fetch after first run");
+        assert_eq!(verified, 0);
+        assert!(verified_at.is_none());
+
+        // Second re-application is a no-op semantically.
+        sqlx::query(MIGRATION_0003_SQL)
+            .execute(&store.pool)
+            .await
+            .expect("second re-run");
+        let (verified, verified_at): (i64, Option<String>) = sqlx::query_as(
+            "SELECT verified, verified_at FROM user_emails WHERE user_id = ?",
+        )
+        .bind(&id)
+        .fetch_one(&store.pool)
+        .await
+        .expect("fetch after second run");
+        assert_eq!(verified, 0);
+        assert!(verified_at.is_none());
+    }
+
+    /// Empty `user_emails` table → migration succeeds without error.
+    /// Already exercised implicitly by `SqlStore::new` (which runs 0003
+    /// against an empty schema), but a focused test makes the contract
+    /// explicit.
+    #[tokio::test]
+    async fn migration_0003_succeeds_on_empty_user_emails_table() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let db_path = temp.path().join("verified-reset-empty.db");
+        let url = format!("sqlite:{}", db_path.to_string_lossy());
+        let store = SqlStore::new(SqlStoreConfig {
+            url,
+            max_connections: 1,
+            auto_create_database: true,
+            ..SqlStoreConfig::default()
+        })
+        .await
+        .expect("SqlStore::new");
+        // `SqlStore::new` already ran 0003; a manual re-run on an empty
+        // table must also succeed cleanly.
+        sqlx::query(MIGRATION_0003_SQL)
+            .execute(&store.pool)
+            .await
+            .expect("re-run on empty table");
     }
 }

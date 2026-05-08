@@ -10,7 +10,9 @@ use actix_service::Service;
 use actix_web::{ App, HttpRequest, middleware::Logger, HttpServer, web};
 use actix_web::http::header::{CACHE_CONTROL, HeaderName, HeaderValue};
 use auth::{config::PasswordHashConfig, hashing::hash_password};
+use comms::Comms;
 use config::app::{AppConfig, AppFeaturesConfig, SqlStorageConfig, StorageConfig, StorageKind};
+use service::notifications::build_comms;
 use rustls::{ServerConfig, Certificate, PrivateKey};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use service::auth::AuthService;
@@ -66,9 +68,11 @@ fn construct_bind_address(port: u16) -> String {
     format!("0.0.0.0:{port}")
 }
 
-/// Adds the default admin account to the store if no users are registered
+/// Adds the default admin account to the store if no active admin is present.
+/// Soft-deleted admins do not satisfy this probe, so a deployment whose lone
+/// admin was account-deleted will recreate the default admin on next launch.
 async fn init_user_accounts(hash_config: &PasswordHashConfig, store: &mut Box<dyn Store>) -> Result<(), StoreError> {
-    if !store.has_users().await? {
+    if !store.has_active_admin_user().await? {
         let password_hash = match hash_password(DEFAULT_ADMIN_ACCOUNT_PASSWORD, hash_config) {
             Ok(hash) => hash,
             Err(error) => return Err(StoreError::Other(format!("{error}"))),
@@ -85,6 +89,7 @@ pub fn create_app(
     store: web::Data<SharedStore>,
     features: web::Data<SharedFeatures>,
     oauth_connector: web::Data<oauth::SharedOAuthConnector>,
+    comms: web::Data<Comms>,
     static_dir: String,
 ) -> App<impl actix_service::ServiceFactory<
     actix_web::dev::ServiceRequest,
@@ -100,6 +105,7 @@ pub fn create_app(
         .app_data(store)
         .app_data(features)
         .app_data(oauth_connector)
+        .app_data(comms)
         .service(api::register_api())
         .service(api::register_redoc())
         .service(api::register_rapidoc())
@@ -214,9 +220,26 @@ pub fn create_app(
 /// for use in third party products such as `Swagger`. In addition, the server also publishes its own 
 /// Swagger-related endpoints that can be used to manually test the API in user-friendly web pages (e.g. `/api-docs/v1/swagger-ui/`). 
 pub async fn run_server() -> std::io::Result<()> {
-    let config = AppConfig::load().expect("Failed to load configuration settings");
+    let mut config = AppConfig::load().expect("Failed to load configuration settings");
     utils::logger::init(&config.logging.log_dir, &config.logging.log_level, &config.logging.log_file_prefix)
         .expect("Failed to initialise logger");
+    // Surface env-resolution warnings via the logger. The hard-fail check
+    // already ran inside `AppConfig::load` (universally-required file-only
+    // fields like public_base_url / from); calling here again is
+    // idempotent and just collects the soft warnings now that the logger
+    // is initialised. The Err arm is unreachable in practice because load
+    // would have returned the same error first, but a defensive log keeps
+    // the panic-message decipherable if the contract ever drifts.
+    match config.comms.resolve_and_validate() {
+        Ok(validation) => {
+            for warning in validation.warnings {
+                log::warn!("{warning}");
+            }
+        }
+        Err(err) => {
+            log::error!("comms validation drifted between AppConfig::load and run_server: {err}");
+        }
+    }
     config.log_config();
   
     let bind_address = construct_bind_address(config.port);
@@ -231,9 +254,13 @@ pub async fn run_server() -> std::io::Result<()> {
     let shared_store: SharedStore = Arc::new(AsyncRwLock::new(store));
     let features: SharedFeatures = Arc::new(RwLock::new(config.features.clone()));
     let oauth_connector: oauth::SharedOAuthConnector = build_oauth_connector(&config)?;
+    let comms: Arc<Comms> = Arc::new(
+        build_comms(&config.comms)
+            .map_err(|e| std::io::Error::other(format!("comms: {e}")))?,
+    );
 
     HttpServer::new(move || {
-        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()), web::Data::new(features.clone()), web::Data::new(oauth_connector.clone()), config.static_dir.clone())
+        create_app(&config.security.password_hash, web::Data::new(shared_store.clone()), web::Data::new(features.clone()), web::Data::new(oauth_connector.clone()), web::Data::from(comms.clone()), config.static_dir.clone())
         .app_data(web::Data::new(config.clone()))
         .wrap(Logger::default())
     })
@@ -362,6 +389,94 @@ fn build_oauth_connector(config: &AppConfig) -> std::io::Result<oauth::SharedOAu
         config::ConnectorKind::Auth0 => Err(std::io::Error::other(
             "oauth connector = \"auth0\" is not yet implemented",
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use storage::{FileStore, FileStoreConfig};
+
+    fn fresh_file_store_in_tempdir() -> (Box<dyn Store>, tempfile::TempDir) {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let store: Box<dyn Store> = Box::new(FileStore::new(&FileStoreConfig {
+            data_dir: temp.path().to_string_lossy().to_string(),
+        }));
+        (store, temp)
+    }
+
+    #[tokio::test]
+    async fn init_user_accounts_recreates_default_admin_after_lone_admin_soft_deleted() {
+        // Pin the soft-delete contract at the startup probe: a soft-deleted
+        // lone admin must not block recreation of the default admin on the
+        // next launch.
+        let hash_config = PasswordHashConfig::default();
+        let (mut store, _temp) = fresh_file_store_in_tempdir();
+
+        // First launch: the store is empty so the default admin is created.
+        init_user_accounts(&hash_config, &mut store)
+            .await
+            .expect("first init_user_accounts");
+        let first_admin = store
+            .find_user_by_name(DEFAULT_ADMIN_ACCOUNT_USERNAME)
+            .await
+            .expect("default admin must exist after first init");
+
+        // Soft-delete the lone admin (mirrors `DELETE /api/v1/users/me`).
+        store
+            .delete_user(first_admin.id)
+            .await
+            .expect("soft-delete the default admin");
+        assert!(
+            !store
+                .has_active_admin_user()
+                .await
+                .expect("has_active_admin_user"),
+            "soft-deleted lone admin must not register as active"
+        );
+
+        // Second launch: with no *active* admin the default admin must be
+        // recreated even though the soft-deleted row still exists.
+        init_user_accounts(&hash_config, &mut store)
+            .await
+            .expect("second init_user_accounts");
+        let second_admin = store
+            .find_user_by_name(DEFAULT_ADMIN_ACCOUNT_USERNAME)
+            .await
+            .expect("default admin must be recreated after soft-delete");
+        assert_ne!(
+            first_admin.id, second_admin.id,
+            "the recreated admin must be a brand-new row, not the soft-deleted one"
+        );
+        assert!(second_admin.is_admin);
+        assert!(second_admin.is_active());
+    }
+
+    #[tokio::test]
+    async fn init_user_accounts_is_idempotent_when_active_admin_already_present() {
+        // Re-running startup against a populated store must be a no-op.
+        let hash_config = PasswordHashConfig::default();
+        let (mut store, _temp) = fresh_file_store_in_tempdir();
+
+        init_user_accounts(&hash_config, &mut store)
+            .await
+            .expect("first init");
+        let first = store
+            .find_user_by_name(DEFAULT_ADMIN_ACCOUNT_USERNAME)
+            .await
+            .expect("first admin");
+
+        init_user_accounts(&hash_config, &mut store)
+            .await
+            .expect("second init");
+        let second = store
+            .find_user_by_name(DEFAULT_ADMIN_ACCOUNT_USERNAME)
+            .await
+            .expect("second admin");
+        assert_eq!(
+            first.id, second.id,
+            "init_user_accounts must not duplicate the admin when one is already active"
+        );
     }
 }
   

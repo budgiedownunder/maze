@@ -10,7 +10,12 @@
 
 #![allow(dead_code)] // Some helpers may not yet be wired into every backend's runner.
 
-use data_model::{Maze, MazeDefinition, OAuthIdentity, User, UserEmail, UserLogin};
+use chrono::{Duration, SubsecRound, Utc};
+use data_model::{
+    AuditOutcome, EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS, ERROR_MESSAGE_TRUNCATION_MARKER,
+    EmailAuditEntry, Maze, MazeDefinition, OAuthIdentity, OneTimeToken, TokenPurpose, User,
+    UserEmail, UserLogin,
+};
 use storage::{Error, Store};
 use uuid::Uuid;
 
@@ -31,6 +36,7 @@ pub fn make_user(username: &str, email: &str) -> User {
         api_key: Uuid::nil(),
         logins: vec![],
         oauth_identities: vec![],
+        deleted_at: None,
     }
 }
 
@@ -937,6 +943,833 @@ pub async fn get_maze_items_is_scoped_to_owner(store: &mut Box<dyn Store>) {
 
     let bob_items = store.get_maze_items(&bob, false).await.expect("bob items");
     assert!(bob_items.is_empty(), "bob must see none of alice's mazes");
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UserStore — soft-delete behaviour
+// ─────────────────────────────────────────────────────────────────────────
+
+pub async fn delete_user_soft_deletes_and_scrambles_username(store: &mut Box<dyn Store>) {
+    // After a soft-delete the original username is freed (scrambled to
+    // `deleted-<uuid>`), so a brand-new account can claim the same handle.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let mut reborn = make_user("alice", "alice2@example.com");
+    store.create_user(&mut reborn).await.expect("username freed for reuse");
+    assert_ne!(reborn.id, alice.id, "rebirth must be a brand-new row");
+}
+
+pub async fn delete_user_frees_email_for_reuse(store: &mut Box<dyn Store>) {
+    // Email rows are hard-deleted on cascade so the address is freed for the
+    // next signup.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let mut reborn = make_user("bob", "alice@example.com");
+    store.create_user(&mut reborn).await.expect("email freed for reuse");
+    assert_ne!(reborn.id, alice.id);
+}
+
+pub async fn delete_user_is_idempotent_per_row(store: &mut Box<dyn Store>) {
+    // Calling delete_user twice on the same row must surface the second
+    // attempt as UserIdNotFound — guard against double-soft-deleting.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("first delete");
+    let err = store
+        .delete_user(alice.id)
+        .await
+        .expect_err("second delete must fail");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn get_user_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .get_user(alice.id)
+        .await
+        .expect_err("soft-deleted user must be invisible to get_user");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn find_user_by_name_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .find_user_by_name("alice")
+        .await
+        .expect_err("soft-deleted user must be invisible to find_user_by_name");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+}
+
+pub async fn find_user_by_verified_email_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .find_user_by_verified_email("alice@example.com")
+        .await
+        .expect_err("soft-deleted user must be invisible to find_user_by_verified_email");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+}
+
+pub async fn find_user_by_api_key_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let api_key = alice.api_key;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .find_user_by_api_key(api_key)
+        .await
+        .expect_err("soft-deleted user must be invisible to find_user_by_api_key");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+}
+
+pub async fn find_user_by_login_id_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let mut alice = fixture_user(store, "alice", "alice@example.com").await;
+    let login = UserLogin::new(24, None, None);
+    let login_id = login.id;
+    alice.logins.push(login);
+    store.update_user(&mut alice).await.expect("update_user");
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .find_user_by_login_id(login_id)
+        .await
+        .expect_err("soft-deleted user must be invisible to find_user_by_login_id");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+}
+
+pub async fn find_user_by_oauth_identity_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let mut alice = make_oauth_user("alice", "alice@example.com", "google", "sub-alice");
+    store.create_user(&mut alice).await.expect("create_user");
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let err = store
+        .find_user_by_oauth_identity("google", "sub-alice")
+        .await
+        .expect_err("soft-deleted user must be invisible to find_user_by_oauth_identity");
+    assert!(matches!(err, Error::UserNotFound()), "got {err:?}");
+}
+
+pub async fn get_users_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let _bob = fixture_user(store, "bob", "bob@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    let users = store.get_users().await.expect("get_users");
+    let names: Vec<&str> = users.iter().map(|u| u.username.as_str()).collect();
+    assert_eq!(names, vec!["bob"], "soft-deleted alice must not appear");
+}
+
+pub async fn get_admin_users_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let admin = fixture_admin(store, "root", "root@example.com").await;
+    let _other_admin = fixture_admin(store, "second", "second@example.com").await;
+    store.delete_user(admin.id).await.expect("soft-delete");
+    let admins = store.get_admin_users().await.expect("get_admin_users");
+    let names: Vec<&str> = admins.iter().map(|u| u.username.as_str()).collect();
+    assert_eq!(names, vec!["second"], "soft-deleted root must not appear");
+}
+
+pub async fn has_users_filters_soft_deleted(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    assert!(
+        !store.has_users().await.expect("has_users"),
+        "soft-deleted lone user must not register as present"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UserStore — purge_user
+// ─────────────────────────────────────────────────────────────────────────
+
+pub async fn purge_user_truly_removes_row(store: &mut Box<dyn Store>) {
+    // Soft-delete first, then purge — the contract-visible signal is that a
+    // second purge against the same id surfaces UserIdNotFound (the row is
+    // really gone, not just hidden behind the soft-delete read filter).
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.delete_user(alice.id).await.expect("soft-delete");
+    store.purge_user(alice.id).await.expect("purge_user");
+    let err = store
+        .purge_user(alice.id)
+        .await
+        .expect_err("second purge must fail — row is gone");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+    let err = store
+        .delete_user(alice.id)
+        .await
+        .expect_err("soft-delete after purge must fail — row is gone");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn purge_user_works_on_active_user(store: &mut Box<dyn Store>) {
+    // No prior soft-delete required — purge_user accepts an active row too.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    store.purge_user(alice.id).await.expect("purge_user (active)");
+    let err = store
+        .get_user(alice.id)
+        .await
+        .expect_err("user must be gone after purge");
+    assert!(matches!(err, Error::UserIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn purge_user_rejects_nil_id(store: &mut Box<dyn Store>) {
+    let err = store
+        .purge_user(Uuid::nil())
+        .await
+        .expect_err("nil id must be rejected");
+    assert!(matches!(err, Error::UserIdMissing()), "got {err:?}");
+}
+
+pub async fn purge_user_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .purge_user(id)
+        .await
+        .expect_err("unknown id must surface NotFound");
+    assert!(
+        matches!(err, Error::UserIdNotFound(ref s) if s == &id.to_string()),
+        "got {err:?}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// UserStore — has_active_admin_user
+// ─────────────────────────────────────────────────────────────────────────
+
+pub async fn has_active_admin_user_returns_true_when_active_admin_exists(
+    store: &mut Box<dyn Store>,
+) {
+    let _ = fixture_admin(store, "root", "root@example.com").await;
+    assert!(
+        store
+            .has_active_admin_user()
+            .await
+            .expect("has_active_admin_user")
+    );
+}
+
+pub async fn has_active_admin_user_returns_false_when_only_admin_is_soft_deleted(
+    store: &mut Box<dyn Store>,
+) {
+    let admin = fixture_admin(store, "root", "root@example.com").await;
+    store.delete_user(admin.id).await.expect("soft-delete");
+    assert!(
+        !store
+            .has_active_admin_user()
+            .await
+            .expect("has_active_admin_user"),
+        "soft-deleted lone admin must not register as active"
+    );
+}
+
+pub async fn has_active_admin_user_returns_false_when_no_users_exist(store: &mut Box<dyn Store>) {
+    assert!(
+        !store
+            .has_active_admin_user()
+            .await
+            .expect("has_active_admin_user")
+    );
+}
+
+pub async fn has_active_admin_user_ignores_non_admin_users(store: &mut Box<dyn Store>) {
+    let _ = fixture_user(store, "alice", "alice@example.com").await;
+    assert!(
+        !store
+            .has_active_admin_user()
+            .await
+            .expect("has_active_admin_user"),
+        "non-admin user must not satisfy has_active_admin_user"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// TokenStore — create / find / consume / purge_expired
+// ─────────────────────────────────────────────────────────────────────────
+
+fn make_password_reset_token(user_id: Uuid) -> OneTimeToken {
+    OneTimeToken::new(user_id, TokenPurpose::PasswordReset, None, 1)
+}
+
+fn make_email_verification_token(user_id: Uuid, target_email: &str) -> OneTimeToken {
+    OneTimeToken::new(
+        user_id,
+        TokenPurpose::EmailVerification,
+        Some(target_email.to_string()),
+        24,
+    )
+}
+
+/// Builds a token whose `expires_at` is already in the past. Timestamps are
+/// truncated to millisecond precision to match the storage layer's canonical
+/// shape, so round-trip equality holds across both backends.
+fn make_expired_token(user_id: Uuid) -> OneTimeToken {
+    let now = Utc::now().trunc_subsecs(3);
+    OneTimeToken {
+        id: Uuid::new_v4(),
+        user_id,
+        purpose: TokenPurpose::PasswordReset,
+        target_email: None,
+        created_at: now - Duration::hours(2),
+        expires_at: now - Duration::hours(1),
+        consumed_at: None,
+    }
+}
+
+pub async fn create_token_round_trips_via_find(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_password_reset_token(alice.id);
+    store.create_token(&token).await.expect("create_token");
+    let loaded = store.find_token(token.id).await.expect("find_token");
+    assert_eq!(loaded, token);
+}
+
+pub async fn create_token_preserves_target_email_for_verification(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_email_verification_token(alice.id, "alice2@example.com");
+    store.create_token(&token).await.expect("create_token");
+    let loaded = store.find_token(token.id).await.expect("find_token");
+    assert_eq!(loaded.target_email.as_deref(), Some("alice2@example.com"));
+    assert_eq!(loaded.purpose, TokenPurpose::EmailVerification);
+}
+
+pub async fn create_token_rejects_duplicate_id(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_password_reset_token(alice.id);
+    store.create_token(&token).await.expect("first create_token");
+    let err = store
+        .create_token(&token)
+        .await
+        .expect_err("duplicate id must be rejected");
+    assert!(matches!(err, Error::TokenIdExists(_)), "got {err:?}");
+}
+
+pub async fn find_token_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .find_token(id)
+        .await
+        .expect_err("unknown id must surface NotFound");
+    assert!(
+        matches!(err, Error::TokenIdNotFound(ref s) if s == &id.to_string()),
+        "got {err:?}"
+    );
+}
+
+pub async fn find_token_filters_expired_tokens(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let expired = make_expired_token(alice.id);
+    store.create_token(&expired).await.expect("create_token");
+    let err = store
+        .find_token(expired.id)
+        .await
+        .expect_err("expired token must be invisible to find_token");
+    assert!(matches!(err, Error::TokenIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn consume_token_marks_consumed_at(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_password_reset_token(alice.id);
+    store.create_token(&token).await.expect("create_token");
+    let consumed = store
+        .consume_token(token.id)
+        .await
+        .expect("consume_token");
+    assert_eq!(consumed.id, token.id);
+    assert!(consumed.consumed_at.is_some(), "consumed_at must be populated");
+}
+
+pub async fn consume_token_twice_rejects_second_call(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_password_reset_token(alice.id);
+    store.create_token(&token).await.expect("create_token");
+    store
+        .consume_token(token.id)
+        .await
+        .expect("first consume succeeds");
+    let err = store
+        .consume_token(token.id)
+        .await
+        .expect_err("second consume must fail");
+    assert!(
+        matches!(err, Error::TokenAlreadyConsumed()),
+        "expected TokenAlreadyConsumed, got {err:?}"
+    );
+}
+
+pub async fn consume_token_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .consume_token(id)
+        .await
+        .expect_err("unknown id must surface NotFound");
+    assert!(matches!(err, Error::TokenIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn consume_token_rejects_expired_token(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let expired = make_expired_token(alice.id);
+    store.create_token(&expired).await.expect("create_token");
+    let err = store
+        .consume_token(expired.id)
+        .await
+        .expect_err("expired token must not consume");
+    assert!(matches!(err, Error::TokenExpired()), "got {err:?}");
+}
+
+pub async fn delete_user_cascades_to_one_time_tokens(store: &mut Box<dyn Store>) {
+    // Soft-deleting a user must clear their pending tokens — leaving live
+    // reset/invite tokens alive is a phishing vector.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let token = make_password_reset_token(alice.id);
+    store.create_token(&token).await.expect("create_token");
+
+    store.delete_user(alice.id).await.expect("soft-delete");
+
+    let err = store
+        .find_token(token.id)
+        .await
+        .expect_err("token must be gone after the owner is soft-deleted");
+    assert!(matches!(err, Error::TokenIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn purge_expired_removes_only_expired_unconsumed_rows(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+
+    // Three tokens: an active one, an expired-unconsumed one, and an
+    // expired-but-consumed one (which must NOT be purged — its row is
+    // historical evidence that the token was used).
+    let active = make_password_reset_token(alice.id);
+    let expired_unconsumed = make_expired_token(alice.id);
+    let expired_consumed = OneTimeToken {
+        consumed_at: Some((Utc::now() - Duration::hours(1)).trunc_subsecs(3)),
+        ..make_expired_token(alice.id)
+    };
+
+    store.create_token(&active).await.expect("create active");
+    store
+        .create_token(&expired_unconsumed)
+        .await
+        .expect("create expired-unconsumed");
+    store
+        .create_token(&expired_consumed)
+        .await
+        .expect("create expired-consumed");
+
+    let purged = store.purge_expired().await.expect("purge_expired");
+    assert_eq!(purged, 1, "exactly the expired-unconsumed row must be purged");
+
+    // Active token still findable.
+    store
+        .find_token(active.id)
+        .await
+        .expect("active token must survive purge_expired");
+
+    // Expired-unconsumed token gone.
+    let err = store
+        .find_token(expired_unconsumed.id)
+        .await
+        .expect_err("expired-unconsumed token must be gone");
+    assert!(matches!(err, Error::TokenIdNotFound(_)), "got {err:?}");
+
+    // A second purge run is a clean no-op.
+    let again = store.purge_expired().await.expect("purge_expired idempotent");
+    assert_eq!(again, 0, "no further rows to purge");
+}
+
+/// 8 concurrent tasks race to consume the same token. Exactly one must
+/// win; the other seven must surface `TokenAlreadyConsumed`. Pins the
+/// race-free single-use semantics of `consume_token`.
+pub async fn consume_token_concurrent_race_has_exactly_one_winner(store: Box<dyn Store>) {
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    // Wrap the box in an `Arc<Mutex<...>>` so multiple tasks can each take
+    // an exclusive lock when they call `consume_token`. The lock simulates
+    // the per-connection serialisation that the real store provides via
+    // its connection pool — without it, the FileStore impl would have
+    // multiple tasks holding their own &mut and trample each other.
+    let alice_id = {
+        // Limited scope: the mutable borrow ends before the Arc is built.
+        let mut store = store;
+        let alice = fixture_user(&mut store, "alice", "alice@example.com").await;
+        let token = make_password_reset_token(alice.id);
+        store.create_token(&token).await.expect("create_token");
+        let token_id = token.id;
+        let user_id = alice.id;
+
+        let shared = Arc::new(Mutex::new(store));
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let shared = shared.clone();
+            handles.push(tokio::spawn(async move {
+                let mut guard = shared.lock().await;
+                guard.consume_token(token_id).await
+            }));
+        }
+        let mut wins = 0;
+        let mut losses = 0;
+        for h in handles {
+            match h.await.expect("join task") {
+                Ok(consumed) => {
+                    assert_eq!(consumed.id, token_id);
+                    assert!(consumed.consumed_at.is_some());
+                    wins += 1;
+                }
+                Err(Error::TokenAlreadyConsumed()) => losses += 1,
+                Err(other) => panic!("unexpected error from concurrent consume: {other:?}"),
+            }
+        }
+        assert_eq!(wins, 1, "exactly one task must win the consume race");
+        assert_eq!(losses, 7, "the other seven tasks must lose with TokenAlreadyConsumed");
+        user_id
+    };
+    // Silence the unused-variable warning if the test ever needs alice_id later.
+    let _ = alice_id;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// EmailAuditLog
+// ─────────────────────────────────────────────────────────────────────────
+
+fn pending_entry_for(user_id: Option<Uuid>, email: &str, template_id: &str) -> EmailAuditEntry {
+    EmailAuditEntry::new_pending(
+        user_id,
+        email,
+        template_id,
+        None,
+        None,
+        "stub",
+    )
+}
+
+pub async fn record_pending_returns_id_and_inserts_pending_row(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+    assert_eq!(id, entry.id);
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert_eq!(loaded.outcome, AuditOutcome::Pending);
+    assert!(loaded.provider_message_id.is_none());
+    assert!(loaded.error_class.is_none());
+    assert_eq!(loaded, entry);
+}
+
+pub async fn record_pending_rejects_duplicate_id(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    store.record_pending(&entry).await.expect("first record_pending");
+    let err = store
+        .record_pending(&entry)
+        .await
+        .expect_err("duplicate id must be rejected");
+    assert!(matches!(err, Error::AuditEntryIdExists(_)), "got {err:?}");
+}
+
+pub async fn find_audit_entry_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .find_audit_entry(id)
+        .await
+        .expect_err("unknown id must surface NotFound");
+    assert!(
+        matches!(err, Error::AuditEntryIdNotFound(ref s) if s == &id.to_string()),
+        "got {err:?}"
+    );
+}
+
+pub async fn update_outcome_to_accepted_populates_provider_message_id(
+    store: &mut Box<dyn Store>,
+) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    store
+        .update_outcome(id, AuditOutcome::Accepted, Some("provider-123"), None, None)
+        .await
+        .expect("update_outcome");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert_eq!(loaded.outcome, AuditOutcome::Accepted);
+    assert_eq!(loaded.provider_message_id.as_deref(), Some("provider-123"));
+    assert!(loaded.error_class.is_none());
+    assert!(loaded.error_message.is_none());
+}
+
+pub async fn update_outcome_to_failed_populates_error_class(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    store
+        .update_outcome(id, AuditOutcome::Failed, None, Some("provider_unavailable"), None)
+        .await
+        .expect("update_outcome");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert_eq!(loaded.outcome, AuditOutcome::Failed);
+    assert!(loaded.provider_message_id.is_none());
+    assert_eq!(loaded.error_class.as_deref(), Some("provider_unavailable"));
+    assert!(loaded.error_message.is_none());
+}
+
+pub async fn update_outcome_to_failed_populates_error_message(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    let detail = "provider HTTP error: status 400: AADSTS70011: scope is not valid";
+    store
+        .update_outcome(
+            id,
+            AuditOutcome::Failed,
+            None,
+            Some("provider_4xx"),
+            Some(detail),
+        )
+        .await
+        .expect("update_outcome");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert_eq!(loaded.outcome, AuditOutcome::Failed);
+    assert_eq!(loaded.error_class.as_deref(), Some("provider_4xx"));
+    assert_eq!(loaded.error_message.as_deref(), Some(detail));
+}
+
+pub async fn update_outcome_truncates_oversize_error_message(store: &mut Box<dyn Store>) {
+    // Verifies the audit-write path doesn't fail on a verbose upstream
+    // body (which would hit MySQL's 65,535-byte VARCHAR check or PG's
+    // varchar(N) overflow). The store layer truncates with a marker so
+    // the audit row always lands.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    let huge = "x".repeat(EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS * 3);
+    store
+        .update_outcome(
+            id,
+            AuditOutcome::Failed,
+            None,
+            Some("provider_4xx"),
+            Some(&huge),
+        )
+        .await
+        .expect("update_outcome must succeed even on oversize body");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    let stored = loaded.error_message.expect("error_message present");
+    assert_eq!(stored.chars().count(), EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS);
+    assert!(stored.ends_with(ERROR_MESSAGE_TRUNCATION_MARKER));
+}
+
+pub async fn record_pending_truncates_oversize_error_message(store: &mut Box<dyn Store>) {
+    // Same protection as `update_outcome_truncates_oversize_error_message`
+    // but on the synchronous-insert side: an audit row constructed with an
+    // oversize `error_message` (e.g. from a future caller that sets it
+    // directly on the entry rather than via update_outcome) still lands.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let mut entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    entry.error_message = Some("y".repeat(EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS * 3));
+    let id = store
+        .record_pending(&entry)
+        .await
+        .expect("record_pending must succeed even on oversize body");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    let stored = loaded.error_message.expect("error_message present");
+    assert_eq!(stored.chars().count(), EMAIL_AUDIT_ERROR_MESSAGE_MAX_CHARS);
+    assert!(stored.ends_with(ERROR_MESSAGE_TRUNCATION_MARKER));
+}
+
+pub async fn update_outcome_rejects_pending_target(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    let err = store
+        .update_outcome(id, AuditOutcome::Pending, None, None, None)
+        .await
+        .expect_err("must not allow re-targeting pending");
+    assert!(matches!(err, Error::Other(_)), "got {err:?}");
+}
+
+pub async fn update_outcome_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
+    let id = Uuid::new_v4();
+    let err = store
+        .update_outcome(id, AuditOutcome::Accepted, Some("p"), None, None)
+        .await
+        .expect_err("unknown id must fail");
+    assert!(matches!(err, Error::AuditEntryIdNotFound(_)), "got {err:?}");
+}
+
+pub async fn find_recent_audit_entries_returns_user_rows_descending_capped_at_limit(
+    store: &mut Box<dyn Store>,
+) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let bob = fixture_user(store, "bob", "bob@example.com").await;
+
+    // Three rows for alice with strictly increasing created_at, plus one
+    // for bob that must NOT appear in alice's results.
+    let now = Utc::now().trunc_subsecs(3);
+    let mut rows = Vec::new();
+    for (offset_secs, template) in [(-30, "a"), (-20, "b"), (-10, "c")] {
+        let mut e = pending_entry_for(Some(alice.id), "alice@example.com", template);
+        e.created_at = now + Duration::seconds(offset_secs);
+        rows.push(e);
+    }
+    for entry in &rows {
+        store.record_pending(entry).await.expect("record_pending");
+    }
+    let mut bob_entry = pending_entry_for(Some(bob.id), "bob@example.com", "z");
+    bob_entry.created_at = now;
+    store
+        .record_pending(&bob_entry)
+        .await
+        .expect("record_pending bob");
+
+    // Latest 2 alice rows by created_at descending.
+    let recent = store
+        .find_recent_audit_entries_for_user(alice.id, 2)
+        .await
+        .expect("find_recent_audit_entries_for_user");
+    assert_eq!(recent.len(), 2, "limit must cap result size");
+    assert_eq!(recent[0].template_id, "c", "newest first");
+    assert_eq!(recent[1].template_id, "b");
+    assert!(recent[0].created_at >= recent[1].created_at);
+
+    // limit larger than the row count just returns them all.
+    let all = store
+        .find_recent_audit_entries_for_user(alice.id, 100)
+        .await
+        .expect("find_recent_audit_entries_for_user (large limit)");
+    assert_eq!(all.len(), 3);
+    assert!(all.iter().all(|e| e.recipient_user_id == Some(alice.id)));
+}
+
+pub async fn find_recent_audit_entries_is_empty_when_user_has_none(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let recent = store
+        .find_recent_audit_entries_for_user(alice.id, 10)
+        .await
+        .expect("find_recent_audit_entries_for_user");
+    assert!(recent.is_empty());
+}
+
+pub async fn audit_log_supports_anti_enumeration_null_recipient(store: &mut Box<dyn Store>) {
+    // Reset request for a non-existent email — no send happens but the
+    // audit row is still recorded with `recipient_user_id = NULL`.
+    let entry = pending_entry_for(None, "ghost@example.com", "password_reset");
+    let id = store.record_pending(&entry).await.expect("record_pending");
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert!(loaded.recipient_user_id.is_none());
+    assert_eq!(loaded.recipient_email, "ghost@example.com");
+    assert_eq!(loaded.outcome, AuditOutcome::Pending);
+}
+
+pub async fn audit_log_survives_soft_delete_pointing_at_user(store: &mut Box<dyn Store>) {
+    // Soft-delete keeps the users row alive (only `deleted_at` is set);
+    // the FK still resolves and the audit row continues to point at the
+    // soft-deleted user. The whole purpose of soft-delete is to keep
+    // audit-log FKs valid.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    store.delete_user(alice.id).await.expect("soft-delete");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert_eq!(
+        loaded.recipient_user_id,
+        Some(alice.id),
+        "audit row must still reference the soft-deleted user"
+    );
+}
+
+pub async fn audit_log_clears_recipient_user_id_under_purge(store: &mut Box<dyn Store>) {
+    // Hard-delete via `purge_user` is the right-to-erasure path: the FK
+    // must SET NULL so the audit row's *fact* survives without
+    // re-identifying the user.
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    store.purge_user(alice.id).await.expect("purge_user");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert!(
+        loaded.recipient_user_id.is_none(),
+        "purge_user must NULL the recipient_user_id FK"
+    );
+    assert_eq!(
+        loaded.recipient_email, "alice@example.com",
+        "the recipient email survives as the audit anchor"
+    );
+}
+
+pub async fn audit_log_clears_triggered_by_user_id_under_purge(store: &mut Box<dyn Store>) {
+    // Same SET NULL behaviour for `triggered_by_user_id` — covers the
+    // admin-invite path where the trigger user is the admin and the
+    // recipient is someone else.
+    let admin = fixture_admin(store, "admin", "admin@example.com").await;
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let mut entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "invitation",
+    );
+    entry.triggered_by_user_id = Some(admin.id);
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    store.purge_user(admin.id).await.expect("purge_user");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert!(
+        loaded.triggered_by_user_id.is_none(),
+        "purge of trigger user must NULL the triggered_by_user_id FK"
+    );
+    assert_eq!(
+        loaded.recipient_user_id,
+        Some(alice.id),
+        "recipient FK is unrelated and must be unaffected"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────

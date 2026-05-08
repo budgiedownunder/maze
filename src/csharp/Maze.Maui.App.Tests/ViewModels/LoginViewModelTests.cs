@@ -1,4 +1,6 @@
 using System.Net;
+using CommunityToolkit.Mvvm.Messaging;
+using Maze.Maui.App.Messages;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;
 using Maze.Maui.App.Views;
@@ -133,6 +135,54 @@ namespace Maze.Maui.App.Tests.ViewModels
             var (vm, _, _, nav, _) = BuildVm();
             await vm.GoToSignUpCommand.ExecuteAsync(null);
             nav.Verify(n => n.GoToAsync(nameof(SignUpPage), null), Times.Once);
+        }
+
+        [Fact]
+        public async Task GoToForgotPassword_NavigatesToForgotPasswordPage()
+        {
+            var (vm, _, _, nav, _) = BuildVm();
+            await vm.GoToForgotPasswordCommand.ExecuteAsync(null);
+            nav.Verify(n => n.GoToAsync(nameof(ForgotPasswordPage), null), Times.Once);
+        }
+
+        // ---- LoginFlashMessage receipt --------------------------------------
+        //
+        // The two tests below invoke `Receive()` directly rather than going
+        // through `WeakReferenceMessenger.Default.Send(...)`. The Default
+        // messenger is a process-global singleton, so a Send() would also fan
+        // out to any LoginViewModel still alive from earlier tests in the
+        // run. Direct invocation keeps each test focused on the recipient
+        // contract; the end-to-end pipeline is covered on the sender side in
+        // `SignUpViewModelTests.SignUp_HappyPath_SendsLoginFlashMessage…`.
+
+        [Fact]
+        public void Receive_LoginFlashMessage_PopulatesFlashMessage()
+        {
+            var (vm, _, _, _, _) = BuildVm();
+            Assert.Equal("", vm.FlashMessage);
+
+            vm.Receive(new LoginFlashMessage("Account created. Check your inbox..."));
+
+            Assert.Contains("Check your inbox", vm.FlashMessage);
+        }
+
+        [Fact]
+        public async Task SignIn_ClearsFlashMessage_OnSubmit()
+        {
+            var (vm, auth, _, _, _) = BuildVm();
+            vm.FlashMessage = "Account created. Check your inbox...";
+
+            // Inject creds + a 401 so the test exits SignIn cleanly without
+            // touching navigation. The flash should be cleared regardless of
+            // sign-in outcome — this proves that.
+            auth.Setup(a => a.SignInAsync(It.IsAny<string>(), It.IsAny<string>()))
+                .ThrowsAsync(new HttpRequestException("u", null, HttpStatusCode.Unauthorized));
+            vm.Email = "alice@example.com";
+            vm.Password = "WrongPass1!";
+
+            await vm.SignInCommand.ExecuteAsync(null);
+
+            Assert.Equal("", vm.FlashMessage);
         }
 
         // ---- TryRestoreSessionAsync -----------------------------------------

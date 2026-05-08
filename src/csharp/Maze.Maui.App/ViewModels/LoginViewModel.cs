@@ -1,5 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using Maze.Maui.App.Messages;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
 using System.Collections.ObjectModel;
@@ -11,7 +13,7 @@ namespace Maze.Maui.App.ViewModels
     /// <summary>
     /// Represents the view model for the login page
     /// </summary>
-    public partial class LoginViewModel : BaseViewModel
+    public partial class LoginViewModel : BaseViewModel, IRecipient<LoginFlashMessage>
     {
         private readonly IAuthService _authService;
         private readonly IAppFeaturesService _appFeaturesService;
@@ -28,6 +30,14 @@ namespace Maze.Maui.App.ViewModels
 
         [ObservableProperty]
         private string errorMessage = "";
+
+        /// <summary>Transient status copy surfaced under the form. Set by
+        /// <see cref="Receive(LoginFlashMessage)"/> when another VM (currently
+        /// <c>SignUpViewModel</c> after a successful signup) publishes a
+        /// <see cref="LoginFlashMessage"/>; cleared automatically on the next
+        /// sign-in attempt so it doesn't linger after the user has acted.</summary>
+        [ObservableProperty]
+        private string flashMessage = "";
 
         [ObservableProperty]
         private bool showPassword = false;
@@ -62,7 +72,14 @@ namespace Maze.Maui.App.ViewModels
             _appFeaturesService = appFeaturesService;
             _navigationService = navigationService;
             _accountViewModel = accountViewModel;
+            // Receive `LoginFlashMessage` so post-signup status copy shows
+            // up under the form. WeakReferenceMessenger keeps a weak ref so
+            // the transient VM lifetime is unaffected.
+            WeakReferenceMessenger.Default.RegisterAll(this);
         }
+
+        /// <inheritdoc/>
+        public void Receive(LoginFlashMessage message) => FlashMessage = message.Message;
 
         /// <summary>
         /// Refreshes server feature flags and attempts to restore an existing session by verifying
@@ -119,6 +136,7 @@ namespace Maze.Maui.App.ViewModels
             }
             IsBusy = true;
             ErrorMessage = "";
+            FlashMessage = "";
             try
             {
                 await _authService.SignInAsync(Email, Password);
@@ -142,6 +160,12 @@ namespace Maze.Maui.App.ViewModels
         private async Task GoToSignUp()
         {
             await _navigationService.GoToAsync(nameof(SignUpPage));
+        }
+
+        [RelayCommand]
+        private async Task GoToForgotPassword()
+        {
+            await _navigationService.GoToAsync(nameof(ForgotPasswordPage));
         }
 
         [RelayCommand]

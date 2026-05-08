@@ -22,12 +22,13 @@ test('weak password shows validation error', async ({ page }) => {
   await expect(page).toHaveURL(/\/signup/)
 })
 
-test('valid signup navigates to /login', async ({ page }) => {
+test('valid signup navigates to /login with inbox-check flash', async ({ page }) => {
   await page.getByLabel('Email').fill('new@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password1!')
   await page.getByLabel('Confirm Password', { exact: true }).fill('Password1!')
   await page.getByRole('button', { name: /sign up/i }).click()
   await expect(page).toHaveURL(/\/login/)
+  await expect(page.getByRole('status')).toContainText(/Account created\. Check your inbox/i)
 })
 
 test('Back button returns to /login', async ({ page }) => {

@@ -1,4 +1,5 @@
 use crate::{Error, UserEmail, wrappers::{generate_now, generate_uuid}, OAuthIdentity, UserLogin, UserValidationError};
+use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -9,6 +10,17 @@ use uuid::Uuid;
 /// whitespace in any part. Exposed for storage backends and other layers
 /// that need to validate user-supplied addresses outside of the full
 /// [`User::validate`] flow.
+///
+/// # Examples
+///
+/// ```
+/// use data_model::is_valid_email_format;
+///
+/// assert!(is_valid_email_format("alice@example.com"));
+/// assert!(!is_valid_email_format(""));
+/// assert!(!is_valid_email_format("not-an-email"));
+/// assert!(!is_valid_email_format("alice @example.com"));
+/// ```
 pub fn is_valid_email_format(email: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| Regex::new(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").expect("Invalid email regex"));
@@ -42,6 +54,15 @@ pub struct User {
     /// JSON files (written before this field existed) readable without migration.
     #[serde(default)]
     pub oauth_identities: Vec<OAuthIdentity>,
+    /// Soft-delete marker. `None` for active users; `Some(timestamp)` for
+    /// soft-deleted users. Storage backends apply a `deleted_at IS NULL`
+    /// filter on every read path so soft-deleted users are invisible to
+    /// the application layer. `serde(default)` keeps user JSON files
+    /// written before this field existed readable without migration;
+    /// `skip_serializing_if = Option::is_none` keeps the absent case out
+    /// of the serialised form for active users.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 impl User {
@@ -66,6 +87,7 @@ impl User {
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     /// println!("User: {:?}", user);
     pub fn new_id() -> Uuid {
@@ -92,6 +114,7 @@ impl User {
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     /// println!("User: {:?}", user);
     pub fn new_api_key() -> Uuid {
@@ -122,7 +145,27 @@ impl User {
             api_key: Uuid::nil(),
             logins: vec![],
             oauth_identities: vec![],
+            deleted_at: None,
         }
+    }
+    /// Returns true if the user is active (i.e. not soft-deleted). Storage
+    /// backends already filter soft-deleted rows out of every read path, so
+    /// in practice loaded users are always active; this helper exists for
+    /// callers that hold a `User` from another source and want to assert
+    /// the invariant explicitly.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::User;
+    ///
+    /// let mut user = User::default();
+    /// assert!(user.is_active());
+    /// user.deleted_at = Some(chrono::Utc::now());
+    /// assert!(!user.is_active());
+    /// ```
+    pub fn is_active(&self) -> bool {
+        self.deleted_at.is_none()
     }
     /// Returns the user's primary [`UserEmail`] row, if any.
     ///
@@ -131,17 +174,53 @@ impl User {
     /// `Option` is returned because the type system can't prove the
     /// invariant — callers that don't know they have a primary acknowledge
     /// the case statically rather than risking a panic.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{User, UserEmail};
+    ///
+    /// let mut user = User::default();
+    /// assert!(user.primary_email().is_none());
+    ///
+    /// user.emails.push(UserEmail::new_primary_verified("alice@example.com"));
+    /// let primary = user.primary_email().expect("primary set");
+    /// assert!(primary.is_primary);
+    /// assert_eq!(primary.email, "alice@example.com");
+    /// ```
     pub fn primary_email(&self) -> Option<&UserEmail> {
         self.emails.iter().find(|e| e.is_primary)
     }
     /// Returns the user's primary email address, or an empty string if no
     /// primary is set. Convenience accessor for callers that previously
     /// read `user.email` directly.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{User, UserEmail};
+    ///
+    /// let mut user = User::default();
+    /// assert_eq!(user.email(), "");
+    /// user.emails.push(UserEmail::new_primary_verified("alice@example.com"));
+    /// assert_eq!(user.email(), "alice@example.com");
+    /// ```
     pub fn email(&self) -> &str {
         self.primary_email().map(|e| e.email.as_str()).unwrap_or("")
     }
     /// Returns true if the user has a verified email row matching the given
     /// address (case-insensitive).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{User, UserEmail};
+    ///
+    /// let mut user = User::default();
+    /// user.emails.push(UserEmail::new_primary_verified("alice@example.com"));
+    /// assert!(user.has_verified_email("ALICE@example.com"));
+    /// assert!(!user.has_verified_email("bob@example.com"));
+    /// ```
     pub fn has_verified_email(&self, email: &str) -> bool {
         self.emails
             .iter()
@@ -152,6 +231,19 @@ impl User {
     /// are unchanged — callers in the email-management API decide whether a
     /// change should flip the verified flag). If no rows exist yet, a new
     /// primary, verified row is added (used during signup-style flows).
+    ///
+    /// # Examples
+    ///
+    /// Seeding the primary email on a fresh `User::default`
+    /// ```
+    /// use data_model::User;
+    ///
+    /// let mut user = User::default();
+    /// user.set_primary_email_address("alice@example.com");
+    /// assert_eq!(user.email(), "alice@example.com");
+    /// assert_eq!(user.emails.len(), 1);
+    /// assert!(user.emails[0].is_primary);
+    /// ```
     pub fn set_primary_email_address(&mut self, email: &str) {
         if let Some(row) = self.emails.iter_mut().find(|e| e.is_primary) {
             row.email = email.to_string();
@@ -180,6 +272,7 @@ impl User {
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     /// match user.to_json() {
     ///     Ok(json) => {
@@ -248,6 +341,7 @@ impl User {
     ///     api_key: User::new_api_key(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     /// match user.validate() {
     ///     Ok(_) => {
@@ -312,6 +406,7 @@ impl User {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Peform a login
@@ -353,6 +448,7 @@ impl User {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Peform a login
@@ -391,6 +487,7 @@ impl User {
     ///     api_key: Uuid::nil(),
     ///     logins: vec![],
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// let login = user.create_login(24, None, None);
@@ -435,6 +532,7 @@ impl User {
     ///     api_key: Uuid::nil(),
     ///     logins,
     ///     oauth_identities: vec![],
+    ///     deleted_at: None,
     /// };
     ///
     /// // Verify that the login is valid
@@ -455,7 +553,7 @@ impl User {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Duration;
+    use chrono::{Duration, TimeZone};
     use pretty_assertions::{assert_eq, assert_ne};
 
     #[test]
@@ -501,6 +599,51 @@ mod tests {
         loaded.from_json(legacy).expect("Failed to deserialize legacy user JSON");
         assert_eq!(loaded, compare);
         assert!(loaded.oauth_identities.is_empty());
+    }
+
+    #[test]
+    fn can_deserialize_user_without_deleted_at_field() {
+        // User JSON written before the deleted_at field existed must continue
+        // to deserialize cleanly thanks to #[serde(default)] — the field is
+        // populated with `None` (active user).
+        let mut loaded = User::default();
+        let pre_field = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#;
+        loaded.from_json(pre_field).expect("deserialize pre-deleted_at user");
+        assert!(loaded.deleted_at.is_none());
+    }
+
+    #[test]
+    fn is_active_reflects_deleted_at_state() {
+        let mut user = create_valid_user();
+        assert!(user.is_active());
+        user.deleted_at = Some(chrono::Utc.with_ymd_and_hms(2026, 5, 5, 12, 0, 0).unwrap());
+        assert!(!user.is_active());
+    }
+
+    #[test]
+    fn deleted_at_round_trips_through_json() {
+        let mut user = create_valid_user();
+        let when = chrono::Utc.with_ymd_and_hms(2026, 5, 5, 12, 0, 0).unwrap();
+        user.deleted_at = Some(when);
+        let json = user.to_json().expect("serialize");
+        // Field appears in the wire form when populated.
+        assert!(json.contains("\"deleted_at\""), "{json}");
+        let mut back = User::default();
+        back.from_json(&json).expect("deserialize");
+        assert_eq!(user, back);
+        assert_eq!(back.deleted_at, Some(when));
+    }
+
+    #[test]
+    fn deleted_at_omitted_from_serialised_form_when_none() {
+        // skip_serializing_if = "Option::is_none" keeps the absent case out
+        // of the wire form for active users.
+        let user = create_valid_user();
+        let json = user.to_json().expect("serialize");
+        assert!(
+            !json.contains("\"deleted_at\""),
+            "active user should not carry deleted_at in the wire form: {json}"
+        );
     }
 
     #[test]
@@ -630,6 +773,7 @@ mod tests {
             api_key: User::new_api_key(),
             logins: vec![],
             oauth_identities: vec![],
+            deleted_at: None,
         }
     }
 

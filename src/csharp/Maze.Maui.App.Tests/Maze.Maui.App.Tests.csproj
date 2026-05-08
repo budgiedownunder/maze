@@ -55,6 +55,8 @@
              Link="LinkedSource\Messages\NewMazeItemMessage.cs" />
     <Compile Include="..\Maze.Maui.App\Messages\PasswordSetMessage.cs"
              Link="LinkedSource\Messages\PasswordSetMessage.cs" />
+    <Compile Include="..\Maze.Maui.App\Messages\LoginFlashMessage.cs"
+             Link="LinkedSource\Messages\LoginFlashMessage.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\BaseViewModel.cs"
              Link="LinkedSource\ViewModels\BaseViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\EmailRowViewModel.cs"
@@ -63,6 +65,8 @@
              Link="LinkedSource\ViewModels\EmailAddressesViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\ChangePasswordViewModel.cs"
              Link="LinkedSource\ViewModels\ChangePasswordViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\ForgotPasswordViewModel.cs"
+             Link="LinkedSource\ViewModels\ForgotPasswordViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\AccountViewModel.cs"
              Link="LinkedSource\ViewModels\AccountViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\LoginViewModel.cs"

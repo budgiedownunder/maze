@@ -94,6 +94,15 @@
                     </ImageButton>
                 </Grid>
 
+                <!-- Transient status flash — set by Receive(LoginFlashMessage)
+                     when SignUpViewModel sends one after a successful signup.
+                     Cleared on the next sign-in attempt. -->
+                <Label Text="{Binding FlashMessage}"
+                       TextColor="{AppThemeBinding Light=#15803D, Dark=#4ADE80}"
+                       IsVisible="{Binding FlashMessage, Converter={StaticResource StringNotEmptyConverter}}"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center" />
+
                 <Label Text="{Binding ErrorMessage}"
                        TextColor="Red"
                        IsVisible="{Binding ErrorMessage, Converter={StaticResource StringNotEmptyConverter}}"
@@ -102,6 +111,12 @@
                 <Button Text="Sign In"
                         Command="{Binding SignInCommand}"
                         HorizontalOptions="Fill" />
+
+                <Button Text="Forgot password?"
+                        Command="{Binding GoToForgotPasswordCommand}"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />
 
                 <Button Text="Sign Up"
                         Command="{Binding GoToSignUpCommand}"

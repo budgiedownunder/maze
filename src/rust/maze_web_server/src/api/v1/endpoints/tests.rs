@@ -3,9 +3,14 @@ mod test_definitions {
     // **************************************************************************************************
     // Unit tests for API and documentation endpoints, via injection of MockStore
     // **************************************************************************************************
+    use crate::api::v1::endpoints::auth_reset::{PasswordResetConfirmRequest, PasswordResetRequest};
+    use crate::api::v1::endpoints::email_verification::{
+        EmailVerificationConfirmRequest, EmailVerificationRequest,
+    };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
     use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
-    use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, SharedFeatures};
+    use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
+    use comms::{Comms, StubEmailProvider};
     
     use actix_http;
     use actix_web::{http::StatusCode, test, dev::{Service, ServiceResponse}, web, Error, http::Method};
@@ -18,7 +23,8 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::MazeStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
+    use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
     const ADMIN_USERNAME_PREFIX:&str = "admin_";
@@ -110,12 +116,16 @@ mod test_definitions {
     /**************/
     struct MockStore {
         users: HashMap<Uuid, MockUser>,
+        tokens: HashMap<Uuid, OneTimeToken>,
+        audit_entries: HashMap<Uuid, EmailAuditEntry>,
     }
 
     impl MockStore {
         pub fn new(user_defs: &Vec<UserDefinition>) -> Self {
             MockStore {
-                users: new_users_map(user_defs)
+                users: new_users_map(user_defs),
+                tokens: HashMap::new(),
+                audit_entries: HashMap::new(),
             }
         }
 
@@ -323,6 +333,21 @@ mod test_definitions {
                 Err(StoreError::UserIdNotFound(id.to_string()))
             }
         }
+        /// Purges a user from the store. The MockStore collapses soft-delete
+        /// + purge into a single hard-remove because the integration tests
+        /// that use this fake exercise endpoint behaviour, not the storage
+        /// layer's soft-delete semantics — those are covered by the storage
+        /// crate's contract tests.
+        async fn purge_user(&mut self, id: Uuid) -> Result<(), StoreError> {
+            if id.is_nil() {
+                return Err(StoreError::UserIdMissing());
+            }
+            if self.users.remove(&id).is_some() {
+                Ok(())
+            } else {
+                Err(StoreError::UserIdNotFound(id.to_string()))
+            }
+        }
         /// Updates a user within the store
         async fn update_user(&mut self, user: &mut User) -> Result<(), StoreError> {
             self.validate_user(user, user.id)?;
@@ -407,6 +432,13 @@ mod test_definitions {
 
         async fn has_users(&self) -> Result<bool, StoreError> {
             Ok(!self.users.is_empty())
+        }
+
+        async fn has_active_admin_user(&self) -> Result<bool, StoreError> {
+            Ok(self
+                .users
+                .values()
+                .any(|v| v.user.is_admin && v.user.is_active()))
         }
 
         async fn add_user_email(
@@ -510,6 +542,130 @@ mod test_definitions {
         async fn empty(&mut self) -> Result<(), StoreError> {
             self.users = HashMap::new();
             Ok(())
+        }
+    }
+
+    // In-memory TokenStore that mirrors the real storage backends'
+    // behavioural contract closely enough for handler-level integration
+    // tests. The `consume_token` race-free guarantee is provided by the
+    // outer `RwLock<Box<dyn Store>>` + the per-method `&mut self` — at
+    // that point the test runner already holds an exclusive lock so no
+    // two `consume_token` calls can interleave.
+    #[async_trait]
+    impl TokenStore for MockStore {
+        async fn create_token(&mut self, token: &OneTimeToken) -> Result<(), StoreError> {
+            if token.id == Uuid::nil() {
+                return Err(StoreError::Other("token id must not be nil".to_string()));
+            }
+            if self.tokens.contains_key(&token.id) {
+                return Err(StoreError::TokenIdExists(token.id.to_string()));
+            }
+            self.tokens.insert(token.id, token.clone());
+            Ok(())
+        }
+        async fn find_token(&self, id: Uuid) -> Result<OneTimeToken, StoreError> {
+            match self.tokens.get(&id) {
+                Some(t) if t.is_expired() => Err(StoreError::TokenIdNotFound(id.to_string())),
+                Some(t) => Ok(t.clone()),
+                None => Err(StoreError::TokenIdNotFound(id.to_string())),
+            }
+        }
+        async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, StoreError> {
+            let token = self.tokens.get_mut(&id)
+                .ok_or_else(|| StoreError::TokenIdNotFound(id.to_string()))?;
+            if token.is_consumed() {
+                return Err(StoreError::TokenAlreadyConsumed());
+            }
+            if token.is_expired() {
+                return Err(StoreError::TokenExpired());
+            }
+            token.consumed_at = Some(Utc::now());
+            Ok(token.clone())
+        }
+        async fn purge_email_verification_tokens(
+            &mut self,
+            user_id: Uuid,
+            target_email: &str,
+        ) -> Result<u64, StoreError> {
+            let before = self.tokens.len() as u64;
+            self.tokens.retain(|_, t| {
+                !(t.user_id == user_id
+                    && t.purpose == data_model::TokenPurpose::EmailVerification
+                    && t.target_email
+                        .as_deref()
+                        .map(|s| s.eq_ignore_ascii_case(target_email))
+                        .unwrap_or(false))
+            });
+            Ok(before - self.tokens.len() as u64)
+        }
+        async fn purge_expired(&mut self) -> Result<u64, StoreError> {
+            let before = self.tokens.len() as u64;
+            self.tokens.retain(|_, t| !t.is_expired() || t.is_consumed());
+            Ok(before - self.tokens.len() as u64)
+        }
+    }
+
+    // In-memory EmailAuditLog. Mirrors the real backends' contract closely
+    // enough for handler-level integration tests — happy path, recon row,
+    // and provider-failure assertions all need to read back rows the
+    // dispatch helpers wrote.
+    #[async_trait]
+    impl EmailAuditLog for MockStore {
+        async fn record_pending(&mut self, entry: &EmailAuditEntry) -> Result<Uuid, StoreError> {
+            if entry.id == Uuid::nil() {
+                return Err(StoreError::Other("audit entry id must not be nil".to_string()));
+            }
+            if self.audit_entries.contains_key(&entry.id) {
+                return Err(StoreError::AuditEntryIdExists(entry.id.to_string()));
+            }
+            self.audit_entries.insert(entry.id, entry.clone());
+            Ok(entry.id)
+        }
+        async fn update_outcome(
+            &mut self,
+            id: Uuid,
+            outcome: AuditOutcome,
+            provider_message_id: Option<&str>,
+            error_class: Option<&str>,
+            error_message: Option<&str>,
+        ) -> Result<(), StoreError> {
+            if matches!(outcome, AuditOutcome::Pending) {
+                return Err(StoreError::Other(
+                    "update_outcome cannot move a row back to pending".to_string(),
+                ));
+            }
+            let row = self.audit_entries.get_mut(&id)
+                .ok_or_else(|| StoreError::AuditEntryIdNotFound(id.to_string()))?;
+            row.outcome = outcome;
+            row.provider_message_id = provider_message_id.map(|s| s.to_string());
+            row.error_class = error_class.map(|s| s.to_string());
+            row.error_message = error_message.map(|s| s.to_string());
+            Ok(())
+        }
+        async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, StoreError> {
+            self.audit_entries
+                .get(&id)
+                .cloned()
+                .ok_or_else(|| StoreError::AuditEntryIdNotFound(id.to_string()))
+        }
+        async fn find_recent_audit_entries_for_user(
+            &self,
+            user_id: Uuid,
+            limit: u32,
+        ) -> Result<Vec<EmailAuditEntry>, StoreError> {
+            let mut matches: Vec<EmailAuditEntry> = self
+                .audit_entries
+                .values()
+                .filter(|e| e.recipient_user_id == Some(user_id))
+                .cloned()
+                .collect();
+            matches.sort_by(|a, b| {
+                b.created_at
+                    .cmp(&a.created_at)
+                    .then_with(|| b.id.cmp(&a.id))
+            });
+            matches.truncate(limit as usize);
+            Ok(matches)
         }
     }
 
@@ -835,8 +991,9 @@ mod test_definitions {
 
         let (shared_mock_store, mock_users, api_key, login_id) = create_shared_mock_store(user_defs, caller_username, add_login);
         let connector: SharedOAuthConnector = Arc::new(NoOpConnector);
+        let comms = web::Data::new(build_comms(&app_config.comms).expect("test comms"));
         let app = test::init_service(
-            create_app(&app_config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(features), web::Data::new(connector), ".".to_string())
+            create_app(&app_config.security.password_hash, web::Data::new(shared_mock_store.clone()), web::Data::new(features), web::Data::new(connector), comms, ".".to_string())
             .app_data(web::Data::new(app_config))
         )
         .await;
@@ -862,6 +1019,60 @@ mod test_definitions {
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, SharedStore, HashMap<Uuid, MockUser>, Option<Uuid>, Option<Uuid>) {
         let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
         create_test_app_with_features(user_defs, caller_username, add_login, features).await
+    }
+
+    /// Variant of `create_test_app` that wires a freshly-constructed
+    /// `StubEmailProvider` into the `Comms` orchestrator and returns a
+    /// clone alongside the app so the test can inspect captured sends.
+    /// Used by the password-reset / email-verification integration tests
+    /// that need to assert on outbound emails.
+    async fn create_test_app_with_stub_email(
+        user_defs: &mut Vec<UserDefinition>,
+        caller_username: Option<&str>,
+        add_login: bool,
+    ) -> (
+        impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        SharedStore,
+        HashMap<Uuid, MockUser>,
+        Option<Uuid>,
+        Option<Uuid>,
+        StubEmailProvider,
+    ) {
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let mut app_config = AppConfig::default();
+        app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        // Drive a stable `public_base_url` so the reset-link assertion has
+        // something deterministic to check against. Likewise pin a `from`
+        // — without it, `comms.send_template` fails the dispatch with
+        // `Config("no default_from_email configured")` and the stub
+        // never sees a message.
+        app_config.comms.public_base_url = "https://maze.test".to_string();
+        app_config.comms.email.from = "noreply@maze.test".to_string();
+
+        set_valid_password_hashes(&app_config.security.password_hash, user_defs);
+        let (shared_mock_store, mock_users, api_key, login_id) =
+            create_shared_mock_store(user_defs, caller_username, add_login);
+        let connector: SharedOAuthConnector = Arc::new(NoOpConnector);
+
+        let renderer = build_renderer(&app_config.comms).expect("test renderer");
+        let default_from = build_default_from(&app_config.comms);
+        let stub = StubEmailProvider::new();
+        let comms = Comms::new(renderer, Some(Arc::new(stub.clone())), default_from);
+
+        let app = test::init_service(
+            create_app(
+                &app_config.security.password_hash,
+                web::Data::new(shared_mock_store.clone()),
+                web::Data::new(features),
+                web::Data::new(connector),
+                web::Data::new(comms),
+                ".".to_string(),
+            )
+            .app_data(web::Data::new(app_config)),
+        )
+        .await;
+
+        (app, shared_mock_store, mock_users, Some(api_key), login_id, stub)
     }
 
     fn get_invalid_email_or_password_error_str() -> String {
@@ -3131,12 +3342,12 @@ mod test_definitions {
     }
 
     #[actix_web::test]
-    async fn signup_creates_user_with_one_primary_verified_email_row() {
-        // The store-side `create_user` is exercised by the storage crate's
-        // contract suite; this test guards the *web layer's* invariant — a
-        // fresh signup must produce exactly one `UserEmail` row, marked both
-        // primary and verified, with the address echoed verbatim from the
-        // signup request.
+    async fn signup_creates_user_with_one_primary_unverified_email_row() {
+        // Self-service signup creates the email row as the user's *claim*,
+        // not as a verified address — the verification handler flips it
+        // once the user clicks the link. (Admin-side `CreateUserRequest`
+        // keeps the trusted-seed path with `verified = true`; that's
+        // covered by separate tests.)
         let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
         let (app, shared_store, _, _, _) = create_test_app(&mut user_defs, None, false).await;
         let signup_email = new_email(NEW_USERNAME_1);
@@ -3149,12 +3360,25 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
 
-        // Round-trip through the store to inspect the persisted shape.
+        // The email is unverified, so `find_user_by_verified_email`
+        // intentionally returns NotFound — that's the security contract
+        // (an unverified address must be invisible to the lookup).
         let store_lock = shared_store.read().await;
+        assert!(
+            matches!(
+                store_lock.find_user_by_verified_email(&signup_email).await,
+                Err(StoreError::UserNotFound())
+            ),
+            "signup-seeded email must be unverified and therefore invisible to find_user_by_verified_email"
+        );
+
+        // The user row exists (locate by username instead) and carries
+        // exactly one primary, unverified email matching the signup.
+        let base_username = signup_email.split('@').next().unwrap();
         let user = store_lock
-            .find_user_by_verified_email(&signup_email)
+            .find_user_by_name(base_username)
             .await
-            .expect("signup must produce a user findable by verified email");
+            .expect("signup must produce a findable user");
         assert_eq!(
             user.emails.len(),
             1,
@@ -3164,7 +3388,11 @@ mod test_definitions {
         let row = &user.emails[0];
         assert_eq!(row.email, signup_email, "stored email must match signup request");
         assert!(row.is_primary, "signup-seeded email must be primary");
-        assert!(row.verified, "signup-seeded email must be verified");
+        assert!(!row.verified, "signup-seeded email must start unverified");
+        assert!(
+            row.verified_at.is_none(),
+            "signup-seeded email verified_at must be None until the user verifies"
+        );
     }
 
     #[actix_web::test]
@@ -3364,6 +3592,1160 @@ mod test_definitions {
     #[actix_web::test]
     async fn can_delete_me_when_not_last_admin_with_login() {
         run_can_delete_me_when_not_last_admin(true).await;
+    }
+
+    #[actix_web::test]
+    async fn delete_me_invalidates_subsequent_login_attempt() {
+        // Pin the soft-delete contract at the handler layer: after the
+        // account is deleted, a fresh login attempt with the original
+        // email + password must fail with 401. Backed by the trait's
+        // soft-delete read filter — `find_user_by_verified_email` no
+        // longer sees the row, so the login lookup falls through to the
+        // anti-enumeration "Invalid email or password" branch.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let original_email = new_email(VALID_USERNAME_1);
+        let login_request = LoginRequest {
+            email: original_email.clone(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+
+        // Sanity: the credentials work before the delete.
+        let pre_req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let pre_resp = test::call_service(&app, pre_req).await;
+        assert_eq!(pre_resp.status(), StatusCode::OK);
+
+        // Delete the caller via their API key.
+        let del_req = create_test_delete_request("/api/v1/users/me", api_key, None);
+        let del_resp = test::call_service(&app, del_req).await;
+        assert_eq!(del_resp.status(), StatusCode::NO_CONTENT);
+
+        // The same credentials must now be rejected.
+        let post_req = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let post_resp = test::call_service(&app, post_req).await;
+        assert_eq!(post_resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // **************************************************************************************************
+    // Tests: POST /api/v1/password-reset/{request,confirm}
+    // **************************************************************************************************
+
+    /// Spin briefly until the captured-stub buffer has at least `min` rows
+    /// or the budget elapses. The reset-request handler dispatches the
+    /// email on a `tokio::spawn` task, so the HTTP response comes back
+    /// before the send resolves.
+    async fn await_stub_capture(stub: &StubEmailProvider, min: usize, max_ms: u64) {
+        let start = std::time::Instant::now();
+        while stub.len() < min && start.elapsed().as_millis() < u128::from(max_ms) {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    }
+
+    fn extract_reset_token(url: &str) -> Option<Uuid> {
+        let q = url.split_once('?')?.1;
+        for pair in q.split('&') {
+            let (k, v) = pair.split_once('=')?;
+            if k == "token" {
+                return Uuid::parse_str(v).ok();
+            }
+        }
+        None
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_happy_path_dispatches_email_with_reset_link() {
+        // Real verified-email match → token created, send fired through stub.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/request",
+            None,
+            None,
+            Some(&PasswordResetRequest { email: email.clone() }),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        await_stub_capture(&stub, 1, 1000).await;
+        assert_eq!(stub.len(), 1, "stub should have captured exactly one message");
+        let captured = stub.last().expect("captured message");
+        assert_eq!(captured.to.len(), 1);
+        assert_eq!(captured.to[0].address, email);
+        assert!(
+            captured.body_text.contains("https://maze.test/reset-password?token="),
+            "reset link should appear in body_text: {}",
+            captured.body_text
+        );
+    }
+
+    #[actix_web::test]
+    async fn password_reset_confirm_updates_password_and_clears_logins() {
+        // The post-reset "old login id rejected" assertion can't go through
+        // `test::call_service` because the auth-middleware's
+        // `ErrorUnauthorized` return propagates as `Err` rather than as a
+        // 401 `ServiceResponse`, which makes `test::call_service` panic.
+        // The cleared-`user.logins` invariant is covered by the storage
+        // crate's contract tests; here we verify the contract-visible
+        // surface — the password was actually rotated — via /login.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+
+        // Sanity: the original credentials work before the reset.
+        let original_login = LoginRequest {
+            email: email.clone(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/login",
+                    None,
+                    None,
+                    Some(&original_login),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        // Request the reset, harvest the token from the captured email.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/password-reset/request",
+                    None,
+                    None,
+                    Some(&PasswordResetRequest { email: email.clone() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        let captured = stub.last().expect("captured");
+        let link = captured
+            .body_text
+            .lines()
+            .find(|l| l.contains("https://maze.test/reset-password?token="))
+            .expect("reset link line");
+        let token_id = extract_reset_token(link.trim()).expect("token in link");
+
+        // Confirm with a fresh password.
+        let new_password = "NewPassword1!";
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/password-reset/confirm",
+                    None,
+                    None,
+                    Some(&PasswordResetConfirmRequest {
+                        token: token_id.to_string(),
+                        new_password: new_password.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+
+        // The new password lets the user log in.
+        let new_login = LoginRequest {
+            email: email.clone(),
+            password: new_password.to_string(),
+        };
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request("/api/v1/login", None, None, Some(&new_login)),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        // The old password must be rejected.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request("/api/v1/login", None, None, Some(&original_login)),
+            )
+            .await
+            .status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_for_unknown_email_returns_200_with_no_send() {
+        // Reconnaissance / anti-enumeration: an email that doesn't match
+        // any user must return the same 200 as a real match, with no send.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/request",
+            None,
+            None,
+            Some(&PasswordResetRequest {
+                email: "ghost@example.com".to_string(),
+            }),
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+
+        // Give any in-flight spawn a moment to flush before asserting.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(stub.len(), 0, "no send should fire for an unknown email");
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_for_unverified_email_returns_200_with_no_send() {
+        // The handler relies on `find_user_by_verified_email` which the
+        // storage layer filters to verified rows only. An attacker who
+        // squats an unverified address on a victim's account must not be
+        // able to redirect resets to it.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        // Attach an unverified email to the existing user. We mutate the
+        // store directly because the API requires bearer auth and we
+        // want to keep this test focused on the reset-request behaviour.
+        let user = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user_1")
+        };
+        {
+            let mut store_lock = shared_store.write().await;
+            store_lock
+                .add_user_email(user.id, "shadow@example.com", false)
+                .await
+                .expect("add unverified email");
+        }
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/request",
+            None,
+            None,
+            Some(&PasswordResetRequest {
+                email: "shadow@example.com".to_string(),
+            }),
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(stub.len(), 0, "unverified email must not trigger a send");
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_for_oauth_only_user_returns_200_with_no_send() {
+        // OAuth-only users have an empty `password_hash` — there's no
+        // password to reset, so the request silently no-ops. The 200
+        // response is identical to the unknown-email path.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        // Seed an OAuth-only user via the store directly.
+        let mut oauth_user = User {
+            id: Uuid::nil(),
+            is_admin: false,
+            username: "oauth_user".to_string(),
+            full_name: "OAuth User".to_string(),
+            emails: vec![data_model::UserEmail::new_primary_verified("oauth@example.com")],
+            password_hash: String::new(),
+            api_key: Uuid::nil(),
+            logins: vec![],
+            oauth_identities: vec![data_model::OAuthIdentity::new(
+                "google".to_string(),
+                "google-sub-1".to_string(),
+                Some("oauth@example.com".to_string()),
+            )],
+            deleted_at: None,
+        };
+        {
+            let mut store_lock = shared_store.write().await;
+            store_lock.create_user(&mut oauth_user).await.expect("create OAuth user");
+        }
+
+        let req = create_test_post_request(
+            "/api/v1/password-reset/request",
+            None,
+            None,
+            Some(&PasswordResetRequest {
+                email: "oauth@example.com".to_string(),
+            }),
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(stub.len(), 0, "OAuth-only user must not trigger a send");
+    }
+
+    #[actix_web::test]
+    async fn password_reset_confirm_rejects_second_consume_attempt() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+
+        // Issue + harvest the token.
+        let req = create_test_post_request(
+            "/api/v1/password-reset/request",
+            None,
+            None,
+            Some(&PasswordResetRequest { email }),
+        );
+        assert_eq!(test::call_service(&app, req).await.status(), StatusCode::OK);
+        await_stub_capture(&stub, 1, 1000).await;
+        let captured = stub.last().expect("captured");
+        let link = captured
+            .body_text
+            .lines()
+            .find(|l| l.contains("https://maze.test/reset-password?token="))
+            .expect("reset link line");
+        let token_id = extract_reset_token(link.trim()).expect("token");
+
+        // First consume succeeds.
+        let confirm = PasswordResetConfirmRequest {
+            token: token_id.to_string(),
+            new_password: "NewPassword1!".to_string(),
+        };
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&confirm),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::NO_CONTENT
+        );
+
+        // Second attempt with the same token must fail with 400.
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&confirm),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[actix_web::test]
+    async fn password_reset_confirm_rejects_unknown_token() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, _stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        let body = PasswordResetConfirmRequest {
+            token: Uuid::new_v4().to_string(),
+            new_password: "NewPassword1!".to_string(),
+        };
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&body),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[actix_web::test]
+    async fn password_reset_confirm_rejects_weak_new_password() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, _stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        let body = PasswordResetConfirmRequest {
+            token: Uuid::new_v4().to_string(),
+            new_password: "weak".to_string(),
+        };
+        let req = create_test_post_request(
+            "/api/v1/password-reset/confirm",
+            None,
+            None,
+            Some(&body),
+        );
+        assert_eq!(
+            test::call_service(&app, req).await.status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    // **************************************************************************************************
+    // Tests: POST /api/v1/email-verifications/{request,confirm}
+    // **************************************************************************************************
+
+    fn extract_verification_token(url: &str) -> Option<Uuid> {
+        let q = url.split_once('?')?.1;
+        for pair in q.split('&') {
+            let (k, v) = pair.split_once('=')?;
+            if k == "token" {
+                return Uuid::parse_str(v).ok();
+            }
+        }
+        None
+    }
+
+    fn harvest_verification_token(stub: &StubEmailProvider) -> Uuid {
+        let captured = stub.last().expect("captured verification email");
+        let link = captured
+            .body_text
+            .lines()
+            .find(|l| l.contains("https://maze.test/verify-email?token="))
+            .expect("verification link line");
+        extract_verification_token(link.trim()).expect("token in link")
+    }
+
+    #[actix_web::test]
+    async fn signup_dispatches_verification_email_and_confirm_flips_verified_flag() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let signup_email = new_email(NEW_USERNAME_1);
+
+        // Signup → 201 + verification email captured.
+        let signup_resp = test::call_service(
+            &app,
+            create_test_post_request(
+                "/api/v1/signup",
+                None,
+                None,
+                Some(&new_signup_request(&signup_email, false)),
+            ),
+        )
+        .await;
+        assert_eq!(signup_resp.status(), StatusCode::CREATED);
+        await_stub_capture(&stub, 1, 1000).await;
+        let token_id = harvest_verification_token(&stub);
+
+        // The user_emails row starts unverified.
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            let user = store_lock
+                .find_user_by_name(signup_email.split('@').next().unwrap())
+                .await
+                .expect("signup user");
+            assert!(!user.emails[0].verified);
+            assert!(user.emails[0].verified_at.is_none());
+            user.id
+        };
+
+        // Confirm → 204 + the row flips.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&EmailVerificationConfirmRequest {
+                        token: token_id.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+
+        let store_lock = shared_store.read().await;
+        let user = store_lock.get_user(user_id).await.expect("user");
+        assert!(user.emails[0].verified, "row must be verified after confirm");
+        assert!(
+            user.emails[0].verified_at.is_some(),
+            "verified_at must be populated after confirm"
+        );
+    }
+
+    #[actix_web::test]
+    async fn add_email_dispatches_verification_email_and_confirm_flips_secondary() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let secondary = "alice-secondary@example.com";
+
+        // Add a secondary email via the handler.
+        let add_resp = test::call_service(
+            &app,
+            create_test_post_request(
+                "/api/v1/users/me/emails",
+                api_key,
+                None,
+                Some(&AddUserEmailRequest {
+                    email: secondary.to_string(),
+                }),
+            ),
+        )
+        .await;
+        assert_eq!(add_resp.status(), StatusCode::CREATED);
+        await_stub_capture(&stub, 1, 1000).await;
+        let token_id = harvest_verification_token(&stub);
+
+        // Sanity: the secondary lands unverified.
+        {
+            let store_lock = shared_store.read().await;
+            let user = store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("alice");
+            let row = user
+                .emails
+                .iter()
+                .find(|r| r.email == secondary)
+                .expect("secondary row");
+            assert!(!row.verified);
+        }
+
+        // Confirm → row flips.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&EmailVerificationConfirmRequest {
+                        token: token_id.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+
+        let store_lock = shared_store.read().await;
+        let user = store_lock
+            .find_user_by_name(VALID_USERNAME_1)
+            .await
+            .expect("alice");
+        let row = user
+            .emails
+            .iter()
+            .find(|r| r.email == secondary)
+            .expect("secondary row");
+        assert!(row.verified, "secondary must be verified after confirm");
+    }
+
+    #[actix_web::test]
+    async fn email_verification_request_supersedes_prior_token() {
+        // Re-issuing supersedes the previous outstanding token: the old
+        // link stops working, only the latest one consumes successfully.
+        // Use a seeded verified user + add an unverified secondary so we
+        // have an authenticated caller (the seeded user's primary is
+        // verified) and an address to verify (the secondary).
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let secondary = "alice-supersede@example.com";
+
+        // Add the secondary — handler issues token #1 + dispatches.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/users/me/emails",
+                    api_key,
+                    None,
+                    Some(&AddUserEmailRequest {
+                        email: secondary.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        let first_token = harvest_verification_token(&stub);
+        stub.clear();
+
+        // Re-request via /email-verifications/request — supersedes #1.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/request",
+                    api_key,
+                    None,
+                    Some(&EmailVerificationRequest {
+                        email: secondary.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        let second_token = harvest_verification_token(&stub);
+        assert_ne!(
+            first_token, second_token,
+            "re-issuance must produce a fresh token id"
+        );
+
+        // The first token is now superseded — confirm fails.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&EmailVerificationConfirmRequest {
+                        token: first_token.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+
+        // The second token still works.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&EmailVerificationConfirmRequest {
+                        token: second_token.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::NO_CONTENT
+        );
+    }
+
+    #[actix_web::test]
+    async fn email_verification_request_for_already_verified_is_idempotent_no_send() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let primary = new_email(VALID_USERNAME_1);
+
+        // The seeded primary is already verified. Re-requesting must
+        // return 200 with no send.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/request",
+                    api_key,
+                    None,
+                    Some(&EmailVerificationRequest { email: primary }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(
+            stub.len(),
+            0,
+            "already-verified email must not trigger a send"
+        );
+    }
+
+    #[actix_web::test]
+    async fn email_verification_confirm_rejects_unknown_token() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, _stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+
+        let body = EmailVerificationConfirmRequest {
+            token: Uuid::new_v4().to_string(),
+        };
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&body),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[actix_web::test]
+    async fn email_verification_confirm_with_password_reset_token_rejected() {
+        // A consumed-token path that uses the wrong purpose must not
+        // verify an email — defense-in-depth against stray cross-flow
+        // tokens. (Storage is responsible for the cross-user case via
+        // the user_id field of the token; that's exercised in the
+        // storage contract suite.)
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+
+        // Issue a password-reset token.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/password-reset/request",
+                    None,
+                    None,
+                    Some(&PasswordResetRequest { email }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        let captured = stub.last().expect("captured");
+        let link = captured
+            .body_text
+            .lines()
+            .find(|l| l.contains("https://maze.test/reset-password?token="))
+            .expect("reset link line");
+        let q = link.split_once('?').unwrap().1;
+        let token_id = q
+            .split('&')
+            .find_map(|p| p.split_once('=').filter(|(k, _)| *k == "token").map(|(_, v)| v))
+            .and_then(|v| Uuid::parse_str(v).ok())
+            .expect("token");
+
+        // Now try to use it as a verification token.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/confirm",
+                    None,
+                    None,
+                    Some(&EmailVerificationConfirmRequest {
+                        token: token_id.to_string(),
+                    }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    // **************************************************************************************************
+    // Audit-log integration tests
+    //
+    // Every send goes through service::audit::record_and_dispatch (or
+    // record_pending_only for the unknown-email recon path). The pending row
+    // is written synchronously, then the spawn settles to Accepted/Failed
+    // when the provider responds. These tests assert each write path lands
+    // a row, and that the outcome / error_class / template_id match.
+    // **************************************************************************************************
+
+    /// Spin briefly until `find_recent_audit_entries_for_user(user_id, _)`
+    /// surfaces a row matching `template_id` whose outcome is no longer
+    /// `Pending`. The dispatch helper writes Pending synchronously and
+    /// updates the outcome from inside `tokio::spawn`, so the HTTP
+    /// response returns before the row settles.
+    async fn await_audit_settled(
+        shared_store: &SharedStore,
+        user_id: Uuid,
+        template_id: &str,
+        max_ms: u64,
+    ) -> EmailAuditEntry {
+        let start = std::time::Instant::now();
+        loop {
+            {
+                let store_lock = shared_store.read().await;
+                let entries = store_lock
+                    .find_recent_audit_entries_for_user(user_id, 10)
+                    .await
+                    .expect("find_recent_audit_entries_for_user");
+                if let Some(entry) = entries.into_iter().find(|e| {
+                    e.template_id == template_id && e.outcome != AuditOutcome::Pending
+                }) {
+                    return entry;
+                }
+            }
+            if start.elapsed().as_millis() >= u128::from(max_ms) {
+                let store_lock = shared_store.read().await;
+                let entries = store_lock
+                    .find_recent_audit_entries_for_user(user_id, 10)
+                    .await
+                    .expect("find_recent_audit_entries_for_user");
+                panic!(
+                    "audit row never settled (template={template_id}) for user {user_id}; latest entries: {entries:?}"
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_records_pending_then_accepted_audit_row() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user")
+                .id
+        };
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/password-reset/request",
+                    None,
+                    None,
+                    Some(&PasswordResetRequest { email: email.clone() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+
+        let row = await_audit_settled(&shared_store, user_id, "password_reset", 1000).await;
+        assert_eq!(row.outcome, AuditOutcome::Accepted);
+        assert_eq!(row.template_id, "password_reset");
+        assert_eq!(row.recipient_email, email);
+        assert_eq!(row.recipient_user_id, Some(user_id));
+        assert_eq!(row.provider, "stub_email");
+        assert!(
+            row.error_class.is_none(),
+            "Accepted rows must not carry error_class: {:?}",
+            row.error_class
+        );
+    }
+
+    #[actix_web::test]
+    async fn password_reset_request_records_failed_audit_row_on_provider_error() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let email = new_email(VALID_USERNAME_1);
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user")
+                .id
+        };
+
+        // Pre-load a permanent provider failure. RetryPolicy::no_retry()
+        // (the stub default) means the orchestrator surfaces it on the
+        // first attempt without re-driving the queue.
+        stub.enqueue_failure(comms::CommsError::Provider("synthetic".into()));
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/password-reset/request",
+                    None,
+                    None,
+                    Some(&PasswordResetRequest { email: email.clone() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        let row = await_audit_settled(&shared_store, user_id, "password_reset", 1000).await;
+        assert_eq!(row.outcome, AuditOutcome::Failed);
+        assert_eq!(row.error_class.as_deref(), Some("provider"));
+        assert!(
+            row.provider_message_id.is_none(),
+            "Failed rows must not carry a provider_message_id"
+        );
+        assert_eq!(stub.len(), 0, "failed sends must not capture the message");
+    }
+
+    #[actix_web::test]
+    async fn email_verification_request_records_accepted_audit_row() {
+        // Use a verified-primary user as the caller, then request
+        // verification of a freshly-added secondary so there's an
+        // unverified row to act on.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let secondary = "alice-verify-audit@example.com";
+
+        // Add the secondary — this dispatches its own verification email
+        // (also audit-logged). Drain captures + the implicit audit row by
+        // remembering the user id for filtering by template_id later.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/users/me/emails",
+                    api_key,
+                    None,
+                    Some(&AddUserEmailRequest { email: secondary.to_string() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        stub.clear();
+
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user")
+                .id
+        };
+
+        // Now re-request verification for the secondary.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/request",
+                    api_key,
+                    None,
+                    Some(&EmailVerificationRequest { email: secondary.to_string() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+
+        let row = await_audit_settled(&shared_store, user_id, "email_verification", 1000).await;
+        assert_eq!(row.outcome, AuditOutcome::Accepted);
+        assert_eq!(row.template_id, "email_verification");
+        assert_eq!(row.recipient_email, secondary);
+        assert_eq!(row.recipient_user_id, Some(user_id));
+        assert_eq!(row.provider, "stub_email");
+    }
+
+    #[actix_web::test]
+    async fn email_verification_request_records_failed_audit_row_on_provider_error() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let secondary = "alice-verify-fail@example.com";
+
+        // Add the secondary first — that dispatch is allowed to succeed.
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/users/me/emails",
+                    api_key,
+                    None,
+                    Some(&AddUserEmailRequest { email: secondary.to_string() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+        stub.clear();
+
+        // Now arm the next dispatch to fail with a 502-like upstream error
+        // — the row should land Failed with `provider_5xx`.
+        stub.enqueue_failure(comms::CommsError::ProviderHttp {
+            status: 502,
+            body: "bad gateway".into(),
+        });
+
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user")
+                .id
+        };
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/email-verifications/request",
+                    api_key,
+                    None,
+                    Some(&EmailVerificationRequest { email: secondary.to_string() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::OK
+        );
+
+        // The Failed row carries error_class = "provider_5xx". Filter on
+        // template_id so the earlier add_email Accepted row is ignored.
+        let start = std::time::Instant::now();
+        let failed = loop {
+            let store_lock = shared_store.read().await;
+            let entries = store_lock
+                .find_recent_audit_entries_for_user(user_id, 10)
+                .await
+                .expect("find_recent_audit_entries_for_user");
+            if let Some(row) = entries
+                .into_iter()
+                .find(|e| e.template_id == "email_verification" && e.outcome == AuditOutcome::Failed)
+            {
+                break row;
+            }
+            drop(store_lock);
+            if start.elapsed().as_millis() > 1000 {
+                panic!("Failed audit row never appeared for user {user_id}");
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        };
+        assert_eq!(failed.error_class.as_deref(), Some("provider_5xx"));
+        assert!(failed.provider_message_id.is_none());
+    }
+
+    #[actix_web::test]
+    async fn signup_records_accepted_audit_row_for_dispatched_verification_email() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 0, MazeContent::Empty));
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, None, false).await;
+        let signup_email = new_email(NEW_USERNAME_1);
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/signup",
+                    None,
+                    None,
+                    Some(&new_signup_request(&signup_email, false)),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(signup_email.split('@').next().unwrap())
+                .await
+                .expect("signup user")
+                .id
+        };
+
+        let row = await_audit_settled(&shared_store, user_id, "email_verification", 1000).await;
+        assert_eq!(row.outcome, AuditOutcome::Accepted);
+        assert_eq!(row.recipient_email, signup_email);
+        assert_eq!(row.recipient_user_id, Some(user_id));
+        assert!(row.token_id.is_some(), "verification rows carry the token id");
+    }
+
+    #[actix_web::test]
+    async fn add_email_records_accepted_audit_row_for_secondary_dispatch() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, shared_store, _, api_key, _, stub) =
+            create_test_app_with_stub_email(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let secondary = "alice-add-audit@example.com";
+
+        assert_eq!(
+            test::call_service(
+                &app,
+                create_test_post_request(
+                    "/api/v1/users/me/emails",
+                    api_key,
+                    None,
+                    Some(&AddUserEmailRequest { email: secondary.to_string() }),
+                ),
+            )
+            .await
+            .status(),
+            StatusCode::CREATED
+        );
+        await_stub_capture(&stub, 1, 1000).await;
+
+        let user_id = {
+            let store_lock = shared_store.read().await;
+            store_lock
+                .find_user_by_name(VALID_USERNAME_1)
+                .await
+                .expect("locate user")
+                .id
+        };
+
+        let row = await_audit_settled(&shared_store, user_id, "email_verification", 1000).await;
+        assert_eq!(row.outcome, AuditOutcome::Accepted);
+        assert_eq!(row.recipient_email, secondary);
+        assert_eq!(row.recipient_user_id, Some(user_id));
+    }
+
+    #[actix_web::test]
+    async fn delete_me_frees_email_for_resignup() {
+        // After a soft-delete the email is hard-deleted in the cascade, so a
+        // brand-new signup with the same address must succeed.
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, api_key, _) =
+            create_test_app(&mut user_defs, Some(VALID_USERNAME_1), false).await;
+        let original_email = new_email(VALID_USERNAME_1);
+
+        let del_req = create_test_delete_request("/api/v1/users/me", api_key, None);
+        let del_resp = test::call_service(&app, del_req).await;
+        assert_eq!(del_resp.status(), StatusCode::NO_CONTENT);
+
+        let signup_req = create_test_post_request(
+            "/api/v1/signup",
+            None,
+            None,
+            Some(&new_signup_request(&original_email, false)),
+        );
+        let signup_resp = test::call_service(&app, signup_req).await;
+        assert_eq!(
+            signup_resp.status(),
+            StatusCode::CREATED,
+            "the original email must be re-claimable after the original user is soft-deleted"
+        );
     }
 
     // **************************************************************************************************
@@ -4097,9 +5479,19 @@ mod test_definitions {
     async fn set_primary_email_promotes_verified_secondary() {
         let (app, shared_store, user_id, api_key, login_id) = me_emails_test_app().await;
 
-        // Add a secondary (created with verified = true by the handler).
+        // Add a secondary via the handler — it lands `verified = false`
+        // and a verification email is dispatched. Mark it verified
+        // directly via the store to simulate the user clicking the
+        // verification link, then promote it.
         let secondary = "alice2@example.com";
         let _ = seed_secondary_email_via_handler(&app, api_key, login_id, secondary).await;
+        {
+            let mut store_lock = shared_store.write().await;
+            store_lock
+                .mark_email_verified(user_id, secondary)
+                .await
+                .expect("mark secondary verified");
+        }
 
         // Promote it.
         let req = create_test_put_request(
@@ -4420,12 +5812,14 @@ mod test_definitions {
         let features: SharedFeatures = Arc::new(RwLock::new(app_config.features.clone()));
         set_valid_password_hashes(&app_config.security.password_hash, &mut user_defs);
         let (shared_mock_store, _, _, _) = create_shared_mock_store(&user_defs, None, false);
+        let comms = web::Data::new(build_comms(&app_config.comms).expect("test comms"));
         test::init_service(
             create_app(
                 &app_config.security.password_hash,
                 web::Data::new(shared_mock_store),
                 web::Data::new(features),
                 web::Data::new(connector as crate::oauth::SharedOAuthConnector),
+                comms,
                 ".".to_string(),
             )
             .app_data(web::Data::new(app_config)),

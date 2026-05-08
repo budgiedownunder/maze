@@ -2,6 +2,8 @@
   href: index.md
 - name: auth
   href: auth/view_content.md
+- name: comms
+  href: comms/view_content.md
 - name: data_model
   href: data_model/view_content.md
 - name: maze

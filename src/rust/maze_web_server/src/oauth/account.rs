@@ -135,6 +135,7 @@ pub async fn resolve(
             identity.provider_user_id.clone(),
             Some(email),
         )],
+        deleted_at: None,
     };
     store.create_user(&mut new_user).await?;
     Ok(ResolveOutcome::Created(new_user))
@@ -217,6 +218,9 @@ mod tests {
         async fn delete_user(&mut self, _id: Uuid) -> Result<(), StoreError> {
             Err(StoreError::Other("not used".into()))
         }
+        async fn purge_user(&mut self, _id: Uuid) -> Result<(), StoreError> {
+            Err(StoreError::Other("not used".into()))
+        }
         async fn update_user(&mut self, user: &mut User) -> Result<(), StoreError> {
             self.users.insert(user.id, user.clone());
             Ok(())
@@ -262,6 +266,9 @@ mod tests {
         async fn get_users(&self) -> Result<Vec<User>, StoreError> { Ok(self.users.values().cloned().collect()) }
         async fn get_admin_users(&self) -> Result<Vec<User>, StoreError> { Ok(vec![]) }
         async fn has_users(&self) -> Result<bool, StoreError> { Ok(!self.users.is_empty()) }
+        async fn has_active_admin_user(&self) -> Result<bool, StoreError> {
+            Ok(self.users.values().any(|u| u.is_admin && u.is_active()))
+        }
         async fn add_user_email(&mut self, _u: Uuid, _e: &str, _v: bool) -> Result<data_model::UserEmail, StoreError> {
             Err(StoreError::Other("not used".into()))
         }
@@ -297,6 +304,7 @@ mod tests {
             api_key: User::new_api_key(),
             logins: vec![],
             oauth_identities: vec![],
+            deleted_at: None,
         }
     }
 
@@ -440,6 +448,7 @@ mod tests {
             api_key: User::new_api_key(),
             logins: vec![],
             oauth_identities: vec![],
+            deleted_at: None,
         }
     }
 

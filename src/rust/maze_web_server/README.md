@@ -78,6 +78,11 @@ The following configuration settings exist:
 | Global   | `port`             | Integer | `8443`   | `MAZE_WEB_SERVER_PORT`
 | Security | `cert_file`        | Text    | `cert.pem` | `MAZE_WEB_SERVER_SECURITY_CERT_FILE`
 |          | `key_file`         | Text    | `key.pem`  | `MAZE_WEB_SERVER_SECURITY_KEY_FILE`
+|          | `security.login_expiry_hours` | Integer | `24`  | (config-file only)
+|          | `security.password_hash.mem_cost`    | Integer | `65536` | (config-file only)
+|          | `security.password_hash.time_cost`   | Integer | `3`     | (config-file only)
+|          | `security.password_hash.lanes`       | Integer | `4`     | (config-file only)
+|          | `security.password_hash.hash_length` | Integer | `32`    | (config-file only)
 | Static   | `static_dir`       | Text    | `static`          | `MAZE_WEB_SERVER_STATIC_DIR`
 | Logging  | `log_dir`          | Text    | `logs`            | `MAZE_WEB_SERVER_LOGGING_LOG_DIR`
 |          | `log_level`        | Text    | `info`            | `MAZE_WEB_SERVER_LOGGING_LOG_LEVEL`
@@ -86,6 +91,12 @@ The following configuration settings exist:
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
+|          | `oauth.internal.providers.<name>.enabled` | Boolean | `false` | (config-file only)
+|          | `oauth.internal.providers.<name>.display_name` | Text | (empty) | (config-file only)
+|          | `oauth.internal.providers.<name>.client_id` | Text | (empty) | (config-file only)
+|          | `oauth.internal.providers.<name>.client_secret_env` | Text | (empty) | (config-file only — names the env var that holds the secret)
+|          | `oauth.internal.providers.<name>.redirect_uri` | Text | (empty) | (config-file only)
+|          | `oauth.internal.providers.<name>.client_secret` | Text | (env-var only — never read from config files) | named by `client_secret_env`
 | Storage  | `storage.type`               | Text (`file` / `sql`) | `file` | `MAZE_WEB_SERVER_STORAGE_TYPE`
 |          | `storage.file.data_dir`      | Text    | `data`  | `MAZE_WEB_SERVER_STORAGE_FILE_DATA_DIR`
 |          | `storage.sql.driver`         | Text (`sqlite` / `postgres` / `mysql`) | `sqlite` | `MAZE_WEB_SERVER_STORAGE_SQL_DRIVER`
@@ -102,6 +113,37 @@ The following configuration settings exist:
 |          | `storage.sql.connect_timeout_secs` | Integer | `10` | `MAZE_WEB_SERVER_STORAGE_SQL_CONNECT_TIMEOUT_SECS`
 |          | `storage.sql.idle_timeout_secs` | Integer | `600` | `MAZE_WEB_SERVER_STORAGE_SQL_IDLE_TIMEOUT_SECS`
 |          | `storage.sql.acquire_timeout_secs` | Integer | `30` | `MAZE_WEB_SERVER_STORAGE_SQL_ACQUIRE_TIMEOUT_SECS`
+| Comms    | `comms.enabled`              | Boolean | `false` | `MAZE_WEB_SERVER_COMMS_ENABLED`
+|          | `comms.public_base_url`      | Text    | (empty) | `MAZE_WEB_SERVER_COMMS_PUBLIC_BASE_URL`
+|          | `comms.branding.company_name`    | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_NAME`
+|          | `comms.branding.company_address` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_ADDRESS`
+|          | `comms.branding.company_url`     | Text | (falls back to `comms.public_base_url`) | `MAZE_WEB_SERVER_COMMS_BRANDING_COMPANY_URL`
+|          | `comms.branding.logo_url`        | Text | (empty) | `MAZE_WEB_SERVER_COMMS_BRANDING_LOGO_URL`
+|          | `comms.branding.app_name`        | Text | (empty — falls back to `comms.email.from_name`, then `comms.branding.company_name`) | `MAZE_WEB_SERVER_COMMS_BRANDING_APP_NAME`
+|          | `comms.email.provider`           | Text (`stub` / `mailgun` / `smtp_oauth2`) | `stub` | `MAZE_WEB_SERVER_COMMS_EMAIL_PROVIDER`
+|          | `comms.email.from`               | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_FROM`
+|          | `comms.email.from_name`          | Text | `The Maze Team` | `MAZE_WEB_SERVER_COMMS_EMAIL_FROM_NAME`
+|          | `comms.email.templates_dir`      | Text | `config/email_templates` | `MAZE_WEB_SERVER_COMMS_EMAIL_TEMPLATES_DIR`
+|          | `comms.email.audit.record_unknown_password_reset_requests` | Boolean | `false` | `MAZE_WEB_SERVER_COMMS_EMAIL_AUDIT_RECORD_UNKNOWN_PASSWORD_RESET_REQUESTS`
+|          | `comms.email.mailgun.domain`     | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_DOMAIN`
+|          | `comms.email.mailgun.region`     | Text (`us` / `eu`) | `us` | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_REGION`
+|          | `comms.email.mailgun.api_key`    | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY`
+|          | `comms.email.smtp_oauth2.host`   | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_HOST`
+|          | `comms.email.smtp_oauth2.port`   | Integer | `587` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_PORT`
+|          | `comms.email.smtp_oauth2.tls`    | Text (`starttls` / `implicit` / `plain`) | `starttls` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_TLS`
+|          | `comms.email.smtp_oauth2.username` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_USERNAME`
+|          | `comms.email.smtp_oauth2.vendor` | Text (`microsoft` / `google` / `google_personal`) | `microsoft` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR`
+|          | `comms.email.smtp_oauth2.microsoft.tenant_id` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_TENANT_ID`
+|          | `comms.email.smtp_oauth2.microsoft.client_id` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_ID`
+|          | `comms.email.smtp_oauth2.microsoft.scopes`    | Array of Text | `["https://outlook.office.com/.default"]` | (config-file only)
+|          | `comms.email.smtp_oauth2.microsoft.client_secret` | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET`
+|          | `comms.email.smtp_oauth2.google.service_account_json_path` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_SERVICE_ACCOUNT_JSON_PATH`
+|          | `comms.email.smtp_oauth2.google.delegated_subject` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT`
+|          | `comms.email.smtp_oauth2.google.scopes`            | Array of Text | `["https://www.googleapis.com/auth/gmail.send"]` | (config-file only)
+|          | `comms.email.smtp_oauth2.google_personal.client_id` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_ID`
+|          | `comms.email.smtp_oauth2.google_personal.scopes`    | Array of Text | `["https://mail.google.com/"]` | (config-file only)
+|          | `comms.email.smtp_oauth2.google_personal.client_secret` | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET`
+|          | `comms.email.smtp_oauth2.google_personal.refresh_token` | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN`
 
 These can also be set in a local configuration file called `config.toml` as follows
 
@@ -178,6 +220,73 @@ display_name = "Facebook"
 client_id = ""
 client_secret_env = "MAZE_OAUTH_FACEBOOK_SECRET"
 redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
+
+# ---- Outbound communications ----
+# Disabled by default. Provider secrets are read from environment
+# variables only — see the env-var column in the table above.
+[comms]
+enabled = false
+public_base_url = "https://your-host:8443"
+
+[comms.branding]
+app_name = "Acme"                                # product name in {{ app_name }} (subjects/bodies); falls back to from_name / company_name
+company_name = "Acme, Inc."
+company_address = "123 Example St, City, Country"
+company_url = "https://acme.example.com"         # defaults to comms.public_base_url
+logo_url = "https://your-host:8443/static/logo.png"
+
+[comms.email]
+provider = "mailgun"                # "stub" (default), "mailgun", or "smtp_oauth2"
+from = "noreply@example.com"
+from_name = "The Maze Team"         # display name in From: header
+templates_dir = "config/email_templates"
+
+# Email audit-log behaviour. Applies to every provider — medium-level,
+# not provider-specific. Default off so small / dev installs don't
+# accumulate one audit-log entry per typo or probe; flip on for
+# rate-limit / abuse forensics. Anti-enumeration timing and the 200
+# response are unaffected either way.
+[comms.email.audit]
+record_unknown_password_reset_requests = false
+
+# Provider sub-table consulted only when provider matches. The api_key is
+# *never* read from this file — set MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY.
+[comms.email.mailgun]
+domain = "mg.example.com"
+region = "us"                      # "us" or "eu"
+
+# SMTP+XOAUTH2 sub-table — consulted only when provider = "smtp_oauth2".
+# Pairs an SMTP relay with the OAuth vendor that mints bearer tokens,
+# selected by `vendor`:
+#   "microsoft"        → Microsoft 365 (Azure AD client-credentials, app-only token)
+#   "google"           → Google Workspace (service-account JWT-bearer + DWD)
+#   "google_personal"  → personal @gmail.com (per-user OAuth refresh-token)
+# The Microsoft client_secret is *never* read from this file — set
+# MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET. The
+# Google private key lives in the JSON file at service_account_json_path.
+# The Google-personal client_secret and refresh_token are env-only — set
+# MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET and
+# MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN.
+[comms.email.smtp_oauth2]
+host = "smtp.office365.com"        # M365: smtp.office365.com  | Gmail: smtp.gmail.com
+port = 587                         # 587 = STARTTLS, 465 = implicit TLS
+tls = "starttls"                   # "starttls", "implicit", or "plain"
+username = "noreply@contoso.com"   # SASL identity (typically the From mailbox)
+vendor = "microsoft"               # | "google" | "google_personal"
+
+[comms.email.smtp_oauth2.microsoft]
+tenant_id = "00000000-0000-0000-0000-000000000000"
+client_id = "00000000-0000-0000-0000-000000000000"
+scopes    = ["https://outlook.office.com/.default"]
+
+[comms.email.smtp_oauth2.google]
+service_account_json_path = "/etc/maze/gcp-service-account.json"
+delegated_subject         = "noreply@company.com"
+scopes                    = ["https://www.googleapis.com/auth/gmail.send"]
+
+[comms.email.smtp_oauth2.google_personal]
+client_id = "1234567890-abc.apps.googleusercontent.com"
+scopes    = ["https://mail.google.com/"]   # required for SMTP — gmail.send is API-only
 ```
 
 Notes:
@@ -191,6 +300,8 @@ Notes:
 - `oauth.connector` selects the implementation. `internal` ships in v1; `auth0` is reserved for a future drop-in and will error with a clear "not yet implemented" message at startup.
 - OAuth client secrets are **always** read from the environment variable named in `client_secret_env`, never from `config.toml`. On startup the server walks every enabled provider and reports *all* misconfigurations in one error (empty `client_id`, missing env var, etc.) rather than fix-restart-fix-restart looping. See the **OAuth Sign-In** subsection below for full setup steps.
 - The `[storage]` section selects between the file-backed (`type = "file"`, the default) and SQL-backed (`type = "sql"`) implementations. The SQL backend supports SQLite, PostgreSQL, and MySQL via SQLx's `Any` driver — all three engines are compiled into the same binary; selection happens at runtime via `storage.sql.driver` and the connection details. See **Storage Backend** below for setup recipes per backend.
+- The `[comms]` section configures outbound email — provider settings, templated-message branding, and template-source paths. `comms.enabled = false` (the default) skips the per-provider env-var checks at startup. Provider secrets — currently `comms.email.mailgun.api_key` — are **environment-only**: read from `MAZE_WEB_SERVER_COMMS_EMAIL_MAILGUN_API_KEY` at startup and never from `config.toml`. Unlike `[oauth]`, missing comms secrets are **soft warnings**: the server still starts and logs a warning naming each unset env var so the operator can see the full set of misconfigurations in one log pass. Setting `comms.email.provider` to a value other than `"stub"` or `"mailgun"` is a hard deserialisation error at startup, not a runtime panic.
+- `comms.email.audit.record_unknown_password_reset_requests` (default `false`) controls whether `/password-reset/request` writes an anti-enumeration "recon row" to the email audit log when the supplied email doesn't match a verified user. Off by default so small / dev installs don't accumulate one audit-log entry per typo or probe; flip on for rate-limit / abuse forensics. The 200 response and timing floor are unaffected either way.
 
 ## Storage Backend
 
