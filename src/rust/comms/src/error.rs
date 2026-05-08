@@ -49,6 +49,46 @@ impl CommsError {
             CommsError::Transient(_) | CommsError::ProviderHttp { status: 500..=599, .. }
         )
     }
+
+    /// Diagnostic detail string for ops / forensics. Distinct from
+    /// [`Display`](std::fmt::Display): for `ProviderHttp` it includes the
+    /// upstream response body, which carries the actual rejection reason
+    /// (e.g. an Azure AD `AADSTS70011: ... scope ...` body for a token-mint
+    /// failure). For every other variant the result equals `to_string()`.
+    ///
+    /// Intended for the email audit log's `error_message` field and for
+    /// verbose error logs — not for surfacing to end users (the body may
+    /// include arbitrary upstream content).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use comms::CommsError;
+    ///
+    /// // Body-bearing variant: full detail surfaces.
+    /// let aad = CommsError::ProviderHttp {
+    ///     status: 400,
+    ///     body: r#"{"error":"invalid_scope","error_description":"AADSTS70011: ..."}"#.into(),
+    /// };
+    /// assert!(aad.detail_message().contains("AADSTS70011"));
+    /// assert!(aad.detail_message().contains("status 400"));
+    ///
+    /// // Body-less ProviderHttp matches Display (no trailing colon).
+    /// let bare = CommsError::ProviderHttp { status: 503, body: String::new() };
+    /// assert_eq!(bare.detail_message(), "provider HTTP error: status 503");
+    ///
+    /// // Other variants: same as Display.
+    /// let permanent = CommsError::Provider("smtp_oauth2: 535 5.7.3 Authentication unsuccessful".into());
+    /// assert_eq!(permanent.detail_message(), permanent.to_string());
+    /// ```
+    pub fn detail_message(&self) -> String {
+        match self {
+            CommsError::ProviderHttp { status, body } if !body.is_empty() => {
+                format!("provider HTTP error: status {status}: {body}")
+            }
+            other => other.to_string(),
+        }
+    }
 }
 
 #[cfg(test)]

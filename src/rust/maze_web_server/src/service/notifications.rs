@@ -226,7 +226,7 @@ fn build_smtp_oauth2_token_source(
                 );
             }
             let scope = if m.scopes.is_empty() {
-                "https://outlook.office.com/SMTP.Send".to_string()
+                "https://outlook.office.com/.default".to_string()
             } else {
                 m.scopes.join(" ")
             };
@@ -342,7 +342,7 @@ mod tests {
                     microsoft: SmtpOauth2MicrosoftConfig {
                         tenant_id: "00000000-0000-0000-0000-000000000000".into(),
                         client_id: "11111111-1111-1111-1111-111111111111".into(),
-                        scopes: vec!["https://outlook.office.com/SMTP.Send".into()],
+                        scopes: vec!["https://outlook.office.com/.default".into()],
                         client_secret: "test-resolved-secret".into(),
                     },
                     google: SmtpOauth2GoogleConfig::default(),

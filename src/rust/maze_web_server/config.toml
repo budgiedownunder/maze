@@ -215,7 +215,7 @@ redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 # [comms.email.smtp_oauth2.microsoft]
 # tenant_id = "00000000-0000-0000-0000-000000000000"
 # client_id = "00000000-0000-0000-0000-000000000000"
-# scopes    = ["https://outlook.office.com/SMTP.Send"]
+# scopes    = ["https://outlook.office.com/.default"]
 # # client_secret — env-only:
 # #   MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET
 #

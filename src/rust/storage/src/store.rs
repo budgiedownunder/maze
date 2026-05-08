@@ -184,9 +184,12 @@ pub trait EmailAuditLog {
     /// success.
     async fn record_pending(&mut self, entry: &EmailAuditEntry) -> Result<Uuid, Error>;
     /// Updates the row's outcome. `provider_message_id` populates the
-    /// matching column on `Accepted`; `error_class` populates on
-    /// `Failed`. Passing `Pending` is a programmer error and rejected
-    /// with [`Error::Other`] — once written, a row only moves
+    /// matching column on `Accepted`; `error_class` and `error_message`
+    /// populate on `Failed`. `error_class` is the stable, low-cardinality
+    /// dashboard signal; `error_message` carries the upstream diagnostic
+    /// detail (e.g. an Azure AD `AADSTS70011` body or an SMTP enhanced
+    /// status response). Passing `Pending` is a programmer error and
+    /// rejected with [`Error::Other`] — once written, a row only moves
     /// forwards.
     async fn update_outcome(
         &mut self,
@@ -194,6 +197,7 @@ pub trait EmailAuditLog {
         outcome: AuditOutcome,
         provider_message_id: Option<&str>,
         error_class: Option<&str>,
+        error_message: Option<&str>,
     ) -> Result<(), Error>;
     /// Loads a single audit row by id.
     async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, Error>;

@@ -627,6 +627,7 @@ mod test_definitions {
             outcome: AuditOutcome,
             provider_message_id: Option<&str>,
             error_class: Option<&str>,
+            error_message: Option<&str>,
         ) -> Result<(), StoreError> {
             if matches!(outcome, AuditOutcome::Pending) {
                 return Err(StoreError::Other(
@@ -638,6 +639,7 @@ mod test_definitions {
             row.outcome = outcome;
             row.provider_message_id = provider_message_id.map(|s| s.to_string());
             row.error_class = error_class.map(|s| s.to_string());
+            row.error_message = error_message.map(|s| s.to_string());
             Ok(())
         }
         async fn find_audit_entry(&self, id: Uuid) -> Result<EmailAuditEntry, StoreError> {

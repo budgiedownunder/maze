@@ -319,7 +319,12 @@ pub struct SmtpOauth2MicrosoftConfig {
     #[serde(default)]
     pub client_id: String,
     /// OAuth scopes to request. Defaults to
-    /// `["https://outlook.office.com/SMTP.Send"]`.
+    /// `["https://outlook.office.com/.default"]` — the Azure AD v2.0
+    /// `client_credentials` endpoint requires the `<resource>/.default`
+    /// scope shape, which mints a token carrying every admin-consented
+    /// application permission for the resource. Specific-permission
+    /// scopes such as `.../SMTP.Send` are the delegated-flow shape and
+    /// produce `AADSTS70011 invalid_scope` against `client_credentials`.
     #[serde(default = "default_smtp_oauth2_microsoft_scopes")]
     pub scopes: Vec<String>,
     /// Resolved at startup from the env var listed above. Skipped during
@@ -676,7 +681,7 @@ pub(crate) fn default_smtp_oauth2_tls() -> String {
     "starttls".to_string()
 }
 pub(crate) fn default_smtp_oauth2_microsoft_scopes() -> Vec<String> {
-    vec!["https://outlook.office.com/SMTP.Send".to_string()]
+    vec!["https://outlook.office.com/.default".to_string()]
 }
 pub(crate) fn default_smtp_oauth2_google_scopes() -> Vec<String> {
     vec!["https://www.googleapis.com/auth/gmail.send".to_string()]
@@ -877,7 +882,7 @@ mod tests {
                     microsoft: SmtpOauth2MicrosoftConfig {
                         tenant_id: "00000000-0000-0000-0000-000000000000".into(),
                         client_id: "00000000-0000-0000-0000-000000000000".into(),
-                        scopes: vec!["https://outlook.office.com/SMTP.Send".into()],
+                        scopes: vec!["https://outlook.office.com/.default".into()],
                         client_secret: String::new(),
                     },
                     google: SmtpOauth2GoogleConfig::default(),
@@ -1056,7 +1061,7 @@ mod tests {
             [comms.email.smtp_oauth2.microsoft]
             tenant_id = "00000000-0000-0000-0000-000000000000"
             client_id = "11111111-1111-1111-1111-111111111111"
-            scopes = ["https://outlook.office.com/SMTP.Send"]
+            scopes = ["https://outlook.office.com/.default"]
 
             [comms.email.smtp_oauth2.google]
             service_account_json_path = "/etc/maze/gcp-service-account.json"
@@ -1084,7 +1089,7 @@ mod tests {
         );
         assert_eq!(
             cfg.email.smtp_oauth2.microsoft.scopes,
-            vec!["https://outlook.office.com/SMTP.Send".to_string()]
+            vec!["https://outlook.office.com/.default".to_string()]
         );
         // client_secret is env-only — never deserialised from TOML.
         assert!(cfg.email.smtp_oauth2.microsoft.client_secret.is_empty());
@@ -1113,7 +1118,7 @@ mod tests {
         );
         assert_eq!(
             cfg.email.smtp_oauth2.microsoft.scopes,
-            vec!["https://outlook.office.com/SMTP.Send".to_string()]
+            vec!["https://outlook.office.com/.default".to_string()]
         );
         assert_eq!(
             cfg.email.smtp_oauth2.google.scopes,

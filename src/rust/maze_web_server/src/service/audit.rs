@@ -160,7 +160,13 @@ pub async fn record_and_dispatch<C: Serialize + Send + Sync + 'static>(
             Ok(receipt) => {
                 let provider_message_id = receipt.provider_message_id.as_deref();
                 if let Err(err) = store_lock
-                    .update_outcome(audit_id, AuditOutcome::Accepted, provider_message_id, None)
+                    .update_outcome(
+                        audit_id,
+                        AuditOutcome::Accepted,
+                        provider_message_id,
+                        None,
+                        None,
+                    )
                     .await
                 {
                     warn!("audit: update_outcome(Accepted) failed for {audit_id}: {err}");
@@ -170,15 +176,22 @@ pub async fn record_and_dispatch<C: Serialize + Send + Sync + 'static>(
             }
             Err(err) => {
                 let class = error_class_for(&err);
+                let detail = err.detail_message();
                 if let Err(update_err) = store_lock
-                    .update_outcome(audit_id, AuditOutcome::Failed, None, Some(class))
+                    .update_outcome(
+                        audit_id,
+                        AuditOutcome::Failed,
+                        None,
+                        Some(class),
+                        Some(&detail),
+                    )
                     .await
                 {
                     warn!(
-                        "audit: update_outcome(Failed) failed for {audit_id}: {update_err} (original: {err})"
+                        "audit: update_outcome(Failed) failed for {audit_id}: {update_err} (original: {detail})"
                     );
                 } else {
-                    warn!("audit: send failed for {audit_id}: {err} (class={class})");
+                    warn!("audit: send failed for {audit_id}: {detail} (class={class})");
                 }
             }
         }

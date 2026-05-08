@@ -135,7 +135,7 @@ The following configuration settings exist:
 |          | `comms.email.smtp_oauth2.vendor` | Text (`microsoft` / `google`) | `microsoft` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR`
 |          | `comms.email.smtp_oauth2.microsoft.tenant_id` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_TENANT_ID`
 |          | `comms.email.smtp_oauth2.microsoft.client_id` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_ID`
-|          | `comms.email.smtp_oauth2.microsoft.scopes`    | Array of Text | `["https://outlook.office.com/SMTP.Send"]` | (config-file only)
+|          | `comms.email.smtp_oauth2.microsoft.scopes`    | Array of Text | `["https://outlook.office.com/.default"]` | (config-file only)
 |          | `comms.email.smtp_oauth2.microsoft.client_secret` | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET`
 |          | `comms.email.smtp_oauth2.google.service_account_json_path` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_SERVICE_ACCOUNT_JSON_PATH`
 |          | `comms.email.smtp_oauth2.google.delegated_subject` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT`
@@ -269,7 +269,7 @@ vendor = "microsoft"               # | "google"
 [comms.email.smtp_oauth2.microsoft]
 tenant_id = "00000000-0000-0000-0000-000000000000"
 client_id = "00000000-0000-0000-0000-000000000000"
-scopes    = ["https://outlook.office.com/SMTP.Send"]
+scopes    = ["https://outlook.office.com/.default"]
 
 [comms.email.smtp_oauth2.google]
 service_account_json_path = "/etc/maze/gcp-service-account.json"

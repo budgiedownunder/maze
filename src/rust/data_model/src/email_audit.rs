@@ -83,6 +83,17 @@ pub struct EmailAuditEntry {
     /// Coarse error taxonomy populated when `outcome = Failed`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_class: Option<String>,
+    /// Free-form diagnostic detail captured alongside `error_class` when
+    /// `outcome = Failed`. Typical content: the upstream Azure AD response
+    /// body for token-mint failures (e.g. `AADSTS70011: ... scope ... is
+    /// not valid`), or the SMTP enhanced-status response for SMTP send
+    /// failures (e.g. `535 5.7.3 Authentication unsuccessful [server-id ...]`).
+    /// Provided for ops debugging — never surfaced to end users (the body
+    /// may include arbitrary upstream content). `error_class` stays the
+    /// stable, low-cardinality dashboard signal; `error_message` is the
+    /// human-readable why.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
 }
 
 impl EmailAuditEntry {
@@ -129,6 +140,7 @@ impl EmailAuditEntry {
             provider_message_id: None,
             outcome: AuditOutcome::Pending,
             error_class: None,
+            error_message: None,
         }
     }
 
@@ -198,6 +210,7 @@ mod tests {
         assert_eq!(row.outcome, AuditOutcome::Pending);
         assert!(row.provider_message_id.is_none());
         assert!(row.error_class.is_none());
+        assert!(row.error_message.is_none());
         assert_ne!(row.id, Uuid::nil());
     }
 
@@ -228,6 +241,9 @@ mod tests {
         let mut row = pending_row();
         row.outcome = AuditOutcome::Failed;
         row.error_class = Some("provider_unavailable".to_string());
+        row.error_message = Some(
+            "provider HTTP error: status 400: AADSTS70011: scope is not valid".to_string(),
+        );
         let json = row.to_json().expect("serialize");
         let mut back = pending_row();
         back.from_json(&json).expect("deserialize");

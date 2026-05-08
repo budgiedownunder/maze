@@ -205,6 +205,14 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// **Version 6** creates the `<data_dir>/email_audit_log/` directory used
 /// by the FileStore `EmailAuditLog` impl (one file per audit entry).
 /// Idempotent.
+///
+/// **Version 7 is a no-op.** The matching SQL migration adds an
+/// `error_message TEXT` column to `email_audit_log`. The FileStore data
+/// shape is updated by the `#[serde(default, skip_serializing_if =
+/// "Option::is_none")]` on the new `EmailAuditEntry.error_message`
+/// field — existing audit-row JSON files round-trip without rewriting.
+/// The framework entry exists to advance the version counter in step
+/// with the SQL backend.
 const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (1, no_op_migration),
     (2, no_op_migration),
@@ -212,6 +220,7 @@ const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (4, no_op_migration),
     (5, migrate_0005_create_one_time_tokens_dir),
     (6, migrate_0006_create_email_audit_log_dir),
+    (7, no_op_migration),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {

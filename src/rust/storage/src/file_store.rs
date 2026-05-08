@@ -2774,9 +2774,9 @@ impl EmailAuditLog for FileStore {
     }
 
     /// Flips a previously-recorded `pending` row to `accepted` (with
-    /// `provider_message_id`) or `failed` (with `error_class`). Once
-    /// written, an audit row only moves forward — passing
-    /// `AuditOutcome::Pending` is rejected.
+    /// `provider_message_id`) or `failed` (with `error_class` and
+    /// `error_message`). Once written, an audit row only moves forward —
+    /// passing `AuditOutcome::Pending` is rejected.
     ///
     /// # Examples
     ///
@@ -2797,7 +2797,7 @@ impl EmailAuditLog for FileStore {
     /// );
     /// store.record_pending(&entry).await.expect("record_pending");
     /// store
-    ///     .update_outcome(entry.id, AuditOutcome::Accepted, Some("provider-123"), None)
+    ///     .update_outcome(entry.id, AuditOutcome::Accepted, Some("provider-123"), None, None)
     ///     .await
     ///     .expect("update_outcome");
     /// # });
@@ -2808,6 +2808,7 @@ impl EmailAuditLog for FileStore {
         outcome: AuditOutcome,
         provider_message_id: Option<&str>,
         error_class: Option<&str>,
+        error_message: Option<&str>,
     ) -> Result<(), Error> {
         if matches!(outcome, AuditOutcome::Pending) {
             return Err(Error::Other(
@@ -2818,6 +2819,7 @@ impl EmailAuditLog for FileStore {
         entry.outcome = outcome;
         entry.provider_message_id = provider_message_id.map(|s| s.to_string());
         entry.error_class = error_class.map(|s| s.to_string());
+        entry.error_message = error_message.map(|s| s.to_string());
         self.write_audit_entry_file(&entry, true)
     }
 

@@ -1493,7 +1493,7 @@ pub async fn update_outcome_to_accepted_populates_provider_message_id(
     let id = store.record_pending(&entry).await.expect("record_pending");
 
     store
-        .update_outcome(id, AuditOutcome::Accepted, Some("provider-123"), None)
+        .update_outcome(id, AuditOutcome::Accepted, Some("provider-123"), None, None)
         .await
         .expect("update_outcome");
 
@@ -1501,6 +1501,7 @@ pub async fn update_outcome_to_accepted_populates_provider_message_id(
     assert_eq!(loaded.outcome, AuditOutcome::Accepted);
     assert_eq!(loaded.provider_message_id.as_deref(), Some("provider-123"));
     assert!(loaded.error_class.is_none());
+    assert!(loaded.error_message.is_none());
 }
 
 pub async fn update_outcome_to_failed_populates_error_class(store: &mut Box<dyn Store>) {
@@ -1513,7 +1514,7 @@ pub async fn update_outcome_to_failed_populates_error_class(store: &mut Box<dyn 
     let id = store.record_pending(&entry).await.expect("record_pending");
 
     store
-        .update_outcome(id, AuditOutcome::Failed, None, Some("provider_unavailable"))
+        .update_outcome(id, AuditOutcome::Failed, None, Some("provider_unavailable"), None)
         .await
         .expect("update_outcome");
 
@@ -1521,6 +1522,34 @@ pub async fn update_outcome_to_failed_populates_error_class(store: &mut Box<dyn 
     assert_eq!(loaded.outcome, AuditOutcome::Failed);
     assert!(loaded.provider_message_id.is_none());
     assert_eq!(loaded.error_class.as_deref(), Some("provider_unavailable"));
+    assert!(loaded.error_message.is_none());
+}
+
+pub async fn update_outcome_to_failed_populates_error_message(store: &mut Box<dyn Store>) {
+    let alice = fixture_user(store, "alice", "alice@example.com").await;
+    let entry = pending_entry_for(
+        Some(alice.id),
+        "alice@example.com",
+        "password_reset",
+    );
+    let id = store.record_pending(&entry).await.expect("record_pending");
+
+    let detail = "provider HTTP error: status 400: AADSTS70011: scope is not valid";
+    store
+        .update_outcome(
+            id,
+            AuditOutcome::Failed,
+            None,
+            Some("provider_4xx"),
+            Some(detail),
+        )
+        .await
+        .expect("update_outcome");
+
+    let loaded = store.find_audit_entry(id).await.expect("find_audit_entry");
+    assert_eq!(loaded.outcome, AuditOutcome::Failed);
+    assert_eq!(loaded.error_class.as_deref(), Some("provider_4xx"));
+    assert_eq!(loaded.error_message.as_deref(), Some(detail));
 }
 
 pub async fn update_outcome_rejects_pending_target(store: &mut Box<dyn Store>) {
@@ -1533,7 +1562,7 @@ pub async fn update_outcome_rejects_pending_target(store: &mut Box<dyn Store>) {
     let id = store.record_pending(&entry).await.expect("record_pending");
 
     let err = store
-        .update_outcome(id, AuditOutcome::Pending, None, None)
+        .update_outcome(id, AuditOutcome::Pending, None, None, None)
         .await
         .expect_err("must not allow re-targeting pending");
     assert!(matches!(err, Error::Other(_)), "got {err:?}");
@@ -1542,7 +1571,7 @@ pub async fn update_outcome_rejects_pending_target(store: &mut Box<dyn Store>) {
 pub async fn update_outcome_returns_not_found_for_unknown_id(store: &mut Box<dyn Store>) {
     let id = Uuid::new_v4();
     let err = store
-        .update_outcome(id, AuditOutcome::Accepted, Some("p"), None)
+        .update_outcome(id, AuditOutcome::Accepted, Some("p"), None, None)
         .await
         .expect_err("unknown id must fail");
     assert!(matches!(err, Error::AuditEntryIdNotFound(_)), "got {err:?}");

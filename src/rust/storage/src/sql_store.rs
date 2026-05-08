@@ -3317,6 +3317,7 @@ async fn audit_entry_from_row(row: &AnyRow) -> Result<EmailAuditEntry, Error> {
     let outcome_raw: String = row.try_get("outcome").map_err(map_sqlx_err)?;
     let outcome = audit_outcome_from_sql(&outcome_raw)?;
     let error_class: Option<String> = row.try_get("error_class").map_err(map_sqlx_err)?;
+    let error_message: Option<String> = row.try_get("error_message").map_err(map_sqlx_err)?;
     Ok(EmailAuditEntry {
         id,
         created_at,
@@ -3329,6 +3330,7 @@ async fn audit_entry_from_row(row: &AnyRow) -> Result<EmailAuditEntry, Error> {
         provider_message_id,
         outcome,
         error_class,
+        error_message,
     })
 }
 
@@ -3390,8 +3392,8 @@ impl EmailAuditLog for SqlStore {
             "INSERT INTO email_audit_log \
                  (id, created_at, recipient_user_id, recipient_email, template_id, \
                   token_id, triggered_by_user_id, provider, \
-                  provider_message_id, outcome, error_class) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  provider_message_id, outcome, error_class, error_message) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         ))
         .bind(entry.id.to_string())
         .bind(datetime_to_sql(entry.created_at))
@@ -3404,6 +3406,7 @@ impl EmailAuditLog for SqlStore {
         .bind(entry.provider_message_id.as_deref())
         .bind(audit_outcome_to_sql(entry.outcome))
         .bind(entry.error_class.as_deref())
+        .bind(entry.error_message.as_deref())
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
@@ -3411,9 +3414,9 @@ impl EmailAuditLog for SqlStore {
     }
 
     /// Flips a previously-recorded `pending` row to `accepted` (with
-    /// `provider_message_id`) or `failed` (with `error_class`). Once
-    /// written, an audit row only moves forward — passing
-    /// `AuditOutcome::Pending` is rejected.
+    /// `provider_message_id`) or `failed` (with `error_class` and
+    /// `error_message`). Once written, an audit row only moves forward —
+    /// passing `AuditOutcome::Pending` is rejected.
     ///
     /// # Examples
     ///
@@ -3438,7 +3441,7 @@ impl EmailAuditLog for SqlStore {
     /// );
     /// store.record_pending(&entry).await.expect("record_pending");
     /// store
-    ///     .update_outcome(entry.id, AuditOutcome::Accepted, Some("provider-123"), None)
+    ///     .update_outcome(entry.id, AuditOutcome::Accepted, Some("provider-123"), None, None)
     ///     .await
     ///     .expect("update_outcome");
     /// # });
@@ -3449,6 +3452,7 @@ impl EmailAuditLog for SqlStore {
         outcome: AuditOutcome,
         provider_message_id: Option<&str>,
         error_class: Option<&str>,
+        error_message: Option<&str>,
     ) -> Result<(), Error> {
         if matches!(outcome, AuditOutcome::Pending) {
             return Err(Error::Other(
@@ -3458,12 +3462,13 @@ impl EmailAuditLog for SqlStore {
         let result = sqlx::query(&q(
             self.kind,
             "UPDATE email_audit_log \
-             SET outcome = ?, provider_message_id = ?, error_class = ? \
+             SET outcome = ?, provider_message_id = ?, error_class = ?, error_message = ? \
              WHERE id = ?",
         ))
         .bind(audit_outcome_to_sql(outcome))
         .bind(provider_message_id)
         .bind(error_class)
+        .bind(error_message)
         .bind(id.to_string())
         .execute(&self.pool)
         .await

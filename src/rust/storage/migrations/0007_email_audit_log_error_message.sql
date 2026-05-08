@@ -1,0 +1,21 @@
+-- Adds `error_message` to `email_audit_log` — a free-form diagnostic
+-- detail captured alongside `error_class` when a send fails. Stores
+-- the upstream response body so operators can see the actual rejection
+-- reason without scraping server logs:
+--
+--   * For token-mint failures (HTTP 4xx/5xx from an OAuth token endpoint
+--     such as Azure AD), this is the response body (e.g. an `AADSTS70011`
+--     scope-validation message).
+--   * For SMTP send failures, this is the SMTP enhanced status response
+--     (e.g. `535 5.7.3 Authentication unsuccessful [server-id ...]`).
+--
+-- The column is TEXT (not VARCHAR(N)) because upstream bodies are
+-- unbounded — Azure AD JSON bodies are typically ~1 KB but provider
+-- error pages can be larger. Per the schema rules in `0001_initial.sql`,
+-- TEXT-affinity columns carry no literal `DEFAULT`; the column is added
+-- nullable so existing rows stay valid as-is.
+--
+-- `error_class` remains the stable, low-cardinality dashboard signal
+-- (a fixed taxonomy in `service::audit::error_class_for`); the new
+-- `error_message` column is the human-readable why and is never aggregated.
+ALTER TABLE email_audit_log ADD COLUMN error_message TEXT;
