@@ -197,19 +197,24 @@ redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 # SMTP+XOAUTH2 settings. Consulted only when provider = "smtp_oauth2".
 # Pairs the SMTP relay (host/port/tls/username) with the OAuth vendor that
 # mints bearer tokens, selected by `vendor`:
-#   "microsoft" — Azure AD client-credentials flow against a registered app
-#       with Mail.Send (or equivalent) constrained to a single mailbox.
+#   "microsoft"        — Azure AD client-credentials flow against a registered
+#       app with Mail.Send (or equivalent) constrained to a single mailbox.
 #       Typical for Microsoft 365. The client secret is environment-only —
 #       MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET.
-#   "google"    — Workspace service-account JWT-bearer flow, typically with
-#       domain-wide delegation. The private key lives in the JSON key file
-#       at service_account_json_path.
+#   "google"           — Workspace service-account JWT-bearer flow, typically
+#       with domain-wide delegation. The private key lives in the JSON key
+#       file at service_account_json_path.
+#   "google_personal"  — per-user OAuth refresh-token flow for personal
+#       @gmail.com accounts (Workspace's domain-wide delegation isn't
+#       available against consumer Gmail). The operator does the consent
+#       dance once out-of-band (e.g. via Google's OAuth Playground) and
+#       supplies the resulting refresh token via the env var below.
 # [comms.email.smtp_oauth2]
-# host = "smtp.office365.com"          # M365: smtp.office365.com  | Workspace: smtp.gmail.com
+# host = "smtp.office365.com"          # M365: smtp.office365.com  | Gmail: smtp.gmail.com
 # port = 587                           # 587 = STARTTLS, 465 = implicit TLS
 # tls = "starttls"                     # "starttls" | "implicit" | "plain"
 # username = "noreply@contoso.com"     # SASL identity (typically the From mailbox)
-# vendor = "microsoft"                 # | "google"
+# vendor = "microsoft"                 # | "google" | "google_personal"
 #
 # # ---- Microsoft 365 (Azure AD client-credentials) ----
 # [comms.email.smtp_oauth2.microsoft]
@@ -224,4 +229,13 @@ redirect_uri = "https://your-host:8443/api/v1/auth/oauth/facebook/callback"
 # service_account_json_path = "/etc/maze/gcp-service-account.json"
 # delegated_subject         = "noreply@company.com"
 # scopes                    = ["https://www.googleapis.com/auth/gmail.send"]
+#
+# # ---- Personal Gmail (OAuth refresh-token flow) ----
+# [comms.email.smtp_oauth2.google_personal]
+# client_id = "1234567890-abc.apps.googleusercontent.com"
+# scopes    = ["https://mail.google.com/"]   # required for SMTP — gmail.send is API-only
+# # client_secret  — env-only:
+# #   MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET
+# # refresh_token  — env-only:
+# #   MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN
 

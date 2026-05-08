@@ -16,6 +16,11 @@ oauth2-microsoft = ["dep:reqwest"]
 # Enables `ServiceAccountTokenSource` — Google Workspace OAuth2 JWT-bearer
 # flow, used by Gmail API providers (with optional domain-wide delegation).
 oauth2-google = ["dep:reqwest", "dep:jsonwebtoken"]
+# Enables `RefreshTokenTokenSource` — generic OAuth2 refresh-token flow
+# against any token endpoint, used for per-user accounts where consent
+# happens once out-of-band (e.g. via Google's OAuth Playground) and the
+# long-lived refresh token is fed to the server as a secret.
+oauth2-refresh-token = ["dep:reqwest"]
 # Enables `MailgunProvider` — `EmailProvider` impl backed by the Mailgun
 # HTTP API (https://api.mailgun.net or the EU regional host).
 provider-mailgun = ["dep:reqwest"]

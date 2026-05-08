@@ -19,7 +19,7 @@ async-trait = "0.1"
 auth = { path = "../auth" }
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
-comms = { path = "../comms", features = ["provider-mailgun", "provider-smtp-oauth2", "oauth2-microsoft", "oauth2-google", "stub"] }
+comms = { path = "../comms", features = ["provider-mailgun", "provider-smtp-oauth2", "oauth2-microsoft", "oauth2-google", "oauth2-refresh-token", "stub"] }
 config = "0.13"
 data_model = { path = "../data_model" }
 fern = "0.7"

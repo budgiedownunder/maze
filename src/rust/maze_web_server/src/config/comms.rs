@@ -184,13 +184,18 @@ pub enum CommsEmailProvider {
     Mailgun,
     /// SMTP transport authenticated with XOAUTH2 against an OAuth token
     /// source. Sub-config in `[comms.email.smtp_oauth2]`, with per-flow
-    /// `[comms.email.smtp_oauth2.microsoft]` (Azure AD client-credentials)
-    /// and `[comms.email.smtp_oauth2.google]` (Workspace service-account
-    /// with optional domain-wide delegation) sub-tables. The Microsoft
-    /// client secret is environment-only —
+    /// `[comms.email.smtp_oauth2.microsoft]` (Azure AD client-credentials),
+    /// `[comms.email.smtp_oauth2.google]` (Workspace service-account with
+    /// optional domain-wide delegation), and
+    /// `[comms.email.smtp_oauth2.google_personal]` (per-user OAuth refresh
+    /// token, used for personal `@gmail.com` accounts) sub-tables. The
+    /// Microsoft client secret is environment-only —
     /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET`.
     /// The Google service-account private key lives in the JSON file at
-    /// `service_account_json_path`.
+    /// `service_account_json_path`. The Google-personal client secret and
+    /// refresh token are environment-only —
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET`
+    /// and `..._REFRESH_TOKEN`.
     SmtpOauth2,
 }
 
@@ -266,6 +271,9 @@ pub struct SmtpOauth2AppConfig {
     /// Google Workspace service-account settings.
     #[serde(default)]
     pub google: SmtpOauth2GoogleConfig,
+    /// Google personal-account refresh-token settings.
+    #[serde(default)]
+    pub google_personal: SmtpOauth2GooglePersonalConfig,
 }
 
 impl Default for SmtpOauth2AppConfig {
@@ -278,16 +286,17 @@ impl Default for SmtpOauth2AppConfig {
             vendor: SmtpOauth2Vendor::default(),
             microsoft: SmtpOauth2MicrosoftConfig::default(),
             google: SmtpOauth2GoogleConfig::default(),
+            google_personal: SmtpOauth2GooglePersonalConfig::default(),
         }
     }
 }
 
 /// OAuth vendor used to obtain the bearer token presented to the SMTP
 /// server via XOAUTH2. Each variant pins a single OAuth flow chosen for
-/// its server-side bulk-send fitness — `client_credentials` for Microsoft,
-/// `service_account` (JWT-bearer) for Google. If a vendor ever offers a
-/// second viable flow we'd want to support, that's a separate
-/// discriminator alongside this one rather than a new variant.
+/// the relevant account shape — `client_credentials` for Microsoft 365
+/// company mailboxes, `service_account` (JWT-bearer) for Google
+/// Workspace, and `refresh_token` for personal `@gmail.com` accounts
+/// where domain-wide delegation isn't available.
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SmtpOauth2Vendor {
@@ -299,6 +308,12 @@ pub enum SmtpOauth2Vendor {
     /// Google service-account JWT-bearer flow with optional domain-wide
     /// delegation. Used by Google Workspace.
     Google,
+    /// Google per-user OAuth refresh-token flow. Used for personal
+    /// `@gmail.com` accounts where the operator runs through the
+    /// consent dance once out-of-band (e.g. via Google's OAuth
+    /// Playground) and supplies the resulting `refresh_token` as a
+    /// long-lived secret.
+    GooglePersonal,
 }
 
 /// `[comms.email.smtp_oauth2.microsoft]` sub-table.
@@ -375,6 +390,60 @@ impl Default for SmtpOauth2GoogleConfig {
             service_account_json_path: String::new(),
             delegated_subject: String::new(),
             scopes: default_smtp_oauth2_google_scopes(),
+        }
+    }
+}
+
+/// `[comms.email.smtp_oauth2.google_personal]` sub-table.
+///
+/// Per-user OAuth refresh-token flow for personal `@gmail.com` accounts.
+/// The operator runs through the OAuth consent dance once out-of-band
+/// (typically via Google's OAuth Playground at
+/// `https://developers.google.com/oauthplayground` against their own
+/// OAuth client credentials) and receives a long-lived `refresh_token`.
+/// That token is then supplied to the server via the env var below; the
+/// server mints short-lived access tokens on demand by exchanging it at
+/// Google's token endpoint.
+///
+/// Both `client_secret` and `refresh_token` are **never** read from
+/// `config.toml`. They are sourced exclusively from
+/// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET`
+/// and `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN`
+/// so secrets never land in committed files or container images.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SmtpOauth2GooglePersonalConfig {
+    /// OAuth client identifier issued by the Google Cloud Console for a
+    /// Web-application client. Can be overridden with
+    /// `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_ID`.
+    #[serde(default)]
+    pub client_id: String,
+    /// OAuth scopes to request when minting access tokens. Defaults to
+    /// `["https://mail.google.com/"]` — the only scope that authorises
+    /// SMTP+XOAUTH2 access against Gmail. The narrower
+    /// `https://www.googleapis.com/auth/gmail.send` scope only authorises
+    /// the Gmail HTTP API and produces `Authentication unsuccessful` at
+    /// SMTP AUTH time.
+    #[serde(default = "default_smtp_oauth2_google_personal_scopes")]
+    pub scopes: Vec<String>,
+    /// Resolved at startup from the env var named in the struct doc.
+    /// Skipped during (de)serialisation — never read from or written to
+    /// the config file.
+    #[serde(skip)]
+    pub client_secret: String,
+    /// Resolved at startup from the env var named in the struct doc.
+    /// Skipped during (de)serialisation — never read from or written to
+    /// the config file.
+    #[serde(skip)]
+    pub refresh_token: String,
+}
+
+impl Default for SmtpOauth2GooglePersonalConfig {
+    fn default() -> Self {
+        Self {
+            client_id: String::new(),
+            scopes: default_smtp_oauth2_google_personal_scopes(),
+            client_secret: String::new(),
+            refresh_token: String::new(),
         }
     }
 }
@@ -549,6 +618,55 @@ impl CommsAppConfig {
                             );
                         }
                     }
+                    SmtpOauth2Vendor::GooglePersonal => {
+                        let secret_key =
+                            "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET";
+                        match env(secret_key) {
+                            Some(v) if !v.is_empty() => {
+                                self.email.smtp_oauth2.google_personal.client_secret = v;
+                            }
+                            Some(_) => {
+                                warnings.push(format!(
+                                    "[comms.email.smtp_oauth2.google_personal] env var \"{secret_key}\" is set but empty; sends will fail"
+                                ));
+                            }
+                            None => {
+                                warnings.push(format!(
+                                    "[comms.email.smtp_oauth2.google_personal] env var \"{secret_key}\" is not set; sends will fail"
+                                ));
+                            }
+                        }
+                        let refresh_key =
+                            "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN";
+                        match env(refresh_key) {
+                            Some(v) if !v.is_empty() => {
+                                self.email.smtp_oauth2.google_personal.refresh_token = v;
+                            }
+                            Some(_) => {
+                                warnings.push(format!(
+                                    "[comms.email.smtp_oauth2.google_personal] env var \"{refresh_key}\" is set but empty; sends will fail"
+                                ));
+                            }
+                            None => {
+                                warnings.push(format!(
+                                    "[comms.email.smtp_oauth2.google_personal] env var \"{refresh_key}\" is not set; sends will fail"
+                                ));
+                            }
+                        }
+                        if self
+                            .email
+                            .smtp_oauth2
+                            .google_personal
+                            .client_id
+                            .trim()
+                            .is_empty()
+                        {
+                            warnings.push(
+                                "[comms.email.smtp_oauth2.google_personal] client_id is empty; sends will fail"
+                                    .to_string(),
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -656,6 +774,10 @@ pub(crate) fn apply_env_overrides_with(
     {
         builder = builder.set_override("comms.email.smtp_oauth2.google.delegated_subject", v)?;
     }
+    if let Some(v) = env("MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_ID") {
+        builder =
+            builder.set_override("comms.email.smtp_oauth2.google_personal.client_id", v)?;
+    }
     Ok(builder)
 }
 
@@ -685,6 +807,9 @@ pub(crate) fn default_smtp_oauth2_microsoft_scopes() -> Vec<String> {
 }
 pub(crate) fn default_smtp_oauth2_google_scopes() -> Vec<String> {
     vec!["https://www.googleapis.com/auth/gmail.send".to_string()]
+}
+pub(crate) fn default_smtp_oauth2_google_personal_scopes() -> Vec<String> {
+    vec!["https://mail.google.com/".to_string()]
 }
 
 #[cfg(test)]
@@ -886,6 +1011,7 @@ mod tests {
                         client_secret: String::new(),
                     },
                     google: SmtpOauth2GoogleConfig::default(),
+                    google_personal: SmtpOauth2GooglePersonalConfig::default(),
                 },
                 audit: CommsEmailAuditConfig::default(),
             },
@@ -915,6 +1041,7 @@ mod tests {
                         delegated_subject: "noreply@company.com".into(),
                         scopes: vec!["https://www.googleapis.com/auth/gmail.send".into()],
                     },
+                    google_personal: SmtpOauth2GooglePersonalConfig::default(),
                 },
                 audit: CommsEmailAuditConfig::default(),
             },
@@ -1126,6 +1253,37 @@ mod tests {
         );
     }
 
+    fn enabled_smtp_oauth2_google_personal_config() -> CommsAppConfig {
+        CommsAppConfig {
+            enabled: true,
+            public_base_url: "https://maze.example.com".into(),
+            email: CommsEmailConfig {
+                provider: CommsEmailProvider::SmtpOauth2,
+                from: "yourname@gmail.com".into(),
+                from_name: "The Maze Team".into(),
+                templates_dir: "config/email_templates".into(),
+                mailgun: MailgunAppConfig::default(),
+                smtp_oauth2: SmtpOauth2AppConfig {
+                    host: "smtp.gmail.com".into(),
+                    port: 587,
+                    tls: "starttls".into(),
+                    username: "yourname@gmail.com".into(),
+                    vendor: SmtpOauth2Vendor::GooglePersonal,
+                    microsoft: SmtpOauth2MicrosoftConfig::default(),
+                    google: SmtpOauth2GoogleConfig::default(),
+                    google_personal: SmtpOauth2GooglePersonalConfig {
+                        client_id: "1234567890-abc.apps.googleusercontent.com".into(),
+                        scopes: vec!["https://mail.google.com/".into()],
+                        client_secret: String::new(),
+                        refresh_token: String::new(),
+                    },
+                },
+                audit: CommsEmailAuditConfig::default(),
+            },
+            ..CommsAppConfig::default()
+        }
+    }
+
     #[test]
     fn resolve_and_validate_warns_when_smtp_oauth2_microsoft_client_secret_env_unset() {
         let env_var = "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET";
@@ -1185,6 +1343,160 @@ mod tests {
         let result = cfg.resolve_and_validate().expect("universals satisfied");
         let joined = result.warnings.join("\n");
         assert!(joined.contains("service_account_json_path"), "{joined}");
+    }
+
+    #[test]
+    fn resolve_and_validate_warns_when_google_personal_secret_and_refresh_env_unset() {
+        let secret_env =
+            "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET";
+        let refresh_env =
+            "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN";
+        let mut cfg = enabled_smtp_oauth2_google_personal_config();
+        let result = cfg
+            .resolve_and_validate_with(build_env(&[]))
+            .expect("universals satisfied");
+        let joined = result.warnings.join("\n");
+        assert!(joined.contains(secret_env), "{joined}");
+        assert!(joined.contains(refresh_env), "{joined}");
+        assert!(cfg.email.smtp_oauth2.google_personal.client_secret.is_empty());
+        assert!(cfg.email.smtp_oauth2.google_personal.refresh_token.is_empty());
+    }
+
+    #[test]
+    fn resolve_and_validate_populates_google_personal_secrets_from_env() {
+        let secret_env =
+            "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET";
+        let refresh_env =
+            "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN";
+        let mut cfg = enabled_smtp_oauth2_google_personal_config();
+        let result = cfg
+            .resolve_and_validate_with(build_env(&[
+                (secret_env, "test-resolved-secret"),
+                (refresh_env, "test-resolved-refresh"),
+            ]))
+            .expect("universals satisfied");
+        assert_eq!(
+            cfg.email.smtp_oauth2.google_personal.client_secret,
+            "test-resolved-secret"
+        );
+        assert_eq!(
+            cfg.email.smtp_oauth2.google_personal.refresh_token,
+            "test-resolved-refresh"
+        );
+        let joined = result.warnings.join("\n");
+        assert!(!joined.contains(secret_env), "{joined}");
+        assert!(!joined.contains(refresh_env), "{joined}");
+    }
+
+    #[test]
+    fn resolve_and_validate_warns_when_google_personal_client_id_empty() {
+        let mut cfg = enabled_smtp_oauth2_google_personal_config();
+        cfg.email.smtp_oauth2.google_personal.client_id = String::new();
+        let result = cfg
+            .resolve_and_validate_with(build_env(&[
+                (
+                    "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET",
+                    "s",
+                ),
+                (
+                    "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN",
+                    "r",
+                ),
+            ]))
+            .expect("universals satisfied");
+        let joined = result.warnings.join("\n");
+        assert!(joined.contains("client_id"), "{joined}");
+    }
+
+    #[test]
+    fn smtp_oauth2_google_personal_subtable_deserialises() {
+        let toml = r#"
+            [comms]
+            enabled = true
+            public_base_url = "https://maze.example.com"
+
+            [comms.email]
+            provider = "smtp_oauth2"
+            from = "yourname@gmail.com"
+
+            [comms.email.smtp_oauth2]
+            host = "smtp.gmail.com"
+            port = 587
+            tls = "starttls"
+            username = "yourname@gmail.com"
+            vendor = "google_personal"
+
+            [comms.email.smtp_oauth2.google_personal]
+            client_id = "1234567890-abc.apps.googleusercontent.com"
+            scopes = ["https://mail.google.com/"]
+        "#;
+        let env: Envelope = toml::from_str(toml).expect("parse");
+        let cfg = env.comms;
+        assert_eq!(cfg.email.smtp_oauth2.vendor, SmtpOauth2Vendor::GooglePersonal);
+        assert_eq!(
+            cfg.email.smtp_oauth2.google_personal.client_id,
+            "1234567890-abc.apps.googleusercontent.com"
+        );
+        assert_eq!(
+            cfg.email.smtp_oauth2.google_personal.scopes,
+            vec!["https://mail.google.com/".to_string()]
+        );
+        // Both secrets are env-only — never deserialised from TOML.
+        assert!(cfg.email.smtp_oauth2.google_personal.client_secret.is_empty());
+        assert!(cfg.email.smtp_oauth2.google_personal.refresh_token.is_empty());
+    }
+
+    #[test]
+    fn smtp_oauth2_google_personal_default_scopes_target_full_mail_access() {
+        // SMTP+XOAUTH2 against Gmail requires the broad
+        // `https://mail.google.com/` scope; the narrower
+        // `gmail.send` scope only authorises the Gmail HTTP API and
+        // produces SMTP AUTH failures. Lock the default in via a test.
+        let cfg = SmtpOauth2GooglePersonalConfig::default();
+        assert_eq!(cfg.scopes, vec!["https://mail.google.com/".to_string()]);
+    }
+
+    #[test]
+    fn apply_env_overrides_propagates_google_personal_client_id() {
+        let toml = r#"
+            [comms]
+            enabled = true
+
+            [comms.email]
+            provider = "smtp_oauth2"
+
+            [comms.email.smtp_oauth2]
+            vendor = "google_personal"
+        "#;
+        let env = build_env(&[(
+            "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_ID",
+            "from-env.apps.googleusercontent.com",
+        )]);
+        let builder = builder_with_defaults_and_toml(toml);
+        let builder = apply_env_overrides_with(builder, env).expect("apply env overrides");
+        let settings = builder.build().expect("build");
+        let cfg: CommsAppConfig = settings.get("comms").expect("deserialize");
+        assert_eq!(
+            cfg.email.smtp_oauth2.google_personal.client_id,
+            "from-env.apps.googleusercontent.com"
+        );
+    }
+
+    #[test]
+    fn resolve_and_validate_does_not_read_google_personal_secret_when_microsoft_flow_active() {
+        // Cross-flow isolation: Microsoft flow must not consume the
+        // GooglePersonal env vars.
+        let secret_env =
+            "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET";
+        let refresh_env =
+            "MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN";
+        let mut cfg = enabled_smtp_oauth2_microsoft_config();
+        let _ = cfg.resolve_and_validate_with(build_env(&[
+            (secret_env, "should-not-be-read"),
+            (refresh_env, "should-not-be-read"),
+        ]));
+        assert!(cfg.email.smtp_oauth2.google_personal.client_secret.is_empty());
+        assert!(cfg.email.smtp_oauth2.google_personal.refresh_token.is_empty());
     }
 
     #[test]

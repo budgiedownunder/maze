@@ -8,6 +8,10 @@
 //!   client_credentials flow for app-only access to a fixed mailbox.
 //! - `service_account` (`oauth2-google`) — Google Workspace JWT-bearer
 //!   flow with optional domain-wide delegation.
+//! - `refresh_token` (`oauth2-refresh-token`) — generic OAuth2
+//!   refresh-token flow, used by per-user accounts where the consent
+//!   dance happens once out-of-band and the long-lived refresh token is
+//!   fed to the server as a secret.
 //!
 //! `RefreshTokenStore` is a trait surface only — no implementations ship
 //! today. It exists so that, if a future flow needs persisted refresh
@@ -29,6 +33,11 @@ pub use client_credentials::{ClientCredentialsConfig, ClientCredentialsTokenSour
 pub mod service_account;
 #[cfg(feature = "oauth2-google")]
 pub use service_account::{ServiceAccountConfig, ServiceAccountTokenSource};
+
+#[cfg(feature = "oauth2-refresh-token")]
+pub mod refresh_token;
+#[cfg(feature = "oauth2-refresh-token")]
+pub use refresh_token::{RefreshTokenConfig, RefreshTokenTokenSource};
 
 use async_trait::async_trait;
 

@@ -8,7 +8,8 @@ use std::sync::Arc;
 use comms::{Comms, EmailAddress, EmailProvider, StubEmailProvider};
 use maze_web_server::config::comms::{
     CommsAppConfig, CommsBrandingConfig, CommsEmailAuditConfig, CommsEmailConfig,
-    CommsEmailProvider, MailgunAppConfig, SmtpOauth2AppConfig,
+    CommsEmailProvider, MailgunAppConfig, SmtpOauth2AppConfig, SmtpOauth2GoogleConfig,
+    SmtpOauth2GooglePersonalConfig, SmtpOauth2MicrosoftConfig, SmtpOauth2Vendor,
 };
 use maze_web_server::service::notifications::{
     build_comms, build_default_from, build_renderer,
@@ -237,4 +238,95 @@ async fn mailgun_sandbox_delivers_when_env_vars_set() {
         receipt.provider_message_id.is_some(),
         "Mailgun should return a provider message id"
     );
+}
+
+/// Optional sandbox test: actually delivers a message through a personal
+/// Gmail account using SMTP+XOAUTH2 with the OAuth refresh-token flow.
+/// Skipped by default (`#[ignore]`) so the suite stays hermetic; run with
+/// `cargo test -p maze_web_server -- --ignored gmail_personal`.
+///
+/// Required env vars:
+/// - `GMAIL_PERSONAL_CLIENT_ID` — OAuth client ID issued by Google Cloud
+///   Console (Web-application client).
+/// - `GMAIL_PERSONAL_CLIENT_SECRET` — matching OAuth client secret.
+/// - `GMAIL_PERSONAL_REFRESH_TOKEN` — long-lived refresh token obtained
+///   once via the OAuth Playground (https://developers.google.com/oauthplayground)
+///   against the `https://mail.google.com/` scope.
+/// - `GMAIL_PERSONAL_FROM` — the personal Gmail address that authorised
+///   the OAuth client (must equal `username` for XOAUTH2).
+/// - `GMAIL_PERSONAL_TO` — recipient address; sending to yourself
+///   (`yourname+inbox-test@gmail.com`) is the simplest setup.
+#[tokio::test]
+#[ignore]
+async fn gmail_personal_delivers_when_env_vars_set() {
+    let client_id = match std::env::var("GMAIL_PERSONAL_CLIENT_ID") {
+        Ok(v) if !v.is_empty() => v,
+        _ => {
+            eprintln!("skipping gmail_personal: GMAIL_PERSONAL_CLIENT_ID unset/empty");
+            return;
+        }
+    };
+    let client_secret = match std::env::var("GMAIL_PERSONAL_CLIENT_SECRET") {
+        Ok(v) if !v.is_empty() => v,
+        _ => {
+            eprintln!("skipping gmail_personal: GMAIL_PERSONAL_CLIENT_SECRET unset/empty");
+            return;
+        }
+    };
+    let refresh_token = match std::env::var("GMAIL_PERSONAL_REFRESH_TOKEN") {
+        Ok(v) if !v.is_empty() => v,
+        _ => {
+            eprintln!("skipping gmail_personal: GMAIL_PERSONAL_REFRESH_TOKEN unset/empty");
+            return;
+        }
+    };
+    let from = match std::env::var("GMAIL_PERSONAL_FROM") {
+        Ok(v) if !v.is_empty() => v,
+        _ => {
+            eprintln!("skipping gmail_personal: GMAIL_PERSONAL_FROM unset/empty");
+            return;
+        }
+    };
+    let to = match std::env::var("GMAIL_PERSONAL_TO") {
+        Ok(v) if !v.is_empty() => v,
+        _ => {
+            eprintln!("skipping gmail_personal: GMAIL_PERSONAL_TO unset/empty");
+            return;
+        }
+    };
+
+    let mut cfg = populated_config();
+    cfg.enabled = true;
+    cfg.email.provider = CommsEmailProvider::SmtpOauth2;
+    cfg.email.from = from.clone();
+    cfg.email.smtp_oauth2 = SmtpOauth2AppConfig {
+        host: "smtp.gmail.com".into(),
+        port: 587,
+        tls: "starttls".into(),
+        username: from,
+        vendor: SmtpOauth2Vendor::GooglePersonal,
+        microsoft: SmtpOauth2MicrosoftConfig::default(),
+        google: SmtpOauth2GoogleConfig::default(),
+        google_personal: SmtpOauth2GooglePersonalConfig {
+            client_id,
+            scopes: vec!["https://mail.google.com/".into()],
+            client_secret,
+            refresh_token,
+        },
+    };
+
+    let comms = build_comms(&cfg).expect("google_personal comms must build with credentials");
+    let ctx = json!({
+        "first_name": "Sandbox",
+        "reset_link": "https://maze.example.com/reset?token=gmail-personal-test",
+    });
+    let receipt = comms
+        .send_template("password_reset", EmailAddress::new(&to), &ctx)
+        .await
+        .expect("Gmail SMTP must accept the send");
+    assert_eq!(receipt.provider, "smtp_oauth2");
+    // The SmtpOAuth2 provider doesn't currently parse the relay's
+    // `250 OK queued as <id>` line, so `provider_message_id` is
+    // always None for this provider — the send succeeded if we got
+    // here without a Comms error.
 }

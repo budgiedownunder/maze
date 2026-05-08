@@ -43,6 +43,12 @@ The crate currently defines the following modules:
   Workspace JWT-bearer OAuth2 flow (with optional domain-wide delegation
   via the `subject` claim). Pulls in `reqwest` with `rustls-tls` and
   `jsonwebtoken`. Used by Gmail API providers.
+- `oauth2-refresh-token` - exposes `RefreshTokenTokenSource` for the
+  generic OAuth2 refresh-token flow against any token endpoint. Pulls in
+  `reqwest` with `rustls-tls`. Used for per-user accounts (e.g. personal
+  Gmail) where the OAuth consent dance happens once out-of-band and the
+  resulting `refresh_token` is supplied to the server as a long-lived
+  secret.
 - `provider-mailgun` - exposes `MailgunProvider`, an `EmailProvider`
   backed by the Mailgun HTTP API (US or EU regional host, HTTP Basic
   auth with `api:<api_key>`). Pulls in `reqwest` with `rustls-tls`.

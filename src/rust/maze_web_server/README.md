@@ -132,7 +132,7 @@ The following configuration settings exist:
 |          | `comms.email.smtp_oauth2.port`   | Integer | `587` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_PORT`
 |          | `comms.email.smtp_oauth2.tls`    | Text (`starttls` / `implicit` / `plain`) | `starttls` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_TLS`
 |          | `comms.email.smtp_oauth2.username` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_USERNAME`
-|          | `comms.email.smtp_oauth2.vendor` | Text (`microsoft` / `google`) | `microsoft` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR`
+|          | `comms.email.smtp_oauth2.vendor` | Text (`microsoft` / `google` / `google_personal`) | `microsoft` | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_VENDOR`
 |          | `comms.email.smtp_oauth2.microsoft.tenant_id` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_TENANT_ID`
 |          | `comms.email.smtp_oauth2.microsoft.client_id` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_ID`
 |          | `comms.email.smtp_oauth2.microsoft.scopes`    | Array of Text | `["https://outlook.office.com/.default"]` | (config-file only)
@@ -140,6 +140,10 @@ The following configuration settings exist:
 |          | `comms.email.smtp_oauth2.google.service_account_json_path` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_SERVICE_ACCOUNT_JSON_PATH`
 |          | `comms.email.smtp_oauth2.google.delegated_subject` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_DELEGATED_SUBJECT`
 |          | `comms.email.smtp_oauth2.google.scopes`            | Array of Text | `["https://www.googleapis.com/auth/gmail.send"]` | (config-file only)
+|          | `comms.email.smtp_oauth2.google_personal.client_id` | Text | (empty) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_ID`
+|          | `comms.email.smtp_oauth2.google_personal.scopes`    | Array of Text | `["https://mail.google.com/"]` | (config-file only)
+|          | `comms.email.smtp_oauth2.google_personal.client_secret` | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET`
+|          | `comms.email.smtp_oauth2.google_personal.refresh_token` | Text | (env-var only — never read from config files) | `MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN`
 
 These can also be set in a local configuration file called `config.toml` as follows
 
@@ -254,17 +258,21 @@ region = "us"                      # "us" or "eu"
 # SMTP+XOAUTH2 sub-table — consulted only when provider = "smtp_oauth2".
 # Pairs an SMTP relay with the OAuth vendor that mints bearer tokens,
 # selected by `vendor`:
-#   "microsoft" → Microsoft 365 (Azure AD client-credentials, app-only token)
-#   "google"    → Google Workspace (service-account JWT-bearer)
+#   "microsoft"        → Microsoft 365 (Azure AD client-credentials, app-only token)
+#   "google"           → Google Workspace (service-account JWT-bearer + DWD)
+#   "google_personal"  → personal @gmail.com (per-user OAuth refresh-token)
 # The Microsoft client_secret is *never* read from this file — set
 # MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_MICROSOFT_CLIENT_SECRET. The
 # Google private key lives in the JSON file at service_account_json_path.
+# The Google-personal client_secret and refresh_token are env-only — set
+# MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET and
+# MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN.
 [comms.email.smtp_oauth2]
-host = "smtp.office365.com"        # M365: smtp.office365.com  | Workspace: smtp.gmail.com
+host = "smtp.office365.com"        # M365: smtp.office365.com  | Gmail: smtp.gmail.com
 port = 587                         # 587 = STARTTLS, 465 = implicit TLS
 tls = "starttls"                   # "starttls", "implicit", or "plain"
 username = "noreply@contoso.com"   # SASL identity (typically the From mailbox)
-vendor = "microsoft"               # | "google"
+vendor = "microsoft"               # | "google" | "google_personal"
 
 [comms.email.smtp_oauth2.microsoft]
 tenant_id = "00000000-0000-0000-0000-000000000000"
@@ -275,6 +283,10 @@ scopes    = ["https://outlook.office.com/.default"]
 service_account_json_path = "/etc/maze/gcp-service-account.json"
 delegated_subject         = "noreply@company.com"
 scopes                    = ["https://www.googleapis.com/auth/gmail.send"]
+
+[comms.email.smtp_oauth2.google_personal]
+client_id = "1234567890-abc.apps.googleusercontent.com"
+scopes    = ["https://mail.google.com/"]   # required for SMTP — gmail.send is API-only
 ```
 
 Notes:

@@ -12,9 +12,9 @@ use comms::template::renderer::BrandingPartialSources;
 use comms::{
     AppContext, BrandingContext, ClientCredentialsConfig, ClientCredentialsTokenSource, Comms,
     EmailAddress, EmailProvider, EmbeddedTemplateLoader, MailgunConfig, MailgunProvider,
-    MailgunRegion, OAuthTokenSource, ServiceAccountConfig, ServiceAccountTokenSource,
-    SmtpOAuth2Config, SmtpOAuth2Provider, SmtpTls, StubEmailProvider, TemplateLoader,
-    TemplateRenderer,
+    MailgunRegion, OAuthTokenSource, RefreshTokenConfig, RefreshTokenTokenSource,
+    ServiceAccountConfig, ServiceAccountTokenSource, SmtpOAuth2Config, SmtpOAuth2Provider, SmtpTls,
+    StubEmailProvider, TemplateLoader, TemplateRenderer,
 };
 
 use crate::config::comms::{
@@ -206,7 +206,10 @@ fn build_email_provider(
 /// `client_credentials` builds a `ClientCredentialsTokenSource` from the
 /// resolved tenant/client/secret triple; Google `service_account` reads
 /// the JSON key file from disk and builds a `ServiceAccountTokenSource`,
-/// optionally setting the JWT `sub` claim from `delegated_subject`.
+/// optionally setting the JWT `sub` claim from `delegated_subject`;
+/// Google `google_personal` builds a `RefreshTokenTokenSource` against
+/// Google's token endpoint using a long-lived `refresh_token` and the
+/// matching OAuth client credentials.
 fn build_smtp_oauth2_token_source(
     smtp_cfg: &SmtpOauth2AppConfig,
 ) -> Result<Arc<dyn OAuthTokenSource>, String> {
@@ -270,6 +273,42 @@ fn build_smtp_oauth2_token_source(
                 .map_err(|e| format!("smtp_oauth2 google token source: {e}"))?;
             Ok(Arc::new(source))
         }
+        SmtpOauth2Vendor::GooglePersonal => {
+            let p = &smtp_cfg.google_personal;
+            if p.client_id.is_empty() {
+                return Err(
+                    "[comms.email.smtp_oauth2.google_personal] client_id is empty".to_string(),
+                );
+            }
+            if p.client_secret.is_empty() {
+                return Err(
+                    "[comms.email.smtp_oauth2.google_personal] client_secret is empty (set MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_CLIENT_SECRET)"
+                        .to_string(),
+                );
+            }
+            if p.refresh_token.is_empty() {
+                return Err(
+                    "[comms.email.smtp_oauth2.google_personal] refresh_token is empty (set MAZE_WEB_SERVER_COMMS_EMAIL_SMTP_OAUTH2_GOOGLE_PERSONAL_REFRESH_TOKEN)"
+                        .to_string(),
+                );
+            }
+            let scopes = if p.scopes.is_empty() {
+                vec!["https://mail.google.com/".to_string()]
+            } else {
+                p.scopes.clone()
+            };
+            let rt_cfg = RefreshTokenConfig {
+                client_id: p.client_id.clone(),
+                client_secret: p.client_secret.clone(),
+                refresh_token: p.refresh_token.clone(),
+                token_uri: "https://oauth2.googleapis.com/token".to_string(),
+                scopes,
+                refresh_skew: Duration::from_secs(60),
+            };
+            let source = RefreshTokenTokenSource::new(rt_cfg)
+                .map_err(|e| format!("smtp_oauth2 google_personal token source: {e}"))?;
+            Ok(Arc::new(source))
+        }
     }
 }
 
@@ -278,8 +317,8 @@ mod tests {
     use super::*;
     use crate::config::comms::{
         CommsAppConfig, CommsBrandingConfig, CommsEmailAuditConfig, CommsEmailConfig,
-        CommsEmailProvider, MailgunAppConfig, SmtpOauth2AppConfig, SmtpOauth2Vendor,
-        SmtpOauth2GoogleConfig, SmtpOauth2MicrosoftConfig,
+        CommsEmailProvider, MailgunAppConfig, SmtpOauth2AppConfig, SmtpOauth2GoogleConfig,
+        SmtpOauth2GooglePersonalConfig, SmtpOauth2MicrosoftConfig, SmtpOauth2Vendor,
     };
 
     fn disabled_config() -> CommsAppConfig {
@@ -346,6 +385,7 @@ mod tests {
                         client_secret: "test-resolved-secret".into(),
                     },
                     google: SmtpOauth2GoogleConfig::default(),
+                    google_personal: SmtpOauth2GooglePersonalConfig::default(),
                 },
                 audit: CommsEmailAuditConfig::default(),
             },
@@ -503,5 +543,70 @@ mod tests {
             err.contains("service_account_json_path") || err.to_lowercase().contains("read"),
             "{err}"
         );
+    }
+
+    fn enabled_smtp_oauth2_google_personal_config_with_secrets() -> CommsAppConfig {
+        CommsAppConfig {
+            enabled: true,
+            public_base_url: "https://maze.example.com".into(),
+            branding: CommsBrandingConfig::default(),
+            email: CommsEmailConfig {
+                provider: CommsEmailProvider::SmtpOauth2,
+                from: "yourname@gmail.com".into(),
+                from_name: "The Maze Team".into(),
+                templates_dir: "config/email_templates".into(),
+                mailgun: MailgunAppConfig::default(),
+                smtp_oauth2: SmtpOauth2AppConfig {
+                    host: "smtp.gmail.com".into(),
+                    port: 587,
+                    tls: "starttls".into(),
+                    username: "yourname@gmail.com".into(),
+                    vendor: SmtpOauth2Vendor::GooglePersonal,
+                    microsoft: SmtpOauth2MicrosoftConfig::default(),
+                    google: SmtpOauth2GoogleConfig::default(),
+                    google_personal: SmtpOauth2GooglePersonalConfig {
+                        client_id: "1234567890-abc.apps.googleusercontent.com".into(),
+                        scopes: vec!["https://mail.google.com/".into()],
+                        client_secret: "test-resolved-secret".into(),
+                        refresh_token: "test-resolved-refresh-token".into(),
+                    },
+                },
+                audit: CommsEmailAuditConfig::default(),
+            },
+        }
+    }
+
+    #[test]
+    fn build_comms_with_smtp_oauth2_google_personal_succeeds() {
+        let cfg = enabled_smtp_oauth2_google_personal_config_with_secrets();
+        let _ = build_comms(&cfg).expect("build with smtp+oauth2 google_personal");
+    }
+
+    #[test]
+    fn build_comms_with_smtp_oauth2_google_personal_missing_client_id_returns_error() {
+        let mut cfg = enabled_smtp_oauth2_google_personal_config_with_secrets();
+        cfg.email.smtp_oauth2.google_personal.client_id = String::new();
+        let err = build_comms(&cfg).err().expect("missing client_id must reject");
+        assert!(err.contains("client_id"), "{err}");
+    }
+
+    #[test]
+    fn build_comms_with_smtp_oauth2_google_personal_missing_client_secret_returns_error() {
+        let mut cfg = enabled_smtp_oauth2_google_personal_config_with_secrets();
+        cfg.email.smtp_oauth2.google_personal.client_secret = String::new();
+        let err = build_comms(&cfg)
+            .err()
+            .expect("missing client_secret must reject");
+        assert!(err.contains("client_secret"), "{err}");
+    }
+
+    #[test]
+    fn build_comms_with_smtp_oauth2_google_personal_missing_refresh_token_returns_error() {
+        let mut cfg = enabled_smtp_oauth2_google_personal_config_with_secrets();
+        cfg.email.smtp_oauth2.google_personal.refresh_token = String::new();
+        let err = build_comms(&cfg)
+            .err()
+            .expect("missing refresh_token must reject");
+        assert!(err.contains("refresh_token"), "{err}");
     }
 }

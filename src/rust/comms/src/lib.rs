@@ -26,6 +26,8 @@ pub use orchestrator::Comms;
 pub use oauth::{ClientCredentialsConfig, ClientCredentialsTokenSource};
 #[cfg(feature = "oauth2-google")]
 pub use oauth::{ServiceAccountConfig, ServiceAccountTokenSource};
+#[cfg(feature = "oauth2-refresh-token")]
+pub use oauth::{RefreshTokenConfig, RefreshTokenTokenSource};
 pub use provider::{DeliveryReceipt, Provider};
 #[cfg(feature = "provider-mailgun")]
 pub use providers::{MailgunConfig, MailgunProvider, MailgunRegion};
