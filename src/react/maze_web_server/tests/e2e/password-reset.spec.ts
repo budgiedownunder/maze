@@ -5,6 +5,11 @@ test('navigating from sign-in to Forgot Password and submitting shows the anti-e
 
   await page.getByRole('button', { name: /forgot password/i }).click()
   await expect(page).toHaveURL(/\/forgot-password/)
+  // LoginPage and ForgotPasswordPage both render an `Email` label, so wait
+  // for the new page's heading before reaching for the input — otherwise
+  // `getByLabel('Email')` can resolve against the still-mounted LoginPage
+  // mid-route-transition (race wider on macOS than Linux runners).
+  await expect(page.getByRole('heading', { name: /forgot password/i })).toBeVisible()
 
   await page.getByLabel('Email').fill('test@example.com')
   await page.getByRole('button', { name: /send reset link/i }).click()
