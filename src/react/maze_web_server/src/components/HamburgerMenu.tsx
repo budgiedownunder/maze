@@ -42,6 +42,11 @@ export function HamburgerMenu() {
         {open && (
           <ul role="menu" className="menu-dropdown">
             <li role="none">
+              <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/mazes') }}>
+                Home
+              </button>
+            </li>
+            <li role="none">
               <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/account') }}>
                 My Account...
               </button>

@@ -64,6 +64,13 @@ describe('HamburgerMenu', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/account')
   })
 
+  it('navigates to /mazes when Home is clicked', async () => {
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^home$/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/mazes')
+  })
+
   it('calls logout and navigates to /login on Sign Out', async () => {
     renderMenu()
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))

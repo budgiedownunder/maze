@@ -26,6 +26,17 @@ test('About modal opens and closes', async ({ page }) => {
   await expect(page.getByRole('dialog')).not.toBeVisible()
 })
 
+test('Home menu item navigates back to /mazes from /account', async ({ page }) => {
+  // First go to /account so the back-to-Home navigation has somewhere to come from.
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await page.getByRole('menuitem', { name: /my account/i }).click()
+  await expect(page).toHaveURL(/\/account/)
+
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await page.getByRole('menuitem', { name: /^home$/i }).click()
+  await expect(page).toHaveURL(/\/mazes/)
+})
+
 test('My Account page opens and shows profile fields', async ({ page }) => {
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /my account/i }).click()
