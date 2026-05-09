@@ -25,7 +25,7 @@
     </TabBar>
 
     <!-- Flyout menu items -->
-    <MenuItem Text="My Account..."
+    <MenuItem Text="My Account"
               IconImageSource="{OnPlatform 'icon_account.png', iOS='icon_account_ios.png', MacCatalyst='icon_account_ios.png'}"
               Clicked="OnAccountMenuItemClicked" />
     <MenuItem Text="Sign Out"

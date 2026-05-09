@@ -48,7 +48,7 @@ export function HamburgerMenu() {
             </li>
             <li role="none">
               <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/account') }}>
-                My Account...
+                My Account
               </button>
             </li>
             <li role="none">
