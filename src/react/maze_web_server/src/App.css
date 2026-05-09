@@ -329,7 +329,51 @@
 }
 
 /* ──────────────────────────────────────────────────────────
-   Email addresses panel (inside AccountModal)
+   Account page
+────────────────────────────────────────────────────────── */
+
+.account-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.account-main {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  padding: 1.5rem;
+}
+
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.account-form > button {
+  align-self: flex-start;
+  width: 100%;
+  max-width: 360px;
+}
+
+.account-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.account-actions > button {
+  flex: 1 1 auto;
+  max-width: 360px;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Email addresses panel (inside AccountPage)
 ────────────────────────────────────────────────────────── */
 
 .email-section {

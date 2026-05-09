@@ -2,12 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { AboutModal } from './AboutModal'
-import { AccountModal } from './AccountModal'
 
 export function HamburgerMenu() {
   const [open, setOpen] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
-  const [showAccount, setShowAccount] = useState(false)
   const { logout } = useAuth()
   const navigate = useNavigate()
   const menuRef = useRef<HTMLDivElement>(null)
@@ -44,7 +42,7 @@ export function HamburgerMenu() {
         {open && (
           <ul role="menu" className="menu-dropdown">
             <li role="none">
-              <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); setShowAccount(true) }}>
+              <button role="menuitem" className="menu-item" onClick={() => { setOpen(false); navigate('/account') }}>
                 My Account...
               </button>
             </li>
@@ -63,7 +61,6 @@ export function HamburgerMenu() {
       </div>
 
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
-      {showAccount && <AccountModal onClose={() => setShowAccount(false)} />}
     </>
   )
 }
