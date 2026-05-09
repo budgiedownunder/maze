@@ -642,20 +642,6 @@
   display: none;
 }
 
-@media (max-width: 540px) {
-  .maze-item-action-label {
-    display: none;
-  }
-  .maze-item-icon {
-    display: none;
-  }
-  .maze-item-name {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-  }
-}
-
 @container (max-width: 110px) {
   .maze-item-dim-full {
     display: none;
@@ -701,6 +687,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 540px) {
+  .maze-item-action-label {
+    display: none;
+  }
+  .maze-item-icon {
+    display: none;
+  }
+  .maze-item-name {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
 }
 
 /* ──────────────────────────────────────────────────────────
