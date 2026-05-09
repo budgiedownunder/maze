@@ -167,7 +167,7 @@
                                 </SwipeItems>
                             </SwipeView.RightItems>
 
-                            <Border HeightRequest="125"
+                            <Border MinimumHeightRequest="125"
                                     Padding="0"
                                     Margin="5"
                                     BackgroundColor="{AppThemeBinding Light=White, Dark={StaticResource OffBlack}}">
@@ -214,21 +214,19 @@
                                                               CommandParameter="{Binding .}"
                                                               Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=GoToDesignCommand}"/>
                                     </Border.GestureRecognizers>
-                                    <Grid Padding="0">
-                                        <HorizontalStackLayout Padding="10">
-                                            <Image Source="maze.png"
-                                                   HeightRequest="125" 
-                                                   WidthRequest="125" 
-                                                   Aspect="AspectFill">
-                                            </Image>
-                                            <VerticalStackLayout Padding="10" Spacing="4" VerticalOptions="Center">
-                                                <Label Text="{Binding Name}" FontSize="24"/>
-                                                <Label Text="{Binding DimensionsSummary}" FontSize="12"
-                                                       IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=UseFullDimensions}"/>
-                                                <Label Text="{Binding DimensionsSummaryShort}" FontSize="12"
-                                                       IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=UseShortDimensions}"/>
-                                            </VerticalStackLayout>
-                                        </HorizontalStackLayout>
+                                    <Grid Padding="10" ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                        <Image Grid.Column="0"
+                                               Source="maze.png"
+                                               HeightRequest="125"
+                                               WidthRequest="125"
+                                               Aspect="AspectFill"/>
+                                        <VerticalStackLayout Grid.Column="1" Padding="10" Spacing="4" VerticalOptions="Center">
+                                            <Label Text="{Binding Name}" FontSize="24" LineBreakMode="WordWrap"/>
+                                            <Label Text="{Binding DimensionsSummary}" FontSize="12"
+                                                   IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=UseFullDimensions}"/>
+                                            <Label Text="{Binding DimensionsSummaryShort}" FontSize="12"
+                                                   IsVisible="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:MazesViewModel}}, Path=UseShortDimensions}"/>
+                                        </VerticalStackLayout>
                                     </Grid>
                                 </Grid>
                             </Border>
