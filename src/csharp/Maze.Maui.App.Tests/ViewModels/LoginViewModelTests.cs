@@ -278,7 +278,7 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
-        public async Task SignInWithOAuth_NewUser_FlipsAccountWelcomeModeAndNavigates()
+        public async Task SignInWithOAuth_NewUser_FlipsAccountWelcomeModeAndPushesAccountPage()
         {
             var (vm, auth, _, nav, account) = BuildVm();
             auth.Setup(a => a.SignInWithOAuthAsync("google"))
@@ -288,10 +288,11 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             Assert.True(account.IsWelcomeMode);
             nav.Verify(n => n.GoToRootAsync("//MainPage"), Times.Once);
+            nav.Verify(n => n.GoToAsync(nameof(AccountPage), It.IsAny<IDictionary<string, object>>()), Times.Once);
         }
 
         [Fact]
-        public async Task SignInWithOAuth_ExistingUser_DoesNotFlipWelcomeModeAndNavigates()
+        public async Task SignInWithOAuth_ExistingUser_DoesNotFlipWelcomeModeAndStaysOnMainPage()
         {
             var (vm, auth, _, nav, account) = BuildVm();
             auth.Setup(a => a.SignInWithOAuthAsync("google"))
@@ -301,6 +302,7 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             Assert.False(account.IsWelcomeMode);
             nav.Verify(n => n.GoToRootAsync("//MainPage"), Times.Once);
+            nav.Verify(n => n.GoToAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object>>()), Times.Never);
         }
 
         [Fact]

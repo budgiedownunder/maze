@@ -179,9 +179,13 @@ namespace Maze.Maui.App.ViewModels
                 var result = await _authService.SignInWithOAuthAsync(providerName);
                 // Flip the singleton AccountViewModel's IsWelcomeMode flag *before*
                 // navigating so AccountPage renders the welcome banner on first
-                // arrival.
+                // arrival. New users are pushed straight onto AccountPage so the
+                // banner is the first thing they see; existing users land on the
+                // main page as usual.
                 _accountViewModel.IsWelcomeMode = result.IsNewUser;
                 await _navigationService.GoToRootAsync("//MainPage");
+                if (result.IsNewUser)
+                    await _navigationService.GoToAsync(nameof(AccountPage));
             }
             catch (OAuthFlowFailedException ex)
             {
