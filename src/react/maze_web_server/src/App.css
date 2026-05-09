@@ -601,7 +601,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-width: 800px;
 }
 
 .maze-list-item {
@@ -649,6 +648,11 @@
   }
   .maze-item-icon {
     display: none;
+  }
+  .maze-item-name {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
   }
 }
 
