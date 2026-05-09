@@ -1,12 +1,10 @@
 using CommunityToolkit.Maui.Extensions;
-using CommunityToolkit.Maui.Views;
 using CommunityToolkit.Mvvm.Messaging;
 using Maze.Maui.App.Messages;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;
 using Maze.Maui.App.Views;
 using Maze.Maui.Controls.Pointer;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Maze.Maui.App
 {
@@ -18,12 +16,6 @@ namespace Maze.Maui.App
         private readonly IAuthService _authService;
         private readonly IDialogService _dialogService;
         private readonly AccountViewModel _accountViewModel;
-        private readonly IServiceProvider _serviceProvider;
-        // One-shot guard: Shell fires OnNavigated more than once during a
-        // single GoToAsync (typically once for navigation start, once for
-        // finalisation), so without this we'd queue two welcome popups —
-        // closing the first then finds a second one waiting.
-        private bool _welcomePopupPending;
 
         /// <summary>
         /// Constructor
@@ -31,14 +23,11 @@ namespace Maze.Maui.App
         /// <param name="authService">Injected auth service</param>
         /// <param name="dialogService">Injected dialog service</param>
         /// <param name="accountViewModel">Injected account view model</param>
-        /// <param name="serviceProvider">DI service provider — used to resolve a fresh
-        ///   <see cref="EmailAddressesViewModel"/> per popup-open (transient lifetime).</param>
-        public AppShell(IAuthService authService, IDialogService dialogService, AccountViewModel accountViewModel, IServiceProvider serviceProvider)
+        public AppShell(IAuthService authService, IDialogService dialogService, AccountViewModel accountViewModel)
         {
             _authService = authService;
             _dialogService = dialogService;
             _accountViewModel = accountViewModel;
-            _serviceProvider = serviceProvider;
             InitializeComponent();
             Routing.RegisterRoute(nameof(MazePage), typeof(MazePage));
             Routing.RegisterRoute(nameof(MazeGamePage), typeof(MazeGamePage));
@@ -46,44 +35,16 @@ namespace Maze.Maui.App
             Routing.RegisterRoute(nameof(SignUpPage), typeof(SignUpPage));
             Routing.RegisterRoute(nameof(ChangePasswordPage), typeof(ChangePasswordPage));
             Routing.RegisterRoute(nameof(ForgotPasswordPage), typeof(ForgotPasswordPage));
+            Routing.RegisterRoute(nameof(AccountPage), typeof(AccountPage));
         }
 
         /// <summary>
-        /// Opens the Account popup.
+        /// Navigates to the Account page.
         /// </summary>
         private async void OnAccountMenuItemClicked(object sender, EventArgs e)
         {
             FlyoutIsPresented = false;
-            // Resolve a fresh EmailAddressesViewModel per popup-open so the
-            // email list starts from server-authoritative state each time
-            // (transient lifetime, see MauiProgram).
-            var emailsViewModel = _serviceProvider.GetRequiredService<EmailAddressesViewModel>();
-            await CurrentPage.ShowPopupAsync(new AccountPopup(_accountViewModel, emailsViewModel));
-        }
-
-        /// <inheritdoc/>
-        protected override void OnNavigated(ShellNavigatedEventArgs args)
-        {
-            base.OnNavigated(args);
-            // Auto-open the Account popup with a welcome banner when arriving
-            // at the main page on the first sign-in of a brand-new OAuth user.
-            // The flag was set by LoginViewModel / SignUpViewModel before the
-            // GoToAsync call. AccountPopup itself clears the welcome flag on
-            // dismiss so the banner is visible while open and absent on
-            // subsequent burger-menu opens.
-            if (_accountViewModel.IsWelcomeMode && !_welcomePopupPending && CurrentPage is MazesPage page)
-            {
-                _welcomePopupPending = true;
-                var emailsViewModel = _serviceProvider.GetRequiredService<EmailAddressesViewModel>();
-                var popup = new AccountPopup(_accountViewModel, emailsViewModel);
-                // Reset the guard once the popup is gone so a future
-                // sign-out / sign-in-as-another-new-user re-triggers cleanly.
-                popup.Closed += (_, _) => _welcomePopupPending = false;
-                // Dispatch onto the UI thread so the popup show happens after
-                // the page-arrival event has fully settled — avoids construction
-                // races on some platforms.
-                Dispatcher.Dispatch(() => _ = page.ShowPopupAsync(popup));
-            }
+            await GoToAsync(nameof(AccountPage));
         }
 
         /// <summary>

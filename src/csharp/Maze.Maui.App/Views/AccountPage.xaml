@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             xmlns:viewmodel="clr-namespace:Maze.Maui.App.ViewModels"
+             x:DataType="viewmodel:AccountViewModel"
+             x:Name="AccountPageRoot"
+             x:Class="Maze.Maui.App.Views.AccountPage"
+             Title="My Account">
+
+    <ContentPage.Resources>
+        <toolkit:IsStringNotNullOrEmptyConverter x:Key="StringNotEmptyConverter" />
+        <toolkit:InvertedBoolConverter x:Key="InvertBoolConverter" />
+    </ContentPage.Resources>
+
+    <Grid VerticalOptions="Fill"
+          HorizontalOptions="Fill">
+
+        <ScrollView VerticalOptions="Fill">
+            <VerticalStackLayout Padding="30"
+                                 Spacing="16"
+                                 MaximumWidthRequest="400"
+                                 HorizontalOptions="Center">
+
+                <!-- Welcome banner shown only when the page was auto-navigated
+                     to after a brand-new OAuth sign-up. Cleared on page
+                     disappearing. -->
+                <Border IsVisible="{Binding IsWelcomeMode}"
+                        Padding="10,8"
+                        StrokeShape="RoundRectangle 4"
+                        Stroke="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                        StrokeThickness="1"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Secondary}, Dark={StaticResource Gray600}}">
+                    <Label Text="Welcome to Maze! Take a moment to set your username and full name."
+                           LineBreakMode="WordWrap"
+                           TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}" />
+                </Border>
+
+                <Label Text="{Binding LoadStatus}"
+                       IsVisible="{Binding IsBusy}"
+                       HorizontalOptions="Center"
+                       VerticalOptions="Center" />
+
+                <Border Padding="16"
+                        Margin="0,0,0,8"
+                        IsVisible="{Binding IsNotBusy}">
+                    <VerticalStackLayout Spacing="12">
+
+                        <Grid ColumnDefinitions="Auto,*"
+                              RowDefinitions="Auto,Auto"
+                              ColumnSpacing="12"
+                              RowSpacing="12">
+                            <Label Grid.Row="0" Grid.Column="0"
+                                   Text="Username"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center" />
+                            <Entry Grid.Row="0" Grid.Column="1"
+                                   Text="{Binding Username}"
+                                   Keyboard="Text"
+                                   HorizontalOptions="Fill"
+                                   VerticalOptions="Center" />
+
+                            <Label Grid.Row="1" Grid.Column="0"
+                                   Text="Full Name"
+                                   FontAttributes="Bold"
+                                   VerticalOptions="Center" />
+                            <Entry Grid.Row="1" Grid.Column="1"
+                                   Text="{Binding FullName}"
+                                   Keyboard="Text"
+                                   HorizontalOptions="Fill"
+                                   VerticalOptions="Center" />
+                        </Grid>
+
+                        <Label Text="Administrator"
+                               IsVisible="{Binding IsAdmin}"
+                               TextColor="White"
+                               BackgroundColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                               Padding="8,4"
+                               HorizontalOptions="Start" />
+
+                    </VerticalStackLayout>
+                </Border>
+
+                <Label Text="{Binding ErrorMessage}"
+                       TextColor="Red"
+                       IsVisible="{Binding ErrorMessage, Converter={StaticResource StringNotEmptyConverter}}"
+                       HorizontalOptions="Center" />
+
+                <Button Text="Save Profile"
+                        Command="{Binding SaveProfileCommand}"
+                        IsVisible="{Binding IsNotBusy}"
+                        HorizontalOptions="Fill" />
+
+                <!-- Email Addresses panel — BindingContext set to a separate
+                     EmailAddressesViewModel exposed via the page's
+                     EmailsViewModel property. The page's outer
+                     BindingContext stays on AccountViewModel. -->
+                <!-- x:DataType retypes compiled bindings inside this subtree
+                     to EmailAddressesViewModel; the page root's x:DataType
+                     (AccountViewModel) would otherwise cause Emails /
+                     NewEmail bindings to silently fail at compile time. -->
+                <VerticalStackLayout x:DataType="viewmodel:EmailAddressesViewModel"
+                                     BindingContext="{Binding Source={x:Reference AccountPageRoot}, Path=EmailsViewModel}"
+                                     Spacing="8">
+                    <Label Text="Email Addresses"
+                           FontAttributes="Bold"
+                           FontSize="14" />
+                    <Label Text="{Binding LoadStatus}"
+                           IsVisible="{Binding IsBusy}"
+                           HorizontalOptions="Center" />
+                    <!-- Panel-scoped busy indicator — fires for every action on this
+                         ViewModel (Make Primary, Remove, Resend Verification, Add Email).
+                         The outer page ActivityIndicator binds to AccountViewModel.IsBusy
+                         and can't see this VM's state, hence the dedicated one here. -->
+                    <ActivityIndicator IsVisible="{Binding IsBusy}"
+                                       IsRunning="{Binding IsBusy}"
+                                       HorizontalOptions="Center" />
+                    <Label Text="{Binding ErrorMessage}"
+                           TextColor="Red"
+                           IsVisible="{Binding ErrorMessage, Converter={StaticResource StringNotEmptyConverter}}"
+                           HorizontalOptions="Center" />
+                    <!-- Transient success message shown after a Resend Verification request
+                         succeeds. Same green as the "Verified" pill; auto-clears after
+                         ResendFlashDuration in the ViewModel. -->
+                    <Label Text="{Binding ResendFlash}"
+                           TextColor="{AppThemeBinding Light=#15803D, Dark=#4ADE80}"
+                           IsVisible="{Binding ResendFlash, Converter={StaticResource StringNotEmptyConverter}}"
+                           HorizontalOptions="Center" />
+                    <!-- Email rows — the page itself scrolls, so this list
+                         grows naturally without an inner height cap. -->
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Emails}"
+                                         Spacing="0">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="viewmodel:EmailRowViewModel">
+                                <Border Padding="8"
+                                        Margin="0,2,0,2"
+                                        StrokeShape="RoundRectangle 4"
+                                        Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+                                        StrokeThickness="1"
+                                        BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+                                    <VerticalStackLayout Spacing="6">
+                                        <!-- Email + status badges -->
+                                        <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                                            <Label Text="{Binding Email}"
+                                                   FontSize="13"
+                                                   VerticalOptions="Center" />
+                                            <!-- Primary badge: solid bright accent (matches React's
+                                                 badge-primary background) — deliberately bolder than
+                                                 the verified/unverified pills above. -->
+                                            <Label Text="Primary"
+                                                   IsVisible="{Binding IsPrimary}"
+                                                   FontSize="10"
+                                                   TextColor="{AppThemeBinding Light=White, Dark=#1E1B29}"
+                                                   BackgroundColor="{AppThemeBinding Light=#AA3BFF, Dark=#C084FC}"
+                                                   Padding="6,2"
+                                                   VerticalOptions="Center" />
+                                            <!-- Pill colors mirror React's CSS vars: semi-transparent tinted
+                                                 bg + darker text in light mode, lighter text in dark mode. -->
+                                            <Label Text="Verified"
+                                                   IsVisible="{Binding Verified}"
+                                                   FontSize="10"
+                                                   TextColor="{AppThemeBinding Light=#15803D, Dark=#4ADE80}"
+                                                   BackgroundColor="{AppThemeBinding Light=#2616A34A, Dark=#2E4ADE80}"
+                                                   Padding="6,2"
+                                                   VerticalOptions="Center" />
+                                            <Label Text="Unverified"
+                                                   IsVisible="{Binding Verified, Converter={StaticResource InvertBoolConverter}}"
+                                                   FontSize="10"
+                                                   TextColor="{AppThemeBinding Light=#6B7280, Dark=#9CA3AF}"
+                                                   BackgroundColor="{AppThemeBinding Light=#266B7280, Dark=#2E9CA3AF}"
+                                                   Padding="6,2"
+                                                   VerticalOptions="Center" />
+                                        </HorizontalStackLayout>
+                                        <!-- Inline action buttons — visibility/disabled rules mirror the
+                                             React EmailAddressesPanel: Make Primary hidden on the primary
+                                             row + disabled when the row is unverified; Remove hidden on
+                                             the primary row; Resend Verification hidden on verified rows
+                                             + disabled stub on unverified (real action lands with the
+                                             future email-send-support feature). -->
+                                        <HorizontalStackLayout Spacing="8">
+                                            <Button Text="Make Primary"
+                                                    IsVisible="{Binding IsPrimary, Converter={StaticResource InvertBoolConverter}}"
+                                                    IsEnabled="{Binding Verified}"
+                                                    Padding="8,4"
+                                                    FontSize="11"
+                                                    BackgroundColor="Transparent"
+                                                    TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                                    CommandParameter="{Binding .}"
+                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:EmailAddressesViewModel}}, Path=SetPrimaryCommand}" />
+                                            <Button Text="Remove"
+                                                    IsVisible="{Binding IsPrimary, Converter={StaticResource InvertBoolConverter}}"
+                                                    Padding="8,4"
+                                                    FontSize="11"
+                                                    BackgroundColor="Transparent"
+                                                    TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                                    CommandParameter="{Binding .}"
+                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:EmailAddressesViewModel}}, Path=RemoveEmailCommand}" />
+                                            <Button Text="Resend Verification"
+                                                    IsVisible="{Binding Verified, Converter={StaticResource InvertBoolConverter}}"
+                                                    Padding="8,4"
+                                                    FontSize="11"
+                                                    BackgroundColor="Transparent"
+                                                    TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                                    CommandParameter="{Binding .}"
+                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type viewmodel:EmailAddressesViewModel}}, Path=VerifyEmailCommand}" />
+                                        </HorizontalStackLayout>
+                                    </VerticalStackLayout>
+                                </Border>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                    <!-- Add-email row -->
+                    <Grid ColumnDefinitions="*,Auto"
+                          ColumnSpacing="8">
+                        <Entry Grid.Column="0"
+                               Text="{Binding NewEmail}"
+                               Placeholder="Add another email address"
+                               Keyboard="Email"
+                               VerticalOptions="Center" />
+                        <Button Grid.Column="1"
+                                Text="Add Email"
+                                Command="{Binding AddEmailCommand}"
+                                VerticalOptions="Center" />
+                    </Grid>
+                </VerticalStackLayout>
+
+                <Button Text="Change Password"
+                        Command="{Binding ChangePasswordCommand}"
+                        IsVisible="{Binding IsNotBusy}"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}">
+                    <!-- Trigger flips the label for OAuth-only users (no
+                         password yet). The Set/Change semantics live in
+                         ChangePasswordViewModel; this just reflects the
+                         current `HasPassword` state on the trigger. -->
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding HasPassword}" Value="False">
+                            <Setter Property="Text" Value="Set Password" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+
+                <Button Text="Delete Account"
+                        Command="{Binding DeleteAccountCommand}"
+                        IsVisible="{Binding IsNotBusy}"
+                        HorizontalOptions="Fill"
+                        BackgroundColor="Red"
+                        TextColor="White" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <ActivityIndicator IsVisible="{Binding IsBusy}"
+                           IsRunning="{Binding IsBusy}"
+                           HorizontalOptions="Fill"
+                           VerticalOptions="Center" />
+
+    </Grid>
+
+</ContentPage>

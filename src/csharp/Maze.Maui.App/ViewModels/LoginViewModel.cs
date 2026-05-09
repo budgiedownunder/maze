@@ -64,7 +64,7 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="navigationService">Injected navigation service</param>
         /// <param name="accountViewModel">Injected (singleton) account view model — used to flip
         /// <see cref="AccountViewModel.IsWelcomeMode"/> when an OAuth sign-up creates a brand-new
-        /// user, so the Account popup auto-opens with a welcome banner on the next page.</param>
+        /// user, so the Account page renders with a welcome banner on first arrival.</param>
         public LoginViewModel(IAuthService authService, IAppFeaturesService appFeaturesService, INavigationService navigationService, AccountViewModel accountViewModel)
         {
             Title = "Sign In";
@@ -178,8 +178,8 @@ namespace Maze.Maui.App.ViewModels
             {
                 var result = await _authService.SignInWithOAuthAsync(providerName);
                 // Flip the singleton AccountViewModel's IsWelcomeMode flag *before*
-                // navigating: AppShell.OnNavigated will read it on arrival at the
-                // main page and auto-open the Account popup with a welcome banner.
+                // navigating so AccountPage renders the welcome banner on first
+                // arrival.
                 _accountViewModel.IsWelcomeMode = result.IsNewUser;
                 await _navigationService.GoToRootAsync("//MainPage");
             }
