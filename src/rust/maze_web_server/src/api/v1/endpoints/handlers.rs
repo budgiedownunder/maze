@@ -463,6 +463,8 @@ impl SignupRequest {
                 logins: vec![],
                 oauth_identities: vec![],
                 deleted_at: None,
+                created_at: chrono::Utc::now(),
+                last_sign_in_at: None,
             }
         )
     }
@@ -1504,6 +1506,8 @@ impl CreateUserRequest {
                 logins: vec![],
                 oauth_identities: vec![],
                 deleted_at: None,
+                created_at: chrono::Utc::now(),
+                last_sign_in_at: None,
             }
         )
     }

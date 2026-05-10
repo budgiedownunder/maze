@@ -1,0 +1,42 @@
+-- Adds `created_at` and `last_sign_in_at` to the `users` table.
+--
+-- `created_at` is non-nullable in the application's `User` struct so callers
+-- never have to handle the absent case. The column is added nullable here
+-- (MySQL portability: adding NOT NULL without a literal DEFAULT on a
+-- populated table is rejected) and then immediately backfilled from Rust
+-- code in `SqlStore::new` (see `backfill_user_timestamps_if_null`) using
+-- the migration-run timestamp captured at startup. Going forward, new users
+-- created by the application carry the real `Utc::now()` set at creation.
+--
+-- `last_sign_in_at` stays nullable in both the SQL column and the
+-- application's `Option<DateTime<Utc>>`. The application uses
+-- `User::is_first_sign_in()` (= `last_sign_in_at.is_none() &&
+-- logins.is_empty()`, captured before the handler flips either field)
+-- as the welcome-banner trigger. The `last_sign_in_at` half is the
+-- primary signal; the `logins` clause defensively guards the case where
+-- the user has an active session but no recorded `last_sign_in_at`.
+-- The Rust-side backfill sets `last_sign_in_at` to the timestamp of
+-- each user's most recent login row — the most accurate evidence we
+-- have of when the user last signed in. Users with no `user_logins`
+-- row leave `last_sign_in_at` at NULL so the welcome-banner trigger
+-- fires correctly on their first actual sign-in. The backfill
+-- iterates `(user_id, MAX(created_at))` per user and issues one
+-- parameterised UPDATE per row rather than a single
+-- `UPDATE … (correlated subquery) WHERE …`; the latter is rejected by
+-- PostgreSQL with `syntax error at or near "WHERE"` despite being
+-- accepted by SQLite and MySQL.
+--
+-- Schema rules per `0001_initial.sql` and `0004_users_soft_delete.sql`:
+--   * `VARCHAR(32)` for the RFC 3339 millisecond UTC timestamp shape that
+--     keeps lex order = chronological order across SQLite, PostgreSQL, and
+--     MySQL via SQLx Any.
+--   * No literal `DEFAULT` (TEXT/BLOB-affinity columns can't carry one
+--     portably).
+--   * No `IF NOT EXISTS` on `CREATE INDEX`.
+--
+-- The backfill UPDATEs aren't in this SQL file because the migration-run
+-- timestamp must be captured at runtime, not baked into the static SQL.
+-- See `backfill_user_timestamps_if_null` in `sql_store.rs`.
+
+ALTER TABLE users ADD COLUMN created_at VARCHAR(32);
+ALTER TABLE users ADD COLUMN last_sign_in_at VARCHAR(32);

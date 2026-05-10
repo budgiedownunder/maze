@@ -37,6 +37,12 @@ pub fn make_user(username: &str, email: &str) -> User {
         logins: vec![],
         oauth_identities: vec![],
         deleted_at: None,
+        // Truncate to millisecond precision to match the storage round-trip.
+        // `datetime_to_sql` writes RFC 3339 with millis; comparing against a
+        // `Utc::now()` that carries sub-millisecond precision would diff after
+        // the round-trip even though the stored value is correct.
+        created_at: chrono::Utc::now().trunc_subsecs(3),
+        last_sign_in_at: None,
     }
 }
 

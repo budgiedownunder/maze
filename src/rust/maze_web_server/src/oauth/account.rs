@@ -136,6 +136,8 @@ pub async fn resolve(
             Some(email),
         )],
         deleted_at: None,
+        created_at: chrono::Utc::now(),
+        last_sign_in_at: None,
     };
     store.create_user(&mut new_user).await?;
     Ok(ResolveOutcome::Created(new_user))
@@ -305,6 +307,8 @@ mod tests {
             logins: vec![],
             oauth_identities: vec![],
             deleted_at: None,
+            created_at: chrono::Utc::now(),
+            last_sign_in_at: None,
         }
     }
 
@@ -449,6 +453,8 @@ mod tests {
             logins: vec![],
             oauth_identities: vec![],
             deleted_at: None,
+            created_at: chrono::Utc::now(),
+            last_sign_in_at: None,
         }
     }
 

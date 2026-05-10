@@ -639,6 +639,8 @@ impl FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     ///
@@ -823,6 +825,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -880,6 +884,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -997,6 +1003,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// store.create_user(&mut user).await.expect("create_user");
@@ -1057,6 +1065,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1130,6 +1140,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1194,6 +1206,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1261,6 +1275,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1325,6 +1341,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1402,6 +1420,8 @@ impl UserStore for FileStore {
     ///     logins,
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1482,6 +1502,8 @@ impl UserStore for FileStore {
     ///         Some("jsmith@company.com".to_string()),
     ///     )],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1558,6 +1580,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1631,6 +1655,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the admin user within the file store
@@ -1787,6 +1813,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let row = store
@@ -1858,6 +1886,7 @@ impl UserStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
@@ -1906,6 +1935,7 @@ impl UserStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
@@ -1955,6 +1985,7 @@ impl UserStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", false).await.expect("add");
@@ -2511,6 +2542,7 @@ impl TokenStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -2556,6 +2588,7 @@ impl TokenStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -2595,6 +2628,7 @@ impl TokenStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -2650,6 +2684,7 @@ impl TokenStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// for _ in 0..2 {
@@ -2962,6 +2997,8 @@ mod tests {
             logins: vec![],
             oauth_identities: vec![],
             deleted_at: None,
+            created_at: chrono::Utc::now(),
+            last_sign_in_at: None,
         }
     }
 

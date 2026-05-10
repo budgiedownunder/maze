@@ -3877,6 +3877,8 @@ mod test_definitions {
                 Some("oauth@example.com".to_string()),
             )],
             deleted_at: None,
+            created_at: chrono::Utc::now(),
+            last_sign_in_at: None,
         };
         {
             let mut store_lock = shared_store.write().await;
