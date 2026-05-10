@@ -175,12 +175,16 @@ namespace Maze.Maui.App.ViewModels
                 var result = await _authService.SignInWithOAuthAsync(providerName);
                 // Flip the singleton AccountViewModel's IsWelcomeMode flag *before*
                 // navigating so AccountPage renders the welcome banner on first
-                // arrival. New users are pushed straight onto AccountPage so the
-                // banner is the first thing they see; existing users land on the
-                // main page as usual.
-                _accountViewModel.IsWelcomeMode = result.IsNewUser;
+                // arrival. First-time sign-ins are pushed straight onto AccountPage
+                // so the banner is the first thing they see; returning users land
+                // on the main page as usual. The trigger is `IsFirstSignIn` (the
+                // user has had no prior successful sign-in via any method), not
+                // `IsNewUser` (the OAuth flow created a brand-new User row) —
+                // they agree in most cases but disagree e.g. when a user signed
+                // up via credentials but never verified, then signs in via OAuth.
+                _accountViewModel.IsWelcomeMode = result.IsFirstSignIn;
                 await _navigationService.GoToRootAsync("//MainPage");
-                if (result.IsNewUser)
+                if (result.IsFirstSignIn)
                     await _navigationService.GoToAsync(nameof(AccountPage));
             }
             catch (OAuthFlowFailedException ex)

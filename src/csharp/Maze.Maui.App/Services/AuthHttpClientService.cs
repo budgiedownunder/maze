@@ -28,6 +28,9 @@ namespace Maze.Maui.App.Services
 
         [JsonPropertyName("login_token_expires_at")]
         public DateTimeOffset LoginTokenExpiresAt { get; set; }
+
+        [JsonPropertyName("is_first_sign_in")]
+        public bool IsFirstSignIn { get; set; }
     }
 
     /// <summary>
@@ -181,7 +184,7 @@ namespace Maze.Maui.App.Services
             => await SecureStorage.Default.GetAsync(TOKEN_STORAGE_KEY);
 
         /// <inheritdoc/>
-        public async Task<UserProfile> SignInAsync(string email, string password)
+        public async Task<CredentialsSignInResult> SignInAsync(string email, string password)
         {
             var body = JsonSerializer.Serialize(new LoginRequest { Email = email, Password = password });
             var content = new StringContent(body, Encoding.UTF8, "application/json");
@@ -198,7 +201,12 @@ namespace Maze.Maui.App.Services
             await SecureStorage.Default.SetAsync(TOKEN_STORAGE_KEY, loginResponse.LoginTokenId);
             await SecureStorage.Default.SetAsync(TOKEN_EXPIRY_STORAGE_KEY, loginResponse.LoginTokenExpiresAt.ToString("O"));
 
-            return await GetMyProfileAsync();
+            var profile = await GetMyProfileAsync();
+            return new CredentialsSignInResult
+            {
+                Profile = profile,
+                IsFirstSignIn = loginResponse.IsFirstSignIn,
+            };
         }
 
         /// <inheritdoc/>
@@ -231,16 +239,29 @@ namespace Maze.Maui.App.Services
                 throw new Exception("OAuth response did not include a token expiry");
 
             // The server emits `new_user=true` on the redirect URL only when
-            // account::resolve created a brand-new user; the ViewModel layer
-            // uses this to open the Account UI with a welcome banner.
+            // account::resolve created a brand-new user; kept as an audit
+            // signal — see the comment on `OAuthSignInResult` for why
+            // it's distinct from the welcome-banner trigger below.
             bool isNewUser = result.Properties.TryGetValue("new_user", out var newUserRaw)
                              && string.Equals(newUserRaw, "true", StringComparison.Ordinal);
+
+            // The welcome-banner trigger across both auth flows. Server
+            // emits `first_sign_in=true` when the user has had no prior
+            // successful sign-in via any method (see `User::is_first_sign_in`
+            // on the Rust side).
+            bool isFirstSignIn = result.Properties.TryGetValue("first_sign_in", out var firstSignInRaw)
+                                 && string.Equals(firstSignInRaw, "true", StringComparison.Ordinal);
 
             await SecureStorage.Default.SetAsync(TOKEN_STORAGE_KEY, token);
             await SecureStorage.Default.SetAsync(TOKEN_EXPIRY_STORAGE_KEY, expiresAt);
 
             var profile = await GetMyProfileAsync();
-            return new OAuthSignInResult { Profile = profile, IsNewUser = isNewUser };
+            return new OAuthSignInResult
+            {
+                Profile = profile,
+                IsNewUser = isNewUser,
+                IsFirstSignIn = isFirstSignIn,
+            };
         }
 
         /// <inheritdoc/>

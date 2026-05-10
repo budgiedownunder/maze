@@ -46,6 +46,8 @@ export function getOAuthErrorMessage(code: string | null): string | null {
     case 'missing_code':
     case 'provider_response':
       return 'There was a problem completing sign-in with the provider. Please try again.'
+    case 'email_collision':
+      return 'An account already exists with this email address. Make sure you have verified that address first, then try signing in again.'
     case 'store_error':
       return 'A server error occurred while completing sign-in. Please try again later.'
     case 'oauth_callback_missing_token':

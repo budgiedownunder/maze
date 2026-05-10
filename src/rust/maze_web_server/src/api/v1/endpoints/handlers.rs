@@ -1002,6 +1002,24 @@ pub async fn oauth_callback(
                 &mobile_error_url(&scheme, "missing_email", persisted.client_state.as_deref()),
             ));
         }
+        Err(account::ResolveError::Store(StoreError::UserEmailExists())) => {
+            // Specific case: branch 3 (create new user) hit a unique-email
+            // collision — typically because a credentials user already
+            // owns this email but in an unverified state, so OAuth resolve
+            // refused to auto-link to them (squat protection) and then
+            // refused to create a duplicate. Emit a dedicated reason code
+            // so clients can show "an account already exists with this
+            // email" instead of the generic store-error message.
+            log::warn!(
+                "oauth resolve email collision: an existing account already owns the address"
+            );
+            return Ok(redirect_with_clear(
+                persisted.origin,
+                &scheme,
+                &web_error_url("email_collision"),
+                &mobile_error_url(&scheme, "email_collision", persisted.client_state.as_deref()),
+            ));
+        }
         Err(account::ResolveError::Store(e)) => {
             log::error!("oauth resolve store error: {e}");
             return Ok(redirect_with_clear(

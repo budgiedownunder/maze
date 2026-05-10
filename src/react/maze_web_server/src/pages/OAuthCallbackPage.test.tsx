@@ -19,6 +19,18 @@ describe('getOAuthErrorMessage', () => {
     expect(getOAuthErrorMessage('email_not_verified')).toMatch(/verified email/i)
   })
 
+  it('explains email_collision distinct from generic store errors', () => {
+    const collision = getOAuthErrorMessage('email_collision')!
+    expect(collision).toMatch(/account already exists/i)
+    // The actionable cause: the email exists but is unverified. Both
+    // password-sign-in and OAuth-auto-link gate on a verified email, so
+    // the user must verify before either path will work.
+    expect(collision).toMatch(/verif/i)
+    // Must not blur into the catch-all "server error" message.
+    expect(collision).not.toMatch(/server error/i)
+    expect(getOAuthErrorMessage('store_error')).toMatch(/server error/i)
+  })
+
   it('coalesces all state-related codes into one message', () => {
     const message = getOAuthErrorMessage('invalid_state')
     expect(getOAuthErrorMessage('missing_state')).toBe(message)

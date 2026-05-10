@@ -58,6 +58,8 @@ namespace Maze.Maui.App.Services
                     "The sign-in session expired or was invalid. Please try again.",
                 "missing_code" or "provider_response" =>
                     "There was a problem completing sign-in with the provider. Please try again.",
+                "email_collision" =>
+                    "An account already exists with this email address. Make sure you have verified that address first, then try signing in again.",
                 "store_error" =>
                     "A server error occurred while completing sign-in. Please try again later.",
                 _ => "We could not sign you in. Please try again.",
