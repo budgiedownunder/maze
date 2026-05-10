@@ -641,7 +641,12 @@ fn oauth_error_to_actix(err: OAuthError) -> Error {
     }
 }
 
-fn web_callback_url(token_id: Uuid, expires_at: DateTime<Utc>, is_new_user: bool) -> String {
+fn web_callback_url(
+    token_id: Uuid,
+    expires_at: DateTime<Utc>,
+    is_new_user: bool,
+    is_first_sign_in: bool,
+) -> String {
     let mut url = format!(
         "/oauth/callback#token={}&expires_at={}",
         token_id,
@@ -649,6 +654,9 @@ fn web_callback_url(token_id: Uuid, expires_at: DateTime<Utc>, is_new_user: bool
     );
     if is_new_user {
         url.push_str("&new_user=true");
+    }
+    if is_first_sign_in {
+        url.push_str("&first_sign_in=true");
     }
     url
 }
@@ -659,6 +667,7 @@ fn mobile_callback_url(
     expires_at: DateTime<Utc>,
     client_state: Option<&str>,
     is_new_user: bool,
+    is_first_sign_in: bool,
 ) -> String {
     // Params live in the URL FRAGMENT (`#token=...&...`) rather than the query
     // string. The mobile final response is a 200 OK HTML bridge page (see
@@ -690,6 +699,9 @@ fn mobile_callback_url(
     }
     if is_new_user {
         url.push_str("&new_user=true");
+    }
+    if is_first_sign_in {
+        url.push_str("&first_sign_in=true");
     }
     url
 }
@@ -1005,6 +1017,9 @@ pub async fn oauth_callback(
         account::ResolveOutcome::SignedIn(u) => (u, false),
         account::ResolveOutcome::Created(u) => (u, true),
     };
+    // Capture is_first_sign_in before `create_login` because the latter flips
+    // `last_sign_in_at` to `Some(now)`
+    let is_first_sign_in = user.is_first_sign_in();
     let new_login = user.create_login(
         config.security.login_expiry_hours,
         get_caller_ip_address(&req),
@@ -1018,13 +1033,14 @@ pub async fn oauth_callback(
 
     let token_id = new_login.id;
     let expires_at = new_login.expires_at;
-    let web_url = web_callback_url(token_id, expires_at, is_new_user);
+    let web_url = web_callback_url(token_id, expires_at, is_new_user, is_first_sign_in);
     let mobile_url = mobile_callback_url(
         &scheme,
         token_id,
         expires_at,
         persisted.client_state.as_deref(),
         is_new_user,
+        is_first_sign_in,
     );
     Ok(oauth_callback_response(persisted.origin, &web_url, &mobile_url))
 }
@@ -1305,6 +1321,10 @@ pub struct LoginResponse {
     #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
     /// Expiry timestamp of the login token
     pub login_token_expires_at: DateTime<Utc>,
+
+    /// First ever sign in?
+    #[schema(example = false)]
+    pub is_first_sign_in: bool,
 }
 #[utoipa::path(
     summary = "Login",
@@ -1328,6 +1348,9 @@ pub async fn login(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut user = verify_user_credentials(&store, &auth_service, &login_req.email, &login_req.password).await?;
+    // Captured before `create_login` because the latter flips
+    // `last_sign_in_at` to `Some(now)`.
+    let is_first_sign_in = user.is_first_sign_in();
     let login_expiry_hours = config.security.login_expiry_hours;
     let login = user.create_login(login_expiry_hours, get_caller_ip_address(&req), get_caller_device_info(&req));
     let store_lock = get_store_write_lock(&store).await;
@@ -1337,8 +1360,9 @@ pub async fn login(
 
     Ok(HttpResponse::Ok().json(LoginResponse {
         login_token_id: login.id,
-        login_token_expires_at: login.expires_at, 
-    }))           
+        login_token_expires_at: login.expires_at,
+        is_first_sign_in,
+    }))
 }
 // **************************************************************************************************
 // Endpoint: GET /api/v1/logout

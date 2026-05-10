@@ -497,6 +497,7 @@ impl User {
         self.logins.retain(|login| login.expires_at > now);
         let login = UserLogin::new(expiry_hours, ip_address, device_info);
         self.logins.push(login.clone());
+        self.last_sign_in_at = Some(now);
         login
     }
     /// Creates a user and then performs a login

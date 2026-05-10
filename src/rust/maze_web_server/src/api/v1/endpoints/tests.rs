@@ -1132,6 +1132,13 @@ mod test_definitions {
             let login_id = login_response.login_token_id;
             assert_ne!(login_id, Uuid::nil());
             assert_ne!(login_response.login_token_expires_at, DateTime::<Utc>::default());
+            // Fresh users created by the test helper have `last_sign_in_at = None`
+            // and `logins = []`, so their first successful login through this
+            // helper should always report the welcome-banner trigger.
+            assert!(
+                login_response.is_first_sign_in,
+                "fresh user's first login must report is_first_sign_in = true"
+            );
 
             if run_logout_test {
                 verify_user_login_presence(&shared_store, email, login_id, true).await;
@@ -2091,6 +2098,85 @@ mod test_definitions {
             true,
             Some(StatusCode::NO_CONTENT)
         ).await;
+    }
+
+    /// Two consecutive logins with the same credentials: the second response
+    /// must carry `is_first_sign_in = false` because `User::create_login` on
+    /// the first login set `last_sign_in_at = Some(now)` (sticky).
+    #[actix_web::test]
+    async fn second_login_reports_is_first_sign_in_false() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let login_request = LoginRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+
+        // First login — fresh user, `is_first_sign_in` is true.
+        let req1 = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let resp1 = test::call_service(&app, req1).await;
+        assert_eq!(resp1.status(), StatusCode::OK);
+        let body1 = test::read_body(resp1).await;
+        let login_response_1: LoginResponse =
+            serde_json::from_slice(&body1).expect("deserialize first login response");
+        assert!(login_response_1.is_first_sign_in, "first login must be is_first_sign_in = true");
+
+        // Second login — same user, no logout in between. `last_sign_in_at`
+        // is now `Some(...)` and `logins` is non-empty.
+        let req2 = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let resp2 = test::call_service(&app, req2).await;
+        assert_eq!(resp2.status(), StatusCode::OK);
+        let body2 = test::read_body(resp2).await;
+        let login_response_2: LoginResponse =
+            serde_json::from_slice(&body2).expect("deserialize second login response");
+        assert!(!login_response_2.is_first_sign_in, "second login must be is_first_sign_in = false");
+    }
+
+    /// Login → logout → login. Sign-out removes the entry from `logins`,
+    /// but `last_sign_in_at` is sticky, so the second login still reports
+    /// `is_first_sign_in = false`. Guards against regressions to a
+    /// `logins.is_empty()`-only check, which would silently fail this case.
+    #[actix_web::test]
+    async fn login_after_signout_reports_is_first_sign_in_false() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let login_request = LoginRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+
+        // First login.
+        let req1 = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let resp1 = test::call_service(&app, req1).await;
+        assert_eq!(resp1.status(), StatusCode::OK);
+        let body1 = test::read_body(resp1).await;
+        let login_response_1: LoginResponse =
+            serde_json::from_slice(&body1).expect("deserialize first login response");
+        assert!(login_response_1.is_first_sign_in, "first login must be is_first_sign_in = true");
+
+        // Logout — removes the login entry from `user.logins`.
+        let logout_req = create_test_post_request(
+            "/api/v1/logout",
+            None,
+            Some(login_response_1.login_token_id),
+            None::<&()>,
+        );
+        let logout_resp = test::call_service(&app, logout_req).await;
+        assert_eq!(logout_resp.status(), StatusCode::NO_CONTENT);
+
+        // Second login post-logout — `logins` is empty again, but
+        // `last_sign_in_at` is still `Some(...)` from the first login, so
+        // the trigger correctly stays false.
+        let req2 = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let resp2 = test::call_service(&app, req2).await;
+        assert_eq!(resp2.status(), StatusCode::OK);
+        let body2 = test::read_body(resp2).await;
+        let login_response_2: LoginResponse =
+            serde_json::from_slice(&body2).expect("deserialize second login response");
+        assert!(
+            !login_response_2.is_first_sign_in,
+            "post-signout login must be is_first_sign_in = false (sticky last_sign_in_at)"
+        );
     }
 
     #[actix_web::test]
