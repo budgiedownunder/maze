@@ -96,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const response = await api.login(email, password)
     await setAuthFromTokenResponse(response.login_token_id, response.login_token_expires_at)
+    return { isFirstSignIn: response.is_first_sign_in }
   }, [setAuthFromTokenResponse])
 
   const logout = useCallback(async () => {

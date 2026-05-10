@@ -61,12 +61,12 @@ describe('getOAuthErrorMessage', () => {
 describe('parseCallbackHash', () => {
   it('extracts token and expires_at from a hash with leading #', () => {
     const result = parseCallbackHash('#token=abc-123&expires_at=2026-04-26T12:00:00Z')
-    expect(result).toEqual({ token: 'abc-123', expiresAt: '2026-04-26T12:00:00Z', newUser: false })
+    expect(result).toEqual({ token: 'abc-123', expiresAt: '2026-04-26T12:00:00Z', newUser: false, firstSignIn: false })
   })
 
   it('accepts a hash without leading #', () => {
     const result = parseCallbackHash('token=abc-123&expires_at=2026-04-26T12:00:00Z')
-    expect(result).toEqual({ token: 'abc-123', expiresAt: '2026-04-26T12:00:00Z', newUser: false })
+    expect(result).toEqual({ token: 'abc-123', expiresAt: '2026-04-26T12:00:00Z', newUser: false, firstSignIn: false })
   })
 
   it('decodes percent-encoded expires_at', () => {
@@ -89,7 +89,8 @@ describe('parseCallbackHash', () => {
 
   it('flags newUser=true when the server emits new_user=true', () => {
     // Set by the Rust callback handler when account::resolve returned `Created`
-    // (first-time OAuth user). Triggers the welcome-banner auto-open in the SPA.
+    // (User row was just created during this OAuth flow). Distinct from
+    // firstSignIn, which is the welcome-banner trigger.
     const result = parseCallbackHash('#token=abc&expires_at=2026-04-26T12:00:00Z&new_user=true')
     expect(result?.newUser).toBe(true)
   })
@@ -103,5 +104,24 @@ describe('parseCallbackHash', () => {
     expect(parseCallbackHash('#token=a&expires_at=z&new_user=1')?.newUser).toBe(false)
     expect(parseCallbackHash('#token=a&expires_at=z&new_user=yes')?.newUser).toBe(false)
     expect(parseCallbackHash('#token=a&expires_at=z&new_user=false')?.newUser).toBe(false)
+  })
+
+  it('flags firstSignIn=true when the server emits first_sign_in=true', () => {
+    const result = parseCallbackHash('#token=abc&expires_at=2026-04-26T12:00:00Z&first_sign_in=true')
+    expect(result?.firstSignIn).toBe(true)
+  })
+
+  it('returns firstSignIn=false when the server omits first_sign_in', () => {
+    const result = parseCallbackHash('#token=abc&expires_at=2026-04-26T12:00:00Z')
+    expect(result?.firstSignIn).toBe(false)
+  })
+
+  it('treats newUser and firstSignIn as independent flags', () => {
+    const both = parseCallbackHash('#token=a&expires_at=z&new_user=true&first_sign_in=true')
+    expect(both).toMatchObject({ newUser: true, firstSignIn: true })
+    const onlyFirst = parseCallbackHash('#token=a&expires_at=z&first_sign_in=true')
+    expect(onlyFirst).toMatchObject({ newUser: false, firstSignIn: true })
+    const onlyNew = parseCallbackHash('#token=a&expires_at=z&new_user=true')
+    expect(onlyNew).toMatchObject({ newUser: true, firstSignIn: false })
   })
 })

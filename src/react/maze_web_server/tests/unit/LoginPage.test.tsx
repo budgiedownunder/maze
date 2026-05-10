@@ -55,13 +55,29 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled()
   })
 
-  it('navigates to /mazes on successful login', async () => {
-    mockLogin.mockResolvedValue(undefined)
+  it('navigates to /mazes on successful login when not first sign-in', async () => {
+    mockLogin.mockResolvedValue({ isFirstSignIn: false })
     renderLoginPage()
     await userEvent.type(screen.getByLabelText(/email/i), 'test@example.com')
     await userEvent.type(screen.getByLabelText('Password'), 'Password1!')
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }))
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/mazes', { replace: true }))
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('/mazes', { replace: true, state: undefined }),
+    )
+  })
+
+  it('navigates to /account with welcome state when first sign-in', async () => {
+    mockLogin.mockResolvedValue({ isFirstSignIn: true })
+    renderLoginPage()
+    await userEvent.type(screen.getByLabelText(/email/i), 'test@example.com')
+    await userEvent.type(screen.getByLabelText('Password'), 'Password1!')
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }))
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('/account', {
+        replace: true,
+        state: { welcome: true },
+      }),
+    )
   })
 
   it('shows error message on 401', async () => {

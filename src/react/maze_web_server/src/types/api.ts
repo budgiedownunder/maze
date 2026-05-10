@@ -26,6 +26,7 @@ export interface AddUserEmailRequest {
 export interface LoginResponse {
   login_token_id: string
   login_token_expires_at: string
+  is_first_sign_in: boolean
 }
 
 export interface RenewResponse {

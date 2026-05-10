@@ -45,11 +45,16 @@ export function clearAuthState(): void {
   sessionStorage.removeItem('auth')
 }
 
+/** Result of a successful credentials login */
+export interface CredentialsSignInResult {
+  isFirstSignIn: boolean
+}
+
 export interface AuthContextValue {
   isLoading: boolean
   isAuthenticated: boolean
   profile: UserProfile | null
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<CredentialsSignInResult>
   /** Ingest a bearer token issued through any auth flow other than password
    *  (today: OAuth callback). Performs the same post-login state transitions
    *  as `login()` — sessionStorage write, profile fetch, renewal interval —
