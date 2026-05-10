@@ -333,6 +333,18 @@ async fn remove_user_email_returns_not_found_for_unknown_address() {
 }
 
 #[tokio::test]
+async fn remove_user_email_drops_matching_oauth_identities() {
+    let mut s = fresh_store().await;
+    contract::remove_user_email_drops_matching_oauth_identities(&mut s).await;
+}
+
+#[tokio::test]
+async fn remove_user_email_preserves_unrelated_oauth_identities() {
+    let mut s = fresh_store().await;
+    contract::remove_user_email_preserves_unrelated_oauth_identities(&mut s).await;
+}
+
+#[tokio::test]
 async fn set_primary_email_clears_other_primaries() {
     let mut s = fresh_store().await;
     contract::set_primary_email_clears_other_primaries(&mut s).await;

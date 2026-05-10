@@ -1618,6 +1618,36 @@ impl UserStore for SqlStore {
         }
     }
 
+    /// Locates a user by an email address regardless of verification state.
+    /// Same SQL shape as [`find_user_by_verified_email`] minus the
+    /// `ue.verified <> 0` filter. The `user_emails.email` UNIQUE constraint
+    /// guarantees at most one match in healthy state; the multi-row guard
+    /// is here for parity and to fail loudly if a future migration ever
+    /// weakens that constraint.
+    ///
+    /// See the trait doc-comment for usage rules — auth code must use
+    /// [`find_user_by_verified_email`] instead.
+    async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, Error> {
+        let mut rows = sqlx::query(&q(
+            self.kind,
+            "SELECT u.* FROM users u \
+             JOIN user_emails ue ON ue.user_id = u.id \
+             WHERE LOWER(ue.email) = LOWER(?) \
+               AND u.deleted_at IS NULL",
+        ))
+        .bind(email)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        match rows.len() {
+            0 => Err(Error::UserNotFound()),
+            1 => user_from_row(&self.pool, self.kind, &rows.pop().expect("len==1")).await,
+            n => Err(integrity_violation(&format!(
+                "{n} users match email '{email}' case-insensitively"
+            ))),
+        }
+    }
+
     /// Locates a user by their api key within the store
     ///
     /// # Examples
@@ -2312,6 +2342,21 @@ impl UserStore for SqlStore {
             self.kind,
             "DELETE FROM user_emails \
              WHERE user_id = ? AND LOWER(email) = LOWER(?)",
+        ))
+        .bind(user_id.to_string())
+        .bind(email)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        // Drop any OAuth identity rows whose `provider_email` matches the
+        // removed address. See the trait doc for the invariant this
+        // upholds — otherwise an OAuth provider could still authenticate
+        // the user via branch 1 of `account::resolve` (which matches by
+        // `(provider, provider_user_id)`, not by current email).
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM oauth_identities \
+             WHERE user_id = ? AND LOWER(provider_email) = LOWER(?)",
         ))
         .bind(user_id.to_string())
         .bind(email)

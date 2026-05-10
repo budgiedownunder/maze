@@ -665,6 +665,79 @@ pub async fn remove_user_email_returns_not_found_for_unknown_address(
     assert!(matches!(err, Error::UserEmailNotFound(_)), "got {err:?}");
 }
 
+pub async fn remove_user_email_drops_matching_oauth_identities(store: &mut Box<dyn Store>) {
+    // An OAuth identity bound to a since-removed email must NOT survive
+    // the removal — otherwise the OAuth provider could still authenticate
+    // the user via branch 1 of `account::resolve` (which matches by
+    // `(provider, provider_user_id)`, not by current email).
+    let mut alice = make_user("alice", "alice@example.com");
+    alice.oauth_identities.push(OAuthIdentity::new(
+        "google".to_string(),
+        "google-sub-alice".to_string(),
+        Some("alice@example.com".to_string()),
+    ));
+    store.create_user(&mut alice).await.expect("create_user");
+    // Need a second email so removing the primary's match doesn't trip
+    // `UserEmailIsLast` — we'll add and promote a secondary, then remove
+    // the original.
+    store
+        .add_user_email(alice.id, "alice2@example.com", true)
+        .await
+        .expect("add secondary");
+    store
+        .set_primary_email(alice.id, "alice2@example.com")
+        .await
+        .expect("promote secondary");
+
+    store
+        .remove_user_email(alice.id, "alice@example.com")
+        .await
+        .expect("remove_user_email");
+
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    assert!(
+        loaded.oauth_identities.is_empty(),
+        "OAuth identity tied to removed email must be dropped, got {:?}",
+        loaded.oauth_identities
+    );
+}
+
+pub async fn remove_user_email_preserves_unrelated_oauth_identities(store: &mut Box<dyn Store>) {
+    // OAuth identities whose `provider_email` does NOT match the removed
+    // address (or is `None`) must be preserved.
+    let mut alice = make_user("alice", "alice@example.com");
+    alice.oauth_identities.push(OAuthIdentity::new(
+        "google".to_string(),
+        "google-sub-alice".to_string(),
+        Some("alice@example.com".to_string()),
+    ));
+    alice.oauth_identities.push(OAuthIdentity::new(
+        "github".to_string(),
+        "github-sub-alice".to_string(),
+        Some("alt@example.com".to_string()),
+    ));
+    store.create_user(&mut alice).await.expect("create_user");
+    store
+        .add_user_email(alice.id, "alt@example.com", true)
+        .await
+        .expect("add secondary");
+
+    store
+        .remove_user_email(alice.id, "alt@example.com")
+        .await
+        .expect("remove alt@example.com");
+
+    let loaded = store.get_user(alice.id).await.expect("get_user");
+    // The github identity bound to the removed `alt@example.com` is gone.
+    // The google identity bound to `alice@example.com` survives.
+    assert_eq!(loaded.oauth_identities.len(), 1);
+    assert_eq!(loaded.oauth_identities[0].provider, "google");
+    assert_eq!(
+        loaded.oauth_identities[0].provider_email.as_deref(),
+        Some("alice@example.com")
+    );
+}
+
 pub async fn set_primary_email_clears_other_primaries(store: &mut Box<dyn Store>) {
     let alice = fixture_user(store, "alice", "alice@example.com").await;
     store

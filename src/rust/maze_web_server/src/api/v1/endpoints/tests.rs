@@ -381,6 +381,22 @@ mod test_definitions {
             }
             Err(StoreError::UserNotFound())
         }
+        /// Locates a user by an email address regardless of verification
+        /// state. Mirrors the real stores; used by the OAuth squat-reclaim
+        /// path to inspect whether a colliding email belongs to a real
+        /// account or a squatter.
+        async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, StoreError> {
+            for v in self.users.values() {
+                if v.user
+                    .emails
+                    .iter()
+                    .any(|row| row.email.eq_ignore_ascii_case(email))
+                {
+                    return Ok(v.user.clone());
+                }
+            }
+            Err(StoreError::UserNotFound())
+        }
         /// Locates a user by their api key within the store
         async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, StoreError> {
             for v in self.users.values() {
@@ -494,6 +510,16 @@ mod test_definitions {
                 return Err(StoreError::UserEmailIsPrimary());
             }
             mock_user.user.emails.remove(idx);
+            // Mirror the production stores: drop OAuth identities whose
+            // `provider_email` matches the removed address. See the trait
+            // doc on `UserStore::remove_user_email`.
+            mock_user
+                .user
+                .oauth_identities
+                .retain(|id| match id.provider_email.as_deref() {
+                    Some(addr) => !addr.eq_ignore_ascii_case(email),
+                    None => true,
+                });
             Ok(())
         }
 

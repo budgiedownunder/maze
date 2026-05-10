@@ -1311,6 +1311,18 @@ impl UserStore for FileStore {
     async fn find_user_by_verified_email(&self, email: &str) -> Result<User, Error> {
         self.find_user_by_verified_email_internal(email)
     }
+
+    /// Locates a user by an email address regardless of verification state.
+    /// Delegates to the existing `find_user_by_any_email_internal` walker
+    /// (originally added for the unique-email collision check) with
+    /// `Uuid::nil()` as the ignore id, so every active user is considered.
+    ///
+    /// See the trait doc-comment for usage rules — auth code must use
+    /// [`UserStore::find_user_by_verified_email`] instead.
+    async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, Error> {
+        self.find_user_by_any_email_internal(email, Uuid::nil())
+    }
+
     /// Locates a user by their api key within the store
     ///
     /// # Examples
@@ -1907,6 +1919,15 @@ impl UserStore for FileStore {
             return Err(Error::UserEmailIsPrimary());
         }
         user.emails.remove(idx);
+        // Drop any OAuth identity rows whose `provider_email` matches the
+        // removed address. See the trait doc for the invariant this
+        // upholds — otherwise an OAuth provider could still authenticate
+        // the user via branch 1 of `account::resolve` (which matches by
+        // `(provider, provider_user_id)`, not by current email).
+        user.oauth_identities.retain(|id| match id.provider_email.as_deref() {
+            Some(addr) => !addr.eq_ignore_ascii_case(email),
+            None => true,
+        });
         self.write_user_file(&user, true)?;
         Ok(())
     }

@@ -39,6 +39,21 @@ pub trait UserStore {
     /// session-hijack scenario where an attacker attaches an unverified
     /// address to a victim's account and redirects password resets to it.
     async fn find_user_by_verified_email(&self, email: &str) -> Result<User, Error>;
+    /// Locates a user by an email address within the store, **regardless
+    /// of verification state**. Use only when the verification state of
+    /// the row is being inspected by the caller for a downstream
+    /// decision. Authentication / session paths must use
+    /// [`UserStore::find_user_by_verified_email`] instead — that variant
+    /// gates on `verified = true` to prevent attaching to attacker-
+    /// controlled rows.
+    ///
+    /// Existing callers:
+    /// - OAuth squat-reclaim (`maze_web_server::oauth::account::resolve`):
+    ///   when branch 3 would create a user but the email is already held
+    ///   by an unverified, no-OAuth squatted record, the reclaim path
+    ///   inspects the existing user's emails + identities here before
+    ///   purging it.
+    async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, Error>;
     /// Locates a user by their api key within the store
     async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error>;
     /// Locates a user by their login id within the store
@@ -70,10 +85,19 @@ pub trait UserStore {
         email: &str,
         verified: bool,
     ) -> Result<UserEmail, Error>;
-    /// Removes an email row from the user. Rejects with
-    /// [`Error::UserEmailIsPrimary`] if it is the primary row (caller must
-    /// promote another first), and with [`Error::UserEmailIsLast`] if it is
-    /// the user's only email row.
+    /// Removes an email row from the user, and atomically removes any of
+    /// the user's `oauth_identities` rows whose `provider_email` matches
+    /// the removed address (case-insensitive). The invariant the
+    /// secondary cleanup maintains is "an OAuth identity row implies the
+    /// user still owns the email the provider linked through" — without
+    /// it, an OAuth identity bound to a since-removed email would let
+    /// the OAuth provider still authenticate the user (branch 1 of
+    /// `account::resolve` matches by `(provider, provider_user_id)`, not
+    /// by email).
+    ///
+    /// Rejects with [`Error::UserEmailIsPrimary`] if it is the primary
+    /// row (caller must promote another first), and with
+    /// [`Error::UserEmailIsLast`] if it is the user's only email row.
     async fn remove_user_email(
         &mut self,
         user_id: Uuid,

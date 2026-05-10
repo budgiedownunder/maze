@@ -44,8 +44,8 @@ This runs:
 - FileStore inline unit tests
 - SqlStore inline unit tests (datetime helpers — gated by `sql-store`)
 - Validation tests
-- The contract suite against FileStore (`tests/file_store_contract.rs` — 115 scenarios)
-- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 115 scenarios)
+- The contract suite against FileStore (`tests/file_store_contract.rs` — 117 scenarios)
+- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 117 scenarios)
 - Doc tests
 
 Tests run in parallel — every FileStore test is rooted at its own `tempfile::TempDir`, and every SqlStore test creates its own in-memory SQLite, so there's no shared state to serialise around.
