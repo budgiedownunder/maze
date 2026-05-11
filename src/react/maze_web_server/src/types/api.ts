@@ -67,6 +67,7 @@ export interface OAuthProviderPublic {
 export interface AppFeatures {
   allow_signup: boolean
   oauth_providers: OAuthProviderPublic[]
+  email_enabled: boolean
 }
 
 export interface GenerateOptions {

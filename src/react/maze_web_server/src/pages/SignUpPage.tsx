@@ -16,7 +16,7 @@ export function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
-  const { oauth_providers } = useAppFeatures()
+  const { oauth_providers, email_enabled } = useAppFeatures()
 
   useEffect(() => { setError(null) }, [email, password, confirmPassword])
 
@@ -33,8 +33,15 @@ export function SignUpPage() {
     setError(null)
     try {
       await api.signup(email, password)
+      // When email is enabled the server has dispatched a verification email
+      // and the primary email lands unverified — direct the user to their
+      // inbox. When email is disabled the server has marked the primary
+      // verified at creation, so the user can sign in immediately.
+      const message = email_enabled
+        ? 'Account created. Check your inbox for a verification email before signing in.'
+        : 'Account created. You can sign in now.'
       navigate(
-        '/login?message=Account+created.+Check+your+inbox+for+a+verification+email+before+signing+in.',
+        `/login?message=${encodeURIComponent(message)}`,
         { replace: true },
       )
     } catch (ex: unknown) {

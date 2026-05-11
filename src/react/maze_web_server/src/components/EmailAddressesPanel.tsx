@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as api from '../api/client'
 import type { UserEmail } from '../types/api'
 import { isValidEmail } from '../utils/validation'
+import { useAppFeatures } from '../context/AppFeaturesContext'
 import { ConfirmModal } from './ConfirmModal'
 
 interface Props {
@@ -19,6 +20,7 @@ export function EmailAddressesPanel({ token }: Props) {
   const [isAdding, setIsAdding] = useState(false)
   const [pendingRemove, setPendingRemove] = useState<string | null>(null)
   const resendFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { email_enabled } = useAppFeatures()
 
   useEffect(() => () => {
     if (resendFlashTimer.current !== null) clearTimeout(resendFlashTimer.current)
@@ -91,9 +93,15 @@ export function EmailAddressesPanel({ token }: Props) {
     setIsAdding(true)
     setError(null)
     try {
+      const added = newEmail
       const res = await api.addMyEmail(token, newEmail)
       setEmails(res.emails)
       setNewEmail('')
+      if (email_enabled) {
+        if (resendFlashTimer.current !== null) clearTimeout(resendFlashTimer.current)
+        setResendFlash(`An email verification has been sent to ${added}. You must verify that email before you can claim it for this account.`)
+        resendFlashTimer.current = setTimeout(() => setResendFlash(null), RESEND_FLASH_MS)
+      }
     } catch (ex: unknown) {
       const status = (ex as { status?: number }).status
       const message = (ex as { message?: string }).message

@@ -4,8 +4,10 @@ import type { AppFeatures } from '../types/api'
 // Fail-open defaults: if the features endpoint is unreachable we still let
 // the user attempt to sign up / sign in. OAuth providers fail closed though
 // because we'd have no display names to render — better to hide the buttons
-// than to render half-broken ones.
-export const APP_FEATURES_DEFAULTS: AppFeatures = { allow_signup: true, oauth_providers: [] }
+// than to render half-broken ones. email_enabled also fails closed: if we
+// can't reach the server, hide the email-dependent surfaces (verification
+// banners, password reset) rather than promise behaviour we can't deliver.
+export const APP_FEATURES_DEFAULTS: AppFeatures = { allow_signup: true, oauth_providers: [], email_enabled: false }
 
 export const AppFeaturesContext = createContext<AppFeatures>(APP_FEATURES_DEFAULTS)
 

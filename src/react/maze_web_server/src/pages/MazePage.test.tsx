@@ -41,7 +41,7 @@ function renderMazePage(id: string) {
     { initialEntries: [`/mazes/${id}`] },
   )
   return render(
-    <AppFeaturesContext.Provider value={{ allow_signup: true, oauth_providers: [] }}>
+    <AppFeaturesContext.Provider value={{ allow_signup: true, oauth_providers: [], email_enabled: false }}>
       <ThemeProvider>
         <AuthProvider>
           <RouterProvider router={router} />

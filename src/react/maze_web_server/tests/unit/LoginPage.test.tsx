@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
+import { AppFeaturesContext, APP_FEATURES_DEFAULTS } from '../../src/context/AppFeaturesContext'
 import { LoginPage } from '../../src/pages/LoginPage'
 
 const mockNavigate = vi.fn()
@@ -27,12 +28,14 @@ vi.mock('../../src/context/AuthContext', async () => {
   }
 })
 
-function renderLoginPage(initialEntry = '/login') {
+function renderLoginPage(initialEntry = '/login', emailEnabled = true) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
-      <ThemeProvider>
-        <LoginPage />
-      </ThemeProvider>
+      <AppFeaturesContext.Provider value={{ ...APP_FEATURES_DEFAULTS, email_enabled: emailEnabled }}>
+        <ThemeProvider>
+          <LoginPage />
+        </ThemeProvider>
+      </AppFeaturesContext.Provider>
     </MemoryRouter>
   )
 }
@@ -93,6 +96,13 @@ describe('LoginPage', () => {
     renderLoginPage()
     await userEvent.click(screen.getByRole('button', { name: /forgot password/i }))
     expect(mockNavigate).toHaveBeenCalledWith('/forgot-password')
+  })
+
+  it('hides the Forgot password? link when email is disabled', () => {
+    renderLoginPage('/login', false)
+    expect(screen.queryByRole('button', { name: /forgot password/i })).not.toBeInTheDocument()
+    // Sign in / sign up controls are unaffected.
+    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
   })
 
   it('surfaces the ?message= flash and clears it from the URL', async () => {

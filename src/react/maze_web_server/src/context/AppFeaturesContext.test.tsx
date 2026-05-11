@@ -35,6 +35,37 @@ describe('AppFeaturesContext', () => {
     expect(result.current.oauth_providers).toEqual([])
   })
 
+  it('treats a missing email_enabled field as false (compat with older servers)', async () => {
+    server.use(
+      http.get('/api/v1/features', () => HttpResponse.json({ allow_signup: true }))
+    )
+    const { result } = renderHook(() => useAppFeatures(), {
+      wrapper: AppFeaturesProvider,
+    })
+    await waitFor(() => {
+      expect(result.current.allow_signup).toBe(true)
+    })
+    // Fail-closed: an older server that doesn't return email_enabled is
+    // assumed to lack working email — hides verification banners etc.
+    expect(result.current.email_enabled).toBe(false)
+  })
+
+  it('reflects server-supplied email_enabled value', async () => {
+    server.use(
+      http.get('/api/v1/features', () => HttpResponse.json({
+        allow_signup: true,
+        oauth_providers: [],
+        email_enabled: true,
+      }))
+    )
+    const { result } = renderHook(() => useAppFeatures(), {
+      wrapper: AppFeaturesProvider,
+    })
+    await waitFor(() => {
+      expect(result.current.email_enabled).toBe(true)
+    })
+  })
+
   it('fails open when fetch fails', async () => {
     server.use(
       http.get('/api/v1/features', () => HttpResponse.error())
@@ -46,7 +77,10 @@ describe('AppFeaturesContext', () => {
       expect(result.current.allow_signup).toBe(true)
     })
     // OAuth fails closed: defaults already set oauth_providers to [] and a
-    // failed fetch leaves them that way (no display names to render).
+    // failed fetch leaves them that way (no display names to render). Email
+    // fails closed for the same reason — better silent than promise
+    // behaviour we can't deliver.
     expect(result.current.oauth_providers).toEqual([])
+    expect(result.current.email_enabled).toBe(false)
   })
 })

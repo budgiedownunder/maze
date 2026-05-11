@@ -17,7 +17,7 @@ export function LoginPage() {
   const { login, isLoading } = useAuth()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
-  const { allow_signup, oauth_providers } = useAppFeatures()
+  const { allow_signup, oauth_providers, email_enabled } = useAppFeatures()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Surface OAuth-flow errors that the server (or the OAuthCallbackPage)
@@ -98,9 +98,11 @@ export function LoginPage() {
         <button type="submit" disabled={submitDisabled} className="btn-submit">
           Sign In
         </button>
-        <button type="button" onClick={() => navigate('/forgot-password')} disabled={isBusy} className="btn-link">
-          Forgot password?
-        </button>
+        {email_enabled && (
+          <button type="button" onClick={() => navigate('/forgot-password')} disabled={isBusy} className="btn-link">
+            Forgot password?
+          </button>
+        )}
         {allow_signup && (
           <button type="button" onClick={() => navigate('/signup')} disabled={isBusy} className="btn-link">
             Sign Up

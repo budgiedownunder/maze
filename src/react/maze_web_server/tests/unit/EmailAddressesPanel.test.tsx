@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
 import { resetMockEmails } from '../../src/mocks/handlers'
 import { EmailAddressesPanel } from '../../src/components/EmailAddressesPanel'
+import { AppFeaturesContext, APP_FEATURES_DEFAULTS } from '../../src/context/AppFeaturesContext'
 import type { UserEmailsResponse } from '../../src/types/api'
 
 const TOKEN = 'test-token'
@@ -13,8 +14,12 @@ beforeEach(() => {
   resetMockEmails()
 })
 
-async function renderPanel() {
-  render(<EmailAddressesPanel token={TOKEN} />)
+async function renderPanel(emailEnabled = false) {
+  render(
+    <AppFeaturesContext.Provider value={{ ...APP_FEATURES_DEFAULTS, email_enabled: emailEnabled }}>
+      <EmailAddressesPanel token={TOKEN} />
+    </AppFeaturesContext.Provider>,
+  )
   // Wait for the initial GET to resolve so subsequent assertions don't race.
   await waitFor(() => expect(screen.queryByText(/loading emails/i)).not.toBeInTheDocument())
 }
@@ -298,6 +303,32 @@ describe('EmailAddressesPanel', () => {
     // Existing primary row still present and primary.
     const oneRow = screen.getByText('test@example.com').closest('li')!
     expect(within(oneRow).getByText('Primary')).toBeInTheDocument()
+  })
+
+  it('shows the verification-sent banner after a successful add when email is enabled', async () => {
+    await renderPanel(true)
+
+    const input = screen.getByPlaceholderText(/add another email/i)
+    await userEvent.type(input, 'second@example.com')
+    await userEvent.click(screen.getByRole('button', { name: /^Add$/ }))
+
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(
+      /an email verification has been sent to second@example\.com\. you must verify that email before you can claim it for this account\./i,
+    ))
+  })
+
+  it('does not show the verification-sent banner after a successful add when email is disabled', async () => {
+    await renderPanel(false)
+
+    const input = screen.getByPlaceholderText(/add another email/i)
+    await userEvent.type(input, 'second@example.com')
+    await userEvent.click(screen.getByRole('button', { name: /^Add$/ }))
+
+    await waitFor(() => expect(screen.getByText('second@example.com')).toBeInTheDocument())
+    // The row was added but the banner must stay absent — server creates it
+    // already verified in this branch, so there is nothing for the user to
+    // do and the message would be misleading.
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('surfaces a 409 duplicate inline and keeps the typed value in the input', async () => {
