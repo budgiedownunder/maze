@@ -12,6 +12,7 @@ namespace Maze.Maui.App.Views
     using CommunityToolkit.Maui.Core;
     using Maze.Maui.Controls.Pointer;
     using Maze.Maui.App.Extensions;
+    using Maze.Maui.App.Utils;
     using Maze.Maui.Controls.InteractiveGrid;
 
     /// <summary>
@@ -626,16 +627,34 @@ namespace Maze.Maui.App.Views
             _viewModel.CanClear = !status.IsEmpty && !IsSolutionDisplayed && !_isWalking;
         }
         /// <summary>
-        /// Adjusts the row and column edit flags based on the cells that are selected
+        /// Adjusts the row and column edit flags based on the cells that are selected.
+        /// Insert Row/Column are additionally gated by the server-reported maze
+        /// cell-count cap (<see cref="Services.AppFeatures.MaxMazeCells"/>) — if
+        /// performing the insert would push <c>rows × cols</c> over the cap, the
+        /// button is left disabled. Delete is never cap-gated (it can only shrink
+        /// the grid).
         /// </summary>
         private void ShowEditRowColumnButtons()
         {
             bool allRowsSelected = MazeGrid.AllRowsSelected;
             bool allColumnsSelected = MazeGrid.AllColumnsSelected;
 
-            _viewModel.CanInsertRows = allColumnsSelected && !IsSolutionDisplayed && !_isWalking;
+            int? cap = _appFeaturesService.Features.MaxMazeCells;
+            CellRange? selection = MazeGrid.CurrentSelection;
+            int selectedRowSpan = selection is not null ? selection.Bottom - selection.Top + 1 : 0;
+            int selectedColumnSpan = selection is not null ? selection.Right - selection.Left + 1 : 0;
+            bool postRowInsertFits = !MazeCellCap.Exceeds(
+                (uint)(MazeGrid.RowCount + selectedRowSpan),
+                (uint)MazeGrid.ColumnCount,
+                cap);
+            bool postColumnInsertFits = !MazeCellCap.Exceeds(
+                (uint)MazeGrid.RowCount,
+                (uint)(MazeGrid.ColumnCount + selectedColumnSpan),
+                cap);
+
+            _viewModel.CanInsertRows = allColumnsSelected && !IsSolutionDisplayed && !_isWalking && postRowInsertFits;
             _viewModel.CanDeleteRows = allColumnsSelected && !allRowsSelected && !IsSolutionDisplayed && !_isWalking;
-            _viewModel.CanInsertColumns = allRowsSelected && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanInsertColumns = allRowsSelected && !IsSolutionDisplayed && !_isWalking && postColumnInsertFits;
             _viewModel.CanDeleteColumns = allRowsSelected && !allColumnsSelected && !IsSolutionDisplayed && !_isWalking;
         }
         /// <summary>
