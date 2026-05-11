@@ -32,6 +32,7 @@ pub enum Error {
     MazeNameMissing(),
     MazeNameNotFound(String),
     MazeNameAlreadyExists(String),
+    MazeHasTooManyCells { rows: usize, cols: usize, max: usize },
     DataModelError(DataModelError),
     Io(std::io::Error),
     SerdeJson(serde_json::Error),
@@ -70,6 +71,11 @@ impl std::fmt::Display for Error {
             Error::MazeNameAlreadyExists(name) => {
                 write!(f, "A maze with the name '{name}' already exists")
             }
+            Error::MazeHasTooManyCells { rows, cols, max } => write!(
+                f,
+                "Maze size {rows}×{cols} = {n} cells exceeds the {max}-cell limit for this store",
+                n = rows.saturating_mul(*cols)
+            ),
             Error::DataModelError(e) => write!(f, "Data model error: {e}"),
             Error::Io(e) => write!(f, "I/O error: {e}"),
             Error::SerdeJson(error) => write!(f, "{error}"),

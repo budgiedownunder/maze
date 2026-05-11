@@ -140,6 +140,23 @@ fn integrity_violation(detail: &str) -> Error {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Limits
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Cell-count ceiling enforced by [`SqlStore`] on `create_maze` and
+/// `update_maze`. Derived from `mazes.definition VARCHAR(16000)` in
+/// `migrations/0001_initial.sql`: with the existing serialisation
+/// (`4·N·M + 2·N + 10` chars for an N-row × M-col grid) the 16,000-char
+/// column maxes out at ~3,844 cells, so 3,600 sits inside that with a
+/// margin while still allowing a 60×60 square.
+///
+/// Applied uniformly across all SQL drivers — SQLite ignores the column
+/// length declaration, but enforcing the cap uniformly avoids dev-vs-prod
+/// divergence when the same data set is later loaded under MySQL or
+/// PostgreSQL, both of which do enforce VARCHAR length.
+pub const MAX_MAZE_CELLS: usize = 3_600;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2533,6 +2550,32 @@ async fn fetch_user_email_row(
 
 #[async_trait]
 impl MazeStore for SqlStore {
+    /// Returns the cell-count ceiling enforced by this SQL store on
+    /// create/update — see [`MAX_MAZE_CELLS`].
+    ///
+    /// # Examples
+    ///
+    /// Read the cap from a fresh in-memory SQLite store
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{SqlStore, SqlStoreConfig, MazeStore};
+    ///
+    /// let store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// assert_eq!(store.max_maze_cells(), Some(3_600));
+    /// # });
+    /// ```
+    fn max_maze_cells(&self) -> Option<usize> {
+        Some(MAX_MAZE_CELLS)
+    }
     /// Creates a new maze within the SQL store instance
     ///
     /// # Examples
@@ -2592,6 +2635,16 @@ impl MazeStore for SqlStore {
     async fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error> {
         if maze.name.is_empty() {
             return Err(Error::MazeNameMissing());
+        }
+
+        let rows = maze.definition.row_count();
+        let cols = maze.definition.col_count();
+        if rows.saturating_mul(cols) > MAX_MAZE_CELLS {
+            return Err(Error::MazeHasTooManyCells {
+                rows,
+                cols,
+                max: MAX_MAZE_CELLS,
+            });
         }
 
         let existing = sqlx::query(&q(
@@ -2754,6 +2807,15 @@ impl MazeStore for SqlStore {
     async fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error> {
         if maze.id.is_empty() {
             return Err(Error::MazeIdMissing());
+        }
+        let rows = maze.definition.row_count();
+        let cols = maze.definition.col_count();
+        if rows.saturating_mul(cols) > MAX_MAZE_CELLS {
+            return Err(Error::MazeHasTooManyCells {
+                rows,
+                cols,
+                max: MAX_MAZE_CELLS,
+            });
         }
         let definition_json = serde_json::to_string(&maze)?;
         let result = sqlx::query(&q(
@@ -4148,5 +4210,123 @@ mod tests {
             .execute(&store.pool)
             .await
             .expect("re-run on empty table");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // max_maze_cells cap enforcement
+    // ─────────────────────────────────────────────────────────────────────
+
+    async fn new_sqlite_store() -> SqlStore {
+        SqlStore::new(SqlStoreConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 1,
+            auto_create_database: true,
+            ..SqlStoreConfig::default()
+        })
+        .await
+        .expect("create in-memory SqlStore")
+    }
+
+    async fn seed_owner(store: &mut SqlStore) -> User {
+        let mut user = User {
+            id: User::new_id(),
+            is_admin: false,
+            username: "owner".to_string(),
+            full_name: "Maze Owner".to_string(),
+            emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+            password_hash: "hash".to_string(),
+            api_key: User::new_api_key(),
+            logins: vec![],
+            oauth_identities: vec![],
+            deleted_at: None,
+            created_at: chrono::Utc::now(),
+            last_sign_in_at: None,
+        };
+        store.create_user(&mut user).await.expect("seed owner");
+        user
+    }
+
+    fn make_maze(name: &str, rows: usize, cols: usize) -> Maze {
+        use data_model::MazeDefinition;
+        let mut maze = Maze::new(MazeDefinition::new(rows, cols));
+        maze.name = name.to_string();
+        maze
+    }
+
+    #[tokio::test]
+    async fn sql_store_max_maze_cells_returns_cap() {
+        let store = new_sqlite_store().await;
+        assert_eq!(store.max_maze_cells(), Some(MAX_MAZE_CELLS));
+    }
+
+    #[tokio::test]
+    async fn sql_store_create_maze_accepts_at_cap() {
+        let mut store = new_sqlite_store().await;
+        let owner = seed_owner(&mut store).await;
+        // 60 × 60 = 3,600 = MAX_MAZE_CELLS
+        let mut maze = make_maze("at-cap", 60, 60);
+        store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect("at-cap create succeeds");
+        assert!(!maze.id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn sql_store_create_maze_accepts_just_under_cap() {
+        let mut store = new_sqlite_store().await;
+        let owner = seed_owner(&mut store).await;
+        // 60 × 59 = 3,540 < 3,600
+        let mut maze = make_maze("under-cap", 60, 59);
+        store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect("under-cap create succeeds");
+    }
+
+    #[tokio::test]
+    async fn sql_store_create_maze_rejects_over_cap() {
+        let mut store = new_sqlite_store().await;
+        let owner = seed_owner(&mut store).await;
+        // 61 × 60 = 3,660 > 3,600
+        let mut maze = make_maze("over-cap", 61, 60);
+        let err = store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect_err("over-cap create should fail");
+        match err {
+            Error::MazeHasTooManyCells { rows, cols, max } => {
+                assert_eq!(rows, 61);
+                assert_eq!(cols, 60);
+                assert_eq!(max, MAX_MAZE_CELLS);
+            }
+            other => panic!("expected MazeHasTooManyCells, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn sql_store_update_maze_rejects_over_cap() {
+        use data_model::MazeDefinition;
+        let mut store = new_sqlite_store().await;
+        let owner = seed_owner(&mut store).await;
+        // Seed at half cap, then try to update to over cap.
+        let mut maze = make_maze("resize-me", 50, 50);
+        store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect("seed create");
+        maze.definition = MazeDefinition::new(70, 60); // 4,200 cells
+        let err = store
+            .update_maze(&owner, &mut maze)
+            .await
+            .expect_err("over-cap update should fail");
+        match err {
+            Error::MazeHasTooManyCells { rows, cols, max } => {
+                assert_eq!(rows, 70);
+                assert_eq!(cols, 60);
+                assert_eq!(max, MAX_MAZE_CELLS);
+            }
+            other => panic!("expected MazeHasTooManyCells, got {other:?}"),
+        }
     }
 }

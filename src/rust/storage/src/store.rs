@@ -138,6 +138,16 @@ pub struct MazeItem {
 /// Represents a store for holding mazes and related objects
 #[async_trait]
 pub trait MazeStore {
+    /// Returns the maximum number of cells (`rows × cols`) the store will
+    /// accept on a `create_maze` / `update_maze` call, or `None` when the
+    /// store imposes no cap. The cap is a property of the storage backend
+    /// (row size on a SQL column, runtime cost on a file store), not of
+    /// the maze itself — implementations report the value they actually
+    /// enforce on writes. Callers use this to surface the limit to clients
+    /// and to validate ahead of an actual write.
+    fn max_maze_cells(&self) -> Option<usize> {
+        None
+    }
     /// Adds a new maze to the store and sets the allocated `id` within the maze object
     async fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error>;
     /// Deletes a maze from the store
@@ -248,3 +258,48 @@ pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + Manage + S
 
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Minimal stub implementing only the required trait methods so that the
+    // default `max_maze_cells` body is the one under test.
+    struct NoCapStub;
+
+    #[async_trait]
+    impl MazeStore for NoCapStub {
+        async fn create_maze(&mut self, _owner: &User, _maze: &mut Maze) -> Result<(), Error> {
+            unimplemented!()
+        }
+        async fn delete_maze(&mut self, _owner: &User, _id: &str) -> Result<(), Error> {
+            unimplemented!()
+        }
+        async fn update_maze(&mut self, _owner: &User, _maze: &mut Maze) -> Result<(), Error> {
+            unimplemented!()
+        }
+        async fn get_maze(&self, _owner: &User, _id: &str) -> Result<Maze, Error> {
+            unimplemented!()
+        }
+        async fn find_maze_by_name(
+            &self,
+            _owner: &User,
+            _name: &str,
+        ) -> Result<MazeItem, Error> {
+            unimplemented!()
+        }
+        async fn get_maze_items(
+            &self,
+            _owner: &User,
+            _include_definitions: bool,
+        ) -> Result<Vec<MazeItem>, Error> {
+            unimplemented!()
+        }
+    }
+
+    #[test]
+    fn maze_store_max_maze_cells_default_is_none() {
+        let stub = NoCapStub;
+        assert!(stub.max_maze_cells().is_none());
+    }
+}
