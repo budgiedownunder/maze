@@ -17,6 +17,7 @@ namespace Maze.Maui.App.ViewModels
     public partial class EmailAddressesViewModel : BaseViewModel
     {
         private readonly IAuthService _authService;
+        private readonly IDialogService _dialogService;
 
         // Same regex used by the React frontend's isValidEmail helper —
         // keeps client-side validation behaviour symmetric across UIs.
@@ -48,10 +49,11 @@ namespace Maze.Maui.App.ViewModels
         internal static readonly TimeSpan ResendFlashDuration = TimeSpan.FromSeconds(5);
         private CancellationTokenSource? _resendFlashCts;
 
-        public EmailAddressesViewModel(IAuthService authService)
+        public EmailAddressesViewModel(IAuthService authService, IDialogService dialogService)
         {
             Title = "Email Addresses";
             _authService = authService;
+            _dialogService = dialogService;
         }
 
         partial void OnNewEmailChanged(string value) => ErrorMessage = "";
@@ -139,6 +141,11 @@ namespace Maze.Maui.App.ViewModels
         private async Task RemoveEmail(EmailRowViewModel? row)
         {
             if (row is null || IsBusy) return;
+            bool confirmed = await _dialogService.ShowConfirmation(
+                "Remove email address",
+                $"Are you sure you want to remove '{row.Email}' from your account?",
+                "Remove", "Cancel", isDestructive: true);
+            if (!confirmed) return;
             // Optimistic snapshot: if the server rejects, restore exactly
             // what was on screen so the user doesn't see a phantom edit.
             var previous = Emails.ToList();

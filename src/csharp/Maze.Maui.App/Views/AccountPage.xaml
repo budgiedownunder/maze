@@ -109,7 +109,7 @@
                            IsVisible="{Binding IsBusy}"
                            HorizontalOptions="Center" />
                     <!-- Panel-scoped busy indicator — fires for every action on this
-                         ViewModel (Make Primary, Remove, Resend Verification, Add Email).
+                         ViewModel (Make Primary, Remove, Resend Verification, Add).
                          The outer page ActivityIndicator binds to AccountViewModel.IsBusy
                          and can't see this VM's state, hence the dedicated one here. -->
                     <ActivityIndicator IsVisible="{Binding IsBusy}"
@@ -218,7 +218,7 @@
                                Keyboard="Email"
                                VerticalOptions="Center" />
                         <Button Grid.Column="1"
-                                Text="Add Email"
+                                Text="Add"
                                 Command="{Binding AddEmailCommand}"
                                 VerticalOptions="Center" />
                     </Grid>

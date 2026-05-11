@@ -40,7 +40,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.GetMyEmailsAsync())
                 .ReturnsAsync(new List<UserEmail> { PrimaryRow, SecondaryRow });
-            var vm = new EmailAddressesViewModel(auth.Object);
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object);
 
             await vm.LoadEmailsCommand.ExecuteAsync(null);
 
@@ -57,7 +57,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.GetMyEmailsAsync())
                 .ThrowsAsync(new HttpRequestException("boom"));
-            var vm = new EmailAddressesViewModel(auth.Object);
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object);
 
             await vm.LoadEmailsCommand.ExecuteAsync(null);
 
@@ -71,7 +71,7 @@ namespace Maze.Maui.App.Tests.ViewModels
         public void CanAddEmail_FalseUntilFormatValid()
         {
             var auth = new Mock<IAuthService>();
-            var vm = new EmailAddressesViewModel(auth.Object);
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object);
 
             Assert.False(vm.CanAddEmail);
             vm.NewEmail = "not-an-email";
@@ -86,7 +86,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.AddEmailAsync("second@example.com"))
                 .ReturnsAsync(new List<UserEmail> { PrimaryRow, NewVerifiedRow("second@example.com") });
-            var vm = new EmailAddressesViewModel(auth.Object);
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object);
             vm.Emails.Add(new EmailRowViewModel { Email = PrimaryRow.Email, IsPrimary = true, Verified = true });
             vm.NewEmail = "second@example.com";
 
@@ -103,7 +103,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.AddEmailAsync(It.IsAny<string>()))
                 .ThrowsAsync(new HttpRequestException("conflict", null, HttpStatusCode.Conflict));
-            var vm = new EmailAddressesViewModel(auth.Object)
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object)
             {
                 NewEmail = "dup@example.com"
             };
@@ -121,7 +121,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.AddEmailAsync(It.IsAny<string>()))
                 .ThrowsAsync(new HttpRequestException("bad", null, HttpStatusCode.BadRequest));
-            var vm = new EmailAddressesViewModel(auth.Object)
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object)
             {
                 NewEmail = "weird@example.com"
             };
@@ -134,18 +134,40 @@ namespace Maze.Maui.App.Tests.ViewModels
         // ---- RemoveEmail ---------------------------------------------------
 
         [Fact]
-        public async Task RemoveEmail_RemovesRowOnSuccess()
+        public async Task RemoveEmail_PromptsForConfirmationAndRemovesRowWhenAccepted()
         {
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.RemoveEmailAsync("second@example.com"))
                 .ReturnsAsync(new List<UserEmail> { PrimaryRow });
-            var vm = SeedTwoRowVm(auth);
+            var dialog = NewDialog(confirm: true);
+            var vm = SeedTwoRowVm(auth, dialog);
             var secondRow = vm.Emails.First(r => r.Email == "second@example.com");
 
             await vm.RemoveEmailCommand.ExecuteAsync(secondRow);
 
+            dialog.Verify(d => d.ShowConfirmation(
+                "Remove email address",
+                "Are you sure you want to remove 'second@example.com' from your account?",
+                "Remove", "Cancel", true), Times.Once);
             Assert.Single(vm.Emails);
             Assert.Equal("primary@example.com", vm.Emails[0].Email);
+        }
+
+        [Fact]
+        public async Task RemoveEmail_DoesNothingWhenUserCancelsConfirmation()
+        {
+            var auth = new Mock<IAuthService>();
+            var dialog = NewDialog(confirm: false);
+            var vm = SeedTwoRowVm(auth, dialog);
+            var secondRow = vm.Emails.First(r => r.Email == "second@example.com");
+
+            await vm.RemoveEmailCommand.ExecuteAsync(secondRow);
+
+            // List unchanged, no API call, no error surfaced.
+            Assert.Equal(2, vm.Emails.Count);
+            Assert.Contains(vm.Emails, r => r.Email == "second@example.com");
+            auth.Verify(s => s.RemoveEmailAsync(It.IsAny<string>()), Times.Never);
+            Assert.Equal("", vm.ErrorMessage);
         }
 
         [Fact]
@@ -287,12 +309,22 @@ namespace Maze.Maui.App.Tests.ViewModels
 
         // ---- helpers -------------------------------------------------------
 
-        private static EmailAddressesViewModel SeedTwoRowVm(Mock<IAuthService> auth)
+        private static EmailAddressesViewModel SeedTwoRowVm(Mock<IAuthService> auth, Mock<IDialogService>? dialog = null)
         {
-            var vm = new EmailAddressesViewModel(auth.Object);
+            var vm = new EmailAddressesViewModel(auth.Object, (dialog ?? NewDialog()).Object);
             vm.Emails.Add(new EmailRowViewModel { Email = "primary@example.com", IsPrimary = true, Verified = true });
             vm.Emails.Add(new EmailRowViewModel { Email = "second@example.com", IsPrimary = false, Verified = true });
             return vm;
+        }
+
+        // Default dialog mock confirms; tests that need cancel pass confirm: false.
+        private static Mock<IDialogService> NewDialog(bool confirm = true)
+        {
+            var dialog = new Mock<IDialogService>();
+            dialog.Setup(d => d.ShowConfirmation(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
+                .ReturnsAsync(confirm);
+            return dialog;
         }
     }
 }
