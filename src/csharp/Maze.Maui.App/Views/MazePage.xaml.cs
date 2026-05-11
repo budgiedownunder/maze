@@ -61,6 +61,7 @@ namespace Maze.Maui.App.Views
         readonly MazesViewModel _mazesViewModel;
         readonly IDialogService _dialogService;
         readonly IDeviceTypeService _deviceTypeService;
+        readonly IAppFeaturesService _appFeaturesService;
         uint? _lastMinSolutionLength;
         CancellationTokenSource? _fallbackInitCts;
         CancellationTokenSource? _walkCts;
@@ -123,13 +124,15 @@ namespace Maze.Maui.App.Views
         /// <param name="dialogService">Injected dialog service</param>
         /// <param name="viewModel">Injected maze view model</param>
         /// <param name="mazesViewModel">Injected mazes view model</param>
-        public MazePage(IDeviceTypeService deviceTypeService, IDialogService dialogService, MazeViewModel viewModel, MazesViewModel mazesViewModel)
+        /// <param name="appFeaturesService">Injected app features service (used to read the server-reported maze cell-count cap)</param>
+        public MazePage(IDeviceTypeService deviceTypeService, IDialogService dialogService, MazeViewModel viewModel, MazesViewModel mazesViewModel, IAppFeaturesService appFeaturesService)
         {
             InitializeComponent();
             _deviceTypeService = deviceTypeService;
             _dialogService = dialogService;
             _viewModel = viewModel;
             _mazesViewModel = mazesViewModel;
+            _appFeaturesService = appFeaturesService;
 
             BindingContext = viewModel;
 
@@ -457,7 +460,7 @@ namespace Maze.Maui.App.Views
 
                 while (true)
                 {
-                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, generationError);
+                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, _appFeaturesService.Features.MaxMazeCells, generationError);
                     IPopupResult<Maze.GenerationOptions?> result = await this.ShowPopupAsync<Maze.GenerationOptions?>(popup);
 
                     if (result.WasDismissedByTappingOutsideOfPopup || result.Result is not Maze.GenerationOptions popupOptions)

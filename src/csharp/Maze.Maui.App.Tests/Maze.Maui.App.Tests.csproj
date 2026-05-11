@@ -45,6 +45,8 @@
              Link="LinkedSource\Services\DeviceTypeService.cs" />
     <Compile Include="..\Maze.Maui.App\Extensions\StringExtensions.cs"
              Link="LinkedSource\Extensions\StringExtensions.cs" />
+    <Compile Include="..\Maze.Maui.App\Utils\MazeCellCap.cs"
+             Link="LinkedSource\Utils\MazeCellCap.cs" />
     <Compile Include="..\Maze.Maui.App\Models\GameType.cs"
              Link="LinkedSource\Models\GameType.cs" />
     <Compile Include="..\Maze.Maui.App\Models\MazeItem.cs"

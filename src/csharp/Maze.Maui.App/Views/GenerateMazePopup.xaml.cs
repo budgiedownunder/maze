@@ -4,6 +4,7 @@ namespace Maze.Maui.App.Views
     using CommunityToolkit.Maui.Extensions;
     using CommunityToolkit.Maui.Views;
     using Maze.Api;
+    using Maze.Maui.App.Utils;
 
     /// <summary>
     /// A popup that prompts the user for maze generation options.
@@ -44,6 +45,8 @@ namespace Maze.Maui.App.Views
     /// </summary>
     public partial class GenerateMazePopup : Popup
     {
+        private readonly int? _maxMazeCells;
+
         /// <summary>
         /// Constructor
         /// </summary>
@@ -54,12 +57,14 @@ namespace Maze.Maui.App.Views
         /// <param name="finishRow">Default finish cell row (0-based)</param>
         /// <param name="finishCol">Default finish cell column (0-based)</param>
         /// <param name="minSolutionLength">Default minimum solution length</param>
+        /// <param name="maxMazeCells">Server-reported cell-count cap (<c>AppFeatures.MaxMazeCells</c>); <c>null</c> means no cap</param>
         /// <param name="generationError">Optional error message from a previous generation attempt, displayed inline</param>
         public GenerateMazePopup(uint rows, uint cols,
             uint startRow, uint startCol, uint finishRow, uint finishCol,
-            uint minSolutionLength, string? generationError = null)
+            uint minSolutionLength, int? maxMazeCells = null, string? generationError = null)
         {
             InitializeComponent();
+            _maxMazeCells = maxMazeCells;
 
             RowsEntry.Text = rows.ToString();
             ColsEntry.Text = cols.ToString();
@@ -119,6 +124,9 @@ namespace Maze.Maui.App.Views
 
             if (!uint.TryParse(ColsEntry.Text?.Trim(), out uint cols) || cols < 3)
             { error = "Columns must be a whole number of 3 or more."; return false; }
+
+            if (MazeCellCap.Exceeds(rows, cols, _maxMazeCells))
+            { error = $"Total cells (rows × columns) cannot exceed {_maxMazeCells}."; return false; }
 
             // Start/finish are entered 1-based: valid range is [1, rows] and [1, cols]
             if (!uint.TryParse(StartRowEntry.Text?.Trim(), out uint startRow1) || startRow1 < 1 || startRow1 > rows)
