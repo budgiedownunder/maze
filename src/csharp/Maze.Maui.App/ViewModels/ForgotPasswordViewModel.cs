@@ -35,19 +35,50 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private bool submitted;
 
+        /// <summary>True when the server is configured to send transactional
+        /// email and the reset flow is therefore usable. When false the page
+        /// renders a single "Password reset is unavailable on this server."
+        /// message instead of the entry form. Captured at construction from
+        /// the features service singleton, populated earlier by
+        /// <c>LoginViewModel.TryRestoreSessionAsync</c>.</summary>
+        public bool EmailEnabled { get; }
+
+        /// <summary>True when the entry form should render: email is enabled
+        /// AND the request hasn't been submitted yet.</summary>
+        public bool ShowForm => EmailEnabled && !Submitted;
+
+        /// <summary>True when the "check your inbox" success state should
+        /// render: email is enabled AND the request has succeeded.</summary>
+        public bool ShowSuccess => EmailEnabled && Submitted;
+
+        /// <summary>True when the "unavailable on this server" state should
+        /// render: email is disabled.</summary>
+        public bool ShowUnavailable => !EmailEnabled;
+
         /// <summary>
         /// Constructor.
         /// </summary>
         /// <param name="authService">Injected auth service.</param>
+        /// <param name="appFeaturesService">Injected features service — read once
+        /// at construction to capture <see cref="EmailEnabled"/>.</param>
         /// <param name="navigationService">Injected navigation service.</param>
-        public ForgotPasswordViewModel(IAuthService authService, INavigationService navigationService)
+        public ForgotPasswordViewModel(IAuthService authService, IAppFeaturesService appFeaturesService, INavigationService navigationService)
         {
             Title = "Forgot Password";
             _authService = authService;
             _navigationService = navigationService;
+            EmailEnabled = appFeaturesService.Features.EmailEnabled;
         }
 
         partial void OnEmailChanged(string value) => ErrorMessage = "";
+
+        partial void OnSubmittedChanged(bool value)
+        {
+            // ShowForm + ShowSuccess derive from Submitted; raise PropertyChanged
+            // so the view's IsVisible bindings re-evaluate when Submitted flips.
+            OnPropertyChanged(nameof(ShowForm));
+            OnPropertyChanged(nameof(ShowSuccess));
+        }
 
         private bool CanSubmit() =>
             !string.IsNullOrWhiteSpace(Email) &&

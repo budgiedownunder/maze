@@ -258,6 +258,28 @@ namespace Maze.Maui.App.Tests.ViewModels
             Assert.False(vm.AllowSignUp);
         }
 
+        [Fact]
+        public async Task TryRestoreSession_PropagatesEmailEnabled()
+        {
+            var (vm, auth, _, _, _) = BuildVm(new AppFeatures { EmailEnabled = true });
+            auth.Setup(a => a.IsAuthenticatedAsync()).ReturnsAsync(false);
+
+            await vm.TryRestoreSessionAsync();
+
+            Assert.True(vm.EmailEnabled);
+        }
+
+        [Fact]
+        public async Task TryRestoreSession_DefaultsEmailEnabledFalseWhenServerReportsFalse()
+        {
+            var (vm, auth, _, _, _) = BuildVm(new AppFeatures { EmailEnabled = false });
+            auth.Setup(a => a.IsAuthenticatedAsync()).ReturnsAsync(false);
+
+            await vm.TryRestoreSessionAsync();
+
+            Assert.False(vm.EmailEnabled);
+        }
+
         // ---- OAuth provider sync --------------------------------------------
 
         [Fact]

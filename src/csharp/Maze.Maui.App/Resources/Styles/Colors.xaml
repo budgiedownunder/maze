@@ -13,6 +13,19 @@
     <Color x:Key="SecondaryDarkText">#9880e5</Color>
     <Color x:Key="Tertiary">#2B0B98</Color>
 
+    <!-- Success-state accent. Used for transient confirmation messages
+         ("Verification link sent.", post-signup flash, etc.) and the
+         Verified pill text on the email panel. Mirrors the React client's
+         pill-verified-text CSS variable. -->
+    <Color x:Key="Success">#15803D</Color>
+    <Color x:Key="SuccessDark">#4ADE80</Color>
+
+    <!-- Fail-state accent. Used for inline error labels under forms and
+         per-panel error rows. Mirrors the React client's text-error CSS
+         variable. -->
+    <Color x:Key="Fail">#DC2626</Color>
+    <Color x:Key="FailDark">#F87171</Color>
+
     <Color x:Key="White">White</Color>
     <Color x:Key="Black">Black</Color>
     <Color x:Key="Magenta">#D600AA</Color>

@@ -137,11 +137,17 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 await _authService.SignUpAsync(Email, Password);
-                // Tell LoginViewModel to surface a "check your inbox" flash
-                // before we pop back. WeakReferenceMessenger is fire-and-forget
-                // — we don't hold a reference across the navigation pop.
-                WeakReferenceMessenger.Default.Send(new LoginFlashMessage(
-                    "Account created. Check your inbox for a verification email before signing in."));
+                // Tell LoginViewModel to surface a flash before we pop back.
+                // When email is enabled the server has dispatched a
+                // verification email and the primary lands unverified — point
+                // the user at their inbox. When email is disabled the server
+                // has marked the primary verified at creation, so the user
+                // can sign in immediately. WeakReferenceMessenger is
+                // fire-and-forget — we don't hold a reference across the pop.
+                var flash = _appFeaturesService.Features.EmailEnabled
+                    ? "Account created. Check your inbox for a verification email before signing in."
+                    : "Account created. You can sign in now.";
+                WeakReferenceMessenger.Default.Send(new LoginFlashMessage(flash));
                 await _navigationService.GoBackAsync();
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)

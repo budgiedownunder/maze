@@ -40,7 +40,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.GetMyEmailsAsync())
                 .ReturnsAsync(new List<UserEmail> { PrimaryRow, SecondaryRow });
-            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object);
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object, NewFeatures().Object);
 
             await vm.LoadEmailsCommand.ExecuteAsync(null);
 
@@ -57,7 +57,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.GetMyEmailsAsync())
                 .ThrowsAsync(new HttpRequestException("boom"));
-            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object);
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object, NewFeatures().Object);
 
             await vm.LoadEmailsCommand.ExecuteAsync(null);
 
@@ -71,7 +71,7 @@ namespace Maze.Maui.App.Tests.ViewModels
         public void CanAddEmail_FalseUntilFormatValid()
         {
             var auth = new Mock<IAuthService>();
-            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object);
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object, NewFeatures().Object);
 
             Assert.False(vm.CanAddEmail);
             vm.NewEmail = "not-an-email";
@@ -86,7 +86,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.AddEmailAsync("second@example.com"))
                 .ReturnsAsync(new List<UserEmail> { PrimaryRow, NewVerifiedRow("second@example.com") });
-            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object);
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object, NewFeatures().Object);
             vm.Emails.Add(new EmailRowViewModel { Email = PrimaryRow.Email, IsPrimary = true, Verified = true });
             vm.NewEmail = "second@example.com";
 
@@ -103,7 +103,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.AddEmailAsync(It.IsAny<string>()))
                 .ThrowsAsync(new HttpRequestException("conflict", null, HttpStatusCode.Conflict));
-            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object)
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object, NewFeatures().Object)
             {
                 NewEmail = "dup@example.com"
             };
@@ -121,7 +121,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var auth = new Mock<IAuthService>();
             auth.Setup(s => s.AddEmailAsync(It.IsAny<string>()))
                 .ThrowsAsync(new HttpRequestException("bad", null, HttpStatusCode.BadRequest));
-            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object)
+            var vm = new EmailAddressesViewModel(auth.Object, NewDialog().Object, NewFeatures().Object)
             {
                 NewEmail = "weird@example.com"
             };
@@ -129,6 +129,41 @@ namespace Maze.Maui.App.Tests.ViewModels
             await vm.AddEmailCommand.ExecuteAsync(null);
 
             Assert.Contains("Email format is invalid", vm.ErrorMessage);
+        }
+
+        [Fact]
+        public async Task AddEmail_SuccessSetsVerificationFlash_WhenEmailEnabled()
+        {
+            var auth = new Mock<IAuthService>();
+            auth.Setup(s => s.AddEmailAsync("second@example.com"))
+                .ReturnsAsync(new List<UserEmail> { PrimaryRow, NewVerifiedRow("second@example.com") });
+            var vm = new EmailAddressesViewModel(
+                auth.Object, NewDialog().Object, NewFeatures(emailEnabled: true).Object);
+            vm.Emails.Add(new EmailRowViewModel { Email = PrimaryRow.Email, IsPrimary = true, Verified = true });
+            vm.NewEmail = "second@example.com";
+
+            await vm.AddEmailCommand.ExecuteAsync(null);
+
+            Assert.Contains("An email verification has been sent to second@example.com", vm.ResendFlash);
+            Assert.Contains("verify that email", vm.ResendFlash);
+        }
+
+        [Fact]
+        public async Task AddEmail_SuccessLeavesFlashEmpty_WhenEmailDisabled()
+        {
+            var auth = new Mock<IAuthService>();
+            auth.Setup(s => s.AddEmailAsync("second@example.com"))
+                .ReturnsAsync(new List<UserEmail> { PrimaryRow, NewVerifiedRow("second@example.com") });
+            var vm = new EmailAddressesViewModel(
+                auth.Object, NewDialog().Object, NewFeatures(emailEnabled: false).Object);
+            vm.Emails.Add(new EmailRowViewModel { Email = PrimaryRow.Email, IsPrimary = true, Verified = true });
+            vm.NewEmail = "second@example.com";
+
+            await vm.AddEmailCommand.ExecuteAsync(null);
+
+            // The row was added but no banner — server creates the row already
+            // verified in this branch, so there's nothing for the user to do.
+            Assert.Equal("", vm.ResendFlash);
         }
 
         // ---- RemoveEmail ---------------------------------------------------
@@ -309,9 +344,15 @@ namespace Maze.Maui.App.Tests.ViewModels
 
         // ---- helpers -------------------------------------------------------
 
-        private static EmailAddressesViewModel SeedTwoRowVm(Mock<IAuthService> auth, Mock<IDialogService>? dialog = null)
+        private static EmailAddressesViewModel SeedTwoRowVm(
+            Mock<IAuthService> auth,
+            Mock<IDialogService>? dialog = null,
+            Mock<IAppFeaturesService>? features = null)
         {
-            var vm = new EmailAddressesViewModel(auth.Object, (dialog ?? NewDialog()).Object);
+            var vm = new EmailAddressesViewModel(
+                auth.Object,
+                (dialog ?? NewDialog()).Object,
+                (features ?? NewFeatures()).Object);
             vm.Emails.Add(new EmailRowViewModel { Email = "primary@example.com", IsPrimary = true, Verified = true });
             vm.Emails.Add(new EmailRowViewModel { Email = "second@example.com", IsPrimary = false, Verified = true });
             return vm;
@@ -325,6 +366,15 @@ namespace Maze.Maui.App.Tests.ViewModels
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>()))
                 .ReturnsAsync(confirm);
             return dialog;
+        }
+
+        // Default features mock returns EmailEnabled=false; the post-add banner
+        // tests pass true to drive the gated branch.
+        private static Mock<IAppFeaturesService> NewFeatures(bool emailEnabled = false)
+        {
+            var features = new Mock<IAppFeaturesService>();
+            features.SetupGet(f => f.Features).Returns(new AppFeatures { EmailEnabled = emailEnabled });
+            return features;
         }
     }
 }

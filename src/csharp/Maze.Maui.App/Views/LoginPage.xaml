@@ -98,13 +98,13 @@
                      when SignUpViewModel sends one after a successful signup.
                      Cleared on the next sign-in attempt. -->
                 <Label Text="{Binding FlashMessage}"
-                       TextColor="{AppThemeBinding Light=#15803D, Dark=#4ADE80}"
+                       TextColor="{AppThemeBinding Light={StaticResource Success}, Dark={StaticResource SuccessDark}}"
                        IsVisible="{Binding FlashMessage, Converter={StaticResource StringNotEmptyConverter}}"
                        HorizontalOptions="Center"
                        HorizontalTextAlignment="Center" />
 
                 <Label Text="{Binding ErrorMessage}"
-                       TextColor="Red"
+                       TextColor="{AppThemeBinding Light={StaticResource Fail}, Dark={StaticResource FailDark}}"
                        IsVisible="{Binding ErrorMessage, Converter={StaticResource StringNotEmptyConverter}}"
                        HorizontalOptions="Center" />
 
@@ -114,6 +114,7 @@
 
                 <Button Text="Forgot password?"
                         Command="{Binding GoToForgotPasswordCommand}"
+                        IsVisible="{Binding EmailEnabled}"
                         HorizontalOptions="Fill"
                         BackgroundColor="Transparent"
                         TextColor="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}" />

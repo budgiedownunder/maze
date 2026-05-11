@@ -45,6 +45,13 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private bool allowSignUp = true;
 
+        /// <summary>Whether the server is configured to send transactional email.
+        /// Drives the visibility of the Forgot password? link below the
+        /// credentials form — when false the link is hidden because the
+        /// reset flow has no working channel. Default false (fail-closed).</summary>
+        [ObservableProperty]
+        private bool emailEnabled;
+
         /// <summary>OAuth providers exposed by the server. Drives the per-provider
         /// button list on <see cref="LoginPage"/>; empty when OAuth is disabled.</summary>
         public ObservableCollection<OAuthProviderPublic> OAuthProviders { get; } = new();
@@ -92,6 +99,7 @@ namespace Maze.Maui.App.ViewModels
         {
             await _appFeaturesService.RefreshAsync();
             AllowSignUp = _appFeaturesService.Features.AllowSignUp;
+            EmailEnabled = _appFeaturesService.Features.EmailEnabled;
             SyncOAuthProviders(_appFeaturesService.Features.OAuthProviders);
 
             if (!await _authService.IsAuthenticatedAsync())
