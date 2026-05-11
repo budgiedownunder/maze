@@ -1035,6 +1035,13 @@ mod test_definitions {
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, SharedStore, HashMap<Uuid, MockUser>, Option<Uuid>, Option<Uuid>) {
         let mut config = AppConfig::default();
         config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        // Default the test app to a production-like comms state (`enabled = true`)
+        // so the credentials sign-up + add-email paths behave as they do in
+        // deployed servers — newly-created email rows are unverified pending
+        // user click-through. Tests that need to drive the comms-disabled
+        // branch (auto-verify + skip dispatch) construct their own AppConfig
+        // and call `create_test_app_with_config` directly.
+        config.comms.enabled = true;
         create_test_app_with_config(user_defs, caller_username, add_login, features, config).await
     }
 
@@ -1064,9 +1071,33 @@ mod test_definitions {
         Option<Uuid>,
         StubEmailProvider,
     ) {
+        create_test_app_with_stub_email_and_comms_enabled(
+            user_defs, caller_username, add_login, true,
+        )
+        .await
+    }
+
+    /// Like `create_test_app_with_stub_email` but lets the test override
+    /// `app_config.comms.enabled`. Used by the new gating tests that need
+    /// to drive the `comms.enabled = false` branch (auto-verify on user
+    /// creation, skip verification dispatch).
+    async fn create_test_app_with_stub_email_and_comms_enabled(
+        user_defs: &mut Vec<UserDefinition>,
+        caller_username: Option<&str>,
+        add_login: bool,
+        comms_enabled: bool,
+    ) -> (
+        impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        SharedStore,
+        HashMap<Uuid, MockUser>,
+        Option<Uuid>,
+        Option<Uuid>,
+        StubEmailProvider,
+    ) {
         let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
         let mut app_config = AppConfig::default();
         app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        app_config.comms.enabled = comms_enabled;
         // Drive a stable `public_base_url` so the reset-link assertion has
         // something deterministic to check against. Likewise pin a `from`
         // — without it, `comms.send_template` fails the dispatch with
@@ -5516,6 +5547,37 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn add_email_with_comms_disabled_creates_verified_and_skips_dispatch() {
+        // Comms disabled — the credentials add-email path must create the
+        // new row already verified and must not attempt to issue or
+        // dispatch a verification email (the user has no path to verify it,
+        // so the row would otherwise be permanently stuck unverified, and
+        // any spawn would be wasted work).
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, _, stub) =
+            create_test_app_with_stub_email_and_comms_enabled(
+                &mut user_defs, Some(VALID_USERNAME_1), false, false,
+            ).await;
+        let body = AddUserEmailRequest { email: "alice2@example.com".into() };
+        let req = create_test_post_request(
+            "/api/v1/users/me/emails", api_key, None, Some(&body),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let response = parse_emails_response(resp).await;
+        let new_row = response
+            .emails
+            .iter()
+            .find(|r| r.email == "alice2@example.com")
+            .expect("new row present");
+        assert!(!new_row.is_primary);
+        assert!(new_row.verified, "new email must be created verified when comms is disabled");
+        assert!(new_row.verified_at.is_some(), "verified_at must be set when verified is true");
+
+        assert_eq!(stub.len(), 0, "no verification email may be dispatched when comms is disabled");
+    }
+
+    #[actix_web::test]
     async fn add_email_with_invalid_format_returns_400() {
         let (app, _, _, api_key, login_id) = me_emails_test_app().await;
         let body = AddUserEmailRequest { email: "not-an-email".into() };
@@ -5715,6 +5777,8 @@ mod test_definitions {
         let body = test::read_body(resp).await;
         let response: AppFeaturesResponse = serde_json::from_slice(&body).expect("failed to deserialize features response");
         assert!(response.allow_signup);
+        // `email_enabled` mirrors `comms.enabled`, which defaults to true.
+        assert!(response.email_enabled);
     }
 
     #[actix_web::test]
@@ -5729,6 +5793,23 @@ mod test_definitions {
         let body = test::read_body(resp).await;
         let response: AppFeaturesResponse = serde_json::from_slice(&body).expect("failed to deserialize features response");
         assert!(!response.allow_signup);
+    }
+
+    #[actix_web::test]
+    async fn get_features_email_enabled_reflects_comms_disabled() {
+        let mut user_defs = vec![];
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let mut app_config = AppConfig::default();
+        app_config.comms.enabled = false;
+        let (app, _, _, _, _) =
+            create_test_app_with_config(&mut user_defs, None, false, features, app_config).await;
+        let req = create_test_get_request("/api/v1/features", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let response: AppFeaturesResponse = serde_json::from_slice(&body)
+            .expect("failed to deserialize features response");
+        assert!(!response.email_enabled);
     }
 
     #[actix_web::test]
@@ -5845,6 +5926,42 @@ mod test_definitions {
         }));
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[actix_web::test]
+    async fn signup_with_comms_disabled_creates_verified_primary_and_skips_dispatch() {
+        // Comms disabled — the credentials sign-up path must create the
+        // primary email already verified (so the user can sign in and use
+        // their account in DEV without a verification step), and must not
+        // attempt to issue or dispatch a verification email since there is
+        // no working channel for it.
+        let mut user_defs = vec![];
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email_and_comms_enabled(&mut user_defs, None, false, false).await;
+        let req = create_test_post_request("/api/v1/signup", None, None, Some(&SignupRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        }));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = test::read_body(resp).await;
+        let user: UserItem = serde_json::from_slice(&body).expect("UserItem");
+        let primary = user.emails.iter().find(|e| e.is_primary).expect("primary row");
+        assert!(primary.verified, "primary email must be created verified when comms is disabled");
+        assert!(primary.verified_at.is_some(), "verified_at must be set when verified is true");
+
+        // Persisted store agrees.
+        let store_lock = shared_store.read().await;
+        let stored = store_lock
+            .find_user_by_verified_email(VALID_USER_EMAIL_1)
+            .await
+            .expect("user must be findable by verified email");
+        assert!(stored.email().eq_ignore_ascii_case(VALID_USER_EMAIL_1));
+
+        // No verification dispatch attempted — the gating is synchronous so
+        // the stub must be empty by the time the request returns (the
+        // dispatch path tokio::spawn'd the send only when entered).
+        assert_eq!(stub.len(), 0, "no verification email may be dispatched when comms is disabled");
     }
 
     // ============================================================================

@@ -50,6 +50,38 @@ impl Default for CommsAppConfig {
     }
 }
 
+impl CommsAppConfig {
+    /// Whether the server is configured to send transactional email and the
+    /// "user must verify their email" lifecycle therefore applies.
+    ///
+    /// Returns the value of [`enabled`](Self::enabled), but call sites should
+    /// prefer this method so the *intent* — "do we require verification?" —
+    /// is explicit at the call site instead of leaking the
+    /// `comms.enabled` config detail.
+    ///
+    /// When this returns `false`, callers that create new email rows for
+    /// users (credentials sign-up, credentials add-email) must mark the row
+    /// `verified = true` at creation and skip verification-token issuance +
+    /// dispatch, since there is no path for the user to verify the address
+    /// otherwise. OAuth flows are unaffected — they take their `verified`
+    /// signal from the IdP — and the admin bootstrap is unaffected because
+    /// it already creates verified rows directly.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze_web_server::config::comms::CommsAppConfig;
+    /// let mut c = CommsAppConfig::default();
+    /// c.enabled = true;
+    /// assert!(c.require_email_verification());
+    /// c.enabled = false;
+    /// assert!(!c.require_email_verification());
+    /// ```
+    pub fn require_email_verification(&self) -> bool {
+        self.enabled
+    }
+}
+
 /// `[comms.email.audit]` sub-table. Controls anti-enumeration "recon"
 /// rows in the email audit log — anonymous entries written when a
 /// request doesn't resolve to a real recipient (today only the

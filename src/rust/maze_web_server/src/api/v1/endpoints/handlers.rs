@@ -314,8 +314,10 @@ impl UserItem {
 // Handler:  get_features()
 // **************************************************************************************************
 /// Response body for `GET /api/v1/features`. Also accepted as the request body
-/// for `PUT /api/v1/admin/features`; only `allow_signup` is mutable from there
-/// and `oauth_providers` is sourced from the live connector at response time.
+/// for `PUT /api/v1/admin/features`; only `allow_signup` is mutable from there.
+/// `oauth_providers` is sourced from the live connector and `email_enabled`
+/// from `comms.enabled` at response time — both are read-only on the admin
+/// update endpoint.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone, Default)]
 pub struct AppFeaturesResponse {
     /// Whether new users can self-register via the signup endpoint
@@ -325,15 +327,26 @@ pub struct AppFeaturesResponse {
     /// the admin update endpoint.
     #[serde(default)]
     pub oauth_providers: Vec<OAuthProviderPublic>,
+    /// Whether the server is configured to send transactional email
+    /// (verification, password reset, etc.). Derived from `comms.enabled`;
+    /// read-only on the admin update endpoint. When `false`, clients should
+    /// hide email-dependent UI surfaces (verification banners, password reset
+    /// link) and the server itself creates new email rows already verified to
+    /// keep the user account workable in DEV environments without comms set
+    /// up.
+    #[serde(default)]
+    pub email_enabled: bool,
 }
 
 fn build_features_response(
     allow_signup: bool,
+    email_enabled: bool,
     connector: &dyn OAuthConnector,
 ) -> AppFeaturesResponse {
     AppFeaturesResponse {
         allow_signup,
         oauth_providers: connector.enabled_providers(),
+        email_enabled,
     }
 }
 
@@ -352,12 +365,14 @@ fn build_features_response(
 pub async fn get_features(
     features: web::Data<SharedFeatures>,
     connector: web::Data<crate::oauth::SharedOAuthConnector>,
+    config: web::Data<AppConfig>,
 ) -> Result<HttpResponse, Error> {
     let features_lock = features.read().map_err(|_| {
         ErrorInternalServerError("Failed to acquire features read lock")
     })?;
     Ok(HttpResponse::Ok().json(build_features_response(
         features_lock.allow_signup,
+        config.comms.enabled,
         connector.as_ref().as_ref(),
     )))
 }
@@ -419,6 +434,7 @@ pub async fn update_admin_features(
 
     Ok(HttpResponse::Ok().json(build_features_response(
         features_lock.allow_signup,
+        config.comms.enabled,
         connector.as_ref().as_ref(),
     )))
 }
@@ -517,7 +533,15 @@ pub async fn signup(
     }
 
     let signup_req_data: SignupRequest = signup_req.into_inner();
+    let require_email_verification = config.comms.require_email_verification();
     let mut store_user = signup_req_data.into_user(&auth_service)?;
+    if !require_email_verification {
+        // Comms is disabled — the user has no path to verify the address, so
+        // mark the primary verified at creation. Keeps the account workable
+        // (e.g. promote secondary emails, password reset paths) in DEV.
+        store_user.emails =
+            vec![data_model::UserEmail::new_primary_verified(&signup_req_data.email)];
+    }
     let base_username = generate_username_from_email(&signup_req_data.email);
 
     let create_outcome = {
@@ -549,28 +573,32 @@ pub async fn signup(
     // Issue + dispatch the verification token. A failure here doesn't
     // unwind the signup — the user is created either way and can
     // request a fresh verification email via /email-verifications/request.
-    match crate::api::v1::endpoints::email_verification::issue_verification_token(
-        &store,
-        store_user.id,
-        &signup_req_data.email,
-    )
-    .await
-    {
-        Ok(token) => {
-            crate::api::v1::endpoints::email_verification::dispatch_verification_email(
-                store.get_ref().clone(),
-                comms.clone().into_inner(),
-                store_user.clone(),
-                &signup_req_data.email,
-                &config.comms.public_base_url,
-                token.id,
-            )
-            .await;
+    // Skipped entirely when comms is disabled, since the primary email was
+    // marked verified at creation above and there is nothing to dispatch to.
+    if require_email_verification {
+        match crate::api::v1::endpoints::email_verification::issue_verification_token(
+            &store,
+            store_user.id,
+            &signup_req_data.email,
+        )
+        .await
+        {
+            Ok(token) => {
+                crate::api::v1::endpoints::email_verification::dispatch_verification_email(
+                    store.get_ref().clone(),
+                    comms.clone().into_inner(),
+                    store_user.clone(),
+                    &signup_req_data.email,
+                    &config.comms.public_base_url,
+                    token.id,
+                )
+                .await;
+            }
+            Err(err) => log::warn!(
+                "signup: verification token issue failed for user {}: {err}",
+                store_user.id
+            ),
         }
-        Err(err) => log::warn!(
-            "signup: verification token issue failed for user {}: {err}",
-            store_user.id
-        ),
     }
 
     Ok(HttpResponse::Created()
