@@ -13,7 +13,7 @@
 
 use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
 use crate::{
-    validation::{validate_email_format, validate_user_fields},
+    validation::{validate_email_format, validate_maze_cell_count, validate_user_fields},
     Error, MazeItem, Store,
 };
 use async_trait::async_trait;
@@ -2637,15 +2637,11 @@ impl MazeStore for SqlStore {
             return Err(Error::MazeNameMissing());
         }
 
-        let rows = maze.definition.row_count();
-        let cols = maze.definition.col_count();
-        if rows.saturating_mul(cols) > MAX_MAZE_CELLS {
-            return Err(Error::MazeHasTooManyCells {
-                rows,
-                cols,
-                max: MAX_MAZE_CELLS,
-            });
-        }
+        validate_maze_cell_count(
+            maze.definition.row_count(),
+            maze.definition.col_count(),
+            MAX_MAZE_CELLS,
+        )?;
 
         let existing = sqlx::query(&q(
             self.kind,
@@ -2808,15 +2804,11 @@ impl MazeStore for SqlStore {
         if maze.id.is_empty() {
             return Err(Error::MazeIdMissing());
         }
-        let rows = maze.definition.row_count();
-        let cols = maze.definition.col_count();
-        if rows.saturating_mul(cols) > MAX_MAZE_CELLS {
-            return Err(Error::MazeHasTooManyCells {
-                rows,
-                cols,
-                max: MAX_MAZE_CELLS,
-            });
-        }
+        validate_maze_cell_count(
+            maze.definition.row_count(),
+            maze.definition.col_count(),
+            MAX_MAZE_CELLS,
+        )?;
         let definition_json = serde_json::to_string(&maze)?;
         let result = sqlx::query(&q(
             self.kind,
