@@ -210,6 +210,17 @@ PostgreSQL and SQLite accept all five rules transparently. **New migrations must
 
 SQLx 0.8's `Any` driver does **not** auto-translate `?` placeholders to PostgreSQL's `$1, $2, …` form for raw `sqlx::query("...")` strings — that translation only happens through the compile-time `query!` / `query_as!` macros. `SqlStore` detects the backend at startup (`SqlBackend::from_url`) and runs a small `q(kind, sql)` helper that rewrites `?` to `$N` only for PostgreSQL. SQLite and MySQL accept `?` natively and pass through unchanged. This is invisible to callers — every query in `sql_store.rs` is wrapped in `q(...)`.
 
+## Maze cell-count caps
+
+Each `MazeStore` impl reports the maximum number of cells (`rows × cols`) it will accept on `create_maze` / `update_maze` via the trait method `max_maze_cells() -> Option<usize>`. `None` means the store imposes no cap. The cap is a property of the *storage backend*, not of the maze domain — the `maze` and `data_model` crates have no notion of size limits and remain unbounded.
+
+| Backend       | `max_maze_cells()` | Why |
+|:--------------|:-------------------|:----|
+| `FileStore`   | `Some(10_000)`     | The filesystem imposes no row-size limit, so `10,000` (eg. a 100 x 100 grid) is chosen as a practical cap. |
+| `SqlStore`    | `Some(3_600)`      | Bound by the `mazes.definition VARCHAR(16000)` column in [`migrations/0001_initial.sql`](./migrations/0001_initial.sql). With the existing JSON serialisation (`4·N·M + 2·N + 10` chars for an N-row × M-col grid) the 16,000-char column maxes out around 62×62 cells; 60×60 = 3,600 sits inside that with a margin. The same cap applies across SQLite, PostgreSQL, and MySQL — SQLite would ignore the column length declaration, but enforcing the cap uniformly avoids dev-vs-prod divergence when the same data set is later loaded under MySQL or PostgreSQL. |
+| trait default | `None`             | Suits stub implementations and any future store with no practical size limit. Production stores override. |
+
+
 ## Architecture note: one impl over `AnyPool`
 
 `SqlStore` is a single struct over `sqlx::AnyPool` rather than three per-backend implementations (`PgSqlStore`/`MySqlSqlStore`/`SqliteSqlStore`). The strict-subset schema removes essentially all runtime divergence between backends, so the only place per-backend logic is needed is the placeholder translator (`q(kind, sql)`, ~10 lines). If a future feature genuinely needs backend-specific SQL (e.g. native upsert syntax, full-text search), the pattern is a local `match self.kind` block at the one call site rather than a new type — keeping the trade-off proportional to the divergence.
