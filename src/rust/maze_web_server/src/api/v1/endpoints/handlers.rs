@@ -322,9 +322,10 @@ impl UserItem {
 // **************************************************************************************************
 /// Response body for `GET /api/v1/features`. Also accepted as the request body
 /// for `PUT /api/v1/admin/features`; only `allow_signup` is mutable from there.
-/// `oauth_providers` is sourced from the live connector and `email_enabled`
-/// from `comms.enabled` at response time — both are read-only on the admin
-/// update endpoint.
+/// `oauth_providers` is sourced from the live connector, `email_enabled` from
+/// `comms.enabled`, and `max_maze_cells` from the configured store's
+/// `MazeStore::max_maze_cells()` at response time — all three are read-only
+/// on the admin update endpoint.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone, Default)]
 pub struct AppFeaturesResponse {
     /// Whether new users can self-register via the signup endpoint
@@ -343,17 +344,23 @@ pub struct AppFeaturesResponse {
     /// up.
     #[serde(default)]
     pub email_enabled: bool,
+    /// Maximum number of cells (`rows × cols`) the configured store will
+    /// accept on a save. `None` means the store imposes no cap.
+    #[serde(default)]
+    pub max_maze_cells: Option<u32>,
 }
 
 fn build_features_response(
     allow_signup: bool,
     email_enabled: bool,
+    max_maze_cells: Option<u32>,
     connector: &dyn OAuthConnector,
 ) -> AppFeaturesResponse {
     AppFeaturesResponse {
         allow_signup,
         oauth_providers: connector.enabled_providers(),
         email_enabled,
+        max_maze_cells,
     }
 }
 
@@ -373,13 +380,19 @@ pub async fn get_features(
     features: web::Data<SharedFeatures>,
     connector: web::Data<crate::oauth::SharedOAuthConnector>,
     config: web::Data<AppConfig>,
+    store: web::Data<SharedStore>,
 ) -> Result<HttpResponse, Error> {
+    let max_maze_cells = get_store_read_lock(&store)
+        .await
+        .max_maze_cells()
+        .and_then(|n| u32::try_from(n).ok());
     let features_lock = features.read().map_err(|_| {
         ErrorInternalServerError("Failed to acquire features read lock")
     })?;
     Ok(HttpResponse::Ok().json(build_features_response(
         features_lock.allow_signup,
         config.comms.enabled,
+        max_maze_cells,
         connector.as_ref().as_ref(),
     )))
 }
@@ -428,11 +441,17 @@ pub async fn update_admin_features(
     features: web::Data<SharedFeatures>,
     config: web::Data<AppConfig>,
     connector: web::Data<crate::oauth::SharedOAuthConnector>,
+    store: web::Data<SharedStore>,
 ) -> Result<HttpResponse, Error> {
     get_authorized_user(&req, true)?;
 
     let new_features = body.into_inner();
     update_features_in_config(&config.config_path, &new_features)?;
+
+    let max_maze_cells = get_store_read_lock(&store)
+        .await
+        .max_maze_cells()
+        .and_then(|n| u32::try_from(n).ok());
 
     let mut features_lock = features.write().map_err(|_| {
         ErrorInternalServerError("Failed to acquire features write lock")
@@ -442,6 +461,7 @@ pub async fn update_admin_features(
     Ok(HttpResponse::Ok().json(build_features_response(
         features_lock.allow_signup,
         config.comms.enabled,
+        max_maze_cells,
         connector.as_ref().as_ref(),
     )))
 }

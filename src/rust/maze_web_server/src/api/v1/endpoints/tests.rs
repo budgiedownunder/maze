@@ -5896,6 +5896,20 @@ mod test_definitions {
         assert_eq!(resp.status(), StatusCode::OK);
     }
 
+    #[actix_web::test]
+    async fn get_features_includes_max_maze_cells_from_store() {
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let req = create_test_get_request("/api/v1/features", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let response: AppFeaturesResponse =
+            serde_json::from_slice(&body).expect("failed to deserialize features response");
+        // MockStore reports MOCK_MAX_MAZE_CELLS = 3_600 via MazeStore::max_maze_cells.
+        assert_eq!(response.max_maze_cells, Some(3_600));
+    }
+
     // **************************************************************************************************
     // Tests: PUT /api/v1/admin/features
     // **************************************************************************************************
