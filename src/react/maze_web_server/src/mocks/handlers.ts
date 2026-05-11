@@ -115,7 +115,7 @@ function mintToken(prefix: string): string {
 
 export const handlers = [
   http.get(`${BASE}/features`, () => {
-    return HttpResponse.json<AppFeatures>({ allow_signup: true, oauth_providers: [], email_enabled: true })
+    return HttpResponse.json<AppFeatures>({ allow_signup: true, oauth_providers: [], email_enabled: true, max_maze_cells: null })
   }),
 
   http.put(`${BASE}/admin/features`, async ({ request }) => {

@@ -68,6 +68,7 @@ export interface AppFeatures {
   allow_signup: boolean
   oauth_providers: OAuthProviderPublic[]
   email_enabled: boolean
+  max_maze_cells: number | null
 }
 
 export interface GenerateOptions {

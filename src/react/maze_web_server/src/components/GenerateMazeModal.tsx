@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useAppFeatures } from '../context/AppFeaturesContext'
 import type { GenerateOptions } from '../types/api'
+import { exceedsMazeCellCap } from '../utils/validation'
 
 interface Props {
   grid: string[][]
@@ -34,6 +36,7 @@ function defaultsFromGrid(grid: string[][]) {
 }
 
 export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = false, error, onGenerate, onCancel }: Props) {
+  const { max_maze_cells } = useAppFeatures()
   const defaults = defaultsFromGrid(grid)
   const [rows, setRows] = useState(defaults.rows)
   const [cols, setCols] = useState(defaults.cols)
@@ -62,6 +65,10 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
     }
     if (!Number.isInteger(c) || c < 3) {
       setValidationError('Columns must be a whole number of 3 or more.')
+      return
+    }
+    if (exceedsMazeCellCap(r, c, max_maze_cells)) {
+      setValidationError(`Total cells (rows × columns) cannot exceed ${max_maze_cells}.`)
       return
     }
     if (!Number.isInteger(sr) || sr < 1 || sr > r) {

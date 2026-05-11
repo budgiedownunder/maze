@@ -23,12 +23,12 @@ function renderLoginPage(features: AppFeatures, initialEntry: string = '/login')
 
 describe('LoginPage', () => {
   it('shows signup button when allow_signup is true', async () => {
-    renderLoginPage({ allow_signup: true, oauth_providers: [], email_enabled: false })
+    renderLoginPage({ allow_signup: true, oauth_providers: [], email_enabled: false, max_maze_cells: null })
     expect(await screen.findByRole('button', { name: /sign up/i })).toBeInTheDocument()
   })
 
   it('hides signup button when allow_signup is false', () => {
-    renderLoginPage({ allow_signup: false, oauth_providers: [], email_enabled: false })
+    renderLoginPage({ allow_signup: false, oauth_providers: [], email_enabled: false, max_maze_cells: null })
     expect(screen.queryByRole('button', { name: /sign up/i })).not.toBeInTheDocument()
   })
 
@@ -40,13 +40,14 @@ describe('LoginPage', () => {
         { name: 'github', display_name: 'GitHub' },
       ],
       email_enabled: false,
+      max_maze_cells: null,
     })
     expect(await screen.findByRole('button', { name: /continue with google/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /continue with github/i })).toBeInTheDocument()
   })
 
   it('hides the OAuth section when no providers are configured', () => {
-    renderLoginPage({ allow_signup: true, oauth_providers: [], email_enabled: false })
+    renderLoginPage({ allow_signup: true, oauth_providers: [], email_enabled: false, max_maze_cells: null })
     expect(screen.queryByRole('button', { name: /continue with/i })).not.toBeInTheDocument()
   })
 
@@ -55,7 +56,7 @@ describe('LoginPage', () => {
     // a Google sign-in tries to create a new user. The server redirects to
     // /login?error=signup_disabled; the page must show, not swallow.
     renderLoginPage(
-      { allow_signup: false, oauth_providers: [{ name: 'google', display_name: 'Google' }], email_enabled: false },
+      { allow_signup: false, oauth_providers: [{ name: 'google', display_name: 'Google' }], email_enabled: false, max_maze_cells: null },
       '/login?error=signup_disabled',
     )
     const alert = await screen.findByRole('alert')
@@ -63,12 +64,12 @@ describe('LoginPage', () => {
   })
 
   it('surfaces ?error=email_not_verified', async () => {
-    renderLoginPage({ allow_signup: true, oauth_providers: [], email_enabled: false }, '/login?error=email_not_verified')
+    renderLoginPage({ allow_signup: true, oauth_providers: [], email_enabled: false, max_maze_cells: null }, '/login?error=email_not_verified')
     expect(await screen.findByRole('alert')).toHaveTextContent(/verified email/i)
   })
 
   it('shows nothing for unknown error codes that look intentional but are not echoed raw', async () => {
-    renderLoginPage({ allow_signup: true, oauth_providers: [], email_enabled: false }, '/login?error=made_up_code')
+    renderLoginPage({ allow_signup: true, oauth_providers: [], email_enabled: false, max_maze_cells: null }, '/login?error=made_up_code')
     const alert = await screen.findByRole('alert')
     // The raw code must NOT leak into the UI.
     expect(alert).not.toHaveTextContent(/made_up_code/)

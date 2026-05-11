@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { GenerateMazeModal } from '../../src/components/GenerateMazeModal'
+import { AppFeaturesContext, APP_FEATURES_DEFAULTS } from '../../src/context/AppFeaturesContext'
 
 const mockOnGenerate = vi.fn()
 const mockOnCancel = vi.fn()
@@ -24,6 +25,19 @@ function renderModal(overrides: Partial<React.ComponentProps<typeof GenerateMaze
       onCancel={mockOnCancel}
       {...overrides}
     />
+  )
+}
+
+function renderModalWithCap(maxMazeCells: number | null, overrides: Partial<React.ComponentProps<typeof GenerateMazeModal>> = {}) {
+  return render(
+    <AppFeaturesContext.Provider value={{ ...APP_FEATURES_DEFAULTS, max_maze_cells: maxMazeCells }}>
+      <GenerateMazeModal
+        grid={sampleGrid}
+        onGenerate={mockOnGenerate}
+        onCancel={mockOnCancel}
+        {...overrides}
+      />
+    </AppFeaturesContext.Provider>
   )
 }
 
@@ -152,6 +166,45 @@ describe('GenerateMazeModal validation', () => {
   it('does not call onGenerate when validation fails', async () => {
     await submitWith({ Rows: '2' })
     expect(mockOnGenerate).not.toHaveBeenCalled()
+  })
+})
+
+// ── max_maze_cells cap ───────────────────────────────────────────
+
+describe('GenerateMazeModal max_maze_cells cap', () => {
+  it('rejects rows × cols over the cap with a message that names the cap value', async () => {
+    renderModalWithCap(3_600)
+    // 61 × 60 = 3,660 cells.
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '61' } })
+    fireEvent.change(screen.getByLabelText('Columns'), { target: { value: '60' } })
+    fireEvent.change(screen.getByLabelText('Finish Row'), { target: { value: '61' } })
+    fireEvent.change(screen.getByLabelText('Finish Column'), { target: { value: '60' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Total cells (rows × columns) cannot exceed 3600.')
+    expect(mockOnGenerate).not.toHaveBeenCalled()
+  })
+
+  it('accepts rows × cols exactly at the cap', async () => {
+    renderModalWithCap(3_600)
+    // 60 × 60 = 3,600 cells.
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '60' } })
+    fireEvent.change(screen.getByLabelText('Columns'), { target: { value: '60' } })
+    fireEvent.change(screen.getByLabelText('Finish Row'), { target: { value: '60' } })
+    fireEvent.change(screen.getByLabelText('Finish Column'), { target: { value: '60' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    expect(mockOnGenerate).toHaveBeenCalledWith(expect.objectContaining({ rowCount: 60, colCount: 60 }))
+  })
+
+  it('does not enforce a cap when max_maze_cells is null', async () => {
+    renderModalWithCap(null)
+    // 200 × 200 = 40,000 cells — well above any practical cap; with cap=null
+    // the modal must let it through.
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '200' } })
+    fireEvent.change(screen.getByLabelText('Columns'), { target: { value: '200' } })
+    fireEvent.change(screen.getByLabelText('Finish Row'), { target: { value: '200' } })
+    fireEvent.change(screen.getByLabelText('Finish Column'), { target: { value: '200' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    expect(mockOnGenerate).toHaveBeenCalledWith(expect.objectContaining({ rowCount: 200, colCount: 200 }))
   })
 })
 
