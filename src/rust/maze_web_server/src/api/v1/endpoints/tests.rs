@@ -23,7 +23,7 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::{validate_maze_cell_count, validate_user_fields}};
     use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
@@ -243,11 +243,24 @@ mod test_definitions {
         }
     }
 
+    /// Cell-count cap exposed by `MockStore` to exercise the handler-level
+    /// cap path. Matches `SqlStore::MAX_MAZE_CELLS` so the over-cap tests
+    /// can use the same dimensions that fail on a real SQL deployment.
+    const MOCK_MAX_MAZE_CELLS: usize = 3_600;
+
     #[async_trait]
     impl MazeStore for MockStore {
+        fn max_maze_cells(&self) -> Option<usize> {
+            Some(MOCK_MAX_MAZE_CELLS)
+        }
 
         async fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
             let mock_user = self.get_mock_user_mut(owner.id)?;
+            validate_maze_cell_count(
+                maze.definition.row_count(),
+                maze.definition.col_count(),
+                MOCK_MAX_MAZE_CELLS,
+            )?;
             let id = MockMaze::create_id_from_name(&maze.name);
 
             if mock_user.mazes.contains_key(&id) {
@@ -278,6 +291,11 @@ mod test_definitions {
 
         async fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
             let mock_user = self.get_mock_user_mut(owner.id)?;
+            validate_maze_cell_count(
+                maze.definition.row_count(),
+                maze.definition.col_count(),
+                MOCK_MAX_MAZE_CELLS,
+            )?;
             if mock_user.mazes.contains_key(&maze.id) {
                 mock_user.mazes.insert(
                     maze.id.to_string(),
@@ -759,6 +777,13 @@ mod test_definitions {
             name: name.to_string(),
             maze: new_solvable_maze(id, name),
         }
+    }
+
+    fn new_sized_maze(id: &str, name: &str, rows: usize, cols: usize) -> Maze {
+        let mut maze = Maze::new(MazeDefinition::new(rows, cols));
+        maze.id = id.to_string();
+        maze.name = name.to_string();
+        maze
     }
 
     fn new_solve_test_maze(id: &str, name: &str, with_start: bool, with_finish: bool, with_block: bool) -> Maze {
@@ -2830,6 +2855,19 @@ mod test_definitions {
         run_cannot_create_maze_that_already_exists(true).await;
     }
 
+    #[actix_web::test]
+    async fn cannot_create_maze_that_exceeds_cell_cap() {
+        // 61 × 60 = 3,660 cells, over the MockStore cap of 3,600.
+        run_create_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            new_sized_maze("", "over_cap_maze", 61, 60),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        )
+        .await;
+    }
+
     // Get maze
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
@@ -2896,6 +2934,21 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_update_maze_with_mismatching_id_with_login() {
         run_cannot_update_maze_with_mismatching_id(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_maze_that_exceeds_cell_cap() {
+        // 70 × 60 = 4,200 cells, over the MockStore cap of 3,600.
+        let id = "maze_a.json";
+        run_update_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::ThreeMazes),
+            Some(VALID_USERNAME_1),
+            true,
+            id,
+            new_sized_maze(id, "maze_a", 70, 60),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        )
+        .await;
     }
 
     // Delete maze
@@ -3358,6 +3411,27 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_generate_maze_with_max_retries_zero_with_login() {
         run_cannot_generate_maze_with_max_retries_zero(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_that_exceeds_cell_cap() {
+        // 61 × 60 = 3,660 cells, over the MockStore cap of 3,600.
+        // The handler rejects before invoking Generator::generate(), so the
+        // dimensions need only satisfy the basic min-3 rule.
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            new_generate_options(61, 60, None, None, None, None),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            None,
+            None,
+            Some(
+                "Maze is too large: 61×60 = 3660 cells exceeds the 3600-cell limit"
+                    .to_string(),
+            ),
+        )
+        .await;
     }
 
     // **************************************************************************************************

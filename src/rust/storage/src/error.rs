@@ -73,7 +73,7 @@ impl std::fmt::Display for Error {
             }
             Error::MazeHasTooManyCells { rows, cols, max } => write!(
                 f,
-                "Maze size {rows}×{cols} = {n} cells exceeds the {max}-cell limit for this store",
+                "Maze is too large: {rows}×{cols} = {n} cells exceeds the {max}-cell limit",
                 n = rows.saturating_mul(*cols)
             ),
             Error::DataModelError(e) => write!(f, "Data model error: {e}"),

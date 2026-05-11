@@ -229,6 +229,13 @@ fn get_maze_id_mismatch_error(url_id: &str, maze_id: &str) -> Error {
     ErrorBadRequest(format!("URL ID '{url_id}' and body maze ID '{maze_id}' do not match"))
 }
 
+fn get_maze_too_many_cells_error(rows: usize, cols: usize, max: usize) -> Error {
+    ErrorUnprocessableEntity(format!(
+        "Maze is too large: {rows}×{cols} = {n} cells exceeds the {max}-cell limit",
+        n = rows.saturating_mul(cols)
+    ))
+}
+
 pub (crate) fn get_maze_solve_error_string(err: &MazeError) -> String {
     format!("The maze could not be solved: {err}")
 }
@@ -1882,8 +1889,10 @@ pub async fn create_maze(
         Err(err) => {
             match err {
                 StoreError::MazeIdExists(id) => Err(get_maze_exists_error(&id)),
+                StoreError::MazeHasTooManyCells { rows, cols, max } =>
+                    Err(get_maze_too_many_cells_error(rows, cols, max)),
                 _ => Err(get_maze_create_internal_error(&err))
-            }    
+            }
         }
     }
 }
@@ -1976,8 +1985,10 @@ pub async fn update_maze(
         Err(err) => {
             match err {
                StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
+               StoreError::MazeHasTooManyCells { rows, cols, max } =>
+                    Err(get_maze_too_many_cells_error(rows, cols, max)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
-            }    
+            }
         }
     }
 }
@@ -2133,10 +2144,21 @@ pub async fn solve_maze(
 #[post("/mazes/generate")]
 pub async fn generate_maze(
     options: web::Json<GeneratorOptions>,
+    store: web::Data<SharedStore>,
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let _ = get_authorized_user(&req, false)?;
-    let generator = Generator { options: options.into_inner() };
+    let options = options.into_inner();
+
+    if let Some(max) = get_store_read_lock(&store).await.max_maze_cells() {
+        let rows = options.row_count;
+        let cols = options.col_count;
+        if rows.saturating_mul(cols) > max {
+            return Err(get_maze_too_many_cells_error(rows, cols, max));
+        }
+    }
+
+    let generator = Generator { options };
     match generator.generate() {
         Ok(maze) => Ok(HttpResponse::Ok().json(maze)),
         Err(err) => Err(get_maze_generate_error(&err))
