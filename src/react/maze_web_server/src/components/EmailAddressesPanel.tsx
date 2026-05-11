@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as api from '../api/client'
 import type { UserEmail } from '../types/api'
 import { isValidEmail } from '../utils/validation'
+import { ConfirmModal } from './ConfirmModal'
 
 interface Props {
   token: string
@@ -16,6 +17,7 @@ export function EmailAddressesPanel({ token }: Props) {
   const [resendFlash, setResendFlash] = useState<string | null>(null)
   const [newEmail, setNewEmail] = useState('')
   const [isAdding, setIsAdding] = useState(false)
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null)
   const resendFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => () => {
@@ -147,7 +149,7 @@ export function EmailAddressesPanel({ token }: Props) {
                       type="button"
                       className="btn-link"
                       disabled={busyEmail !== null}
-                      onClick={() => handleRemove(row.email)}
+                      onClick={() => setPendingRemove(row.email)}
                     >
                       Remove
                     </button>
@@ -168,6 +170,20 @@ export function EmailAddressesPanel({ token }: Props) {
           })}
         </ul>
       )}
+      {pendingRemove !== null && (
+        <ConfirmModal
+          title="Remove email address"
+          message={`Are you sure you want to remove '${pendingRemove}' from your account?`}
+          confirmLabel="Remove"
+          isDangerous
+          onConfirm={() => {
+            const target = pendingRemove
+            setPendingRemove(null)
+            void handleRemove(target)
+          }}
+          onCancel={() => setPendingRemove(null)}
+        />
+      )}
       {emails !== null && (
         <form onSubmit={handleAddEmail} className="email-add-form">
           <label htmlFor="add-email-input" className="visually-hidden">Add another email</label>
@@ -184,7 +200,7 @@ export function EmailAddressesPanel({ token }: Props) {
             className="btn-link"
             disabled={isAdding || !isValidEmail(newEmail)}
           >
-            {isAdding ? 'Adding...' : 'Add Email'}
+            {isAdding ? 'Adding...' : 'Add'}
           </button>
         </form>
       )}

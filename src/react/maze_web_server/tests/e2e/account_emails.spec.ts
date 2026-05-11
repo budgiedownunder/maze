@@ -29,7 +29,7 @@ test('add then make primary then remove email round-trip through the account pag
 
   // Add a new email.
   await main.getByPlaceholder(/add another email/i).fill('second@example.com')
-  await main.getByRole('button', { name: /^Add Email$/ }).click()
+  await main.getByRole('button', { name: /^Add$/ }).click()
 
   // List grows to two rows; the new row is verified but not primary.
   await expect(emailList.locator('li')).toHaveCount(2)
@@ -43,8 +43,11 @@ test('add then make primary then remove email round-trip through the account pag
   await expect(newRow.locator('.badge-primary')).toBeVisible()
   await expect(seededRow.locator('.badge-primary')).toHaveCount(0)
 
-  // Now the previously primary row is removable. Remove it.
+  // Now the previously primary row is removable. Remove it (via confirm modal).
   await seededRow.getByRole('button', { name: /^Remove$/ }).click()
+  const confirmDialog = page.getByRole('dialog', { name: /remove email address/i })
+  await expect(confirmDialog).toBeVisible()
+  await confirmDialog.getByRole('button', { name: /^Remove$/ }).click()
   await expect(emailList.locator('li')).toHaveCount(1)
   await expect(emailList.locator('li').filter({ hasText: 'second@example.com' })).toBeVisible()
 })

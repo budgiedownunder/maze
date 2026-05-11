@@ -95,7 +95,8 @@ describe('EmailAddressesPanel', () => {
     expect(within(oneRow).queryByText('Primary')).not.toBeInTheDocument()
   })
 
-  it('removes a non-primary email after confirming the API succeeded', async () => {
+  it('removes a non-primary email after the user confirms in the modal', async () => {
+    let deleteCalls = 0
     server.use(
       http.get('/api/v1/users/me/emails', () => {
         const emails: UserEmailsResponse = {
@@ -107,6 +108,7 @@ describe('EmailAddressesPanel', () => {
         return HttpResponse.json(emails)
       }),
       http.delete('/api/v1/users/me/emails/:email', () => {
+        deleteCalls += 1
         const emails: UserEmailsResponse = {
           emails: [
             { email: 'one@example.com', is_primary: true, verified: true, verified_at: '2026-01-01T00:00:00.000Z' },
@@ -122,8 +124,48 @@ describe('EmailAddressesPanel', () => {
     const twoRow = screen.getByText('two@example.com').closest('li')!
     await userEvent.click(within(twoRow).getByRole('button', { name: /^Remove$/ }))
 
+    // Clicking Remove opens the confirm modal — the API has not been called yet.
+    const dialog = await screen.findByRole('dialog', { name: /remove email address/i })
+    expect(within(dialog).getByText(/are you sure you want to remove 'two@example\.com'/i)).toBeInTheDocument()
+    expect(deleteCalls).toBe(0)
+    expect(screen.getByText('two@example.com')).toBeInTheDocument()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Remove$/ }))
+
     await waitFor(() => expect(screen.queryByText('two@example.com')).not.toBeInTheDocument())
     expect(screen.getByText('one@example.com')).toBeInTheDocument()
+    expect(deleteCalls).toBe(1)
+  })
+
+  it('keeps the email when the user cancels the remove confirmation modal', async () => {
+    let deleteCalls = 0
+    server.use(
+      http.get('/api/v1/users/me/emails', () => {
+        const emails: UserEmailsResponse = {
+          emails: [
+            { email: 'one@example.com', is_primary: true,  verified: true, verified_at: '2026-01-01T00:00:00.000Z' },
+            { email: 'two@example.com', is_primary: false, verified: true, verified_at: '2026-01-01T00:00:00.000Z' },
+          ],
+        }
+        return HttpResponse.json(emails)
+      }),
+      http.delete('/api/v1/users/me/emails/:email', () => {
+        deleteCalls += 1
+        return new HttpResponse(null, { status: 500 })
+      }),
+    )
+
+    await renderPanel()
+
+    const twoRow = screen.getByText('two@example.com').closest('li')!
+    await userEvent.click(within(twoRow).getByRole('button', { name: /^Remove$/ }))
+
+    const dialog = await screen.findByRole('dialog', { name: /remove email address/i })
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Cancel$/ }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /remove email address/i })).not.toBeInTheDocument())
+    expect(screen.getByText('two@example.com')).toBeInTheDocument()
+    expect(deleteCalls).toBe(0)
   })
 
   it('reverts the optimistic update and shows an error when set-primary fails', async () => {
@@ -235,7 +277,7 @@ describe('EmailAddressesPanel', () => {
     await renderPanel()
 
     const input = screen.getByPlaceholderText(/add another email/i)
-    const button = screen.getByRole('button', { name: /^Add Email$/ })
+    const button = screen.getByRole('button', { name: /^Add$/ })
 
     expect(button).toBeDisabled()
     await userEvent.type(input, 'not-an-email')
@@ -249,7 +291,7 @@ describe('EmailAddressesPanel', () => {
 
     const input = screen.getByPlaceholderText(/add another email/i)
     await userEvent.type(input, 'second@example.com')
-    await userEvent.click(screen.getByRole('button', { name: /^Add Email$/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Add$/ }))
 
     await waitFor(() => expect(screen.getByText('second@example.com')).toBeInTheDocument())
     expect(input).toHaveValue('')
@@ -266,7 +308,7 @@ describe('EmailAddressesPanel', () => {
     // POST handler returns 409 on duplicates, so retyping it triggers the
     // error path.
     await userEvent.type(input, 'test@example.com')
-    await userEvent.click(screen.getByRole('button', { name: /^Add Email$/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Add$/ }))
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/already in use/i))
     expect(input).toHaveValue('test@example.com')
