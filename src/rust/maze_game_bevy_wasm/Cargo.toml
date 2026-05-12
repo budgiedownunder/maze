@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = false
+wasm-opt = ["-Oz", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]
 
 [dependencies]
 maze_game_bevy = { path = "../maze_game_bevy" }
