@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
+import { AppFeaturesContext, APP_FEATURES_DEFAULTS } from '../../src/context/AppFeaturesContext'
 import { SignUpPage } from '../../src/pages/SignUpPage'
 
 const mockNavigate = vi.fn()
@@ -26,12 +27,14 @@ async function fillForm(overrides: Partial<Record<string, string>> = {}) {
   if (fields.confirmPassword) await userEvent.type(passwordInputs[1], fields.confirmPassword)
 }
 
-function renderSignUpPage() {
+function renderSignUpPage(emailEnabled = false) {
   return render(
     <MemoryRouter>
-      <ThemeProvider>
-        <SignUpPage />
-      </ThemeProvider>
+      <AppFeaturesContext.Provider value={{ ...APP_FEATURES_DEFAULTS, email_enabled: emailEnabled }}>
+        <ThemeProvider>
+          <SignUpPage />
+        </ThemeProvider>
+      </AppFeaturesContext.Provider>
     </MemoryRouter>
   )
 }
@@ -74,12 +77,22 @@ describe('SignUpPage', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('navigates to /login with inbox-check flash on successful signup', async () => {
-    renderSignUpPage()
+  it('navigates to /login with inbox-check flash when email is enabled', async () => {
+    renderSignUpPage(true)
     await fillForm()
     await userEvent.click(screen.getByRole('button', { name: /sign up/i }))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/login\?message=Account\+created/),
+      `/login?message=${encodeURIComponent('Account created. Check your inbox for a verification email before signing in.')}`,
+      { replace: true },
+    ))
+  })
+
+  it('navigates to /login with sign-in-now flash when email is disabled', async () => {
+    renderSignUpPage(false)
+    await fillForm()
+    await userEvent.click(screen.getByRole('button', { name: /sign up/i }))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(
+      `/login?message=${encodeURIComponent('Account created. You can sign in now.')}`,
       { replace: true },
     ))
   })

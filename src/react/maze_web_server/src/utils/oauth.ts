@@ -1,19 +1,18 @@
-/** Parses `#token=…&expires_at=…[&new_user=true]` from a URL fragment.
- *  Returns null if `token` or `expires_at` is missing — the OAuth callback
- *  page treats that as a flow failure. `newUser` is `true` only when the
- *  server explicitly emitted `new_user=true`; absent or any other value
- *  means an existing user signed in.
+/** Parses `#token=…&expires_at=…[&new_user=true][&first_sign_in=true]` from
+ *  a URL fragment. Returns null if `token` or `expires_at` is missing — the
+ *  OAuth callback page treats that as a flow failure.
  *
  *  Lives in utils (not on the page component) so the page file exports only
  *  components, keeping `react-refresh/only-export-components` happy. */
-export function parseCallbackHash(hash: string): { token: string; expiresAt: string; newUser: boolean } | null {
+export function parseCallbackHash(hash: string): { token: string; expiresAt: string; newUser: boolean; firstSignIn: boolean } | null {
   const fragment = hash.startsWith('#') ? hash.slice(1) : hash
   const params = new URLSearchParams(fragment)
   const token = params.get('token')
   const expiresAt = params.get('expires_at')
   const newUser = params.get('new_user') === 'true'
+  const firstSignIn = params.get('first_sign_in') === 'true'
   if (!token || !expiresAt) return null
-  return { token, expiresAt, newUser }
+  return { token, expiresAt, newUser, firstSignIn }
 }
 
 /** Maps an OAuth error code (the value of `?error=…` on /login) to a friendly
@@ -46,6 +45,8 @@ export function getOAuthErrorMessage(code: string | null): string | null {
     case 'missing_code':
     case 'provider_response':
       return 'There was a problem completing sign-in with the provider. Please try again.'
+    case 'email_collision':
+      return 'An account already exists with this email address. Make sure you have verified that address first, then try signing in again.'
     case 'store_error':
       return 'A server error occurred while completing sign-in. Please try again later.'
     case 'oauth_callback_missing_token':

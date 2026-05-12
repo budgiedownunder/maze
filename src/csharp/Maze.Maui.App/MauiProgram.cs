@@ -109,6 +109,7 @@ namespace Maze.Maui.App
             builder.Services.AddTransient<MazePage>();
             builder.Services.AddTransient<MazeGamePage>();
             builder.Services.AddTransient<Play3dGamePage>();
+            builder.Services.AddTransient<AccountPage>();
 
 #if DEBUG
             builder.Logging.AddDebug();

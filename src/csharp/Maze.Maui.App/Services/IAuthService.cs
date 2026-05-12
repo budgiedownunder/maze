@@ -57,16 +57,38 @@ namespace Maze.Maui.App.Services
     }
 
     /// <summary>
-    /// Result of a successful OAuth sign-in. <see cref="IsNewUser"/> is true
-    /// when the server's <c>account::resolve</c> created a brand-new user
-    /// (the OAuth flow's branch 3) — used by the ViewModel layer to open the
-    /// Account UI with a welcome banner so the user can set their username
-    /// and full name immediately.
+    /// Result of a successful OAuth sign-in. <see cref="IsFirstSignIn"/>
+    /// is the welcome-banner trigger across both auth flows: it is true
+    /// when the user has had no prior successful sign-in via any method
+    /// (server returned <c>first_sign_in=true</c> in the callback URL
+    /// fragment). <see cref="IsNewUser"/> is a separate audit signal —
+    /// true when the server's <c>account::resolve</c> created a brand-new
+    /// User row during this OAuth flow. They agree in most cases but
+    /// disagree e.g. when a user signed up via credentials, never
+    /// verified, then signs in via OAuth: <c>IsNewUser=false</c> (row
+    /// already existed) but <c>IsFirstSignIn=true</c> (no prior session).
+    /// The ViewModel layer keys the welcome banner off
+    /// <c>IsFirstSignIn</c>.
     /// </summary>
     public class OAuthSignInResult
     {
         public UserProfile Profile { get; init; } = new();
         public bool IsNewUser { get; init; }
+        public bool IsFirstSignIn { get; init; }
+    }
+
+    /// <summary>
+    /// Result of a successful credential sign-in. <see cref="IsFirstSignIn"/>
+    /// is the welcome-banner trigger — true when the user has had no
+    /// prior successful sign-in via any method (server returned
+    /// <c>is_first_sign_in: true</c> in the login response). The
+    /// ViewModel layer keys the welcome banner off this flag, the same
+    /// way it does for <see cref="OAuthSignInResult"/>.
+    /// </summary>
+    public class CredentialsSignInResult
+    {
+        public UserProfile Profile { get; init; } = new();
+        public bool IsFirstSignIn { get; init; }
     }
 
     /// <summary>
@@ -80,8 +102,11 @@ namespace Maze.Maui.App.Services
         /// <summary>Returns the stored bearer token, or null if not authenticated.</summary>
         Task<string?> GetBearerTokenAsync();
 
-        /// <summary>Signs in with email and password. Stores the returned bearer token. Returns the user profile.</summary>
-        Task<UserProfile> SignInAsync(string email, string password);
+        /// <summary>Signs in with email and password. Stores the returned bearer token.
+        /// Returns the user profile alongside <c>IsFirstSignIn</c>, the welcome-banner
+        /// trigger (true when this is the user's first ever successful sign-in via
+        /// any method).</summary>
+        Task<CredentialsSignInResult> SignInAsync(string email, string password);
 
         /// <summary>
         /// Signs in via the named OAuth provider (e.g. "google", "github") using the platform's

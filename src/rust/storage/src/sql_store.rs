@@ -13,7 +13,7 @@
 
 use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
 use crate::{
-    validation::{validate_email_format, validate_user_fields},
+    validation::{validate_email_format, validate_maze_cell_count, validate_user_fields},
     Error, MazeItem, Store,
 };
 use async_trait::async_trait;
@@ -138,6 +138,23 @@ fn integrity_violation(detail: &str) -> Error {
     log::error!("storage integrity violation: {detail}");
     Error::Other(format!("storage integrity violation: {detail}"))
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Limits
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Cell-count ceiling enforced by [`SqlStore`] on `create_maze` and
+/// `update_maze`. Derived from `mazes.definition VARCHAR(16000)` in
+/// `migrations/0001_initial.sql`: with the existing serialisation
+/// (`4·N·M + 2·N + 10` chars for an N-row × M-col grid) the 16,000-char
+/// column maxes out at ~3,844 cells, so 3,600 sits inside that with a
+/// margin while still allowing a 60×60 square.
+///
+/// Applied uniformly across all SQL drivers — SQLite ignores the column
+/// length declaration, but enforcing the cap uniformly avoids dev-vs-prod
+/// divergence when the same data set is later loaded under MySQL or
+/// PostgreSQL, both of which do enforce VARCHAR length.
+pub const MAX_MAZE_CELLS: usize = 3_600;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -293,26 +310,138 @@ impl SqlStore {
         // needed (matches the COLLATE pattern above).
         retire_legacy_users_email_column(&pool, kind).await?;
 
+        // Backfill `users.created_at` / `users.last_sign_in_at` for any
+        // pre-v8 row that still has them NULL. The migration-run timestamp
+        // is captured here at startup (rather than baked into the static
+        // SQL of `0008_user_timestamps.sql`) so the value reflects when the
+        // upgrade actually happened. Idempotent — once every row has a
+        // value the UPDATEs match zero rows.
+        backfill_user_timestamps_if_null(&pool, kind).await?;
+
         Ok(Self { pool, kind })
     }
 }
 
+/// Backfills `users.created_at` and `users.last_sign_in_at` for any row
+/// where they are still NULL. Companion to `0008_user_timestamps.sql`,
+/// which adds the columns nullable; the application's `User` struct treats
+/// `created_at` as non-nullable so this backfill must complete before any
+/// read goes through `user_from_row`.
+///
+/// `created_at` is unconditionally backfilled to the migration-run
+/// timestamp captured here at startup — non-nullable in the app, so every
+/// pre-existing row needs a value, and we don't have a more accurate
+/// value to substitute.
+///
+/// `last_sign_in_at` is backfilled to the timestamp of each user's most
+/// recent login row — the most accurate evidence we have of when they
+/// last signed in. Users with no `user_logins` row stay at NULL so the
+/// welcome-banner trigger `User::is_first_sign_in()` (=
+/// `last_sign_in_at.is_none() && logins.is_empty()`) correctly fires on
+/// their first actual sign-in.
+///
+/// Implementation note: the `last_sign_in_at` step deliberately avoids a
+/// single `UPDATE … (correlated subquery) WHERE …` statement, which
+/// PostgreSQL rejects with `syntax error at or near "WHERE"` in some
+/// versions even though it's accepted by SQLite and MySQL. Iterating
+/// `(user_id, MAX(created_at))` rows in Rust and issuing one parameterised
+/// `UPDATE` per user is portable across all three backends and gives a
+/// clear error message naming the failing step if anything goes wrong.
+async fn backfill_user_timestamps_if_null(
+    pool: &AnyPool,
+    kind: SqlBackend,
+) -> Result<(), Error> {
+    log::info!(
+        "SqlStore: backfilling users.created_at to migration-run timestamp \
+         for any pre-v8 row that's still NULL"
+    );
+    sqlx::query(&q(
+        kind,
+        "UPDATE users SET created_at = ? WHERE created_at IS NULL",
+    ))
+        .bind(datetime_to_sql(Utc::now()))
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            Error::Other(format!(
+                "backfill_user_timestamps_if_null: \
+                 UPDATE users.created_at failed: sqlx: {e}"
+            ))
+        })?;
+
+    log::info!(
+        "SqlStore: backfilling users.last_sign_in_at from MAX(user_logins.created_at) \
+         for any pre-v8 row that's still NULL"
+    );
+    let rows = sqlx::query(
+        "SELECT user_id, MAX(created_at) AS max_created_at \
+         FROM user_logins GROUP BY user_id",
+    )
+        .fetch_all(pool)
+        .await
+        .map_err(|e| {
+            Error::Other(format!(
+                "backfill_user_timestamps_if_null: \
+                 SELECT MAX(user_logins.created_at) per user failed: sqlx: {e}"
+            ))
+        })?;
+    for row in rows {
+        let user_id: String = row.try_get("user_id").map_err(map_sqlx_err)?;
+        let max_created_at: String =
+            row.try_get("max_created_at").map_err(map_sqlx_err)?;
+        sqlx::query(&q(
+            kind,
+            "UPDATE users SET last_sign_in_at = ? \
+             WHERE id = ? AND last_sign_in_at IS NULL",
+        ))
+            .bind(&max_created_at)
+            .bind(&user_id)
+            .execute(pool)
+            .await
+            .map_err(|e| {
+                Error::Other(format!(
+                    "backfill_user_timestamps_if_null: \
+                     UPDATE users.last_sign_in_at for user_id={user_id} failed: sqlx: {e}"
+                ))
+            })?;
+    }
+    Ok(())
+}
+
 /// Per-backend retirement of `users.email`. Runs every startup; naturally
-/// idempotent. See `SqlStore::new` for context.
+/// idempotent. See `SqlStore::new` for context. Each `sqlx::query` below
+/// is wrapped with a `map_err` that prefixes the error with the
+/// backend-specific step name so a Postgres/MySQL/SQLite-specific failure
+/// is identifiable from the log alone.
 async fn retire_legacy_users_email_column(
     pool: &AnyPool,
     kind: SqlBackend,
 ) -> Result<(), Error> {
+    /// Helper to wrap an sqlx error with the function name and a step
+    /// description. Mirrors the pattern in
+    /// `backfill_user_timestamps_if_null`.
+    fn err(step: &str, e: sqlx::Error) -> Error {
+        Error::Other(format!(
+            "retire_legacy_users_email_column: {step} failed: sqlx: {e}"
+        ))
+    }
     match kind {
         SqlBackend::Postgres => {
+            log::info!(
+                "SqlStore: retiring legacy users.email column \
+                 (PostgreSQL DROP COLUMN IF EXISTS)"
+            );
             // Dropping the column also drops the implicit `users_email_key`
             // UNIQUE constraint and its supporting index in PG.
             sqlx::query("ALTER TABLE users DROP COLUMN IF EXISTS email")
                 .execute(pool)
                 .await
-                .map_err(map_sqlx_err)?;
+                .map_err(|e| err("ALTER TABLE users DROP COLUMN email", e))?;
         }
         SqlBackend::MySql => {
+            log::info!(
+                "SqlStore: retiring legacy users.email column (MySQL probe + drop)"
+            );
             // The UNIQUE on `email` creates an index named after the column
             // by convention. We can't rely on `IF EXISTS` here:
             //   * `ALTER TABLE … DROP INDEX IF EXISTS …` is rejected by MySQL
@@ -330,13 +459,13 @@ async fn retire_legacy_users_email_column(
             )
             .fetch_optional(pool)
             .await
-            .map_err(map_sqlx_err)?
+            .map_err(|e| err("probe INFORMATION_SCHEMA.STATISTICS for users.email index", e))?
             .is_some();
             if has_index {
                 sqlx::query("ALTER TABLE users DROP INDEX email")
                     .execute(pool)
                     .await
-                    .map_err(map_sqlx_err)?;
+                    .map_err(|e| err("ALTER TABLE users DROP INDEX email", e))?;
             }
             let has_column = sqlx::query(
                 "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS \
@@ -346,13 +475,13 @@ async fn retire_legacy_users_email_column(
             )
             .fetch_optional(pool)
             .await
-            .map_err(map_sqlx_err)?
+            .map_err(|e| err("probe INFORMATION_SCHEMA.COLUMNS for users.email column", e))?
             .is_some();
             if has_column {
                 sqlx::query("ALTER TABLE users DROP COLUMN email")
                     .execute(pool)
                     .await
-                    .map_err(map_sqlx_err)?;
+                    .map_err(|e| err("ALTER TABLE users DROP COLUMN email", e))?;
             }
         }
         SqlBackend::Sqlite => {
@@ -368,7 +497,10 @@ async fn retire_legacy_users_email_column(
             // rename fails with "there is already another table or index
             // with this name: users". `pool.acquire()` pins one connection
             // for the whole rebuild.
-            let mut conn = pool.acquire().await.map_err(map_sqlx_err)?;
+            let mut conn = pool
+                .acquire()
+                .await
+                .map_err(|e| err("acquire dedicated connection for SQLite rebuild", e))?;
 
             // Probe what state the schema is in so we can pick the right
             // path. Three states matter:
@@ -382,14 +514,14 @@ async fn retire_legacy_users_email_column(
             )
             .fetch_optional(&mut *conn)
             .await
-            .map_err(map_sqlx_err)?
+            .map_err(|e| err("probe sqlite_master for users table", e))?
             .is_some();
             let users_new_exists = sqlx::query(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users_new'",
             )
             .fetch_optional(&mut *conn)
             .await
-            .map_err(map_sqlx_err)?
+            .map_err(|e| err("probe sqlite_master for users_new table", e))?
             .is_some();
 
             if users_new_exists && !users_exists {
@@ -397,10 +529,14 @@ async fn retire_legacy_users_email_column(
                 // failed before renaming `users_new` (e.g. older code that
                 // ran the rebuild across pool connections). Just complete
                 // the rename.
+                log::info!(
+                    "SqlStore: detected half-applied users.email retirement \
+                     (users_new present, users absent); completing the rename"
+                );
                 sqlx::query("ALTER TABLE users_new RENAME TO users")
                     .execute(&mut *conn)
                     .await
-                    .map_err(map_sqlx_err)?;
+                    .map_err(|e| err("recovery rename users_new -> users", e))?;
                 log::info!(
                     "SqlStore: completed half-applied users.email retirement \
                      by renaming users_new to users"
@@ -414,20 +550,27 @@ async fn retire_legacy_users_email_column(
                 )
                 .fetch_optional(&mut *conn)
                 .await
-                .map_err(map_sqlx_err)?
+                .map_err(|e| err("probe pragma_table_info for users.email column", e))?
                 .is_some();
             if !has_email_column {
                 return Ok(());
             }
 
+            log::info!(
+                "SqlStore: retiring legacy users.email column \
+                 (SQLite full table rebuild)"
+            );
             // Drop any stale `users_new` left behind by a previous aborted
             // attempt before starting fresh — guarantees the CREATE below
             // doesn't collide.
             if users_new_exists {
+                log::info!(
+                    "SqlStore: dropping stale users_new left by a previous aborted rebuild"
+                );
                 sqlx::query("DROP TABLE users_new")
                     .execute(&mut *conn)
                     .await
-                    .map_err(map_sqlx_err)?;
+                    .map_err(|e| err("DROP TABLE users_new (stale)", e))?;
             }
 
             // Disable FK enforcement for the duration of the rebuild —
@@ -437,36 +580,38 @@ async fn retire_legacy_users_email_column(
             sqlx::query("PRAGMA foreign_keys = OFF")
                 .execute(&mut *conn)
                 .await
-                .map_err(map_sqlx_err)?;
+                .map_err(|e| err("PRAGMA foreign_keys = OFF", e))?;
             sqlx::query(
                 "CREATE TABLE users_new (\
-                    id            VARCHAR(36)  NOT NULL PRIMARY KEY,\
-                    is_admin      INTEGER      NOT NULL DEFAULT 0,\
-                    username      VARCHAR(64)  NOT NULL UNIQUE,\
-                    full_name     VARCHAR(255) NOT NULL,\
-                    password_hash VARCHAR(255) NOT NULL,\
-                    api_key       VARCHAR(36)  NOT NULL UNIQUE,\
-                    deleted_at    VARCHAR(32)\
+                    id              VARCHAR(36)  NOT NULL PRIMARY KEY,\
+                    is_admin        INTEGER      NOT NULL DEFAULT 0,\
+                    username        VARCHAR(64)  NOT NULL UNIQUE,\
+                    full_name       VARCHAR(255) NOT NULL,\
+                    password_hash   VARCHAR(255) NOT NULL,\
+                    api_key         VARCHAR(36)  NOT NULL UNIQUE,\
+                    deleted_at      VARCHAR(32),\
+                    created_at      VARCHAR(32),\
+                    last_sign_in_at VARCHAR(32)\
                 )",
             )
             .execute(&mut *conn)
             .await
-            .map_err(map_sqlx_err)?;
+            .map_err(|e| err("CREATE TABLE users_new", e))?;
             sqlx::query(
-                "INSERT INTO users_new (id, is_admin, username, full_name, password_hash, api_key, deleted_at) \
-                 SELECT id, is_admin, username, full_name, password_hash, api_key, deleted_at FROM users",
+                "INSERT INTO users_new (id, is_admin, username, full_name, password_hash, api_key, deleted_at, created_at, last_sign_in_at) \
+                 SELECT id, is_admin, username, full_name, password_hash, api_key, deleted_at, created_at, last_sign_in_at FROM users",
             )
             .execute(&mut *conn)
             .await
-            .map_err(map_sqlx_err)?;
+            .map_err(|e| err("INSERT INTO users_new SELECT FROM users", e))?;
             sqlx::query("DROP TABLE users")
                 .execute(&mut *conn)
                 .await
-                .map_err(map_sqlx_err)?;
+                .map_err(|e| err("DROP TABLE users (legacy)", e))?;
             sqlx::query("ALTER TABLE users_new RENAME TO users")
                 .execute(&mut *conn)
                 .await
-                .map_err(map_sqlx_err)?;
+                .map_err(|e| err("ALTER TABLE users_new RENAME TO users", e))?;
             // The supporting index on the rebuilt `users` table.
             // CREATE INDEX is not idempotent across all backends, but
             // because we just DROPped the old `users` table and renamed
@@ -475,11 +620,11 @@ async fn retire_legacy_users_email_column(
             sqlx::query("CREATE INDEX idx_users_deleted_at ON users(deleted_at)")
                 .execute(&mut *conn)
                 .await
-                .map_err(map_sqlx_err)?;
+                .map_err(|e| err("CREATE INDEX idx_users_deleted_at", e))?;
             sqlx::query("PRAGMA foreign_keys = ON")
                 .execute(&mut *conn)
                 .await
-                .map_err(map_sqlx_err)?;
+                .map_err(|e| err("PRAGMA foreign_keys = ON", e))?;
             log::info!(
                 "SqlStore: retired legacy users.email column (SQLite table rebuild)"
             );
@@ -618,6 +763,13 @@ async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result
         Some(s) => Some(datetime_from_sql(&s)?),
         None => None,
     };
+    let created_at_str: String = row.try_get("created_at").map_err(map_sqlx_err)?;
+    let created_at = datetime_from_sql(&created_at_str)?;
+    let last_sign_in_at_str: Option<String> = row.try_get("last_sign_in_at").map_err(map_sqlx_err)?;
+    let last_sign_in_at = match last_sign_in_at_str {
+        Some(s) => Some(datetime_from_sql(&s)?),
+        None => None,
+    };
     Ok(User {
         id,
         is_admin: int_to_bool(is_admin_raw),
@@ -629,6 +781,8 @@ async fn user_from_row(pool: &AnyPool, kind: SqlBackend, row: &AnyRow) -> Result
         logins: fetch_user_logins(pool, kind, id).await?,
         oauth_identities: fetch_user_oauth_identities(pool, kind, id).await?,
         deleted_at,
+        created_at,
+        last_sign_in_at,
     })
 }
 
@@ -870,6 +1024,8 @@ impl UserStore for SqlStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -897,8 +1053,8 @@ impl UserStore for SqlStore {
 
         sqlx::query(&q(
             self.kind,
-            "INSERT INTO users (id, is_admin, username, full_name, password_hash, api_key) \
-             VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO users (id, is_admin, username, full_name, password_hash, api_key, created_at, last_sign_in_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         ))
         .bind(user.id.to_string())
         .bind(bool_to_int(user.is_admin))
@@ -906,6 +1062,8 @@ impl UserStore for SqlStore {
         .bind(&user.full_name)
         .bind(&user.password_hash)
         .bind(user.api_key.to_string())
+        .bind(datetime_to_sql(user.created_at))
+        .bind(user.last_sign_in_at.map(datetime_to_sql))
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
@@ -949,6 +1107,8 @@ impl UserStore for SqlStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1069,6 +1229,8 @@ impl UserStore for SqlStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// store.create_user(&mut user).await.expect("create_user");
@@ -1133,6 +1295,8 @@ impl UserStore for SqlStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1175,7 +1339,7 @@ impl UserStore for SqlStore {
         let result = sqlx::query(&q(
             self.kind,
             "UPDATE users SET is_admin = ?, username = ?, full_name = ?, \
-                              password_hash = ?, api_key = ? \
+                              password_hash = ?, api_key = ?, last_sign_in_at = ? \
              WHERE id = ?",
         ))
         .bind(bool_to_int(user.is_admin))
@@ -1183,6 +1347,7 @@ impl UserStore for SqlStore {
         .bind(&user.full_name)
         .bind(&user.password_hash)
         .bind(user.api_key.to_string())
+        .bind(user.last_sign_in_at.map(datetime_to_sql))
         .bind(user.id.to_string())
         .execute(&self.pool)
         .await
@@ -1248,6 +1413,8 @@ impl UserStore for SqlStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1327,6 +1494,8 @@ impl UserStore for SqlStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1412,6 +1581,8 @@ impl UserStore for SqlStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1464,6 +1635,36 @@ impl UserStore for SqlStore {
         }
     }
 
+    /// Locates a user by an email address regardless of verification state.
+    /// Same SQL shape as [`find_user_by_verified_email`] minus the
+    /// `ue.verified <> 0` filter. The `user_emails.email` UNIQUE constraint
+    /// guarantees at most one match in healthy state; the multi-row guard
+    /// is here for parity and to fail loudly if a future migration ever
+    /// weakens that constraint.
+    ///
+    /// See the trait doc-comment for usage rules — auth code must use
+    /// [`find_user_by_verified_email`] instead.
+    async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, Error> {
+        let mut rows = sqlx::query(&q(
+            self.kind,
+            "SELECT u.* FROM users u \
+             JOIN user_emails ue ON ue.user_id = u.id \
+             WHERE LOWER(ue.email) = LOWER(?) \
+               AND u.deleted_at IS NULL",
+        ))
+        .bind(email)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        match rows.len() {
+            0 => Err(Error::UserNotFound()),
+            1 => user_from_row(&self.pool, self.kind, &rows.pop().expect("len==1")).await,
+            n => Err(integrity_violation(&format!(
+                "{n} users match email '{email}' case-insensitively"
+            ))),
+        }
+    }
+
     /// Locates a user by their api key within the store
     ///
     /// # Examples
@@ -1497,6 +1698,8 @@ impl UserStore for SqlStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1588,6 +1791,8 @@ impl UserStore for SqlStore {
     ///     logins,
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1687,6 +1892,8 @@ impl UserStore for SqlStore {
     ///         Some("jsmith@company.com".to_string()),
     ///     )],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1778,6 +1985,8 @@ impl UserStore for SqlStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the SQL store
@@ -1857,6 +2066,8 @@ impl UserStore for SqlStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the admin user within the SQL store
@@ -2028,6 +2239,7 @@ impl UserStore for SqlStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let row = store
@@ -2110,6 +2322,7 @@ impl UserStore for SqlStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
@@ -2152,6 +2365,21 @@ impl UserStore for SqlStore {
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
+        // Drop any OAuth identity rows whose `provider_email` matches the
+        // removed address. See the trait doc for the invariant this
+        // upholds — otherwise an OAuth provider could still authenticate
+        // the user via branch 1 of `account::resolve` (which matches by
+        // `(provider, provider_user_id)`, not by current email).
+        sqlx::query(&q(
+            self.kind,
+            "DELETE FROM oauth_identities \
+             WHERE user_id = ? AND LOWER(provider_email) = LOWER(?)",
+        ))
+        .bind(user_id.to_string())
+        .bind(email)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         Ok(())
     }
 
@@ -2183,6 +2411,7 @@ impl UserStore for SqlStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
@@ -2253,6 +2482,7 @@ impl UserStore for SqlStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", false).await.expect("add");
@@ -2320,6 +2550,32 @@ async fn fetch_user_email_row(
 
 #[async_trait]
 impl MazeStore for SqlStore {
+    /// Returns the cell-count ceiling enforced by this SQL store on
+    /// create/update — see [`MAX_MAZE_CELLS`].
+    ///
+    /// # Examples
+    ///
+    /// Read the cap from a fresh in-memory SQLite store
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{SqlStore, SqlStoreConfig, MazeStore};
+    ///
+    /// let store = SqlStore::new(SqlStoreConfig {
+    ///     url: "sqlite::memory:".to_string(),
+    ///     max_connections: 1,
+    ///     auto_create_database: true,
+    ///     ..SqlStoreConfig::default()
+    /// })
+    /// .await
+    /// .expect("create in-memory SqlStore");
+    ///
+    /// assert_eq!(store.max_maze_cells(), Some(3_600));
+    /// # });
+    /// ```
+    fn max_maze_cells(&self) -> Option<usize> {
+        Some(MAX_MAZE_CELLS)
+    }
     /// Creates a new maze within the SQL store instance
     ///
     /// # Examples
@@ -2380,6 +2636,12 @@ impl MazeStore for SqlStore {
         if maze.name.is_empty() {
             return Err(Error::MazeNameMissing());
         }
+
+        validate_maze_cell_count(
+            maze.definition.row_count(),
+            maze.definition.col_count(),
+            MAX_MAZE_CELLS,
+        )?;
 
         let existing = sqlx::query(&q(
             self.kind,
@@ -2542,6 +2804,11 @@ impl MazeStore for SqlStore {
         if maze.id.is_empty() {
             return Err(Error::MazeIdMissing());
         }
+        validate_maze_cell_count(
+            maze.definition.row_count(),
+            maze.definition.col_count(),
+            MAX_MAZE_CELLS,
+        )?;
         let definition_json = serde_json::to_string(&maze)?;
         let result = sqlx::query(&q(
             self.kind,
@@ -2971,6 +3238,7 @@ impl TokenStore for SqlStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -3043,6 +3311,7 @@ impl TokenStore for SqlStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -3101,6 +3370,7 @@ impl TokenStore for SqlStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -3193,6 +3463,7 @@ impl TokenStore for SqlStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// for _ in 0..2 {
@@ -3556,6 +3827,7 @@ impl EmailAuditLog for SqlStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// for template in ["password_reset", "email_verification"] {
@@ -3752,8 +4024,8 @@ mod tests {
             (&plain2_id, 0, "carol", "carol@example.com"),
         ] {
             sqlx::query(
-                "INSERT INTO users (id, is_admin, username, full_name, password_hash, api_key) \
-                 VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO users (id, is_admin, username, full_name, password_hash, api_key, created_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(*id)
             .bind(*is_admin)
@@ -3761,6 +4033,7 @@ mod tests {
             .bind(*username)
             .bind("hash")
             .bind(Uuid::new_v4().to_string())
+            .bind("2026-01-01T00:00:00.000Z")
             .execute(&store.pool)
             .await
             .expect("insert user");
@@ -3852,14 +4125,15 @@ mod tests {
 
         let id = Uuid::new_v4().to_string();
         sqlx::query(
-            "INSERT INTO users (id, is_admin, username, full_name, password_hash, api_key) \
-             VALUES (?, 0, ?, ?, ?, ?)",
+            "INSERT INTO users (id, is_admin, username, full_name, password_hash, api_key, created_at) \
+             VALUES (?, 0, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind("dave")
         .bind("dave")
         .bind("hash")
         .bind(Uuid::new_v4().to_string())
+        .bind("2026-01-01T00:00:00.000Z")
         .execute(&store.pool)
         .await
         .expect("insert user");
@@ -3928,5 +4202,123 @@ mod tests {
             .execute(&store.pool)
             .await
             .expect("re-run on empty table");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // max_maze_cells cap enforcement
+    // ─────────────────────────────────────────────────────────────────────
+
+    async fn new_sqlite_store() -> SqlStore {
+        SqlStore::new(SqlStoreConfig {
+            url: "sqlite::memory:".to_string(),
+            max_connections: 1,
+            auto_create_database: true,
+            ..SqlStoreConfig::default()
+        })
+        .await
+        .expect("create in-memory SqlStore")
+    }
+
+    async fn seed_owner(store: &mut SqlStore) -> User {
+        let mut user = User {
+            id: User::new_id(),
+            is_admin: false,
+            username: "owner".to_string(),
+            full_name: "Maze Owner".to_string(),
+            emails: vec![UserEmail::new_primary_verified("owner@example.com")],
+            password_hash: "hash".to_string(),
+            api_key: User::new_api_key(),
+            logins: vec![],
+            oauth_identities: vec![],
+            deleted_at: None,
+            created_at: chrono::Utc::now(),
+            last_sign_in_at: None,
+        };
+        store.create_user(&mut user).await.expect("seed owner");
+        user
+    }
+
+    fn make_maze(name: &str, rows: usize, cols: usize) -> Maze {
+        use data_model::MazeDefinition;
+        let mut maze = Maze::new(MazeDefinition::new(rows, cols));
+        maze.name = name.to_string();
+        maze
+    }
+
+    #[tokio::test]
+    async fn sql_store_max_maze_cells_returns_cap() {
+        let store = new_sqlite_store().await;
+        assert_eq!(store.max_maze_cells(), Some(MAX_MAZE_CELLS));
+    }
+
+    #[tokio::test]
+    async fn sql_store_create_maze_accepts_at_cap() {
+        let mut store = new_sqlite_store().await;
+        let owner = seed_owner(&mut store).await;
+        // 60 × 60 = 3,600 = MAX_MAZE_CELLS
+        let mut maze = make_maze("at-cap", 60, 60);
+        store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect("at-cap create succeeds");
+        assert!(!maze.id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn sql_store_create_maze_accepts_just_under_cap() {
+        let mut store = new_sqlite_store().await;
+        let owner = seed_owner(&mut store).await;
+        // 60 × 59 = 3,540 < 3,600
+        let mut maze = make_maze("under-cap", 60, 59);
+        store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect("under-cap create succeeds");
+    }
+
+    #[tokio::test]
+    async fn sql_store_create_maze_rejects_over_cap() {
+        let mut store = new_sqlite_store().await;
+        let owner = seed_owner(&mut store).await;
+        // 61 × 60 = 3,660 > 3,600
+        let mut maze = make_maze("over-cap", 61, 60);
+        let err = store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect_err("over-cap create should fail");
+        match err {
+            Error::MazeHasTooManyCells { rows, cols, max } => {
+                assert_eq!(rows, 61);
+                assert_eq!(cols, 60);
+                assert_eq!(max, MAX_MAZE_CELLS);
+            }
+            other => panic!("expected MazeHasTooManyCells, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn sql_store_update_maze_rejects_over_cap() {
+        use data_model::MazeDefinition;
+        let mut store = new_sqlite_store().await;
+        let owner = seed_owner(&mut store).await;
+        // Seed at half cap, then try to update to over cap.
+        let mut maze = make_maze("resize-me", 50, 50);
+        store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect("seed create");
+        maze.definition = MazeDefinition::new(70, 60); // 4,200 cells
+        let err = store
+            .update_maze(&owner, &mut maze)
+            .await
+            .expect_err("over-cap update should fail");
+        match err {
+            Error::MazeHasTooManyCells { rows, cols, max } => {
+                assert_eq!(rows, 70);
+                assert_eq!(cols, 60);
+                assert_eq!(max, MAX_MAZE_CELLS);
+            }
+            other => panic!("expected MazeHasTooManyCells, got {other:?}"),
+        }
     }
 }

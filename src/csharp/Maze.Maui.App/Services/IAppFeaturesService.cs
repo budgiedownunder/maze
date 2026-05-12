@@ -28,6 +28,17 @@ namespace Maze.Maui.App.Services
         /// <summary>OAuth providers currently enabled on the server. Empty when OAuth is disabled.</summary>
         [JsonPropertyName("oauth_providers")]
         public List<OAuthProviderPublic> OAuthProviders { get; set; } = new();
+
+        /// <summary>Whether the server is configured to send transactional email</summary>
+        [JsonPropertyName("email_enabled")]
+        public bool EmailEnabled { get; set; } = false;
+
+        /// <summary>
+        /// Maximum number of cells (rows × cols) the configured store will accept
+        /// on a save. <c>null</c> means the store imposes no cap.
+        /// </summary>
+        [JsonPropertyName("max_maze_cells")]
+        public int? MaxMazeCells { get; set; } = null;
     }
 
     /// <summary>

@@ -44,8 +44,8 @@ This runs:
 - FileStore inline unit tests
 - SqlStore inline unit tests (datetime helpers — gated by `sql-store`)
 - Validation tests
-- The contract suite against FileStore (`tests/file_store_contract.rs` — 113 scenarios)
-- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 113 scenarios)
+- The contract suite against FileStore (`tests/file_store_contract.rs` — 117 scenarios)
+- The contract suite against SqlStore over in-memory SQLite (`tests/sql_store_contract.rs` — 117 scenarios)
 - Doc tests
 
 Tests run in parallel — every FileStore test is rooted at its own `tempfile::TempDir`, and every SqlStore test creates its own in-memory SQLite, so there's no shared state to serialise around.
@@ -141,6 +141,7 @@ The migration registry lives in `src/file_store_migration.rs`:
 | 5       | `migrate_0005_create_one_time_tokens_dir` — creates `<data_dir>/one_time_tokens/`. Each token is one file `<token-id>.json`; the FileStore `TokenStore` impl reads/writes via tempfile + rename. |
 | 6       | `migrate_0006_create_email_audit_log_dir` — creates `<data_dir>/email_audit_log/`. One file per audit row keyed by id; the FileStore `EmailAuditLog` impl reads/writes via tempfile + rename. `purge_user` walks the directory and clears `recipient_user_id` / `triggered_by_user_id` on rows referencing the purged user — the FileStore counterpart to the SQL `ON DELETE SET NULL` FK behaviour. |
 | 7       | No-op. The matching SQL migration adds an `error_message VARCHAR(2000)` column to `email_audit_log` for verbose upstream-error capture. The FileStore data shape is updated by `#[serde(default, skip_serializing_if = "Option::is_none")]` on the new `EmailAuditEntry.error_message` field — existing audit-row JSON files round-trip without rewriting; new files written after version-7-applied include the field only when populated. Both stores truncate oversize values at write time via `data_model::truncate_email_audit_error_message` so a verbose upstream body never fails the audit write. |
+| 8       | `migrate_0008_user_timestamps` — walks every `users/<uuid>/user.json` and writes the migration-run timestamp (captured once at the top of the migration function) into `created_at` for any file that lacks it. `last_sign_in_at` is backfilled to the most recent `logins[*].created_at` (the most accurate evidence of the user's last sign-in); files with no logins keep `last_sign_in_at` absent so the welcome-banner trigger `User::is_first_sign_in()` fires correctly on their first actual sign-in. `User.created_at` is non-nullable in the application struct so callers never have to handle the absent case. New users created from this migration onwards carry the real `Utc::now()` set at user creation. |
 
 Behaviour properties:
 
@@ -155,7 +156,7 @@ The SqlStore schema is defined across the migration files in [`migrations/`](./m
 
 | Table | Purpose |
 |:------|:--------|
-| `users` | User records with admin flag, username, full name, password hash, API key (added in `0001_initial.sql`), plus a nullable `deleted_at` soft-delete marker (added in `0004_users_soft_delete.sql`). The `email` column was retired post-`0002_user_emails.sql` by per-backend cleanup in `SqlStore::new` (`retire_legacy_users_email_column`) — portable column-drop on a `UNIQUE NOT NULL` column isn't expressible in a single migration file across SQLite, PostgreSQL, and MySQL |
+| `users` | User records with admin flag, username, full name, password hash, API key (added in `0001_initial.sql`), a nullable `deleted_at` soft-delete marker (added in `0004_users_soft_delete.sql`), and `created_at` / `last_sign_in_at` timestamps (added in `0008_user_timestamps.sql`; both nullable in the column but `created_at` is non-nullable in the application struct via the migration's epoch backfill). The `email` column was retired post-`0002_user_emails.sql` by per-backend cleanup in `SqlStore::new` (`retire_legacy_users_email_column`) — portable column-drop on a `UNIQUE NOT NULL` column isn't expressible in a single migration file across SQLite, PostgreSQL, and MySQL |
 | `user_emails` | Email addresses attached to a user — `email`, `is_primary`, `verified`, `verified_at` (added in `0002_user_emails.sql`). Globally unique on `email`; one row per user has `is_primary = 1`, enforced in application code |
 | `user_logins` | Active and expired bearer-token login sessions, FK to `users` |
 | `oauth_identities` | Provider-linked identities (Google, GitHub, Facebook), FK to `users` |
@@ -178,6 +179,7 @@ The migration files in [`migrations/`](./migrations/):
 | `0005_one_time_tokens.sql` | Creates the `one_time_tokens` table (`id`, `user_id`, `purpose`, `target_email`, `created_at`, `expires_at`, `consumed_at`) plus `idx_one_time_tokens_user_id` and `idx_one_time_tokens_expires_at`. FK to `users(id)` with `ON DELETE CASCADE`. The trait `TokenStore` ([`store.rs`](./src/store.rs)) sits on top: `create_token`, `find_token` (filters expired), `consume_token` (race-free single-use via `UPDATE ... WHERE consumed_at IS NULL`), `purge_email_verification_tokens` (used by the verification re-send handler so re-issuing supersedes any prior token), `purge_expired`. |
 | `0006_email_audit_log.sql` | Creates the `email_audit_log` table (`id`, `created_at`, `recipient_user_id`, `recipient_email`, `template_id`, `token_id`, `triggered_by_user_id`, `triggered_by_ip`, `provider`, `provider_message_id`, `outcome`, `error_class`) plus four lookup indexes. Two FKs to `users(id)` — `recipient_user_id` and `triggered_by_user_id`, both `ON DELETE SET NULL`. The trait `EmailAuditLog` ([`store.rs`](./src/store.rs)) provides `record_pending` (synchronous insert before the send), `update_outcome` (asynchronous flip to `accepted`/`failed`), `find_audit_entry`, and `find_recent_audit_entries_for_user`. The body of every send and any expansion containing a secret token is *deliberately not stored* — the log records intent and authorization, not credentials. |
 | `0007_email_audit_log_error_message.sql` | Adds a nullable `error_message VARCHAR(2000)` column to `email_audit_log` for free-form diagnostic detail captured alongside `error_class` when a send fails (e.g. an Azure AD `AADSTS70011` body for token-mint failures, or the SMTP enhanced status response for SMTP send failures). `error_class` remains the stable, low-cardinality dashboard signal; `error_message` is the human-readable why. VARCHAR (not bare TEXT) per the rule in [`0001_initial.sql`](./migrations/0001_initial.sql) — SQLx-Any classifies MySQL TEXT as BLOB and breaks `Option<String>` decoding. Sized at 2000 (~8 KB at utf8mb4): well above the AAD JSON / SMTP responses this column actually stores, but small enough to leave ~24 KB of row-size headroom for future columns. The store layer truncates oversize values at write time via `data_model::truncate_email_audit_error_message` (with the `…[truncated]` marker), so an unusually verbose upstream body never fails the audit write — the audit row is only useful if it always lands. |
+| `0008_user_timestamps.sql` | Adds `users.created_at VARCHAR(32)` (RFC 3339 timestamp) and `users.last_sign_in_at VARCHAR(32)`. Both are added nullable for portability (MySQL rejects `ALTER TABLE ... ADD COLUMN ... NOT NULL` without a literal `DEFAULT` on a populated table). The backfill UPDATEs aren't in the static SQL file — they live in `backfill_user_timestamps_if_null` in `sql_store.rs` and run from `SqlStore::new` after `sqlx::migrate!()`. `created_at` is unconditionally backfilled with `Utc::now()` captured at startup (non-null required by the app, no more accurate value available). `last_sign_in_at` is backfilled to the timestamp of the user's most recent login row — the most accurate evidence we have of when they last signed in. The backfill iterates `(user_id, MAX(created_at))` from `user_logins` in Rust and issues one parameterised UPDATE per user rather than a single `UPDATE … (correlated subquery) WHERE …`; the correlated form is rejected by PostgreSQL with `syntax error at or near "WHERE"` despite being accepted by SQLite and MySQL. Users with no `user_logins` row stay at NULL so the welcome-banner trigger fires correctly on their first actual sign-in. The application's `User.created_at` is non-nullable; new users carry the real `Utc::now()` set at creation. `User.last_sign_in_at` is `Option<DateTime<Utc>>`; the welcome-banner trigger is `User::is_first_sign_in()` = `last_sign_in_at.is_none() && logins.is_empty()` (captured before the handler flips either field). |
 
 ### Soft-delete behaviour
 
@@ -207,6 +209,17 @@ PostgreSQL and SQLite accept all five rules transparently. **New migrations must
 ### Placeholder translation
 
 SQLx 0.8's `Any` driver does **not** auto-translate `?` placeholders to PostgreSQL's `$1, $2, …` form for raw `sqlx::query("...")` strings — that translation only happens through the compile-time `query!` / `query_as!` macros. `SqlStore` detects the backend at startup (`SqlBackend::from_url`) and runs a small `q(kind, sql)` helper that rewrites `?` to `$N` only for PostgreSQL. SQLite and MySQL accept `?` natively and pass through unchanged. This is invisible to callers — every query in `sql_store.rs` is wrapped in `q(...)`.
+
+## Maze cell-count caps
+
+Each `MazeStore` impl reports the maximum number of cells (`rows × cols`) it will accept on `create_maze` / `update_maze` via the trait method `max_maze_cells() -> Option<usize>`. `None` means the store imposes no cap. The cap is a property of the *storage backend*, not of the maze domain — the `maze` and `data_model` crates have no notion of size limits and remain unbounded.
+
+| Backend       | `max_maze_cells()` | Why |
+|:--------------|:-------------------|:----|
+| `FileStore`   | `Some(10_000)`     | The filesystem imposes no row-size limit, so `10,000` (eg. a 100 x 100 grid) is chosen as a practical cap. |
+| `SqlStore`    | `Some(3_600)`      | Bound by the `mazes.definition VARCHAR(16000)` column in [`migrations/0001_initial.sql`](./migrations/0001_initial.sql). With the existing JSON serialisation (`4·N·M + 2·N + 10` chars for an N-row × M-col grid) the 16,000-char column maxes out around 62×62 cells; 60×60 = 3,600 sits inside that with a margin. The same cap applies across SQLite, PostgreSQL, and MySQL — SQLite would ignore the column length declaration, but enforcing the cap uniformly avoids dev-vs-prod divergence when the same data set is later loaded under MySQL or PostgreSQL. |
+| trait default | `None`             | Suits stub implementations and any future store with no practical size limit. Production stores override. |
+
 
 ## Architecture note: one impl over `AnyPool`
 

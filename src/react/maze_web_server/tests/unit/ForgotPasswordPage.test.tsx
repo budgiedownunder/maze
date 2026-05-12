@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
 import { mockResetTokens } from '../../src/mocks/handlers'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
+import { AppFeaturesContext, APP_FEATURES_DEFAULTS } from '../../src/context/AppFeaturesContext'
 import { ForgotPasswordPage } from '../../src/pages/ForgotPasswordPage'
 
 const mockNavigate = vi.fn()
@@ -14,12 +15,14 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate }
 })
 
-function renderForgotPasswordPage() {
+function renderForgotPasswordPage(emailEnabled = true) {
   return render(
     <MemoryRouter>
-      <ThemeProvider>
-        <ForgotPasswordPage />
-      </ThemeProvider>
+      <AppFeaturesContext.Provider value={{ ...APP_FEATURES_DEFAULTS, email_enabled: emailEnabled }}>
+        <ThemeProvider>
+          <ForgotPasswordPage />
+        </ThemeProvider>
+      </AppFeaturesContext.Provider>
     </MemoryRouter>,
   )
 }
@@ -84,5 +87,15 @@ describe('ForgotPasswordPage', () => {
     await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: /back to sign in/i }))
     expect(mockNavigate).toHaveBeenCalledWith('/login')
+  })
+
+  it('shows the unavailable message and hides the form when email is disabled', async () => {
+    renderForgotPasswordPage(false)
+
+    expect(screen.getByRole('status')).toHaveTextContent(/password reset is unavailable on this server/i)
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /send reset link/i })).not.toBeInTheDocument()
+    // Back-to-sign-in button still rendered so the user has a way out.
+    expect(screen.getByRole('button', { name: /back to sign in/i })).toBeInTheDocument()
   })
 })

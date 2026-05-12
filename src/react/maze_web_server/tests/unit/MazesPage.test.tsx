@@ -64,6 +64,13 @@ describe('MazesPage', () => {
     expect(screen.getByText(mockMazeBeta.name)).toBeInTheDocument()
   })
 
+  it('exposes the full name as a title attribute for desktop hover tooltip', async () => {
+    renderMazesPage()
+    const nameEl = await screen.findByText(mockMazeAlpha.name)
+    expect(nameEl).toHaveAttribute('title', mockMazeAlpha.name)
+    expect(screen.getByText(mockMazeBeta.name)).toHaveAttribute('title', mockMazeBeta.name)
+  })
+
   it('shows dimensions subtitle for each maze', async () => {
     renderMazesPage()
     await waitFor(() => expect(screen.getByText('3 rows × 3 columns')).toBeInTheDocument())

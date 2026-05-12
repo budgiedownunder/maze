@@ -161,9 +161,12 @@ pub async fn list_emails(
 
 #[utoipa::path(
     summary = "Add a new email address to the authenticated user",
-    description = "Adds a new (non-primary) email row with `verified = false` and \
-                   dispatches a verification email. The row stays unverified until \
-                   the user clicks the link.",
+    description = "Adds a new (non-primary) email row. When the server is configured to \
+                   send transactional email (`comms.enabled = true`) the row is created \
+                   with `verified = false` and a verification email is dispatched; the \
+                   row stays unverified until the user clicks the link. When \
+                   `comms.enabled = false` the row is created `verified = true` directly \
+                   and no dispatch is attempted, since the user has no path to verify it.",
     post,
     path = "/api/v1/users/me/emails",
     request_body = AddUserEmailRequest,
@@ -189,38 +192,41 @@ pub async fn add_email(
 ) -> Result<HttpResponse, Error> {
     let caller = get_authorized_user(&req)?;
     let new_email = add_req.email.clone();
+    let require_email_verification = config.comms.require_email_verification();
     let updated = {
         let mut store_lock = get_store_write_lock(&store).await;
         store_lock
-            .add_user_email(caller.id, &new_email, false)
+            .add_user_email(caller.id, &new_email, !require_email_verification)
             .await
             .map_err(map_store_error)?;
         reload_user(&**store_lock, caller.id).await?
     };
 
-    match crate::api::v1::endpoints::email_verification::issue_verification_token(
-        &store,
-        caller.id,
-        &new_email,
-    )
-    .await
-    {
-        Ok(token) => {
-            crate::api::v1::endpoints::email_verification::dispatch_verification_email(
-                store.get_ref().clone(),
-                comms.clone().into_inner(),
-                updated.clone(),
-                &new_email,
-                &config.comms.public_base_url,
-                token.id,
-            )
-            .await;
-        }
-        Err(err) => log::warn!(
-            "add_email: verification token issue failed for user {} email {}: {err}",
+    if require_email_verification {
+        match crate::api::v1::endpoints::email_verification::issue_verification_token(
+            &store,
             caller.id,
-            new_email
-        ),
+            &new_email,
+        )
+        .await
+        {
+            Ok(token) => {
+                crate::api::v1::endpoints::email_verification::dispatch_verification_email(
+                    store.get_ref().clone(),
+                    comms.clone().into_inner(),
+                    updated.clone(),
+                    &new_email,
+                    &config.comms.public_base_url,
+                    token.id,
+                )
+                .await;
+            }
+            Err(err) => log::warn!(
+                "add_email: verification token issue failed for user {} email {}: {err}",
+                caller.id,
+                new_email
+            ),
+        }
     }
 
     Ok(HttpResponse::Created().json(UserEmailsResponse::from_user(&updated)))

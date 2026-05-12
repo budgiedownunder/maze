@@ -70,6 +70,35 @@ pub fn validate_user_fields(user: &User) -> Result<(), Error> {
     Ok(())
 }
 
+/// Validates that a maze of `rows × cols` fits within the supplied per-store
+/// cell-count cap. Each `MazeStore` impl calls this from `create_maze` /
+/// `update_maze` so the limit is enforced uniformly. `saturating_mul` keeps
+/// the comparison meaningful when the inputs are pathologically large —
+/// instead of panicking on overflow or wrapping to a small number that
+/// silently passes the check, the product clamps to `usize::MAX` and the
+/// guard rejects.
+///
+/// # Returns
+///
+/// `Ok(())` if `rows × cols ≤ max`,
+/// `Err(Error::MazeHasTooManyCells { rows, cols, max })` otherwise.
+///
+/// # Examples
+///
+/// Probe a 60×60 and a 70×60 grid against a 3,600-cell cap
+/// ```
+/// use storage::validation::validate_maze_cell_count;
+///
+/// assert!(validate_maze_cell_count(60, 60, 3_600).is_ok());
+/// assert!(validate_maze_cell_count(70, 60, 3_600).is_err());
+/// ```
+pub fn validate_maze_cell_count(rows: usize, cols: usize, max: usize) -> Result<(), Error> {
+    if rows.saturating_mul(cols) > max {
+        return Err(Error::MazeHasTooManyCells { rows, cols, max });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,6 +118,8 @@ mod tests {
             logins: vec![],
             oauth_identities: vec![],
             deleted_at: None,
+            created_at: chrono::Utc::now(),
+            last_sign_in_at: None,
         }
     }
 
@@ -144,4 +175,38 @@ mod tests {
         run_validation_test(&user);
     }
 
+    // ─── validate_maze_cell_count ────────────────────────────────────────
+
+    #[test]
+    fn validate_maze_cell_count_accepts_at_cap() {
+        validate_maze_cell_count(60, 60, 3_600).expect("at-cap should pass");
+    }
+
+    #[test]
+    fn validate_maze_cell_count_accepts_just_under_cap() {
+        validate_maze_cell_count(60, 59, 3_600).expect("under-cap should pass");
+    }
+
+    #[test]
+    fn validate_maze_cell_count_rejects_over_cap() {
+        let err = validate_maze_cell_count(61, 60, 3_600)
+            .expect_err("over-cap should fail");
+        match err {
+            Error::MazeHasTooManyCells { rows, cols, max } => {
+                assert_eq!(rows, 61);
+                assert_eq!(cols, 60);
+                assert_eq!(max, 3_600);
+            }
+            other => panic!("expected MazeHasTooManyCells, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_maze_cell_count_saturates_on_overflow() {
+        // Pathological inputs: rows × cols would wrap, but saturating_mul
+        // clamps to usize::MAX which is always > max, so the guard rejects.
+        let err = validate_maze_cell_count(usize::MAX, 2, 3_600)
+            .expect_err("overflow should not bypass the cap");
+        assert!(matches!(err, Error::MazeHasTooManyCells { .. }));
+    }
 }

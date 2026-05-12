@@ -2,6 +2,14 @@ export function isValidEmail(email: string): boolean {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
 }
 
+// Returns true when the rows × cols product would exceed the server-reported
+// store cap. A null cap means the configured store imposes no cap, in which
+// case this always returns false.
+export function exceedsMazeCellCap(rows: number, cols: number, cap: number | null): boolean {
+  if (cap === null) return false
+  return rows * cols > cap
+}
+
 export function validateSignupForm(fields: {
   email: string
   password: string

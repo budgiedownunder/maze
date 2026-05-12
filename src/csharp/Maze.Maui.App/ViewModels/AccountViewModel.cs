@@ -49,11 +49,11 @@ namespace Maze.Maui.App.ViewModels
         private string loadStatus = "";
 
         /// <summary>
-        /// When true, the AccountPopup renders a one-line welcome banner above
+        /// When true, the AccountPage renders a one-line welcome banner above
         /// the form. Set by the OAuth sign-in flow when the server signals
-        /// <c>new_user=true</c>; cleared by AppShell after the popup is
-        /// auto-shown so subsequent burger-menu opens of the Account UI don't
-        /// keep showing the banner.
+        /// <c>new_user=true</c>; cleared by <c>AccountPage.OnDisappearing</c>
+        /// so subsequent burger-menu opens of the Account page don't keep
+        /// showing the banner.
         /// </summary>
         [ObservableProperty]
         private bool isWelcomeMode;

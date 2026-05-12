@@ -26,38 +26,48 @@ test('About modal opens and closes', async ({ page }) => {
   await expect(page.getByRole('dialog')).not.toBeVisible()
 })
 
-test('My Account modal opens and shows profile fields', async ({ page }) => {
+test('Home menu item navigates back to /mazes from /account', async ({ page }) => {
+  // First go to /account so the back-to-Home navigation has somewhere to come from.
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /my account/i }).click()
-  const dialog = page.getByRole('dialog', { name: /my account/i })
-  await expect(dialog).toBeVisible()
-  await expect(dialog.getByLabel('Username')).toHaveValue('testuser')
-  await expect(dialog.getByText('test@example.com')).toBeVisible()
-  await dialog.getByRole('button', { name: /close/i }).click()
-  await expect(dialog).not.toBeVisible()
+  await expect(page).toHaveURL(/\/account/)
+
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await page.getByRole('menuitem', { name: /^home$/i }).click()
+  await expect(page).toHaveURL(/\/mazes/)
 })
 
-test('Change Password modal opens from Account modal and Back returns', async ({ page }) => {
+test('My Account page opens and shows profile fields', async ({ page }) => {
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /my account/i }).click()
-  await expect(page.getByRole('dialog', { name: /my account/i })).toBeVisible()
+  await expect(page).toHaveURL(/\/account/)
+  await expect(page.getByRole('heading', { name: /my account/i })).toBeVisible()
+  await expect(page.getByLabel('Username')).toHaveValue('testuser')
+  await expect(page.getByText('test@example.com')).toBeVisible()
+})
+
+test('Change Password modal opens from Account page and Back returns', async ({ page }) => {
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await page.getByRole('menuitem', { name: /my account/i }).click()
+  await expect(page).toHaveURL(/\/account/)
 
   await page.getByRole('button', { name: /change password/i }).click()
   await expect(page.getByRole('dialog', { name: /change password/i })).toBeVisible()
 
   await page.getByRole('button', { name: /back/i }).click()
-  await expect(page.getByRole('dialog', { name: /my account/i })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: /change password/i })).not.toBeVisible()
+  await expect(page).toHaveURL(/\/account/)
 })
 
-test('Delete Account shows confirmation and Cancel returns to account modal', async ({ page }) => {
+test('Delete Account shows confirmation and Cancel returns to account page', async ({ page }) => {
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /my account/i }).click()
-  await expect(page.getByRole('dialog', { name: /my account/i })).toBeVisible()
+  await expect(page).toHaveURL(/\/account/)
 
   await page.getByRole('button', { name: /delete account/i }).click()
   await expect(page.getByText(/cannot be undone/i)).toBeVisible()
 
   await page.getByRole('button', { name: /cancel/i }).click()
   await expect(page.getByText(/cannot be undone/i)).not.toBeVisible()
-  await expect(page.getByRole('dialog', { name: /my account/i })).toBeVisible()
+  await expect(page).toHaveURL(/\/account/)
 })

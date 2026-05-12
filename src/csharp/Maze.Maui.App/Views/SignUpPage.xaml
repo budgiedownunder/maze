@@ -110,7 +110,7 @@
                 </Grid>
 
                 <Label Text="{Binding ErrorMessage}"
-                       TextColor="Red"
+                       TextColor="{AppThemeBinding Light={StaticResource Fail}, Dark={StaticResource FailDark}}"
                        IsVisible="{Binding ErrorMessage, Converter={StaticResource StringNotEmptyConverter}}"
                        HorizontalOptions="Center" />
 

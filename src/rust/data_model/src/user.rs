@@ -63,6 +63,37 @@ pub struct User {
     /// of the serialised form for active users.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<DateTime<Utc>>,
+    /// Account creation timestamp. Set to `Utc::now()` at user creation;
+    /// immutable thereafter. Storage migration v8 backfills existing rows
+    /// to a fixed sentinel timestamp — accuracy for pre-migration users
+    /// doesn't matter (this isn't a live system yet) but the field must
+    /// always be populated so callers can rely on it being present.
+    pub created_at: DateTime<Utc>,
+    /// Sticky timestamp of the user's most recent successful sign-in (any
+    /// method — credentials or OAuth). `None` for a freshly-created user
+    /// who has never signed in; `Some(timestamp)` from the first successful
+    /// sign-in onwards. Sign-out and bearer-token expiry both prune entries
+    /// from `logins`, but `last_sign_in_at` is sticky — once `Some`, never
+    /// `None` again. The welcome-banner trigger is therefore
+    ///
+    /// ```text
+    /// is_first_sign_in = last_sign_in_at.is_none() && logins.is_empty()
+    /// ```
+    ///
+    /// (captured before the sign-in handler updates either field). The
+    /// `last_sign_in_at.is_none()` half is the primary signal — the
+    /// `logins.is_empty()` clause is a defensive guard against the
+    /// pathological case where the user has an active session but no
+    /// recorded `last_sign_in_at` (e.g. a deployment gap where logins
+    /// were created before this field existed, or external data
+    /// manipulation that cleared `last_sign_in_at` without clearing
+    /// `logins`).
+    /// `serde(default)` + `skip_serializing_if` keep older user JSON files
+    /// readable; migration v8 backfills existing rows to the migration-run
+    /// timestamp so existing users don't false-positive as first-time on
+    /// their next sign-in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_sign_in_at: Option<DateTime<Utc>>,
 }
 
 impl User {
@@ -88,6 +119,8 @@ impl User {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     /// println!("User: {:?}", user);
     pub fn new_id() -> Uuid {
@@ -115,6 +148,8 @@ impl User {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     /// println!("User: {:?}", user);
     pub fn new_api_key() -> Uuid {
@@ -146,6 +181,8 @@ impl User {
             logins: vec![],
             oauth_identities: vec![],
             deleted_at: None,
+            created_at: generate_now(),
+            last_sign_in_at: None,
         }
     }
     /// Returns true if the user is active (i.e. not soft-deleted). Storage
@@ -166,6 +203,38 @@ impl User {
     /// ```
     pub fn is_active(&self) -> bool {
         self.deleted_at.is_none()
+    }
+    /// Returns true if the next successful sign-in for this user should be
+    /// treated as their **first** sign-in (i.e. should trigger the welcome
+    /// banner on the client). Captures the state observed by the sign-in
+    /// handler **before** it appends a new login or flips `last_sign_in_at`.
+    ///
+    /// The sticky `last_sign_in_at.is_none()` check is the primary signal;
+    /// the `logins.is_empty()` clause is a defensive guard against the
+    /// pathological case where the user has an active session but no
+    /// recorded `last_sign_in_at` (deployment gap, or external data
+    /// manipulation). Once a user signs in successfully under the current
+    /// code path the handler sets `last_sign_in_at = Some(now)`, so future
+    /// calls return false.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chrono::Utc;
+    /// use data_model::User;
+    ///
+    /// // Brand-new user with no sessions and no recorded sign-in.
+    /// let mut user = User::default();
+    /// user.last_sign_in_at = None;
+    /// user.logins.clear();
+    /// assert!(user.is_first_sign_in());
+    ///
+    /// // Pre-v8 backfilled user: last_sign_in_at populated by migration.
+    /// user.last_sign_in_at = Some(Utc::now());
+    /// assert!(!user.is_first_sign_in());
+    /// ```
+    pub fn is_first_sign_in(&self) -> bool {
+        self.last_sign_in_at.is_none() && self.logins.is_empty()
     }
     /// Returns the user's primary [`UserEmail`] row, if any.
     ///
@@ -273,6 +342,8 @@ impl User {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     /// match user.to_json() {
     ///     Ok(json) => {
@@ -300,7 +371,7 @@ impl User {
     /// ```
     /// use data_model::User;
     /// let mut user = User::default();
-    /// let json = r#"{"id":"02345678-1234-5678-1234-567890123456","is_admin":false,"username":"john_smith","full_name":"John Smith","emails":[{"email":"john_smith@company.com","is_primary":true,"verified":true,"verified_at":null}],"password_hash":"some_password_hash","api_key":"12345678-1234-5678-1234-567890123456","logins":[]}"#;
+    /// let json = r#"{"id":"02345678-1234-5678-1234-567890123456","is_admin":false,"username":"john_smith","full_name":"John Smith","emails":[{"email":"john_smith@company.com","is_primary":true,"verified":true,"verified_at":null}],"password_hash":"some_password_hash","api_key":"12345678-1234-5678-1234-567890123456","logins":[],"created_at":"2026-01-01T00:00:00Z"}"#;
     /// match user.from_json(json) {
     ///     Ok(()) => {
     ///         println!(
@@ -342,6 +413,8 @@ impl User {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     /// match user.validate() {
     ///     Ok(_) => {
@@ -407,6 +480,8 @@ impl User {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Peform a login
@@ -422,6 +497,7 @@ impl User {
         self.logins.retain(|login| login.expires_at > now);
         let login = UserLogin::new(expiry_hours, ip_address, device_info);
         self.logins.push(login.clone());
+        self.last_sign_in_at = Some(now);
         login
     }
     /// Creates a user and then performs a login
@@ -449,6 +525,8 @@ impl User {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Peform a login
@@ -488,6 +566,8 @@ impl User {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// let login = user.create_login(24, None, None);
@@ -533,6 +613,8 @@ impl User {
     ///     logins,
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Verify that the login is valid
@@ -575,16 +657,24 @@ mod tests {
 
     #[test]
     fn can_serialize() {
-        let user = User::default();
+        let mut user = User::default();
+        // Pin created_at so the round-trip JSON literal below is stable.
+        user.created_at = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
         let s = user.to_json().expect("Failed to serialize");
-        assert_eq!(s, r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#);
+        assert_eq!(s, r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[],"created_at":"2026-01-01T00:00:00Z"}"#);
     }
 
     #[test]
     fn can_deserialize() {
-        let compare = User::default();
+        let pinned = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let mut compare = User::default();
+        compare.created_at = pinned;
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[],"created_at":"2026-01-01T00:00:00Z"}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
@@ -592,10 +682,15 @@ mod tests {
     #[test]
     fn can_deserialize_legacy_user_without_oauth_identities() {
         // User JSON written before the oauth_identities field existed must
-        // continue to deserialize cleanly thanks to #[serde(default)].
-        let compare = User::default();
+        // continue to deserialize cleanly thanks to #[serde(default)] —
+        // `created_at` is pinned here because that field IS required.
+        let pinned = chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let mut compare = User::default();
+        compare.created_at = pinned;
         let mut loaded = User::default();
-        let legacy = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[]}"#;
+        let legacy = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"created_at":"2026-01-01T00:00:00Z"}"#;
         loaded.from_json(legacy).expect("Failed to deserialize legacy user JSON");
         assert_eq!(loaded, compare);
         assert!(loaded.oauth_identities.is_empty());
@@ -607,7 +702,7 @@ mod tests {
         // to deserialize cleanly thanks to #[serde(default)] — the field is
         // populated with `None` (active user).
         let mut loaded = User::default();
-        let pre_field = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[]}"#;
+        let pre_field = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","api_key":"00000000-0000-0000-0000-000000000000","logins":[],"oauth_identities":[],"created_at":"2026-01-01T00:00:00Z"}"#;
         loaded.from_json(pre_field).expect("deserialize pre-deleted_at user");
         assert!(loaded.deleted_at.is_none());
     }
@@ -757,7 +852,7 @@ mod tests {
     fn cannot_deserialize_with_missing_api_key() {
         let compare = User::default();
         let mut loaded = User::default();
-        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","logins":[]}"#;
+        let s = r#"{"id":"00000000-0000-0000-0000-000000000000","is_admin":false,"username":"","full_name":"","emails":[],"password_hash":"","logins":[],"created_at":"2026-01-01T00:00:00Z"}"#;
         loaded.from_json(s).expect("Failed to deserialize");
         assert_eq!(loaded, compare);
     }
@@ -774,6 +869,8 @@ mod tests {
             logins: vec![],
             oauth_identities: vec![],
             deleted_at: None,
+            created_at: generate_now(),
+            last_sign_in_at: None,
         }
     }
 

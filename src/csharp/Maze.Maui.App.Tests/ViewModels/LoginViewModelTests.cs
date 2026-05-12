@@ -74,16 +74,36 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
-        public async Task SignIn_HappyPath_CallsAuthAndNavigatesToMainPage()
+        public async Task SignIn_NotFirstSignIn_StaysOnMainPage()
         {
-            var (vm, auth, _, nav, _) = BuildVm();
+            var (vm, auth, _, nav, account) = BuildVm();
+            auth.Setup(a => a.SignInAsync("alice@example.com", "Pass1!"))
+                .ReturnsAsync(new CredentialsSignInResult { IsFirstSignIn = false });
             vm.Email = "alice@example.com";
             vm.Password = "Pass1!";
 
             await vm.SignInCommand.ExecuteAsync(null);
 
+            Assert.False(account.IsWelcomeMode);
             auth.Verify(a => a.SignInAsync("alice@example.com", "Pass1!"), Times.Once);
             nav.Verify(n => n.GoToRootAsync("//MainPage"), Times.Once);
+            nav.Verify(n => n.GoToAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object>>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task SignIn_FirstSignIn_FlipsAccountWelcomeModeAndPushesAccountPage()
+        {
+            var (vm, auth, _, nav, account) = BuildVm();
+            auth.Setup(a => a.SignInAsync("alice@example.com", "Pass1!"))
+                .ReturnsAsync(new CredentialsSignInResult { IsFirstSignIn = true });
+            vm.Email = "alice@example.com";
+            vm.Password = "Pass1!";
+
+            await vm.SignInCommand.ExecuteAsync(null);
+
+            Assert.True(account.IsWelcomeMode);
+            nav.Verify(n => n.GoToRootAsync("//MainPage"), Times.Once);
+            nav.Verify(n => n.GoToAsync(nameof(AccountPage), It.IsAny<IDictionary<string, object>>()), Times.Once);
         }
 
         [Fact]
@@ -238,6 +258,28 @@ namespace Maze.Maui.App.Tests.ViewModels
             Assert.False(vm.AllowSignUp);
         }
 
+        [Fact]
+        public async Task TryRestoreSession_PropagatesEmailEnabled()
+        {
+            var (vm, auth, _, _, _) = BuildVm(new AppFeatures { EmailEnabled = true });
+            auth.Setup(a => a.IsAuthenticatedAsync()).ReturnsAsync(false);
+
+            await vm.TryRestoreSessionAsync();
+
+            Assert.True(vm.EmailEnabled);
+        }
+
+        [Fact]
+        public async Task TryRestoreSession_DefaultsEmailEnabledFalseWhenServerReportsFalse()
+        {
+            var (vm, auth, _, _, _) = BuildVm(new AppFeatures { EmailEnabled = false });
+            auth.Setup(a => a.IsAuthenticatedAsync()).ReturnsAsync(false);
+
+            await vm.TryRestoreSessionAsync();
+
+            Assert.False(vm.EmailEnabled);
+        }
+
         // ---- OAuth provider sync --------------------------------------------
 
         [Fact]
@@ -278,29 +320,31 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
-        public async Task SignInWithOAuth_NewUser_FlipsAccountWelcomeModeAndNavigates()
+        public async Task SignInWithOAuth_FirstSignIn_FlipsAccountWelcomeModeAndPushesAccountPage()
         {
             var (vm, auth, _, nav, account) = BuildVm();
             auth.Setup(a => a.SignInWithOAuthAsync("google"))
-                .ReturnsAsync(new OAuthSignInResult { IsNewUser = true });
+                .ReturnsAsync(new OAuthSignInResult { IsFirstSignIn = true });
 
             await vm.SignInWithOAuthCommand.ExecuteAsync("google");
 
             Assert.True(account.IsWelcomeMode);
             nav.Verify(n => n.GoToRootAsync("//MainPage"), Times.Once);
+            nav.Verify(n => n.GoToAsync(nameof(AccountPage), It.IsAny<IDictionary<string, object>>()), Times.Once);
         }
 
         [Fact]
-        public async Task SignInWithOAuth_ExistingUser_DoesNotFlipWelcomeModeAndNavigates()
+        public async Task SignInWithOAuth_NotFirstSignIn_DoesNotFlipWelcomeModeAndStaysOnMainPage()
         {
             var (vm, auth, _, nav, account) = BuildVm();
             auth.Setup(a => a.SignInWithOAuthAsync("google"))
-                .ReturnsAsync(new OAuthSignInResult { IsNewUser = false });
+                .ReturnsAsync(new OAuthSignInResult { IsFirstSignIn = false });
 
             await vm.SignInWithOAuthCommand.ExecuteAsync("google");
 
             Assert.False(account.IsWelcomeMode);
             nav.Verify(n => n.GoToRootAsync("//MainPage"), Times.Once);
+            nav.Verify(n => n.GoToAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object>>()), Times.Never);
         }
 
         [Fact]

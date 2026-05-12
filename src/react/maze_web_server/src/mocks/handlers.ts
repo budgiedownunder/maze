@@ -28,6 +28,10 @@ export function resetMockEmails(): void {
 export const mockLoginResponse: LoginResponse = {
   login_token_id: 'aaaaaaaa-0000-0000-0000-000000000001',
   login_token_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  // Default to false so the seeded "test" user (signed in by every test
+  // helper) doesn't take the welcome-banner branch. Tests that exercise
+  // the first-sign-in path override this with `server.use(...)`.
+  is_first_sign_in: false,
 }
 
 export const mockMazeAlpha: Maze = {
@@ -111,7 +115,7 @@ function mintToken(prefix: string): string {
 
 export const handlers = [
   http.get(`${BASE}/features`, () => {
-    return HttpResponse.json<AppFeatures>({ allow_signup: true, oauth_providers: [] })
+    return HttpResponse.json<AppFeatures>({ allow_signup: true, oauth_providers: [], email_enabled: true, max_maze_cells: null })
   }),
 
   http.put(`${BASE}/admin/features`, async ({ request }) => {

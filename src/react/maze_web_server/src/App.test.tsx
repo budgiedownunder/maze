@@ -7,7 +7,7 @@ import { SignupRoute } from './App'
 describe('SignupRoute', () => {
   it('redirects to /login when allow_signup is false', async () => {
     render(
-      <AppFeaturesContext.Provider value={{ allow_signup: false, oauth_providers: [] }}>
+      <AppFeaturesContext.Provider value={{ allow_signup: false, oauth_providers: [], email_enabled: false, max_maze_cells: null }}>
         <MemoryRouter initialEntries={['/signup']}>
           <Routes>
             <Route path="/signup" element={<SignupRoute />} />

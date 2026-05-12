@@ -23,7 +23,7 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::validate_user_fields};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::{validate_maze_cell_count, validate_user_fields}};
     use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
@@ -243,11 +243,24 @@ mod test_definitions {
         }
     }
 
+    /// Cell-count cap exposed by `MockStore` to exercise the handler-level
+    /// cap path. Matches `SqlStore::MAX_MAZE_CELLS` so the over-cap tests
+    /// can use the same dimensions that fail on a real SQL deployment.
+    const MOCK_MAX_MAZE_CELLS: usize = 3_600;
+
     #[async_trait]
     impl MazeStore for MockStore {
+        fn max_maze_cells(&self) -> Option<usize> {
+            Some(MOCK_MAX_MAZE_CELLS)
+        }
 
         async fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
             let mock_user = self.get_mock_user_mut(owner.id)?;
+            validate_maze_cell_count(
+                maze.definition.row_count(),
+                maze.definition.col_count(),
+                MOCK_MAX_MAZE_CELLS,
+            )?;
             let id = MockMaze::create_id_from_name(&maze.name);
 
             if mock_user.mazes.contains_key(&id) {
@@ -278,6 +291,11 @@ mod test_definitions {
 
         async fn update_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), StoreError> {
             let mock_user = self.get_mock_user_mut(owner.id)?;
+            validate_maze_cell_count(
+                maze.definition.row_count(),
+                maze.definition.col_count(),
+                MOCK_MAX_MAZE_CELLS,
+            )?;
             if mock_user.mazes.contains_key(&maze.id) {
                 mock_user.mazes.insert(
                     maze.id.to_string(),
@@ -375,6 +393,22 @@ mod test_definitions {
                     .emails
                     .iter()
                     .any(|row| row.verified && row.email.eq_ignore_ascii_case(email))
+                {
+                    return Ok(v.user.clone());
+                }
+            }
+            Err(StoreError::UserNotFound())
+        }
+        /// Locates a user by an email address regardless of verification
+        /// state. Mirrors the real stores; used by the OAuth squat-reclaim
+        /// path to inspect whether a colliding email belongs to a real
+        /// account or a squatter.
+        async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, StoreError> {
+            for v in self.users.values() {
+                if v.user
+                    .emails
+                    .iter()
+                    .any(|row| row.email.eq_ignore_ascii_case(email))
                 {
                     return Ok(v.user.clone());
                 }
@@ -494,6 +528,16 @@ mod test_definitions {
                 return Err(StoreError::UserEmailIsPrimary());
             }
             mock_user.user.emails.remove(idx);
+            // Mirror the production stores: drop OAuth identities whose
+            // `provider_email` matches the removed address. See the trait
+            // doc on `UserStore::remove_user_email`.
+            mock_user
+                .user
+                .oauth_identities
+                .retain(|id| match id.provider_email.as_deref() {
+                    Some(addr) => !addr.eq_ignore_ascii_case(email),
+                    None => true,
+                });
             Ok(())
         }
 
@@ -733,6 +777,13 @@ mod test_definitions {
             name: name.to_string(),
             maze: new_solvable_maze(id, name),
         }
+    }
+
+    fn new_sized_maze(id: &str, name: &str, rows: usize, cols: usize) -> Maze {
+        let mut maze = Maze::new(MazeDefinition::new(rows, cols));
+        maze.id = id.to_string();
+        maze.name = name.to_string();
+        maze
     }
 
     fn new_solve_test_maze(id: &str, name: &str, with_start: bool, with_finish: bool, with_block: bool) -> Maze {
@@ -1009,6 +1060,13 @@ mod test_definitions {
     ) -> (impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>, SharedStore, HashMap<Uuid, MockUser>, Option<Uuid>, Option<Uuid>) {
         let mut config = AppConfig::default();
         config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        // Default the test app to a production-like comms state (`enabled = true`)
+        // so the credentials sign-up + add-email paths behave as they do in
+        // deployed servers — newly-created email rows are unverified pending
+        // user click-through. Tests that need to drive the comms-disabled
+        // branch (auto-verify + skip dispatch) construct their own AppConfig
+        // and call `create_test_app_with_config` directly.
+        config.comms.enabled = true;
         create_test_app_with_config(user_defs, caller_username, add_login, features, config).await
     }
 
@@ -1038,9 +1096,33 @@ mod test_definitions {
         Option<Uuid>,
         StubEmailProvider,
     ) {
+        create_test_app_with_stub_email_and_comms_enabled(
+            user_defs, caller_username, add_login, true,
+        )
+        .await
+    }
+
+    /// Like `create_test_app_with_stub_email` but lets the test override
+    /// `app_config.comms.enabled`. Used by the new gating tests that need
+    /// to drive the `comms.enabled = false` branch (auto-verify on user
+    /// creation, skip verification dispatch).
+    async fn create_test_app_with_stub_email_and_comms_enabled(
+        user_defs: &mut Vec<UserDefinition>,
+        caller_username: Option<&str>,
+        add_login: bool,
+        comms_enabled: bool,
+    ) -> (
+        impl Service<actix_http::Request, Response = ServiceResponse, Error = Error>,
+        SharedStore,
+        HashMap<Uuid, MockUser>,
+        Option<Uuid>,
+        Option<Uuid>,
+        StubEmailProvider,
+    ) {
         let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
         let mut app_config = AppConfig::default();
         app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        app_config.comms.enabled = comms_enabled;
         // Drive a stable `public_base_url` so the reset-link assertion has
         // something deterministic to check against. Likewise pin a `from`
         // — without it, `comms.send_template` fails the dispatch with
@@ -1132,6 +1214,13 @@ mod test_definitions {
             let login_id = login_response.login_token_id;
             assert_ne!(login_id, Uuid::nil());
             assert_ne!(login_response.login_token_expires_at, DateTime::<Utc>::default());
+            // Fresh users created by the test helper have `last_sign_in_at = None`
+            // and `logins = []`, so their first successful login through this
+            // helper should always report the welcome-banner trigger.
+            assert!(
+                login_response.is_first_sign_in,
+                "fresh user's first login must report is_first_sign_in = true"
+            );
 
             if run_logout_test {
                 verify_user_login_presence(&shared_store, email, login_id, true).await;
@@ -2093,6 +2182,85 @@ mod test_definitions {
         ).await;
     }
 
+    /// Two consecutive logins with the same credentials: the second response
+    /// must carry `is_first_sign_in = false` because `User::create_login` on
+    /// the first login set `last_sign_in_at = Some(now)` (sticky).
+    #[actix_web::test]
+    async fn second_login_reports_is_first_sign_in_false() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let login_request = LoginRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+
+        // First login — fresh user, `is_first_sign_in` is true.
+        let req1 = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let resp1 = test::call_service(&app, req1).await;
+        assert_eq!(resp1.status(), StatusCode::OK);
+        let body1 = test::read_body(resp1).await;
+        let login_response_1: LoginResponse =
+            serde_json::from_slice(&body1).expect("deserialize first login response");
+        assert!(login_response_1.is_first_sign_in, "first login must be is_first_sign_in = true");
+
+        // Second login — same user, no logout in between. `last_sign_in_at`
+        // is now `Some(...)` and `logins` is non-empty.
+        let req2 = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let resp2 = test::call_service(&app, req2).await;
+        assert_eq!(resp2.status(), StatusCode::OK);
+        let body2 = test::read_body(resp2).await;
+        let login_response_2: LoginResponse =
+            serde_json::from_slice(&body2).expect("deserialize second login response");
+        assert!(!login_response_2.is_first_sign_in, "second login must be is_first_sign_in = false");
+    }
+
+    /// Login → logout → login. Sign-out removes the entry from `logins`,
+    /// but `last_sign_in_at` is sticky, so the second login still reports
+    /// `is_first_sign_in = false`. Guards against regressions to a
+    /// `logins.is_empty()`-only check, which would silently fail this case.
+    #[actix_web::test]
+    async fn login_after_signout_reports_is_first_sign_in_false() {
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let login_request = LoginRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        };
+
+        // First login.
+        let req1 = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let resp1 = test::call_service(&app, req1).await;
+        assert_eq!(resp1.status(), StatusCode::OK);
+        let body1 = test::read_body(resp1).await;
+        let login_response_1: LoginResponse =
+            serde_json::from_slice(&body1).expect("deserialize first login response");
+        assert!(login_response_1.is_first_sign_in, "first login must be is_first_sign_in = true");
+
+        // Logout — removes the login entry from `user.logins`.
+        let logout_req = create_test_post_request(
+            "/api/v1/logout",
+            None,
+            Some(login_response_1.login_token_id),
+            None::<&()>,
+        );
+        let logout_resp = test::call_service(&app, logout_req).await;
+        assert_eq!(logout_resp.status(), StatusCode::NO_CONTENT);
+
+        // Second login post-logout — `logins` is empty again, but
+        // `last_sign_in_at` is still `Some(...)` from the first login, so
+        // the trigger correctly stays false.
+        let req2 = create_test_post_request("/api/v1/login", None, None, Some(&login_request));
+        let resp2 = test::call_service(&app, req2).await;
+        assert_eq!(resp2.status(), StatusCode::OK);
+        let body2 = test::read_body(resp2).await;
+        let login_response_2: LoginResponse =
+            serde_json::from_slice(&body2).expect("deserialize second login response");
+        assert!(
+            !login_response_2.is_first_sign_in,
+            "post-signout login must be is_first_sign_in = false (sticky last_sign_in_at)"
+        );
+    }
+
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
     async fn cannot_logout_if_login_id_not_set_in_logout_header() {
@@ -2687,6 +2855,19 @@ mod test_definitions {
         run_cannot_create_maze_that_already_exists(true).await;
     }
 
+    #[actix_web::test]
+    async fn cannot_create_maze_that_exceeds_cell_cap() {
+        // 61 × 60 = 3,660 cells, over the MockStore cap of 3,600.
+        run_create_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            new_sized_maze("", "over_cap_maze", 61, 60),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        )
+        .await;
+    }
+
     // Get maze
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
@@ -2753,6 +2934,21 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_update_maze_with_mismatching_id_with_login() {
         run_cannot_update_maze_with_mismatching_id(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_maze_that_exceeds_cell_cap() {
+        // 70 × 60 = 4,200 cells, over the MockStore cap of 3,600.
+        let id = "maze_a.json";
+        run_update_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::ThreeMazes),
+            Some(VALID_USERNAME_1),
+            true,
+            id,
+            new_sized_maze(id, "maze_a", 70, 60),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        )
+        .await;
     }
 
     // Delete maze
@@ -3215,6 +3411,27 @@ mod test_definitions {
     #[actix_web::test]
     async fn cannot_generate_maze_with_max_retries_zero_with_login() {
         run_cannot_generate_maze_with_max_retries_zero(true).await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_generate_maze_that_exceeds_cell_cap() {
+        // 61 × 60 = 3,660 cells, over the MockStore cap of 3,600.
+        // The handler rejects before invoking Generator::generate(), so the
+        // dimensions need only satisfy the basic min-3 rule.
+        run_generate_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            new_generate_options(61, 60, None, None, None, None),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            None,
+            None,
+            Some(
+                "Maze is too large: 61×60 = 3660 cells exceeds the 3600-cell limit"
+                    .to_string(),
+            ),
+        )
+        .await;
     }
 
     // **************************************************************************************************
@@ -3877,6 +4094,8 @@ mod test_definitions {
                 Some("oauth@example.com".to_string()),
             )],
             deleted_at: None,
+            created_at: chrono::Utc::now(),
+            last_sign_in_at: None,
         };
         {
             let mut store_lock = shared_store.write().await;
@@ -5402,6 +5621,37 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn add_email_with_comms_disabled_creates_verified_and_skips_dispatch() {
+        // Comms disabled — the credentials add-email path must create the
+        // new row already verified and must not attempt to issue or
+        // dispatch a verification email (the user has no path to verify it,
+        // so the row would otherwise be permanently stuck unverified, and
+        // any spawn would be wasted work).
+        let mut user_defs = create_user_defs(&CreateUsersDef::new(0, 1, MazeContent::Empty));
+        let (app, _, _, api_key, _, stub) =
+            create_test_app_with_stub_email_and_comms_enabled(
+                &mut user_defs, Some(VALID_USERNAME_1), false, false,
+            ).await;
+        let body = AddUserEmailRequest { email: "alice2@example.com".into() };
+        let req = create_test_post_request(
+            "/api/v1/users/me/emails", api_key, None, Some(&body),
+        );
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let response = parse_emails_response(resp).await;
+        let new_row = response
+            .emails
+            .iter()
+            .find(|r| r.email == "alice2@example.com")
+            .expect("new row present");
+        assert!(!new_row.is_primary);
+        assert!(new_row.verified, "new email must be created verified when comms is disabled");
+        assert!(new_row.verified_at.is_some(), "verified_at must be set when verified is true");
+
+        assert_eq!(stub.len(), 0, "no verification email may be dispatched when comms is disabled");
+    }
+
+    #[actix_web::test]
     async fn add_email_with_invalid_format_returns_400() {
         let (app, _, _, api_key, login_id) = me_emails_test_app().await;
         let body = AddUserEmailRequest { email: "not-an-email".into() };
@@ -5601,6 +5851,8 @@ mod test_definitions {
         let body = test::read_body(resp).await;
         let response: AppFeaturesResponse = serde_json::from_slice(&body).expect("failed to deserialize features response");
         assert!(response.allow_signup);
+        // `email_enabled` mirrors `comms.enabled`, which defaults to true.
+        assert!(response.email_enabled);
     }
 
     #[actix_web::test]
@@ -5618,6 +5870,23 @@ mod test_definitions {
     }
 
     #[actix_web::test]
+    async fn get_features_email_enabled_reflects_comms_disabled() {
+        let mut user_defs = vec![];
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let mut app_config = AppConfig::default();
+        app_config.comms.enabled = false;
+        let (app, _, _, _, _) =
+            create_test_app_with_config(&mut user_defs, None, false, features, app_config).await;
+        let req = create_test_get_request("/api/v1/features", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let response: AppFeaturesResponse = serde_json::from_slice(&body)
+            .expect("failed to deserialize features response");
+        assert!(!response.email_enabled);
+    }
+
+    #[actix_web::test]
     async fn get_features_no_auth_required() {
         let mut user_defs = create_user_defs(&CreateUsersDef::new(1, 1, MazeContent::Empty));
         let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
@@ -5625,6 +5894,20 @@ mod test_definitions {
         let req = create_test_get_request("/api/v1/features", None, None);
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[actix_web::test]
+    async fn get_features_includes_max_maze_cells_from_store() {
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let req = create_test_get_request("/api/v1/features", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = test::read_body(resp).await;
+        let response: AppFeaturesResponse =
+            serde_json::from_slice(&body).expect("failed to deserialize features response");
+        // MockStore reports MOCK_MAX_MAZE_CELLS = 3_600 via MazeStore::max_maze_cells.
+        assert_eq!(response.max_maze_cells, Some(3_600));
     }
 
     // **************************************************************************************************
@@ -5731,6 +6014,42 @@ mod test_definitions {
         }));
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[actix_web::test]
+    async fn signup_with_comms_disabled_creates_verified_primary_and_skips_dispatch() {
+        // Comms disabled — the credentials sign-up path must create the
+        // primary email already verified (so the user can sign in and use
+        // their account in DEV without a verification step), and must not
+        // attempt to issue or dispatch a verification email since there is
+        // no working channel for it.
+        let mut user_defs = vec![];
+        let (app, shared_store, _, _, _, stub) =
+            create_test_app_with_stub_email_and_comms_enabled(&mut user_defs, None, false, false).await;
+        let req = create_test_post_request("/api/v1/signup", None, None, Some(&SignupRequest {
+            email: VALID_USER_EMAIL_1.to_string(),
+            password: VALID_USER_PASSWORD.to_string(),
+        }));
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = test::read_body(resp).await;
+        let user: UserItem = serde_json::from_slice(&body).expect("UserItem");
+        let primary = user.emails.iter().find(|e| e.is_primary).expect("primary row");
+        assert!(primary.verified, "primary email must be created verified when comms is disabled");
+        assert!(primary.verified_at.is_some(), "verified_at must be set when verified is true");
+
+        // Persisted store agrees.
+        let store_lock = shared_store.read().await;
+        let stored = store_lock
+            .find_user_by_verified_email(VALID_USER_EMAIL_1)
+            .await
+            .expect("user must be findable by verified email");
+        assert!(stored.email().eq_ignore_ascii_case(VALID_USER_EMAIL_1));
+
+        // No verification dispatch attempted — the gating is synchronous so
+        // the stub must be empty by the time the request returns (the
+        // dispatch path tokio::spawn'd the send only when entered).
+        assert_eq!(stub.len(), 0, "no verification email may be dispatched when comms is disabled");
     }
 
     // ============================================================================

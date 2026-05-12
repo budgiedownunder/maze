@@ -57,11 +57,18 @@ describe('HamburgerMenu', () => {
     expect(screen.getByRole('dialog', { name: /about/i })).toBeInTheDocument()
   })
 
-  it('opens Account modal when My Account is clicked', async () => {
+  it('navigates to /account when My Account is clicked', async () => {
     renderMenu()
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /my account/i }))
-    expect(screen.getByRole('dialog', { name: /my account/i })).toBeInTheDocument()
+    expect(mockNavigate).toHaveBeenCalledWith('/account')
+  })
+
+  it('navigates to /mazes when Home is clicked', async () => {
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /^home$/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/mazes')
   })
 
   it('calls logout and navigates to /login on Sign Out', async () => {

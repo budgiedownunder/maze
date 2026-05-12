@@ -9,6 +9,7 @@ import { GenerateMazeModal } from '../components/GenerateMazeModal'
 import { AlertModal } from '../components/AlertModal'
 import { generateMaze, solveMaze } from '../wasm/mazeWasm'
 import type { GenerateOptions } from '../types/api'
+import { useAppFeatures } from '../context/AppFeaturesContext'
 import { useToken } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useMenuVariant } from '../hooks/useMenuVariant'
@@ -48,8 +49,10 @@ export function MazePage() {
     enableRangeMode, disableRangeMode,
     setWall, setStart, setFinish, clearCell,
     insertRowsBefore, deleteRows, insertColsBefore, deleteCols,
+    canInsertRows, canInsertColumns,
     applyGenerated, applySolution, clearSolution,
   } = useMazeEditor()
+  const { max_maze_cells } = useAppFeatures()
 
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -546,18 +549,26 @@ export function MazePage() {
             </button>
             <button
               className="maze-toolbar-btn"
-              title="Insert Rows Before"
-              aria-label="Insert Rows Before"
-              disabled={activeCell === null || !selectionStatus.allColumnsSelected || selectionStatus.hasSolution || isWalking}
+              title={!canInsertRows && max_maze_cells !== null
+                ? `Insert Rows Before — disabled: would exceed the ${max_maze_cells}-cell limit`
+                : 'Insert Rows Before'}
+              aria-label={!canInsertRows && max_maze_cells !== null
+                ? `Insert Rows Before (disabled: would exceed the ${max_maze_cells}-cell limit)`
+                : 'Insert Rows Before'}
+              disabled={activeCell === null || !selectionStatus.allColumnsSelected || selectionStatus.hasSolution || isWalking || !canInsertRows}
               onClick={() => { insertRowsBefore(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/insert_rows_button.png" alt="Insert Row Before" />
             </button>
             <button
               className="maze-toolbar-btn"
-              title="Insert Columns Before"
-              aria-label="Insert Columns Before"
-              disabled={activeCell === null || !selectionStatus.allRowsSelected || selectionStatus.hasSolution || isWalking}
+              title={!canInsertColumns && max_maze_cells !== null
+                ? `Insert Columns Before — disabled: would exceed the ${max_maze_cells}-cell limit`
+                : 'Insert Columns Before'}
+              aria-label={!canInsertColumns && max_maze_cells !== null
+                ? `Insert Columns Before (disabled: would exceed the ${max_maze_cells}-cell limit)`
+                : 'Insert Columns Before'}
+              disabled={activeCell === null || !selectionStatus.allRowsSelected || selectionStatus.hasSolution || isWalking || !canInsertColumns}
               onClick={() => { insertColsBefore(); gridRef.current?.focus() }}
             >
               <img src="/images/maze/insert_columns_button.png" alt="Insert Column Before" />

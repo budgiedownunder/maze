@@ -47,7 +47,7 @@
 
             <!-- Validation error -->
             <Label x:Name="ErrorLabel"
-                   TextColor="Red"
+                   TextColor="{AppThemeBinding Light={StaticResource Fail}, Dark={StaticResource FailDark}}"
                    FontSize="12"
                    IsVisible="False"
                    HorizontalOptions="Center"/>

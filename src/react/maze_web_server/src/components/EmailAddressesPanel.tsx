@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import * as api from '../api/client'
 import type { UserEmail } from '../types/api'
 import { isValidEmail } from '../utils/validation'
+import { useAppFeatures } from '../context/AppFeaturesContext'
+import { ConfirmModal } from './ConfirmModal'
 
 interface Props {
   token: string
@@ -16,7 +18,9 @@ export function EmailAddressesPanel({ token }: Props) {
   const [resendFlash, setResendFlash] = useState<string | null>(null)
   const [newEmail, setNewEmail] = useState('')
   const [isAdding, setIsAdding] = useState(false)
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null)
   const resendFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { email_enabled } = useAppFeatures()
 
   useEffect(() => () => {
     if (resendFlashTimer.current !== null) clearTimeout(resendFlashTimer.current)
@@ -89,9 +93,15 @@ export function EmailAddressesPanel({ token }: Props) {
     setIsAdding(true)
     setError(null)
     try {
+      const added = newEmail
       const res = await api.addMyEmail(token, newEmail)
       setEmails(res.emails)
       setNewEmail('')
+      if (email_enabled) {
+        if (resendFlashTimer.current !== null) clearTimeout(resendFlashTimer.current)
+        setResendFlash(`An email verification has been sent to ${added}. You must verify that email before you can claim it for this account.`)
+        resendFlashTimer.current = setTimeout(() => setResendFlash(null), RESEND_FLASH_MS)
+      }
     } catch (ex: unknown) {
       const status = (ex as { status?: number }).status
       const message = (ex as { message?: string }).message
@@ -147,7 +157,7 @@ export function EmailAddressesPanel({ token }: Props) {
                       type="button"
                       className="btn-link"
                       disabled={busyEmail !== null}
-                      onClick={() => handleRemove(row.email)}
+                      onClick={() => setPendingRemove(row.email)}
                     >
                       Remove
                     </button>
@@ -168,6 +178,20 @@ export function EmailAddressesPanel({ token }: Props) {
           })}
         </ul>
       )}
+      {pendingRemove !== null && (
+        <ConfirmModal
+          title="Remove email address"
+          message={`Are you sure you want to remove '${pendingRemove}' from your account?`}
+          confirmLabel="Remove"
+          isDangerous
+          onConfirm={() => {
+            const target = pendingRemove
+            setPendingRemove(null)
+            void handleRemove(target)
+          }}
+          onCancel={() => setPendingRemove(null)}
+        />
+      )}
       {emails !== null && (
         <form onSubmit={handleAddEmail} className="email-add-form">
           <label htmlFor="add-email-input" className="visually-hidden">Add another email</label>
@@ -184,7 +208,7 @@ export function EmailAddressesPanel({ token }: Props) {
             className="btn-link"
             disabled={isAdding || !isValidEmail(newEmail)}
           >
-            {isAdding ? 'Adding...' : 'Add Email'}
+            {isAdding ? 'Adding...' : 'Add'}
           </button>
         </form>
       )}

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Maze.Maui.App.Messages;
 using Maze.Maui.App.Services;
+using Maze.Maui.App.Views;
 using System.Collections.ObjectModel;
 using System.Net;
 
@@ -65,7 +66,7 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="navigationService">Injected navigation service</param>
         /// <param name="accountViewModel">Injected (singleton) account view model — used to flip
         /// <see cref="AccountViewModel.IsWelcomeMode"/> when an OAuth sign-up creates a brand-new
-        /// user, so the Account popup auto-opens with a welcome banner on the next page.</param>
+        /// user, so the Account page renders with a welcome banner on first arrival.</param>
         public SignUpViewModel(IAuthService authService, IAppFeaturesService appFeaturesService, INavigationService navigationService, AccountViewModel accountViewModel)
         {
             Title = "Sign Up";
@@ -136,11 +137,17 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 await _authService.SignUpAsync(Email, Password);
-                // Tell LoginViewModel to surface a "check your inbox" flash
-                // before we pop back. WeakReferenceMessenger is fire-and-forget
-                // — we don't hold a reference across the navigation pop.
-                WeakReferenceMessenger.Default.Send(new LoginFlashMessage(
-                    "Account created. Check your inbox for a verification email before signing in."));
+                // Tell LoginViewModel to surface a flash before we pop back.
+                // When email is enabled the server has dispatched a
+                // verification email and the primary lands unverified — point
+                // the user at their inbox. When email is disabled the server
+                // has marked the primary verified at creation, so the user
+                // can sign in immediately. WeakReferenceMessenger is
+                // fire-and-forget — we don't hold a reference across the pop.
+                var flash = _appFeaturesService.Features.EmailEnabled
+                    ? "Account created. Check your inbox for a verification email before signing in."
+                    : "Account created. You can sign in now.";
+                WeakReferenceMessenger.Default.Send(new LoginFlashMessage(flash));
                 await _navigationService.GoBackAsync();
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
@@ -173,10 +180,18 @@ namespace Maze.Maui.App.ViewModels
             {
                 var result = await _authService.SignInWithOAuthAsync(providerName);
                 // Flip the singleton AccountViewModel's IsWelcomeMode flag *before*
-                // navigating: AppShell.OnNavigated will read it on arrival at the
-                // main page and auto-open the Account popup with a welcome banner.
-                _accountViewModel.IsWelcomeMode = result.IsNewUser;
+                // navigating so AccountPage renders the welcome banner on first
+                // arrival. First-time sign-ins are pushed straight onto AccountPage
+                // so the banner is the first thing they see; returning users land
+                // on the main page as usual. The trigger is `IsFirstSignIn` (the
+                // user has had no prior successful sign-in via any method), not
+                // `IsNewUser` (the OAuth flow created a brand-new User row) —
+                // they agree in most cases but disagree e.g. when a user signed
+                // up via credentials but never verified, then signs in via OAuth.
+                _accountViewModel.IsWelcomeMode = result.IsFirstSignIn;
                 await _navigationService.GoToRootAsync("//MainPage");
+                if (result.IsFirstSignIn)
+                    await _navigationService.GoToAsync(nameof(AccountPage));
             }
             catch (OAuthFlowFailedException ex)
             {

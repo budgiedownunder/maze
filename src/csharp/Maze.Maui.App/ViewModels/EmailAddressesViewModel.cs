@@ -17,6 +17,8 @@ namespace Maze.Maui.App.ViewModels
     public partial class EmailAddressesViewModel : BaseViewModel
     {
         private readonly IAuthService _authService;
+        private readonly IDialogService _dialogService;
+        private readonly IAppFeaturesService _appFeaturesService;
 
         // Same regex used by the React frontend's isValidEmail helper —
         // keeps client-side validation behaviour symmetric across UIs.
@@ -48,10 +50,12 @@ namespace Maze.Maui.App.ViewModels
         internal static readonly TimeSpan ResendFlashDuration = TimeSpan.FromSeconds(5);
         private CancellationTokenSource? _resendFlashCts;
 
-        public EmailAddressesViewModel(IAuthService authService)
+        public EmailAddressesViewModel(IAuthService authService, IDialogService dialogService, IAppFeaturesService appFeaturesService)
         {
             Title = "Email Addresses";
             _authService = authService;
+            _dialogService = dialogService;
+            _appFeaturesService = appFeaturesService;
         }
 
         partial void OnNewEmailChanged(string value) => ErrorMessage = "";
@@ -113,9 +117,18 @@ namespace Maze.Maui.App.ViewModels
             ErrorMessage = "";
             try
             {
+                var added = NewEmail;
                 var rows = await _authService.AddEmailAsync(NewEmail);
                 ReplaceRows(rows);
                 NewEmail = "";
+                if (_appFeaturesService.Features.EmailEnabled)
+                {
+                    var flash = $"An email verification has been sent to {added}. You must verify that email before you can claim it for this account.";
+                    _resendFlashCts?.Cancel();
+                    ResendFlash = flash;
+                    _resendFlashCts = new CancellationTokenSource();
+                    _ = ScheduleResendFlashClearAsync(flash, _resendFlashCts.Token);
+                }
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
             {
@@ -139,6 +152,11 @@ namespace Maze.Maui.App.ViewModels
         private async Task RemoveEmail(EmailRowViewModel? row)
         {
             if (row is null || IsBusy) return;
+            bool confirmed = await _dialogService.ShowConfirmation(
+                "Remove email address",
+                $"Are you sure you want to remove '{row.Email}' from your account?",
+                "Remove", "Cancel", isDestructive: true);
+            if (!confirmed) return;
             // Optimistic snapshot: if the server rejects, restore exactly
             // what was on screen so the user doesn't see a phantom edit.
             var previous = Emails.ToList();
@@ -211,9 +229,10 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 await _authService.RequestEmailVerificationAsync(row.Email);
-                ResendFlash = $"Verification link sent to {row.Email}.";
+                var flash = $"Verification link sent to {row.Email}.";
+                ResendFlash = flash;
                 _resendFlashCts = new CancellationTokenSource();
-                _ = ScheduleResendFlashClearAsync(row.Email, _resendFlashCts.Token);
+                _ = ScheduleResendFlashClearAsync(flash, _resendFlashCts.Token);
             }
             catch
             {
@@ -225,7 +244,7 @@ namespace Maze.Maui.App.ViewModels
             }
         }
 
-        private async Task ScheduleResendFlashClearAsync(string email, CancellationToken ct)
+        private async Task ScheduleResendFlashClearAsync(string expectedText, CancellationToken ct)
         {
             try
             {
@@ -236,9 +255,10 @@ namespace Maze.Maui.App.ViewModels
                 return;
             }
             // Only clear if the message we set is still the one on screen —
-            // a subsequent Resend may have replaced it with a different
-            // address before the timer fired.
-            if (ResendFlash == $"Verification link sent to {email}.")
+            // a subsequent action may have replaced it with a different
+            // message (different address, different action) before the
+            // timer fired.
+            if (ResendFlash == expectedText)
             {
                 ResendFlash = "";
             }

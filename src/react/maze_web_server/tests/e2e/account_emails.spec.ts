@@ -8,27 +8,28 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/mazes/)
 }
 
-async function openAccountModal(page: Page) {
+async function openAccountPage(page: Page) {
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /my account/i }).click()
-  await expect(page.getByRole('dialog', { name: /my account/i })).toBeVisible()
+  await expect(page).toHaveURL(/\/account/)
+  await expect(page.getByRole('heading', { name: /my account/i })).toBeVisible()
 }
 
-test('add then make primary then remove email round-trip through the account modal', async ({ page }) => {
+test('add then make primary then remove email round-trip through the account page', async ({ page }) => {
   await login(page)
-  await openAccountModal(page)
-  const dialog = page.getByRole('dialog', { name: /my account/i })
+  await openAccountPage(page)
+  const main = page.locator('main')
 
   // Initial state: one row, the seeded primary email.
-  const emailList = dialog.locator('.email-list')
+  const emailList = main.locator('.email-list')
   await expect(emailList.locator('li')).toHaveCount(1)
   const seededRow = emailList.locator('li').filter({ hasText: 'test@example.com' })
   await expect(seededRow.getByText('Primary')).toBeVisible()
   await expect(seededRow.getByText('Verified')).toBeVisible()
 
   // Add a new email.
-  await dialog.getByPlaceholder(/add another email/i).fill('second@example.com')
-  await dialog.getByRole('button', { name: /^Add Email$/ }).click()
+  await main.getByPlaceholder(/add another email/i).fill('second@example.com')
+  await main.getByRole('button', { name: /^Add$/ }).click()
 
   // List grows to two rows; the new row is verified but not primary.
   await expect(emailList.locator('li')).toHaveCount(2)
@@ -42,8 +43,11 @@ test('add then make primary then remove email round-trip through the account mod
   await expect(newRow.locator('.badge-primary')).toBeVisible()
   await expect(seededRow.locator('.badge-primary')).toHaveCount(0)
 
-  // Now the previously primary row is removable. Remove it.
+  // Now the previously primary row is removable. Remove it (via confirm modal).
   await seededRow.getByRole('button', { name: /^Remove$/ }).click()
+  const confirmDialog = page.getByRole('dialog', { name: /remove email address/i })
+  await expect(confirmDialog).toBeVisible()
+  await confirmDialog.getByRole('button', { name: /^Remove$/ }).click()
   await expect(emailList.locator('li')).toHaveCount(1)
   await expect(emailList.locator('li').filter({ hasText: 'second@example.com' })).toBeVisible()
 })

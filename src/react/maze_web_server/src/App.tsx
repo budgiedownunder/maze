@@ -13,6 +13,7 @@ import { OAuthCallbackPage } from './pages/OAuthCallbackPage'
 import { MazesPage } from './pages/MazesPage'
 import { MazePage } from './pages/MazePage'
 import { MazeGamePage } from './pages/MazeGamePage'
+import { AccountPage } from './pages/AccountPage'
 
 export function SignupRoute() {
   const { allow_signup } = useAppFeatures()
@@ -31,6 +32,7 @@ const router = createBrowserRouter([
   { path: '/mazes/new', element: <ProtectedRoute><MazePage /></ProtectedRoute> },
   { path: '/mazes/:id', element: <ProtectedRoute><MazePage /></ProtectedRoute> },
   { path: '/play/:id', element: <ProtectedRoute><MazeGamePage /></ProtectedRoute> },
+  { path: '/account', element: <ProtectedRoute><AccountPage /></ProtectedRoute> },
   { path: '*', element: <Navigate to="/login" replace /> },
 ])
 

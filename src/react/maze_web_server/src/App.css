@@ -329,7 +329,51 @@
 }
 
 /* ──────────────────────────────────────────────────────────
-   Email addresses panel (inside AccountModal)
+   Account page
+────────────────────────────────────────────────────────── */
+
+.account-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.account-main {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  padding: 1.5rem;
+}
+
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.account-form > button {
+  align-self: flex-start;
+  width: 100%;
+  max-width: 360px;
+}
+
+.account-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.account-actions > button {
+  flex: 1 1 auto;
+  max-width: 360px;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Email addresses panel (inside AccountPage)
 ────────────────────────────────────────────────────────── */
 
 .email-section {
@@ -601,7 +645,6 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-width: 800px;
 }
 
 .maze-list-item {
@@ -641,15 +684,6 @@
 
 .maze-item-dim-short {
   display: none;
-}
-
-@media (max-width: 540px) {
-  .maze-item-action-label {
-    display: none;
-  }
-  .maze-item-icon {
-    display: none;
-  }
 }
 
 @container (max-width: 110px) {
@@ -697,6 +731,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 540px) {
+  .maze-item-action-label {
+    display: none;
+  }
+  .maze-item-icon {
+    display: none;
+  }
+  .maze-item-name {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
 }
 
 /* ──────────────────────────────────────────────────────────

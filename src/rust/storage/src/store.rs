@@ -39,6 +39,21 @@ pub trait UserStore {
     /// session-hijack scenario where an attacker attaches an unverified
     /// address to a victim's account and redirects password resets to it.
     async fn find_user_by_verified_email(&self, email: &str) -> Result<User, Error>;
+    /// Locates a user by an email address within the store, **regardless
+    /// of verification state**. Use only when the verification state of
+    /// the row is being inspected by the caller for a downstream
+    /// decision. Authentication / session paths must use
+    /// [`UserStore::find_user_by_verified_email`] instead — that variant
+    /// gates on `verified = true` to prevent attaching to attacker-
+    /// controlled rows.
+    ///
+    /// Existing callers:
+    /// - OAuth squat-reclaim (`maze_web_server::oauth::account::resolve`):
+    ///   when branch 3 would create a user but the email is already held
+    ///   by an unverified, no-OAuth squatted record, the reclaim path
+    ///   inspects the existing user's emails + identities here before
+    ///   purging it.
+    async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, Error>;
     /// Locates a user by their api key within the store
     async fn find_user_by_api_key(&self, api_key: Uuid) -> Result<User, Error>;
     /// Locates a user by their login id within the store
@@ -70,10 +85,19 @@ pub trait UserStore {
         email: &str,
         verified: bool,
     ) -> Result<UserEmail, Error>;
-    /// Removes an email row from the user. Rejects with
-    /// [`Error::UserEmailIsPrimary`] if it is the primary row (caller must
-    /// promote another first), and with [`Error::UserEmailIsLast`] if it is
-    /// the user's only email row.
+    /// Removes an email row from the user, and atomically removes any of
+    /// the user's `oauth_identities` rows whose `provider_email` matches
+    /// the removed address (case-insensitive). The invariant the
+    /// secondary cleanup maintains is "an OAuth identity row implies the
+    /// user still owns the email the provider linked through" — without
+    /// it, an OAuth identity bound to a since-removed email would let
+    /// the OAuth provider still authenticate the user (branch 1 of
+    /// `account::resolve` matches by `(provider, provider_user_id)`, not
+    /// by email).
+    ///
+    /// Rejects with [`Error::UserEmailIsPrimary`] if it is the primary
+    /// row (caller must promote another first), and with
+    /// [`Error::UserEmailIsLast`] if it is the user's only email row.
     async fn remove_user_email(
         &mut self,
         user_id: Uuid,
@@ -114,6 +138,16 @@ pub struct MazeItem {
 /// Represents a store for holding mazes and related objects
 #[async_trait]
 pub trait MazeStore {
+    /// Returns the maximum number of cells (`rows × cols`) the store will
+    /// accept on a `create_maze` / `update_maze` call, or `None` when the
+    /// store imposes no cap. The cap is a property of the storage backend
+    /// (row size on a SQL column, runtime cost on a file store), not of
+    /// the maze itself — implementations report the value they actually
+    /// enforce on writes. Callers use this to surface the limit to clients
+    /// and to validate ahead of an actual write.
+    fn max_maze_cells(&self) -> Option<usize> {
+        None
+    }
     /// Adds a new maze to the store and sets the allocated `id` within the maze object
     async fn create_maze(&mut self, owner: &User, maze: &mut Maze) -> Result<(), Error>;
     /// Deletes a maze from the store
@@ -224,3 +258,48 @@ pub trait Store: UserStore + MazeStore + TokenStore + EmailAuditLog + Manage + S
 
 #[allow(dead_code)]
 pub type SharedStore = Arc<RwLock<Box<dyn Store>>>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Minimal stub implementing only the required trait methods so that the
+    // default `max_maze_cells` body is the one under test.
+    struct NoCapStub;
+
+    #[async_trait]
+    impl MazeStore for NoCapStub {
+        async fn create_maze(&mut self, _owner: &User, _maze: &mut Maze) -> Result<(), Error> {
+            unimplemented!()
+        }
+        async fn delete_maze(&mut self, _owner: &User, _id: &str) -> Result<(), Error> {
+            unimplemented!()
+        }
+        async fn update_maze(&mut self, _owner: &User, _maze: &mut Maze) -> Result<(), Error> {
+            unimplemented!()
+        }
+        async fn get_maze(&self, _owner: &User, _id: &str) -> Result<Maze, Error> {
+            unimplemented!()
+        }
+        async fn find_maze_by_name(
+            &self,
+            _owner: &User,
+            _name: &str,
+        ) -> Result<MazeItem, Error> {
+            unimplemented!()
+        }
+        async fn get_maze_items(
+            &self,
+            _owner: &User,
+            _include_definitions: bool,
+        ) -> Result<Vec<MazeItem>, Error> {
+            unimplemented!()
+        }
+    }
+
+    #[test]
+    fn maze_store_max_maze_cells_default_is_none() {
+        let stub = NoCapStub;
+        assert!(stub.max_maze_cells().is_none());
+    }
+}

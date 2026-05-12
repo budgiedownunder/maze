@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useMazeEditor } from '../../src/hooks/useMazeEditor'
+import { createElement, type ReactNode } from 'react'
+import { AppFeaturesContext, APP_FEATURES_DEFAULTS } from '../../src/context/AppFeaturesContext'
 import type { MazeDefinition } from '../../src/types/api'
 
 function makeGrid(rows: number, cols: number, fill = ' '): string[][] {
@@ -14,6 +16,23 @@ function makeDefinition(grid: string[][]): MazeDefinition {
 // Initialise the hook with a given grid and return the result
 function setupHook(grid: string[][]) {
   const { result } = renderHook(() => useMazeEditor())
+  act(() => {
+    result.current.initFromDefinition('maze-1', 'Test', makeDefinition(grid))
+  })
+  return result
+}
+
+// Same as `setupHook` but the hook reads max_maze_cells from a wrapping
+// AppFeaturesContext.Provider with the supplied cap. Uses createElement
+// rather than JSX so this file can stay as `.ts` (no JSX parser needed).
+function setupHookWithCap(grid: string[][], maxMazeCells: number | null) {
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(
+      AppFeaturesContext.Provider,
+      { value: { ...APP_FEATURES_DEFAULTS, max_maze_cells: maxMazeCells } },
+      children,
+    )
+  const { result } = renderHook(() => useMazeEditor(), { wrapper })
   act(() => {
     result.current.initFromDefinition('maze-1', 'Test', makeDefinition(grid))
   })
@@ -995,5 +1014,55 @@ describe('markSaved', () => {
     act(() => result.current.markSaved('new-id', 'New Name'))
     expect(result.current.activeCell).toEqual({ row: 1, col: 2 })
     expect(result.current.anchorCell).toBeNull()
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// canInsertRows / canInsertColumns (max_maze_cells cap)
+// ──────────────────────────────────────────────────────────────
+
+describe('canInsertRows / canInsertColumns', () => {
+  it('returns true for both when max_maze_cells is null (no cap)', () => {
+    const result = setupHookWithCap(makeGrid(60, 60), null)
+    act(() => result.current.activateRow(10, false))
+    expect(result.current.canInsertRows).toBe(true)
+    act(() => result.current.activateCol(10, false))
+    expect(result.current.canInsertColumns).toBe(true)
+  })
+
+  it('returns true when inserting a single row stays at the cap', () => {
+    // 59 × 60 grid, cap 3,600. Inserting one row → 60 × 60 = 3,600 (at cap).
+    const result = setupHookWithCap(makeGrid(59, 60), 3_600)
+    act(() => result.current.activateRow(0, false))
+    expect(result.current.canInsertRows).toBe(true)
+  })
+
+  it('returns false when inserting a single row would exceed the cap', () => {
+    // 60 × 60 grid, cap 3,600. Inserting one row → 61 × 60 = 3,660 (over).
+    const result = setupHookWithCap(makeGrid(60, 60), 3_600)
+    act(() => result.current.activateRow(0, false))
+    expect(result.current.canInsertRows).toBe(false)
+  })
+
+  it('returns false when inserting a multi-row selection would exceed the cap', () => {
+    // 58 × 60 grid, cap 3,600. Selecting 3 rows → +3 rows would put us at
+    // 61 × 60 = 3,660 (over). Inserting 2 rows → 60 × 60 = 3,600 (fits).
+    const result = setupHookWithCap(makeGrid(58, 60), 3_600)
+    act(() => result.current.activateRow(0, false))
+    act(() => result.current.activateRow(2, true))   // 3-row selection
+    expect(result.current.canInsertRows).toBe(false)
+  })
+
+  it('returns false when inserting a column would exceed the cap', () => {
+    // 60 × 60 grid, cap 3,600. Inserting one col → 60 × 61 = 3,660 (over).
+    const result = setupHookWithCap(makeGrid(60, 60), 3_600)
+    act(() => result.current.activateCol(0, false))
+    expect(result.current.canInsertColumns).toBe(false)
+  })
+
+  it('returns true when no selection exists (toolbar handles the disable separately)', () => {
+    const result = setupHookWithCap(makeGrid(60, 60), 3_600)
+    expect(result.current.canInsertRows).toBe(true)
+    expect(result.current.canInsertColumns).toBe(true)
   })
 })

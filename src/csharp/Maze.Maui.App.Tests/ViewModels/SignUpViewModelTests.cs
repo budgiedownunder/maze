@@ -22,11 +22,11 @@ namespace Maze.Maui.App.Tests.ViewModels
             => new(new Mock<IAuthService>().Object, new Mock<IDialogService>().Object, new Mock<INavigationService>().Object);
 
         private static (SignUpViewModel vm, Mock<IAuthService> auth, Mock<IAppFeaturesService> features, Mock<INavigationService> nav, AccountViewModel account)
-            BuildVm()
+            BuildVm(bool emailEnabled = true)
         {
             var auth = new Mock<IAuthService>();
             var features = new Mock<IAppFeaturesService>();
-            features.SetupGet(f => f.Features).Returns(new AppFeatures());
+            features.SetupGet(f => f.Features).Returns(new AppFeatures { EmailEnabled = emailEnabled });
             features.Setup(f => f.RefreshAsync()).Returns(Task.CompletedTask);
             var nav = new Mock<INavigationService>();
             var account = BuildAccountVm();
@@ -114,9 +114,9 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
-        public async Task SignUp_HappyPath_SendsLoginFlashMessageBeforeNavigatingBack()
+        public async Task SignUp_HappyPath_SendsCheckInboxFlash_WhenEmailEnabled()
         {
-            var (vm, _, _, _, _) = BuildVm();
+            var (vm, _, _, _, _) = BuildVm(emailEnabled: true);
             vm.Email = "alice@example.com";
             vm.Password = ValidPassword;
             vm.ConfirmPassword = ValidPassword;
@@ -137,6 +137,32 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             Assert.NotNull(captured);
             Assert.Contains("Check your inbox", captured!);
+        }
+
+        [Fact]
+        public async Task SignUp_HappyPath_SendsSignInNowFlash_WhenEmailDisabled()
+        {
+            var (vm, _, _, _, _) = BuildVm(emailEnabled: false);
+            vm.Email = "alice@example.com";
+            vm.Password = ValidPassword;
+            vm.ConfirmPassword = ValidPassword;
+
+            string? captured = null;
+            object recipient = new();
+            WeakReferenceMessenger.Default.Register<LoginFlashMessage>(
+                recipient,
+                (_, m) => captured = m.Message);
+            try
+            {
+                await vm.SignUpCommand.ExecuteAsync(null);
+            }
+            finally
+            {
+                WeakReferenceMessenger.Default.Unregister<LoginFlashMessage>(recipient);
+            }
+
+            Assert.NotNull(captured);
+            Assert.Contains("You can sign in now", captured!);
         }
 
         [Fact]

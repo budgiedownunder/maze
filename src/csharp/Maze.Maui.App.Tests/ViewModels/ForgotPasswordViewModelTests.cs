@@ -13,11 +13,13 @@ namespace Maze.Maui.App.Tests.ViewModels
     public class ForgotPasswordViewModelTests
     {
         private static (ForgotPasswordViewModel vm, Mock<IAuthService> auth, Mock<INavigationService> nav)
-            BuildVm()
+            BuildVm(bool emailEnabled = true)
         {
             var auth = new Mock<IAuthService>();
             var nav = new Mock<INavigationService>();
-            var vm = new ForgotPasswordViewModel(auth.Object, nav.Object);
+            var features = new Mock<IAppFeaturesService>();
+            features.SetupGet(f => f.Features).Returns(new AppFeatures { EmailEnabled = emailEnabled });
+            var vm = new ForgotPasswordViewModel(auth.Object, features.Object, nav.Object);
             return (vm, auth, nav);
         }
 
@@ -126,6 +128,43 @@ namespace Maze.Maui.App.Tests.ViewModels
             await vm.BackToSignInCommand.ExecuteAsync(null);
 
             nav.Verify(n => n.GoBackAsync(), Times.Once);
+        }
+
+        // ---- Email-disabled branch ------------------------------------------
+
+        [Fact]
+        public void EmailDisabled_ShowsUnavailableAndHidesForm()
+        {
+            var (vm, _, _) = BuildVm(emailEnabled: false);
+
+            Assert.False(vm.EmailEnabled);
+            Assert.True(vm.ShowUnavailable);
+            Assert.False(vm.ShowForm);
+            Assert.False(vm.ShowSuccess);
+        }
+
+        [Fact]
+        public void EmailEnabled_StartsOnFormState()
+        {
+            var (vm, _, _) = BuildVm(emailEnabled: true);
+
+            Assert.True(vm.EmailEnabled);
+            Assert.True(vm.ShowForm);
+            Assert.False(vm.ShowSuccess);
+            Assert.False(vm.ShowUnavailable);
+        }
+
+        [Fact]
+        public async Task EmailEnabled_FlipsToSuccessAfterSubmit()
+        {
+            var (vm, _, _) = BuildVm(emailEnabled: true);
+            vm.Email = "alice@example.com";
+
+            await vm.SubmitCommand.ExecuteAsync(null);
+
+            Assert.False(vm.ShowForm);
+            Assert.True(vm.ShowSuccess);
+            Assert.False(vm.ShowUnavailable);
         }
     }
 }

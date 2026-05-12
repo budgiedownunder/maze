@@ -16,9 +16,16 @@ use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
 use crate::{
     file_store_migration,
-    validation::{validate_email_format, validate_user_fields},
+    validation::{validate_email_format, validate_maze_cell_count, validate_user_fields},
     Error, MazeItem, Store,
 };
+
+/// Cell-count ceiling enforced by [`FileStore`] on `create_maze` and
+/// `update_maze`. The filesystem imposes no practical row-size limit, so
+/// this cap is a *runtime-cost* bound — large mazes are expensive to
+/// generate, solve, render, and serialise — rather than a storage one.
+/// 100×100 fits exactly at the cap.
+pub const MAX_MAZE_CELLS: usize = 10_000;
 
 /// File store configuration settings
 #[derive(Debug, Clone)]
@@ -639,6 +646,8 @@ impl FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     ///
@@ -823,6 +832,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -880,6 +891,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -997,6 +1010,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// store.create_user(&mut user).await.expect("create_user");
@@ -1057,6 +1072,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1130,6 +1147,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1194,6 +1213,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1261,6 +1282,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1295,6 +1318,18 @@ impl UserStore for FileStore {
     async fn find_user_by_verified_email(&self, email: &str) -> Result<User, Error> {
         self.find_user_by_verified_email_internal(email)
     }
+
+    /// Locates a user by an email address regardless of verification state.
+    /// Delegates to the existing `find_user_by_any_email_internal` walker
+    /// (originally added for the unique-email collision check) with
+    /// `Uuid::nil()` as the ignore id, so every active user is considered.
+    ///
+    /// See the trait doc-comment for usage rules — auth code must use
+    /// [`UserStore::find_user_by_verified_email`] instead.
+    async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, Error> {
+        self.find_user_by_any_email_internal(email, Uuid::nil())
+    }
+
     /// Locates a user by their api key within the store
     ///
     /// # Examples
@@ -1325,6 +1360,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1402,6 +1439,8 @@ impl UserStore for FileStore {
     ///     logins,
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1482,6 +1521,8 @@ impl UserStore for FileStore {
     ///         Some("jsmith@company.com".to_string()),
     ///     )],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1558,6 +1599,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the user within the file store
@@ -1631,6 +1674,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     ///
     /// // Create the admin user within the file store
@@ -1787,6 +1832,8 @@ impl UserStore for FileStore {
     ///     logins: vec![],
     ///     oauth_identities: vec![],
     ///     deleted_at: None,
+    ///     created_at: chrono::Utc::now(),
+    ///     last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let row = store
@@ -1858,6 +1905,7 @@ impl UserStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
@@ -1878,6 +1926,15 @@ impl UserStore for FileStore {
             return Err(Error::UserEmailIsPrimary());
         }
         user.emails.remove(idx);
+        // Drop any OAuth identity rows whose `provider_email` matches the
+        // removed address. See the trait doc for the invariant this
+        // upholds — otherwise an OAuth provider could still authenticate
+        // the user via branch 1 of `account::resolve` (which matches by
+        // `(provider, provider_user_id)`, not by current email).
+        user.oauth_identities.retain(|id| match id.provider_email.as_deref() {
+            Some(addr) => !addr.eq_ignore_ascii_case(email),
+            None => true,
+        });
         self.write_user_file(&user, true)?;
         Ok(())
     }
@@ -1906,6 +1963,7 @@ impl UserStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", true).await.expect("add");
@@ -1955,6 +2013,7 @@ impl UserStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// store.add_user_email(user.id, "alice2@example.com", false).await.expect("add");
@@ -1997,6 +2056,28 @@ fn generate_now_millis() -> chrono::DateTime<chrono::Utc> {
 
 #[async_trait]
 impl MazeStore for FileStore {
+    /// Returns the cell-count ceiling enforced by this file store on
+    /// create/update — see [`MAX_MAZE_CELLS`].
+    ///
+    /// # Examples
+    ///
+    /// Read the cap from a fresh file store rooted at a temporary directory
+    ///
+    /// ```
+    /// # tokio_test::block_on(async {
+    /// use storage::{FileStore, FileStoreConfig, MazeStore};
+    ///
+    /// let temp = tempfile::tempdir().unwrap();
+    /// let store = FileStore::new(&FileStoreConfig {
+    ///     data_dir: temp.path().to_string_lossy().to_string(),
+    /// });
+    ///
+    /// assert_eq!(store.max_maze_cells(), Some(10_000));
+    /// # });
+    /// ```
+    fn max_maze_cells(&self) -> Option<usize> {
+        Some(MAX_MAZE_CELLS)
+    }
     /// Creates a new maze within the file store instance
     ///
     /// # Examples
@@ -2054,6 +2135,11 @@ impl MazeStore for FileStore {
         if maze.name.is_empty() {
             return Err(Error::MazeNameMissing());
         }
+        validate_maze_cell_count(
+            maze.definition.row_count(),
+            maze.definition.col_count(),
+            MAX_MAZE_CELLS,
+        )?;
         // Reject case-insensitive name collision before writing — the
         // `write_maze_file` overwrite check uses `Path::exists`, which
         // is case-insensitive on NTFS/APFS but case-sensitive on ext4.
@@ -2182,6 +2268,11 @@ impl MazeStore for FileStore {
         if maze.id.is_empty() {
             return Err(Error::MazeIdMissing());
         }
+        validate_maze_cell_count(
+            maze.definition.row_count(),
+            maze.definition.col_count(),
+            MAX_MAZE_CELLS,
+        )?;
         if !self.maze_exists(owner, &maze.id) {
             return Err(Error::MazeIdNotFound(maze.id.to_string()));
         }
@@ -2511,6 +2602,7 @@ impl TokenStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -2556,6 +2648,7 @@ impl TokenStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -2595,6 +2688,7 @@ impl TokenStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// let token = OneTimeToken::new(user.id, TokenPurpose::PasswordReset, None, 1);
@@ -2650,6 +2744,7 @@ impl TokenStore for FileStore {
     ///     emails: vec![UserEmail::new_primary_verified("alice@example.com")],
     ///     password_hash: "hash".into(), api_key: Uuid::nil(),
     ///     logins: vec![], oauth_identities: vec![], deleted_at: None,
+    ///     created_at: chrono::Utc::now(), last_sign_in_at: None,
     /// };
     /// store.create_user(&mut user).await.expect("create_user");
     /// for _ in 0..2 {
@@ -2962,6 +3057,8 @@ mod tests {
             logins: vec![],
             oauth_identities: vec![],
             deleted_at: None,
+            created_at: chrono::Utc::now(),
+            last_sign_in_at: None,
         }
     }
 
@@ -3171,6 +3268,124 @@ mod tests {
             Err(error) => {
                 panic!("{}", error);
             }
+        }
+    }
+
+    // ─── max_maze_cells cap enforcement ──────────────────────────────
+
+    fn make_sized_maze(name: &str, rows: usize, cols: usize) -> Maze {
+        use data_model::MazeDefinition;
+        let mut maze = Maze::new(MazeDefinition::new(rows, cols));
+        maze.name = name.to_string();
+        maze
+    }
+
+    #[tokio::test]
+    async fn file_store_max_maze_cells_returns_cap() {
+        let (store, _temp) = new_store().await;
+        assert_eq!(store.max_maze_cells(), Some(MAX_MAZE_CELLS));
+    }
+
+    #[tokio::test]
+    async fn file_store_create_maze_accepts_at_cap() {
+        let (mut store, _temp) = new_store().await;
+        let owner = create_user(
+            &mut store,
+            false,
+            "owner",
+            "",
+            "owner@company.com",
+            "hash",
+        )
+        .await;
+        // 100 × 100 = 10,000 = MAX_MAZE_CELLS
+        let mut maze = make_sized_maze("at-cap", 100, 100);
+        store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect("at-cap create succeeds");
+        assert!(!maze.id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn file_store_create_maze_accepts_just_under_cap() {
+        let (mut store, _temp) = new_store().await;
+        let owner = create_user(
+            &mut store,
+            false,
+            "owner",
+            "",
+            "owner@company.com",
+            "hash",
+        )
+        .await;
+        // 99 × 100 = 9,900 < 10,000
+        let mut maze = make_sized_maze("under-cap", 99, 100);
+        store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect("under-cap create succeeds");
+    }
+
+    #[tokio::test]
+    async fn file_store_create_maze_rejects_over_cap() {
+        let (mut store, _temp) = new_store().await;
+        let owner = create_user(
+            &mut store,
+            false,
+            "owner",
+            "",
+            "owner@company.com",
+            "hash",
+        )
+        .await;
+        // 101 × 100 = 10,100 > 10,000
+        let mut maze = make_sized_maze("over-cap", 101, 100);
+        let err = store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect_err("over-cap create should fail");
+        match err {
+            Error::MazeHasTooManyCells { rows, cols, max } => {
+                assert_eq!(rows, 101);
+                assert_eq!(cols, 100);
+                assert_eq!(max, MAX_MAZE_CELLS);
+            }
+            other => panic!("expected MazeHasTooManyCells, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn file_store_update_maze_rejects_over_cap() {
+        use data_model::MazeDefinition;
+        let (mut store, _temp) = new_store().await;
+        let owner = create_user(
+            &mut store,
+            false,
+            "owner",
+            "",
+            "owner@company.com",
+            "hash",
+        )
+        .await;
+        // Seed at half cap, then try to update to over cap.
+        let mut maze = make_sized_maze("resize-me", 50, 50);
+        store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect("seed create");
+        maze.definition = MazeDefinition::new(120, 100); // 12,000 cells
+        let err = store
+            .update_maze(&owner, &mut maze)
+            .await
+            .expect_err("over-cap update should fail");
+        match err {
+            Error::MazeHasTooManyCells { rows, cols, max } => {
+                assert_eq!(rows, 120);
+                assert_eq!(cols, 100);
+                assert_eq!(max, MAX_MAZE_CELLS);
+            }
+            other => panic!("expected MazeHasTooManyCells, got {other:?}"),
         }
     }
 }

@@ -26,6 +26,7 @@ export interface AddUserEmailRequest {
 export interface LoginResponse {
   login_token_id: string
   login_token_expires_at: string
+  is_first_sign_in: boolean
 }
 
 export interface RenewResponse {
@@ -66,6 +67,8 @@ export interface OAuthProviderPublic {
 export interface AppFeatures {
   allow_signup: boolean
   oauth_providers: OAuthProviderPublic[]
+  email_enabled: boolean
+  max_maze_cells: number | null
 }
 
 export interface GenerateOptions {

@@ -45,6 +45,13 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private bool allowSignUp = true;
 
+        /// <summary>Whether the server is configured to send transactional email.
+        /// Drives the visibility of the Forgot password? link below the
+        /// credentials form — when false the link is hidden because the
+        /// reset flow has no working channel. Default false (fail-closed).</summary>
+        [ObservableProperty]
+        private bool emailEnabled;
+
         /// <summary>OAuth providers exposed by the server. Drives the per-provider
         /// button list on <see cref="LoginPage"/>; empty when OAuth is disabled.</summary>
         public ObservableCollection<OAuthProviderPublic> OAuthProviders { get; } = new();
@@ -64,7 +71,7 @@ namespace Maze.Maui.App.ViewModels
         /// <param name="navigationService">Injected navigation service</param>
         /// <param name="accountViewModel">Injected (singleton) account view model — used to flip
         /// <see cref="AccountViewModel.IsWelcomeMode"/> when an OAuth sign-up creates a brand-new
-        /// user, so the Account popup auto-opens with a welcome banner on the next page.</param>
+        /// user, so the Account page renders with a welcome banner on first arrival.</param>
         public LoginViewModel(IAuthService authService, IAppFeaturesService appFeaturesService, INavigationService navigationService, AccountViewModel accountViewModel)
         {
             Title = "Sign In";
@@ -92,6 +99,7 @@ namespace Maze.Maui.App.ViewModels
         {
             await _appFeaturesService.RefreshAsync();
             AllowSignUp = _appFeaturesService.Features.AllowSignUp;
+            EmailEnabled = _appFeaturesService.Features.EmailEnabled;
             SyncOAuthProviders(_appFeaturesService.Features.OAuthProviders);
 
             if (!await _authService.IsAuthenticatedAsync())
@@ -139,8 +147,16 @@ namespace Maze.Maui.App.ViewModels
             FlashMessage = "";
             try
             {
-                await _authService.SignInAsync(Email, Password);
+                var result = await _authService.SignInAsync(Email, Password);
+                // Flip the singleton AccountViewModel's IsWelcomeMode flag *before*
+                // navigating so AccountPage renders the welcome banner on first
+                // arrival. First-time sign-ins are pushed straight onto AccountPage
+                // so the banner is the first thing they see; returning users land
+                // on the main page as usual. Mirrors the OAuth path below.
+                _accountViewModel.IsWelcomeMode = result.IsFirstSignIn;
                 await _navigationService.GoToRootAsync("//MainPage");
+                if (result.IsFirstSignIn)
+                    await _navigationService.GoToAsync(nameof(AccountPage));
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
             {
@@ -178,10 +194,18 @@ namespace Maze.Maui.App.ViewModels
             {
                 var result = await _authService.SignInWithOAuthAsync(providerName);
                 // Flip the singleton AccountViewModel's IsWelcomeMode flag *before*
-                // navigating: AppShell.OnNavigated will read it on arrival at the
-                // main page and auto-open the Account popup with a welcome banner.
-                _accountViewModel.IsWelcomeMode = result.IsNewUser;
+                // navigating so AccountPage renders the welcome banner on first
+                // arrival. First-time sign-ins are pushed straight onto AccountPage
+                // so the banner is the first thing they see; returning users land
+                // on the main page as usual. The trigger is `IsFirstSignIn` (the
+                // user has had no prior successful sign-in via any method), not
+                // `IsNewUser` (the OAuth flow created a brand-new User row) —
+                // they agree in most cases but disagree e.g. when a user signed
+                // up via credentials but never verified, then signs in via OAuth.
+                _accountViewModel.IsWelcomeMode = result.IsFirstSignIn;
                 await _navigationService.GoToRootAsync("//MainPage");
+                if (result.IsFirstSignIn)
+                    await _navigationService.GoToAsync(nameof(AccountPage));
             }
             catch (OAuthFlowFailedException ex)
             {

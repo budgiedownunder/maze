@@ -17,7 +17,7 @@ export function LoginPage() {
   const { login, isLoading } = useAuth()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
-  const { allow_signup, oauth_providers } = useAppFeatures()
+  const { allow_signup, oauth_providers, email_enabled } = useAppFeatures()
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Surface OAuth-flow errors that the server (or the OAuthCallbackPage)
@@ -47,8 +47,14 @@ export function LoginPage() {
     setError(null)
     setIsSubmitting(true)
     try {
-      await login(email, password)
-      navigate('/mazes', { replace: true })
+      const result = await login(email, password)
+      // Mirror the OAuthCallbackPage routing: first-ever-sign-ins land
+      // directly on /account with the welcome-banner state so the user
+      // sees it before anything else; returning users go to /mazes.
+      navigate(
+        result.isFirstSignIn ? '/account' : '/mazes',
+        { replace: true, state: result.isFirstSignIn ? { welcome: true } : undefined },
+      )
     } catch (ex: unknown) {
       const status = (ex as { status?: number }).status
       setError(status === 401 ? 'Invalid email or password' : 'Login failed. Please try again.')
@@ -92,9 +98,11 @@ export function LoginPage() {
         <button type="submit" disabled={submitDisabled} className="btn-submit">
           Sign In
         </button>
-        <button type="button" onClick={() => navigate('/forgot-password')} disabled={isBusy} className="btn-link">
-          Forgot password?
-        </button>
+        {email_enabled && (
+          <button type="button" onClick={() => navigate('/forgot-password')} disabled={isBusy} className="btn-link">
+            Forgot password?
+          </button>
+        )}
         {allow_signup && (
           <button type="button" onClick={() => navigate('/signup')} disabled={isBusy} className="btn-link">
             Sign Up

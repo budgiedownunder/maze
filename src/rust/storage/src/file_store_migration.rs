@@ -84,6 +84,8 @@ impl LegacyUser {
             logins: self.logins,
             oauth_identities: self.oauth_identities,
             deleted_at: None,
+            created_at: Utc::now(),
+            last_sign_in_at: None,
         }
     }
 }
@@ -213,6 +215,15 @@ type MigrationFn = fn(&Path) -> Result<(), Error>;
 /// field — existing audit-row JSON files round-trip without rewriting.
 /// The framework entry exists to advance the version counter in step
 /// with the SQL backend.
+///
+/// **Version 8** counterpart to `migrations/0008_user_timestamps.sql`.
+/// `User.created_at` is non-nullable in the application's struct, so
+/// every existing `users/<uuid>/user.json` must be rewritten to carry
+/// the field. The migration captures the migration-run timestamp at
+/// startup and writes it into `created_at` and `last_sign_in_at` for
+/// any file that lacks them — mirrors the Rust-side
+/// `backfill_user_timestamps_if_null` on the SQL side. Idempotent —
+/// files already carrying both fields are left alone.
 const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (1, no_op_migration),
     (2, no_op_migration),
@@ -221,6 +232,7 @@ const MIGRATIONS: &[(u32, MigrationFn)] = &[
     (5, migrate_0005_create_one_time_tokens_dir),
     (6, migrate_0006_create_email_audit_log_dir),
     (7, no_op_migration),
+    (8, migrate_0008_user_timestamps),
 ];
 
 const fn max_registered_version(migrations: &[(u32, MigrationFn)]) -> u32 {
@@ -260,6 +272,118 @@ fn migrate_0006_create_email_audit_log_dir(data_dir: &Path) -> Result<(), Error>
     fs::create_dir_all(&dir)?;
     Ok(())
 }
+
+/// FileStore migration 0008 — counterpart to
+/// `migrations/0008_user_timestamps.sql` and
+/// `sql_store::backfill_user_timestamps_if_null`. Walks every
+/// `users/<uuid>/user.json` and writes the migration-run timestamp
+/// (captured once at the top of this function) into `created_at` for
+/// any file that lacks it. `last_sign_in_at` is set to the most recent
+/// `logins[*].created_at` if the file has any logins (the most accurate
+/// "when did this user last sign in" we can reconstruct); files without
+/// logins keep `last_sign_in_at` absent so the welcome-banner trigger
+/// fires correctly on their first actual sign-in. Idempotent — files
+/// that already carry both fields are left alone.
+fn migrate_0008_user_timestamps(data_dir: &Path) -> Result<(), Error> {
+    let users_dir = data_dir.join("users");
+    if !users_dir.is_dir() {
+        return Ok(());
+    }
+    let now = Utc::now()
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    for entry in fs::read_dir(&users_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if Uuid::parse_str(name).is_err() {
+            continue;
+        }
+        let user_file = path.join("user.json");
+        if !user_file.is_file() {
+            continue;
+        }
+        migrate_0008_user_file(&user_file, &now)?;
+    }
+    Ok(())
+}
+
+fn migrate_0008_user_file(path: &Path, now_iso: &str) -> Result<(), Error> {
+    let raw = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(error) => {
+            log::warn!(
+                "FileStore migration 0008: skipping unreadable file {} - {}",
+                path.display(),
+                error
+            );
+            return Ok(());
+        }
+    };
+    let mut value: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(error) => {
+            log::warn!(
+                "FileStore migration 0008: skipping unparseable file {} - {}",
+                path.display(),
+                error
+            );
+            return Ok(());
+        }
+    };
+    let serde_json::Value::Object(ref mut map) = value else {
+        log::warn!(
+            "FileStore migration 0008: skipping non-object file {}",
+            path.display(),
+        );
+        return Ok(());
+    };
+    let mut mutated = false;
+    if !map.contains_key("created_at") {
+        map.insert(
+            "created_at".to_string(),
+            serde_json::Value::String(now_iso.to_string()),
+        );
+        mutated = true;
+    }
+    // `last_sign_in_at` is backfilled to the most recent
+    // `logins[*].created_at` — the timestamp of the user's latest login,
+    // which is the most accurate evidence we have of when they signed
+    // in. Users with no logins keep `last_sign_in_at` absent so the
+    // welcome-banner trigger `User::is_first_sign_in()` (=
+    // `last_sign_in_at.is_none() && logins.is_empty()`) correctly fires
+    // on their first actual sign-in. Each `created_at` is parsed as a
+    // chrono `DateTime` rather than lex-compared, since the legacy
+    // serializer may have written timestamps with mixed sub-second
+    // precision and lex-order would diverge from chronological order
+    // across a `.000Z` / `Z` boundary.
+    let most_recent_login_iso = map
+        .get("logins")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .filter_map(|login| login.get("created_at")?.as_str())
+                .filter_map(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .max()
+                .map(|dt| dt.with_timezone(&chrono::Utc).to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+        });
+    if !map.contains_key("last_sign_in_at")
+        && let Some(iso) = most_recent_login_iso
+    {
+        map.insert("last_sign_in_at".to_string(), serde_json::Value::String(iso));
+        mutated = true;
+    }
+    if mutated {
+        let new_json = serde_json::to_string(&value)?;
+        rewrite_atomically(path, &new_json)?;
+    }
+    Ok(())
+}
+
 
 /// Run every pending migration in `MIGRATIONS` against `data_dir`.
 ///
@@ -699,6 +823,8 @@ mod tests {
             logins: vec![],
             oauth_identities: vec![],
             deleted_at: None,
+            created_at: Utc::now(),
+            last_sign_in_at: None,
         }
     }
 

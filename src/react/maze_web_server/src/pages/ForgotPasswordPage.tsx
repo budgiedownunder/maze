@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as api from '../api/client'
 import { useTheme } from '../context/ThemeContext'
+import { useAppFeatures } from '../context/AppFeaturesContext'
 import { isValidEmail } from '../utils/validation'
 import appIcon from '../assets/app.png'
 
 const SUCCESS_COPY = "If that email is registered, we've sent a password reset link. Check your inbox."
+const UNAVAILABLE_COPY = 'Password reset is unavailable on this server.'
 
 export function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -14,6 +16,7 @@ export function ForgotPasswordPage() {
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
+  const { email_enabled } = useAppFeatures()
 
   const submitDisabled = !isValidEmail(email) || isSubmitting
 
@@ -49,7 +52,14 @@ export function ForgotPasswordPage() {
       <img src={appIcon} alt="Maze" width={100} height={100} className="auth-logo" />
       <h1 className="auth-title auth-title--solo">Forgot Password</h1>
 
-      {submitted ? (
+      {!email_enabled ? (
+        <div className="auth-form">
+          <p role="status" className="success-msg">{UNAVAILABLE_COPY}</p>
+          <button type="button" onClick={() => navigate('/login')} className="btn-link">
+            Back to sign in
+          </button>
+        </div>
+      ) : submitted ? (
         <div className="auth-form">
           <p role="status" className="success-msg">{SUCCESS_COPY}</p>
           <button type="button" onClick={() => navigate('/login')} className="btn-link">

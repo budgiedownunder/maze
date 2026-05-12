@@ -1,5 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
+import { useAppFeatures } from '../context/AppFeaturesContext'
 import type { MazeDefinition } from '../types/api'
+import { exceedsMazeCellCap } from '../utils/validation'
 
 export interface CellPoint {
   row: number
@@ -29,6 +31,7 @@ export interface SelectionStatus {
 }
 
 export function useMazeEditor() {
+  const { max_maze_cells } = useAppFeatures()
   const [grid, setGrid] = useState<string[][]>([])
   const [mazeName, setMazeName] = useState('')
   const [mazeId, setMazeId] = useState<string | null>(null)
@@ -358,6 +361,22 @@ export function useMazeEditor() {
 
   // ── Structural editing ───────────────────────────────────────
 
+  const canInsertRows = useMemo((): boolean => {
+    if (!selectionRect) return true
+    const rows = grid.length
+    const cols = rows > 0 ? grid[0].length : 0
+    const insertCount = selectionRect.maxRow - selectionRect.minRow + 1
+    return !exceedsMazeCellCap(rows + insertCount, cols, max_maze_cells)
+  }, [selectionRect, grid, max_maze_cells])
+
+  const canInsertColumns = useMemo((): boolean => {
+    if (!selectionRect) return true
+    const rows = grid.length
+    const cols = rows > 0 ? grid[0].length : 0
+    const insertCount = selectionRect.maxCol - selectionRect.minCol + 1
+    return !exceedsMazeCellCap(rows, cols + insertCount, max_maze_cells)
+  }, [selectionRect, grid, max_maze_cells])
+
   const insertRowsBefore = useCallback(() => {
     if (!selectionRect) return
     const cols = grid.length > 0 ? grid[0].length : 0
@@ -486,5 +505,7 @@ export function useMazeEditor() {
     deleteRows,
     insertColsBefore,
     deleteCols,
+    canInsertRows,
+    canInsertColumns,
   }
 }

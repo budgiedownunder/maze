@@ -4,6 +4,7 @@ namespace Maze.Maui.App.Views
     using CommunityToolkit.Maui.Extensions;
     using CommunityToolkit.Maui.Views;
     using Maze.Api;
+    using Maze.Maui.App.Utils;
 
     /// <summary>
     /// A popup that prompts the user for maze generation options.
@@ -44,6 +45,8 @@ namespace Maze.Maui.App.Views
     /// </summary>
     public partial class GenerateMazePopup : Popup
     {
+        private readonly int? _maxMazeCells;
+
         /// <summary>
         /// Constructor
         /// </summary>
@@ -54,12 +57,14 @@ namespace Maze.Maui.App.Views
         /// <param name="finishRow">Default finish cell row (0-based)</param>
         /// <param name="finishCol">Default finish cell column (0-based)</param>
         /// <param name="minSolutionLength">Default minimum solution length</param>
+        /// <param name="maxMazeCells">Server-reported cell-count cap (<c>AppFeatures.MaxMazeCells</c>); <c>null</c> means no cap</param>
         /// <param name="generationError">Optional error message from a previous generation attempt, displayed inline</param>
         public GenerateMazePopup(uint rows, uint cols,
             uint startRow, uint startCol, uint finishRow, uint finishCol,
-            uint minSolutionLength, string? generationError = null)
+            uint minSolutionLength, int? maxMazeCells = null, string? generationError = null)
         {
             InitializeComponent();
+            _maxMazeCells = maxMazeCells;
 
             RowsEntry.Text = rows.ToString();
             ColsEntry.Text = cols.ToString();
@@ -105,7 +110,9 @@ namespace Maze.Maui.App.Views
 
         /// <summary>
         /// Parses and validates the form entries into a <see cref="Maze.GenerationOptions"/> instance.
-        /// Start/finish entries are 1-based and converted to 0-based for the API.
+        /// Delegates to <see cref="GenerateMazeOptionsParser.TryParse"/> for the validation chain
+        /// — see that method for the per-field rules. Start/finish entries are 1-based as entered
+        /// and emitted 0-based on the returned options.
         /// </summary>
         /// <param name="options">The parsed options on success (Seed is set to 0; caller must assign)</param>
         /// <param name="error">An error message on failure</param>
@@ -114,48 +121,31 @@ namespace Maze.Maui.App.Views
         {
             options = null;
 
-            if (!uint.TryParse(RowsEntry.Text?.Trim(), out uint rows) || rows < 3)
-            { error = "Rows must be a whole number of 3 or more."; return false; }
+            if (!GenerateMazeOptionsParser.TryParse(
+                rowsText: RowsEntry.Text,
+                colsText: ColsEntry.Text,
+                startRowText: StartRowEntry.Text,
+                startColText: StartColEntry.Text,
+                finishRowText: FinishRowEntry.Text,
+                finishColText: FinishColEntry.Text,
+                minSolutionLengthText: MinSolutionLengthEntry.Text,
+                maxMazeCells: _maxMazeCells,
+                out var parsed,
+                out error))
+            {
+                return false;
+            }
 
-            if (!uint.TryParse(ColsEntry.Text?.Trim(), out uint cols) || cols < 3)
-            { error = "Columns must be a whole number of 3 or more."; return false; }
-
-            // Start/finish are entered 1-based: valid range is [1, rows] and [1, cols]
-            if (!uint.TryParse(StartRowEntry.Text?.Trim(), out uint startRow1) || startRow1 < 1 || startRow1 > rows)
-            { error = $"Start Row must be between 1 and {rows}."; return false; }
-
-            if (!uint.TryParse(StartColEntry.Text?.Trim(), out uint startCol1) || startCol1 < 1 || startCol1 > cols)
-            { error = $"Start Column must be between 1 and {cols}."; return false; }
-
-            if (!uint.TryParse(FinishRowEntry.Text?.Trim(), out uint finishRow1) || finishRow1 < 1 || finishRow1 > rows)
-            { error = $"Finish Row must be between 1 and {rows}."; return false; }
-
-            if (!uint.TryParse(FinishColEntry.Text?.Trim(), out uint finishCol1) || finishCol1 < 1 || finishCol1 > cols)
-            { error = $"Finish Column must be between 1 and {cols}."; return false; }
-
-            // Convert to 0-based for the API
-            uint startRow = startRow1 - 1;
-            uint startCol = startCol1 - 1;
-            uint finishRow = finishRow1 - 1;
-            uint finishCol = finishCol1 - 1;
-
-            if (startRow == finishRow && startCol == finishCol)
-            { error = "Start and Finish cells must be different."; return false; }
-
-            if (!uint.TryParse(MinSolutionLengthEntry.Text?.Trim(), out uint minSolutionLength) || minSolutionLength < 1)
-            { error = "Min Solution Length must be a whole number of 1 or more."; return false; }
-
-            error = string.Empty;
             options = new Maze.GenerationOptions
             {
-                RowCount = rows,
-                ColCount = cols,
+                RowCount = parsed!.Rows,
+                ColCount = parsed.Cols,
                 Seed = 0, // placeholder — caller assigns the final seed
-                StartRow = startRow,
-                StartCol = startCol,
-                FinishRow = finishRow,
-                FinishCol = finishCol,
-                MinSpineLength = minSolutionLength,
+                StartRow = parsed.StartRow,
+                StartCol = parsed.StartCol,
+                FinishRow = parsed.FinishRow,
+                FinishCol = parsed.FinishCol,
+                MinSpineLength = parsed.MinSolutionLength,
             };
             return true;
         }

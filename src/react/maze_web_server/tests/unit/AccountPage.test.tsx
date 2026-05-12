@@ -6,7 +6,8 @@ import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
 import { mockLoginResponse, mockProfile } from '../../src/mocks/handlers'
 import { AuthProvider } from '../../src/context/AuthProvider'
-import { AccountModal } from '../../src/components/AccountModal'
+import { ThemeProvider } from '../../src/context/ThemeProvider'
+import { AccountPage } from '../../src/pages/AccountPage'
 
 const mockNavigate = vi.fn()
 const mockLogout = vi.fn()
@@ -30,12 +31,14 @@ vi.mock('../../src/context/AuthContext', async () => {
   }
 })
 
-function renderModal(onClose = vi.fn()) {
+function renderPage() {
   return render(
     <MemoryRouter>
-      <AuthProvider>
-        <AccountModal onClose={onClose} />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AccountPage />
+        </AuthProvider>
+      </ThemeProvider>
     </MemoryRouter>
   )
 }
@@ -51,26 +54,26 @@ beforeEach(() => {
 })
 afterEach(() => sessionStorage.clear())
 
-describe('AccountModal', () => {
+describe('AccountPage', () => {
   it('shows loading state initially', () => {
-    renderModal()
+    renderPage()
     expect(screen.getByText(/loading profile/i)).toBeInTheDocument()
   })
 
   it('pre-populates fields from profile', async () => {
-    renderModal()
+    renderPage()
     await waitFor(() => expect(screen.getByDisplayValue(mockProfile.username)).toBeInTheDocument())
     expect(screen.getByDisplayValue(mockProfile.full_name)).toBeInTheDocument()
   })
 
   it('does not show Administrator badge for regular users', async () => {
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     expect(screen.queryByText(/administrator/i)).not.toBeInTheDocument()
   })
 
   it('renders the Email Addresses panel after the profile loads', async () => {
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     expect(await screen.findByRole('heading', { name: /email addresses/i })).toBeInTheDocument()
   })
@@ -79,18 +82,18 @@ describe('AccountModal', () => {
     server.use(
       http.get('/api/v1/users/me', () => HttpResponse.json({ ...mockProfile, is_admin: true })),
     )
-    renderModal()
+    renderPage()
     await waitFor(() => expect(screen.getByText(/administrator/i)).toBeInTheDocument())
   })
 
   it('Save Profile button is disabled when no fields have changed', async () => {
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     expect(screen.getByRole('button', { name: /save profile/i })).toBeDisabled()
   })
 
   it('Save Profile button is enabled when a field changes', async () => {
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     await userEvent.clear(screen.getByDisplayValue(mockProfile.username))
     await userEvent.type(screen.getByLabelText(/username/i), 'newusername')
@@ -98,7 +101,7 @@ describe('AccountModal', () => {
   })
 
   it('Save Profile calls PUT and updates fields on success', async () => {
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     await userEvent.clear(screen.getByDisplayValue(mockProfile.username))
     await userEvent.type(screen.getByLabelText(/username/i), 'updateduser')
@@ -110,7 +113,7 @@ describe('AccountModal', () => {
     server.use(
       http.put('/api/v1/users/me/profile', () => HttpResponse.json(null, { status: 409 })),
     )
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     await userEvent.clear(screen.getByDisplayValue(mockProfile.username))
     await userEvent.type(screen.getByLabelText(/username/i), 'takenuser')
@@ -122,7 +125,7 @@ describe('AccountModal', () => {
     server.use(
       http.put('/api/v1/users/me/profile', () => HttpResponse.text('Username format is invalid', { status: 400 })),
     )
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     await userEvent.clear(screen.getByDisplayValue(mockProfile.username))
     await userEvent.type(screen.getByLabelText(/username/i), 'newname')
@@ -131,7 +134,7 @@ describe('AccountModal', () => {
   })
 
   it('opens ChangePasswordModal when Change Password is clicked', async () => {
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     await userEvent.click(screen.getByRole('button', { name: /change password/i }))
     expect(screen.getByRole('dialog', { name: /change password/i })).toBeInTheDocument()
@@ -141,7 +144,7 @@ describe('AccountModal', () => {
     server.use(
       http.get('/api/v1/users/me', () => HttpResponse.json({ ...mockProfile, has_password: false })),
     )
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     const trigger = screen.getByRole('button', { name: /^set password$/i })
     expect(trigger).toBeInTheDocument()
@@ -155,7 +158,7 @@ describe('AccountModal', () => {
       http.get('/api/v1/users/me', () => HttpResponse.json({ ...mockProfile, has_password: false })),
       http.put('/api/v1/users/me/password', () => new HttpResponse(null, { status: 204 })),
     )
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     expect(screen.getByRole('button', { name: /^set password$/i })).toBeInTheDocument()
 
@@ -165,7 +168,7 @@ describe('AccountModal', () => {
     await userEvent.type(screen.getByLabelText(/confirm new password/i), 'NewPass1!')
     await userEvent.click(screen.getByRole('button', { name: /^set password$/i }))
 
-    // After the popup closes, the trigger should read Change Password —
+    // After the password modal closes, the trigger should read Change Password —
     // the parent flipped its local has_password optimistically on success.
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /^change password$/i })).toBeInTheDocument()
@@ -174,14 +177,14 @@ describe('AccountModal', () => {
   })
 
   it('shows delete confirmation step when Delete Account is clicked', async () => {
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     await userEvent.click(screen.getByRole('button', { name: /delete account/i }))
     expect(screen.getByText(/cannot be undone/i)).toBeInTheDocument()
   })
 
   it('returns to normal state when Cancel is clicked in delete confirmation', async () => {
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     await userEvent.click(screen.getByRole('button', { name: /delete account/i }))
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
@@ -189,18 +192,10 @@ describe('AccountModal', () => {
   })
 
   it('calls DELETE and navigates to /login on confirm delete', async () => {
-    renderModal()
+    renderPage()
     await waitFor(() => screen.getByDisplayValue(mockProfile.username))
     await userEvent.click(screen.getByRole('button', { name: /delete account/i }))
     await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/login', { replace: true }))
-  })
-
-  it('calls onClose when Close button is clicked', async () => {
-    const onClose = vi.fn()
-    renderModal(onClose)
-    await waitFor(() => screen.getByDisplayValue(mockProfile.username))
-    await userEvent.click(screen.getByRole('button', { name: /close/i }))
-    expect(onClose).toHaveBeenCalledOnce()
   })
 })

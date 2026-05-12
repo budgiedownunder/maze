@@ -123,7 +123,7 @@ test.describe('MazeGamePage', () => {
       body: '<html><body>stub</body></html>',
     }))
     await page.goto('/mazes')
-    await page.getByRole('button', { name: /play in 3d/i }).first().click()
+    await page.getByRole('button', { name: 'Play in 3D Alpha', exact: true }).click()
     await page.waitForURL(/\/game\/\?id=/)
   })
 })

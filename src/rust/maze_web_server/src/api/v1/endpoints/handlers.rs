@@ -229,6 +229,13 @@ fn get_maze_id_mismatch_error(url_id: &str, maze_id: &str) -> Error {
     ErrorBadRequest(format!("URL ID '{url_id}' and body maze ID '{maze_id}' do not match"))
 }
 
+fn get_maze_too_many_cells_error(rows: usize, cols: usize, max: usize) -> Error {
+    ErrorUnprocessableEntity(format!(
+        "Maze is too large: {rows}×{cols} = {n} cells exceeds the {max}-cell limit",
+        n = rows.saturating_mul(cols)
+    ))
+}
+
 pub (crate) fn get_maze_solve_error_string(err: &MazeError) -> String {
     format!("The maze could not be solved: {err}")
 }
@@ -314,8 +321,11 @@ impl UserItem {
 // Handler:  get_features()
 // **************************************************************************************************
 /// Response body for `GET /api/v1/features`. Also accepted as the request body
-/// for `PUT /api/v1/admin/features`; only `allow_signup` is mutable from there
-/// and `oauth_providers` is sourced from the live connector at response time.
+/// for `PUT /api/v1/admin/features`; only `allow_signup` is mutable from there.
+/// `oauth_providers` is sourced from the live connector, `email_enabled` from
+/// `comms.enabled`, and `max_maze_cells` from the configured store's
+/// `MazeStore::max_maze_cells()` at response time — all three are read-only
+/// on the admin update endpoint.
 #[derive(Serialize, Deserialize, ToSchema, Debug, Clone, Default)]
 pub struct AppFeaturesResponse {
     /// Whether new users can self-register via the signup endpoint
@@ -325,15 +335,32 @@ pub struct AppFeaturesResponse {
     /// the admin update endpoint.
     #[serde(default)]
     pub oauth_providers: Vec<OAuthProviderPublic>,
+    /// Whether the server is configured to send transactional email
+    /// (verification, password reset, etc.). Derived from `comms.enabled`;
+    /// read-only on the admin update endpoint. When `false`, clients should
+    /// hide email-dependent UI surfaces (verification banners, password reset
+    /// link) and the server itself creates new email rows already verified to
+    /// keep the user account workable in DEV environments without comms set
+    /// up.
+    #[serde(default)]
+    pub email_enabled: bool,
+    /// Maximum number of cells (`rows × cols`) the configured store will
+    /// accept on a save. `None` means the store imposes no cap.
+    #[serde(default)]
+    pub max_maze_cells: Option<u32>,
 }
 
 fn build_features_response(
     allow_signup: bool,
+    email_enabled: bool,
+    max_maze_cells: Option<u32>,
     connector: &dyn OAuthConnector,
 ) -> AppFeaturesResponse {
     AppFeaturesResponse {
         allow_signup,
         oauth_providers: connector.enabled_providers(),
+        email_enabled,
+        max_maze_cells,
     }
 }
 
@@ -352,12 +379,20 @@ fn build_features_response(
 pub async fn get_features(
     features: web::Data<SharedFeatures>,
     connector: web::Data<crate::oauth::SharedOAuthConnector>,
+    config: web::Data<AppConfig>,
+    store: web::Data<SharedStore>,
 ) -> Result<HttpResponse, Error> {
+    let max_maze_cells = get_store_read_lock(&store)
+        .await
+        .max_maze_cells()
+        .and_then(|n| u32::try_from(n).ok());
     let features_lock = features.read().map_err(|_| {
         ErrorInternalServerError("Failed to acquire features read lock")
     })?;
     Ok(HttpResponse::Ok().json(build_features_response(
         features_lock.allow_signup,
+        config.comms.enabled,
+        max_maze_cells,
         connector.as_ref().as_ref(),
     )))
 }
@@ -406,11 +441,17 @@ pub async fn update_admin_features(
     features: web::Data<SharedFeatures>,
     config: web::Data<AppConfig>,
     connector: web::Data<crate::oauth::SharedOAuthConnector>,
+    store: web::Data<SharedStore>,
 ) -> Result<HttpResponse, Error> {
     get_authorized_user(&req, true)?;
 
     let new_features = body.into_inner();
     update_features_in_config(&config.config_path, &new_features)?;
+
+    let max_maze_cells = get_store_read_lock(&store)
+        .await
+        .max_maze_cells()
+        .and_then(|n| u32::try_from(n).ok());
 
     let mut features_lock = features.write().map_err(|_| {
         ErrorInternalServerError("Failed to acquire features write lock")
@@ -419,6 +460,8 @@ pub async fn update_admin_features(
 
     Ok(HttpResponse::Ok().json(build_features_response(
         features_lock.allow_signup,
+        config.comms.enabled,
+        max_maze_cells,
         connector.as_ref().as_ref(),
     )))
 }
@@ -463,6 +506,8 @@ impl SignupRequest {
                 logins: vec![],
                 oauth_identities: vec![],
                 deleted_at: None,
+                created_at: chrono::Utc::now(),
+                last_sign_in_at: None,
             }
         )
     }
@@ -515,7 +560,15 @@ pub async fn signup(
     }
 
     let signup_req_data: SignupRequest = signup_req.into_inner();
+    let require_email_verification = config.comms.require_email_verification();
     let mut store_user = signup_req_data.into_user(&auth_service)?;
+    if !require_email_verification {
+        // Comms is disabled — the user has no path to verify the address, so
+        // mark the primary verified at creation. Keeps the account workable
+        // (e.g. promote secondary emails, password reset paths) in DEV.
+        store_user.emails =
+            vec![data_model::UserEmail::new_primary_verified(&signup_req_data.email)];
+    }
     let base_username = generate_username_from_email(&signup_req_data.email);
 
     let create_outcome = {
@@ -547,28 +600,32 @@ pub async fn signup(
     // Issue + dispatch the verification token. A failure here doesn't
     // unwind the signup — the user is created either way and can
     // request a fresh verification email via /email-verifications/request.
-    match crate::api::v1::endpoints::email_verification::issue_verification_token(
-        &store,
-        store_user.id,
-        &signup_req_data.email,
-    )
-    .await
-    {
-        Ok(token) => {
-            crate::api::v1::endpoints::email_verification::dispatch_verification_email(
-                store.get_ref().clone(),
-                comms.clone().into_inner(),
-                store_user.clone(),
-                &signup_req_data.email,
-                &config.comms.public_base_url,
-                token.id,
-            )
-            .await;
+    // Skipped entirely when comms is disabled, since the primary email was
+    // marked verified at creation above and there is nothing to dispatch to.
+    if require_email_verification {
+        match crate::api::v1::endpoints::email_verification::issue_verification_token(
+            &store,
+            store_user.id,
+            &signup_req_data.email,
+        )
+        .await
+        {
+            Ok(token) => {
+                crate::api::v1::endpoints::email_verification::dispatch_verification_email(
+                    store.get_ref().clone(),
+                    comms.clone().into_inner(),
+                    store_user.clone(),
+                    &signup_req_data.email,
+                    &config.comms.public_base_url,
+                    token.id,
+                )
+                .await;
+            }
+            Err(err) => log::warn!(
+                "signup: verification token issue failed for user {}: {err}",
+                store_user.id
+            ),
         }
-        Err(err) => log::warn!(
-            "signup: verification token issue failed for user {}: {err}",
-            store_user.id
-        ),
     }
 
     Ok(HttpResponse::Created()
@@ -639,7 +696,12 @@ fn oauth_error_to_actix(err: OAuthError) -> Error {
     }
 }
 
-fn web_callback_url(token_id: Uuid, expires_at: DateTime<Utc>, is_new_user: bool) -> String {
+fn web_callback_url(
+    token_id: Uuid,
+    expires_at: DateTime<Utc>,
+    is_new_user: bool,
+    is_first_sign_in: bool,
+) -> String {
     let mut url = format!(
         "/oauth/callback#token={}&expires_at={}",
         token_id,
@@ -647,6 +709,9 @@ fn web_callback_url(token_id: Uuid, expires_at: DateTime<Utc>, is_new_user: bool
     );
     if is_new_user {
         url.push_str("&new_user=true");
+    }
+    if is_first_sign_in {
+        url.push_str("&first_sign_in=true");
     }
     url
 }
@@ -657,6 +722,7 @@ fn mobile_callback_url(
     expires_at: DateTime<Utc>,
     client_state: Option<&str>,
     is_new_user: bool,
+    is_first_sign_in: bool,
 ) -> String {
     // Params live in the URL FRAGMENT (`#token=...&...`) rather than the query
     // string. The mobile final response is a 200 OK HTML bridge page (see
@@ -688,6 +754,9 @@ fn mobile_callback_url(
     }
     if is_new_user {
         url.push_str("&new_user=true");
+    }
+    if is_first_sign_in {
+        url.push_str("&first_sign_in=true");
     }
     url
 }
@@ -988,6 +1057,24 @@ pub async fn oauth_callback(
                 &mobile_error_url(&scheme, "missing_email", persisted.client_state.as_deref()),
             ));
         }
+        Err(account::ResolveError::Store(StoreError::UserEmailExists())) => {
+            // Specific case: branch 3 (create new user) hit a unique-email
+            // collision — typically because a credentials user already
+            // owns this email but in an unverified state, so OAuth resolve
+            // refused to auto-link to them (squat protection) and then
+            // refused to create a duplicate. Emit a dedicated reason code
+            // so clients can show "an account already exists with this
+            // email" instead of the generic store-error message.
+            log::warn!(
+                "oauth resolve email collision: an existing account already owns the address"
+            );
+            return Ok(redirect_with_clear(
+                persisted.origin,
+                &scheme,
+                &web_error_url("email_collision"),
+                &mobile_error_url(&scheme, "email_collision", persisted.client_state.as_deref()),
+            ));
+        }
         Err(account::ResolveError::Store(e)) => {
             log::error!("oauth resolve store error: {e}");
             return Ok(redirect_with_clear(
@@ -1003,6 +1090,9 @@ pub async fn oauth_callback(
         account::ResolveOutcome::SignedIn(u) => (u, false),
         account::ResolveOutcome::Created(u) => (u, true),
     };
+    // Capture is_first_sign_in before `create_login` because the latter flips
+    // `last_sign_in_at` to `Some(now)`
+    let is_first_sign_in = user.is_first_sign_in();
     let new_login = user.create_login(
         config.security.login_expiry_hours,
         get_caller_ip_address(&req),
@@ -1016,13 +1106,14 @@ pub async fn oauth_callback(
 
     let token_id = new_login.id;
     let expires_at = new_login.expires_at;
-    let web_url = web_callback_url(token_id, expires_at, is_new_user);
+    let web_url = web_callback_url(token_id, expires_at, is_new_user, is_first_sign_in);
     let mobile_url = mobile_callback_url(
         &scheme,
         token_id,
         expires_at,
         persisted.client_state.as_deref(),
         is_new_user,
+        is_first_sign_in,
     );
     Ok(oauth_callback_response(persisted.origin, &web_url, &mobile_url))
 }
@@ -1303,6 +1394,10 @@ pub struct LoginResponse {
     #[schema(format = "date-time", example = "2025-04-01T12:00:00Z")]
     /// Expiry timestamp of the login token
     pub login_token_expires_at: DateTime<Utc>,
+
+    /// First ever sign in?
+    #[schema(example = false)]
+    pub is_first_sign_in: bool,
 }
 #[utoipa::path(
     summary = "Login",
@@ -1326,6 +1421,9 @@ pub async fn login(
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let mut user = verify_user_credentials(&store, &auth_service, &login_req.email, &login_req.password).await?;
+    // Captured before `create_login` because the latter flips
+    // `last_sign_in_at` to `Some(now)`.
+    let is_first_sign_in = user.is_first_sign_in();
     let login_expiry_hours = config.security.login_expiry_hours;
     let login = user.create_login(login_expiry_hours, get_caller_ip_address(&req), get_caller_device_info(&req));
     let store_lock = get_store_write_lock(&store).await;
@@ -1335,8 +1433,9 @@ pub async fn login(
 
     Ok(HttpResponse::Ok().json(LoginResponse {
         login_token_id: login.id,
-        login_token_expires_at: login.expires_at, 
-    }))           
+        login_token_expires_at: login.expires_at,
+        is_first_sign_in,
+    }))
 }
 // **************************************************************************************************
 // Endpoint: GET /api/v1/logout
@@ -1504,6 +1603,8 @@ impl CreateUserRequest {
                 logins: vec![],
                 oauth_identities: vec![],
                 deleted_at: None,
+                created_at: chrono::Utc::now(),
+                last_sign_in_at: None,
             }
         )
     }
@@ -1808,8 +1909,10 @@ pub async fn create_maze(
         Err(err) => {
             match err {
                 StoreError::MazeIdExists(id) => Err(get_maze_exists_error(&id)),
+                StoreError::MazeHasTooManyCells { rows, cols, max } =>
+                    Err(get_maze_too_many_cells_error(rows, cols, max)),
                 _ => Err(get_maze_create_internal_error(&err))
-            }    
+            }
         }
     }
 }
@@ -1902,8 +2005,10 @@ pub async fn update_maze(
         Err(err) => {
             match err {
                StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
+               StoreError::MazeHasTooManyCells { rows, cols, max } =>
+                    Err(get_maze_too_many_cells_error(rows, cols, max)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
-            }    
+            }
         }
     }
 }
@@ -2059,10 +2164,21 @@ pub async fn solve_maze(
 #[post("/mazes/generate")]
 pub async fn generate_maze(
     options: web::Json<GeneratorOptions>,
+    store: web::Data<SharedStore>,
     req: HttpRequest
 ) -> Result<HttpResponse, Error> {
     let _ = get_authorized_user(&req, false)?;
-    let generator = Generator { options: options.into_inner() };
+    let options = options.into_inner();
+
+    if let Some(max) = get_store_read_lock(&store).await.max_maze_cells() {
+        let rows = options.row_count;
+        let cols = options.col_count;
+        if rows.saturating_mul(cols) > max {
+            return Err(get_maze_too_many_cells_error(rows, cols, max));
+        }
+    }
+
+    let generator = Generator { options };
     match generator.generate() {
         Ok(maze) => Ok(HttpResponse::Ok().json(maze)),
         Err(err) => Err(get_maze_generate_error(&err))
