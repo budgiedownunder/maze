@@ -7,6 +7,10 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [package.metadata.wasm-pack.profile.release]
+# wasm-pack's bundled wasm-opt crashes on the default-release WASM
+# (binaryen Precompute internal error). Run wasm-opt manually as a
+# separate post-build step for the size-optimised build only — see
+# this crate's README.
 wasm-opt = false
 
 [dependencies]

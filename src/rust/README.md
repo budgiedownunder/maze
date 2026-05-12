@@ -34,9 +34,12 @@ and then:
 ```
 cd src/rust
 cargo install wasm-pack
+cargo install wasm-opt
 cd maze_wasm/tests/js
 npm install
 ```
+
+`wasm-opt` is required for the size-optimised build of [`maze_game_bevy_wasm`](./maze_game_bevy_wasm/README.md#size-optimised-build) 
 
 ### Build
 To build all project crates and JavaScript APIs:

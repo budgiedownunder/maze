@@ -6,12 +6,62 @@ The `maze_game_bevy_wasm` crate is a thin `cdylib` wrapper around [`maze_game_be
 
 ## Getting Started
 
+### Setup
+To setup the build and test environment, run the following from the `maze_game_bevy_wasm` directory:
+
+```
+cargo install wasm-pack
+cargo install wasm-opt
+```
+
 ### Build
 
 ```
 cd src/rust/maze_game_bevy_wasm
 wasm-pack build --target web --no-typescript --out-dir ../../react/maze_web_server/public/game
 ```
+
+### Size-optimised build
+
+For a smaller WASM (≈19 MiB instead of ≈50 MiB), build under a size-tuned cargo profile and then post-process with `wasm-opt`. The `--config` flags applied to the cargo build live entirely on the command line — they do **not** affect any other `cargo build --release` in the workspace, so the server and other crates remain fast to compile.
+
+**Prerequisite:** `wasm-opt` on your `PATH` — installed via the [workspace setup steps](../README.md#setup). (We don't let `wasm-pack` run its bundled `wasm-opt` automatically because that binary crashes on the default-release WASM with a binaryen Precompute internal error; running `wasm-opt` ourselves after the size-tuned build sidesteps the bug)
+
+Run the following from the `maze_game_bevy_wasm` directory:
+
+**Bash:**
+
+```bash
+wasm-pack build --target web --no-typescript --out-dir ../../react/maze_web_server/public/game -- \
+  --config 'profile.release.lto="fat"' \
+  --config 'profile.release.codegen-units=1' \
+  --config 'profile.release.package.maze_game_bevy.opt-level="z"' \
+  --config 'profile.release.package.maze_game_bevy.strip="symbols"' \
+  --config 'profile.release.package.maze_game_bevy_wasm.opt-level="z"' \
+  --config 'profile.release.package.maze_game_bevy_wasm.strip="symbols"'
+
+wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int \
+  ../../react/maze_web_server/public/game/maze_game_bevy_wasm_bg.wasm \
+  -o ../../react/maze_web_server/public/game/maze_game_bevy_wasm_bg.wasm
+```
+
+**PowerShell:**
+
+```powershell
+wasm-pack build --target web --no-typescript --out-dir ../../react/maze_web_server/public/game -- `
+  --config 'profile.release.lto="fat"' `
+  --config 'profile.release.codegen-units=1' `
+  --config 'profile.release.package.maze_game_bevy.opt-level="z"' `
+  --config 'profile.release.package.maze_game_bevy.strip="symbols"' `
+  --config 'profile.release.package.maze_game_bevy_wasm.opt-level="z"' `
+  --config 'profile.release.package.maze_game_bevy_wasm.strip="symbols"'
+
+wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int `
+  ../../react/maze_web_server/public/game/maze_game_bevy_wasm_bg.wasm `
+  -o ../../react/maze_web_server/public/game/maze_game_bevy_wasm_bg.wasm
+```
+
+Trade-off: this size-optimised pipeline takes ≈5× longer (≈7 minutes) than the default build (≈1–2 minutes), but the smaller binary greatly reduces download time and improves game start-up experience.
 
 ### Testing
 
