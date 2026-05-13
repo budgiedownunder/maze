@@ -212,7 +212,7 @@ fn setup_title(mut commands: Commands) {
     commands.spawn((Camera2d, TitleEntity));
     // Shadow layer — offset down-right; font size updated reactively by title_resize_system
     commands.spawn((
-        Text2d::new("MAZE GAME"),
+        Text2d::new("MAZE 3D"),
         TextFont { font_size: 96.0, ..default() },
         TextColor(Color::srgb(0.25, 0.15, 0.0)),
         Transform::from_translation(Vec3::new(4.0, -4.0, -0.1)),
@@ -221,7 +221,7 @@ fn setup_title(mut commands: Commands) {
     ));
     // Main gold layer
     commands.spawn((
-        Text2d::new("MAZE GAME"),
+        Text2d::new("MAZE 3D"),
         TextFont { font_size: 96.0, ..default() },
         TextColor(Color::srgb(1.0, 0.75, 0.1)),
         TitleEntity,

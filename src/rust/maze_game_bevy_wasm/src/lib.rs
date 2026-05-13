@@ -5,6 +5,7 @@ fn make_app() -> App {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
         primary_window: Some(Window {
+            title: "Maze 3D".into(),
             canvas: Some("#bevy-canvas".into()),
             fit_canvas_to_parent: true,
             ..default()
