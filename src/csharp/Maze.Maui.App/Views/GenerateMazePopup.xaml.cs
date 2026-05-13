@@ -5,6 +5,9 @@ namespace Maze.Maui.App.Views
     using CommunityToolkit.Maui.Views;
     using Maze.Api;
     using Maze.Maui.App.Utils;
+#if WINDOWS
+    using System.Runtime.InteropServices;
+#endif
 
     /// <summary>
     /// A popup that prompts the user for maze generation options.
@@ -82,7 +85,47 @@ namespace Maze.Maui.App.Views
                 ErrorLabel.Text = $"Generation failed: {generationError}";
                 ErrorLabel.IsVisible = true;
             }
+
+            // Land focus on the first edit field. Deferred to the dispatcher so
+            // the native handlers are attached by the time Focus() runs.
+            Opened += (s, e) => Dispatcher.Dispatch(() => RowsEntry.Focus());
+
+#if WINDOWS
+            // Trap Tab / Shift+Tab so focus cycles inside the popup. CT.Maui v13
+            // hosts this Popup as a Shell-navigated PopupPage rather than a
+            // focus-trapping native dialog, so without this Tab leaks into the
+            // toolbar / page underneath.
+            Loaded += OnLoadedWindows;
+#endif
         }
+
+#if WINDOWS
+        private void OnLoadedWindows(object? sender, EventArgs e)
+        {
+            if (Handler?.PlatformView is Microsoft.UI.Xaml.UIElement native)
+                native.PreviewKeyDown += OnNativePreviewKeyDown;
+        }
+
+        private void OnNativePreviewKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            if (e.Key != Windows.System.VirtualKey.Tab) return;
+            bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            if (!shift && GenerateButton.IsFocused)
+            {
+                RowsEntry.Focus();
+                e.Handled = true;
+            }
+            else if (shift && RowsEntry.IsFocused)
+            {
+                GenerateButton.Focus();
+                e.Handled = true;
+            }
+        }
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+        private const int VK_SHIFT = 0x10;
+#endif
 
         /// <summary>
         /// Handles the Generate button click. Validates inputs and closes the popup with the

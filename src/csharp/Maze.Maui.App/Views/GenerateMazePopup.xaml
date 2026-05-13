@@ -54,10 +54,10 @@
 
             <!-- Buttons -->
             <Grid ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,4,0,0">
-                <Button Grid.Column="0" Text="Cancel" Clicked="OnCancelClicked"
+                <Button Grid.Column="0" x:Name="CancelButton" Text="Cancel" Clicked="OnCancelClicked"
                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                         TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
-                <Button Grid.Column="1" Text="Generate" Clicked="OnGenerateClicked"/>
+                <Button Grid.Column="1" x:Name="GenerateButton" Text="Generate" Clicked="OnGenerateClicked"/>
             </Grid>
 
         </VerticalStackLayout>

@@ -191,7 +191,8 @@ namespace Maze.Maui.App.ViewModels
                 _accountViewModel.IsWelcomeMode = result.IsFirstSignIn;
                 await _navigationService.GoToRootAsync("//MainPage");
                 if (result.IsFirstSignIn)
-                    await _navigationService.GoToAsync(nameof(AccountPage));
+                    await _navigationService.GoToAsync(nameof(AccountPage),
+                        new Dictionary<string, object> { { "IsWelcome", true } });
             }
             catch (OAuthFlowFailedException ex)
             {
