@@ -6,6 +6,17 @@
     xmlns:views="clr-namespace:Maze.Maui.App.Views"
     FlyoutBehavior="Flyout">
 
+    <Shell.Resources>
+        <!-- Per-item override for visual-only separator rows in the flyout.
+             Applied via Shell.MenuItemTemplate on the separator MenuItems
+             so normal MenuItems keep Shell's default rendering. -->
+        <DataTemplate x:Key="FlyoutSeparatorTemplate">
+            <BoxView HeightRequest="1"
+                     Margin="20,8"
+                     Color="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" />
+        </DataTemplate>
+    </Shell.Resources>
+
     <!-- Unauthenticated: Login page, tab bar, nav bar, and flyout all hidden -->
     <TabBar x:Name="LoginTabBar" Shell.FlyoutBehavior="Disabled">
         <ShellContent
@@ -24,16 +35,28 @@
             ContentTemplate="{DataTemplate views:HomePage}" />
     </TabBar>
 
-    <!-- Flyout menu items -->
+    <!-- Flyout menu items:
+         Navigation group, then account group, then about — separators
+         between groups. -->
+    <MenuItem Text="Home"
+              Clicked="OnHomeMenuItemClicked" />
+    <MenuItem Text="Play 3D"
+              IconImageSource="{OnPlatform 'icon_play_3d.png', iOS='icon_play_3d_ios.png', MacCatalyst='icon_play_3d_ios.png'}"
+              Clicked="OnPlay3dMenuItemClicked" />
+    <MenuItem Text="Design &amp; Play"
+              IconImageSource="{OnPlatform 'icon_mazes.png', iOS='icon_mazes_ios.png', MacCatalyst='icon_mazes_ios.png'}"
+              Clicked="OnDesignAndPlayMenuItemClicked" />
+    <MenuItem IsEnabled="False"
+              Shell.MenuItemTemplate="{StaticResource FlyoutSeparatorTemplate}" />
     <MenuItem Text="My Account"
               IconImageSource="{OnPlatform 'icon_account.png', iOS='icon_account_ios.png', MacCatalyst='icon_account_ios.png'}"
               Clicked="OnAccountMenuItemClicked" />
     <MenuItem Text="Sign Out"
               Clicked="OnSignOutMenuItemClicked" />
+    <MenuItem IsEnabled="False"
+              Shell.MenuItemTemplate="{StaticResource FlyoutSeparatorTemplate}" />
     <MenuItem Text="About"
               IconImageSource="{OnPlatform 'icon_about.png', iOS='icon_about_ios.png', MacCatalyst='icon_about_ios.png'}"
               Clicked="OnAboutMenuItemClicked" />
-    <MenuItem Text="3D Demo"
-              Clicked="On3dDemoMenuItemClicked" />
 
 </Shell>

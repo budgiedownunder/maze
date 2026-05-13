@@ -40,6 +40,35 @@ namespace Maze.Maui.App
         }
 
         /// <summary>
+        /// Navigates to the Home page (the root authenticated page).
+        /// </summary>
+        private async void OnHomeMenuItemClicked(object sender, EventArgs e)
+        {
+            FlyoutIsPresented = false;
+            await GoToAsync("//MainPage");
+        }
+
+        /// <summary>
+        /// Launches a random 3D game (Bevy via WebView) — same entry point
+        /// as the Play 3D tile on the Home page. No MazeItem parameter,
+        /// which Play3dGamePage treats as random-game mode.
+        /// </summary>
+        private async void OnPlay3dMenuItemClicked(object sender, EventArgs e)
+        {
+            FlyoutIsPresented = false;
+            await GoToAsync(nameof(Play3dGamePage));
+        }
+
+        /// <summary>
+        /// Navigates to the maze list (Design and Play).
+        /// </summary>
+        private async void OnDesignAndPlayMenuItemClicked(object sender, EventArgs e)
+        {
+            FlyoutIsPresented = false;
+            await GoToAsync(nameof(MazesPage));
+        }
+
+        /// <summary>
         /// Navigates to the Account page.
         /// </summary>
         private async void OnAccountMenuItemClicked(object sender, EventArgs e)
@@ -99,15 +128,6 @@ namespace Maze.Maui.App
         {
             FlyoutIsPresented = false;
             await CurrentPage.ShowPopupAsync(new AboutPopup());
-        }
-
-        /// <summary>
-        /// Navigates to the 3D Bevy game page.
-        /// </summary>
-        private async void On3dDemoMenuItemClicked(object sender, EventArgs e)
-        {
-            FlyoutIsPresented = false;
-            await GoToAsync(nameof(Play3dGamePage));
         }
     }
 }
