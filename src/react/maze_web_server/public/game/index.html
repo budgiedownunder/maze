@@ -133,6 +133,9 @@
       if (!token) { location.replace('/'); }
     })();
   </script>
+  <script>
+    window.addEventListener('maze-game-result', e => console.log('[game-result]', e.detail));
+  </script>
   <script type="module">
     import { start, start_with_maze, default as init } from './maze_game_bevy_wasm.js';
 

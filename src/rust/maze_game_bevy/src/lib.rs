@@ -271,6 +271,54 @@ struct GameClock {
     last_displayed_secs: i32,
 }
 
+/// Outcome of a 3D-game session, as reported to the JS host on completion.
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GameOutcome {
+    Win,
+    Lose,
+}
+
+/// Extensible result payload dispatched to the JS host as the `detail` of a
+/// `maze-game-result` CustomEvent on `window`. Fixed fields cover the metrics
+/// known up-front (outcome, elapsed time, maze dimensions, optional difficulty);
+/// `extras` is an open map so future per-feature metrics (moves, hint count,
+/// deaths, etc.) can be added without breaking the contract.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameResult {
+    pub outcome: GameOutcome,
+    pub elapsed_ms: u64,
+    pub difficulty: Option<String>,
+    pub rows: u32,
+    pub cols: u32,
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub extras: std::collections::BTreeMap<String, serde_json::Value>,
+}
+
+/// Dispatches a `maze-game-result` CustomEvent on the browser `window` so the
+/// hosting page (React `/game/` wrapper, or the MAUI WebView) can react to the
+/// outcome. Wrapped behind `#[cfg(target_arch = "wasm32")]` so native builds
+/// (cargo run -p maze_game_bevy) compile without any browser dependencies.
+#[cfg(target_arch = "wasm32")]
+fn dispatch_game_result(result: &GameResult) {
+    use wasm_bindgen::JsValue;
+    let Ok(json) = serde_json::to_string(result) else { return; };
+    let Some(window) = web_sys::window() else { return; };
+    let detail = js_sys::JSON::parse(&json).unwrap_or(JsValue::NULL);
+    let init = web_sys::CustomEventInit::new();
+    init.set_detail(&detail);
+    if let Ok(event) = web_sys::CustomEvent::new_with_event_init_dict("maze-game-result", &init) {
+        let _ = window.dispatch_event(&event);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn dispatch_game_result(_result: &GameResult) {
+    // Native builds have no browser host — nothing to do. Kept as an empty
+    // function so call sites can stay platform-agnostic.
+}
+
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     app.insert_resource(PendingMazeJson(maze_json.map(String::from)))
         .init_state::<AppState>()
@@ -841,6 +889,7 @@ fn movement_system(
     time: Res<Time>,
     keys: Option<Res<ButtonInput<KeyCode>>>,
     mut state: ResMut<GameState>,
+    clock: Res<GameClock>,
     mut camera: Query<&mut Transform, With<Camera3d>>,
 ) {
     let dt = time.delta_secs();
@@ -878,6 +927,14 @@ fn movement_system(
                 TextColor(Color::WHITE),
                 Transform::from_xyz(0.0, -36.0, 11.0),
             ));
+            dispatch_game_result(&GameResult {
+                outcome: GameOutcome::Win,
+                elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
+                difficulty: None,
+                rows: state.grid.len() as u32,
+                cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,
+                extras: std::collections::BTreeMap::new(),
+            });
         }
     } else if state.anim.is_some() {
         let pos = state.anim.as_ref().unwrap().current_pos();
@@ -1003,6 +1060,14 @@ fn tick_clock_system(
         TextColor(Color::WHITE),
         Transform::from_xyz(0.0, -36.0, 11.0),
     ));
+    dispatch_game_result(&GameResult {
+        outcome: GameOutcome::Lose,
+        elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
+        difficulty: None,
+        rows: state.grid.len() as u32,
+        cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,
+        extras: std::collections::BTreeMap::new(),
+    });
 }
 
 fn clock_text_system(
