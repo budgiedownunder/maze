@@ -5,7 +5,7 @@ async function login(page: Page) {
   await page.getByLabel('Email').fill('test@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password1!')
   await page.getByRole('button', { name: /sign in/i }).click()
-  await expect(page).toHaveURL(/\/mazes/)
+  await expect(page).toHaveURL(/\/$/)
 }
 
 async function openAccountPage(page: Page) {

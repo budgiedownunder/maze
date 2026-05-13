@@ -580,6 +580,13 @@
   background: var(--surface-hover);
 }
 
+.menu-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 0.25rem 0;
+  list-style: none;
+}
+
 /* ──────────────────────────────────────────────────────────
    Password input (wrapper + toggle button)
 ────────────────────────────────────────────────────────── */

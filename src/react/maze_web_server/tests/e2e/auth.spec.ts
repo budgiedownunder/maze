@@ -5,7 +5,7 @@ async function login(page: Page) {
   await page.getByLabel('Email').fill('test@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password1!')
   await page.getByRole('button', { name: /sign in/i }).click()
-  await expect(page).toHaveURL(/\/mazes/)
+  await expect(page).toHaveURL(/\/$/)
 }
 
 test('navigating to / redirects to /login', async ({ page }) => {
@@ -18,7 +18,7 @@ test('navigating to /mazes without auth redirects to /login', async ({ page }) =
   await expect(page).toHaveURL(/\/login/)
 })
 
-test('successful login navigates to /mazes', async ({ page }) => {
+test('successful login navigates to home', async ({ page }) => {
   await login(page)
 })
 

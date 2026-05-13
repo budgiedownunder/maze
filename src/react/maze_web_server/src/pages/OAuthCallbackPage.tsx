@@ -23,7 +23,7 @@ export function OAuthCallbackPage() {
 
     setAuthFromTokenResponse(parsed.token, parsed.expiresAt)
       .then(() => navigate(
-        parsed.firstSignIn ? '/account' : '/mazes',
+        parsed.firstSignIn ? '/account' : '/',
         { replace: true, state: parsed.firstSignIn ? { welcome: true } : undefined },
       ))
       .catch(() => navigate('/login?error=oauth_session_init_failed', { replace: true }))

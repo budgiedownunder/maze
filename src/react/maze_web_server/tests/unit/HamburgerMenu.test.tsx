@@ -12,8 +12,12 @@ beforeEach(() => {
     issuedAt: new Date().toISOString(),
     expiry: mockLoginResponse.login_token_expires_at,
   }))
+  mockNavigate.mockReset()
 })
-afterEach(() => sessionStorage.clear())
+afterEach(() => {
+  sessionStorage.clear()
+  vi.unstubAllGlobals()
+})
 
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async () => {
@@ -64,11 +68,36 @@ describe('HamburgerMenu', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/account')
   })
 
-  it('navigates to /mazes when Home is clicked', async () => {
+  it('navigates to / when Home is clicked', async () => {
     renderMenu()
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /^home$/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/')
+  })
+
+  it('navigates to /mazes when Design & Play is clicked', async () => {
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /design & play/i }))
     expect(mockNavigate).toHaveBeenCalledWith('/mazes')
+  })
+
+  it('Play 3D sets window.location.href to /game/', async () => {
+    const locationStub = { href: '' }
+    vi.stubGlobal('location', locationStub)
+
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /play 3d/i }))
+
+    expect(locationStub.href).toBe('/game/')
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('renders two separators dividing nav / account / about groups', async () => {
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    expect(screen.getAllByRole('separator')).toHaveLength(2)
   })
 
   it('calls logout and navigates to /login on Sign Out', async () => {

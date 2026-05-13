@@ -50,9 +50,9 @@ export function LoginPage() {
       const result = await login(email, password)
       // Mirror the OAuthCallbackPage routing: first-ever-sign-ins land
       // directly on /account with the welcome-banner state so the user
-      // sees it before anything else; returning users go to /mazes.
+      // sees it before anything else; returning users go to the Home page.
       navigate(
-        result.isFirstSignIn ? '/account' : '/mazes',
+        result.isFirstSignIn ? '/account' : '/',
         { replace: true, state: result.isFirstSignIn ? { welcome: true } : undefined },
       )
     } catch (ex: unknown) {
