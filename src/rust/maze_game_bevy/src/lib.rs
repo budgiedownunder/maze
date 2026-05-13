@@ -30,6 +30,47 @@ const MAP_MARGIN: f32 = 12.0;
 const MAP_RADIUS: i32 = 5;                      // cells visible in each direction from player
 const MAP_VIEW: i32 = MAP_RADIUS * 2 + 1;       // total cells per side (7)
 
+// ---- Colour palette ----
+// Every fixed colour the game uses lives here. Domain-named aliases below
+// (CLOCK_GOLD, CLOCK_RED) point back into the palette so use-sites read
+// semantically without re-declaring the value.
+
+// Shared
+const COLOR_GOLD: Color = Color::srgb(1.0, 0.75, 0.1);                // splash title + countdown HUD
+const COLOR_OVERLAY_BACKDROP: Color = Color::srgba(0.0, 0.0, 0.0, 0.75); // win + lose dark backdrop
+const COLOR_MINIMAP_DARK: Color = Color::srgb(0.05, 0.05, 0.05);      // minimap backdrop + unexplored cells
+
+// Title screen
+const COLOR_SPLASH_SHADOW: Color = Color::srgb(0.25, 0.15, 0.0);
+
+// Win overlay + finish marker
+const COLOR_WIN_GOLD: Color = Color::srgb(1.0, 0.8, 0.1);
+const COLOR_ORB_LIGHT: Color = Color::srgb(1.0, 0.85, 0.2);
+
+// Lose overlay + countdown warning
+const COLOR_LOSE_RED: Color = Color::srgb(0.95, 0.3, 0.25);
+const COLOR_CLOCK_WARN: Color = Color::srgb(0.95, 0.25, 0.2);
+const COLOR_CLOCK_FLASH: Color = Color::srgba(1.0, 0.85, 0.0, 0.6); // alarm-yellow behind red text
+
+// Weather effects
+const COLOR_RAIN: Color = Color::srgba(0.6, 0.75, 1.0, 0.55);
+const COLOR_LIGHTNING_PEAK: Color = Color::srgba(1.0, 1.0, 1.0, 0.7);
+
+// Minimap palette
+const COLOR_MINIMAP_OUTSIDE: Color = Color::srgb(0.0, 0.0, 0.0);
+const COLOR_MINIMAP_WALL: Color = Color::srgb(0.18, 0.18, 0.18);
+const COLOR_MINIMAP_START: Color = Color::srgb(0.0, 0.7, 0.0);
+const COLOR_MINIMAP_FINISH: Color = Color::srgb(0.9, 0.9, 0.9);
+const COLOR_MINIMAP_FLOOR: Color = Color::srgb(0.45, 0.45, 0.45);
+const COLOR_MINIMAP_PLAYER: Color = Color::srgb(1.0, 0.85, 0.0);
+
+// Domain aliases — sugar at the use site for the countdown HUD palette.
+const CLOCK_GOLD: Color = COLOR_GOLD;
+const CLOCK_RED: Color = COLOR_CLOCK_WARN;
+const CLOCK_WARN_SECS: f32 = 30.0;
+const CLOCK_FLASH_SECS: f32 = 15.0;
+const CLOCK_FLASH_HZ: f32 = 1.5;
+
 #[derive(States, Default, Clone, Copy, Eq, PartialEq, Hash, Debug)]
 enum AppState {
     #[default]
@@ -66,6 +107,38 @@ struct WinLeaf {
     vel_y: f32,
     rot: f32,
     rot_speed: f32,
+}
+
+#[derive(Component)]
+struct ClockText;
+
+#[derive(Component)]
+struct ClockBackground;
+
+#[derive(Component)]
+struct LoseOverlay;
+
+#[derive(Component)]
+struct LoseMainText;
+
+#[derive(Component)]
+struct LoseSubText;
+
+#[derive(Component)]
+struct LoseBackground;
+
+#[derive(Component)]
+struct RainDrop {
+    x: f32,
+    y: f32,
+    vel_x: f32,
+    vel_y: f32,
+}
+
+#[derive(Component)]
+struct LightningQuad {
+    remaining: f32,
+    duration: f32,
 }
 
 #[derive(Component)]
@@ -188,6 +261,14 @@ struct GameState {
     anim: Option<Animation>,
     explored: HashSet<(usize, usize)>,
     won: bool,
+    lost: bool,
+}
+
+#[derive(Resource)]
+struct GameClock {
+    remaining_secs: f32,
+    elapsed_secs: f32,
+    last_displayed_secs: i32,
 }
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
@@ -203,6 +284,12 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, movement_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, leaf_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, tick_clock_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, clock_text_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, clock_flash_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, lose_resize_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, rain_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, lightning_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, quit_system);
@@ -214,7 +301,7 @@ fn setup_title(mut commands: Commands) {
     commands.spawn((
         Text2d::new("MAZE 3D"),
         TextFont { font_size: 96.0, ..default() },
-        TextColor(Color::srgb(0.25, 0.15, 0.0)),
+        TextColor(COLOR_SPLASH_SHADOW),
         Transform::from_translation(Vec3::new(4.0, -4.0, -0.1)),
         TitleEntity,
         TitleTextKind::Shadow,
@@ -223,7 +310,7 @@ fn setup_title(mut commands: Commands) {
     commands.spawn((
         Text2d::new("MAZE 3D"),
         TextFont { font_size: 96.0, ..default() },
-        TextColor(Color::srgb(1.0, 0.75, 0.1)),
+        TextColor(COLOR_GOLD),
         TitleEntity,
         TitleTextKind::Gold,
     ));
@@ -326,6 +413,14 @@ fn spawn_world(
         anim: None,
         explored,
         won: false,
+        lost: false,
+    });
+
+    // Hardcoded 60 s for now; Step 5 will source this from the server config.
+    commands.insert_resource(GameClock {
+        remaining_secs: 60.0,
+        elapsed_secs: 0.0,
+        last_displayed_secs: -1,
     });
 
     commands.spawn((
@@ -539,7 +634,7 @@ fn spawn_world(
                     }
                     commands.spawn((
                         PointLight {
-                            color: Color::srgb(1.0, 0.85, 0.2),
+                            color: COLOR_ORB_LIGHT,
                             intensity: 80_000.0,
                             radius: 0.35,
                             shadows_enabled: true,
@@ -583,7 +678,7 @@ fn spawn_world(
     // Dark background
     commands.spawn((
         Sprite {
-            color: Color::srgb(0.05, 0.05, 0.05),
+            color: COLOR_MINIMAP_DARK,
             custom_size: Some(Vec2::splat(map_size + 4.0)),
             ..default()
         },
@@ -597,7 +692,7 @@ fn spawn_world(
             let sy = center_y - dr as f32 * MAP_CELL_PX;
             commands.spawn((
                 Sprite {
-                    color: Color::srgb(0.05, 0.05, 0.05),
+                    color: COLOR_MINIMAP_DARK,
                     custom_size: Some(Vec2::splat(MAP_CELL_PX - 1.0)),
                     ..default()
                 },
@@ -616,7 +711,7 @@ fn spawn_world(
         ))
     });
     let arrow_mat = color_materials.as_mut().map(|m| {
-        m.add(ColorMaterial { color: Color::srgb(1.0, 0.85, 0.0), ..default() })
+        m.add(ColorMaterial { color: COLOR_MINIMAP_PLAYER, ..default() })
     });
     match (arrow_mesh, arrow_mat) {
         (Some(mesh), Some(mat)) => {
@@ -632,6 +727,32 @@ fn spawn_world(
             commands.spawn((Transform::from_xyz(center_x, center_y, 1.0), MinimapPlayer));
         }
     }
+
+    // Countdown text — top-centre HUD. Initial position from the current window;
+    // clock_text_system / clock_flash_system reposition each frame so resizes track.
+    let clock_y = window
+        .single()
+        .map(|w| w.height() / 2.0 - 32.0)
+        .unwrap_or(330.0);
+    // Flashing background sits behind the text. Alpha is driven each frame by
+    // clock_flash_system; starts at the COLOR_CLOCK_FLASH peak and gets clamped to 0
+    // on the first frame because remaining_secs is well above CLOCK_FLASH_SECS.
+    commands.spawn((
+        ClockBackground,
+        Sprite {
+            color: COLOR_CLOCK_FLASH,
+            custom_size: Some(Vec2::new(140.0, 52.0)),
+            ..default()
+        },
+        Transform::from_xyz(0.0, clock_y, 8.9),
+    ));
+    commands.spawn((
+        ClockText,
+        Text2d::new("--:--"),
+        TextFont { font_size: 36.0, ..default() },
+        TextColor(CLOCK_GOLD),
+        Transform::from_xyz(0.0, clock_y, 9.0),
+    ));
 }
 
 fn win_resize_system(
@@ -741,14 +862,14 @@ fn movement_system(
         if !state.won && state.grid[r][c] == 'F' {
             state.won = true;
             commands.spawn((WinOverlay, WinBackground, Sprite {
-                color: Color::srgba(0.0, 0.0, 0.0, 0.75),
+                color: COLOR_OVERLAY_BACKDROP,
                 custom_size: Some(Vec2::new(340.0, 130.0)),
                 ..default()
             }, Transform::from_xyz(0.0, 0.0, 10.0)));
             commands.spawn((WinOverlay, WinMainText,
                 Text2d::new("You Win!"),
                 TextFont { font_size: 72.0, ..default() },
-                TextColor(Color::srgb(1.0, 0.8, 0.1)),
+                TextColor(COLOR_WIN_GOLD),
                 Transform::from_xyz(0.0, 16.0, 11.0),
             ));
             commands.spawn((WinOverlay, WinSubText,
@@ -765,8 +886,8 @@ fn movement_system(
         state.visual_yaw = yaw;
     }
 
-    // Pitch — active even during movement animation, disabled after win
-    if !state.won {
+    // Pitch — active even during movement animation, disabled after win or loss
+    if !state.won && !state.lost {
         if let Some(ref keys) = keys {
             if keys.pressed(KeyCode::KeyQ) {
                 state.visual_pitch = (state.visual_pitch + PITCH_RATE * dt).min(MAX_PITCH_UP);
@@ -777,8 +898,8 @@ fn movement_system(
         }
     }
 
-    // Movement — only when idle and not won
-    if state.anim.is_none() && !state.won {
+    // Movement — only when idle and the game is still in play
+    if state.anim.is_none() && !state.won && !state.lost {
         let Some(keys) = keys else { return; };
         let left = keys.just_pressed(KeyCode::ArrowLeft) || keys.just_pressed(KeyCode::KeyA);
         let right = keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::KeyD);
@@ -836,6 +957,246 @@ fn movement_system(
     }
 }
 
+fn tick_clock_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut clock: ResMut<GameClock>,
+    mut state: ResMut<GameState>,
+) {
+    if state.won || state.lost {
+        return;
+    }
+    let dt = time.delta_secs();
+    clock.elapsed_secs += dt;
+    clock.remaining_secs -= dt;
+    if clock.remaining_secs > 0.0 {
+        return;
+    }
+    clock.remaining_secs = 0.0;
+    state.lost = true;
+
+    // Spawn lose UI — mirrors the win-UI spawn in movement_system. Colours swapped for a
+    // muted red theme so it reads as loss without resorting to skulls or anything morbid.
+    commands.spawn((
+        LoseOverlay,
+        LoseBackground,
+        Sprite {
+            color: COLOR_OVERLAY_BACKDROP,
+            custom_size: Some(Vec2::new(340.0, 130.0)),
+            ..default()
+        },
+        Transform::from_xyz(0.0, 0.0, 10.0),
+    ));
+    commands.spawn((
+        LoseOverlay,
+        LoseMainText,
+        Text2d::new("You Lose!"),
+        TextFont { font_size: 72.0, ..default() },
+        TextColor(COLOR_LOSE_RED),
+        Transform::from_xyz(0.0, 16.0, 11.0),
+    ));
+    commands.spawn((
+        LoseOverlay,
+        LoseSubText,
+        Text2d::new("Time's up"),
+        TextFont { font_size: 24.0, ..default() },
+        TextColor(Color::WHITE),
+        Transform::from_xyz(0.0, -36.0, 11.0),
+    ));
+}
+
+fn clock_text_system(
+    window: Query<&Window>,
+    mut clock: ResMut<GameClock>,
+    mut texts: Query<(&mut Text2d, &mut Transform, &mut TextColor), With<ClockText>>,
+) {
+    // Anchor the HUD to the top edge each frame so window resizes track.
+    let half_h = window.single().map(|w| w.height() / 2.0).unwrap_or(360.0);
+    let target_y = half_h - 32.0;
+
+    // Throttle text content updates to once per whole-second change.
+    let remaining = clock.remaining_secs.max(0.0).ceil() as i32;
+    let text_changed = remaining != clock.last_displayed_secs;
+    if text_changed {
+        clock.last_displayed_secs = remaining;
+    }
+    let mins = remaining / 60;
+    let secs = remaining % 60;
+    let warn = clock.remaining_secs <= CLOCK_WARN_SECS;
+    for (mut text, mut transform, mut colour) in &mut texts {
+        if text_changed {
+            text.0 = format!("{:02}:{:02}", mins, secs);
+            colour.0 = if warn { CLOCK_RED } else { CLOCK_GOLD };
+        }
+        transform.translation.y = target_y;
+    }
+}
+
+fn clock_flash_system(
+    time: Res<Time>,
+    clock: Res<GameClock>,
+    state: Res<GameState>,
+    window: Query<&Window>,
+    mut backgrounds: Query<(&mut Sprite, &mut Transform), With<ClockBackground>>,
+) {
+    let half_h = window.single().map(|w| w.height() / 2.0).unwrap_or(360.0);
+    let target_y = half_h - 32.0;
+
+    // Hide entirely outside the flash window or once the game ends — the win / lose
+    // overlay should own the screen at that point.
+    let pulse_alpha = if state.won
+        || state.lost
+        || clock.remaining_secs > CLOCK_FLASH_SECS
+    {
+        0.0
+    } else {
+        let peak = COLOR_CLOCK_FLASH.alpha();
+        let phase = time.elapsed_secs() * CLOCK_FLASH_HZ * std::f32::consts::TAU;
+        peak * (phase.sin() * 0.5 + 0.5)
+    };
+
+    for (mut sprite, mut transform) in &mut backgrounds {
+        sprite.color = COLOR_CLOCK_FLASH.with_alpha(pulse_alpha);
+        transform.translation.y = target_y;
+    }
+}
+
+fn lose_resize_system(
+    window: Query<&Window>,
+    mut last_width: Local<f32>,
+    mut lose_texts: Query<(&mut TextFont, &mut Transform, Option<&LoseMainText>), With<LoseOverlay>>,
+    mut lose_sprites: Query<&mut Sprite, With<LoseBackground>>,
+) {
+    let width = window.single().map(|w| w.width()).unwrap_or(1280.0);
+    if (width - *last_width).abs() < 0.5 {
+        return;
+    }
+    *last_width = width;
+
+    let scale = (width / 5.5).min(96.0) / 96.0;
+    for (mut font, mut t, is_main) in &mut lose_texts {
+        if is_main.is_some() {
+            font.font_size = 72.0 * scale;
+            t.translation = Vec3::new(0.0, 16.0 * scale, 11.0);
+        } else {
+            font.font_size = (24.0 * scale).max(14.0);
+            t.translation = Vec3::new(0.0, -36.0 * scale, 11.0);
+        }
+    }
+    for mut sprite in &mut lose_sprites {
+        sprite.custom_size = Some(Vec2::new(340.0 * scale, 130.0 * scale));
+    }
+}
+
+fn rain_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    window: Query<&Window>,
+    state: Res<GameState>,
+    mut drops: Query<(Entity, &mut RainDrop, &mut Transform)>,
+    mut rng: Local<u64>,
+    mut timer: Local<f32>,
+) {
+    let Ok(win) = window.single() else { return; };
+    let half_w = win.width() / 2.0;
+    let half_h = win.height() / 2.0;
+    let dt = time.delta_secs();
+
+    for (entity, mut drop, mut transform) in &mut drops {
+        drop.x += drop.vel_x * dt;
+        drop.y += drop.vel_y * dt;
+        transform.translation.x = drop.x;
+        transform.translation.y = drop.y;
+        if drop.y < -(half_h + 20.0) {
+            commands.entity(entity).despawn();
+        }
+    }
+
+    if !state.lost {
+        return;
+    }
+
+    if *rng == 0 {
+        *rng = time.elapsed_secs_f64().to_bits() | 1;
+    }
+
+    // Heavy rain — denser than the win-leaf system. 6 drops every 40 ms ≈ 150 drops/s.
+    *timer += dt;
+    while *timer >= 0.04 {
+        *timer -= 0.04;
+        for _ in 0..6 {
+            let x = lcg(&mut rng) * 2.0 * half_w - half_w;
+            let vx = (lcg(&mut rng) - 0.5) * 60.0;
+            let vy = -(500.0 + lcg(&mut rng) * 250.0);
+            commands.spawn((
+                RainDrop { x, y: half_h + 10.0, vel_x: vx, vel_y: vy },
+                Sprite {
+                    color: COLOR_RAIN,
+                    custom_size: Some(Vec2::new(2.0, 12.0)),
+                    ..default()
+                },
+                Transform::from_xyz(x, half_h + 10.0, 9.0),
+            ));
+        }
+    }
+}
+
+fn lightning_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    window: Query<&Window>,
+    state: Res<GameState>,
+    mut flashes: Query<(Entity, &mut LightningQuad, &mut Sprite)>,
+    mut rng: Local<u64>,
+    mut cooldown: Local<f32>,
+) {
+    let dt = time.delta_secs();
+
+    // Fade existing flashes (quadratic falloff so the peak feels sharp).
+    for (entity, mut flash, mut sprite) in &mut flashes {
+        flash.remaining -= dt;
+        if flash.remaining <= 0.0 {
+            commands.entity(entity).despawn();
+            continue;
+        }
+        let progress = flash.remaining / flash.duration;
+        let alpha = 0.7 * progress * progress;
+        sprite.color = Color::srgba(1.0, 1.0, 1.0, alpha);
+    }
+
+    if !state.lost {
+        return;
+    }
+
+    if *rng == 0 {
+        *rng = time.elapsed_secs_f64().to_bits() | 2;
+    }
+    if *cooldown <= 0.0 {
+        *cooldown = 3.0 + lcg(&mut rng) * 3.0;
+        return;
+    }
+    *cooldown -= dt;
+    if *cooldown > 0.0 {
+        return;
+    }
+    *cooldown = 3.0 + lcg(&mut rng) * 3.0;
+
+    let Ok(win) = window.single() else { return; };
+    let (w, h) = (win.width(), win.height());
+    // z=8 puts the flash behind the rain (z=9) and the lose overlay/text (z=10/11),
+    // so the foreground stays sharp during the flash.
+    let duration = 0.2;
+    commands.spawn((
+        LightningQuad { remaining: duration, duration },
+        Sprite {
+            color: COLOR_LIGHTNING_PEAK,
+            custom_size: Some(Vec2::new(w, h)),
+            ..default()
+        },
+        Transform::from_xyz(0.0, 0.0, 8.0),
+    ));
+}
+
 fn minimap_system(
     state: Res<GameState>,
     config: Res<MinimapConfig>,
@@ -852,17 +1213,17 @@ fn minimap_system(
         let mc = pc + cell.dc;
         sprite.color = if mr < 0 || mc < 0 || mr >= nrows || mc >= ncols {
             // Outside grid boundary
-            Color::srgb(0.0, 0.0, 0.0)
+            COLOR_MINIMAP_OUTSIDE
         } else {
             let (r, c) = (mr as usize, mc as usize);
             if !state.explored.contains(&(r, c)) {
-                Color::srgb(0.05, 0.05, 0.05)
+                COLOR_MINIMAP_DARK
             } else {
                 match state.grid[r][c] {
-                    'W' => Color::srgb(0.18, 0.18, 0.18),
-                    'S' => Color::srgb(0.0, 0.7, 0.0),
-                    'F' => Color::srgb(0.9, 0.9, 0.9),
-                    _   => Color::srgb(0.45, 0.45, 0.45),
+                    'W' => COLOR_MINIMAP_WALL,
+                    'S' => COLOR_MINIMAP_START,
+                    'F' => COLOR_MINIMAP_FINISH,
+                    _   => COLOR_MINIMAP_FLOOR,
                 }
             }
         };
