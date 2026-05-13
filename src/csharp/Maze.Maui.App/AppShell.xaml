@@ -15,13 +15,13 @@
             ContentTemplate="{DataTemplate views:LoginPage}" />
     </TabBar>
 
-    <!-- Authenticated: Mazes page only (single tab, tab bar hidden) -->
+    <!-- Authenticated: Home page (single tab, tab bar hidden) -->
     <TabBar x:Name="MainTabBar">
         <ShellContent
-            Title="Mazes"
+            Title="Home"
             Route="MainPage"
             Shell.TabBarIsVisible="False"
-            ContentTemplate="{DataTemplate views:MazesPage}" />
+            ContentTemplate="{DataTemplate views:HomePage}" />
     </TabBar>
 
     <!-- Flyout menu items -->

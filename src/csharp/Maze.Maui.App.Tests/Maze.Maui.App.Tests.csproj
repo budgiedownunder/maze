@@ -63,6 +63,8 @@
              Link="LinkedSource\Messages\LoginFlashMessage.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\BaseViewModel.cs"
              Link="LinkedSource\ViewModels\BaseViewModel.cs" />
+    <Compile Include="..\Maze.Maui.App\ViewModels\HomeViewModel.cs"
+             Link="LinkedSource\ViewModels\HomeViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\EmailRowViewModel.cs"
              Link="LinkedSource\ViewModels\EmailRowViewModel.cs" />
     <Compile Include="..\Maze.Maui.App\ViewModels\EmailAddressesViewModel.cs"
