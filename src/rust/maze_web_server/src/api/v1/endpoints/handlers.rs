@@ -398,6 +398,80 @@ pub async fn get_features(
 }
 
 // **************************************************************************************************
+// Endpoint: GET /api/v1/game/play3d-config?difficulty=…
+// Handler:  get_play3d_config()
+// **************************************************************************************************
+/// Query parameters for `GET /api/v1/game/play3d-config`.
+#[derive(Deserialize, Debug)]
+pub struct Play3dConfigQuery {
+    /// Difficulty label: `easy`, `tricky`, or `hard` (case-insensitive).
+    pub difficulty: String,
+}
+
+/// Response body for `GET /api/v1/game/play3d-config?difficulty=…`.
+///
+/// Every fixed value the Bevy 3D game needs for a session is sourced from this
+/// response: the maze dimensions, the time limit, the RNG seed (fixed per
+/// difficulty for leaderboard fairness), the minimum solution-path length
+/// (plumbed to the maze crate's `min_spine_length`), and the in-game splash
+/// title (with optional per-difficulty override).
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Play3dConfigResponse {
+    /// Echo of the requested difficulty, normalised to lowercase.
+    pub difficulty: String,
+    /// Number of maze rows.
+    pub rows: u32,
+    /// Number of maze columns.
+    pub cols: u32,
+    /// Time limit, in seconds, before the player loses.
+    pub timer_seconds: u32,
+    /// Fixed RNG seed for the maze generator.
+    pub seed: u64,
+    /// Minimum start-to-finish path length the generator must hit.
+    pub min_solution_length: u32,
+    /// In-game splash title to show on the title screen.
+    pub title: String,
+}
+
+#[utoipa::path(
+    summary = "Returns the configured Play 3D preset for a difficulty",
+    description = "Returns the maze dimensions, time limit, fixed RNG seed, minimum solution length, and splash title for the requested Play 3D difficulty. Difficulty values are case-insensitive: `easy`, `tricky`, `hard`. No authentication required.",
+    get,
+    path = "/api/v1/game/play3d-config",
+    params(
+        ("difficulty" = String, Query, description = "Difficulty label (easy | tricky | hard)")
+    ),
+    responses(
+        (status = 200, description = "Play 3D preset returned successfully", body = Play3dConfigResponse),
+        (status = 400, description = "Unknown difficulty label")
+    ),
+    tags = ["v1"]
+)]
+#[get("/game/play3d-config")]
+pub async fn get_play3d_config(
+    query: Query<Play3dConfigQuery>,
+    config: web::Data<AppConfig>,
+) -> Result<HttpResponse, Error> {
+    let raw = query.difficulty.trim();
+    let normalised = raw.to_ascii_lowercase();
+    let Some(preset) = config.game.play3d.lookup(&normalised) else {
+        return Err(actix_web::error::ErrorBadRequest(format!(
+            "Unknown difficulty: \"{raw}\". Expected one of: easy, tricky, hard."
+        )));
+    };
+    Ok(HttpResponse::Ok().json(Play3dConfigResponse {
+        difficulty: normalised.clone(),
+        rows: preset.rows,
+        cols: preset.cols,
+        timer_seconds: preset.timer_seconds,
+        seed: preset.seed,
+        min_solution_length: preset.min_solution_length,
+        title: config.game.play3d.resolved_title(&normalised),
+    }))
+}
+
+// **************************************************************************************************
 // Endpoint: PUT /api/v1/admin/features
 // Handler:  update_admin_features()
 // **************************************************************************************************

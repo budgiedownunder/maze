@@ -8,7 +8,7 @@ mod test_definitions {
         EmailVerificationConfirmRequest, EmailVerificationRequest,
     };
     use crate::api::v1::endpoints::handlers::{get_maze_solve_error_string, get_maze_generate_error_string};
-    use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
+    use crate::api::v1::endpoints::handlers::{AppFeaturesResponse, ChangePasswordRequest, CreateUserRequest, LoginRequest, LoginResponse, Play3dConfigResponse, SignupRequest, UpdateProfileRequest, UserItem, UpdateUserRequest};
     use crate::{create_app, config::app::{AppConfig, AppFeaturesConfig}, oauth::{NoOpConnector, SharedOAuthConnector}, service::notifications::{build_comms, build_default_from, build_renderer}, SharedFeatures};
     use comms::{Comms, StubEmailProvider};
     
@@ -5908,6 +5908,137 @@ mod test_definitions {
             serde_json::from_slice(&body).expect("failed to deserialize features response");
         // MockStore reports MOCK_MAX_MAZE_CELLS = 3_600 via MazeStore::max_maze_cells.
         assert_eq!(response.max_maze_cells, Some(3_600));
+    }
+
+    // **************************************************************************************************
+    // Tests: GET /api/v1/game/play3d-config
+    // **************************************************************************************************
+    #[actix_web::test]
+    async fn get_play3d_config_returns_easy_preset_from_defaults() {
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=easy", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.difficulty, "easy");
+        assert_eq!(body.rows, 8);
+        assert_eq!(body.cols, 8);
+        assert_eq!(body.timer_seconds, 120);
+        assert_eq!(body.seed, 8_080_808);
+        assert_eq!(body.min_solution_length, 30);
+        assert_eq!(body.title, "Maze 3D");
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_returns_tricky_and_hard_presets() {
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=tricky", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.difficulty, "tricky");
+        assert_eq!(body.rows, 15);
+        assert_eq!(body.cols, 15);
+        assert_eq!(body.timer_seconds, 240);
+        assert_eq!(body.seed, 15_151_515);
+        assert_eq!(body.min_solution_length, 90);
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=hard", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.difficulty, "hard");
+        assert_eq!(body.rows, 25);
+        assert_eq!(body.cols, 25);
+        assert_eq!(body.timer_seconds, 420);
+        assert_eq!(body.seed, 25_252_525);
+        assert_eq!(body.min_solution_length, 220);
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_seed_is_fixed_across_repeated_calls() {
+        // Regression guard: leaderboard fairness relies on the seed being the
+        // configured constant, not minted per request. Two back-to-back calls
+        // must return identical seeds.
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+
+        let req1 = create_test_get_request("/api/v1/game/play3d-config?difficulty=easy", None, None);
+        let resp1 = test::call_service(&app, req1).await;
+        let body1: Play3dConfigResponse = test::read_body_json(resp1).await;
+
+        let req2 = create_test_get_request("/api/v1/game/play3d-config?difficulty=easy", None, None);
+        let resp2 = test::call_service(&app, req2).await;
+        let body2: Play3dConfigResponse = test::read_body_json(resp2).await;
+
+        assert_eq!(body1.seed, body2.seed);
+        assert_eq!(body1.min_solution_length, body2.min_solution_length);
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_normalises_case_of_difficulty_query() {
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=Easy", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.difficulty, "easy");
+        assert_eq!(body.rows, 8);
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_returns_400_for_unknown_difficulty() {
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=banana", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_returns_400_when_difficulty_query_missing() {
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let req = create_test_get_request("/api/v1/game/play3d-config", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_no_auth_required() {
+        let mut user_defs = vec![];
+        let (app, _, _, _, _) = create_test_app(&mut user_defs, None, false).await;
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=easy", None, None);
+        let resp = test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_respects_per_difficulty_title_override() {
+        let mut user_defs = vec![];
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let mut app_config = AppConfig::default();
+        app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        app_config.comms.enabled = true;
+        app_config.game.play3d.title = "MAZE 3D DAILY".to_string();
+        app_config.game.play3d.easy.title = Some("MAZE 3D — EASY".to_string());
+        let (app, _, _, _, _) =
+            create_test_app_with_config(&mut user_defs, None, false, features, app_config).await;
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=easy", None, None);
+        let resp = test::call_service(&app, req).await;
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.title, "MAZE 3D — EASY");
+
+        // Tricky has no override → falls back to the parent default.
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=tricky", None, None);
+        let resp = test::call_service(&app, req).await;
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.title, "MAZE 3D DAILY");
     }
 
     // **************************************************************************************************

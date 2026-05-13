@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::config::comms::{self, CommsAppConfig};
+use crate::config::game::GameConfig;
 
 /// Security configuration including TLS certificate paths and password hashing parameters.
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -528,6 +529,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub comms: CommsAppConfig,
 
+    /// Game configuration: Play 3D difficulty presets, seeds, splash title.
+    #[serde(default)]
+    pub game: GameConfig,
+
     /// Path to the config file that was loaded. Not read from the config file itself —
     /// used by the admin API to persist runtime feature-flag changes back to disk.
     #[serde(skip, default = "default_config_path")]
@@ -545,6 +550,7 @@ impl Default for AppConfig {
             oauth: OAuthConfig::default(),
             storage: StorageConfig::default(),
             comms: CommsAppConfig::default(),
+            game: GameConfig::default(),
             config_path: default_config_path(),
         }
     }

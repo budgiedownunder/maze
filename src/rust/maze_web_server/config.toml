@@ -89,6 +89,39 @@ data_dir = "data"
 # Can also be changed at runtime via PUT /api/v1/admin/features (admin only).
 allow_signup = true
 
+# ---- Game configuration ----
+# Play 3D presets — fetched by /game/index.html on every game session so a
+# change here propagates to every client without a rebuild. `seed` is fixed per
+# difficulty so leaderboard records on the same difficulty share the same maze
+# layout from day 1. `min_solution_length` is plumbed through to the maze
+# crate's `min_spine_length` generator option (with the crate's default
+# `max_retries`) so configured mazes are guaranteed non-trivial. `title` is the
+# in-game splash text (Bevy `setup_title`); set it at the `[game.play3d]` level
+# for all difficulties, or override per difficulty.
+[game.play3d]
+title = "Maze 3D"
+
+[game.play3d.easy]
+rows = 10
+cols = 10
+timer_seconds = 120
+seed = 8080808
+min_solution_length = 15
+
+[game.play3d.tricky]
+rows = 20
+cols = 20
+timer_seconds = 240
+seed = 15151515
+min_solution_length = 35
+
+[game.play3d.hard]
+rows = 40
+cols = 40
+timer_seconds = 420
+seed = 25252525
+min_solution_length = 50
+
 [oauth]
 # Master switch for OAuth sign-in. When false, no OAuth buttons are shown in
 # the front ends and no validation runs against the connector's section below.

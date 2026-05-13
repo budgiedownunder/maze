@@ -7,6 +7,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg
         // Unguarded routes
         .service(handlers::get_features)
+        .service(handlers::get_play3d_config)
         .service(handlers::login)
         .service(handlers::signup)
         // Password reset (unguarded — the secret reset-token id is the credential)

@@ -88,6 +88,13 @@ The following configuration settings exist:
 |          | `log_level`        | Text    | `info`            | `MAZE_WEB_SERVER_LOGGING_LOG_LEVEL`
 |          | `log_file_prefix`  | Text    | `maze_web_server_`| `MAZE_WEB_SERVER_LOGGING_LOG_FILE_PREFIX`
 | Features | `allow_signup`     | Boolean | `true`            | `MAZE_WEB_SERVER_FEATURES_ALLOW_SIGNUP`
+| Game (Play 3D) | `game.play3d.title`                         | Text    | `Maze 3D`  | (config-file only)
+|                | `game.play3d.<difficulty>.rows`             | Integer | preset     | (config-file only)
+|                | `game.play3d.<difficulty>.cols`             | Integer | preset     | (config-file only)
+|                | `game.play3d.<difficulty>.timer_seconds`    | Integer | preset     | (config-file only)
+|                | `game.play3d.<difficulty>.seed`             | Integer | preset     | (config-file only — fixed per difficulty for leaderboard fairness)
+|                | `game.play3d.<difficulty>.min_solution_length` | Integer | preset  | (config-file only — maps to the maze crate's `min_spine_length`)
+|                | `game.play3d.<difficulty>.title`            | Text (optional) | (falls back to `game.play3d.title`) | (config-file only)
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
@@ -160,6 +167,36 @@ log_level = "info"
 
 [features]
 allow_signup = true
+
+# Play 3D presets are fetched by /game/index.html on every game session, so a
+# change here propagates to every client without a rebuild. `seed` is fixed per
+# difficulty so leaderboard records on the same difficulty share the same maze
+# layout from day 1. `min_solution_length` is plumbed through to the maze
+# crate's `min_spine_length` generator option. `title` is the in-game splash
+# text — set it at the parent level or per difficulty.
+[game.play3d]
+title = "Maze 3D"
+
+[game.play3d.easy]
+rows = 8
+cols = 8
+timer_seconds = 120
+seed = 8080808
+min_solution_length = 30
+
+[game.play3d.tricky]
+rows = 15
+cols = 15
+timer_seconds = 240
+seed = 15151515
+min_solution_length = 90
+
+[game.play3d.hard]
+rows = 25
+cols = 25
+timer_seconds = 420
+seed = 25252525
+min_solution_length = 220
 
 [storage]
 # Backend selector: "file" (on-disk JSON layout) or "sql" (SQLite/Postgres/MySQL).
@@ -474,6 +511,32 @@ The following endpoints manage user identity:
 In addition, `GET /api/v1/features` returns an `oauth_providers` array describing the canonical name and human-readable display name of each provider currently enabled — clients render one button per entry.
 
 The full API reference (including maze and admin-user endpoints) is available interactively via the documentation endpoints listed above.
+
+## Game
+
+The 3D maze game (Bevy / WASM, served from `/game/`) fetches its session config at startup from the server, so a single edit to `config.toml` propagates to every client without a rebuild:
+
+| Method | Path | Auth required | Description |
+|:-------|:-----|:--------------|:------------|
+| `GET`  | `/api/v1/game/play3d-config?difficulty=easy\|tricky\|hard` | None | Returns the configured Play 3D preset for the difficulty: maze dimensions, time limit, fixed RNG seed, minimum solution-path length, and in-game splash title. Difficulty value is case-insensitive; unknown values return `400`. |
+
+Response shape (camelCase):
+
+```json
+{
+  "difficulty": "easy",
+  "rows": 8,
+  "cols": 8,
+  "timerSeconds": 120,
+  "seed": 8080808,
+  "minSolutionLength": 30,
+  "title": "Maze 3D"
+}
+```
+
+- `seed` is **fixed per difficulty** (not minted per request) so leaderboard records on the same difficulty share the same maze layout from day 1. Override per-session via `/game/?difficulty=easy&seed=<n>` if variety is wanted.
+- `minSolutionLength` is plumbed through to the maze crate's `min_spine_length` generator option (with the crate's default `max_retries`). Set it too high and generation will error rather than produce a degenerate maze.
+- `title` is the in-game splash text shown for ~2 s on game start. Override per difficulty via `[game.play3d.<difficulty>].title`.
 
 ### `GET /api/v1/users/me` shape
 
