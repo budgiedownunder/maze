@@ -442,7 +442,9 @@ namespace Maze.Maui.App.ViewModels
                 };
 
                 await _mazeService.CreateMazeItem(item);
+                MazeItem.ID = item.ID;
                 MazeItem.Name = name;
+                IsStored = true;
                 WeakReferenceMessenger.Default.Send(new NewMazeItemMessage(item));
                 created = true;
             }

@@ -63,6 +63,29 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
+        public async Task SaveMaze_Draft_PropagatesServerAssignedIdAndFlipsIsStored()
+        {
+            var (vm, _, dialog, service) = BuildVm();
+            vm.IsStored = false;
+            vm.MazeItem = new MazeItem();
+            dialog.Setup(d => d.DisplayPrompt(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                                              It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(),
+                                              It.IsAny<int>(), It.IsAny<Keyboard?>(), It.IsAny<string?>(),
+                                              It.IsAny<bool>(), It.IsAny<bool>()))
+                  .ReturnsAsync("My Maze");
+            service.Setup(s => s.CreateMazeItem(It.IsAny<MazeItem>()))
+                   .Callback<MazeItem>(item => item.ID = "server-id-42")
+                   .Returns(Task.CompletedTask);
+
+            var result = await vm.SaveMaze(new Api.Maze(3, 3));
+
+            Assert.True(result);
+            Assert.Equal("server-id-42", vm.MazeItem.ID);
+            Assert.Equal("My Maze", vm.MazeItem.Name);
+            Assert.True(vm.IsStored);
+        }
+
+        [Fact]
         public async Task SaveMaze_Draft_UserCancelsNamePrompt_ReturnsFalseWithoutServiceCall()
         {
             var (vm, _, dialog, service) = BuildVm();
