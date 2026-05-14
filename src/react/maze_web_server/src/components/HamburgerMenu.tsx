@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { AboutModal } from './AboutModal'
+import { Play3dDifficultyModal } from './Play3dDifficultyModal'
 
 export function HamburgerMenu() {
   const [open, setOpen] = useState(false)
   const [showAbout, setShowAbout] = useState(false)
+  const [showDifficultyModal, setShowDifficultyModal] = useState(false)
   const { logout } = useAuth()
   const navigate = useNavigate()
   const menuRef = useRef<HTMLDivElement>(null)
@@ -28,7 +30,11 @@ export function HamburgerMenu() {
 
   function handlePlay3d() {
     setOpen(false)
-    window.location.href = '/game/'
+    setShowDifficultyModal(true)
+  }
+
+  function startPlay3d(difficulty: string) {
+    window.location.href = `/game/?difficulty=${encodeURIComponent(difficulty)}`
   }
 
   return (
@@ -83,6 +89,12 @@ export function HamburgerMenu() {
       </div>
 
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
+      {showDifficultyModal && (
+        <Play3dDifficultyModal
+          onPlay={startPlay3d}
+          onCancel={() => setShowDifficultyModal(false)}
+        />
+      )}
     </>
   )
 }

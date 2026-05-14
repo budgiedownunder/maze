@@ -43,9 +43,15 @@ test('Design & Play menu item navigates to /mazes', async ({ page }) => {
   await expect(page).toHaveURL(/\/mazes$/)
 })
 
-test('hamburger menu includes a Play 3D item', async ({ page }) => {
+test('hamburger menu Play 3D item opens the difficulty modal', async ({ page }) => {
   await page.getByRole('button', { name: /open menu/i }).click()
   await expect(page.getByRole('menuitem', { name: /play 3d/i })).toBeVisible()
+  await page.getByRole('menuitem', { name: /play 3d/i }).click()
+  await expect(page.getByRole('dialog', { name: /choose difficulty/i })).toBeVisible()
+  await expect(page.getByRole('radio', { name: /tricky/i })).toBeChecked()
+  await page.getByRole('button', { name: /cancel/i }).click()
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(page).toHaveURL(/\/$/)
 })
 
 test('My Account page opens and shows profile fields', async ({ page }) => {

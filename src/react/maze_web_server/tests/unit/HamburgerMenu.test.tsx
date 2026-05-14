@@ -82,7 +82,7 @@ describe('HamburgerMenu', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/mazes')
   })
 
-  it('Play 3D sets window.location.href to /game/', async () => {
+  it('Play 3D opens the difficulty modal (no navigation yet)', async () => {
     const locationStub = { href: '' }
     vi.stubGlobal('location', locationStub)
 
@@ -90,7 +90,48 @@ describe('HamburgerMenu', () => {
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /play 3d/i }))
 
-    expect(locationStub.href).toBe('/game/')
+    expect(screen.getByRole('dialog', { name: /choose difficulty/i })).toBeInTheDocument()
+    expect(locationStub.href).toBe('')
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('difficulty modal defaults to Tricky and Play navigates to /game/?difficulty=tricky', async () => {
+    const locationStub = { href: '' }
+    vi.stubGlobal('location', locationStub)
+
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /play 3d/i }))
+    expect(screen.getByRole('radio', { name: /tricky/i })).toBeChecked()
+    await userEvent.click(screen.getByRole('button', { name: /^play$/i }))
+
+    expect(locationStub.href).toBe('/game/?difficulty=tricky')
+  })
+
+  it('choosing Hard then Play navigates to /game/?difficulty=hard', async () => {
+    const locationStub = { href: '' }
+    vi.stubGlobal('location', locationStub)
+
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /play 3d/i }))
+    await userEvent.click(screen.getByRole('radio', { name: /hard/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^play$/i }))
+
+    expect(locationStub.href).toBe('/game/?difficulty=hard')
+  })
+
+  it('cancelling the difficulty modal closes it without navigating', async () => {
+    const locationStub = { href: '' }
+    vi.stubGlobal('location', locationStub)
+
+    renderMenu()
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
+    await userEvent.click(screen.getByRole('menuitem', { name: /play 3d/i }))
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(locationStub.href).toBe('')
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
