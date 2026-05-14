@@ -1,6 +1,7 @@
 using CommunityToolkit.Maui.Extensions;
 using CommunityToolkit.Mvvm.Messaging;
 using Maze.Maui.App.Messages;
+using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.ViewModels;
 using Maze.Maui.App.Views;
@@ -49,14 +50,22 @@ namespace Maze.Maui.App
         }
 
         /// <summary>
-        /// Launches a random 3D game (Bevy via WebView) — same entry point
-        /// as the Play 3D tile on the Home page. No MazeItem parameter,
-        /// which Play3dGamePage treats as random-game mode.
+        /// Launches a 3D game (Bevy via WebView) — same entry point as the
+        /// Play 3D tile on the Home page. Prompts the user for a difficulty,
+        /// then navigates to Play3dGamePage with it. Cancelling the picker
+        /// leaves the user where they were.
         /// </summary>
         private async void OnPlay3dMenuItemClicked(object sender, EventArgs e)
         {
             FlyoutIsPresented = false;
-            await GoToAsync(nameof(Play3dGamePage));
+
+            var difficulty = await _dialogService.ShowPlay3dDifficultyAsync();
+            if (difficulty is null) return;
+
+            await GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
+            {
+                { "difficulty", difficulty.Value.ToQueryValue() },
+            });
         }
 
         /// <summary>

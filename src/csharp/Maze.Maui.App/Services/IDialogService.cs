@@ -56,5 +56,10 @@
         /// <param name="message">Result message to display</param>
         /// <returns>A task that completes when the popup is dismissed</returns>
         public Task ShowGameResult(string message);
+        /// <summary>
+        /// Displays the Play 3D difficulty picker (Easy / Tricky / Hard).
+        /// </summary>
+        /// <returns>A task containing the chosen <see cref="Models.Difficulty"/>, or <c>null</c> if the user cancelled</returns>
+        public Task<Models.Difficulty?> ShowPlay3dDifficultyAsync();
     }
 }

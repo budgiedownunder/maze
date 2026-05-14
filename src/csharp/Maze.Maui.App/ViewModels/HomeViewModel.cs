@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.Input;
+using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
 using Maze.Maui.App.Views;
 
@@ -11,27 +12,37 @@ namespace Maze.Maui.App.ViewModels
     public partial class HomeViewModel : BaseViewModel
     {
         private readonly INavigationService _navigationService;
+        private readonly IDialogService _dialogService;
 
         /// <summary>
         /// Constructor
         /// </summary>
         /// <param name="navigationService">Injected navigation service</param>
-        public HomeViewModel(INavigationService navigationService)
+        /// <param name="dialogService">Injected dialog service (Play 3D difficulty picker)</param>
+        public HomeViewModel(INavigationService navigationService, IDialogService dialogService)
         {
             Title = "Home";
             _navigationService = navigationService;
+            _dialogService = dialogService;
         }
 
         /// <summary>
-        /// Launches a random 3D game. Navigates to the Bevy 3D page without
-        /// a MazeItem parameter — the page interprets the absence of a maze
-        /// id as random-game mode.
+        /// Launches a 3D game. Prompts the user for a difficulty, then
+        /// navigates to the Bevy 3D page with that difficulty — the page
+        /// appends it to the WebView URL and the server resolves the preset.
+        /// Cancelling the picker stays on the Home page.
         /// </summary>
         /// <returns>Task</returns>
         [RelayCommand]
         async Task PlayRandom3dAsync()
         {
-            await _navigationService.GoToAsync(nameof(Play3dGamePage));
+            var difficulty = await _dialogService.ShowPlay3dDifficultyAsync();
+            if (difficulty is null) return;
+
+            await _navigationService.GoToAsync(nameof(Play3dGamePage), new Dictionary<string, object>
+            {
+                { "difficulty", difficulty.Value.ToQueryValue() },
+            });
         }
 
         /// <summary>
