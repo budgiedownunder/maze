@@ -1,5 +1,6 @@
 using Maze.Maui.App.Models;
 using Maze.Maui.App.Services;
+using Microsoft.Extensions.Logging;
 
 namespace Maze.Maui.App.Views
 {
@@ -9,6 +10,7 @@ namespace Maze.Maui.App.Views
     {
         private readonly ConfigurationService _configurationService;
         private readonly IAuthService _authService;
+        private readonly ILogger<Play3dGamePage> _logger;
 
         public MazeItem? MazeItem { get; set; }
 
@@ -20,11 +22,18 @@ namespace Maze.Maui.App.Views
         /// </summary>
         public string? DifficultyValue { get; set; }
 
-        public Play3dGamePage(ConfigurationService configurationService, IAuthService authService)
+        public Play3dGamePage(ConfigurationService configurationService, IAuthService authService, ILogger<Play3dGamePage> logger)
         {
             InitializeComponent();
             _configurationService = configurationService;
             _authService = authService;
+            _logger = logger;
+        }
+
+        protected override void OnAppearing()
+        {
+            base.OnAppearing();
+            GameWebViewHandler.GameResultReceived += OnGameResultReceived;
         }
 
         protected override async void OnNavigatedTo(NavigatedToEventArgs args)
@@ -60,9 +69,38 @@ namespace Maze.Maui.App.Views
         protected override void OnDisappearing()
         {
             base.OnDisappearing();
+            GameWebViewHandler.GameResultReceived -= OnGameResultReceived;
             MazeItem = null;
             DifficultyValue = null;
             MazeGameWebView.Source = new UrlWebViewSource { Url = "about:blank" };
+        }
+
+        /// <summary>
+        /// Handles a GameResult posted by the hosted /game/ page via the
+        /// platform WebView bridge. Currently diagnostic only — parses the
+        /// payload and logs it (debug builds route through the Debug provider).
+        /// Leaderboard recording is future work. The bridge may fire on a
+        /// non-UI thread (Android), so the handler hops to the main thread.
+        /// </summary>
+        /// <param name="json">Raw GameResult JSON payload</param>
+        private void OnGameResultReceived(string json)
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                var result = GameResult.FromJson(json);
+                if (result is null)
+                {
+                    _logger.LogWarning("Play3dGamePage: unparseable GameResult payload: {Json}", json);
+                    return;
+                }
+
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation(
+                        "Play3dGamePage: GameResult outcome={Outcome} elapsedMs={ElapsedMs} difficulty={Difficulty} rows={Rows} cols={Cols} seed={Seed}",
+                        result.Outcome, result.ElapsedMs, result.Difficulty ?? "(none)", result.Rows, result.Cols, result.Seed);
+                }
+            });
         }
     }
 }

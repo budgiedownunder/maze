@@ -47,6 +47,23 @@
       display: block;
       touch-action: none;
     }
+    #play-again {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      z-index: 20;
+      padding: 10px 24px;
+      font-family: sans-serif;
+      font-size: 1rem;
+      color: #fff;
+      /* Deliberately not #ac99ea — that's the D-pad / spinner accent, and the
+         button would visually merge into the D-pad on touch devices. */
+      background: #2f9e44;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
     #controls { display: none; }
     .game-dpad { display: none; }
 
@@ -95,6 +112,12 @@
         width: 24px;
         height: 24px;
       }
+      /* On touch devices the D-pad occupies the bottom strip — move the
+         Play Again button to the top so it doesn't overlap the controls. */
+      #play-again {
+        top: 16px;
+        bottom: auto;
+      }
     }
   </style>
 </head>
@@ -134,7 +157,38 @@
     })();
   </script>
   <script>
-    window.addEventListener('maze-game-result', e => console.log('[game-result]', e.detail));
+    window.addEventListener('maze-game-result', function (e) {
+      // Forward the result to the MAUI platform bridge so the native host can
+      // capture it. Each platform exposes a different channel; a plain browser
+      // tab (React) has none — the CustomEvent itself remains observable.
+      try {
+        var payload = JSON.stringify(e.detail);
+        if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+          window.chrome.webview.postMessage(payload);                       // Windows WebView2
+        } else if (window.MazeMauiHost && window.MazeMauiHost.onGameResult) {
+          window.MazeMauiHost.onGameResult(payload);                        // Android JavascriptInterface
+        } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.MazeMauiHost) {
+          window.webkit.messageHandlers.MazeMauiHost.postMessage(payload);  // iOS / MacCatalyst WKWebView
+        }
+      } catch (err) {
+        console.error('[game-result] bridge forward failed', err);
+      }
+
+      // Offer a "Play Again" affordance — reloads /game/ with the same query
+      // string (difficulty / seed preserved). Works in both the React browser
+      // tab and the MAUI WebView.
+      showPlayAgain();
+    });
+
+    function showPlayAgain() {
+      if (document.getElementById('play-again')) return;
+      var btn = document.createElement('button');
+      btn.id = 'play-again';
+      btn.type = 'button';
+      btn.textContent = '↻ Play Again';
+      btn.addEventListener('click', function () { location.reload(); });
+      document.body.appendChild(btn);
+    }
   </script>
   <script type="module">
     import { start, start_with_maze, start_with_config, default as init } from './maze_game_bevy_wasm.js';
