@@ -281,6 +281,30 @@
   margin-top: 0.5rem;
 }
 
+.modal-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.modal-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+/* Override the global `input { width: 100%; padding: … }` rule — radios need
+   their natural size, no padding, and no default margin so the bullet sits
+   flush with the modal's left edge and the label text sits right beside it. */
+.modal-radio input[type='radio'] {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+
 /* ──────────────────────────────────────────────────────────
    About modal (centered icon + text layout)
 ────────────────────────────────────────────────────────── */

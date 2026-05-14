@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { HamburgerMenu } from '../components/HamburgerMenu'
+import { Play3dDifficultyModal } from '../components/Play3dDifficultyModal'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import appIcon from '../assets/app.png'
@@ -9,10 +11,16 @@ export function HomePage() {
   const menuVariant = useMenuVariant()
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
+  const [showDifficultyModal, setShowDifficultyModal] = useState(false)
 
   function handlePlay3d() {
-    // No id => Bevy starts a random maze, mirroring the MAUI flyout entry.
-    window.location.href = '/game/'
+    setShowDifficultyModal(true)
+  }
+
+  function startPlay3d(difficulty: string) {
+    // `/game/` is the standalone Bevy/WASM page, not a React route — a full
+    // page navigation is required. The server maps `?difficulty=` to a preset.
+    window.location.href = `/game/?difficulty=${encodeURIComponent(difficulty)}`
   }
 
   function handleMyMazes() {
@@ -55,6 +63,12 @@ export function HomePage() {
           </button>
         </section>
       </main>
+      {showDifficultyModal && (
+        <Play3dDifficultyModal
+          onPlay={startPlay3d}
+          onCancel={() => setShowDifficultyModal(false)}
+        />
+      )}
     </div>
   )
 }
