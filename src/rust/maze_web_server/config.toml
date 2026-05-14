@@ -105,6 +105,7 @@ allow_signup = true
 title = "Maze 3D"
 
 [game.play3d.easy]
+title = "EASY 3D"
 rows = 10
 cols = 10
 timer_seconds = 120
@@ -114,6 +115,7 @@ minimap_cell_px = 10
 minimap_radius = 5
 
 [game.play3d.tricky]
+title = "TRICKY 3D"
 rows = 25
 cols = 25
 timer_seconds = 240
@@ -123,11 +125,12 @@ minimap_cell_px = 10
 minimap_radius = 7
 
 [game.play3d.hard]
+title = "HARD 3D"
 rows = 40
 cols = 40
 timer_seconds = 600
 seed = 25252525
-min_solution_length = 50
+min_solution_length = 45
 minimap_cell_px = 10
 minimap_radius = 8
 
