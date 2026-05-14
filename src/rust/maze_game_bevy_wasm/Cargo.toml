@@ -16,4 +16,6 @@ wasm-opt = false
 [dependencies]
 maze_game_bevy = { path = "../maze_game_bevy" }
 bevy = { version = "0.18", default-features = false, features = ["webgl2"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 wasm-bindgen = "0.2"

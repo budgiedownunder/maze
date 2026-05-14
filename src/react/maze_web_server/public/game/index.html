@@ -137,14 +137,26 @@
     window.addEventListener('maze-game-result', e => console.log('[game-result]', e.detail));
   </script>
   <script type="module">
-    import { start, start_with_maze, default as init } from './maze_game_bevy_wasm.js';
+    import { start, start_with_maze, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
     const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=1';
+    const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
     const timer = setInterval(() => {
       document.getElementById('elapsed').textContent = `${++secs}s`;
     }, 1000);
+
+    function showLoadingError(message) {
+      clearInterval(timer);
+      const loading = document.getElementById('loading');
+      if (!loading) return;
+      const spinner = loading.querySelector('.spinner');
+      if (spinner) spinner.remove();
+      const p = loading.querySelector('p') ?? loading.appendChild(document.createElement('p'));
+      p.textContent = message;
+      p.style.color = '#ff7070';
+    }
 
     const t0 = performance.now();
     const response = await fetch(WASM_URL);
@@ -160,6 +172,9 @@
     const mazeId = params.get('id');
 
     if (mazeId) {
+      // /game/?id=<mazeId> — a specific stored maze. Skip the difficulty
+      // config and let Bevy use Step 2 defaults (60 s clock, no seed/difficulty
+      // reported in GameResult).
       const auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
       const token = (auth && auth.token) || params.get('t');
       clearInterval(timer);
@@ -174,10 +189,38 @@
       canvas.focus({ preventScroll: true });
       start_with_maze(mazeJson);
     } else {
-      clearInterval(timer);
-      document.getElementById('loading').remove();
-      canvas.focus({ preventScroll: true });
-      start();
+      // /game/?difficulty=<…> — fetch the server-side preset, allow a
+      // ?seed=<n> override for replay / share variety, then start Bevy with
+      // the assembled GameConfig.
+      const difficulty = (params.get('difficulty') ?? DEFAULT_DIFFICULTY).trim();
+      const configUrl = `/api/v1/game/play3d-config?difficulty=${encodeURIComponent(difficulty)}`;
+      const cfgRes = await fetch(configUrl);
+      if (cfgRes.ok) {
+        const preset = await cfgRes.json();
+
+        // Optional ?seed=<n> URL override — lets a user replay an exact maze
+        // (or share its URL). Must parse as a finite integer; otherwise the
+        // configured seed stays in effect.
+        const seedOverride = params.get('seed');
+        if (seedOverride !== null && seedOverride !== '') {
+          const parsed = Number(seedOverride);
+          if (Number.isFinite(parsed) && Number.isInteger(parsed)) {
+            preset.seed = parsed;
+          }
+        }
+
+        try {
+          start_with_config(JSON.stringify(preset));
+          clearInterval(timer);
+          document.getElementById('loading').remove();
+          canvas.focus({ preventScroll: true });
+        } catch (err) {
+          showLoadingError(`Failed to start game: ${err}`);
+        }
+      } else {
+        const body = await cfgRes.text().catch(() => '');
+        showLoadingError(`Failed to load Play 3D config (${cfgRes.status}): ${body || cfgRes.statusText}`);
+      }
     }
 
     function fire(key, type) {

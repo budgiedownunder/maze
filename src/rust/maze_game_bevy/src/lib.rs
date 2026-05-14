@@ -3,7 +3,7 @@ use bevy::image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerD
 use bevy::math::Affine2;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use maze::{Direction, MazeGame, MoveResult};
+use maze::{Direction, GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MoveResult};
 use std::collections::HashSet;
 use std::f32::consts::PI;
 
@@ -271,6 +271,38 @@ struct GameClock {
     last_displayed_secs: i32,
 }
 
+/// Per-session game configuration handed down from the JS host (via
+/// `maze_game_bevy_wasm::start_with_config`). When no host config is provided
+/// (native `cargo run`, or the bare wasm `start()` path), `Default` produces
+/// values that preserve the Step 2 hardcoded behaviour: a 60-second clock,
+/// the splash title "MAZE 3D", and `rows`/`cols == 0` so `spawn_world` knows
+/// to fall back to the built-in demo grid instead of running the maze
+/// generator.
+#[derive(Resource, Clone, Debug)]
+pub struct GameConfig {
+    pub difficulty: Option<String>,
+    pub rows: u32,
+    pub cols: u32,
+    pub timer_seconds: f32,
+    pub seed: u64,
+    pub min_solution_length: u32,
+    pub title: String,
+}
+
+impl Default for GameConfig {
+    fn default() -> Self {
+        Self {
+            difficulty: None,
+            rows: 0,
+            cols: 0,
+            timer_seconds: 60.0,
+            seed: 0,
+            min_solution_length: 0,
+            title: "MAZE 3D".to_string(),
+        }
+    }
+}
+
 /// Outcome of a 3D-game session, as reported to the JS host on completion.
 #[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -292,6 +324,10 @@ pub struct GameResult {
     pub difficulty: Option<String>,
     pub rows: u32,
     pub cols: u32,
+    /// Seed of the maze actually played. `None` for the no-config / demo path
+    /// where no seed was ever supplied.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<u64>,
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub extras: std::collections::BTreeMap<String, serde_json::Value>,
 }
@@ -320,6 +356,12 @@ fn dispatch_game_result(_result: &GameResult) {
 }
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
+    // `GameConfig` is the seam the JS host uses (via
+    // `maze_game_bevy_wasm::start_with_config`) to drive difficulty / timer /
+    // splash title / seed. `init_resource` only inserts the default when the
+    // caller didn't already supply one, so a host-provided config is
+    // preserved.
+    app.init_resource::<GameConfig>();
     app.insert_resource(PendingMazeJson(maze_json.map(String::from)))
         .init_state::<AppState>()
         .insert_resource(TitleTimer(Timer::from_seconds(2.0, TimerMode::Once)))
@@ -343,11 +385,42 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, quit_system);
 }
 
-fn setup_title(mut commands: Commands) {
+/// Generates a maze using the seeded `maze::Generator` and returns its grid
+/// serialised as the JSON form `MazeGame::from_json` accepts (`{"grid":[…]}`).
+///
+/// Intended for the JS host (`maze_game_bevy_wasm::start_with_config`) so that
+/// generation failures surface up the call stack — and into the browser's
+/// `#loading` error overlay — *before* Bevy enters `AppState::Playing`, where
+/// the rest of the game systems would otherwise panic on missing resources.
+pub fn generate_maze_json(
+    rows: u32,
+    cols: u32,
+    seed: u64,
+    min_solution_length: u32,
+) -> Result<String, String> {
+    let options = GeneratorOptions {
+        row_count: rows as usize,
+        col_count: cols as usize,
+        algorithm: GenerationAlgorithm::RecursiveBacktracking,
+        start: None,
+        finish: None,
+        min_spine_length: Some(min_solution_length as usize),
+        max_retries: None,
+        branch_from_finish: None,
+        seed: Some(seed),
+    };
+    let maze = Generator { options }
+        .generate()
+        .map_err(|err| err.to_string())?;
+    Ok(grid_to_json(&maze.definition.grid))
+}
+
+fn setup_title(mut commands: Commands, config: Res<GameConfig>) {
     commands.spawn((Camera2d, TitleEntity));
+    let title = config.title.clone();
     // Shadow layer — offset down-right; font size updated reactively by title_resize_system
     commands.spawn((
-        Text2d::new("MAZE 3D"),
+        Text2d::new(title.clone()),
         TextFont { font_size: 96.0, ..default() },
         TextColor(COLOR_SPLASH_SHADOW),
         Transform::from_translation(Vec3::new(4.0, -4.0, -0.1)),
@@ -356,7 +429,7 @@ fn setup_title(mut commands: Commands) {
     ));
     // Main gold layer
     commands.spawn((
-        Text2d::new("MAZE 3D"),
+        Text2d::new(title),
         TextFont { font_size: 96.0, ..default() },
         TextColor(COLOR_GOLD),
         TitleEntity,
@@ -420,15 +493,28 @@ fn teardown_title(mut commands: Commands, query: Query<Entity, With<TitleEntity>
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_world(
     mut commands: Commands,
     pending: Res<PendingMazeJson>,
+    config: Res<GameConfig>,
     mut meshes: Option<ResMut<Assets<Mesh>>>,
     mut materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut color_materials: Option<ResMut<Assets<ColorMaterial>>>,
     mut images: Option<ResMut<Assets<Image>>>,
     window: Query<&Window>,
 ) {
+    // Three maze sources, in priority order:
+    //   1. `PendingMazeJson` — a specific stored maze (the `/game/?id=…` path).
+    //   2. `GameConfig` with non-zero dimensions — generate from `seed` + dims
+    //      via the seeded `maze::Generator` (the `/game/?difficulty=…` path).
+    //   3. Fallback — the built-in demo grid (no host config, e.g. the bare
+    //      `start()` entry or `cargo run -p maze_game_bevy`).
+    // Maze source: either the JS host pre-generated / supplied JSON via
+    // `PendingMazeJson` (the `/game/?id=…` or `/game/?difficulty=…` paths), or
+    // we fall back to the built-in demo grid (the native / no-config path).
+    // Generation failures are surfaced before we ever reach here — see
+    // `generate_maze_json` and `maze_game_bevy_wasm::start_with_config`.
     let (game, grid) = match pending.0.as_deref() {
         Some(json) => {
             let game = MazeGame::from_json(json).expect("maze JSON was validated by the REST API");
@@ -464,9 +550,12 @@ fn spawn_world(
         lost: false,
     });
 
-    // Hardcoded 60 s for now; Step 5 will source this from the server config.
+    // Timer comes from `GameConfig.timer_seconds`. The default (60 s, see
+    // `GameConfig::default`) is what the no-config / demo path uses, so this
+    // single source covers both the configured Play 3D session and the
+    // fallback.
     commands.insert_resource(GameClock {
-        remaining_secs: 60.0,
+        remaining_secs: config.timer_seconds.max(0.0),
         elapsed_secs: 0.0,
         last_displayed_secs: -1,
     });
@@ -890,6 +979,7 @@ fn movement_system(
     keys: Option<Res<ButtonInput<KeyCode>>>,
     mut state: ResMut<GameState>,
     clock: Res<GameClock>,
+    config: Res<GameConfig>,
     mut camera: Query<&mut Transform, With<Camera3d>>,
 ) {
     let dt = time.delta_secs();
@@ -930,9 +1020,10 @@ fn movement_system(
             dispatch_game_result(&GameResult {
                 outcome: GameOutcome::Win,
                 elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
-                difficulty: None,
+                difficulty: config.difficulty.clone(),
                 rows: state.grid.len() as u32,
                 cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,
+                seed: if config.rows > 0 { Some(config.seed) } else { None },
                 extras: std::collections::BTreeMap::new(),
             });
         }
@@ -1019,6 +1110,7 @@ fn tick_clock_system(
     time: Res<Time>,
     mut clock: ResMut<GameClock>,
     mut state: ResMut<GameState>,
+    config: Res<GameConfig>,
 ) {
     if state.won || state.lost {
         return;
@@ -1063,9 +1155,10 @@ fn tick_clock_system(
     dispatch_game_result(&GameResult {
         outcome: GameOutcome::Lose,
         elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
-        difficulty: None,
+        difficulty: config.difficulty.clone(),
         rows: state.grid.len() as u32,
         cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,
+        seed: if config.rows > 0 { Some(config.seed) } else { None },
         extras: std::collections::BTreeMap::new(),
     });
 }
