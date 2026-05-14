@@ -16,26 +16,66 @@ use serde::{Deserialize, Serialize};
 /// same Easy maze. This makes the future leaderboard fair from day 1 without
 /// extra same-seed bucketing logic. `?seed=<n>` on the `/game/` URL still
 /// overrides this for replay / share variety.
+///
+/// Every field is `#[serde(default)]` so a partial / incomplete sub-section in
+/// `config.toml` degrades gracefully to that field's default rather than
+/// failing the *entire* `AppConfig` deserialise (which silently falls back to
+/// `AppConfig::default()` — see `AppConfig::load`). A single commented-out line
+/// must never take down the whole server config.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Play3dDifficultyConfig {
-    /// Number of maze rows.
+    /// Number of maze rows. Defaults to 8 when omitted.
+    #[serde(default = "default_play3d_rows")]
     pub rows: u32,
-    /// Number of maze columns.
+    /// Number of maze columns. Defaults to 8 when omitted.
+    #[serde(default = "default_play3d_cols")]
     pub cols: u32,
-    /// Time limit, in seconds, before the player loses.
+    /// Time limit, in seconds, before the player loses. Defaults to 120 when
+    /// omitted.
+    #[serde(default = "default_play3d_timer_seconds")]
     pub timer_seconds: u32,
     /// Fixed RNG seed handed to the maze generator. Same `seed` + same `rows`,
     /// `cols`, `min_solution_length` produce the same maze every time.
+    /// Defaults to 0 when omitted.
+    #[serde(default = "default_play3d_seed")]
     pub seed: u64,
     /// Minimum number of cells along the start-to-finish path. Maps directly
     /// to the maze crate's `min_spine_length` generator option (with the
     /// crate's default `max_retries = 100`) so configured mazes are never
     /// degenerate. The generator returns an error if no draw meets this.
+    /// Defaults to 0 (no minimum) when omitted.
+    #[serde(default = "default_play3d_min_solution_length")]
     pub min_solution_length: u32,
+    /// On-screen pixel size of each minimap cell. Scales the minimap's
+    /// physical footprint without changing how much of the maze is visible.
+    /// Defaults to 10 (the value the game shipped with) when omitted.
+    #[serde(default = "default_minimap_cell_px")]
+    pub minimap_cell_px: u32,
+    /// Number of minimap cells visible in each direction from the player —
+    /// i.e. the minimap shows a `(2 × radius + 1)` square window of the maze.
+    /// Larger values reveal more of the maze (useful for big Hard mazes).
+    /// Defaults to 5 (the value the game shipped with) when omitted.
+    #[serde(default = "default_minimap_radius")]
+    pub minimap_radius: u32,
     /// Optional per-difficulty title override for the in-game splash. When
     /// `None`, the parent `[game.play3d].title` is used.
     #[serde(default)]
     pub title: Option<String>,
+}
+
+impl Default for Play3dDifficultyConfig {
+    fn default() -> Self {
+        Self {
+            rows: default_play3d_rows(),
+            cols: default_play3d_cols(),
+            timer_seconds: default_play3d_timer_seconds(),
+            seed: default_play3d_seed(),
+            min_solution_length: default_play3d_min_solution_length(),
+            minimap_cell_px: default_minimap_cell_px(),
+            minimap_radius: default_minimap_radius(),
+            title: None,
+        }
+    }
 }
 
 /// Top-level `[game.play3d]` configuration.
@@ -44,11 +84,15 @@ pub struct Play3dConfig {
     /// Default title for the in-game splash (overridable per difficulty).
     #[serde(default = "default_play3d_title")]
     pub title: String,
-    /// Easy preset.
+    /// Easy preset. A wholly-omitted `[game.play3d.easy]` table degrades to
+    /// `Play3dDifficultyConfig::default()` rather than failing config load.
+    #[serde(default)]
     pub easy: Play3dDifficultyConfig,
-    /// Tricky preset.
+    /// Tricky preset. Same omitted-section fallback as `easy`.
+    #[serde(default)]
     pub tricky: Play3dDifficultyConfig,
-    /// Hard preset.
+    /// Hard preset. Same omitted-section fallback as `easy`.
+    #[serde(default)]
     pub hard: Play3dDifficultyConfig,
 }
 
@@ -87,6 +131,8 @@ impl Default for Play3dConfig {
                 timer_seconds: 120,
                 seed: 8_080_808,
                 min_solution_length: 30,
+                minimap_cell_px: default_minimap_cell_px(),
+                minimap_radius: default_minimap_radius(),
                 title: None,
             },
             tricky: Play3dDifficultyConfig {
@@ -95,6 +141,8 @@ impl Default for Play3dConfig {
                 timer_seconds: 240,
                 seed: 15_151_515,
                 min_solution_length: 90,
+                minimap_cell_px: default_minimap_cell_px(),
+                minimap_radius: default_minimap_radius(),
                 title: None,
             },
             hard: Play3dDifficultyConfig {
@@ -103,6 +151,8 @@ impl Default for Play3dConfig {
                 timer_seconds: 420,
                 seed: 25_252_525,
                 min_solution_length: 220,
+                minimap_cell_px: default_minimap_cell_px(),
+                minimap_radius: default_minimap_radius(),
                 title: None,
             },
         }
@@ -119,6 +169,36 @@ pub struct GameConfig {
 
 fn default_play3d_title() -> String {
     "Maze 3D".to_string()
+}
+
+// Per-field fallbacks for an incomplete `[game.play3d.<difficulty>]` table.
+// Generic, safe, playable values — not tuned per difficulty — because their
+// only job is to keep the rest of the config loading when one field is
+// missing. A fully-specified config never hits these.
+fn default_play3d_rows() -> u32 {
+    8
+}
+fn default_play3d_cols() -> u32 {
+    8
+}
+fn default_play3d_timer_seconds() -> u32 {
+    120
+}
+fn default_play3d_seed() -> u64 {
+    0
+}
+fn default_play3d_min_solution_length() -> u32 {
+    0
+}
+
+/// The minimap cell pixel size the game shipped with.
+fn default_minimap_cell_px() -> u32 {
+    10
+}
+
+/// The minimap visible-radius the game shipped with.
+fn default_minimap_radius() -> u32 {
+    5
 }
 
 #[cfg(test)]
@@ -183,6 +263,8 @@ mod tests {
             timer_seconds = 180
             seed = 43
             min_solution_length = 60
+            minimap_cell_px = 8
+            minimap_radius = 7
             title = "MAZE 3D — TRICKY"
 
             [play3d.hard]
@@ -200,5 +282,56 @@ mod tests {
         assert_eq!(cfg.play3d.hard.min_solution_length, 160);
         assert_eq!(cfg.play3d.resolved_title("easy"), "Maze 3D Daily");
         assert_eq!(cfg.play3d.resolved_title("tricky"), "MAZE 3D — TRICKY");
+        // Minimap fields: explicit on tricky, defaulted on easy/hard (omitted in toml).
+        assert_eq!(cfg.play3d.tricky.minimap_cell_px, 8);
+        assert_eq!(cfg.play3d.tricky.minimap_radius, 7);
+        assert_eq!(cfg.play3d.easy.minimap_cell_px, 10);
+        assert_eq!(cfg.play3d.easy.minimap_radius, 5);
+        assert_eq!(cfg.play3d.hard.minimap_cell_px, 10);
+        assert_eq!(cfg.play3d.hard.minimap_radius, 5);
+    }
+
+    #[test]
+    fn minimap_defaults_match_shipped_values() {
+        let cfg = Play3dConfig::default();
+        for d in ["easy", "tricky", "hard"] {
+            let preset = cfg.lookup(d).unwrap();
+            assert_eq!(preset.minimap_cell_px, 10, "{d} cell px");
+            assert_eq!(preset.minimap_radius, 5, "{d} radius");
+        }
+    }
+
+    #[test]
+    fn partial_difficulty_section_degrades_gracefully() {
+        // Regression: a single omitted field (or a wholly-omitted difficulty
+        // sub-section) must NOT fail the deserialise. Previously every
+        // `Play3dDifficultyConfig` field was required, so commenting out one
+        // line in `config.toml` failed the entire `AppConfig` deserialise,
+        // which `AppConfig::load` silently swallows by falling back to
+        // `AppConfig::default()` — surfacing later as a confusing
+        // "static_dir 'static' does not exist".
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 10
+            cols = 10
+            timer_seconds = 120
+            seed = 999
+            # min_solution_length deliberately omitted
+
+            # [play3d.tricky] and [play3d.hard] deliberately omitted entirely
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("partial config must still deserialise");
+        // Explicit fields survive.
+        assert_eq!(cfg.play3d.easy.rows, 10);
+        assert_eq!(cfg.play3d.easy.seed, 999);
+        // The omitted field falls back to its default.
+        assert_eq!(cfg.play3d.easy.min_solution_length, 0);
+        assert_eq!(cfg.play3d.easy.minimap_cell_px, 10);
+        // Omitted sub-sections fall back to Play3dDifficultyConfig::default().
+        assert_eq!(cfg.play3d.tricky.rows, 8);
+        assert_eq!(cfg.play3d.hard.timer_seconds, 120);
     }
 }

@@ -50,9 +50,25 @@ struct StartConfig {
     seed: u64,
     #[serde(default)]
     min_solution_length: u32,
+    #[serde(default = "default_minimap_cell_px")]
+    minimap_cell_px: u32,
+    #[serde(default = "default_minimap_radius")]
+    minimap_radius: u32,
     title: String,
     #[serde(default)]
     maze_json: Option<String>,
+}
+
+/// The minimap cell pixel size the game shipped with — used when the host
+/// payload omits `minimapCellPx` (e.g. an older `/game/index.html`).
+fn default_minimap_cell_px() -> u32 {
+    10
+}
+
+/// The minimap visible-radius the game shipped with — used when the host
+/// payload omits `minimapRadius`.
+fn default_minimap_radius() -> u32 {
+    5
 }
 
 /// Start the Bevy game with a host-supplied session config. Called by
@@ -97,6 +113,8 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         timer_seconds: cfg.timer_seconds,
         seed: cfg.seed,
         min_solution_length: cfg.min_solution_length,
+        minimap_cell_px: cfg.minimap_cell_px,
+        minimap_radius: cfg.minimap_radius,
         title: cfg.title,
     });
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());

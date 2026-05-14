@@ -5927,6 +5927,8 @@ mod test_definitions {
         assert_eq!(body.timer_seconds, 120);
         assert_eq!(body.seed, 8_080_808);
         assert_eq!(body.min_solution_length, 30);
+        assert_eq!(body.minimap_cell_px, 10);
+        assert_eq!(body.minimap_radius, 5);
         assert_eq!(body.title, "Maze 3D");
     }
 
@@ -6039,6 +6041,32 @@ mod test_definitions {
         let resp = test::call_service(&app, req).await;
         let body: Play3dConfigResponse = test::read_body_json(resp).await;
         assert_eq!(body.title, "MAZE 3D DAILY");
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_returns_default_minimap_size_and_honours_overrides() {
+        let mut user_defs = vec![];
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let mut app_config = AppConfig::default();
+        app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        app_config.comms.enabled = true;
+        // Easy keeps the shipped defaults; hard gets a bigger minimap.
+        app_config.game.play3d.hard.minimap_cell_px = 14;
+        app_config.game.play3d.hard.minimap_radius = 9;
+        let (app, _, _, _, _) =
+            create_test_app_with_config(&mut user_defs, None, false, features, app_config).await;
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=easy", None, None);
+        let resp = test::call_service(&app, req).await;
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.minimap_cell_px, 10);
+        assert_eq!(body.minimap_radius, 5);
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=hard", None, None);
+        let resp = test::call_service(&app, req).await;
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.minimap_cell_px, 14);
+        assert_eq!(body.minimap_radius, 9);
     }
 
     // **************************************************************************************************

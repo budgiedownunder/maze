@@ -89,12 +89,16 @@ The following configuration settings exist:
 |          | `log_file_prefix`  | Text    | `maze_web_server_`| `MAZE_WEB_SERVER_LOGGING_LOG_FILE_PREFIX`
 | Features | `allow_signup`     | Boolean | `true`            | `MAZE_WEB_SERVER_FEATURES_ALLOW_SIGNUP`
 | Game (Play 3D) | `game.play3d.title`                         | Text    | `Maze 3D`  | (config-file only)
-|                | `game.play3d.<difficulty>.rows`             | Integer | preset     | (config-file only)
-|                | `game.play3d.<difficulty>.cols`             | Integer | preset     | (config-file only)
-|                | `game.play3d.<difficulty>.timer_seconds`    | Integer | preset     | (config-file only)
-|                | `game.play3d.<difficulty>.seed`             | Integer | preset     | (config-file only — fixed per difficulty for leaderboard fairness)
-|                | `game.play3d.<difficulty>.min_solution_length` | Integer | preset  | (config-file only — maps to the maze crate's `min_spine_length`)
+|                | `game.play3d.<difficulty>.rows`             | Integer | `8`        | (config-file only)
+|                | `game.play3d.<difficulty>.cols`             | Integer | `8`        | (config-file only)
+|                | `game.play3d.<difficulty>.timer_seconds`    | Integer | `120`      | (config-file only)
+|                | `game.play3d.<difficulty>.seed`             | Integer | `0`        | (config-file only — fixed per difficulty for leaderboard fairness)
+|                | `game.play3d.<difficulty>.min_solution_length` | Integer | `0`     | (config-file only — `0` = no minimum; maps to the maze crate's `min_spine_length`)
+|                | `game.play3d.<difficulty>.minimap_cell_px`  | Integer | `10`    | (config-file only — on-screen pixel size of each minimap cell)
+|                | `game.play3d.<difficulty>.minimap_radius`   | Integer | `5`     | (config-file only — cells visible each direction from the player; minimap shows a 2r+1 square)
 |                | `game.play3d.<difficulty>.title`            | Text (optional) | (falls back to `game.play3d.title`) | (config-file only)
+
+Every `game.play3d.<difficulty>.*` field — and each difficulty sub-section as a whole — is optional: an omitted field (or a wholly-omitted `[game.play3d.<difficulty>]` table) falls back to the default above rather than failing config load. This is deliberate: a missing required field would otherwise fail the *entire* `AppConfig` deserialise, which silently reverts to built-in defaults. The defaults are generic, safe values, not tuned per difficulty — a real deployment should still specify each difficulty explicitly.
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
@@ -183,6 +187,8 @@ cols = 8
 timer_seconds = 120
 seed = 8080808
 min_solution_length = 30
+minimap_cell_px = 10
+minimap_radius = 5
 
 [game.play3d.tricky]
 rows = 15
@@ -190,6 +196,8 @@ cols = 15
 timer_seconds = 240
 seed = 15151515
 min_solution_length = 90
+minimap_cell_px = 10
+minimap_radius = 5
 
 [game.play3d.hard]
 rows = 25
@@ -197,6 +205,8 @@ cols = 25
 timer_seconds = 420
 seed = 25252525
 min_solution_length = 220
+minimap_cell_px = 10
+minimap_radius = 5
 
 [storage]
 # Backend selector: "file" (on-disk JSON layout) or "sql" (SQLite/Postgres/MySQL).
@@ -530,12 +540,15 @@ Response shape (camelCase):
   "timerSeconds": 120,
   "seed": 8080808,
   "minSolutionLength": 30,
+  "minimapCellPx": 10,
+  "minimapRadius": 5,
   "title": "Maze 3D"
 }
 ```
 
 - `seed` is **fixed per difficulty** (not minted per request) so leaderboard records on the same difficulty share the same maze layout from day 1. Override per-session via `/game/?difficulty=easy&seed=<n>` if variety is wanted.
 - `minSolutionLength` is plumbed through to the maze crate's `min_spine_length` generator option (with the crate's default `max_retries`). Set it too high and generation will error rather than produce a degenerate maze.
+- `minimapCellPx` / `minimapRadius` size the in-game minimap: `minimapCellPx` scales its on-screen footprint, `minimapRadius` controls how many cells around the player are visible (a `2r+1` square window). Both default to the shipped values (10 / 5).
 - `title` is the in-game splash text shown for ~2 s on game start. Override per difficulty via `[game.play3d.<difficulty>].title`.
 
 ### `GET /api/v1/users/me` shape

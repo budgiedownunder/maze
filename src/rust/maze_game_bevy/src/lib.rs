@@ -25,10 +25,14 @@ const MAX_PITCH_UP:  f32 = PI * 45.0/180.0;   // 45° — half-way up
 const LINE_W: f32 = 0.06;
 const LINE_H: f32 = 0.01;
 const LINE_Y: f32 = 0.015;
-const MAP_CELL_PX: f32 = 10.0;
+// Minimap defaults. `MAP_CELL_PX` / `MAP_RADIUS` are the values the game
+// shipped with; they seed `GameConfig::default` and are used by the no-config
+// (native / demo) path. The configured Play 3D path overrides both per
+// difficulty via `GameConfig`. `MAP_MARGIN` (screen-edge inset) is not
+// configurable.
+const MAP_CELL_PX: u32 = 10;
+const MAP_RADIUS: u32 = 5;
 const MAP_MARGIN: f32 = 12.0;
-const MAP_RADIUS: i32 = 5;                      // cells visible in each direction from player
-const MAP_VIEW: i32 = MAP_RADIUS * 2 + 1;       // total cells per side (7)
 
 // ---- Colour palette ----
 // Every fixed colour the game uses lives here. Domain-named aliases below
@@ -286,6 +290,10 @@ pub struct GameConfig {
     pub timer_seconds: f32,
     pub seed: u64,
     pub min_solution_length: u32,
+    /// On-screen pixel size of each minimap cell.
+    pub minimap_cell_px: u32,
+    /// Minimap cells visible in each direction from the player.
+    pub minimap_radius: u32,
     pub title: String,
 }
 
@@ -298,6 +306,8 @@ impl Default for GameConfig {
             timer_seconds: 60.0,
             seed: 0,
             min_solution_length: 0,
+            minimap_cell_px: MAP_CELL_PX,
+            minimap_radius: MAP_RADIUS,
             title: "MAZE 3D".to_string(),
         }
     }
@@ -791,9 +801,14 @@ fn spawn_world(
     }
 
     // --- Minimap overlay ---
-    // Fixed MAP_VIEW×MAP_VIEW viewport centred on the player. Cell colours update
-    // each frame in minimap_system based on fog-of-war exploration state.
-    let map_size = MAP_VIEW as f32 * MAP_CELL_PX;
+    // A `(2·radius + 1)`-square viewport centred on the player. `cell_px` and
+    // `radius` come from `GameConfig` (per-difficulty for the configured Play
+    // 3D path; the shipped 10 / 5 defaults for the native / demo path). Cell
+    // colours update each frame in minimap_system based on fog-of-war state.
+    let cell_px = config.minimap_cell_px as f32;
+    let radius = config.minimap_radius as i32;
+    let view = radius * 2 + 1;
+    let map_size = view as f32 * cell_px;
     let (center_x, center_y) = if let Ok(win) = window.single() {
         (
             win.width()  / 2.0 - MAP_MARGIN - map_size / 2.0,
@@ -823,14 +838,14 @@ fn spawn_world(
     ));
 
     // Fixed grid of viewport sprites — one per slot, initially all dark (unexplored).
-    for dr in -MAP_RADIUS..=MAP_RADIUS {
-        for dc in -MAP_RADIUS..=MAP_RADIUS {
-            let sx = center_x + dc as f32 * MAP_CELL_PX;
-            let sy = center_y - dr as f32 * MAP_CELL_PX;
+    for dr in -radius..=radius {
+        for dc in -radius..=radius {
+            let sx = center_x + dc as f32 * cell_px;
+            let sy = center_y - dr as f32 * cell_px;
             commands.spawn((
                 Sprite {
                     color: COLOR_MINIMAP_DARK,
-                    custom_size: Some(Vec2::splat(MAP_CELL_PX - 1.0)),
+                    custom_size: Some(Vec2::splat(cell_px - 1.0)),
                     ..default()
                 },
                 Transform::from_xyz(sx, sy, 0.0),

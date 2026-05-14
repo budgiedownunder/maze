@@ -430,6 +430,10 @@ pub struct Play3dConfigResponse {
     pub seed: u64,
     /// Minimum start-to-finish path length the generator must hit.
     pub min_solution_length: u32,
+    /// On-screen pixel size of each minimap cell.
+    pub minimap_cell_px: u32,
+    /// Number of minimap cells visible in each direction from the player.
+    pub minimap_radius: u32,
     /// In-game splash title to show on the title screen.
     pub title: String,
 }
@@ -467,6 +471,8 @@ pub async fn get_play3d_config(
         timer_seconds: preset.timer_seconds,
         seed: preset.seed,
         min_solution_length: preset.min_solution_length,
+        minimap_cell_px: preset.minimap_cell_px,
+        minimap_radius: preset.minimap_radius,
         title: config.game.play3d.resolved_title(&normalised),
     }))
 }
