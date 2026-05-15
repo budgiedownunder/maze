@@ -91,13 +91,13 @@ pub struct LandmarksConfig {
     /// same object in the same dead-end. Default `true`.
     #[serde(default = "default_landmarks_dead_end_objects")]
     pub dead_end_objects: bool,
-    /// Sparse wall decals / posters — a small fraction of wall panels
-    /// (currently 1 in 8) get a decorative emissive decal (vent grate,
+    /// Sparse wall decorations / posters — a small fraction of wall panels
+    /// (currently 1 in 8) get a decorative emissive decoration (vent grate,
     /// faded poster, rune, window glow) projected on their inside face.
-    /// Decal placement and kind are seeded so the same maze always
+    /// Decoration placement and kind are seeded so the same maze always
     /// looks the same. Default `true`.
-    #[serde(default = "default_landmarks_wall_decals")]
-    pub wall_decals: bool,
+    #[serde(default = "default_landmarks_wall_decorations")]
+    pub wall_decorations: bool,
 }
 
 impl Default for LandmarksConfig {
@@ -105,7 +105,7 @@ impl Default for LandmarksConfig {
         Self {
             wall_tint: default_landmarks_wall_tint(),
             dead_end_objects: default_landmarks_dead_end_objects(),
-            wall_decals: default_landmarks_wall_decals(),
+            wall_decorations: default_landmarks_wall_decorations(),
         }
     }
 }
@@ -273,9 +273,9 @@ fn default_landmarks_dead_end_objects() -> bool {
     true
 }
 
-/// Sparse wall decals default on. Operators can disable them per
-/// difficulty via `[game.play3d.<difficulty>.landmarks] wall_decals = false`.
-fn default_landmarks_wall_decals() -> bool {
+/// Sparse wall decorations default on. Operators can disable them per
+/// difficulty via `[game.play3d.<difficulty>.landmarks] wall_decorations = false`.
+fn default_landmarks_wall_decorations() -> bool {
     true
 }
 
@@ -384,7 +384,7 @@ mod tests {
             [play3d.easy.landmarks]
             wall_tint = false
             dead_end_objects = false
-            wall_decals = false
+            wall_decorations = false
 
             [play3d.tricky]
             rows = 12
@@ -408,21 +408,21 @@ mod tests {
         // Easy override disables every toggle.
         assert!(!cfg.play3d.easy.landmarks.wall_tint);
         assert!(!cfg.play3d.easy.landmarks.dead_end_objects);
-        assert!(!cfg.play3d.easy.landmarks.wall_decals);
+        assert!(!cfg.play3d.easy.landmarks.wall_decorations);
         // Tricky omits the whole landmarks table → all default true.
         assert!(cfg.play3d.tricky.landmarks.wall_tint);
         assert!(cfg.play3d.tricky.landmarks.dead_end_objects);
-        assert!(cfg.play3d.tricky.landmarks.wall_decals);
+        assert!(cfg.play3d.tricky.landmarks.wall_decorations);
         // Hard sets one toggle; the others fall back to the default.
         assert!(cfg.play3d.hard.landmarks.wall_tint);
         assert!(!cfg.play3d.hard.landmarks.dead_end_objects);
-        assert!(cfg.play3d.hard.landmarks.wall_decals);
+        assert!(cfg.play3d.hard.landmarks.wall_decorations);
         // Built-in Play3dConfig::default() enables every toggle.
         let default = Play3dConfig::default();
         for d in [&default.easy, &default.tricky, &default.hard] {
             assert!(d.landmarks.wall_tint);
             assert!(d.landmarks.dead_end_objects);
-            assert!(d.landmarks.wall_decals);
+            assert!(d.landmarks.wall_decorations);
         }
     }
 

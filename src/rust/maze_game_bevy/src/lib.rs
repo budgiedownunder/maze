@@ -57,19 +57,19 @@ const WALL_TINT_OFFSETS: [(f32, f32, f32); WALL_TINT_VARIANTS] = [
 // build from the shared cylinder / cuboid primitives below.
 const DEAD_END_OBJECT_VARIANTS: u32 = 4;
 
-// Sparse wall decals. Each wall panel hashes `(row, col, face, seed)`;
-// 1 in `WALL_DECAL_FREQUENCY` panels gets a decal, and the kind picks
-// from `WALL_DECAL_VARIANTS`. Decal placement / orientation are derived
+// Sparse wall decorations. Each wall panel hashes `(row, col, face, seed)`;
+// 1 in `WALL_DECORATION_FREQUENCY` panels gets a decoration, and the kind picks
+// from `WALL_DECORATION_VARIANTS`. Decoration placement / orientation are derived
 // from the wall's face id (0=N, 1=S, 2=E, 3=W).
-const WALL_DECAL_VARIANTS: u32 = 4;
-const WALL_DECAL_FREQUENCY: u32 = 8;
-const DECAL_W: f32 = 0.6;
-const DECAL_H: f32 = 0.8;
-const DECAL_THICKNESS: f32 = 0.02;
-const DECAL_Y: f32 = 1.7;
-// Push the decal just outside the wall's inside face so it does not
+const WALL_DECORATION_VARIANTS: u32 = 4;
+const WALL_DECORATION_FREQUENCY: u32 = 8;
+const DECORATION_W: f32 = 0.6;
+const DECORATION_H: f32 = 0.8;
+const DECORATION_THICKNESS: f32 = 0.02;
+const DECORATION_Y: f32 = 1.7;
+// Push the decoration just outside the wall's inside face so it does not
 // z-fight with the brick texture; wall half-thickness + a small epsilon.
-const DECAL_OFFSET: f32 = WALL_THICKNESS / 2.0 + 0.005;
+const DECORATION_OFFSET: f32 = WALL_THICKNESS / 2.0 + 0.005;
 
 // ---- Colour palette ----
 // Every fixed colour the game uses lives here. Domain-named aliases below
@@ -218,7 +218,7 @@ struct FinishOrb;
 struct DeadEndObject;
 
 #[derive(Component)]
-struct WallDecal;
+struct WallDecoration;
 
 #[derive(Component)]
 struct WinOverlay;
@@ -380,11 +380,11 @@ pub struct Landmarks {
     /// and finish) gets a single distinctive object picked by hashing
     /// `(row, col, seed)`. When `false`, dead-ends render bare.
     pub dead_end_objects: bool,
-    /// Sparse wall decals — when `true`, ~1 in 8 wall panels gets a
-    /// decorative decal (vent grate, faded poster, rune, window glow)
-    /// projected on the inside face. Both placement and decal kind are
+    /// Sparse wall decorations — when `true`, ~1 in 8 wall panels gets a
+    /// decorative element (vent grate, faded poster, rune, window glow)
+    /// projected on the inside face. Both placement and decoration kind are
     /// seeded.
-    pub wall_decals: bool,
+    pub wall_decorations: bool,
 }
 
 impl Default for Landmarks {
@@ -392,7 +392,7 @@ impl Default for Landmarks {
         Self {
             wall_tint: true,
             dead_end_objects: true,
-            wall_decals: true,
+            wall_decorations: true,
         }
     }
 }
@@ -865,31 +865,31 @@ fn spawn_world(
         })
     });
 
-    // ---- Wall decal assets ----
+    // ---- Wall decoration assets ----
     // Two thin cuboid meshes — one for N/S faces (extent in X+Y, thin
     // in Z), one for E/W (extent in Y+Z, thin in X) — and four
-    // emissive-tinted materials, one per decal kind. Per-decal emissive
+    // emissive-tinted materials, one per decoration kind. Per-decoration emissive
     // colour tints the same monochrome texture differently so each
-    // decal type reads distinctly.
-    let decal_ns_mesh = meshes
+    // decoration type reads distinctly.
+    let decoration_ns_mesh = meshes
         .as_mut()
-        .map(|m| m.add(Cuboid::new(DECAL_W, DECAL_H, DECAL_THICKNESS)));
-    let decal_ew_mesh = meshes
+        .map(|m| m.add(Cuboid::new(DECORATION_W, DECORATION_H, DECORATION_THICKNESS)));
+    let decoration_ew_mesh = meshes
         .as_mut()
-        .map(|m| m.add(Cuboid::new(DECAL_THICKNESS, DECAL_H, DECAL_W)));
-    let vent_tex   = images.as_mut().map(|imgs| make_vent_decal_texture(imgs));
-    let poster_tex = images.as_mut().map(|imgs| make_poster_decal_texture(imgs));
-    let rune_tex   = images.as_mut().map(|imgs| make_rune_decal_texture(imgs));
-    let window_tex = images.as_mut().map(|imgs| make_window_decal_texture(imgs));
-    let decal_emissives: [(LinearRgba, &Option<Handle<Image>>); WALL_DECAL_VARIANTS as usize] = [
+        .map(|m| m.add(Cuboid::new(DECORATION_THICKNESS, DECORATION_H, DECORATION_W)));
+    let vent_tex   = images.as_mut().map(|imgs| make_vent_decoration_texture(imgs));
+    let poster_tex = images.as_mut().map(|imgs| make_poster_decoration_texture(imgs));
+    let rune_tex   = images.as_mut().map(|imgs| make_rune_decoration_texture(imgs));
+    let window_tex = images.as_mut().map(|imgs| make_window_decoration_texture(imgs));
+    let decoration_emissives: [(LinearRgba, &Option<Handle<Image>>); WALL_DECORATION_VARIANTS as usize] = [
         (LinearRgba::new(0.30, 0.30, 0.32, 1.0), &vent_tex),   // vent grate — cool grey
         (LinearRgba::new(0.65, 0.40, 0.18, 1.0), &poster_tex), // faded poster — warm orange
         (LinearRgba::new(0.25, 0.60, 1.10, 1.0), &rune_tex),   // rune glyph — bright cyan
         (LinearRgba::new(0.45, 0.65, 1.00, 1.0), &window_tex), // window — sky blue
     ];
-    let wall_decal_mats: [Option<Handle<StandardMaterial>>; WALL_DECAL_VARIANTS as usize] =
+    let wall_decoration_mats: [Option<Handle<StandardMaterial>>; WALL_DECORATION_VARIANTS as usize] =
         std::array::from_fn(|i| {
-            let (emissive, tex) = decal_emissives[i];
+            let (emissive, tex) = decoration_emissives[i];
             materials.as_mut().map(|m| {
                 m.add(StandardMaterial {
                     base_color: Color::BLACK,
@@ -925,32 +925,32 @@ fn spawn_world(
             let wall_ns_mat = wall_ns_mats[tint].clone();
             let wall_ew_mat = wall_ew_mats[tint].clone();
 
-            // Decal spawn helper — invoked after each wall-face spawn.
+            // Decoration spawn helper — invoked after each wall-face spawn.
             // Captures the per-cell hash inputs once so each call only
             // varies face_id, mesh, and position. Skipped wholesale when
-            // the per-difficulty `landmarks.wall_decals` toggle is off.
-            let spawn_decal = |cmd: &mut Commands,
+            // the per-difficulty `landmarks.wall_decorations` toggle is off.
+            let spawn_decoration = |cmd: &mut Commands,
                                face_id: u32,
                                mesh: Option<Handle<Mesh>>,
                                pos: Vec3| {
-                if !config.landmarks.wall_decals {
+                if !config.landmarks.wall_decorations {
                     return;
                 }
-                let Some(kind) = wall_decal_index(r, c, face_id, config.seed) else {
+                let Some(kind) = wall_decoration_index(r, c, face_id, config.seed) else {
                     return;
                 };
-                let mat = wall_decal_mats[kind as usize].clone();
+                let mat = wall_decoration_mats[kind as usize].clone();
                 match (mesh, mat) {
                     (Some(m), Some(mt)) => {
                         cmd.spawn((
-                            WallDecal,
+                            WallDecoration,
                             Mesh3d(m),
                             MeshMaterial3d(mt),
                             Transform::from_translation(pos),
                         ));
                     }
                     _ => {
-                        cmd.spawn((WallDecal, Transform::from_translation(pos)));
+                        cmd.spawn((WallDecoration, Transform::from_translation(pos)));
                     }
                 }
             };
@@ -966,8 +966,8 @@ fn spawn_world(
                     }
                     _ => { commands.spawn((WallCell, Transform::from_translation(pos))); }
                 }
-                spawn_decal(&mut commands, 0, decal_ns_mesh.clone(),
-                            Vec3::new(x, DECAL_Y, z - HALF_CELL + DECAL_OFFSET));
+                spawn_decoration(&mut commands, 0, decoration_ns_mesh.clone(),
+                            Vec3::new(x, DECORATION_Y, z - HALF_CELL + DECORATION_OFFSET));
             }
             // South face (N/S-facing panel — teal)
             if r + 1 >= rows || grid[r + 1][c] == 'W' {
@@ -978,8 +978,8 @@ fn spawn_world(
                     }
                     _ => { commands.spawn((WallCell, Transform::from_translation(pos))); }
                 }
-                spawn_decal(&mut commands, 1, decal_ns_mesh.clone(),
-                            Vec3::new(x, DECAL_Y, z + HALF_CELL - DECAL_OFFSET));
+                spawn_decoration(&mut commands, 1, decoration_ns_mesh.clone(),
+                            Vec3::new(x, DECORATION_Y, z + HALF_CELL - DECORATION_OFFSET));
             }
             // East face (E/W-facing panel — blue-teal)
             if c + 1 >= cols || grid[r][c + 1] == 'W' {
@@ -990,8 +990,8 @@ fn spawn_world(
                     }
                     _ => { commands.spawn((WallCell, Transform::from_translation(pos))); }
                 }
-                spawn_decal(&mut commands, 2, decal_ew_mesh.clone(),
-                            Vec3::new(x + HALF_CELL - DECAL_OFFSET, DECAL_Y, z));
+                spawn_decoration(&mut commands, 2, decoration_ew_mesh.clone(),
+                            Vec3::new(x + HALF_CELL - DECORATION_OFFSET, DECORATION_Y, z));
             }
             // West face (E/W-facing panel — blue-teal)
             if c == 0 || grid[r][c - 1] == 'W' {
@@ -1002,8 +1002,8 @@ fn spawn_world(
                     }
                     _ => { commands.spawn((WallCell, Transform::from_translation(pos))); }
                 }
-                spawn_decal(&mut commands, 3, decal_ew_mesh.clone(),
-                            Vec3::new(x - HALF_CELL + DECAL_OFFSET, DECAL_Y, z));
+                spawn_decoration(&mut commands, 3, decoration_ew_mesh.clone(),
+                            Vec3::new(x - HALF_CELL + DECORATION_OFFSET, DECORATION_Y, z));
             }
 
             // --- Floor grid lines ---
@@ -1997,14 +1997,14 @@ fn make_tile_texture(images: &mut Assets<Image>) -> Handle<Image> {
     images.add(make_image(W, H, pixels))
 }
 
-// ---- Wall decal procedural textures ----
+// ---- Wall decoration procedural textures ----
 // Each generator returns a 64×64 monochrome grayscale texture whose
-// pixel intensity drives the emissive channel; the wall-decal material
+// pixel intensity drives the emissive channel; the wall-decoration material
 // for that variant then tints the texture via emissive RGB. Keeping the
 // textures monochrome and letting the material colour them matches the
 // existing brick / tile pattern and keeps the WASM payload small.
 
-fn make_vent_decal_texture(images: &mut Assets<Image>) -> Handle<Image> {
+fn make_vent_decoration_texture(images: &mut Assets<Image>) -> Handle<Image> {
     // Vent grate — five horizontal slats with thin dark frame.
     const W: u32 = 64;
     const H: u32 = 64;
@@ -2032,7 +2032,7 @@ fn make_vent_decal_texture(images: &mut Assets<Image>) -> Handle<Image> {
     images.add(make_image(W, H, pixels))
 }
 
-fn make_poster_decal_texture(images: &mut Assets<Image>) -> Handle<Image> {
+fn make_poster_decoration_texture(images: &mut Assets<Image>) -> Handle<Image> {
     // Faded poster — bright at the top fading to mid at the bottom,
     // with a dark frame and a few horizontal "tears" for character.
     const W: u32 = 64;
@@ -2060,7 +2060,7 @@ fn make_poster_decal_texture(images: &mut Assets<Image>) -> Handle<Image> {
     images.add(make_image(W, H, pixels))
 }
 
-fn make_rune_decal_texture(images: &mut Assets<Image>) -> Handle<Image> {
+fn make_rune_decoration_texture(images: &mut Assets<Image>) -> Handle<Image> {
     // Rune glyph — bright circle on a dark background with a cross
     // inside. The circle is filled (lower intensity ~190) and the cross
     // strokes punch through with higher intensity (~245).
@@ -2099,7 +2099,7 @@ fn make_rune_decal_texture(images: &mut Assets<Image>) -> Handle<Image> {
     images.add(make_image(W, H, pixels))
 }
 
-fn make_window_decal_texture(images: &mut Assets<Image>) -> Handle<Image> {
+fn make_window_decoration_texture(images: &mut Assets<Image>) -> Handle<Image> {
     // Window — stone frame with a bright sky-glow centre, divided by a
     // simple cross mullion. Slightly darker at the bottom suggests a
     // horizon line.
@@ -2184,12 +2184,12 @@ fn dead_end_object_index(r: usize, c: usize, seed: u64) -> u32 {
 }
 
 /// Deterministic hash of `(row, col, face, seed)` → `Some(kind)` if a
-/// wall decal should be placed on this face, `None` otherwise. The
-/// `1 / WALL_DECAL_FREQUENCY` placement rate is chosen so decals feel
+/// wall decoration should be placed on this face, `None` otherwise. The
+/// `1 / WALL_DECORATION_FREQUENCY` placement rate is chosen so decorations feel
 /// sparse rather than wallpaper. Different constants from the other
-/// landmark hashes so decal placement isn't visually correlated with
+/// landmark hashes so decoration placement isn't visually correlated with
 /// wall tint or dead-end object kind.
-fn wall_decal_index(r: usize, c: usize, face_id: u32, seed: u64) -> Option<u32> {
+fn wall_decoration_index(r: usize, c: usize, face_id: u32, seed: u64) -> Option<u32> {
     let mut h = seed.wrapping_mul(0x517C_C1B7_2722_0A95);
     h = h.wrapping_add((r as u64).wrapping_mul(0xC6BC_279E_C8C9_D5B1));
     h = h.wrapping_add((c as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
@@ -2197,8 +2197,8 @@ fn wall_decal_index(r: usize, c: usize, face_id: u32, seed: u64) -> Option<u32> 
     h ^= h >> 30;
     h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
     h ^= h >> 27;
-    if h.is_multiple_of(WALL_DECAL_FREQUENCY as u64) {
-        Some(((h / WALL_DECAL_FREQUENCY as u64) % WALL_DECAL_VARIANTS as u64) as u32)
+    if h.is_multiple_of(WALL_DECORATION_FREQUENCY as u64) {
+        Some(((h / WALL_DECORATION_FREQUENCY as u64) % WALL_DECORATION_VARIANTS as u64) as u32)
     } else {
         None
     }

@@ -454,8 +454,8 @@ pub struct LandmarksResponse {
     pub wall_tint: bool,
     /// Dead-end landmark objects enabled for this difficulty.
     pub dead_end_objects: bool,
-    /// Sparse wall decals enabled for this difficulty.
-    pub wall_decals: bool,
+    /// Sparse wall decorations enabled for this difficulty.
+    pub wall_decorations: bool,
 }
 
 #[utoipa::path(
@@ -498,7 +498,7 @@ pub async fn get_play3d_config(
         landmarks: LandmarksResponse {
             wall_tint: preset.landmarks.wall_tint,
             dead_end_objects: preset.landmarks.dead_end_objects,
-            wall_decals: preset.landmarks.wall_decals,
+            wall_decorations: preset.landmarks.wall_decorations,
         },
     }))
 }

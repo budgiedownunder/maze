@@ -38,7 +38,7 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Procedural brick-pattern** texture on walls; stone-tile texture on floors — generated at runtime, no asset files required.
 - **Per-cell wall tint variation** — pick one of six emissive variants for for wall panels, so different corridor sections have different shades.
 - **Dead-end landmark objects** — every dead-end cell (passable cell with exactly one open neighbour, excluding start / finish) gets a distinctive landmark — a brazier, urn, broken pillar, or chest — picked by hashing `(row, col, seed)`. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] dead_end_objects`.
-- **Sparse wall decals** — ~1 in 8 wall panels gets a decorative emissive decal (vent grate, faded poster, rune glyph, or window glow) projected on its inside face. Placement and kind are seeded from `(row, col, face, seed)` so the same maze always decorates the same walls. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_decals`.
+- **Sparse wall decorations** — ~1 in 8 wall panels gets a decorative emissive decoration (vent grate, faded poster, rune glyph, or window glow) projected on its inside face. Placement and kind are seeded from `(row, col, face, seed)` so the same maze always decorates the same walls. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_decorations`.
 - Floor grid lines at cell boundaries for orientation feedback.
 - Start cell highlighted green; finish cell highlighted gold.
 - Status bar overlay (top-left corner) — a row container that displays the configured `mode` label.

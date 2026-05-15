@@ -100,7 +100,7 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.mode`             | Text    | `Play`     | (config-file only — free-text label shown in the in-game status bar, e.g. `Easy` / `Tricky` / `Hard`)
 |                | `game.play3d.<difficulty>.landmarks.wall_tint` | Boolean | `true` | (config-file only — when `true`, add random wall tinting)
 |                | `game.play3d.<difficulty>.landmarks.dead_end_objects` | Boolean | `true` | (config-file only — when `true`, place random objects in dead-end cells)
-|                | `game.play3d.<difficulty>.landmarks.wall_decals` | Boolean | `true` | (config-file only — when `true`, add random wall decorations )
+|                | `game.play3d.<difficulty>.landmarks.wall_decorations` | Boolean | `true` | (config-file only — when `true`, add random wall decorations )
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
@@ -196,7 +196,7 @@ minimap_radius = 5
 [game.play3d.easy.landmarks]
 wall_tint = true
 dead_end_objects = true
-wall_decals = true
+wall_decorations = true
 
 [game.play3d.tricky]
 mode = "Tricky"
@@ -211,7 +211,7 @@ minimap_radius = 5
 [game.play3d.tricky.landmarks]
 wall_tint = true
 dead_end_objects = true
-wall_decals = true
+wall_decorations = true
 
 [game.play3d.hard]
 mode = "Hard"
@@ -226,7 +226,7 @@ minimap_radius = 5
 [game.play3d.hard.landmarks]
 wall_tint = true
 dead_end_objects = true
-wall_decals = true
+wall_decorations = true
 
 [storage]
 # Backend selector: "file" (on-disk JSON layout) or "sql" (SQLite/Postgres/MySQL).
