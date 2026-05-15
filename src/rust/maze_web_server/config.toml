@@ -123,6 +123,11 @@ wall_tint = true
 # distinctive objects (brazier / urn / broken pillar / chest) picked
 # by hashing (row, col, seed). Default true.
 dead_end_objects = true
+# Sparse wall decals — ~1 in 8 wall panels gets a decorative emissive
+# decal (vent grate / faded poster / rune glyph / window glow) on its
+# inside face, placement and kind seeded from (row, col, face, seed).
+# Default true.
+wall_decals = true
 
 [game.play3d.tricky]
 title = "TRICKY 3D"
@@ -138,6 +143,7 @@ minimap_radius = 5
 [game.play3d.tricky.landmarks]
 wall_tint = true
 dead_end_objects = true
+wall_decals = true
 
 [game.play3d.hard]
 title = "HARD 3D"
@@ -153,6 +159,7 @@ minimap_radius = 5
 [game.play3d.hard.landmarks]
 wall_tint = true
 dead_end_objects = true
+wall_decals = true
 
 [oauth]
 # Master switch for OAuth sign-in. When false, no OAuth buttons are shown in
