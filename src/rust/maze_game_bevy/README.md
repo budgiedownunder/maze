@@ -37,6 +37,7 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 
 - **Procedural brick-pattern** texture on walls; stone-tile texture on floors — generated at runtime, no asset files required.
 - **Per-cell wall tint variation** — pick one of six emissive variants for for wall panels, so different corridor sections have different shades.
+- **Dead-end landmark objects** — every dead-end cell (passable cell with exactly one open neighbour, excluding start / finish) gets a distinctive landmark — a brazier, urn, broken pillar, or chest — picked by hashing `(row, col, seed)`. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] dead_end_objects`.
 - Floor grid lines at cell boundaries for orientation feedback.
 - Start cell highlighted green; finish cell highlighted gold.
 - Status bar overlay (top-left corner) — a row container that displays the configured `mode` label.

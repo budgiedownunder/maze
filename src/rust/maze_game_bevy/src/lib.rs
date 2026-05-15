@@ -51,6 +51,12 @@ const WALL_TINT_OFFSETS: [(f32, f32, f32); WALL_TINT_VARIANTS] = [
     ( 0.04,  0.04,  0.04), // brighter
 ];
 
+// Dead-end landmark object variants. Each cell flagged as a dead-end
+// (passable cell with exactly one open neighbour, excluding start/finish)
+// hashes (row, col, seed) to pick one of these object kinds. Variants 
+// build from the shared cylinder / cuboid primitives below.
+const DEAD_END_OBJECT_VARIANTS: u32 = 4;
+
 // ---- Colour palette ----
 // Every fixed colour the game uses lives here. Domain-named aliases below
 // (CLOCK_GOLD, CLOCK_RED) point back into the palette so use-sites read
@@ -193,6 +199,9 @@ struct FloorLine;
 
 #[derive(Component)]
 struct FinishOrb;
+
+#[derive(Component)]
+struct DeadEndObject;
 
 #[derive(Component)]
 struct WinOverlay;
@@ -349,11 +358,19 @@ pub struct Landmarks {
     /// Per-cell wall tint variation — when `false`, every cell uses the
     /// base wall material variant (reproduces the pre-5A look).
     pub wall_tint: bool,
+    /// Dead-end landmark objects — when `true`, every dead-end cell
+    /// (passable cell with exactly one open neighbour, excluding start
+    /// and finish) gets a single distinctive object picked by hashing
+    /// `(row, col, seed)`. When `false`, dead-ends render bare.
+    pub dead_end_objects: bool,
 }
 
 impl Default for Landmarks {
     fn default() -> Self {
-        Self { wall_tint: true }
+        Self {
+            wall_tint: true,
+            dead_end_objects: true,
+        }
     }
 }
 
@@ -781,6 +798,50 @@ fn spawn_world(
         })
     });
 
+    // Dead-end landmark primitives — a unit cylinder + unit cuboid that
+    // every dead-end object scales to taste. One shared mesh per shape
+    // (instead of one per object kind) keeps the asset count flat.
+    let dead_end_cylinder = meshes.as_mut().map(|m| m.add(Cylinder::new(0.5, 1.0)));
+    let dead_end_cuboid   = meshes.as_mut().map(|m| m.add(Cuboid::new(1.0, 1.0, 1.0)));
+    // Each landmark kind gets its own emissive-only material so it reads
+    // distinctly from a distance. The brazier uses two: a stone base and
+    // an over-bright orange glow that picks up the bloom pipeline.
+    let dead_end_stone_mat = materials.as_mut().map(|m| {
+        m.add(StandardMaterial {
+            base_color: Color::BLACK,
+            emissive: LinearRgba::new(0.45, 0.45, 0.45, 1.0),
+            ..default()
+        })
+    });
+    let dead_end_glow_mat = materials.as_mut().map(|m| {
+        m.add(StandardMaterial {
+            base_color: Color::BLACK,
+            emissive: LinearRgba::new(1.4, 0.7, 0.15, 1.0),
+            ..default()
+        })
+    });
+    let dead_end_urn_mat = materials.as_mut().map(|m| {
+        m.add(StandardMaterial {
+            base_color: Color::BLACK,
+            emissive: LinearRgba::new(0.55, 0.30, 0.15, 1.0),
+            ..default()
+        })
+    });
+    let dead_end_pillar_mat = materials.as_mut().map(|m| {
+        m.add(StandardMaterial {
+            base_color: Color::BLACK,
+            emissive: LinearRgba::new(0.70, 0.70, 0.65, 1.0),
+            ..default()
+        })
+    });
+    let dead_end_chest_mat = materials.as_mut().map(|m| {
+        m.add(StandardMaterial {
+            base_color: Color::BLACK,
+            emissive: LinearRgba::new(0.40, 0.25, 0.10, 1.0),
+            ..default()
+        })
+    });
+
     let rows = grid.len();
     for (r, row) in grid.iter().enumerate() {
         let cols = row.len();
@@ -914,6 +975,65 @@ fn spawn_world(
                     }
                     _ => { commands.spawn((FloorCell, Transform::from_xyz(x, 0.0, z))); }
                 },
+            }
+
+            // --- Dead-end landmark object ---
+            // A single distinctive object per dead-end cell — brazier /
+            // urn / broken pillar / chest, picked by hashing
+            // (row, col, seed). Skipped for start / finish cells (the
+            // player stands on start, the finish has the orb) and when
+            // the per-difficulty toggle is off.
+            if config.landmarks.dead_end_objects
+                && cell != 'S'
+                && cell != 'F'
+                && is_dead_end(&grid, r, c)
+            {
+                let kind = dead_end_object_index(r, c, config.seed);
+                let spawn = |cmd: &mut Commands,
+                             mesh: Option<Handle<Mesh>>,
+                             mat: Option<Handle<StandardMaterial>>,
+                             y: f32,
+                             sx: f32, sy: f32, sz: f32| {
+                    let pos = Vec3::new(x, y, z);
+                    let scale = Vec3::new(sx, sy, sz);
+                    match (mesh, mat) {
+                        (Some(m), Some(mt)) => {
+                            cmd.spawn((
+                                DeadEndObject,
+                                Mesh3d(m),
+                                MeshMaterial3d(mt),
+                                Transform::from_translation(pos).with_scale(scale),
+                            ));
+                        }
+                        _ => {
+                            cmd.spawn((DeadEndObject, Transform::from_translation(pos)));
+                        }
+                    }
+                };
+                match kind {
+                    0 => {
+                        // Brazier — stone column + glowing bowl on top.
+                        spawn(&mut commands, dead_end_cylinder.clone(), dead_end_stone_mat.clone(),
+                              0.40, 0.40, 0.80, 0.40);
+                        spawn(&mut commands, dead_end_cylinder.clone(), dead_end_glow_mat.clone(),
+                              0.85, 0.50, 0.15, 0.50);
+                    }
+                    1 => {
+                        // Urn — squat terracotta cylinder.
+                        spawn(&mut commands, dead_end_cylinder.clone(), dead_end_urn_mat.clone(),
+                              0.35, 0.50, 0.70, 0.50);
+                    }
+                    2 => {
+                        // Broken pillar — tall narrow marble column.
+                        spawn(&mut commands, dead_end_cylinder.clone(), dead_end_pillar_mat.clone(),
+                              0.75, 0.35, 1.50, 0.35);
+                    }
+                    _ => {
+                        // Chest — wide low wooden cuboid.
+                        spawn(&mut commands, dead_end_cuboid.clone(), dead_end_chest_mat.clone(),
+                              0.25, 0.80, 0.50, 0.60);
+                    }
+                }
             }
         }
     }
@@ -1814,6 +1934,38 @@ fn wall_tint_index(r: usize, c: usize, seed: u64) -> usize {
     h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
     h ^= h >> 27;
     (h % WALL_TINT_VARIANTS as u64) as usize
+}
+
+/// Deterministic hash of `(row, col, seed)` → dead-end object kind in
+/// `0..DEAD_END_OBJECT_VARIANTS`. Different constants from
+/// `wall_tint_index` so the object kind and the cell tint don't
+/// correlate visually.
+fn dead_end_object_index(r: usize, c: usize, seed: u64) -> u32 {
+    let mut h = seed.wrapping_mul(0x6EED_0E9D_A4D9_4A4F);
+    h = h.wrapping_add((r as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+    h = h.wrapping_add((c as u64).wrapping_mul(0xC6BC_279E_C8C9_D5B1));
+    h ^= h >> 30;
+    h = h.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    h ^= h >> 27;
+    (h % DEAD_END_OBJECT_VARIANTS as u64) as u32
+}
+
+/// `true` when `(r, c)` is a dead-end cell — a passable cell whose four
+/// orthogonal neighbours include exactly one other passable cell. Start
+/// and finish cells are excluded by the caller, not here, so this helper
+/// stays purely topological.
+fn is_dead_end(grid: &[Vec<char>], r: usize, c: usize) -> bool {
+    let rows = grid.len();
+    let cols = if grid.is_empty() { 0 } else { grid[0].len() };
+    if r >= rows || c >= cols || grid[r][c] == 'W' {
+        return false;
+    }
+    let mut open = 0u32;
+    if r > 0 && grid[r - 1][c] != 'W' { open += 1; }
+    if r + 1 < rows && grid[r + 1][c] != 'W' { open += 1; }
+    if c > 0 && grid[r][c - 1] != 'W' { open += 1; }
+    if c + 1 < cols && grid[r][c + 1] != 'W' { open += 1; }
+    open == 1
 }
 
 fn lcg(state: &mut u64) -> f32 {

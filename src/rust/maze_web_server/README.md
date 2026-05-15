@@ -99,6 +99,7 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.title`            | Text (optional) | (falls back to `game.play3d.title`) | (config-file only)
 |                | `game.play3d.<difficulty>.mode`             | Text    | `Play`     | (config-file only — free-text label shown in the in-game status bar, e.g. `Easy` / `Tricky` / `Hard`)
 |                | `game.play3d.<difficulty>.landmarks.wall_tint` | Boolean | `true` | (config-file only — when `true`, each passable cell hashes `(row, col, seed)` to pick one of six wall-emissive variants, giving the corridors a subtle per-cell shade variation as a spatial-orientation cue)
+|                | `game.play3d.<difficulty>.landmarks.dead_end_objects` | Boolean | `true` | (config-file only — when `true`, every dead-end cell (excluding start/finish) gets a distinctive landmark object: brazier, urn, broken pillar, or chest, picked by hashing `(row, col, seed)`)
 
 Every `game.play3d.<difficulty>.*` field — and each difficulty sub-section as a whole — is optional: an omitted field (or a wholly-omitted `[game.play3d.<difficulty>]` table) falls back to the default above rather than failing config load. This is deliberate: a missing required field would otherwise fail the *entire* `AppConfig` deserialise, which silently reverts to built-in defaults. The defaults are generic, safe values, not tuned per difficulty — a real deployment should still specify each difficulty explicitly.
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
@@ -195,6 +196,7 @@ minimap_radius = 5
 
 [game.play3d.easy.landmarks]
 wall_tint = true
+dead_end_objects = true
 
 [game.play3d.tricky]
 mode = "Tricky"
@@ -208,6 +210,7 @@ minimap_radius = 5
 
 [game.play3d.tricky.landmarks]
 wall_tint = true
+dead_end_objects = true
 
 [game.play3d.hard]
 mode = "Hard"
@@ -221,6 +224,7 @@ minimap_radius = 5
 
 [game.play3d.hard.landmarks]
 wall_tint = true
+dead_end_objects = true
 
 [storage]
 # Backend selector: "file" (on-disk JSON layout) or "sql" (SQLite/Postgres/MySQL).

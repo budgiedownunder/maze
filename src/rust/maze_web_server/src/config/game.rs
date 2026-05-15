@@ -85,12 +85,19 @@ pub struct LandmarksConfig {
     /// subtly different shades. Default `true`.
     #[serde(default = "default_landmarks_wall_tint")]
     pub wall_tint: bool,
+    /// Dead-end landmark objects — place a single distinctive object
+    /// (brazier / urn / pillar / chest) in every dead-end cell, picked
+    /// by hashing `(row, col, seed)` so the same maze always shows the
+    /// same object in the same dead-end. Default `true`.
+    #[serde(default = "default_landmarks_dead_end_objects")]
+    pub dead_end_objects: bool,
 }
 
 impl Default for LandmarksConfig {
     fn default() -> Self {
         Self {
             wall_tint: default_landmarks_wall_tint(),
+            dead_end_objects: default_landmarks_dead_end_objects(),
         }
     }
 }
@@ -252,6 +259,12 @@ fn default_landmarks_wall_tint() -> bool {
     true
 }
 
+/// Dead-end landmark objects default on. Operators can disable it per
+/// difficulty via `[game.play3d.<difficulty>.landmarks] dead_end_objects = false`.
+fn default_landmarks_dead_end_objects() -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,7 +356,7 @@ mod tests {
     }
 
     #[test]
-    fn landmarks_round_trips_from_toml_and_defaults_to_wall_tint_true() {
+    fn landmarks_round_trips_from_toml_and_defaults_to_all_true() {
         let toml = r#"
             [play3d]
             title = "Maze 3D"
@@ -356,6 +369,7 @@ mod tests {
             min_solution_length = 12
             [play3d.easy.landmarks]
             wall_tint = false
+            dead_end_objects = false
 
             [play3d.tricky]
             rows = 12
@@ -364,15 +378,33 @@ mod tests {
             seed = 43
             min_solution_length = 60
             # landmarks deliberately omitted — must default to all-true
+
+            [play3d.hard]
+            rows = 20
+            cols = 20
+            timer_seconds = 360
+            seed = 44
+            min_solution_length = 160
+            [play3d.hard.landmarks]
+            # only one toggle present — the other must default to true
+            dead_end_objects = false
         "#;
         let cfg: GameConfig = toml::from_str(toml).unwrap();
-        assert!(!cfg.play3d.easy.landmarks.wall_tint, "easy override disables wall_tint");
-        assert!(cfg.play3d.tricky.landmarks.wall_tint, "tricky omitted → defaults true");
-        // Built-in defaults from Play3dConfig::default() must also enable wall_tint.
+        // Easy override disables both.
+        assert!(!cfg.play3d.easy.landmarks.wall_tint);
+        assert!(!cfg.play3d.easy.landmarks.dead_end_objects);
+        // Tricky omits the whole landmarks table → both default true.
+        assert!(cfg.play3d.tricky.landmarks.wall_tint);
+        assert!(cfg.play3d.tricky.landmarks.dead_end_objects);
+        // Hard sets one toggle; the other falls back to the default.
+        assert!(cfg.play3d.hard.landmarks.wall_tint);
+        assert!(!cfg.play3d.hard.landmarks.dead_end_objects);
+        // Built-in Play3dConfig::default() enables every toggle.
         let default = Play3dConfig::default();
-        assert!(default.easy.landmarks.wall_tint);
-        assert!(default.tricky.landmarks.wall_tint);
-        assert!(default.hard.landmarks.wall_tint);
+        for d in [&default.easy, &default.tricky, &default.hard] {
+            assert!(d.landmarks.wall_tint);
+            assert!(d.landmarks.dead_end_objects);
+        }
     }
 
     #[test]

@@ -452,6 +452,8 @@ pub struct Play3dConfigResponse {
 pub struct LandmarksResponse {
     /// Per-cell wall tint variation enabled for this difficulty.
     pub wall_tint: bool,
+    /// Dead-end landmark objects enabled for this difficulty.
+    pub dead_end_objects: bool,
 }
 
 #[utoipa::path(
@@ -493,6 +495,7 @@ pub async fn get_play3d_config(
         mode: preset.mode.clone(),
         landmarks: LandmarksResponse {
             wall_tint: preset.landmarks.wall_tint,
+            dead_end_objects: preset.landmarks.dead_end_objects,
         },
     }))
 }

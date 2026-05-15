@@ -119,6 +119,10 @@ minimap_radius = 5
 # Per-cell wall tint variation — each cell's walls pick one of six
 # emissive variants seeded from (row, col, seed). Default true.
 wall_tint = true
+# Dead-end landmark objects — every dead-end cell gets one of four
+# distinctive objects (brazier / urn / broken pillar / chest) picked
+# by hashing (row, col, seed). Default true.
+dead_end_objects = true
 
 [game.play3d.tricky]
 title = "TRICKY 3D"
@@ -133,6 +137,7 @@ minimap_radius = 5
 
 [game.play3d.tricky.landmarks]
 wall_tint = true
+dead_end_objects = true
 
 [game.play3d.hard]
 title = "HARD 3D"
@@ -147,6 +152,7 @@ minimap_radius = 5
 
 [game.play3d.hard.landmarks]
 wall_tint = true
+dead_end_objects = true
 
 [oauth]
 # Master switch for OAuth sign-in. When false, no OAuth buttons are shown in
