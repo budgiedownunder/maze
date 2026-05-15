@@ -15,7 +15,11 @@ Browser-based UI for the `maze_web_server` REST API. Features:
 - **3D maze game** — a "Play 3D" button on the maze list and maze editor pages
   navigates the browser to `/game/?id={mazeId}` on the Rust server, which serves the
   [`Bevy`](https://bevyengine.org/) WebAssembly module ([`maze_game_bevy_wasm`](../../rust/maze_game_bevy_wasm/README.md))
-  that runs the first-person 3D game entirely in-browser
+  that runs the first-person 3D game entirely in-browser. On touch devices
+  the game accepts both a six-button D-pad (turn / move / tilt / pause) and
+  single-finger canvas gestures: swipe left / right to turn, swipe up / down
+  to tilt, press-and-hold to move forward. Spacebar (desktop) or the D-pad
+  pause button toggles a "PAUSED" overlay that freezes the timer and movement.
 - **In-browser WASM** — maze generation, solving, and game logic run locally via the
   `maze_wasm` WebAssembly module with no server round-trip
 

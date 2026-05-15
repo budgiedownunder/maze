@@ -31,17 +31,19 @@ The player starts at the start cell facing the first open neighbour cycling thro
 
 Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. Turning and movement are gated by an animation lock, but pitch input is allowed to update during these animations (though not after winning).
 
-On touch devices (browser and MAUI WebView) a D-pad overlay replaces keyboard input: six buttons in a two-row grid — tilt-up, move-forward, tilt-down on the top row, turn-left, pause/resume, turn-right on the bottom row. The tilt buttons are rendered slightly smaller with a chevron icon to distinguish them from the primary movement controls. The pause button's glyph toggles between `‖` (paused state coming) and `▶` (resume) in lockstep with the Bevy game state via a `maze-game-paused` CustomEvent. The overlay is shown automatically when `pointer: coarse` is detected and hidden on desktop.
+
 
 ### Visual features
 
-- Procedural brick-pattern texture on walls; stone-tile texture on floors — generated at runtime, no asset files required.
+- **Procedural brick-pattern** texture on walls; stone-tile texture on floors — generated at runtime, no asset files required.
 - Floor grid lines at cell boundaries for orientation feedback.
-- Start cell highlighted green; finish cell highlighted white.
-- **Status bar overlay (top-left corner)** — a row container that displays the configured `mode` label.
-- Minimap overlay (top-right corner) — fixed viewport centred on the player; only explored cells and their immediate neighbours are revealed. The whole panel re-anchors to the window's top-right corner on resize.
-- Win overlay — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen.
-- **Gold-leaf rain** — on win, small gold leaf sprites spawn continuously across the full screen width and fall with gentle rotation and drift, celebrating completion.
+- Start cell highlighted green; finish cell highlighted gold.
+- Status bar overlay (top-left corner) — a row container that displays the configured `mode` label.
+- **Minimap overlay** (top-right corner) — fixed viewport centred on the player; only explored cells and their immediate neighbours are revealed. The whole panel re-anchors to the window's top-right corner on resize.
+- **Win overlay** — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen.
+- Gold-leaf rain — on win, small gold leaf sprites spawn continuously across the full screen width and fall with gentle rotation and drift, celebrating completion.
+- **Lose overlay** — on not completing in time, movement stops and a "You Lose!" panel appears centred on screen.
+- Rain-Lightning — on lose, rain sprites spawn continuously across the full screen width and fall accompanied by periodic lightning flashes.
 
 ## Getting Started
 

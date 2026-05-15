@@ -318,6 +318,91 @@
       if (img) img.src = paused ? '/images/maze/dpad_play.png' : '/images/maze/dpad_pause.png';
       btn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
     });
+
+    // Canvas touch gestures — translate single-finger gestures to the same
+    // synthetic key events the D-pad already uses, so the Bevy side stays
+    // keyboard-driven. Swipe left/right → turn; swipe up/down → tilt
+    // (one incremental nudge per swipe); press-and-hold with no movement
+    // → move forward (held). Multi-touch is ignored to avoid pinch/zoom
+    // misfires. The D-pad lives in a separate `#controls` strip below the
+    // canvas, so its taps never hit these listeners.
+    {
+      const SWIPE_THRESHOLD = 30;   // px — minimum travel to classify as a swipe
+      const HOLD_DELAY = 250;       // ms — touch must be held this long with no movement to count as a hold
+      let touchStart = null;        // { x, y, lastX, lastY }
+      let holdTimer = null;
+      let holdActive = false;
+
+      const cancelHold = () => {
+        if (holdTimer !== null) { clearTimeout(holdTimer); holdTimer = null; }
+        if (holdActive) { fire('ArrowUp', 'keyup'); holdActive = false; }
+      };
+
+      canvas.addEventListener('touchstart', e => {
+        if (e.touches.length !== 1) {
+          cancelHold();
+          touchStart = null;
+          return;
+        }
+        const t = e.touches[0];
+        touchStart = { x: t.clientX, y: t.clientY, lastX: t.clientX, lastY: t.clientY };
+        holdActive = false;
+        holdTimer = setTimeout(() => {
+          if (touchStart && !holdActive) {
+            holdActive = true;
+            fire('ArrowUp', 'keydown');
+          }
+        }, HOLD_DELAY);
+      }, { passive: true });
+
+      canvas.addEventListener('touchmove', e => {
+        if (!touchStart || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        touchStart.lastX = t.clientX;
+        touchStart.lastY = t.clientY;
+        // Once the touch has moved beyond the swipe threshold, it can no
+        // longer promote to a hold — cancel the pending hold timer.
+        if (!holdActive && holdTimer !== null) {
+          const dx = t.clientX - touchStart.x;
+          const dy = t.clientY - touchStart.y;
+          if (Math.hypot(dx, dy) > SWIPE_THRESHOLD) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+          }
+        }
+      }, { passive: true });
+
+      canvas.addEventListener('touchend', () => {
+        if (!touchStart) return;
+        if (holdTimer !== null) { clearTimeout(holdTimer); holdTimer = null; }
+        if (holdActive) {
+          fire('ArrowUp', 'keyup');
+          holdActive = false;
+        } else {
+          const dx = touchStart.lastX - touchStart.x;
+          const dy = touchStart.lastY - touchStart.y;
+          const absX = Math.abs(dx);
+          const absY = Math.abs(dy);
+          if (Math.max(absX, absY) >= SWIPE_THRESHOLD) {
+            let key;
+            if (absX > absY) {
+              key = dx > 0 ? 'ArrowRight' : 'ArrowLeft';
+            } else {
+              // Screen y grows downward, so swipe UP (negative dy) = tilt up.
+              key = dy < 0 ? 'KeyQ' : 'KeyE';
+            }
+            fire(key, 'keydown');
+            fire(key, 'keyup');
+          }
+        }
+        touchStart = null;
+      }, { passive: true });
+
+      canvas.addEventListener('touchcancel', () => {
+        cancelHold();
+        touchStart = null;
+      }, { passive: true });
+    }
   </script>
 </body>
 </html>
