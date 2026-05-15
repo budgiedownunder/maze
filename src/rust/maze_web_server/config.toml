@@ -115,6 +115,11 @@ min_solution_length = 15
 minimap_cell_px = 10
 minimap_radius = 5
 
+[game.play3d.easy.landmarks]
+# Per-cell wall tint variation — each cell's walls pick one of six
+# emissive variants seeded from (row, col, seed). Default true.
+wall_tint = true
+
 [game.play3d.tricky]
 title = "TRICKY 3D"
 mode = "Tricky"
@@ -126,6 +131,9 @@ min_solution_length = 35
 minimap_cell_px = 10
 minimap_radius = 5
 
+[game.play3d.tricky.landmarks]
+wall_tint = true
+
 [game.play3d.hard]
 title = "HARD 3D"
 mode = "Hard"
@@ -136,6 +144,9 @@ seed = 25252525
 min_solution_length = 45
 minimap_cell_px = 10
 minimap_radius = 5
+
+[game.play3d.hard.landmarks]
+wall_tint = true
 
 [oauth]
 # Master switch for OAuth sign-in. When false, no OAuth buttons are shown in

@@ -438,6 +438,20 @@ pub struct Play3dConfigResponse {
     pub title: String,
     /// Free-text label shown in the in-game status bar.
     pub mode: String,
+    /// Per-difficulty landmark / spatial-orientation toggles forwarded
+    /// verbatim from the config preset to the WASM client.
+    pub landmarks: LandmarksResponse,
+}
+
+/// JSON shape of the per-difficulty landmark toggles in
+/// [`Play3dConfigResponse`]. Mirrors `crate::config::game::LandmarksConfig`
+/// but renames fields to `camelCase` so they sit naturally alongside the
+/// rest of the response (e.g. `wallTint`).
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LandmarksResponse {
+    /// Per-cell wall tint variation enabled for this difficulty.
+    pub wall_tint: bool,
 }
 
 #[utoipa::path(
@@ -477,6 +491,9 @@ pub async fn get_play3d_config(
         minimap_radius: preset.minimap_radius,
         title: config.game.play3d.resolved_title(&normalised),
         mode: preset.mode.clone(),
+        landmarks: LandmarksResponse {
+            wall_tint: preset.landmarks.wall_tint,
+        },
     }))
 }
 

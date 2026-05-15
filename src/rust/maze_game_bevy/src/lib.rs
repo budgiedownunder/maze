@@ -34,6 +34,23 @@ const MAP_CELL_PX: u32 = 10;
 const MAP_RADIUS: u32 = 5;
 const MAP_MARGIN: f32 = 12.0;
 
+// Per-cell wall-tint variants for spatial-orientation landmarks. Every
+// passable cell hashes (row, col, GameConfig.seed) to pick one of these
+// emissive offsets, so the same maze always tints the same cells but
+// different cells (and so different corridor sections) read as subtly
+// different shades. Offsets are added to the base emissive RGB and
+// clamped at 0 — staying within roughly ±10% of the base so the maze
+// still reads as a coherent space rather than a circus.
+const WALL_TINT_VARIANTS: usize = 6;
+const WALL_TINT_OFFSETS: [(f32, f32, f32); WALL_TINT_VARIANTS] = [
+    ( 0.00,  0.00,  0.00), // base
+    ( 0.05, -0.02, -0.02), // warm
+    (-0.04,  0.05, -0.02), // green
+    (-0.02, -0.02,  0.05), // cool blue
+    (-0.04, -0.04, -0.04), // dimmer
+    ( 0.04,  0.04,  0.04), // brighter
+];
+
 // ---- Colour palette ----
 // Every fixed colour the game uses lives here. Domain-named aliases below
 // (CLOCK_GOLD, CLOCK_RED) point back into the palette so use-sites read
@@ -318,6 +335,26 @@ pub struct GameConfig {
     pub title: String,
     /// Free-text label shown in the in-game status bar
     pub mode: String,
+    /// Per-difficulty landmark / spatial-orientation toggles. Each
+    /// landmark technique has its own flag here so a build can disable
+    /// any individual technique at runtime via the server config.
+    pub landmarks: Landmarks,
+}
+
+/// Toggle bag for the spatial-orientation landmark techniques. Each new
+/// landmark sub-step adds one field (default `true`). The host populates
+/// this from `[game.play3d.<difficulty>.landmarks]` in the server config.
+#[derive(Clone, Debug)]
+pub struct Landmarks {
+    /// Per-cell wall tint variation — when `false`, every cell uses the
+    /// base wall material variant (reproduces the pre-5A look).
+    pub wall_tint: bool,
+}
+
+impl Default for Landmarks {
+    fn default() -> Self {
+        Self { wall_tint: true }
+    }
 }
 
 impl Default for GameConfig {
@@ -333,6 +370,7 @@ impl Default for GameConfig {
             minimap_radius: MAP_RADIUS,
             title: "MAZE 3D".to_string(),
             mode: "Play".to_string(),
+            landmarks: Landmarks::default(),
         }
     }
 }
@@ -653,26 +691,45 @@ fn spawn_world(
 
     // emissive: LinearRgba writes directly to the framebuffer without sRGB conversion or
     // lighting interaction. base_color: BLACK ensures PBR diffuse contributes nothing.
-    // N/S-facing panels (ahead/behind) — cool stone grey
-    let wall_ns_mat = materials.as_mut().map(|m| {
-        m.add(StandardMaterial {
-            base_color: Color::BLACK,
-            emissive: LinearRgba::new(0.38, 0.38, 0.40, 1.0),
-            emissive_texture: brick_tex.clone(),
-            uv_transform: Affine2::from_scale(Vec2::new(3.0, 5.0)),
-            ..default()
-        })
-    });
-    // E/W-facing panels (sides) — slightly darker stone grey for orientation distinction
-    let wall_ew_mat = materials.as_mut().map(|m| {
-        m.add(StandardMaterial {
-            base_color: Color::BLACK,
-            emissive: LinearRgba::new(0.14, 0.14, 0.16, 1.0),
-            emissive_texture: brick_tex.clone(),
-            uv_transform: Affine2::from_scale(Vec2::new(3.0, 5.0)),
-            ..default()
-        })
-    });
+    // N/S-facing panels (ahead/behind) — cool stone grey, with WALL_TINT_VARIANTS
+    // emissive variants for per-cell tint variation (picked in the spawn loop).
+    let wall_ns_mats: [Option<Handle<StandardMaterial>>; WALL_TINT_VARIANTS] =
+        std::array::from_fn(|i| {
+            let (dr, dg, db) = WALL_TINT_OFFSETS[i];
+            materials.as_mut().map(|m| {
+                m.add(StandardMaterial {
+                    base_color: Color::BLACK,
+                    emissive: LinearRgba::new(
+                        (0.38 + dr).max(0.0),
+                        (0.38 + dg).max(0.0),
+                        (0.40 + db).max(0.0),
+                        1.0,
+                    ),
+                    emissive_texture: brick_tex.clone(),
+                    uv_transform: Affine2::from_scale(Vec2::new(3.0, 5.0)),
+                    ..default()
+                })
+            })
+        });
+    // E/W-facing panels (sides) — slightly darker stone grey for orientation distinction.
+    let wall_ew_mats: [Option<Handle<StandardMaterial>>; WALL_TINT_VARIANTS] =
+        std::array::from_fn(|i| {
+            let (dr, dg, db) = WALL_TINT_OFFSETS[i];
+            materials.as_mut().map(|m| {
+                m.add(StandardMaterial {
+                    base_color: Color::BLACK,
+                    emissive: LinearRgba::new(
+                        (0.14 + dr).max(0.0),
+                        (0.14 + dg).max(0.0),
+                        (0.16 + db).max(0.0),
+                        1.0,
+                    ),
+                    emissive_texture: brick_tex.clone(),
+                    uv_transform: Affine2::from_scale(Vec2::new(3.0, 5.0)),
+                    ..default()
+                })
+            })
+        });
     let floor_mat = materials.as_mut().map(|m| {
         m.add(StandardMaterial {
             base_color: Color::BLACK,
@@ -733,6 +790,20 @@ fn spawn_world(
             }
             let x = c as f32 * CELL_SIZE + 1.0;
             let z = r as f32 * CELL_SIZE + 1.0;
+
+            // Per-cell wall-tint: hash (r, c, seed) → one of the
+            // WALL_TINT_VARIANTS material variants so every cell's walls
+            // pick up a subtly different shade, and the same maze always
+            // looks the same. When the per-difficulty `landmarks.wall_tint`
+            // toggle is off, every cell falls back to variant 0 (the base)
+            // and the maze reads as it did before 5A.
+            let tint = if config.landmarks.wall_tint {
+                wall_tint_index(r, c, config.seed)
+            } else {
+                0
+            };
+            let wall_ns_mat = wall_ns_mats[tint].clone();
+            let wall_ew_mat = wall_ew_mats[tint].clone();
 
             // Spawn wall panels in a single call so all components (Mesh3d,
             // MeshMaterial3d, Transform, marker) are applied atomically.
@@ -1730,6 +1801,19 @@ fn grid_to_json(grid: &[Vec<char>]) -> String {
         })
         .collect();
     format!("{{\"grid\":[{}]}}", rows.join(","))
+}
+
+/// Deterministic hash of `(row, col, seed)` → wall tint variant index in
+/// `0..WALL_TINT_VARIANTS`. Used by `spawn_world` so each cell picks a
+/// stable tint for its walls; the same seed always tints the same cells.
+fn wall_tint_index(r: usize, c: usize, seed: u64) -> usize {
+    let mut h = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    h = h.wrapping_add((r as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9));
+    h = h.wrapping_add((c as u64).wrapping_mul(0x94D0_49BB_1331_11EB));
+    h ^= h >> 30;
+    h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h ^= h >> 27;
+    (h % WALL_TINT_VARIANTS as u64) as usize
 }
 
 fn lcg(state: &mut u64) -> f32 {

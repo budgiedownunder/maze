@@ -65,6 +65,34 @@ pub struct Play3dDifficultyConfig {
     /// per difficulty so e.g. Easy / Tricky / Hard. Defaults to "Play".
     #[serde(default = "default_play3d_mode")]
     pub mode: String,
+    /// Landmark / spatial-orientation toggles. Each landmark technique
+    /// has its own flag here so an operator can enable or disable any
+    /// individual technique per difficulty without code changes.
+    #[serde(default)]
+    pub landmarks: LandmarksConfig,
+}
+
+/// Per-difficulty landmark / spatial-orientation toggles. New techniques
+/// add their own field here (default `true`) as they land — the schema
+/// is intentionally a flat record of booleans (or simple values) so
+/// `config.toml` reads like `[game.play3d.<difficulty>.landmarks]` with
+/// one knob per feature.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct LandmarksConfig {
+    /// Per-cell wall tint variation. Each passable cell hashes
+    /// `(row, col, seed)` to pick one of several emissive variants for
+    /// its wall panels — different corridor sections then read as
+    /// subtly different shades. Default `true`.
+    #[serde(default = "default_landmarks_wall_tint")]
+    pub wall_tint: bool,
+}
+
+impl Default for LandmarksConfig {
+    fn default() -> Self {
+        Self {
+            wall_tint: default_landmarks_wall_tint(),
+        }
+    }
 }
 
 impl Default for Play3dDifficultyConfig {
@@ -79,6 +107,7 @@ impl Default for Play3dDifficultyConfig {
             minimap_radius: default_minimap_radius(),
             title: None,
             mode: default_play3d_mode(),
+            landmarks: LandmarksConfig::default(),
         }
     }
 }
@@ -140,6 +169,7 @@ impl Default for Play3dConfig {
                 minimap_radius: default_minimap_radius(),
                 title: None,
                 mode: "Easy".to_string(),
+                landmarks: LandmarksConfig::default(),
             },
             tricky: Play3dDifficultyConfig {
                 rows: 15,
@@ -151,6 +181,7 @@ impl Default for Play3dConfig {
                 minimap_radius: default_minimap_radius(),
                 title: None,
                 mode: "Tricky".to_string(),
+                landmarks: LandmarksConfig::default(),
             },
             hard: Play3dDifficultyConfig {
                 rows: 25,
@@ -162,6 +193,7 @@ impl Default for Play3dConfig {
                 minimap_radius: default_minimap_radius(),
                 title: None,
                 mode: "Hard".to_string(),
+                landmarks: LandmarksConfig::default(),
             },
         }
     }
@@ -212,6 +244,12 @@ fn default_minimap_radius() -> u32 {
 /// Default mode label shown in the in-game status bar when not configured.
 fn default_play3d_mode() -> String {
     "Play".to_string()
+}
+
+/// Per-cell wall tint variation defaults on. Operators can disable it
+/// per difficulty via `[game.play3d.<difficulty>.landmarks] wall_tint = false`.
+fn default_landmarks_wall_tint() -> bool {
+    true
 }
 
 #[cfg(test)]
@@ -302,6 +340,39 @@ mod tests {
         assert_eq!(cfg.play3d.easy.minimap_radius, 5);
         assert_eq!(cfg.play3d.hard.minimap_cell_px, 10);
         assert_eq!(cfg.play3d.hard.minimap_radius, 5);
+    }
+
+    #[test]
+    fn landmarks_round_trips_from_toml_and_defaults_to_wall_tint_true() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            [play3d.easy.landmarks]
+            wall_tint = false
+
+            [play3d.tricky]
+            rows = 12
+            cols = 12
+            timer_seconds = 180
+            seed = 43
+            min_solution_length = 60
+            # landmarks deliberately omitted — must default to all-true
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert!(!cfg.play3d.easy.landmarks.wall_tint, "easy override disables wall_tint");
+        assert!(cfg.play3d.tricky.landmarks.wall_tint, "tricky omitted → defaults true");
+        // Built-in defaults from Play3dConfig::default() must also enable wall_tint.
+        let default = Play3dConfig::default();
+        assert!(default.easy.landmarks.wall_tint);
+        assert!(default.tricky.landmarks.wall_tint);
+        assert!(default.hard.landmarks.wall_tint);
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use maze_game_bevy::GameConfig;
+use maze_game_bevy::{GameConfig, Landmarks};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
@@ -58,7 +58,30 @@ struct StartConfig {
     #[serde(default)]
     mode: String,
     #[serde(default)]
+    landmarks: LandmarksStartConfig,
+    #[serde(default)]
     maze_json: Option<String>,
+}
+
+/// Shape of the nested `landmarks` object in the host JSON payload —
+/// per-difficulty toggles for the landmark / spatial-orientation
+/// features. Mirrors the server's `LandmarksResponse` field-for-field;
+/// kept as a separate type so we can default it field-wise.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LandmarksStartConfig {
+    #[serde(default = "default_landmarks_wall_tint")]
+    wall_tint: bool,
+}
+
+impl Default for LandmarksStartConfig {
+    fn default() -> Self {
+        Self { wall_tint: default_landmarks_wall_tint() }
+    }
+}
+
+fn default_landmarks_wall_tint() -> bool {
+    true
 }
 
 /// The minimap cell pixel size the game shipped with — used when the host
@@ -119,6 +142,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         minimap_radius: cfg.minimap_radius,
         title: cfg.title,
         mode: cfg.mode,
+        landmarks: Landmarks { wall_tint: cfg.landmarks.wall_tint },
     });
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());
     app.run();
