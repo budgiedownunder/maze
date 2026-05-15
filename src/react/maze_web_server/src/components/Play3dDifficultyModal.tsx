@@ -7,7 +7,7 @@ import { useState } from 'react'
 const DIFFICULTIES = ['easy', 'tricky', 'hard'] as const
 type Difficulty = (typeof DIFFICULTIES)[number]
 
-const DEFAULT_DIFFICULTY: Difficulty = 'tricky'
+const DEFAULT_DIFFICULTY: Difficulty = 'easy'
 
 interface Props {
   onPlay: (difficulty: Difficulty) => void

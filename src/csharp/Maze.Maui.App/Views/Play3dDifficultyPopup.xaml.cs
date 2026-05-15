@@ -26,10 +26,10 @@ namespace Maze.Maui.App.Views
         {
             InitializeComponent();
 
-            // Land focus on the default (Tricky) option. Deferred to the
+            // Land focus on the default (Easy) option. Deferred to the
             // dispatcher so the native handlers are attached by the time
             // Focus() runs.
-            Opened += (s, e) => Dispatcher.Dispatch(() => TrickyRadio.Focus());
+            Opened += (s, e) => Dispatcher.Dispatch(() => EasyRadio.Focus());
 
 #if WINDOWS
             // Trap Tab / Shift+Tab so focus cycles inside the popup. CT.Maui v13

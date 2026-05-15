@@ -51,7 +51,7 @@ export function HomePage() {
             <img src={play3dIcon} className="home-tile-img" alt="" aria-hidden="true" />
             <div className="home-tile-text">
               <h2 className="home-tile-title">Play 3D</h2>
-              <p className="home-tile-desc">Play a random 3D game</p>
+              <p className="home-tile-desc">Play in easy, tricky or hard mode</p>
             </div>
           </button>
           <button type="button" className="home-tile" onClick={handleMyMazes}>

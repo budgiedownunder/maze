@@ -63,28 +63,28 @@ describe('HomePage', () => {
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
-  it('difficulty modal defaults to Tricky and Play navigates to /game/?difficulty=tricky', async () => {
+  it('difficulty modal defaults to Easy and Play navigates to /game/?difficulty=easy', async () => {
     const locationStub = { href: '' }
     vi.stubGlobal('location', locationStub)
 
     renderHomePage()
     await userEvent.click(screen.getByRole('button', { name: /play 3d/i }))
-    expect(screen.getByRole('radio', { name: /tricky/i })).toBeChecked()
-    await userEvent.click(screen.getByRole('button', { name: /^play$/i }))
-
-    expect(locationStub.href).toBe('/game/?difficulty=tricky')
-  })
-
-  it('choosing Easy then Play navigates to /game/?difficulty=easy', async () => {
-    const locationStub = { href: '' }
-    vi.stubGlobal('location', locationStub)
-
-    renderHomePage()
-    await userEvent.click(screen.getByRole('button', { name: /play 3d/i }))
-    await userEvent.click(screen.getByRole('radio', { name: /easy/i }))
+    expect(screen.getByRole('radio', { name: /easy/i })).toBeChecked()
     await userEvent.click(screen.getByRole('button', { name: /^play$/i }))
 
     expect(locationStub.href).toBe('/game/?difficulty=easy')
+  })
+
+  it('choosing Tricky then Play navigates to /game/?difficulty=tricky', async () => {
+    const locationStub = { href: '' }
+    vi.stubGlobal('location', locationStub)
+
+    renderHomePage()
+    await userEvent.click(screen.getByRole('button', { name: /play 3d/i }))
+    await userEvent.click(screen.getByRole('radio', { name: /tricky/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^play$/i }))
+
+    expect(locationStub.href).toBe('/game/?difficulty=tricky')
   })
 
   it('cancelling the difficulty modal closes it without navigating', async () => {

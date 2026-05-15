@@ -95,17 +95,17 @@ describe('HamburgerMenu', () => {
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
-  it('difficulty modal defaults to Tricky and Play navigates to /game/?difficulty=tricky', async () => {
+  it('difficulty modal defaults to Easy and Play navigates to /game/?difficulty=easy', async () => {
     const locationStub = { href: '' }
     vi.stubGlobal('location', locationStub)
 
     renderMenu()
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }))
     await userEvent.click(screen.getByRole('menuitem', { name: /play 3d/i }))
-    expect(screen.getByRole('radio', { name: /tricky/i })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /easy/i })).toBeChecked()
     await userEvent.click(screen.getByRole('button', { name: /^play$/i }))
 
-    expect(locationStub.href).toBe('/game/?difficulty=tricky')
+    expect(locationStub.href).toBe('/game/?difficulty=easy')
   })
 
   it('choosing Hard then Play navigates to /game/?difficulty=hard', async () => {
