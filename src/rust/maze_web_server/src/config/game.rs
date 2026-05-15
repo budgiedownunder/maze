@@ -61,6 +61,10 @@ pub struct Play3dDifficultyConfig {
     /// `None`, the parent `[game.play3d].title` is used.
     #[serde(default)]
     pub title: Option<String>,
+    /// Free-text label shown in the in-game status bar. One
+    /// per difficulty so e.g. Easy / Tricky / Hard. Defaults to "Play".
+    #[serde(default = "default_play3d_mode")]
+    pub mode: String,
 }
 
 impl Default for Play3dDifficultyConfig {
@@ -74,6 +78,7 @@ impl Default for Play3dDifficultyConfig {
             minimap_cell_px: default_minimap_cell_px(),
             minimap_radius: default_minimap_radius(),
             title: None,
+            mode: default_play3d_mode(),
         }
     }
 }
@@ -134,6 +139,7 @@ impl Default for Play3dConfig {
                 minimap_cell_px: default_minimap_cell_px(),
                 minimap_radius: default_minimap_radius(),
                 title: None,
+                mode: "Easy".to_string(),
             },
             tricky: Play3dDifficultyConfig {
                 rows: 15,
@@ -144,6 +150,7 @@ impl Default for Play3dConfig {
                 minimap_cell_px: default_minimap_cell_px(),
                 minimap_radius: default_minimap_radius(),
                 title: None,
+                mode: "Tricky".to_string(),
             },
             hard: Play3dDifficultyConfig {
                 rows: 25,
@@ -154,6 +161,7 @@ impl Default for Play3dConfig {
                 minimap_cell_px: default_minimap_cell_px(),
                 minimap_radius: default_minimap_radius(),
                 title: None,
+                mode: "Hard".to_string(),
             },
         }
     }
@@ -199,6 +207,11 @@ fn default_minimap_cell_px() -> u32 {
 /// The minimap visible-radius the game shipped with.
 fn default_minimap_radius() -> u32 {
     5
+}
+
+/// Default mode label shown in the in-game status bar when not configured.
+fn default_play3d_mode() -> String {
+    "Play".to_string()
 }
 
 #[cfg(test)]
@@ -289,6 +302,38 @@ mod tests {
         assert_eq!(cfg.play3d.easy.minimap_radius, 5);
         assert_eq!(cfg.play3d.hard.minimap_cell_px, 10);
         assert_eq!(cfg.play3d.hard.minimap_radius, 5);
+    }
+
+    #[test]
+    fn mode_round_trips_from_toml_and_falls_back_to_default_when_omitted() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            mode = "Marathon"
+
+            [play3d.tricky]
+            rows = 12
+            cols = 12
+            timer_seconds = 180
+            seed = 43
+            min_solution_length = 60
+            # mode deliberately omitted — must fall back to default
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.mode, "Marathon");
+        assert_eq!(cfg.play3d.tricky.mode, "Play");
+        // Default Play3dConfig still uses the shipped per-difficulty labels.
+        let default = Play3dConfig::default();
+        assert_eq!(default.easy.mode, "Easy");
+        assert_eq!(default.tricky.mode, "Tricky");
+        assert_eq!(default.hard.mode, "Hard");
     }
 
     #[test]

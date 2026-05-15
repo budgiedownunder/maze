@@ -56,6 +56,8 @@ struct StartConfig {
     minimap_radius: u32,
     title: String,
     #[serde(default)]
+    mode: String,
+    #[serde(default)]
     maze_json: Option<String>,
 }
 
@@ -116,6 +118,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         minimap_cell_px: cfg.minimap_cell_px,
         minimap_radius: cfg.minimap_radius,
         title: cfg.title,
+        mode: cfg.mode,
     });
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());
     app.run();

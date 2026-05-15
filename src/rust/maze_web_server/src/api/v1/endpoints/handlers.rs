@@ -436,6 +436,8 @@ pub struct Play3dConfigResponse {
     pub minimap_radius: u32,
     /// In-game splash title to show on the title screen.
     pub title: String,
+    /// Free-text label shown in the in-game status bar.
+    pub mode: String,
 }
 
 #[utoipa::path(
@@ -474,6 +476,7 @@ pub async fn get_play3d_config(
         minimap_cell_px: preset.minimap_cell_px,
         minimap_radius: preset.minimap_radius,
         title: config.game.play3d.resolved_title(&normalised),
+        mode: preset.mode.clone(),
     }))
 }
 

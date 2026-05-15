@@ -37,7 +37,8 @@ On touch devices (browser and MAUI WebView) a D-pad overlay replaces keyboard in
 - Procedural brick-pattern texture on walls; stone-tile texture on floors — generated at runtime, no asset files required.
 - Floor grid lines at cell boundaries for orientation feedback.
 - Start cell highlighted green; finish cell highlighted white.
-- Minimap overlay (top-right corner) — fixed 7×7 viewport centred on the player with fog of war; only explored cells and their immediate neighbours are revealed. Player position shown as a directional arrow.
+- **Status bar overlay (top-left corner)** — a row container that displays the configured `mode` label.
+- Minimap overlay (top-right corner) — fixed viewport centred on the player; only explored cells and their immediate neighbours are revealed. The whole panel re-anchors to the window's top-right corner on resize.
 - Win overlay — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen.
 - **Gold-leaf rain** — on win, small gold leaf sprites spawn continuously across the full screen width and fall with gentle rotation and drift, celebrating completion.
 

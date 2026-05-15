@@ -62,11 +62,19 @@ const COLOR_LIGHTNING_PEAK: Color = Color::srgba(1.0, 1.0, 1.0, 0.7);
 
 // Minimap palette
 const COLOR_MINIMAP_OUTSIDE: Color = Color::srgb(0.0, 0.0, 0.0);
-const COLOR_MINIMAP_WALL: Color = Color::srgb(0.18, 0.18, 0.18);
-const COLOR_MINIMAP_START: Color = Color::srgb(0.0, 0.7, 0.0);
-const COLOR_MINIMAP_FINISH: Color = Color::srgb(0.9, 0.9, 0.9);
-const COLOR_MINIMAP_FLOOR: Color = Color::srgb(0.45, 0.45, 0.45);
-const COLOR_MINIMAP_PLAYER: Color = Color::srgb(1.0, 0.85, 0.0);
+const COLOR_MINIMAP_WALL: Color = Color::srgb(0.55, 0.55, 0.58);
+const COLOR_MINIMAP_START: Color = Color::srgb(0.0, 0.65, 0.0);
+const COLOR_MINIMAP_FINISH: Color = Color::srgb(1.0, 0.85, 0.1);
+const COLOR_MINIMAP_FLOOR: Color = Color::srgb(0.78, 0.92, 0.78);
+const COLOR_MINIMAP_PLAYER: Color = Color::srgb(0.95, 0.15, 0.15);
+
+// Status bar (top-left HUD row). One row container.
+const COLOR_STATUSBAR_BG: Color = Color::srgba(0.10, 0.10, 0.14, 0.80);
+const COLOR_STATUSBAR_TEXT: Color = Color::srgb(0.67, 0.60, 0.92); // accent purple
+
+const STATUSBAR_BG_W: f32 = 140.0;
+const STATUSBAR_BG_H: f32 = 36.0;
+const STATUSBAR_MARGIN: f32 = 12.0;
 
 // Domain aliases — sugar at the use site for the countdown HUD palette.
 const CLOCK_GOLD: Color = COLOR_GOLD;
@@ -120,6 +128,12 @@ struct ClockText;
 struct ClockBackground;
 
 #[derive(Component)]
+struct StatusBar;
+
+#[derive(Component)]
+struct ModeText;
+
+#[derive(Component)]
 struct LoseOverlay;
 
 #[derive(Component)]
@@ -171,6 +185,9 @@ struct MinimapCamera;
 
 #[derive(Component)]
 struct MinimapPlayer;
+
+#[derive(Component)]
+struct MinimapBackground;
 
 #[derive(Component)]
 struct MinimapCell {
@@ -295,6 +312,8 @@ pub struct GameConfig {
     /// Minimap cells visible in each direction from the player.
     pub minimap_radius: u32,
     pub title: String,
+    /// Free-text label shown in the in-game status bar
+    pub mode: String,
 }
 
 impl Default for GameConfig {
@@ -309,6 +328,7 @@ impl Default for GameConfig {
             minimap_cell_px: MAP_CELL_PX,
             minimap_radius: MAP_RADIUS,
             title: "MAZE 3D".to_string(),
+            mode: "Play".to_string(),
         }
     }
 }
@@ -387,10 +407,13 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, tick_clock_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, clock_text_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, clock_flash_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, statusbar_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, lose_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, rain_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, lightning_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, minimap_resize_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, quit_system);
 }
@@ -827,8 +850,10 @@ fn spawn_world(
         MinimapCamera,
     ));
 
-    // Dark background
+    // Dark background — tagged so minimap_resize_system can reposition it
+    // (along with the cells) when the window size changes.
     commands.spawn((
+        MinimapBackground,
         Sprite {
             color: COLOR_MINIMAP_DARK,
             custom_size: Some(Vec2::splat(map_size + 4.0)),
@@ -904,6 +929,33 @@ fn spawn_world(
         TextFont { font_size: 36.0, ..default() },
         TextColor(CLOCK_GOLD),
         Transform::from_xyz(0.0, clock_y, 9.0),
+    ));
+
+    // Top-left status bar — currently shows the mode label only;
+    // `statusbar_resize_system` repositions both nodes each frame so window
+    // resizes track the top-left corner.
+    let (sb_x, sb_y) = window
+        .single()
+        .map(|w| (
+            -w.width()  / 2.0 + STATUSBAR_MARGIN + STATUSBAR_BG_W / 2.0,
+             w.height() / 2.0 - STATUSBAR_MARGIN - STATUSBAR_BG_H / 2.0,
+        ))
+        .unwrap_or((-500.0, 330.0));
+    commands.spawn((
+        StatusBar,
+        Sprite {
+            color: COLOR_STATUSBAR_BG,
+            custom_size: Some(Vec2::new(STATUSBAR_BG_W, STATUSBAR_BG_H)),
+            ..default()
+        },
+        Transform::from_xyz(sb_x, sb_y, 8.9),
+    ));
+    commands.spawn((
+        ModeText,
+        Text2d::new(config.mode.clone()),
+        TextFont { font_size: 22.0, ..default() },
+        TextColor(COLOR_STATUSBAR_TEXT),
+        Transform::from_xyz(sb_x, sb_y, 9.0),
     ));
 }
 
@@ -1202,6 +1254,62 @@ fn clock_text_system(
             colour.0 = if warn { CLOCK_RED } else { CLOCK_GOLD };
         }
         transform.translation.y = target_y;
+    }
+}
+
+fn minimap_resize_system(
+    window: Query<&Window>,
+    game_config: Res<GameConfig>,
+    mut minimap: ResMut<MinimapConfig>,
+    mut last_size: Local<(f32, f32)>,
+    mut bg: Query<&mut Transform, (With<MinimapBackground>, Without<MinimapCell>)>,
+    mut cells: Query<(&MinimapCell, &mut Transform), Without<MinimapBackground>>,
+) {
+    let Ok(win) = window.single() else { return; };
+    let w = win.width();
+    let h = win.height();
+    if (w - last_size.0).abs() < 0.5 && (h - last_size.1).abs() < 0.5 {
+        return;
+    }
+    *last_size = (w, h);
+
+    let cell_px = game_config.minimap_cell_px as f32;
+    let radius = game_config.minimap_radius as i32;
+    let view = radius * 2 + 1;
+    let map_size = view as f32 * cell_px;
+    let center_x = w / 2.0 - MAP_MARGIN - map_size / 2.0;
+    let center_y = h / 2.0 - MAP_MARGIN - map_size / 2.0;
+
+    minimap.center_x = center_x;
+    minimap.center_y = center_y;
+
+    for mut t in &mut bg {
+        t.translation.x = center_x;
+        t.translation.y = center_y;
+    }
+    for (cell, mut t) in &mut cells {
+        t.translation.x = center_x + cell.dc as f32 * cell_px;
+        t.translation.y = center_y - cell.dr as f32 * cell_px;
+    }
+    // Player marker is repositioned to (center_x, center_y) each frame by
+    // minimap_system, so it picks up the new centre automatically.
+}
+
+fn statusbar_resize_system(
+    window: Query<&Window>,
+    mut bg: Query<&mut Transform, (With<StatusBar>, Without<ModeText>)>,
+    mut text: Query<&mut Transform, (With<ModeText>, Without<StatusBar>)>,
+) {
+    let Ok(win) = window.single() else { return; };
+    let target_x = -win.width()  / 2.0 + STATUSBAR_MARGIN + STATUSBAR_BG_W / 2.0;
+    let target_y =  win.height() / 2.0 - STATUSBAR_MARGIN - STATUSBAR_BG_H / 2.0;
+    for mut t in &mut bg {
+        t.translation.x = target_x;
+        t.translation.y = target_y;
+    }
+    for mut t in &mut text {
+        t.translation.x = target_x;
+        t.translation.y = target_y;
     }
 }
 

@@ -106,6 +106,7 @@ title = "Maze 3D"
 
 [game.play3d.easy]
 title = "EASY 3D"
+mode = "Easy"
 rows = 10
 cols = 10
 timer_seconds = 120
@@ -116,6 +117,7 @@ minimap_radius = 5
 
 [game.play3d.tricky]
 title = "TRICKY 3D"
+mode = "Tricky"
 rows = 25
 cols = 25
 timer_seconds = 240
@@ -126,6 +128,7 @@ minimap_radius = 7
 
 [game.play3d.hard]
 title = "HARD 3D"
+mode = "Hard"
 rows = 40
 cols = 40
 timer_seconds = 600

@@ -97,6 +97,7 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.minimap_cell_px`  | Integer | `10`    | (config-file only — on-screen pixel size of each minimap cell)
 |                | `game.play3d.<difficulty>.minimap_radius`   | Integer | `5`     | (config-file only — cells visible each direction from the player; minimap shows a 2r+1 square)
 |                | `game.play3d.<difficulty>.title`            | Text (optional) | (falls back to `game.play3d.title`) | (config-file only)
+|                | `game.play3d.<difficulty>.mode`             | Text    | `Play`     | (config-file only — free-text label shown in the in-game status bar, e.g. `Easy` / `Tricky` / `Hard`)
 
 Every `game.play3d.<difficulty>.*` field — and each difficulty sub-section as a whole — is optional: an omitted field (or a wholly-omitted `[game.play3d.<difficulty>]` table) falls back to the default above rather than failing config load. This is deliberate: a missing required field would otherwise fail the *entire* `AppConfig` deserialise, which silently reverts to built-in defaults. The defaults are generic, safe values, not tuned per difficulty — a real deployment should still specify each difficulty explicitly.
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
@@ -182,6 +183,7 @@ allow_signup = true
 title = "Maze 3D"
 
 [game.play3d.easy]
+mode = "Easy"
 rows = 8
 cols = 8
 timer_seconds = 120
@@ -191,6 +193,7 @@ minimap_cell_px = 10
 minimap_radius = 5
 
 [game.play3d.tricky]
+mode = "Tricky"
 rows = 15
 cols = 15
 timer_seconds = 240
@@ -200,6 +203,7 @@ minimap_cell_px = 10
 minimap_radius = 5
 
 [game.play3d.hard]
+mode = "Hard"
 rows = 25
 cols = 25
 timer_seconds = 420
