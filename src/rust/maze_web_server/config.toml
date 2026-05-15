@@ -124,7 +124,7 @@ timer_seconds = 240
 seed = 15151515
 min_solution_length = 35
 minimap_cell_px = 10
-minimap_radius = 7
+minimap_radius = 5
 
 [game.play3d.hard]
 title = "HARD 3D"
@@ -135,7 +135,7 @@ timer_seconds = 600
 seed = 25252525
 min_solution_length = 45
 minimap_cell_px = 10
-minimap_radius = 8
+minimap_radius = 5
 
 [oauth]
 # Master switch for OAuth sign-in. When false, no OAuth buttons are shown in

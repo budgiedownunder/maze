@@ -4319,7 +4319,12 @@ name = "maze_game_bevy"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "js-sys",
  "maze",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -4328,6 +4333,8 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "maze_game_bevy",
+ "serde",
+ "serde_json",
  "wasm-bindgen",
 ]
 

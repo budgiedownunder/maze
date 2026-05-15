@@ -283,7 +283,11 @@ struct GameState {
     explored: HashSet<(usize, usize)>,
     won: bool,
     lost: bool,
+    paused: bool,
 }
+
+#[derive(Component)]
+struct PausedOverlay;
 
 #[derive(Resource)]
 struct GameClock {
@@ -385,6 +389,25 @@ fn dispatch_game_result(_result: &GameResult) {
     // function so call sites can stay platform-agnostic.
 }
 
+/// Dispatches a `maze-game-paused` CustomEvent on the browser `window` so the
+/// container page/application can swap its pause/play state in sync with the Bevy
+/// game state. Detail is `{ "paused": bool }`.
+#[cfg(target_arch = "wasm32")]
+fn dispatch_pause_state(paused: bool) {
+    use wasm_bindgen::JsValue;
+    let Some(window) = web_sys::window() else { return; };
+    let json = format!("{{\"paused\":{}}}", paused);
+    let detail = js_sys::JSON::parse(&json).unwrap_or(JsValue::NULL);
+    let init = web_sys::CustomEventInit::new();
+    init.set_detail(&detail);
+    if let Ok(event) = web_sys::CustomEvent::new_with_event_init_dict("maze-game-paused", &init) {
+        let _ = window.dispatch_event(&event);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn dispatch_pause_state(_paused: bool) {}
+
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     // `GameConfig` is the seam the JS host uses (via
     // `maze_game_bevy_wasm::start_with_config`) to drive difficulty / timer /
@@ -413,8 +436,8 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, lightning_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap_resize_system.run_if(in_state(AppState::Playing)))
-        .add_systems(Update, minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, orb_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, pause_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, quit_system);
 }
 
@@ -581,6 +604,7 @@ fn spawn_world(
         explored,
         won: false,
         lost: false,
+        paused: false,
     });
 
     // Timer comes from `GameConfig.timer_seconds`. The default (60 s, see
@@ -957,6 +981,27 @@ fn spawn_world(
         TextColor(COLOR_STATUSBAR_TEXT),
         Transform::from_xyz(sb_x, sb_y, 9.0),
     ));
+
+    // Paused overlay — pre-spawned hidden so a pause toggle is a single
+    // visibility flip (no per-toggle spawn/despawn flicker).
+    commands.spawn((
+        PausedOverlay,
+        Visibility::Hidden,
+        Sprite {
+            color: COLOR_OVERLAY_BACKDROP,
+            custom_size: Some(Vec2::new(340.0, 130.0)),
+            ..default()
+        },
+        Transform::from_xyz(0.0, 0.0, 10.0),
+    ));
+    commands.spawn((
+        PausedOverlay,
+        Visibility::Hidden,
+        Text2d::new("PAUSED"),
+        TextFont { font_size: 64.0, ..default() },
+        TextColor(Color::WHITE),
+        Transform::from_xyz(0.0, 0.0, 11.0),
+    ));
 }
 
 fn win_resize_system(
@@ -1049,6 +1094,11 @@ fn movement_system(
     config: Res<GameConfig>,
     mut camera: Query<&mut Transform, With<Camera3d>>,
 ) {
+    // While paused, freeze movement, animation, and pitch entirely — the
+    // camera keeps its current transform.
+    if state.paused {
+        return;
+    }
     let dt = time.delta_secs();
 
     // Advance active animation; snap to target when complete
@@ -1179,7 +1229,7 @@ fn tick_clock_system(
     mut state: ResMut<GameState>,
     config: Res<GameConfig>,
 ) {
-    if state.won || state.lost {
+    if state.won || state.lost || state.paused {
         return;
     }
     let dt = time.delta_secs();
@@ -1515,6 +1565,27 @@ fn minimap_system(
         t.translation = Vec3::new(config.center_x, config.center_y, 1.0);
         t.rotation = Quat::from_rotation_z(state.visual_yaw);
     }
+}
+
+fn pause_system(
+    keys: Option<Res<ButtonInput<KeyCode>>>,
+    mut state: ResMut<GameState>,
+    mut overlay: Query<&mut Visibility, With<PausedOverlay>>,
+) {
+    // No pause once the game has resolved
+    if state.won || state.lost {
+        return;
+    }
+    let Some(keys) = keys else { return; };
+    if !keys.just_pressed(KeyCode::Space) {
+        return;
+    }
+    state.paused = !state.paused;
+    let new_vis = if state.paused { Visibility::Visible } else { Visibility::Hidden };
+    for mut v in &mut overlay {
+        *v = new_vis;
+    }
+    dispatch_pause_state(state.paused);
 }
 
 fn quit_system(

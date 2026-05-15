@@ -26,11 +26,12 @@ The player starts at the start cell facing the first open neighbour cycling thro
 | `↑` / `W` | Move forward |
 | `Q` | Tilt camera up (clamped at +45°) |
 | `E` | Tilt camera down (clamped at -90°, looking at the floor) |
+| `Space` | Pause / resume (freezes the timer and movement; "PAUSED" overlay shows) |
 | `Escape` | Quit |
 
 Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. Turning and movement are gated by an animation lock, but pitch input is allowed to update during these animations (though not after winning).
 
-On touch devices (browser and MAUI WebView) a D-pad overlay replaces keyboard input: five buttons in a two-row grid — tilt-up, move-forward, tilt-down on the top row, turn-left and turn-right on the bottom row. The tilt buttons are rendered slightly smaller with a chevron icon to distinguish them from the primary movement controls. The overlay is shown automatically when `pointer: coarse` is detected and hidden on desktop.
+On touch devices (browser and MAUI WebView) a D-pad overlay replaces keyboard input: six buttons in a two-row grid — tilt-up, move-forward, tilt-down on the top row, turn-left, pause/resume, turn-right on the bottom row. The tilt buttons are rendered slightly smaller with a chevron icon to distinguish them from the primary movement controls. The pause button's glyph toggles between `‖` (paused state coming) and `▶` (resume) in lockstep with the Bevy game state via a `maze-game-paused` CustomEvent. The overlay is shown automatically when `pointer: coarse` is detected and hidden on desktop.
 
 ### Visual features
 

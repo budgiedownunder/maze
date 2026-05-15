@@ -76,7 +76,7 @@
       }
       .game-dpad {
         display: grid;
-        grid-template-areas: "tiltdown up tiltup" "left . right";
+        grid-template-areas: "tiltdown up tiltup" "left pause right";
         gap: 4px;
         touch-action: none;
       }
@@ -146,6 +146,9 @@
       <button type="button" tabindex="-1" class="tilt" style="grid-area:tiltdown" aria-label="Tilt down">
         <img src="/images/maze/tilt_down.png"  alt="" draggable="false">
       </button>
+      <button type="button" tabindex="-1" id="pause-btn" style="grid-area:pause" aria-label="Pause">
+        <img src="/images/maze/dpad_pause.png" alt="" draggable="false">
+      </button>
     </div>
   </div>
   <script>
@@ -193,7 +196,7 @@
   <script type="module">
     import { start, start_with_maze, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=3';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=4';
     const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
@@ -295,6 +298,26 @@
       btn.addEventListener('pointercancel', () => fire(key, 'keyup'));
       btn.addEventListener('contextmenu',   e => e.preventDefault());
     }
+
+    // Pause button — separate wiring because its glyph and aria-label
+    // follow the Bevy paused state via the `maze-game-paused` event, so
+    // a stable id is easier to target than a label that swaps.
+    const pauseBtn = document.getElementById('pause-btn');
+    if (pauseBtn) {
+      pauseBtn.addEventListener('pointerdown',   e => { e.preventDefault(); fire('Space', 'keydown'); });
+      pauseBtn.addEventListener('pointerup',     e => { e.preventDefault(); fire('Space', 'keyup');   });
+      pauseBtn.addEventListener('pointerleave',  () => fire('Space', 'keyup'));
+      pauseBtn.addEventListener('pointercancel', () => fire('Space', 'keyup'));
+      pauseBtn.addEventListener('contextmenu',   e => e.preventDefault());
+    }
+    window.addEventListener('maze-game-paused', function (e) {
+      const btn = document.getElementById('pause-btn');
+      if (!btn) return;
+      const img = btn.querySelector('img');
+      const paused = !!(e.detail && e.detail.paused);
+      if (img) img.src = paused ? '/images/maze/dpad_play.png' : '/images/maze/dpad_pause.png';
+      btn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
+    });
   </script>
 </body>
 </html>
