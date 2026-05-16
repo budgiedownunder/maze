@@ -66,8 +66,19 @@
     }
     #controls { display: none; }
     .game-dpad { display: none; }
+    /* Persistent in-canvas pause button. Always available on touch
+       devices regardless of the D-pad show/hide preference, so the
+       player has a discoverable way to reach the pause menu. Hidden on
+       pointer-fine devices (mouse / trackpad) where Space on the
+       keyboard already covers it. */
+    #touch-pause-btn { display: none; }
+    /* The Hide/Show D-pad button only makes sense on touch devices
+       (where the D-pad exists). Hide it on fine-pointer devices so the
+       pause menu collapses to just Resume + Restart. */
+    #pm-dpad-toggle { display: none; }
 
     @media (pointer: coarse) {
+      #pm-dpad-toggle { display: block; }
       #controls {
         display: flex;
         justify-content: center;
@@ -113,17 +124,111 @@
         height: 24px;
       }
       /* On touch devices the D-pad occupies the bottom strip — move the
-         Play Again button to the top so it doesn't overlap the controls. */
+         Play Again button to the top so it doesn't overlap the controls.
+         Sits centred at top so the persistent pause button at the
+         top-right doesn't collide with it. */
       #play-again {
         top: 16px;
         bottom: auto;
       }
+      /* When the user has hidden the D-pad via the pause menu, the
+         #controls strip collapses and #play-again returns to the bottom
+         where it sits on desktop. */
+      body.dpad-hidden #controls { display: none; }
+      body.dpad-hidden #play-again { top: auto; bottom: 24px; }
+      /* Bottom-right corner of #game-wrap, which sits ABOVE the D-pad
+         strip in the flex column. Bottom-right is clear regardless of
+         D-pad visibility, sits well clear of the Bevy HUD elements
+         (status bar top-left, clock top-centre, minimap top-right),
+         and falls naturally under a right-hand thumb. */
+      #touch-pause-btn {
+        display: flex;
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
+        z-index: 20;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.6);
+        cursor: pointer;
+        align-items: center;
+        justify-content: center;
+        touch-action: none;
+        -webkit-touch-callout: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #touch-pause-btn img {
+        width: 24px;
+        height: 24px;
+        display: block;
+        pointer-events: none;
+      }
     }
+
+    /* In-game pause menu — a host-side HTML overlay shown when Bevy
+       reports paused=true via the maze-game-paused CustomEvent. Lives
+       outside the canvas so taps don't fall through to the Bevy
+       keyboard-input emulator. */
+    #pause-menu {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 20px 24px;
+      background: rgba(0, 0, 0, 0.85);
+      border: 2px solid #ac99ea;
+      border-radius: 12px;
+      font-family: sans-serif;
+    }
+    #pause-menu[hidden] { display: none; }
+    #pause-menu button {
+      min-width: 220px;
+      min-height: 48px;
+      padding: 12px 20px;
+      font-size: 1rem;
+      color: #fff;
+      background: #2f9e44;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    #pause-menu button.secondary { background: #495057; }
   </style>
 </head>
 <body>
+  <script>
+    /* Apply the persisted D-pad-hidden body class as early as possible
+       to avoid a flash of visible D-pad on touch devices when the
+       preference is "hidden". Runs before #controls is parsed below, so
+       the browser sees `display: none` on its first style resolution. */
+    (function () {
+      try {
+        if (localStorage.getItem('dpadHidden') === '1') {
+          document.body.classList.add('dpad-hidden');
+        }
+      } catch (_) { /* localStorage unavailable — ignore */ }
+    })();
+  </script>
   <div id="game-wrap">
-    <canvas id="bevy-canvas"></canvas>
+    <!-- tabindex="-1" makes the canvas focusable via script/mouse but
+         not via Tab key, so the existing `canvas.focus()` calls
+         actually take effect (canvas elements aren't focusable by
+         default). Necessary so keyboard input keeps reaching Bevy
+         after the player taps a pause-menu button or after a
+         Restart-triggered reload. -->
+    <canvas id="bevy-canvas" tabindex="-1"></canvas>
+    <button type="button" tabindex="-1" id="touch-pause-btn" aria-label="Pause">
+      <img src="/images/maze/dpad_pause.png" alt="" draggable="false">
+    </button>
     <div id="loading">
       <div class="spinner"></div>
       <p>Loading game… (<span id="elapsed">0s</span>)</p>
@@ -150,6 +255,11 @@
         <img src="/images/maze/dpad_pause.png" alt="" draggable="false">
       </button>
     </div>
+  </div>
+  <div id="pause-menu" hidden role="dialog" aria-label="Paused" aria-modal="true">
+    <button id="pm-resume" type="button">Resume</button>
+    <button id="pm-restart" type="button" class="secondary">Restart</button>
+    <button id="pm-dpad-toggle" type="button" class="secondary">Hide D-pad</button>
   </div>
   <script>
     (function() {
@@ -192,6 +302,94 @@
       btn.addEventListener('click', function () { location.reload(); });
       document.body.appendChild(btn);
     }
+  </script>
+  <script>
+    /* Pause-menu wiring — opens on Bevy's `maze-game-paused` event,
+       offers Resume / Restart / D-pad-toggle controls suitable for
+       touch use. Synthesises a Space keydown/keyup on the canvas to
+       toggle Bevy's pause state, matching the existing D-pad pause
+       button. Lives in a vanilla script so it survives WASM load
+       failures (the module script below uses top-level await and may
+       throw if the WASM fetch fails). */
+    (function () {
+      var menu = document.getElementById('pause-menu');
+      var resume = document.getElementById('pm-resume');
+      var restart = document.getElementById('pm-restart');
+      var dpadToggle = document.getElementById('pm-dpad-toggle');
+      var canvas = document.getElementById('bevy-canvas');
+      // Both pause buttons share the same wiring and the same icon/label
+      // swap: the D-pad pause button (#pause-btn, inside #controls and
+      // only visible when the D-pad is shown) AND the persistent corner
+      // button (#touch-pause-btn, always visible on touch devices).
+      var pauseButtonIds = ['pause-btn', 'touch-pause-btn'];
+
+      function fire(key, type) {
+        canvas.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
+      }
+
+      function firePause() {
+        fire('Space', 'keydown');
+        fire('Space', 'keyup');
+      }
+
+      function refreshDpadLabel() {
+        dpadToggle.textContent = document.body.classList.contains('dpad-hidden')
+          ? 'Show D-pad'
+          : 'Hide D-pad';
+      }
+      refreshDpadLabel();
+
+      for (var i = 0; i < pauseButtonIds.length; i++) {
+        var btn = document.getElementById(pauseButtonIds[i]);
+        if (!btn) continue;
+        btn.addEventListener('pointerdown',   function (e) { e.preventDefault(); fire('Space', 'keydown'); });
+        btn.addEventListener('pointerup',     function (e) { e.preventDefault(); fire('Space', 'keyup');   });
+        btn.addEventListener('pointerleave',  function ()  { fire('Space', 'keyup'); });
+        btn.addEventListener('pointercancel', function ()  { fire('Space', 'keyup'); });
+        btn.addEventListener('contextmenu',   function (e) { e.preventDefault(); });
+      }
+
+      window.addEventListener('maze-game-paused', function (e) {
+        var paused = !!(e.detail && e.detail.paused);
+        if (paused) {
+          refreshDpadLabel();
+          menu.hidden = false;
+        } else {
+          menu.hidden = true;
+        }
+        for (var i = 0; i < pauseButtonIds.length; i++) {
+          var btn = document.getElementById(pauseButtonIds[i]);
+          if (!btn) continue;
+          var img = btn.querySelector('img');
+          if (img) img.src = paused ? '/images/maze/dpad_play.png' : '/images/maze/dpad_pause.png';
+          btn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
+        }
+      });
+
+      resume.addEventListener('click', function () {
+        // Same code path as the corner / D-pad pause buttons — Bevy
+        // toggles paused=false, the `maze-game-paused` listener above
+        // then hides the menu. Re-focus the canvas so subsequent
+        // keyboard input goes to Bevy rather than the (now hidden)
+        // Resume button.
+        firePause();
+        canvas.focus({ preventScroll: true });
+      });
+
+      restart.addEventListener('click', function () {
+        // Preserves the current query string (difficulty / seed / id)
+        // for parity with the post-game "Play Again" button.
+        location.reload();
+      });
+
+      dpadToggle.addEventListener('click', function () {
+        var hidden = document.body.classList.toggle('dpad-hidden');
+        try {
+          localStorage.setItem('dpadHidden', hidden ? '1' : '0');
+        } catch (_) { /* localStorage unavailable — ignore */ }
+        refreshDpadLabel();
+      });
+    })();
   </script>
   <script type="module">
     import { start, start_with_maze, start_with_config, default as init } from './maze_game_bevy_wasm.js';
@@ -299,25 +497,10 @@
       btn.addEventListener('contextmenu',   e => e.preventDefault());
     }
 
-    // Pause button — separate wiring because its glyph and aria-label
-    // follow the Bevy paused state via the `maze-game-paused` event, so
-    // a stable id is easier to target than a label that swaps.
-    const pauseBtn = document.getElementById('pause-btn');
-    if (pauseBtn) {
-      pauseBtn.addEventListener('pointerdown',   e => { e.preventDefault(); fire('Space', 'keydown'); });
-      pauseBtn.addEventListener('pointerup',     e => { e.preventDefault(); fire('Space', 'keyup');   });
-      pauseBtn.addEventListener('pointerleave',  () => fire('Space', 'keyup'));
-      pauseBtn.addEventListener('pointercancel', () => fire('Space', 'keyup'));
-      pauseBtn.addEventListener('contextmenu',   e => e.preventDefault());
-    }
-    window.addEventListener('maze-game-paused', function (e) {
-      const btn = document.getElementById('pause-btn');
-      if (!btn) return;
-      const img = btn.querySelector('img');
-      const paused = !!(e.detail && e.detail.paused);
-      if (img) img.src = paused ? '/images/maze/dpad_play.png' : '/images/maze/dpad_pause.png';
-      btn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
-    });
+    // Pause-button click wiring lives in the vanilla pause-menu script
+    // higher up in this file — those listeners need to be attached
+    // before WASM loads so the buttons are usable as soon as the canvas
+    // appears (and remain testable when the WASM fetch is stubbed out).
 
     // Canvas touch gestures — translate single-finger gestures to the same
     // synthetic key events the D-pad already uses, so the Bevy side stays
