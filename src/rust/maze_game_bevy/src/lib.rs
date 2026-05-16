@@ -55,7 +55,11 @@ mod tests {
     use super::*;
     use crate::overlays::title::TitleEntity;
     use crate::state::{AppState, GameState, GridFacing};
-    use crate::world::{demo_grid, floor::FloorCell, initial_facing, walls::WallCell};
+    use crate::world::{
+        decorations::WallDecoration, demo_grid, floor::FloorCell, initial_facing,
+        objects::{dead_end::DeadEndObject, finish::orb::FinishOrb},
+        walls::WallCell,
+    };
     use bevy::state::app::StatesPlugin;
 
     fn make_title_app() -> App {
@@ -227,5 +231,65 @@ mod tests {
         assert_eq!(state.grid[0].len(), 3);
         assert_eq!(state.game.player_row(), 0);
         assert_eq!(state.game.player_col(), 0);
+    }
+
+    /// Builds a playing app with a custom `GameConfig` pre-inserted so the
+    /// landmark toggles can be exercised end-to-end. `build_app` calls
+    /// `init_resource::<GameConfig>()` which is a no-op when the resource
+    /// is already present, so the caller's config survives.
+    fn make_playing_app_with_config(config: GameConfig) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.insert_resource(config);
+        build_app(&mut app, None);
+        app.update();
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Playing);
+        app.update();
+        app
+    }
+
+    #[test]
+    fn playing_spawns_one_finish_orb_for_demo_grid() {
+        // demo_grid has exactly one 'F' cell, so spawn_finish_for_cell's
+        // 'F' predicate should produce exactly one FinishOrb entity.
+        let mut app = make_playing_app();
+        let count = app.world_mut().query::<&FinishOrb>().iter(app.world()).count();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn wall_decorations_toggle_off_suppresses_spawns() {
+        let mut app = make_playing_app_with_config(GameConfig {
+            landmarks: Landmarks {
+                wall_decorations: false,
+                ..Landmarks::default()
+            },
+            ..GameConfig::default()
+        });
+        let count = app
+            .world_mut()
+            .query::<&WallDecoration>()
+            .iter(app.world())
+            .count();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn dead_end_objects_toggle_off_suppresses_spawns() {
+        let mut app = make_playing_app_with_config(GameConfig {
+            landmarks: Landmarks {
+                dead_end_objects: false,
+                ..Landmarks::default()
+            },
+            ..GameConfig::default()
+        });
+        let count = app
+            .world_mut()
+            .query::<&DeadEndObject>()
+            .iter(app.world())
+            .count();
+        assert_eq!(count, 0);
     }
 }

@@ -128,3 +128,39 @@ pub(crate) fn spawn_walls_for_cell(
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wall_tint_index_is_deterministic() {
+        let seed = 0xDEAD_BEEFu64;
+        assert_eq!(wall_tint_index(3, 5, seed), wall_tint_index(3, 5, seed));
+    }
+
+    #[test]
+    fn wall_tint_index_always_in_range() {
+        for r in 0..20 {
+            for c in 0..20 {
+                let idx = wall_tint_index(r, c, 0x1234_5678);
+                assert!(idx < WALL_TINT_VARIANTS, "got {idx}");
+            }
+        }
+    }
+
+    #[test]
+    fn wall_tint_index_changes_with_seed() {
+        // Different seeds should produce a different tint for at least one cell
+        // (otherwise the seed is being ignored).
+        let mut diffs = 0;
+        for r in 0..10 {
+            for c in 0..10 {
+                if wall_tint_index(r, c, 0) != wall_tint_index(r, c, 1) {
+                    diffs += 1;
+                }
+            }
+        }
+        assert!(diffs > 0, "seed had no effect across 100 cells");
+    }
+}

@@ -260,3 +260,48 @@ pub(crate) fn dispatch_pause_state(paused: bool) {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn dispatch_pause_state(_paused: bool) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn anim(elapsed: f32, duration: f32) -> Animation {
+        Animation {
+            start_pos: Vec3::ZERO,
+            target_pos: Vec3::splat(4.0),
+            start_yaw: 0.0,
+            target_yaw: 8.0,
+            elapsed,
+            duration,
+        }
+    }
+
+    #[test]
+    fn animation_at_start_is_at_start_position() {
+        let a = anim(0.0, 1.0);
+        assert_eq!(a.current_pos(), Vec3::ZERO);
+        assert_eq!(a.current_yaw(), 0.0);
+    }
+
+    #[test]
+    fn animation_at_end_is_at_target() {
+        let a = anim(1.0, 1.0);
+        assert_eq!(a.current_pos(), Vec3::splat(4.0));
+        assert_eq!(a.current_yaw(), 8.0);
+    }
+
+    #[test]
+    fn animation_at_midpoint_is_halfway() {
+        // Smoothstep at t=0.5 evaluates to 0.5 exactly: t*t*(3 - 2t) = 0.5.
+        let a = anim(0.5, 1.0);
+        assert!((a.current_pos().x - 2.0).abs() < 1e-6);
+        assert!((a.current_yaw() - 4.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn animation_overshoot_clamps_to_target() {
+        let a = anim(5.0, 1.0);
+        assert_eq!(a.current_pos(), Vec3::splat(4.0));
+        assert_eq!(a.current_yaw(), 8.0);
+    }
+}

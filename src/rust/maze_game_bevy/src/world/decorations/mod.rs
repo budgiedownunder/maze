@@ -178,3 +178,77 @@ pub(crate) fn spawn_decorations_for_cell(
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wall_decoration_index_is_deterministic() {
+        let seed = 0xDEADu64;
+        assert_eq!(
+            wall_decoration_index(3, 5, 2, seed),
+            wall_decoration_index(3, 5, 2, seed)
+        );
+    }
+
+    #[test]
+    fn wall_decoration_index_kind_always_in_range() {
+        for r in 0..30 {
+            for c in 0..30 {
+                for face in 0..4 {
+                    if let Some(kind) = wall_decoration_index(r, c, face, 0xCAFEu64) {
+                        assert!(kind < WALL_DECORATION_VARIANTS, "got kind {kind}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn wall_decoration_index_respects_face_id() {
+        // The same cell on different faces should be able to disagree
+        // (otherwise face_id is being ignored).
+        let mut some_differ = false;
+        for r in 0..20 {
+            for c in 0..20 {
+                if wall_decoration_index(r, c, 0, 0xC0FFEEu64)
+                    != wall_decoration_index(r, c, 1, 0xC0FFEEu64)
+                {
+                    some_differ = true;
+                    break;
+                }
+            }
+            if some_differ {
+                break;
+            }
+        }
+        assert!(some_differ, "face_id had no effect");
+    }
+
+    #[test]
+    fn wall_decoration_index_frequency_within_tolerance() {
+        // 50×50×4 = 10000 hash rolls. Expected ~1/FREQUENCY of them are Some.
+        // Allow ±50% tolerance — hash uniformity isn't guaranteed for small
+        // samples but the order of magnitude should match.
+        let mut decorated = 0usize;
+        let mut total = 0usize;
+        let seed = 0xABCD_1234u64;
+        for r in 0..50 {
+            for c in 0..50 {
+                for face in 0..4 {
+                    total += 1;
+                    if wall_decoration_index(r, c, face, seed).is_some() {
+                        decorated += 1;
+                    }
+                }
+            }
+        }
+        let expected = total as f64 / WALL_DECORATION_FREQUENCY as f64;
+        let ratio = decorated as f64 / expected;
+        assert!(
+            (0.5..=1.5).contains(&ratio),
+            "decorated {decorated} / expected {expected:.0} (ratio {ratio:.2})"
+        );
+    }
+}

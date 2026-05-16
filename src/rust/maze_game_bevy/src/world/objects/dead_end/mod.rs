@@ -134,3 +134,90 @@ pub(crate) fn spawn_dead_end_object_for_cell(
         _ => chest::spawn_chest(commands, assets, x, z),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dead_end_object_index_is_deterministic() {
+        let seed = 0xCAFEu64;
+        assert_eq!(
+            dead_end_object_index(3, 5, seed),
+            dead_end_object_index(3, 5, seed)
+        );
+    }
+
+    #[test]
+    fn dead_end_object_index_always_in_range() {
+        for r in 0..30 {
+            for c in 0..30 {
+                let kind = dead_end_object_index(r, c, 0x9999u64);
+                assert!(kind < DEAD_END_OBJECT_VARIANTS, "got kind {kind}");
+            }
+        }
+    }
+
+    #[test]
+    fn is_dead_end_single_open_neighbour() {
+        // (1,1) has only south open
+        let grid = vec![
+            vec!['W', 'W', 'W'],
+            vec!['W', ' ', 'W'],
+            vec!['W', ' ', 'W'],
+        ];
+        assert!(is_dead_end(&grid, 1, 1));
+    }
+
+    #[test]
+    fn is_dead_end_corridor_false() {
+        // (1,1) has east AND west open — two-way corridor, not a dead end
+        let grid = vec![
+            vec!['W', 'W', 'W'],
+            vec![' ', ' ', ' '],
+            vec!['W', 'W', 'W'],
+        ];
+        assert!(!is_dead_end(&grid, 1, 1));
+    }
+
+    #[test]
+    fn is_dead_end_junction_false() {
+        // (1,1) has three open neighbours — T-junction, not a dead end
+        let grid = vec![
+            vec!['W', ' ', 'W'],
+            vec![' ', ' ', ' '],
+            vec!['W', 'W', 'W'],
+        ];
+        assert!(!is_dead_end(&grid, 1, 1));
+    }
+
+    #[test]
+    fn is_dead_end_isolated_false() {
+        // No open neighbours
+        let grid = vec![
+            vec!['W', 'W', 'W'],
+            vec!['W', ' ', 'W'],
+            vec!['W', 'W', 'W'],
+        ];
+        assert!(!is_dead_end(&grid, 1, 1));
+    }
+
+    #[test]
+    fn is_dead_end_corner_with_one_neighbour() {
+        // Top-left cell; grid boundary counts as wall; only south open
+        let grid = vec![vec![' ', 'W'], vec![' ', 'W']];
+        assert!(is_dead_end(&grid, 0, 0));
+    }
+
+    #[test]
+    fn is_dead_end_on_wall_false() {
+        let grid = vec![vec!['W', 'W'], vec!['W', ' ']];
+        assert!(!is_dead_end(&grid, 0, 0));
+    }
+
+    #[test]
+    fn is_dead_end_out_of_bounds_false() {
+        let grid = vec![vec![' ']];
+        assert!(!is_dead_end(&grid, 5, 5));
+    }
+}
