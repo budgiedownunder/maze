@@ -16,7 +16,7 @@ pub(crate) struct WallDecoration;
 // from `WALL_DECORATION_VARIANTS`. Decoration placement / orientation are derived
 // from the wall's face id (0=N, 1=S, 2=E, 3=W).
 pub(crate) const WALL_DECORATION_VARIANTS: u32 = 4;
-pub(crate) const WALL_DECORATION_FREQUENCY: u32 = 8;
+pub(crate) const WALL_DECORATION_FREQUENCY: u32 = 10;
 pub(crate) const DECORATION_W: f32 = 0.6;
 pub(crate) const DECORATION_H: f32 = 0.8;
 pub(crate) const DECORATION_THICKNESS: f32 = 0.02;
