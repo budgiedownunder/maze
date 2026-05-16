@@ -56,7 +56,10 @@ mod tests {
     use crate::overlays::title::TitleEntity;
     use crate::state::{AppState, GameState, GridFacing};
     use crate::world::{
-        decorations::WallDecoration, demo_grid, floor::FloorCell, initial_facing,
+        decorations::{floor::FloorAccent, wall::WallDecoration},
+        demo_grid,
+        floor::FloorCell,
+        initial_facing,
         objects::{dead_end::DeadEndObject, finish::orb::FinishOrb},
         walls::WallCell,
     };
@@ -288,6 +291,23 @@ mod tests {
         let count = app
             .world_mut()
             .query::<&DeadEndObject>()
+            .iter(app.world())
+            .count();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn floor_accents_toggle_off_suppresses_spawns() {
+        let mut app = make_playing_app_with_config(GameConfig {
+            landmarks: Landmarks {
+                floor_accents: false,
+                ..Landmarks::default()
+            },
+            ..GameConfig::default()
+        });
+        let count = app
+            .world_mut()
+            .query::<&FloorAccent>()
             .iter(app.world())
             .count();
         assert_eq!(count, 0);

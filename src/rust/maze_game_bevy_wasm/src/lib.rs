@@ -76,6 +76,8 @@ struct LandmarksStartConfig {
     dead_end_objects: bool,
     #[serde(default = "default_landmarks_wall_decorations")]
     wall_decorations: bool,
+    #[serde(default = "default_landmarks_floor_accents")]
+    floor_accents: bool,
 }
 
 impl Default for LandmarksStartConfig {
@@ -84,6 +86,7 @@ impl Default for LandmarksStartConfig {
             wall_tint: default_landmarks_wall_tint(),
             dead_end_objects: default_landmarks_dead_end_objects(),
             wall_decorations: default_landmarks_wall_decorations(),
+            floor_accents: default_landmarks_floor_accents(),
         }
     }
 }
@@ -97,6 +100,10 @@ fn default_landmarks_dead_end_objects() -> bool {
 }
 
 fn default_landmarks_wall_decorations() -> bool {
+    true
+}
+
+fn default_landmarks_floor_accents() -> bool {
     true
 }
 
@@ -162,6 +169,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
             wall_tint: cfg.landmarks.wall_tint,
             dead_end_objects: cfg.landmarks.dead_end_objects,
             wall_decorations: cfg.landmarks.wall_decorations,
+            floor_accents: cfg.landmarks.floor_accents,
         },
     });
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());

@@ -456,6 +456,8 @@ pub struct LandmarksResponse {
     pub dead_end_objects: bool,
     /// Sparse wall decorations enabled for this difficulty.
     pub wall_decorations: bool,
+    /// Floor accents at junction cells enabled for this difficulty.
+    pub floor_accents: bool,
 }
 
 #[utoipa::path(
@@ -499,6 +501,7 @@ pub async fn get_play3d_config(
             wall_tint: preset.landmarks.wall_tint,
             dead_end_objects: preset.landmarks.dead_end_objects,
             wall_decorations: preset.landmarks.wall_decorations,
+            floor_accents: preset.landmarks.floor_accents,
         },
     }))
 }

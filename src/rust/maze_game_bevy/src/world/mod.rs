@@ -237,6 +237,7 @@ pub(crate) fn spawn_world(
                 &mut commands,
                 &decoration_assets,
                 &grid,
+                cell,
                 r,
                 c,
                 &config,

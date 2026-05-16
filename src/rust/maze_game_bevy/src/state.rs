@@ -149,11 +149,17 @@ pub struct Landmarks {
     /// and finish) gets a single distinctive object picked by hashing
     /// `(row, col, seed)`. When `false`, dead-ends render bare.
     pub dead_end_objects: bool,
-    /// Sparse wall decorations — when `true`, ~1 in 8 wall panels gets a
-    /// decorative element (vent grate, faded poster, rune, window glow)
+    /// Sparse wall decorations — when `true`, ~1 in 10 wall panels gets a
+    /// decorative element (vent grate, faded poster, rune, glowing glass)
     /// projected on the inside face. Both placement and decoration kind are
     /// seeded.
     pub wall_decorations: bool,
+    /// Floor accents at junction cells — when `true`, every 3- or 4-way
+    /// junction cell (excluding start / finish) gets a single flat accent
+    /// (moss / cracked tile / mosaic / sigil) on its floor, kind picked by
+    /// hashing `(row, col, seed)`. Reinforces "this is a decision point"
+    /// memory.
+    pub floor_accents: bool,
 }
 
 impl Default for Landmarks {
@@ -162,6 +168,7 @@ impl Default for Landmarks {
             wall_tint: true,
             dead_end_objects: true,
             wall_decorations: true,
+            floor_accents: true,
         }
     }
 }

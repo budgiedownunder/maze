@@ -39,6 +39,7 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Per-cell wall tint variation** — pick one of six emissive variants for for wall panels, so different corridor sections have different shades.
 - **Dead-end landmark objects** — every dead-end cell (passable cell with exactly one open neighbour, excluding start / finish) gets a distinctive landmark — a brazier, urn, broken pillar, or chest — picked by hashing `(row, col, seed)`. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] dead_end_objects`.
 - **Sparse wall decorations** — ~1 in 10 wall panels gets a decorative emissive decoration (vent grate, faded poster, rune glyph, or glowing glass) projected on its inside face. Placement and kind are seeded from `(row, col, face, seed)` so the same maze always decorates the same walls. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_decorations`.
+- **Floor accents at junctions** — every 3- or 4-way junction cell (passable cell with more than two open neighbours, excluding start / finish) gets a single flat accent on its floor — moss, cracked tile, mosaic, or arcane sigil — picked by hashing `(row, col, seed)`. Reinforces "this is a decision point" memory. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] floor_accents`.
 - Floor grid lines at cell boundaries for orientation feedback.
 - Start cell highlighted green; finish cell highlighted gold.
 - Status bar overlay (top-left corner) — a row container that displays the configured `mode` label.
@@ -104,12 +105,20 @@ src/
 │   │   ├── mod.rs          per-cell tint hash + WallAssets bundle + spawn_walls_for_cell
 │   │   ├── ns_panel.rs     N/S-facing panel mesh, materials, spawn helper
 │   │   └── ew_panel.rs     E/W-facing panel mesh, materials, spawn helper
-│   ├── decorations/        sparse wall decorations
-│   │   ├── mod.rs          shared mesh/dims + placement hash + spawn_decorations_for_cell
-│   │   ├── vent.rs         vent-grate texture + material
-│   │   ├── poster.rs       faded-poster texture + material
-│   │   ├── rune.rs         rune-glyph texture + material
-│   │   └── glowing_glass.rs leaded glowing-glass texture + material
+│   ├── decorations/        wall decorations + floor accents
+│   │   ├── mod.rs          DecorationAssets bundle + spawn_decorations_for_cell (delegates to wall + floor)
+│   │   ├── wall/           sparse wall decorations
+│   │   │   ├── mod.rs      shared mesh/dims + placement hash + spawn_wall_decorations_for_cell
+│   │   │   ├── vent.rs     vent-grate texture + material
+│   │   │   ├── poster.rs   faded-poster texture + material
+│   │   │   ├── rune.rs     rune-glyph texture + material
+│   │   │   └── glowing_glass.rs leaded glowing-glass texture + material
+│   │   └── floor/          junction floor accents (placement seeded)
+│   │       ├── mod.rs      FloorAccent + FloorAccentAssets + is_junction + floor_accent_index
+│   │       ├── moss.rs     moss-patch texture + material
+│   │       ├── cracked_tile.rs cracked-tile texture + material
+│   │       ├── mosaic.rs   concentric-mosaic texture + material
+│   │       └── sigil.rs    pentagram-sigil texture + material
 │   ├── objects/            3D physical objects placed in the world
 │   │   ├── mod.rs          ObjectAssets bundle + spawn_objects_for_cell
 │   │   ├── finish/         objects placed at the finish cell

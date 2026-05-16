@@ -92,12 +92,19 @@ pub struct LandmarksConfig {
     #[serde(default = "default_landmarks_dead_end_objects")]
     pub dead_end_objects: bool,
     /// Sparse wall decorations / posters — a small fraction of wall panels
-    /// (currently 1 in 8) get a decorative emissive decoration (vent grate,
-    /// faded poster, rune, window glow) projected on their inside face.
+    /// (currently 1 in 10) get a decorative emissive decoration (vent grate,
+    /// faded poster, rune, glowing glass) projected on their inside face.
     /// Decoration placement and kind are seeded so the same maze always
     /// looks the same. Default `true`.
     #[serde(default = "default_landmarks_wall_decorations")]
     pub wall_decorations: bool,
+    /// Floor accents at junction cells — every 3- or 4-way junction
+    /// (excluding start / finish) gets a single flat accent (moss /
+    /// cracked tile / mosaic / sigil) on its floor. Kind is picked by
+    /// hashing `(row, col, seed)` so the same maze always shows the same
+    /// accent at the same junction. Default `true`.
+    #[serde(default = "default_landmarks_floor_accents")]
+    pub floor_accents: bool,
 }
 
 impl Default for LandmarksConfig {
@@ -106,6 +113,7 @@ impl Default for LandmarksConfig {
             wall_tint: default_landmarks_wall_tint(),
             dead_end_objects: default_landmarks_dead_end_objects(),
             wall_decorations: default_landmarks_wall_decorations(),
+            floor_accents: default_landmarks_floor_accents(),
         }
     }
 }
@@ -279,6 +287,12 @@ fn default_landmarks_wall_decorations() -> bool {
     true
 }
 
+/// Floor accents at junction cells default on. Operators can disable them
+/// per difficulty via `[game.play3d.<difficulty>.landmarks] floor_accents = false`.
+fn default_landmarks_floor_accents() -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -385,6 +399,7 @@ mod tests {
             wall_tint = false
             dead_end_objects = false
             wall_decorations = false
+            floor_accents = false
 
             [play3d.tricky]
             rows = 12
@@ -409,20 +424,24 @@ mod tests {
         assert!(!cfg.play3d.easy.landmarks.wall_tint);
         assert!(!cfg.play3d.easy.landmarks.dead_end_objects);
         assert!(!cfg.play3d.easy.landmarks.wall_decorations);
+        assert!(!cfg.play3d.easy.landmarks.floor_accents);
         // Tricky omits the whole landmarks table → all default true.
         assert!(cfg.play3d.tricky.landmarks.wall_tint);
         assert!(cfg.play3d.tricky.landmarks.dead_end_objects);
         assert!(cfg.play3d.tricky.landmarks.wall_decorations);
+        assert!(cfg.play3d.tricky.landmarks.floor_accents);
         // Hard sets one toggle; the others fall back to the default.
         assert!(cfg.play3d.hard.landmarks.wall_tint);
         assert!(!cfg.play3d.hard.landmarks.dead_end_objects);
         assert!(cfg.play3d.hard.landmarks.wall_decorations);
+        assert!(cfg.play3d.hard.landmarks.floor_accents);
         // Built-in Play3dConfig::default() enables every toggle.
         let default = Play3dConfig::default();
         for d in [&default.easy, &default.tricky, &default.hard] {
             assert!(d.landmarks.wall_tint);
             assert!(d.landmarks.dead_end_objects);
             assert!(d.landmarks.wall_decorations);
+            assert!(d.landmarks.floor_accents);
         }
     }
 
