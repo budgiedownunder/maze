@@ -98,10 +98,11 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.minimap_radius`   | Integer | `5`     | (config-file only — cells visible each direction from the player; minimap shows a 2r+1 square)
 |                | `game.play3d.<difficulty>.title`            | Text (optional) | (falls back to `game.play3d.title`) | (config-file only)
 |                | `game.play3d.<difficulty>.mode`             | Text    | `Play`     | (config-file only — free-text label shown in the in-game status bar, e.g. `Easy` / `Tricky` / `Hard`)
-|                | `game.play3d.<difficulty>.landmarks.wall_tint` | Boolean | `true` | (config-file only — when `true`, add random wall tinting)
+|                | `game.play3d.<difficulty>.landmarks.wall_tint` | Boolean | `true` | (config-file only — when `true`, add random wall tinting; bypassed when `wall_material_variation` is `true`)
 |                | `game.play3d.<difficulty>.landmarks.dead_end_objects` | Boolean | `true` | (config-file only — when `true`, place random objects in dead-end cells)
 |                | `game.play3d.<difficulty>.landmarks.wall_decorations` | Boolean | `true` | (config-file only — when `true`, add random wall decorations )
 |                | `game.play3d.<difficulty>.landmarks.floor_accents` | Boolean | `true` | (config-file only — when `true`, place flat accents on the floor of 3- and 4-way junction cells)
+|                | `game.play3d.<difficulty>.landmarks.wall_material_variation` | Boolean | `true` | (config-file only — when `true`, split the maze into a 2×2 NW/NE/SW/SE grid and render each quadrant with its own wall material (brick / dressed stone / wood / cobblestone); supersedes `wall_tint`)
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
@@ -199,6 +200,7 @@ wall_tint = true
 dead_end_objects = true
 wall_decorations = true
 floor_accents = true
+wall_material_variation = true
 
 [game.play3d.tricky]
 mode = "Tricky"
@@ -215,6 +217,7 @@ wall_tint = true
 dead_end_objects = true
 wall_decorations = true
 floor_accents = true
+wall_material_variation = true
 
 [game.play3d.hard]
 mode = "Hard"
@@ -231,6 +234,7 @@ wall_tint = true
 dead_end_objects = true
 wall_decorations = true
 floor_accents = true
+wall_material_variation = true
 
 [storage]
 # Backend selector: "file" (on-disk JSON layout) or "sql" (SQLite/Postgres/MySQL).
@@ -566,7 +570,15 @@ Response shape (camelCase):
   "minSolutionLength": 30,
   "minimapCellPx": 10,
   "minimapRadius": 5,
-  "title": "Maze 3D"
+  "title": "Maze 3D",
+  "mode": "Easy",
+  "landmarks": {
+    "wallTint": true,
+    "deadEndObjects": true,
+    "wallDecorations": true,
+    "floorAccents": true,
+    "wallMaterialVariation": true
+  }
 }
 ```
 

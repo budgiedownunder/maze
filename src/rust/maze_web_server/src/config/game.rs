@@ -105,6 +105,14 @@ pub struct LandmarksConfig {
     /// accent at the same junction. Default `true`.
     #[serde(default = "default_landmarks_floor_accents")]
     pub floor_accents: bool,
+    /// Per-quadrant wall material variation — splits the maze into a
+    /// 2×2 NW/NE/SW/SE grid and gives each quadrant its own wall
+    /// material kind (brick / dressed stone / wood / cobblestone). The
+    /// quadrant-to-kind mapping is seed-permuted so different seeds
+    /// rotate the assignment. Supersedes `wall_tint` when on — each
+    /// quadrant renders with one fixed material kind. Default `true`.
+    #[serde(default = "default_landmarks_wall_material_variation")]
+    pub wall_material_variation: bool,
 }
 
 impl Default for LandmarksConfig {
@@ -114,6 +122,7 @@ impl Default for LandmarksConfig {
             dead_end_objects: default_landmarks_dead_end_objects(),
             wall_decorations: default_landmarks_wall_decorations(),
             floor_accents: default_landmarks_floor_accents(),
+            wall_material_variation: default_landmarks_wall_material_variation(),
         }
     }
 }
@@ -293,6 +302,13 @@ fn default_landmarks_floor_accents() -> bool {
     true
 }
 
+/// Per-quadrant wall material variation defaults on. Operators can disable
+/// it per difficulty via
+/// `[game.play3d.<difficulty>.landmarks] wall_material_variation = false`.
+fn default_landmarks_wall_material_variation() -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -400,6 +416,7 @@ mod tests {
             dead_end_objects = false
             wall_decorations = false
             floor_accents = false
+            wall_material_variation = false
 
             [play3d.tricky]
             rows = 12
@@ -425,16 +442,19 @@ mod tests {
         assert!(!cfg.play3d.easy.landmarks.dead_end_objects);
         assert!(!cfg.play3d.easy.landmarks.wall_decorations);
         assert!(!cfg.play3d.easy.landmarks.floor_accents);
+        assert!(!cfg.play3d.easy.landmarks.wall_material_variation);
         // Tricky omits the whole landmarks table → all default true.
         assert!(cfg.play3d.tricky.landmarks.wall_tint);
         assert!(cfg.play3d.tricky.landmarks.dead_end_objects);
         assert!(cfg.play3d.tricky.landmarks.wall_decorations);
         assert!(cfg.play3d.tricky.landmarks.floor_accents);
+        assert!(cfg.play3d.tricky.landmarks.wall_material_variation);
         // Hard sets one toggle; the others fall back to the default.
         assert!(cfg.play3d.hard.landmarks.wall_tint);
         assert!(!cfg.play3d.hard.landmarks.dead_end_objects);
         assert!(cfg.play3d.hard.landmarks.wall_decorations);
         assert!(cfg.play3d.hard.landmarks.floor_accents);
+        assert!(cfg.play3d.hard.landmarks.wall_material_variation);
         // Built-in Play3dConfig::default() enables every toggle.
         let default = Play3dConfig::default();
         for d in [&default.easy, &default.tricky, &default.hard] {
@@ -442,6 +462,7 @@ mod tests {
             assert!(d.landmarks.dead_end_objects);
             assert!(d.landmarks.wall_decorations);
             assert!(d.landmarks.floor_accents);
+            assert!(d.landmarks.wall_material_variation);
         }
     }
 

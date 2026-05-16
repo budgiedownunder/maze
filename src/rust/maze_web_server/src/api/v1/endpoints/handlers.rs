@@ -458,6 +458,9 @@ pub struct LandmarksResponse {
     pub wall_decorations: bool,
     /// Floor accents at junction cells enabled for this difficulty.
     pub floor_accents: bool,
+    /// Per-quadrant wall material variation enabled for this difficulty.
+    /// When on, supersedes the per-cell tint variation.
+    pub wall_material_variation: bool,
 }
 
 #[utoipa::path(
@@ -502,6 +505,7 @@ pub async fn get_play3d_config(
             dead_end_objects: preset.landmarks.dead_end_objects,
             wall_decorations: preset.landmarks.wall_decorations,
             floor_accents: preset.landmarks.floor_accents,
+            wall_material_variation: preset.landmarks.wall_material_variation,
         },
     }))
 }

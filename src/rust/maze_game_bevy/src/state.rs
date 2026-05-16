@@ -160,6 +160,13 @@ pub struct Landmarks {
     /// hashing `(row, col, seed)`. Reinforces "this is a decision point"
     /// memory.
     pub floor_accents: bool,
+    /// Per-quadrant wall material variation — when `true`, the maze is
+    /// split into a 2×2 NW/NE/SW/SE grid and each quadrant renders with
+    /// its own wall material (brick / dressed stone / wood / cobblestone),
+    /// seed-permuted so different seeds rotate the quadrant-to-kind
+    /// mapping. Supersedes [`Self::wall_tint`] when on: each quadrant gets
+    /// one fixed material kind and the per-cell tint hash is bypassed.
+    pub wall_material_variation: bool,
 }
 
 impl Default for Landmarks {
@@ -169,6 +176,7 @@ impl Default for Landmarks {
             dead_end_objects: true,
             wall_decorations: true,
             floor_accents: true,
+            wall_material_variation: true,
         }
     }
 }

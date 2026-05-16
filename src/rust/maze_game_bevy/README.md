@@ -36,7 +36,8 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 ### Visual features
 
 - **Procedural brick-pattern** texture on walls; stone-tile texture on floors — generated at runtime, no asset files required.
-- **Per-cell wall tint variation** — pick one of six emissive variants for for wall panels, so different corridor sections have different shades.
+- **Per-cell wall tint variation** — pick one of six emissive variants for for wall panels, so different corridor sections have different shades. Bypassed when **per-quadrant wall material variation** is on for that difficulty.
+- **Per-quadrant wall material variation** — splits the maze into a 2×2 NW/NE/SW/SE grid; each quadrant renders with its own wall material (brick / dressed stone / wood / cobblestone), with the quadrant-to-kind mapping permuted by the seed so different seeds rotate which quadrant gets which material. Supersedes the per-cell tint variation when on. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_material_variation`.
 - **Dead-end landmark objects** — every dead-end cell (passable cell with exactly one open neighbour, excluding start / finish) gets a distinctive landmark — a brazier, urn, broken pillar, or chest — picked by hashing `(row, col, seed)`. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] dead_end_objects`.
 - **Sparse wall decorations** — ~1 in 10 wall panels gets a decorative emissive decoration (vent grate, faded poster, rune glyph, or glowing glass) projected on its inside face. Placement and kind are seeded from `(row, col, face, seed)` so the same maze always decorates the same walls. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_decorations`.
 - **Floor accents at junctions** — every 3- or 4-way junction cell (passable cell with more than two open neighbours, excluding start / finish) gets a single flat accent on its floor — moss, cracked tile, mosaic, or arcane sigil — picked by hashing `(row, col, seed)`. Reinforces "this is a decision point" memory. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] floor_accents`.
@@ -94,7 +95,10 @@ src/
 │   ├── textures/           shared procedural world textures
 │   │   ├── mod.rs          module declarations
 │   │   ├── brick.rs        make_brick_texture (consumed by walls)
-│   │   └── tile.rs         make_tile_texture (consumed by floor tile/start/finish)
+│   │   ├── cobblestone.rs  make_cobblestone_texture (wall material variant)
+│   │   ├── dressed_stone.rs make_dressed_stone_texture (wall material variant)
+│   │   ├── tile.rs         make_tile_texture (consumed by floor tile/start/finish)
+│   │   └── wood.rs         make_wood_texture (wall material variant)
 │   ├── floor/              floor cells, grid lines, start, finish
 │   │   ├── mod.rs          FloorCell marker + FloorAssets bundle + spawn_floor_for_cell
 │   │   ├── tile.rs         default-tile material + spawn helper

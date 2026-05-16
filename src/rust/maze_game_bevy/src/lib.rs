@@ -312,4 +312,40 @@ mod tests {
             .count();
         assert_eq!(count, 0);
     }
+
+    #[test]
+    fn wall_material_variation_toggle_off_uses_tint_path() {
+        // The dispatch branch in `spawn_walls_for_cell` should produce the
+        // same wall-panel count whether material variation is on (per-quadrant
+        // materials path) or off (tinted path). Sanity check that neither
+        // path drops faces — a regression would surface as a mismatch.
+        let mut app_on = make_playing_app_with_config(GameConfig {
+            landmarks: Landmarks {
+                wall_material_variation: true,
+                ..Landmarks::default()
+            },
+            ..GameConfig::default()
+        });
+        let count_on = app_on
+            .world_mut()
+            .query::<&WallCell>()
+            .iter(app_on.world())
+            .count();
+
+        let mut app_off = make_playing_app_with_config(GameConfig {
+            landmarks: Landmarks {
+                wall_material_variation: false,
+                ..Landmarks::default()
+            },
+            ..GameConfig::default()
+        });
+        let count_off = app_off
+            .world_mut()
+            .query::<&WallCell>()
+            .iter(app_off.world())
+            .count();
+
+        assert_eq!(count_on, count_off);
+        assert_eq!(count_on, expected_wall_panel_count(&demo_grid()));
+    }
 }

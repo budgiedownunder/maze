@@ -118,6 +118,7 @@ minimap_radius = 5
 [game.play3d.easy.landmarks]
 # Per-cell wall tint variation — each cell's walls pick one of six
 # emissive variants seeded from (row, col, seed). Default true.
+# Bypassed when wall_material_variation = true.
 wall_tint = true
 # Dead-end landmark objects — every dead-end cell gets one of four
 # distinctive objects (brazier / urn / broken pillar / chest) picked
@@ -131,6 +132,12 @@ wall_decorations = true
 # (excluding start / finish) gets one of four flat accents (moss /
 # cracked tile / mosaic / sigil) on its floor. Default true.
 floor_accents = true
+# Per-quadrant wall material variation — splits the maze into a
+# 2×2 NW/NE/SW/SE grid; each quadrant renders with its own wall
+# material (brick / dressed stone / wood / cobblestone), seed-permuted
+# so different seeds rotate the assignment. Supersedes wall_tint
+# when on. Default true.
+wall_material_variation = true
 
 [game.play3d.tricky]
 title = "TRICKY 3D"
@@ -148,6 +155,7 @@ wall_tint = true
 dead_end_objects = true
 wall_decorations = true
 floor_accents = true
+wall_material_variation = true
 
 [game.play3d.hard]
 title = "HARD 3D"
@@ -165,6 +173,7 @@ wall_tint = true
 dead_end_objects = true
 wall_decorations = true
 floor_accents = true
+wall_material_variation = true
 
 [oauth]
 # Master switch for OAuth sign-in. When false, no OAuth buttons are shown in
