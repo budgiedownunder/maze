@@ -76,3 +76,73 @@ To test the `maze_game_bevy` crate:
 cd src/rust
 cargo test --locked -p maze_game_bevy
 ```
+
+## Source layout
+
+The crate is organised into focused per-concern modules under `src/`:
+
+```
+src/
+├── lib.rs                  module decls + public re-exports + build_app
+├── palette.rs              cross-module colour constants
+├── state.rs                shared state / config types (GameConfig, GameState, etc.)
+├── images.rs               generic Bevy Image factory (sampler-tuned)
+├── movement.rs             input + animation + win-detection + quit
+├── world/                  3D scene construction
+│   ├── mod.rs              spawn_world orchestrator + grid helpers
+│   ├── textures/           shared procedural world textures
+│   │   ├── mod.rs          module declarations
+│   │   ├── brick.rs        make_brick_texture (consumed by walls)
+│   │   └── tile.rs         make_tile_texture (consumed by floor tile/start/finish)
+│   ├── floor/              floor cells, grid lines, start, finish
+│   │   ├── mod.rs          FloorCell marker + FloorAssets bundle + spawn_floor_for_cell
+│   │   ├── tile.rs         default-tile material + spawn helper
+│   │   ├── lines.rs        FloorLine, line meshes + material + spawn_lines_for_cell
+│   │   ├── start.rs        StartCell + start material + spawn helper
+│   │   └── finish.rs       FinishCell + finish material + spawn helper
+│   ├── walls/              wall panels
+│   │   ├── mod.rs          per-cell tint hash + WallAssets bundle + spawn_walls_for_cell
+│   │   ├── ns_panel.rs     N/S-facing panel mesh, materials, spawn helper
+│   │   └── ew_panel.rs     E/W-facing panel mesh, materials, spawn helper
+│   ├── decorations/        sparse wall decorations
+│   │   ├── mod.rs          shared mesh/dims + placement hash + spawn_decorations_for_cell
+│   │   ├── vent.rs         vent-grate texture + material
+│   │   ├── poster.rs       faded-poster texture + material
+│   │   ├── rune.rs         rune-glyph texture + material
+│   │   └── window.rs       window-glow texture + material
+│   ├── objects/            3D physical objects placed in the world
+│   │   ├── mod.rs          ObjectAssets bundle + spawn_objects_for_cell
+│   │   ├── finish/         objects placed at the finish cell
+│   │   │   ├── mod.rs      FinishAssets bundle + spawn_finish_for_cell ('F' predicate)
+│   │   │   └── orb.rs      FinishOrb + orb mesh/material/light + orb_system
+│   │   └── dead_end/       dead-end landmark objects (placement seeded)
+│   │       ├── mod.rs      DeadEndObject + DeadEndAssets + dispatcher + hash + is_dead_end
+│   │       ├── brazier.rs  brazier: stone column + glow + spawn helper
+│   │       ├── urn.rs      urn material + spawn helper
+│   │       ├── pillar.rs   broken-pillar material + spawn helper
+│   │       └── chest.rs    chest material + spawn helper
+│   └── sky/                sky / atmosphere modes
+│       ├── mod.rs          spawn_sky dispatcher (today: night)
+│       └── night/          dim corridor-lit aesthetic
+│           └── mod.rs      ambient + directional lights
+├── hud/                    top-screen overlays
+│   ├── mod.rs              module declarations
+│   ├── minimap.rs          top-right minimap overlay
+│   ├── statusbar.rs        top-left mode label
+│   └── clock.rs            top-centre countdown clock + lose-state trigger
+└── overlays/               full-screen modal layers
+    ├── mod.rs              module declarations
+    ├── title.rs            title-screen splash
+    ├── win.rs              win panel + gold-leaf rain
+    ├── lose.rs             lose panel + rain + lightning
+    └── pause.rs            paused overlay
+```
+
+`spawn_world` is a thin orchestrator: it resolves the maze source into
+`GameState` + `GameClock`, spawns the camera and the sky, builds per-domain
+asset bundles (`walls`, `floor`, `decorations`, `objects`), runs a per-cell
+loop calling each domain's `spawn_*_for_cell`, and finishes with HUD +
+paused-overlay spawns. The only items re-exported through `lib.rs` are
+`build_app`, `generate_maze_json`, and the public types `GameConfig`,
+`Landmarks`, `GameOutcome`, `GameResult`. Everything else is `pub(crate)` or
+fully private.
