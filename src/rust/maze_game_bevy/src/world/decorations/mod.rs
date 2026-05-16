@@ -1,7 +1,7 @@
+pub(crate) mod glowing_glass;
 pub(crate) mod poster;
 pub(crate) mod rune;
 pub(crate) mod vent;
-pub(crate) mod window;
 
 use crate::state::GameConfig;
 use crate::world::walls::WALL_THICKNESS;
@@ -52,7 +52,7 @@ pub(crate) fn build_decoration_assets(
         vent::build_vent_material(materials, images),
         poster::build_poster_material(materials, images),
         rune::build_rune_material(materials, images),
-        window::build_window_material(materials, images),
+        glowing_glass::build_glowing_glass_material(materials, images),
     ];
     DecorationAssets { ns_mesh, ew_mesh, mats }
 }
