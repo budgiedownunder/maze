@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 /// Rune glyph — bright circle on a dark background with a cross inside. The
 /// circle is filled (lower intensity ~190) and the cross strokes punch
-/// through with higher intensity (~245). Material tints bright cyan.
+/// through with higher intensity (~245). Material tints rich gold.
 pub(crate) fn make_rune_decoration_texture(images: &mut Assets<Image>) -> Handle<Image> {
     const W: u32 = 64;
     const H: u32 = 64;
@@ -49,7 +49,7 @@ pub(crate) fn build_rune_material(
     materials.as_mut().map(|m| {
         m.add(StandardMaterial {
             base_color: Color::BLACK,
-            emissive: LinearRgba::new(0.25, 0.60, 1.10, 1.0),
+            emissive: LinearRgba::new(1.00, 0.75, 0.10, 1.0),
             emissive_texture: tex,
             uv_transform: Affine2::from_scale(Vec2::new(1.0, 1.0)),
             ..default()
