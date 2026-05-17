@@ -16,7 +16,10 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     use crate::movement::{movement_system, quit_system};
     use crate::overlays::{lose, pause, title, win};
     use crate::state::{AppState, PendingMazeJson, TitleTimer};
-    use crate::world::{objects, sky, spawn_world};
+    use crate::world::{
+        objects::{self, dead_end::brazier_flicker_system},
+        sky, spawn_world,
+    };
 
     // `GameConfig` is the seam the JS host uses (via
     // `maze_game_bevy_wasm::start_with_config`) to drive difficulty / timer /
@@ -46,6 +49,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, minimap::minimap_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pause::pause_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, sky::sky_dome_follow_camera.run_if(in_state(AppState::Playing)))
         .add_systems(Update, quit_system);
@@ -61,7 +65,10 @@ mod tests {
         demo_grid,
         floor::FloorCell,
         initial_facing,
-        objects::{dead_end::DeadEndObject, finish::orb::FinishOrb},
+        objects::{
+            dead_end::{BrazierBowl, DeadEndObject},
+            finish::orb::FinishOrb,
+        },
         sky::dome::SkyDome,
         walls::WallCell,
     };
@@ -279,6 +286,49 @@ mod tests {
             .iter(app.world())
             .count();
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn playing_spawns_brazier_bowl_marker() {
+        // The demo grid contains at least one dead-end cell, and the
+        // dead-end-object hash is deterministic — so at least one of the
+        // four landmark kinds will be spawned. We can't guarantee a
+        // brazier from a single demo grid (the hash picks one of four),
+        // so seed the config to force kind 0 (brazier) — `seed = 0` puts
+        // demo-grid cell (1,0) into the brazier branch via the hash.
+        let mut app = make_playing_app_with_config(GameConfig {
+            seed: brazier_forcing_seed(),
+            ..GameConfig::default()
+        });
+        let count = app.world_mut().query::<&BrazierBowl>().iter(app.world()).count();
+        assert!(
+            count >= 1,
+            "expected at least one BrazierBowl marker, got {count}"
+        );
+    }
+
+    /// Returns a seed value that hashes at least one demo-grid dead-end
+    /// cell into the brazier branch (`dead_end_object_index == 0`). The
+    /// demo grid's dead-end cells are determined by `is_dead_end`; we
+    /// sweep candidate seeds until we find one that yields a brazier so
+    /// the smoke test isn't sensitive to changes in the hash constants.
+    fn brazier_forcing_seed() -> u64 {
+        use crate::world::demo_grid;
+        use crate::world::objects::dead_end::{dead_end_object_index, is_dead_end};
+        let grid = demo_grid();
+        for seed in 0u64..1024 {
+            for (r, row) in grid.iter().enumerate() {
+                for (c, &cell) in row.iter().enumerate() {
+                    if cell == 'S' || cell == 'F' {
+                        continue;
+                    }
+                    if is_dead_end(&grid, r, c) && dead_end_object_index(r, c, seed) == 0 {
+                        return seed;
+                    }
+                }
+            }
+        }
+        panic!("no seed in 0..1024 produces a brazier on the demo grid");
     }
 
     #[test]
