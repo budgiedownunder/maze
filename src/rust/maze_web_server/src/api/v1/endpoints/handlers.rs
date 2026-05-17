@@ -438,9 +438,10 @@ pub struct Play3dConfigResponse {
     pub title: String,
     /// Free-text label shown in the in-game status bar.
     pub mode: String,
-    /// Per-difficulty landmark / spatial-orientation toggles forwarded
-    /// verbatim from the config preset to the WASM client.
+    /// Landmark settings.
     pub landmarks: LandmarksResponse,
+    /// Sky type. Safely degrades to `night` if unrecognised.
+    pub sky_type: String,
 }
 
 /// JSON shape of the per-difficulty landmark toggles in
@@ -507,6 +508,7 @@ pub async fn get_play3d_config(
             floor_accents: preset.landmarks.floor_accents,
             wall_material_variation: preset.landmarks.wall_material_variation,
         },
+        sky_type: preset.sky_type.as_wire_str().to_string(),
     }))
 }
 

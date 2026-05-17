@@ -38,6 +38,7 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Procedural brick-pattern** texture on walls; stone-tile texture on floors — generated at runtime, no asset files required.
 - **Per-cell wall tint variation** — pick one of six emissive variants for for wall panels, so different corridor sections have different shades. Bypassed when **per-quadrant wall material variation** is on for that difficulty.
 - **Per-quadrant wall material variation** — splits the maze into a 2×2 NW/NE/SW/SE grid; each quadrant renders with its own wall material (brick / dressed stone / wood / cobblestone), with the quadrant-to-kind mapping permuted by the seed so different seeds rotate which quadrant gets which material. Supersedes the per-cell tint variation when on. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_material_variation`.
+- **Atmospheric sky modes** — `night` (dense stars on deep indigo), `sunrise` (soft warm pink with medium stars), `day` (sky-blue with broken white/grey clouds), and `sunset` (warm orange with sparse dark clouds and sparse stars). Each mode renders a procedural panoramic dome around the player (gradient + cloud blobs baked into the dome texture; stars are tiny 3D entities parented to the dome so they stay angularly fixed in the sky as the player walks) and ships a paired ambient + directional light preset so the corridors visibly feel like the chosen time of day. Selected per difficulty via `[game.play3d.<difficulty>] sky_type`; default `night`.
 - **Dead-end landmark objects** — every dead-end cell (passable cell with exactly one open neighbour, excluding start / finish) gets a distinctive landmark — a brazier, urn, broken pillar, or chest — picked by hashing `(row, col, seed)`. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] dead_end_objects`.
 - **Sparse wall decorations** — ~1 in 10 wall panels gets a decorative emissive decoration (vent grate, faded poster, rune glyph, or glowing glass) projected on its inside face. Placement and kind are seeded from `(row, col, face, seed)` so the same maze always decorates the same walls. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_decorations`.
 - **Floor accents at junctions** — every 3- or 4-way junction cell (passable cell with more than two open neighbours, excluding start / finish) gets a single flat accent on its floor — moss, cracked tile, mosaic, or arcane sigil — picked by hashing `(row, col, seed)`. Reinforces "this is a decision point" memory. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] floor_accents`.
@@ -135,9 +136,15 @@ src/
 │   │       ├── pillar.rs   broken-pillar material + spawn helper
 │   │       └── chest.rs    chest material + spawn helper
 │   └── sky/                sky / atmosphere modes
-│       ├── mod.rs          spawn_sky dispatcher (today: night)
-│       └── night/          dim corridor-lit aesthetic
-│           └── mod.rs      ambient + directional lights
+│       ├── mod.rs          spawn_sky dispatcher + shared util fns (PRNG, sRGB byte conv)
+│       ├── dome.rs         inverted-sphere dome + camera-follow system
+│       ├── procedural.rs   sky-dome backdrop (gradient baker + make_sky_texture orchestrator)
+│       ├── clouds.rs       cloud blobs painted into the dome texture (CloudSpec + paint)
+│       ├── stars.rs        3D entity starfield (tiny emissive spheres, parented to dome)
+│       ├── day/mod.rs      bright sky-blue with broken clouds
+│       ├── night/mod.rs    deep indigo with dense stars
+│       ├── sunrise/mod.rs  soft warm pink with medium stars
+│       └── sunset/mod.rs   warm orange with sparse clouds + sparse stars
 ├── hud/                    top-screen overlays
 │   ├── mod.rs              module declarations
 │   ├── minimap.rs          top-right minimap overlay

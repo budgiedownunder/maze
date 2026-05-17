@@ -134,6 +134,50 @@ pub struct GameConfig {
     /// landmark technique has its own flag here so a build can disable
     /// any individual technique at runtime via the server config.
     pub landmarks: Landmarks,
+    /// Atmospheric sky mode for this session. Determines the dome
+    /// texture (gradient + clouds + stars) and a paired ambient +
+    /// directional light preset. Default `Night`.
+    pub sky_type: SkyType,
+}
+
+/// Atmospheric sky modes. Each variant maps to a procedurally generated
+/// dome texture + a paired light preset (see `world/sky`). Default is
+/// `Night` so a missing or unrecognised config value preserves the
+/// pre-Step-10 visual.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SkyType {
+    #[default]
+    Night,
+    Sunrise,
+    Day,
+    Sunset,
+}
+
+impl SkyType {
+    /// Lowercase wire form, matching the JSON / TOML strings the server
+    /// emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Night => "night",
+            Self::Sunrise => "sunrise",
+            Self::Day => "day",
+            Self::Sunset => "sunset",
+        }
+    }
+
+    /// Parses a wire string into a [`SkyType`]. Unknown values fall
+    /// back to [`SkyType::Night`] rather than failing — the same
+    /// design as the config-layer deserialiser, so a stale client +
+    /// fresh server (or vice versa) keeps working with a sane default
+    /// instead of crashing.
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "sunrise" => Self::Sunrise,
+            "day" => Self::Day,
+            "sunset" => Self::Sunset,
+            _ => Self::Night,
+        }
+    }
 }
 
 /// Toggle bag for the spatial-orientation landmark techniques. Each new
@@ -195,6 +239,7 @@ impl Default for GameConfig {
             title: "MAZE 3D".to_string(),
             mode: "Play".to_string(),
             landmarks: Landmarks::default(),
+            sky_type: SkyType::default(),
         }
     }
 }

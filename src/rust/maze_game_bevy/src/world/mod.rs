@@ -219,7 +219,13 @@ pub(crate) fn spawn_world(
     });
 
     spawn_camera(&mut commands, start_pos, start_yaw);
-    sky::spawn_sky(&mut commands);
+    sky::spawn_sky(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &mut images,
+        &config,
+    );
 
     let wall_assets = walls::build_wall_assets(&mut meshes, &mut materials, &mut images);
     let floor_assets = floor::build_floor_assets(&mut meshes, &mut materials, &mut images);

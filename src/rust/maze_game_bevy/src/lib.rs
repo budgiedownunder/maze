@@ -6,7 +6,7 @@ mod palette;
 mod state;
 mod world;
 
-pub use state::{GameConfig, GameOutcome, GameResult, Landmarks};
+pub use state::{GameConfig, GameOutcome, GameResult, Landmarks, SkyType};
 pub use world::generate_maze_json;
 
 use bevy::prelude::*;
@@ -16,7 +16,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     use crate::movement::{movement_system, quit_system};
     use crate::overlays::{lose, pause, title, win};
     use crate::state::{AppState, PendingMazeJson, TitleTimer};
-    use crate::world::{objects, spawn_world};
+    use crate::world::{objects, sky, spawn_world};
 
     // `GameConfig` is the seam the JS host uses (via
     // `maze_game_bevy_wasm::start_with_config`) to drive difficulty / timer /
@@ -47,6 +47,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pause::pause_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, sky::sky_dome_follow_camera.run_if(in_state(AppState::Playing)))
         .add_systems(Update, quit_system);
 }
 
@@ -54,13 +55,14 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
 mod tests {
     use super::*;
     use crate::overlays::title::TitleEntity;
-    use crate::state::{AppState, GameState, GridFacing};
+    use crate::state::{AppState, GameState, GridFacing, SkyType};
     use crate::world::{
         decorations::{floor::FloorAccent, wall::WallDecoration},
         demo_grid,
         floor::FloorCell,
         initial_facing,
         objects::{dead_end::DeadEndObject, finish::orb::FinishOrb},
+        sky::dome::SkyDome,
         walls::WallCell,
     };
     use bevy::state::app::StatesPlugin;
@@ -311,6 +313,81 @@ mod tests {
             .iter(app.world())
             .count();
         assert_eq!(count, 0);
+    }
+
+    /// Smoke-tests `spawn_sky` for every [`SkyType`] variant.
+    ///
+    /// Each sky type must spawn exactly one [`SkyDome`] entity and at
+    /// least one [`AmbientLight`] — a regression guard against a
+    /// missing branch in the dispatch in `world/sky/mod.rs`.
+    fn assert_sky_spawns_dome_and_light(sky_type: SkyType) {
+        let mut app = make_playing_app_with_config(GameConfig {
+            sky_type,
+            ..GameConfig::default()
+        });
+        let dome_count = app.world_mut().query::<&SkyDome>().iter(app.world()).count();
+        assert_eq!(dome_count, 1, "{sky_type:?}: expected exactly one SkyDome");
+        let ambient_count = app
+            .world_mut()
+            .query::<&AmbientLight>()
+            .iter(app.world())
+            .count();
+        assert!(
+            ambient_count >= 1,
+            "{sky_type:?}: expected at least one AmbientLight, got {ambient_count}"
+        );
+        let directional_count = app
+            .world_mut()
+            .query::<&DirectionalLight>()
+            .iter(app.world())
+            .count();
+        assert!(
+            directional_count >= 1,
+            "{sky_type:?}: expected at least one DirectionalLight, got {directional_count}"
+        );
+    }
+
+    #[test]
+    fn night_sky_spawns_dome_and_lights() {
+        assert_sky_spawns_dome_and_light(SkyType::Night);
+    }
+
+    #[test]
+    fn sunrise_sky_spawns_dome_and_lights() {
+        assert_sky_spawns_dome_and_light(SkyType::Sunrise);
+    }
+
+    #[test]
+    fn day_sky_spawns_dome_and_lights() {
+        assert_sky_spawns_dome_and_light(SkyType::Day);
+    }
+
+    #[test]
+    fn sunset_sky_spawns_dome_and_lights() {
+        assert_sky_spawns_dome_and_light(SkyType::Sunset);
+    }
+
+    #[test]
+    fn default_sky_type_is_night() {
+        assert_eq!(GameConfig::default().sky_type, SkyType::Night);
+    }
+
+    #[test]
+    fn sky_type_wire_round_trip() {
+        for st in [
+            SkyType::Night,
+            SkyType::Sunrise,
+            SkyType::Day,
+            SkyType::Sunset,
+        ] {
+            assert_eq!(SkyType::from_wire_str(st.as_wire_str()), st);
+        }
+        // Unknown values fall back to Night.
+        assert_eq!(SkyType::from_wire_str("typo"), SkyType::Night);
+        assert_eq!(SkyType::from_wire_str(""), SkyType::Night);
+        // Case-insensitive.
+        assert_eq!(SkyType::from_wire_str("DAY"), SkyType::Day);
+        assert_eq!(SkyType::from_wire_str("SunSet"), SkyType::Sunset);
     }
 
     #[test]

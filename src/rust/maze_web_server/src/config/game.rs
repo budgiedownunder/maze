@@ -8,7 +8,7 @@
 //! frontends via `GET /api/v1/game/play3d-config?difficulty=…` so the React /
 //! MAUI clients never duplicate them.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Per-difficulty Play 3D preset.
 ///
@@ -70,6 +70,49 @@ pub struct Play3dDifficultyConfig {
     /// individual technique per difficulty without code changes.
     #[serde(default)]
     pub landmarks: LandmarksConfig,
+    /// Atmospheric sky mode. Drives the dome texture (gradient +
+    /// clouds + stars) and the paired ambient + directional light
+    /// preset in the Bevy game. Default `night`.
+    #[serde(default = "default_sky_type")]
+    pub sky_type: SkyTypeConfig,
+}
+
+/// Atmospheric sky modes. Wire form (TOML / JSON) is lowercase
+/// (`"night" | "sunrise" | "day" | "sunset"`). Unknown values
+/// deserialise as `Night` rather than failing the entire `AppConfig`
+/// load — same forgiving policy as the rest of this module.
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SkyTypeConfig {
+    #[default]
+    Night,
+    Sunrise,
+    Day,
+    Sunset,
+}
+
+impl SkyTypeConfig {
+    /// Lowercase wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Night => "night",
+            Self::Sunrise => "sunrise",
+            Self::Day => "day",
+            Self::Sunset => "sunset",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SkyTypeConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "sunrise" => Self::Sunrise,
+            "day" => Self::Day,
+            "sunset" => Self::Sunset,
+            _ => Self::Night,
+        })
+    }
 }
 
 /// Per-difficulty landmark / spatial-orientation toggles. New techniques
@@ -140,6 +183,7 @@ impl Default for Play3dDifficultyConfig {
             title: None,
             mode: default_play3d_mode(),
             landmarks: LandmarksConfig::default(),
+            sky_type: default_sky_type(),
         }
     }
 }
@@ -202,6 +246,7 @@ impl Default for Play3dConfig {
                 title: None,
                 mode: "Easy".to_string(),
                 landmarks: LandmarksConfig::default(),
+                sky_type: default_sky_type(),
             },
             tricky: Play3dDifficultyConfig {
                 rows: 15,
@@ -214,6 +259,7 @@ impl Default for Play3dConfig {
                 title: None,
                 mode: "Tricky".to_string(),
                 landmarks: LandmarksConfig::default(),
+                sky_type: default_sky_type(),
             },
             hard: Play3dDifficultyConfig {
                 rows: 25,
@@ -226,6 +272,7 @@ impl Default for Play3dConfig {
                 title: None,
                 mode: "Hard".to_string(),
                 landmarks: LandmarksConfig::default(),
+                sky_type: default_sky_type(),
             },
         }
     }
@@ -307,6 +354,13 @@ fn default_landmarks_floor_accents() -> bool {
 /// `[game.play3d.<difficulty>.landmarks] wall_material_variation = false`.
 fn default_landmarks_wall_material_variation() -> bool {
     true
+}
+
+/// Atmospheric sky mode defaults to night for parity with the pre-Step-10
+/// look (the only sky mode that previously existed). Operators override
+/// per difficulty via `[game.play3d.<difficulty>] sky_type = "day"`.
+fn default_sky_type() -> SkyTypeConfig {
+    SkyTypeConfig::Night
 }
 
 #[cfg(test)]
@@ -464,6 +518,80 @@ mod tests {
             assert!(d.landmarks.floor_accents);
             assert!(d.landmarks.wall_material_variation);
         }
+    }
+
+    #[test]
+    fn sky_type_round_trips_from_toml_and_defaults_to_night() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            sky_type = "day"
+
+            [play3d.tricky]
+            rows = 12
+            cols = 12
+            timer_seconds = 180
+            seed = 43
+            min_solution_length = 60
+            sky_type = "SUNSET"
+            # case-insensitive
+
+            [play3d.hard]
+            rows = 20
+            cols = 20
+            timer_seconds = 360
+            seed = 44
+            min_solution_length = 160
+            # sky_type deliberately omitted — defaults to night
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.sky_type, SkyTypeConfig::Day);
+        assert_eq!(cfg.play3d.tricky.sky_type, SkyTypeConfig::Sunset);
+        assert_eq!(cfg.play3d.hard.sky_type, SkyTypeConfig::Night);
+        // Built-in defaults are all Night.
+        let default = Play3dConfig::default();
+        assert_eq!(default.easy.sky_type, SkyTypeConfig::Night);
+        assert_eq!(default.tricky.sky_type, SkyTypeConfig::Night);
+        assert_eq!(default.hard.sky_type, SkyTypeConfig::Night);
+    }
+
+    #[test]
+    fn unknown_sky_type_falls_back_to_night() {
+        // Forgiving deserialiser — a typo (or a value from a future
+        // version) must not kill config load. Falls back to Night so
+        // the player still gets *some* sky rather than no game.
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            sky_type = "thunderstorm"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
+        assert_eq!(cfg.play3d.easy.sky_type, SkyTypeConfig::Night);
+    }
+
+    #[test]
+    fn sky_type_as_wire_str_matches_serde_form() {
+        // The handler layer surfaces this lowercase string in JSON
+        // responses; the WASM client parses it back via
+        // SkyType::from_wire_str. The round-trip is symmetric.
+        assert_eq!(SkyTypeConfig::Night.as_wire_str(), "night");
+        assert_eq!(SkyTypeConfig::Sunrise.as_wire_str(), "sunrise");
+        assert_eq!(SkyTypeConfig::Day.as_wire_str(), "day");
+        assert_eq!(SkyTypeConfig::Sunset.as_wire_str(), "sunset");
     }
 
     #[test]

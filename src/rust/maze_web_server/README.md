@@ -103,6 +103,7 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.landmarks.wall_decorations` | Boolean | `true` | (config-file only — when `true`, add random wall decorations )
 |                | `game.play3d.<difficulty>.landmarks.floor_accents` | Boolean | `true` | (config-file only — when `true`, place flat accents on the floor of 3- and 4-way junction cells)
 |                | `game.play3d.<difficulty>.landmarks.wall_material_variation` | Boolean | `true` | (config-file only — when `true`, split the maze into a 2×2 NW/NE/SW/SE grid and render each quadrant with its own wall material (brick / dressed stone / wood / cobblestone); supersedes `wall_tint`)
+|                | `game.play3d.<difficulty>.sky_type` | Text (`night` / `sunrise` / `day` / `sunset`) | `night` | (config-file only — atmospheric sky mode; unknown values fall back to `night`)
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
@@ -195,6 +196,8 @@ min_solution_length = 30
 minimap_cell_px = 10
 minimap_radius = 5
 
+sky_type = "night"
+
 [game.play3d.easy.landmarks]
 wall_tint = true
 dead_end_objects = true
@@ -212,6 +215,8 @@ min_solution_length = 90
 minimap_cell_px = 10
 minimap_radius = 5
 
+sky_type = "night"
+
 [game.play3d.tricky.landmarks]
 wall_tint = true
 dead_end_objects = true
@@ -228,6 +233,8 @@ seed = 25252525
 min_solution_length = 220
 minimap_cell_px = 10
 minimap_radius = 5
+
+sky_type = "night"
 
 [game.play3d.hard.landmarks]
 wall_tint = true
@@ -578,7 +585,8 @@ Response shape (camelCase):
     "wallDecorations": true,
     "floorAccents": true,
     "wallMaterialVariation": true
-  }
+  },
+  "skyType": "night"
 }
 ```
 
