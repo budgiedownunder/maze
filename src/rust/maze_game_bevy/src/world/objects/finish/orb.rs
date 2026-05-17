@@ -1,8 +1,29 @@
 use crate::overlays::win::COLOR_ORB_LIGHT;
+use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::world::CELL_SIZE;
 use bevy::prelude::*;
 
+// ---------- Tuning constants ----------
+
+/// Orb sphere radius (units).
+const ORB_RADIUS: f32 = 0.35;
+/// Orb resting Y position (mid-height in the finish cell, well above
+/// the floor + grid lines).
 const ORB_BASE_Y: f32 = 1.0;
+/// Orb emissive RGB — warm gold.
+const ORB_EMISSIVE: LinearRgba = LinearRgba::new(1.2, 0.9, 0.1, 1.0);
+
+/// Per-second bob frequency (radians).
+const BOB_RATE: f32 = 2.0;
+/// Bob amplitude (units of vertical travel from the resting Y).
+const BOB_AMPLITUDE: f32 = 0.15;
+/// Per-second rotation rate around Y (radians).
+const SPIN_RATE: f32 = 1.2;
+
+/// Point light intensity at the orb (lumens-ish; Bevy PBR units).
+const ORB_LIGHT_INTENSITY: f32 = 80_000.0;
+/// Point light source radius (units) — softens the shadow penumbra.
+const ORB_LIGHT_RADIUS: f32 = 0.35;
 
 #[derive(Component)]
 pub(crate) struct FinishOrb;
@@ -16,11 +37,11 @@ pub(crate) fn build_orb_assets(
     meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
 ) -> OrbAssets {
-    let mesh = meshes.as_mut().map(|m| m.add(Sphere::new(0.35)));
+    let mesh = meshes.as_mut().map(|m| m.add(Sphere::new(ORB_RADIUS)));
     let mat = materials.as_mut().map(|m| {
         m.add(StandardMaterial {
-            base_color: Color::BLACK,
-            emissive: LinearRgba::new(1.2, 0.9, 0.1, 1.0),
+            base_color: EMISSIVE_ONLY_BASE,
+            emissive: ORB_EMISSIVE,
             ..default()
         })
     });
@@ -46,8 +67,8 @@ pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c
     commands.spawn((
         PointLight {
             color: COLOR_ORB_LIGHT,
-            intensity: 80_000.0,
-            radius: 0.35,
+            intensity: ORB_LIGHT_INTENSITY,
+            radius: ORB_LIGHT_RADIUS,
             shadows_enabled: true,
             ..default()
         },
@@ -57,7 +78,7 @@ pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c
 
 pub(crate) fn orb_system(time: Res<Time>, mut orb: Query<&mut Transform, With<FinishOrb>>) {
     if let Ok(mut t) = orb.single_mut() {
-        t.translation.y = ORB_BASE_Y + 0.15 * (time.elapsed_secs() * 2.0).sin();
-        t.rotate_y(time.delta_secs() * 1.2);
+        t.translation.y = ORB_BASE_Y + BOB_AMPLITUDE * (time.elapsed_secs() * BOB_RATE).sin();
+        t.rotate_y(time.delta_secs() * SPIN_RATE);
     }
 }

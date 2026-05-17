@@ -1,9 +1,20 @@
+use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::world::{CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 
+// ---------- Tuning constants ----------
+
+/// Floor-line strip width (units, perpendicular to its run direction).
 const LINE_W: f32 = 0.06;
+/// Floor-line strip thickness (units, vertical extent).
 const LINE_H: f32 = 0.01;
+/// Y position of the line strip — slightly above the floor tile (top at
+/// y=0.005) so the strips render in front without z-fighting.
 const LINE_Y: f32 = 0.015;
+
+/// Emissive RGB for the floor-line strip — neutral mid-grey so it reads
+/// as a faint orientation cue rather than a coloured accent.
+const LINE_EMISSIVE: LinearRgba = LinearRgba::new(0.28, 0.28, 0.28, 1.0);
 
 #[derive(Component)]
 pub(crate) struct FloorLine;
@@ -27,8 +38,8 @@ pub(crate) fn build_line_assets(
         .map(|m| m.add(Cuboid::new(LINE_W, LINE_H, CELL_SIZE)));
     let line_mat = materials.as_mut().map(|m| {
         m.add(StandardMaterial {
-            base_color: Color::BLACK,
-            emissive: LinearRgba::new(0.28, 0.28, 0.28, 1.0),
+            base_color: EMISSIVE_ONLY_BASE,
+            emissive: LINE_EMISSIVE,
             ..default()
         })
     });

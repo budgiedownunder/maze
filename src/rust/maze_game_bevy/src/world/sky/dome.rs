@@ -7,6 +7,7 @@
 //! sweeps the sky past the player, walking around does not move the
 //! visible sky.
 
+use crate::palette::UNLIT_FULL_BRIGHT;
 use bevy::prelude::*;
 use bevy::render::render_resource::Face;
 
@@ -36,7 +37,7 @@ pub(crate) fn spawn_dome(
         .map(|m| m.add(Sphere::new(SKY_RADIUS).mesh().uv(64, 32)));
     let material = materials.as_mut().map(|m| {
         m.add(StandardMaterial {
-            base_color: Color::WHITE,
+            base_color: UNLIT_FULL_BRIGHT,
             base_color_texture: sky_texture,
             // Unlit so the sky paints its own colour rather than picking
             // up the per-mode ambient/directional light tint (which would

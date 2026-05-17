@@ -11,12 +11,15 @@ use bevy::prelude::*;
 pub(crate) struct FloorAccent;
 
 pub(crate) const FLOOR_ACCENT_VARIANTS: u32 = 4;
-// X-Z extent of the accent patch. Smaller than CELL_SIZE (2.0) so the
-// existing floor tile + grid lines remain visible around the patch.
+/// X-Z extent of the accent patch (units). Smaller than CELL_SIZE (2.0)
+/// so the existing floor tile + grid lines remain visible around the
+/// patch.
 const FLOOR_ACCENT_SIZE: f32 = 1.2;
-// Y position: above the floor tile (top at y=0.005) AND the grid lines
-// (top at y=0.020) so the accent sits cleanly on the surface with no
-// z-fighting.
+/// Mesh thickness (units, vertical extent). Thin enough to look flat.
+const FLOOR_ACCENT_THICKNESS: f32 = 0.01;
+/// Y position: above the floor tile (top at y=0.005) AND the grid lines
+/// (top at y=0.020) so the accent sits cleanly on the surface with no
+/// z-fighting.
 const FLOOR_ACCENT_Y: f32 = 0.025;
 
 pub(crate) struct FloorAccentAssets {
@@ -33,9 +36,13 @@ pub(crate) fn build_floor_accent_assets(
     // shared across all accent kinds. Pixel intensity drives emissive;
     // each kind's material tints the same monochrome texture differently
     // so the four accent types read distinctly.
-    let mesh = meshes
-        .as_mut()
-        .map(|m| m.add(Cuboid::new(FLOOR_ACCENT_SIZE, 0.01, FLOOR_ACCENT_SIZE)));
+    let mesh = meshes.as_mut().map(|m| {
+        m.add(Cuboid::new(
+            FLOOR_ACCENT_SIZE,
+            FLOOR_ACCENT_THICKNESS,
+            FLOOR_ACCENT_SIZE,
+        ))
+    });
     let mats: [Option<Handle<StandardMaterial>>; FLOOR_ACCENT_VARIANTS as usize] = [
         moss::build_moss_material(materials, images),
         cracked_tile::build_cracked_tile_material(materials, images),

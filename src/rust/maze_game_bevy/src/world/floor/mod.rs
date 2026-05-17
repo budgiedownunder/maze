@@ -7,6 +7,13 @@ use crate::world::textures::tile::make_tile_texture;
 use crate::world::CELL_SIZE;
 use bevy::prelude::*;
 
+// ---------- Tuning constants ----------
+
+/// Floor-tile mesh thickness (units, vertical extent). Thin enough to
+/// look flat from the player's eye height without z-fighting the grid
+/// lines that sit just above it.
+const FLOOR_THICKNESS: f32 = 0.01;
+
 #[derive(Component)]
 pub(crate) struct FloorCell;
 
@@ -27,7 +34,7 @@ pub(crate) fn build_floor_assets(
     // pipeline. Shared by tile / start / finish.
     let floor_mesh = meshes
         .as_mut()
-        .map(|m| m.add(Cuboid::new(CELL_SIZE, 0.01, CELL_SIZE)));
+        .map(|m| m.add(Cuboid::new(CELL_SIZE, FLOOR_THICKNESS, CELL_SIZE)));
     // Tile texture is shared by tile / start / finish materials — build once.
     let tile_tex = images.as_mut().map(|imgs| make_tile_texture(imgs));
     FloorAssets {

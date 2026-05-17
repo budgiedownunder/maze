@@ -1,7 +1,16 @@
 use super::{FloorAssets, FloorCell};
+use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::world::CELL_SIZE;
 use bevy::math::Affine2;
 use bevy::prelude::*;
+
+// ---------- Tuning constants ----------
+
+/// Floor tile emissive RGB (cool stone grey).
+const TILE_EMISSIVE: LinearRgba = LinearRgba::new(0.12, 0.12, 0.12, 1.0);
+/// UV repeat across one floor cell — the tile texture tiles twice per
+/// cell on each axis.
+const TILE_UV_SCALE: Vec2 = Vec2::new(2.0, 2.0);
 
 pub(crate) fn build_tile_material(
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
@@ -9,10 +18,10 @@ pub(crate) fn build_tile_material(
 ) -> Option<Handle<StandardMaterial>> {
     materials.as_mut().map(|m| {
         m.add(StandardMaterial {
-            base_color: Color::BLACK,
-            emissive: LinearRgba::new(0.12, 0.12, 0.12, 1.0),
+            base_color: EMISSIVE_ONLY_BASE,
+            emissive: TILE_EMISSIVE,
             emissive_texture: tile_tex.clone(),
-            uv_transform: Affine2::from_scale(Vec2::new(2.0, 2.0)),
+            uv_transform: Affine2::from_scale(TILE_UV_SCALE),
             ..default()
         })
     })

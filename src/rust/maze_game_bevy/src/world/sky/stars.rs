@@ -14,6 +14,7 @@
 
 use super::dome::SKY_RADIUS;
 use super::next_unit;
+use crate::palette::UNLIT_FULL_BRIGHT;
 use bevy::prelude::*;
 use std::f32::consts::TAU;
 
@@ -59,7 +60,7 @@ pub(crate) fn spawn_stars(
             // skips the lighting calculation — so the colour MUST live
             // in `base_color` (emissive is gated behind the PBR
             // lighting path and silently does nothing under `unlit`).
-            base_color: Color::WHITE,
+            base_color: UNLIT_FULL_BRIGHT,
             unlit: true,
             ..default()
         })

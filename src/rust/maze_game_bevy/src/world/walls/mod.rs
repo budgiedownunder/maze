@@ -50,6 +50,32 @@ pub(crate) const WALL_MATERIAL_WOOD: usize = 2;
 #[allow(dead_code)]
 pub(crate) const WALL_MATERIAL_COBBLESTONE: usize = 3;
 
+// Per-material emissive RGB tints + UV scales. N/S-facing panels
+// (ahead / behind the player) use the lighter half; E/W-facing panels
+// (sides) use the darker half so the same material reads as the same
+// kind from any angle but still has directional shading depth.
+// One pair per index in `0..WALL_MATERIAL_VARIANTS`.
+
+// Brick — pre-Step-5F look, slightly cool stone grey.
+const NS_BRICK_EMISSIVE: (f32, f32, f32) = (0.38, 0.38, 0.40);
+const EW_BRICK_EMISSIVE: (f32, f32, f32) = (0.14, 0.14, 0.16);
+const BRICK_UV: Vec2 = Vec2::new(3.0, 5.0);
+
+// Dressed stone — slightly warm pale stone.
+const NS_DRESSED_STONE_EMISSIVE: (f32, f32, f32) = (0.50, 0.48, 0.42);
+const EW_DRESSED_STONE_EMISSIVE: (f32, f32, f32) = (0.22, 0.21, 0.19);
+const DRESSED_STONE_UV: Vec2 = Vec2::new(2.0, 3.0);
+
+// Wood — warm brown, tall grain stretched vertically (UV.y = 4).
+const NS_WOOD_EMISSIVE: (f32, f32, f32) = (0.35, 0.20, 0.10);
+const EW_WOOD_EMISSIVE: (f32, f32, f32) = (0.18, 0.10, 0.05);
+const WOOD_UV: Vec2 = Vec2::new(1.0, 4.0);
+
+// Cobblestone — desaturated warm grey.
+const NS_COBBLESTONE_EMISSIVE: (f32, f32, f32) = (0.32, 0.30, 0.28);
+const EW_COBBLESTONE_EMISSIVE: (f32, f32, f32) = (0.12, 0.11, 0.10);
+const COBBLESTONE_UV: Vec2 = Vec2::new(2.0, 2.0);
+
 #[derive(Component)]
 pub(crate) struct WallCell;
 
@@ -77,23 +103,23 @@ pub(crate) fn build_wall_assets(
     let ns_specs: [WallMaterialSpec; WALL_MATERIAL_VARIANTS] = [
         WallMaterialSpec {
             texture: &brick_tex,
-            emissive: (0.38, 0.38, 0.40),
-            uv_scale: Vec2::new(3.0, 5.0),
+            emissive: NS_BRICK_EMISSIVE,
+            uv_scale: BRICK_UV,
         },
         WallMaterialSpec {
             texture: &dressed_tex,
-            emissive: (0.50, 0.48, 0.42),
-            uv_scale: Vec2::new(2.0, 3.0),
+            emissive: NS_DRESSED_STONE_EMISSIVE,
+            uv_scale: DRESSED_STONE_UV,
         },
         WallMaterialSpec {
             texture: &wood_tex,
-            emissive: (0.35, 0.20, 0.10),
-            uv_scale: Vec2::new(1.0, 4.0),
+            emissive: NS_WOOD_EMISSIVE,
+            uv_scale: WOOD_UV,
         },
         WallMaterialSpec {
             texture: &cobble_tex,
-            emissive: (0.32, 0.30, 0.28),
-            uv_scale: Vec2::new(2.0, 2.0),
+            emissive: NS_COBBLESTONE_EMISSIVE,
+            uv_scale: COBBLESTONE_UV,
         },
     ];
     // E/W-facing panels (sides) — darker variants of the same materials so
@@ -101,23 +127,23 @@ pub(crate) fn build_wall_assets(
     let ew_specs: [WallMaterialSpec; WALL_MATERIAL_VARIANTS] = [
         WallMaterialSpec {
             texture: &brick_tex,
-            emissive: (0.14, 0.14, 0.16),
-            uv_scale: Vec2::new(3.0, 5.0),
+            emissive: EW_BRICK_EMISSIVE,
+            uv_scale: BRICK_UV,
         },
         WallMaterialSpec {
             texture: &dressed_tex,
-            emissive: (0.22, 0.21, 0.19),
-            uv_scale: Vec2::new(2.0, 3.0),
+            emissive: EW_DRESSED_STONE_EMISSIVE,
+            uv_scale: DRESSED_STONE_UV,
         },
         WallMaterialSpec {
             texture: &wood_tex,
-            emissive: (0.18, 0.10, 0.05),
-            uv_scale: Vec2::new(1.0, 4.0),
+            emissive: EW_WOOD_EMISSIVE,
+            uv_scale: WOOD_UV,
         },
         WallMaterialSpec {
             texture: &cobble_tex,
-            emissive: (0.12, 0.11, 0.10),
-            uv_scale: Vec2::new(2.0, 2.0),
+            emissive: EW_COBBLESTONE_EMISSIVE,
+            uv_scale: COBBLESTONE_UV,
         },
     ];
 

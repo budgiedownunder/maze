@@ -2,6 +2,7 @@ use super::{
     WallCell, PANEL_H, PANEL_W, WALL_MATERIAL_VARIANTS, WALL_THICKNESS, WALL_TINT_OFFSETS,
     WALL_TINT_VARIANTS,
 };
+use crate::palette::EMISSIVE_ONLY_BASE;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 
@@ -42,7 +43,7 @@ pub(crate) fn build_ns_panel_assets(
             let (br, bg, bb) = brick_spec.emissive;
             materials.as_mut().map(|m| {
                 m.add(StandardMaterial {
-                    base_color: Color::BLACK,
+                    base_color: EMISSIVE_ONLY_BASE,
                     emissive: LinearRgba::new(
                         (br + dr).max(0.0),
                         (bg + dg).max(0.0),
@@ -61,7 +62,7 @@ pub(crate) fn build_ns_panel_assets(
             let (r, g, b) = spec.emissive;
             materials.as_mut().map(|m| {
                 m.add(StandardMaterial {
-                    base_color: Color::BLACK,
+                    base_color: EMISSIVE_ONLY_BASE,
                     emissive: LinearRgba::new(r, g, b, 1.0),
                     emissive_texture: spec.texture.clone(),
                     uv_transform: Affine2::from_scale(spec.uv_scale),
