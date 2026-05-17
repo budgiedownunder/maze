@@ -61,6 +61,7 @@ mod tests {
     use crate::overlays::title::TitleEntity;
     use crate::state::{AppState, GameState, GridFacing, SkyType};
     use crate::world::{
+        camera_pos_for, cell_centre,
         decorations::{floor::FloorAccent, wall::WallDecoration},
         demo_grid,
         floor::FloorCell,
@@ -71,6 +72,7 @@ mod tests {
         },
         sky::dome::SkyDome,
         walls::WallCell,
+        CAMERA_EDGE_OFFSET,
     };
     use bevy::state::app::StatesPlugin;
 
@@ -225,6 +227,53 @@ mod tests {
     fn initial_pitch_is_zero() {
         let app = make_playing_app();
         assert_eq!(app.world().resource::<GameState>().visual_pitch, 0.0);
+    }
+
+    #[test]
+    fn initial_camera_offset_back_from_cell_centre() {
+        // The camera should spawn at the back-edge of the start cell
+        // relative to its facing — i.e. `cell_centre + back_vec * OFFSET`,
+        // NOT at the cell centre. Verifies the new `camera_pos_for`
+        // helper is wired into spawn_world.
+        let app = make_playing_app();
+        let state = app.world().resource::<GameState>();
+        let start_row = state.game.player_row();
+        let start_col = state.game.player_col();
+        let centre = cell_centre(start_row, start_col);
+        let visual = state.visual_pos;
+        let delta = visual - centre;
+        // Distance from centre equals the offset, within float tolerance.
+        let dist = delta.length();
+        assert!(
+            (dist - CAMERA_EDGE_OFFSET).abs() < 1e-4,
+            "camera offset from cell centre = {dist}, expected ~{CAMERA_EDGE_OFFSET}"
+        );
+        // Y is unchanged (cell_centre puts Y at EYE_HEIGHT, camera_pos_for
+        // shifts only X/Z).
+        assert!(delta.y.abs() < 1e-4, "camera Y should match cell centre");
+    }
+
+    #[test]
+    fn camera_pos_for_back_vector_matches_yaw() {
+        // For each cardinal facing, the camera should sit on the OPPOSITE
+        // side of cell centre from the direction the camera is looking.
+        // Bevy camera default forward = -Z; after Quat::from_rotation_y(yaw),
+        // forward = (-sin(yaw), 0, -cos(yaw)) — so back = (sin(yaw), 0, cos(yaw)).
+        let (r, c) = (3usize, 5usize);
+        let centre = cell_centre(r, c);
+        for facing in [
+            GridFacing::North,
+            GridFacing::East,
+            GridFacing::South,
+            GridFacing::West,
+        ] {
+            let yaw = facing.to_yaw();
+            let pos = camera_pos_for(r, c, yaw);
+            let expected =
+                centre + bevy::math::Vec3::new(yaw.sin(), 0.0, yaw.cos()) * CAMERA_EDGE_OFFSET;
+            let diff = (pos - expected).length();
+            assert!(diff < 1e-5, "{facing:?}: pos {pos} != expected {expected}");
+        }
     }
 
     #[test]

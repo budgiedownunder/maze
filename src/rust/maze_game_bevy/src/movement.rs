@@ -2,7 +2,7 @@ use crate::overlays::win;
 use crate::state::{
     dispatch_game_result, Animation, GameClock, GameConfig, GameOutcome, GameResult, GameState,
 };
-use crate::world::{cell_centre, explore_cell_raw};
+use crate::world::{camera_pos_for, explore_cell_raw};
 use bevy::prelude::*;
 use maze::MoveResult;
 use std::f32::consts::PI;
@@ -82,25 +82,35 @@ pub(crate) fn movement_system(
         let right = keys.just_pressed(KeyCode::ArrowRight) || keys.just_pressed(KeyCode::KeyD);
         let forward = keys.pressed(KeyCode::ArrowUp) || keys.pressed(KeyCode::KeyW);
 
+        // Turns interpolate both yaw AND position so the camera orbits to
+        // the back-edge of the cell relative to the NEW facing. Without
+        // the position interpolation, the camera would only sit
+        // off-centre after a forward move — a left/right turn would leave
+        // the player visibly to one side of the cell rather than at its
+        // back wall.
         if left {
             state.facing = state.facing.turn_left();
             let (start_yaw, start_pos) = (state.visual_yaw, state.visual_pos);
+            let target_yaw = start_yaw + PI / 2.0;
+            let (row, col) = (state.game.player_row(), state.game.player_col());
             state.anim = Some(Animation {
                 start_pos,
-                target_pos: start_pos,
+                target_pos: camera_pos_for(row, col, target_yaw),
                 start_yaw,
-                target_yaw: start_yaw + PI / 2.0,
+                target_yaw,
                 elapsed: 0.0,
                 duration: TURN_DUR,
             });
         } else if right {
             state.facing = state.facing.turn_right();
             let (start_yaw, start_pos) = (state.visual_yaw, state.visual_pos);
+            let target_yaw = start_yaw - PI / 2.0;
+            let (row, col) = (state.game.player_row(), state.game.player_col());
             state.anim = Some(Animation {
                 start_pos,
-                target_pos: start_pos,
+                target_pos: camera_pos_for(row, col, target_yaw),
                 start_yaw,
-                target_yaw: start_yaw - PI / 2.0,
+                target_yaw,
                 elapsed: 0.0,
                 duration: TURN_DUR,
             });
@@ -112,8 +122,10 @@ pub(crate) fn movement_system(
                 let nrows = state.grid.len();
                 let ncols = state.grid[0].len();
                 explore_cell_raw(&mut state.explored, nrows, ncols, row, col);
-                let target_pos = cell_centre(row, col);
                 let (start_pos, start_yaw) = (state.visual_pos, state.visual_yaw);
+                // Forward moves don't change facing, so the target camera
+                // position uses the same yaw as the start.
+                let target_pos = camera_pos_for(row, col, start_yaw);
                 state.anim = Some(Animation {
                     start_pos,
                     target_pos,

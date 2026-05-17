@@ -16,6 +16,24 @@ pub(crate) const CELL_SIZE: f32 = 2.0;
 pub(crate) const HALF_CELL: f32 = CELL_SIZE / 2.0;
 const EYE_HEIGHT: f32 = 1.7;
 
+/// How far back from the cell centre — in the direction OPPOSITE the
+/// player's current facing — the camera is positioned. A non-zero shift
+/// lets the player see further into the cell ahead and brings
+/// perpendicular openings (left/right corridors) into a glancing angle
+/// inside the camera's FOV instead of sitting at 90° off-axis. With
+/// `CELL_SIZE = 2.0` the back wall sits at `HALF_CELL - WALL_THICKNESS/2
+/// ≈ 0.975` from centre, so 0.7 leaves ~0.275 clearance behind the
+/// camera — still well clear of the near plane.
+pub(crate) const CAMERA_EDGE_OFFSET: f32 = 0.7;
+
+/// Vertical field of view (radians) for the player camera. Bevy's
+/// default `PerspectiveProjection` uses π/4 ≈ 45° vertical, which gives
+/// ~73° horizontal at 16:9 — too narrow for perpendicular openings to
+/// register without turning the head. π/3 ≈ 60° vertical gives ~91°
+/// horizontal at 16:9, the FPS-typical range, so peripheral openings
+/// at the cell boundary land well inside the view frustum.
+pub(crate) const CAMERA_FOV_VERTICAL_RADIANS: f32 = std::f32::consts::PI / 3.0;
+
 /// Generates a maze using the seeded `maze::Generator` and returns its grid
 /// serialised as the JSON form `MazeGame::from_json` accepts (`{"grid":[…]}`).
 ///
@@ -109,6 +127,18 @@ pub(crate) fn cell_centre(row: usize, col: usize) -> Vec3 {
     )
 }
 
+/// Camera world position for a player at `(row, col)` looking along
+/// `yaw`. Returns the cell centre shifted by [`CAMERA_EDGE_OFFSET`] in
+/// the direction OPPOSITE the camera's forward, so the camera sits near
+/// the back edge of the cell relative to its current facing.
+///
+/// Bevy's default camera forward is `-Z`; after `Quat::from_rotation_y(yaw)`
+/// the forward becomes `(-sin(yaw), 0, -cos(yaw))`, so the back-vector
+/// is `(sin(yaw), 0, cos(yaw))`.
+pub(crate) fn camera_pos_for(row: usize, col: usize, yaw: f32) -> Vec3 {
+    cell_centre(row, col) + Vec3::new(yaw.sin(), 0.0, yaw.cos()) * CAMERA_EDGE_OFFSET
+}
+
 pub(crate) fn explore_cell(
     explored: &mut HashSet<(usize, usize)>,
     grid: &[Vec<char>],
@@ -149,6 +179,12 @@ pub(crate) fn explore_cell_raw(
 fn spawn_camera(commands: &mut Commands, start_pos: Vec3, start_yaw: f32) {
     commands.spawn((
         Camera3d::default(),
+        // Explicit Projection so we can override Bevy's narrow default
+        // vertical FOV — see CAMERA_FOV_VERTICAL_RADIANS for rationale.
+        Projection::Perspective(PerspectiveProjection {
+            fov: CAMERA_FOV_VERTICAL_RADIANS,
+            ..default()
+        }),
         Transform::from_translation(start_pos).with_rotation(Quat::from_rotation_y(start_yaw)),
     ));
 }
@@ -187,9 +223,9 @@ pub(crate) fn spawn_world(
 
     let start_row = game.player_row();
     let start_col = game.player_col();
-    let start_pos = cell_centre(start_row, start_col);
     let facing = initial_facing(&grid, start_row, start_col);
     let start_yaw = facing.to_yaw();
+    let start_pos = camera_pos_for(start_row, start_col, start_yaw);
 
     let mut explored = HashSet::new();
     explore_cell(&mut explored, &grid, start_row, start_col);
