@@ -56,24 +56,35 @@ pub(crate) const WALL_MATERIAL_COBBLESTONE: usize = 3;
 // kind from any angle but still has directional shading depth.
 // One pair per index in `0..WALL_MATERIAL_VARIANTS`.
 
-// Brick — pre-Step-5F look, slightly cool stone grey.
+// Per-material wall emissive tints fall into two families depending on
+// whether the texture is monochrome or RGB-coloured:
+//   - Greyscale textures (brick, dressed_stone): emissive carries the
+//     chromaticity. Texture is greyscale, emissive RGB tints it.
+//   - RGB-coloured textures (wood, cobblestone — Step 11.S): texture
+//     carries per-pixel chromaticity AND per-plank/per-cobble tone
+//     variation. Emissive must stay near-neutral brightness or it
+//     compounds with the texture and saturates.
+
+// Brick (greyscale texture) — slightly cool stone grey.
 const NS_BRICK_EMISSIVE: (f32, f32, f32) = (0.38, 0.38, 0.40);
 const EW_BRICK_EMISSIVE: (f32, f32, f32) = (0.14, 0.14, 0.16);
 const BRICK_UV: Vec2 = Vec2::new(3.0, 5.0);
 
-// Dressed stone — slightly warm pale stone.
+// Dressed stone (greyscale texture) — slightly warm pale stone.
 const NS_DRESSED_STONE_EMISSIVE: (f32, f32, f32) = (0.50, 0.48, 0.42);
 const EW_DRESSED_STONE_EMISSIVE: (f32, f32, f32) = (0.22, 0.21, 0.19);
 const DRESSED_STONE_UV: Vec2 = Vec2::new(2.0, 3.0);
 
-// Wood — warm brown, tall grain stretched vertically (UV.y = 4).
-const NS_WOOD_EMISSIVE: (f32, f32, f32) = (0.35, 0.20, 0.10);
-const EW_WOOD_EMISSIVE: (f32, f32, f32) = (0.18, 0.10, 0.05);
+// Wood (RGB-coloured texture with per-plank tone palette). Neutral
+// brightness — chromaticity lives in the texture.
+const NS_WOOD_EMISSIVE: (f32, f32, f32) = (0.55, 0.55, 0.55);
+const EW_WOOD_EMISSIVE: (f32, f32, f32) = (0.28, 0.28, 0.28);
 const WOOD_UV: Vec2 = Vec2::new(1.0, 4.0);
 
-// Cobblestone — desaturated warm grey.
-const NS_COBBLESTONE_EMISSIVE: (f32, f32, f32) = (0.32, 0.30, 0.28);
-const EW_COBBLESTONE_EMISSIVE: (f32, f32, f32) = (0.12, 0.11, 0.10);
+// Cobblestone (RGB-coloured texture with per-cobble tone palette).
+// Neutral brightness — chromaticity lives in the texture.
+const NS_COBBLESTONE_EMISSIVE: (f32, f32, f32) = (0.45, 0.45, 0.45);
+const EW_COBBLESTONE_EMISSIVE: (f32, f32, f32) = (0.17, 0.17, 0.17);
 const COBBLESTONE_UV: Vec2 = Vec2::new(2.0, 2.0);
 
 #[derive(Component)]
