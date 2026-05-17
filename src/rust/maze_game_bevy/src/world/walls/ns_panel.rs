@@ -8,7 +8,12 @@ use bevy::prelude::*;
 
 pub(crate) struct NsPanelAssets {
     pub(crate) mesh: Option<Handle<Mesh>>,
-    pub(crate) tinted_mats: [Option<Handle<StandardMaterial>>; WALL_TINT_VARIANTS],
+    /// Tinted material handles indexed by `[material_kind][tint_index]`
+    /// so the per-cell tinted path can render any of the four wall
+    /// textures (brick / dressed_stone / wood / cobblestone) under each
+    /// of the six per-cell tint variants.
+    pub(crate) tinted_mats:
+        [[Option<Handle<StandardMaterial>>; WALL_TINT_VARIANTS]; WALL_MATERIAL_VARIANTS],
     pub(crate) material_mats: [Option<Handle<StandardMaterial>>; WALL_MATERIAL_VARIANTS],
 }
 
@@ -34,13 +39,16 @@ pub(crate) fn build_ns_panel_assets(
         .map(|m| m.add(Cuboid::new(PANEL_W, PANEL_H, WALL_THICKNESS)));
     // emissive: LinearRgba writes directly to the framebuffer without sRGB conversion or
     // lighting interaction. base_color: BLACK ensures PBR diffuse contributes nothing.
-    // N/S-facing panels (ahead/behind) — cool stone grey, with WALL_TINT_VARIANTS
-    // emissive variants for per-cell tint variation (picked in the spawn loop).
-    let brick_spec = &material_specs[super::WALL_MATERIAL_BRICK];
-    let tinted_mats: [Option<Handle<StandardMaterial>>; WALL_TINT_VARIANTS] =
-        std::array::from_fn(|i| {
-            let (dr, dg, db) = WALL_TINT_OFFSETS[i];
-            let (br, bg, bb) = brick_spec.emissive;
+    // N/S-facing panels (ahead/behind) — one tinted-material set per
+    // wall texture kind, each carrying the WALL_TINT_VARIANTS emissive
+    // variants. The active (kind, tint) pair is picked at spawn time
+    // from `GameConfig.wall_type` + the per-cell tint hash.
+    let tinted_mats: [[Option<Handle<StandardMaterial>>; WALL_TINT_VARIANTS];
+        WALL_MATERIAL_VARIANTS] = std::array::from_fn(|kind| {
+        let spec = &material_specs[kind];
+        std::array::from_fn(|tint| {
+            let (dr, dg, db) = WALL_TINT_OFFSETS[tint];
+            let (br, bg, bb) = spec.emissive;
             materials.as_mut().map(|m| {
                 m.add(StandardMaterial {
                     base_color: EMISSIVE_ONLY_BASE,
@@ -50,12 +58,13 @@ pub(crate) fn build_ns_panel_assets(
                         (bb + db).max(0.0),
                         1.0,
                     ),
-                    emissive_texture: brick_spec.texture.clone(),
-                    uv_transform: Affine2::from_scale(brick_spec.uv_scale),
+                    emissive_texture: spec.texture.clone(),
+                    uv_transform: Affine2::from_scale(spec.uv_scale),
                     ..default()
                 })
             })
-        });
+        })
+    });
     let material_mats: [Option<Handle<StandardMaterial>>; WALL_MATERIAL_VARIANTS] =
         std::array::from_fn(|i| {
             let spec = &material_specs[i];
@@ -80,10 +89,16 @@ pub(crate) fn build_ns_panel_assets(
 pub(crate) fn spawn_ns_face_tinted(
     commands: &mut Commands,
     assets: &NsPanelAssets,
+    kind: usize,
     tint: usize,
     pos: Vec3,
 ) {
-    spawn_ns_panel(commands, assets.mesh.clone(), assets.tinted_mats[tint].clone(), pos);
+    spawn_ns_panel(
+        commands,
+        assets.mesh.clone(),
+        assets.tinted_mats[kind][tint].clone(),
+        pos,
+    );
 }
 
 pub(crate) fn spawn_ns_face_material(

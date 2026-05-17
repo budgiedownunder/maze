@@ -116,6 +116,10 @@ minimap_cell_px = 10
 minimap_radius = 5
 # Sky type — one of "night" | "sunrise" | "day" | "sunset". Default "night".
 sky_type = "night"
+# Wall texture kind for the per-cell tinted path (used when the
+# wall_material_variation landmark below is false). One of "brick" |
+# "dressed_stone" | "wood" | "cobblestone". Default "brick".
+wall_type = "brick"
 
 [game.play3d.easy.landmarks]
 # Per-cell wall tint variation — each cell's walls pick one of six
@@ -152,6 +156,7 @@ min_solution_length = 35
 minimap_cell_px = 10
 minimap_radius = 5
 sky_type = "night"
+wall_type = "brick"
 
 [game.play3d.tricky.landmarks]
 wall_tint = true
@@ -171,6 +176,7 @@ min_solution_length = 45
 minimap_cell_px = 10
 minimap_radius = 5
 sky_type = "night"
+wall_type = "brick"
 
 [game.play3d.hard.landmarks]
 wall_tint = true

@@ -43,11 +43,8 @@ pub(crate) const WALL_TINT_OFFSETS: [(f32, f32, f32); WALL_TINT_VARIANTS] = [
 // the `landmarks.wall_material_variation` toggle is on.
 pub(crate) const WALL_MATERIAL_VARIANTS: usize = 4;
 pub(crate) const WALL_MATERIAL_BRICK: usize = 0;
-#[allow(dead_code)]
 pub(crate) const WALL_MATERIAL_DRESSED_STONE: usize = 1;
-#[allow(dead_code)]
 pub(crate) const WALL_MATERIAL_WOOD: usize = 2;
-#[allow(dead_code)]
 pub(crate) const WALL_MATERIAL_COBBLESTONE: usize = 3;
 
 // Per-material emissive RGB tints + UV scales. N/S-facing panels
@@ -267,12 +264,18 @@ pub(crate) fn spawn_walls_for_cell(
     } else {
         0
     };
+    // The texture kind for the tinted path is now configured per
+    // difficulty via `GameConfig.wall_type` — same set of four kinds the
+    // quadrant-variation path uses, but a single choice for the whole
+    // maze instead of a per-quadrant assignment.
+    let kind = config.wall_type.to_kind_index();
 
     // North face
     if r == 0 || grid[r - 1][c] == 'W' {
         ns_panel::spawn_ns_face_tinted(
             commands,
             &assets.ns,
+            kind,
             tint,
             Vec3::new(x, PANEL_Y, z - HALF_CELL),
         );
@@ -282,6 +285,7 @@ pub(crate) fn spawn_walls_for_cell(
         ns_panel::spawn_ns_face_tinted(
             commands,
             &assets.ns,
+            kind,
             tint,
             Vec3::new(x, PANEL_Y, z + HALF_CELL),
         );
@@ -291,6 +295,7 @@ pub(crate) fn spawn_walls_for_cell(
         ew_panel::spawn_ew_face_tinted(
             commands,
             &assets.ew,
+            kind,
             tint,
             Vec3::new(x + HALF_CELL, PANEL_Y, z),
         );
@@ -300,6 +305,7 @@ pub(crate) fn spawn_walls_for_cell(
         ew_panel::spawn_ew_face_tinted(
             commands,
             &assets.ew,
+            kind,
             tint,
             Vec3::new(x - HALF_CELL, PANEL_Y, z),
         );

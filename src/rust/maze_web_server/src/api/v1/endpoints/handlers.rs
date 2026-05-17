@@ -442,6 +442,11 @@ pub struct Play3dConfigResponse {
     pub landmarks: LandmarksResponse,
     /// Sky type. Safely degrades to `night` if unrecognised.
     pub sky_type: String,
+    /// Wall texture kind used by the per-cell tinted path (when
+    /// `landmarks.wallMaterialVariation` is off). One of `brick`,
+    /// `dressed_stone`, `wood`, `cobblestone`. Safely degrades to
+    /// `brick` if unrecognised.
+    pub wall_type: String,
 }
 
 /// JSON shape of the per-difficulty landmark toggles in
@@ -509,6 +514,7 @@ pub async fn get_play3d_config(
             wall_material_variation: preset.landmarks.wall_material_variation,
         },
         sky_type: preset.sky_type.as_wire_str().to_string(),
+        wall_type: preset.wall_type.as_wire_str().to_string(),
     }))
 }
 

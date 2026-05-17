@@ -75,6 +75,13 @@ pub struct Play3dDifficultyConfig {
     /// preset in the Bevy game. Default `night`.
     #[serde(default = "default_sky_type")]
     pub sky_type: SkyTypeConfig,
+    /// Wall material kind to use when `landmarks.wall_material_variation`
+    /// is OFF for this difficulty (the per-cell tinted path). When that
+    /// landmark is on, the per-quadrant material variation supersedes
+    /// this setting — same bypass model as `landmarks.wall_tint`. Default
+    /// `brick` so the no-config and pre-Step-14 behaviour is preserved.
+    #[serde(default = "default_wall_type")]
+    pub wall_type: WallTypeConfig,
 }
 
 /// Atmospheric sky modes. Wire form (TOML / JSON) is lowercase
@@ -111,6 +118,45 @@ impl<'de> Deserialize<'de> for SkyTypeConfig {
             "day" => Self::Day,
             "sunset" => Self::Sunset,
             _ => Self::Night,
+        })
+    }
+}
+
+/// Wall texture kind for the per-cell tinted path. Wire form (TOML /
+/// JSON) is `snake_case` (`"brick" | "dressed_stone" | "wood" |
+/// "cobblestone"`). Unknown values deserialise as `Brick` rather than
+/// failing the entire `AppConfig` load — same forgiving policy as
+/// [`SkyTypeConfig`].
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WallTypeConfig {
+    #[default]
+    Brick,
+    DressedStone,
+    Wood,
+    Cobblestone,
+}
+
+impl WallTypeConfig {
+    /// `snake_case` wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Brick => "brick",
+            Self::DressedStone => "dressed_stone",
+            Self::Wood => "wood",
+            Self::Cobblestone => "cobblestone",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for WallTypeConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "dressed_stone" => Self::DressedStone,
+            "wood" => Self::Wood,
+            "cobblestone" => Self::Cobblestone,
+            _ => Self::Brick,
         })
     }
 }
@@ -184,6 +230,7 @@ impl Default for Play3dDifficultyConfig {
             mode: default_play3d_mode(),
             landmarks: LandmarksConfig::default(),
             sky_type: default_sky_type(),
+            wall_type: default_wall_type(),
         }
     }
 }
@@ -247,6 +294,7 @@ impl Default for Play3dConfig {
                 mode: "Easy".to_string(),
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
+                wall_type: default_wall_type(),
             },
             tricky: Play3dDifficultyConfig {
                 rows: 15,
@@ -260,6 +308,7 @@ impl Default for Play3dConfig {
                 mode: "Tricky".to_string(),
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
+                wall_type: default_wall_type(),
             },
             hard: Play3dDifficultyConfig {
                 rows: 25,
@@ -273,6 +322,7 @@ impl Default for Play3dConfig {
                 mode: "Hard".to_string(),
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
+                wall_type: default_wall_type(),
             },
         }
     }
@@ -361,6 +411,13 @@ fn default_landmarks_wall_material_variation() -> bool {
 /// per difficulty via `[game.play3d.<difficulty>] sky_type = "day"`.
 fn default_sky_type() -> SkyTypeConfig {
     SkyTypeConfig::Night
+}
+
+/// Wall material kind for the per-cell tinted path defaults to brick —
+/// parity with the pre-Step-14 hard-coded path. Operators override per
+/// difficulty via `[game.play3d.<difficulty>] wall_type = "wood"`.
+fn default_wall_type() -> WallTypeConfig {
+    WallTypeConfig::Brick
 }
 
 #[cfg(test)]
@@ -592,6 +649,77 @@ mod tests {
         assert_eq!(SkyTypeConfig::Sunrise.as_wire_str(), "sunrise");
         assert_eq!(SkyTypeConfig::Day.as_wire_str(), "day");
         assert_eq!(SkyTypeConfig::Sunset.as_wire_str(), "sunset");
+    }
+
+    #[test]
+    fn wall_type_round_trips_from_toml_and_defaults_to_brick() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            wall_type = "wood"
+
+            [play3d.tricky]
+            rows = 12
+            cols = 12
+            timer_seconds = 180
+            seed = 43
+            min_solution_length = 60
+            wall_type = "DRESSED_STONE"
+            # case-insensitive
+
+            [play3d.hard]
+            rows = 20
+            cols = 20
+            timer_seconds = 360
+            seed = 44
+            min_solution_length = 160
+            # wall_type deliberately omitted — defaults to brick
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.wall_type, WallTypeConfig::Wood);
+        assert_eq!(cfg.play3d.tricky.wall_type, WallTypeConfig::DressedStone);
+        assert_eq!(cfg.play3d.hard.wall_type, WallTypeConfig::Brick);
+        // Built-in defaults are all Brick.
+        let default = Play3dConfig::default();
+        assert_eq!(default.easy.wall_type, WallTypeConfig::Brick);
+        assert_eq!(default.tricky.wall_type, WallTypeConfig::Brick);
+        assert_eq!(default.hard.wall_type, WallTypeConfig::Brick);
+    }
+
+    #[test]
+    fn unknown_wall_type_falls_back_to_brick() {
+        // Same forgiving policy as sky_type — a typo must not kill the
+        // config load. Falls back to Brick (the pre-Step-14 hard-coded
+        // texture).
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            wall_type = "marble"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
+        assert_eq!(cfg.play3d.easy.wall_type, WallTypeConfig::Brick);
+    }
+
+    #[test]
+    fn wall_type_as_wire_str_matches_serde_form() {
+        assert_eq!(WallTypeConfig::Brick.as_wire_str(), "brick");
+        assert_eq!(WallTypeConfig::DressedStone.as_wire_str(), "dressed_stone");
+        assert_eq!(WallTypeConfig::Wood.as_wire_str(), "wood");
+        assert_eq!(WallTypeConfig::Cobblestone.as_wire_str(), "cobblestone");
     }
 
     #[test]

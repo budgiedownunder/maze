@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use maze_game_bevy::{GameConfig, Landmarks, SkyType};
+use maze_game_bevy::{GameConfig, Landmarks, SkyType, WallType};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
@@ -61,6 +61,8 @@ struct StartConfig {
     landmarks: LandmarksStartConfig,
     #[serde(default)]
     sky_type: String,
+    #[serde(default)]
+    wall_type: String,
     #[serde(default)]
     maze_json: Option<String>,
 }
@@ -182,6 +184,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
             wall_material_variation: cfg.landmarks.wall_material_variation,
         },
         sky_type: SkyType::from_wire_str(&cfg.sky_type),
+        wall_type: WallType::from_wire_str(&cfg.wall_type),
     });
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());
     app.run();

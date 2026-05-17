@@ -138,6 +138,13 @@ pub struct GameConfig {
     /// texture (gradient + clouds + stars) and a paired ambient +
     /// directional light preset. Default `Night`.
     pub sky_type: SkyType,
+    /// Wall texture kind used by the per-cell tinted path (the path
+    /// taken when [`Landmarks::wall_material_variation`] is `false`).
+    /// When `wall_material_variation` is `true`, the per-quadrant
+    /// material variation supersedes this setting — same bypass model
+    /// as [`Landmarks::wall_tint`]. Default `Brick` so the pre-Step-14
+    /// hard-coded look is preserved.
+    pub wall_type: WallType,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -176,6 +183,56 @@ impl SkyType {
             "day" => Self::Day,
             "sunset" => Self::Sunset,
             _ => Self::Night,
+        }
+    }
+}
+
+/// Wall texture kinds for the per-cell tinted path. Each variant maps
+/// to one of the `WALL_MATERIAL_*` indices in [`crate::world::walls`].
+/// Default is `Brick` so a missing or unrecognised wire value preserves
+/// the pre-Step-14 hard-coded look.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WallType {
+    #[default]
+    Brick,
+    DressedStone,
+    Wood,
+    Cobblestone,
+}
+
+impl WallType {
+    /// `snake_case` wire form, matching the JSON / TOML strings the
+    /// server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Brick => "brick",
+            Self::DressedStone => "dressed_stone",
+            Self::Wood => "wood",
+            Self::Cobblestone => "cobblestone",
+        }
+    }
+
+    /// Parses a wire string into a [`WallType`]. Unknown values fall
+    /// back to [`WallType::Brick`] — same forgiving policy as
+    /// [`SkyType::from_wire_str`].
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "dressed_stone" => Self::DressedStone,
+            "wood" => Self::Wood,
+            "cobblestone" => Self::Cobblestone,
+            _ => Self::Brick,
+        }
+    }
+
+    /// Returns the matching `WALL_MATERIAL_*` index used by
+    /// [`crate::world::walls`]. Single source of truth so no call site
+    /// hard-codes the integer mapping.
+    pub fn to_kind_index(self) -> usize {
+        match self {
+            Self::Brick => crate::world::walls::WALL_MATERIAL_BRICK,
+            Self::DressedStone => crate::world::walls::WALL_MATERIAL_DRESSED_STONE,
+            Self::Wood => crate::world::walls::WALL_MATERIAL_WOOD,
+            Self::Cobblestone => crate::world::walls::WALL_MATERIAL_COBBLESTONE,
         }
     }
 }
@@ -240,6 +297,7 @@ impl Default for GameConfig {
             mode: "Play".to_string(),
             landmarks: Landmarks::default(),
             sky_type: SkyType::default(),
+            wall_type: WallType::default(),
         }
     }
 }

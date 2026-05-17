@@ -6,7 +6,7 @@ mod palette;
 mod state;
 mod world;
 
-pub use state::{GameConfig, GameOutcome, GameResult, Landmarks, SkyType};
+pub use state::{GameConfig, GameOutcome, GameResult, Landmarks, SkyType, WallType};
 pub use world::generate_maze_json;
 
 use bevy::prelude::*;
@@ -59,7 +59,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
 mod tests {
     use super::*;
     use crate::overlays::title::TitleEntity;
-    use crate::state::{AppState, GameState, GridFacing, SkyType};
+    use crate::state::{AppState, GameState, GridFacing, SkyType, WallType};
     use crate::world::{
         camera_pos_for, cell_centre,
         decorations::{floor::FloorAccent, wall::WallDecoration},
@@ -487,6 +487,50 @@ mod tests {
         // Case-insensitive.
         assert_eq!(SkyType::from_wire_str("DAY"), SkyType::Day);
         assert_eq!(SkyType::from_wire_str("SunSet"), SkyType::Sunset);
+    }
+
+    #[test]
+    fn default_wall_type_is_brick() {
+        assert_eq!(GameConfig::default().wall_type, WallType::Brick);
+    }
+
+    #[test]
+    fn wall_type_wire_round_trip() {
+        for wt in [
+            WallType::Brick,
+            WallType::DressedStone,
+            WallType::Wood,
+            WallType::Cobblestone,
+        ] {
+            assert_eq!(WallType::from_wire_str(wt.as_wire_str()), wt);
+        }
+        // Unknown values fall back to Brick.
+        assert_eq!(WallType::from_wire_str("typo"), WallType::Brick);
+        assert_eq!(WallType::from_wire_str(""), WallType::Brick);
+        // Case-insensitive.
+        assert_eq!(WallType::from_wire_str("WOOD"), WallType::Wood);
+        assert_eq!(
+            WallType::from_wire_str("Dressed_Stone"),
+            WallType::DressedStone
+        );
+    }
+
+    #[test]
+    fn wall_type_to_kind_index_matches_wall_material_constants() {
+        use crate::world::walls::{
+            WALL_MATERIAL_BRICK, WALL_MATERIAL_COBBLESTONE, WALL_MATERIAL_DRESSED_STONE,
+            WALL_MATERIAL_WOOD,
+        };
+        assert_eq!(WallType::Brick.to_kind_index(), WALL_MATERIAL_BRICK);
+        assert_eq!(
+            WallType::DressedStone.to_kind_index(),
+            WALL_MATERIAL_DRESSED_STONE
+        );
+        assert_eq!(WallType::Wood.to_kind_index(), WALL_MATERIAL_WOOD);
+        assert_eq!(
+            WallType::Cobblestone.to_kind_index(),
+            WALL_MATERIAL_COBBLESTONE
+        );
     }
 
     #[test]
