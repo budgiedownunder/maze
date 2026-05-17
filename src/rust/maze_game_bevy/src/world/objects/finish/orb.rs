@@ -7,9 +7,14 @@ use bevy::prelude::*;
 
 /// Orb sphere radius (units).
 const ORB_RADIUS: f32 = 0.35;
-/// Orb resting Y position (mid-height in the finish cell, well above
-/// the floor + grid lines).
-const ORB_BASE_Y: f32 = 1.0;
+/// Orb resting Y position. Set to the player's eye height so the orb
+/// sits on the camera's optical axis — perspective projection only
+/// renders a sphere as a perfect circle when it's at the optical
+/// centre; at any other position the off-axis angle stretches the
+/// sphere into an ellipse, and the effect is most visible on narrow
+/// (portrait / phone) viewports where the vertical FOV is widest.
+/// Floating the orb at eye level keeps it circular on every aspect.
+const ORB_BASE_Y: f32 = 1.7;
 /// Orb emissive RGB — warm gold.
 const ORB_EMISSIVE: LinearRgba = LinearRgba::new(1.2, 0.9, 0.1, 1.0);
 
