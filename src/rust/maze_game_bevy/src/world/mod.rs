@@ -26,13 +26,52 @@ const EYE_HEIGHT: f32 = 1.7;
 /// camera — still well clear of the near plane.
 pub(crate) const CAMERA_EDGE_OFFSET: f32 = 0.7;
 
-/// Vertical field of view (radians) for the player camera. Bevy's
-/// default `PerspectiveProjection` uses π/4 ≈ 45° vertical, which gives
-/// ~73° horizontal at 16:9 — too narrow for perpendicular openings to
-/// register without turning the head. π/3 ≈ 60° vertical gives ~91°
-/// horizontal at 16:9, the FPS-typical range, so peripheral openings
-/// at the cell boundary land well inside the view frustum.
+/// Vertical field of view (radians) for the player camera at the
+/// reference aspect ratio. Bevy's default `PerspectiveProjection` uses
+/// π/4 ≈ 45° vertical, which gives ~73° horizontal at 16:9 — too
+/// narrow for perpendicular openings to register without turning the
+/// head. π/3 ≈ 60° vertical gives ~91° horizontal at 16:9, the
+/// FPS-typical range. On viewports narrower than the reference
+/// (e.g. phone portrait, tall windows) the vertical FOV grows past
+/// this value to keep the horizontal FOV constant — see
+/// [`camera_fov_for_aspect`].
 pub(crate) const CAMERA_FOV_VERTICAL_RADIANS: f32 = std::f32::consts::PI / 3.0;
+
+/// Reference viewport aspect ratio (width / height) at which the
+/// vertical FOV equals [`CAMERA_FOV_VERTICAL_RADIANS`]. Below this
+/// aspect, the vertical FOV grows so the horizontal FOV stays constant
+/// — classic "Hor+" scaling. 16:9 is the desktop / landscape phone
+/// reference.
+pub(crate) const CAMERA_FOV_REFERENCE_ASPECT: f32 = 16.0 / 9.0;
+
+/// Upper bound on the vertical FOV used by the Hor+ scaling. Without
+/// a cap, a phone-portrait viewport (~9:19.5) would need ~130°
+/// vertical to keep the reference horizontal FOV — fisheye territory
+/// that reads as queasy at the screen edges. The cap accepts some
+/// horizontal-FOV loss on very narrow viewports in exchange for a
+/// watchable scene. 100° is wide-but-not-fisheye.
+pub(crate) const CAMERA_FOV_VERTICAL_MAX_RADIANS: f32 =
+    std::f32::consts::PI * 100.0 / 180.0;
+
+/// Returns the vertical FOV (radians) the camera should use at the
+/// given viewport aspect ratio (`width / height`). Wide viewports get
+/// the base vertical FOV unchanged (Bevy widens horizontal FOV
+/// naturally). Narrow viewports get a grown vertical FOV that keeps
+/// the horizontal FOV equal to the value seen at
+/// [`CAMERA_FOV_REFERENCE_ASPECT`], capped at
+/// [`CAMERA_FOV_VERTICAL_MAX_RADIANS`].
+///
+/// Math: for a perspective projection,
+/// `tan(h_fov / 2) = tan(v_fov / 2) · aspect`. Hold the LHS constant at
+/// its value at the reference aspect and solve for the new v_fov.
+pub(crate) fn camera_fov_for_aspect(aspect: f32) -> f32 {
+    if aspect <= 0.0 || aspect >= CAMERA_FOV_REFERENCE_ASPECT {
+        return CAMERA_FOV_VERTICAL_RADIANS;
+    }
+    let ref_half_h_tan = (CAMERA_FOV_VERTICAL_RADIANS * 0.5).tan() * CAMERA_FOV_REFERENCE_ASPECT;
+    let target_v_fov = 2.0 * (ref_half_h_tan / aspect).atan();
+    target_v_fov.min(CAMERA_FOV_VERTICAL_MAX_RADIANS)
+}
 
 /// Generates a maze using the seeded `maze::Generator` and returns its grid
 /// serialised as the JSON form `MazeGame::from_json` accepts (`{"grid":[…]}`).
@@ -181,12 +220,44 @@ fn spawn_camera(commands: &mut Commands, start_pos: Vec3, start_yaw: f32) {
         Camera3d::default(),
         // Explicit Projection so we can override Bevy's narrow default
         // vertical FOV — see CAMERA_FOV_VERTICAL_RADIANS for rationale.
+        // The aspect-dependent FOV adjustment lives in
+        // `camera_fov_resize_system` (Hor+ scaling) so this initial
+        // value is just the wide-viewport value.
         Projection::Perspective(PerspectiveProjection {
             fov: CAMERA_FOV_VERTICAL_RADIANS,
             ..default()
         }),
         Transform::from_translation(start_pos).with_rotation(Quat::from_rotation_y(start_yaw)),
     ));
+}
+
+/// Each frame, set the camera's vertical FOV from the current window
+/// aspect via [`camera_fov_for_aspect`]. Bevy's `PerspectiveProjection`
+/// is locked to vertical FOV — its horizontal is derived from
+/// `vfov × aspect_ratio` — so on a narrow viewport the horizontal view
+/// shrinks. This system implements Hor+ scaling: at aspects narrower
+/// than [`CAMERA_FOV_REFERENCE_ASPECT`] it grows the vertical FOV to
+/// preserve the horizontal FOV, capped at
+/// [`CAMERA_FOV_VERTICAL_MAX_RADIANS`].
+pub(crate) fn camera_fov_resize_system(
+    windows: Query<&Window>,
+    mut cameras: Query<&mut Projection, With<Camera3d>>,
+) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let (w, h) = (window.resolution.width(), window.resolution.height());
+    if w <= 0.0 || h <= 0.0 {
+        return;
+    }
+    let target_fov = camera_fov_for_aspect(w / h);
+    for mut projection in cameras.iter_mut() {
+        if let Projection::Perspective(persp) = &mut *projection {
+            if (persp.fov - target_fov).abs() > 1e-4 {
+                persp.fov = target_fov;
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

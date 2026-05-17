@@ -52,6 +52,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pause::pause_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, sky::sky_dome_follow_camera.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, world::camera_fov_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, quit_system);
 }
 
@@ -61,7 +62,7 @@ mod tests {
     use crate::overlays::title::TitleEntity;
     use crate::state::{AppState, GameState, GridFacing, SkyType, WallType};
     use crate::world::{
-        camera_pos_for, cell_centre,
+        camera_fov_for_aspect, camera_pos_for, cell_centre,
         decorations::{floor::FloorAccent, wall::WallDecoration},
         demo_grid,
         floor::FloorCell,
@@ -72,7 +73,8 @@ mod tests {
         },
         sky::dome::SkyDome,
         walls::WallCell,
-        CAMERA_EDGE_OFFSET,
+        CAMERA_EDGE_OFFSET, CAMERA_FOV_REFERENCE_ASPECT, CAMERA_FOV_VERTICAL_MAX_RADIANS,
+        CAMERA_FOV_VERTICAL_RADIANS,
     };
     use bevy::state::app::StatesPlugin;
 
@@ -251,6 +253,55 @@ mod tests {
         // Y is unchanged (cell_centre puts Y at EYE_HEIGHT, camera_pos_for
         // shifts only X/Z).
         assert!(delta.y.abs() < 1e-4, "camera Y should match cell centre");
+    }
+
+    #[test]
+    fn camera_fov_at_reference_aspect_returns_base() {
+        let f = camera_fov_for_aspect(CAMERA_FOV_REFERENCE_ASPECT);
+        assert!((f - CAMERA_FOV_VERTICAL_RADIANS).abs() < 1e-5);
+    }
+
+    #[test]
+    fn camera_fov_above_reference_aspect_returns_base() {
+        // Ultrawide-style viewports should NOT shrink vertical FOV —
+        // Bevy widens horizontal naturally; the function just returns
+        // the base vertical unchanged.
+        let f = camera_fov_for_aspect(21.0 / 9.0);
+        assert!((f - CAMERA_FOV_VERTICAL_RADIANS).abs() < 1e-5);
+    }
+
+    #[test]
+    fn camera_fov_below_reference_aspect_grows_vertical() {
+        // Square viewport: aspect 1.0 < 16/9. Vertical FOV must grow.
+        let f = camera_fov_for_aspect(1.0);
+        assert!(
+            f > CAMERA_FOV_VERTICAL_RADIANS,
+            "expected v_fov > base, got {f}"
+        );
+        // Horizontal FOV should match the reference: tan(h/2) = tan(v/2)*aspect.
+        let h_at_target = 2.0 * ((f * 0.5).tan() * 1.0).atan();
+        let h_at_ref =
+            2.0 * ((CAMERA_FOV_VERTICAL_RADIANS * 0.5).tan() * CAMERA_FOV_REFERENCE_ASPECT).atan();
+        assert!(
+            (h_at_target - h_at_ref).abs() < 1e-4,
+            "horizontal FOV not preserved: {h_at_target} vs {h_at_ref}"
+        );
+    }
+
+    #[test]
+    fn camera_fov_extreme_portrait_is_capped() {
+        // Phone portrait ~9:19.5 (aspect ~0.46). Without the cap the
+        // formula would demand ~130° vertical — we cap at the constant.
+        let f = camera_fov_for_aspect(9.0 / 19.5);
+        assert!((f - CAMERA_FOV_VERTICAL_MAX_RADIANS).abs() < 1e-5);
+    }
+
+    #[test]
+    fn camera_fov_invalid_aspect_falls_back_to_base() {
+        // Zero / negative aspect (e.g. window minimised) must not panic
+        // or produce NaN — fall back to the base.
+        assert_eq!(camera_fov_for_aspect(0.0), CAMERA_FOV_VERTICAL_RADIANS);
+        assert_eq!(camera_fov_for_aspect(-1.0), CAMERA_FOV_VERTICAL_RADIANS);
     }
 
     #[test]

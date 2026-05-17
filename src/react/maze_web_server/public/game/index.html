@@ -394,7 +394,7 @@
   <script type="module">
     import { start, start_with_maze, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=4';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=5';
     const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
@@ -512,6 +512,13 @@
     {
       const SWIPE_THRESHOLD = 30;   // px — minimum travel to classify as a swipe
       const HOLD_DELAY = 250;       // ms — touch must be held this long with no movement to count as a hold
+      // ms to hold a synthetic KeyQ / KeyE for a swipe-up / swipe-down
+      // tilt. The Bevy side reads Q/E with `pressed()` (continuous), so
+      // an instant keydown+keyup (the swipe-left/right turn pattern)
+      // gives at most one frame of pitch ≈ 1° — invisible. Holding for
+      // ~250 ms at the configured pitch rate gives a clearly-visible
+      // ~15° nudge per swipe.
+      const TILT_HOLD_MS = 250;
       let touchStart = null;        // { x, y, lastX, lastY }
       let holdTimer = null;
       let holdActive = false;
@@ -567,15 +574,23 @@
           const absX = Math.abs(dx);
           const absY = Math.abs(dy);
           if (Math.max(absX, absY) >= SWIPE_THRESHOLD) {
-            let key;
             if (absX > absY) {
-              key = dx > 0 ? 'ArrowRight' : 'ArrowLeft';
+              // Turn: ArrowLeft/Right are read with `just_pressed()` on
+              // the Bevy side, so an instant keydown+keyup registers
+              // one 90° turn animation.
+              const key = dx > 0 ? 'ArrowRight' : 'ArrowLeft';
+              fire(key, 'keydown');
+              fire(key, 'keyup');
             } else {
-              // Screen y grows downward, so swipe UP (negative dy) = tilt up.
-              key = dy < 0 ? 'KeyQ' : 'KeyE';
+              // Tilt: KeyQ/KeyE are read with `pressed()` (continuous
+              // hold for proportional pitch). Hold the synthetic key
+              // for TILT_HOLD_MS so the pitch accumulator moves a
+              // visible amount. Screen y grows downward, so swipe UP
+              // (negative dy) = tilt up = KeyQ.
+              const key = dy < 0 ? 'KeyQ' : 'KeyE';
+              fire(key, 'keydown');
+              setTimeout(() => fire(key, 'keyup'), TILT_HOLD_MS);
             }
-            fire(key, 'keydown');
-            fire(key, 'keyup');
           }
         }
         touchStart = null;
