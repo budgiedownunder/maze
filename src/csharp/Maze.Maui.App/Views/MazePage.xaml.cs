@@ -227,6 +227,16 @@ namespace Maze.Maui.App.Views
                 if (!saved) return;
             }
 
+            // For 3D launches, show the per-launch custom popup so the
+            // user can pick sky / wall texture / landmark toggles / timer.
+            // Cancelling the popup aborts the launch.
+            Models.Play3dCustomLaunchSettings? launchSettings = null;
+            if (gameType == Models.GameType.ThreeD)
+            {
+                launchSettings = await _dialogService.ShowPlay3dCustomLaunchAsync(MazeItem.Name);
+                if (launchSettings is null) return;
+            }
+
             // 2D: pass in-memory definition directly (MazeGamePage renders from it)
             // 3D: pass the saved MazeItem by ID (Play3dGamePage fetches from server)
             Models.MazeItem navigationItem = gameType == Models.GameType.ThreeD
@@ -237,8 +247,12 @@ namespace Maze.Maui.App.Views
             try
             {
                 var route = gameType == Models.GameType.ThreeD ? nameof(Play3dGamePage) : nameof(MazeGamePage);
-                await Shell.Current.GoToAsync(route, true,
-                    new Dictionary<string, object> { { "MazeItem", navigationItem } });
+                var navArgs = new Dictionary<string, object> { { "MazeItem", navigationItem } };
+                if (launchSettings is not null)
+                {
+                    navArgs["LaunchSettings"] = launchSettings;
+                }
+                await Shell.Current.GoToAsync(route, true, navArgs);
                 await Task.Delay(500);
             }
             finally { _viewModel.IsBusy = false; }

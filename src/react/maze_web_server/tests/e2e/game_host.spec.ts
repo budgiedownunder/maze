@@ -258,4 +258,52 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
     const payload = await capturedPayload(page)
     expect(payload.mode).toBe('Play')
   })
+
+  test('URL query params override localStorage (MAUI native-popup path)', async ({ page }) => {
+    // The MAUI native Play3dCustomLaunchPopup writes the chosen settings
+    // as URL query params (MAUI's WebView can't share the React SPA's
+    // localStorage), and /game/index.html prefers URL params over
+    // localStorage so MAUI's explicit per-launch choice always wins.
+    await stubGameHost(page, 'My Maze')
+    await page.addInitScript(() => {
+      // Stale localStorage from a prior browser-only launch.
+      localStorage.setItem(
+        'play3dCustomLaunchSettings',
+        JSON.stringify({
+          skyType: 'night',
+          wallType: 'brick',
+          wallTint: false,
+          wallMaterialVariation: false,
+          deadEndObjects: true,
+          wallDecorations: true,
+          floorAccents: true,
+          timerSeconds: 60,
+        })
+      )
+    })
+    // MAUI URL: explicit settings layered on top of localStorage.
+    const params = new URLSearchParams({
+      t: 'fake',
+      id: 'test-id',
+      skyType: 'day',
+      wallType: 'cobblestone',
+      wallTint: '1',
+      wallMaterialVariation: '0',
+      deadEndObjects: '0',
+      wallDecorations: '0',
+      floorAccents: '1',
+      timerSeconds: '300',
+    }).toString()
+    await page.goto(`/game/index.html?${params}`)
+    const payload = await capturedPayload(page)
+    // URL wins for every field.
+    expect(payload.skyType).toBe('day')
+    expect(payload.wallType).toBe('cobblestone')
+    expect(payload.timerSeconds).toBe(300)
+    expect(payload.landmarks.wallTint).toBe(true)
+    expect(payload.landmarks.wallMaterialVariation).toBe(false)
+    expect(payload.landmarks.deadEndObjects).toBe(false)
+    expect(payload.landmarks.wallDecorations).toBe(false)
+    expect(payload.landmarks.floorAccents).toBe(true)
+  })
 })

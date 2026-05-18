@@ -394,7 +394,7 @@
   <script type="module">
     import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=7';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=8';
     const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
@@ -452,14 +452,44 @@
         timerSeconds: 60,
       };
       function loadLaunchSettings() {
+        // Two channels write the per-launch settings:
+        //   - React SPA → localStorage (the Play3dCustomLaunchModal
+        //     writes to MODE_STORAGE_KEY before navigating).
+        //   - MAUI native popup → URL query params (each WebView has
+        //     its own isolated storage, so MAUI can't share the SPA's
+        //     localStorage — it serialises the settings into the URL
+        //     it asks the WebView to load).
+        // URL params win when both are present, so MAUI's explicit
+        // per-launch choice always overrides any stale localStorage.
+        const base = { ...DEFAULT_LAUNCH_SETTINGS };
         try {
           const raw = localStorage.getItem(MODE_STORAGE_KEY);
-          if (!raw) return DEFAULT_LAUNCH_SETTINGS;
-          const parsed = JSON.parse(raw);
-          return { ...DEFAULT_LAUNCH_SETTINGS, ...parsed };
-        } catch (_) {
-          return DEFAULT_LAUNCH_SETTINGS;
-        }
+          if (raw) Object.assign(base, JSON.parse(raw));
+        } catch (_) { /* malformed JSON or storage disabled — ignore */ }
+        // Then layer URL params on top, if any.
+        const readBool = (key, fallback) => {
+          const v = params.get(key);
+          if (v === '1' || v === 'true') return true;
+          if (v === '0' || v === 'false') return false;
+          return fallback;
+        };
+        const readStr = (key, fallback) => params.get(key) ?? fallback;
+        const readPosInt = (key, fallback) => {
+          const v = params.get(key);
+          if (v === null) return fallback;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : fallback;
+        };
+        return {
+          skyType: readStr('skyType', base.skyType),
+          wallType: readStr('wallType', base.wallType),
+          wallTint: readBool('wallTint', base.wallTint),
+          wallMaterialVariation: readBool('wallMaterialVariation', base.wallMaterialVariation),
+          deadEndObjects: readBool('deadEndObjects', base.deadEndObjects),
+          wallDecorations: readBool('wallDecorations', base.wallDecorations),
+          floorAccents: readBool('floorAccents', base.floorAccents),
+          timerSeconds: readPosInt('timerSeconds', base.timerSeconds),
+        };
       }
       function truncateMode(name) {
         if (typeof name !== 'string') return 'Play';

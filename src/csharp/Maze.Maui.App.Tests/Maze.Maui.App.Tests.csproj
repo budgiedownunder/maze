@@ -51,6 +51,8 @@
              Link="LinkedSource\Utils\GenerateMazeOptionsParser.cs" />
     <Compile Include="..\Maze.Maui.App\Models\Difficulty.cs"
              Link="LinkedSource\Models\Difficulty.cs" />
+    <Compile Include="..\Maze.Maui.App\Models\Play3dCustomLaunchSettings.cs"
+             Link="LinkedSource\Models\Play3dCustomLaunchSettings.cs" />
     <Compile Include="..\Maze.Maui.App\Models\GameResult.cs"
              Link="LinkedSource\Models\GameResult.cs" />
     <Compile Include="..\Maze.Maui.App\Models\GameType.cs"

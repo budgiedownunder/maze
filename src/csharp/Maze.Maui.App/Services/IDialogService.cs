@@ -61,5 +61,17 @@
         /// </summary>
         /// <returns>A task containing the chosen <see cref="Models.Difficulty"/>, or <c>null</c> if the user cancelled</returns>
         public Task<Models.Difficulty?> ShowPlay3dDifficultyAsync();
+
+        /// <summary>
+        /// Displays the Play 3D custom-launch picker (sky / wall texture /
+        /// landmark toggles / time limit) for a user-edited maze.
+        /// Pre-fills from the user's previously-saved settings (MAUI
+        /// <see cref="Microsoft.Maui.Storage.Preferences"/>); on Play, the
+        /// returned <see cref="Models.Play3dCustomLaunchSettings"/> is also
+        /// persisted by the popup itself for next time.
+        /// </summary>
+        /// <param name="mazeName">Maze name shown in the popup title</param>
+        /// <returns>A task containing the chosen settings, or <c>null</c> if the user cancelled</returns>
+        public Task<Models.Play3dCustomLaunchSettings?> ShowPlay3dCustomLaunchAsync(string? mazeName = null);
     }
 }

@@ -6,6 +6,7 @@ namespace Maze.Maui.App.Views
 {
     [QueryProperty(nameof(MazeItem), "MazeItem")]
     [QueryProperty(nameof(DifficultyValue), "difficulty")]
+    [QueryProperty(nameof(LaunchSettings), "LaunchSettings")]
     public partial class Play3dGamePage : ContentPage
     {
         private readonly ConfigurationService _configurationService;
@@ -21,6 +22,16 @@ namespace Maze.Maui.App.Views
         /// so the server resolves the maze-size / timer / seed preset.
         /// </summary>
         public string? DifficultyValue { get; set; }
+
+        /// <summary>
+        /// Per-launch custom settings chosen by the user via the
+        /// <see cref="Play3dCustomLaunchPopup"/>. Only relevant for the
+        /// <see cref="MazeItem"/>-driven path (specific stored maze); when
+        /// set, the settings are appended to the <c>/game/?id=…</c> URL as
+        /// query parameters that <c>/game/index.html</c> reads back when
+        /// building the <c>StartConfig</c>.
+        /// </summary>
+        public Play3dCustomLaunchSettings? LaunchSettings { get; set; }
 
         public Play3dGamePage(ConfigurationService configurationService, IAuthService authService, ILogger<Play3dGamePage> logger)
         {
@@ -52,6 +63,14 @@ namespace Maze.Maui.App.Views
                 var id = Uri.EscapeDataString(MazeItem.ID);
                 gameUrl += $"?id={id}";
                 if (token is not null) gameUrl += $"&t={token}";
+                // Append the user's chosen per-launch settings as URL
+                // params. /game/index.html reads them with priority over
+                // localStorage so the MAUI flow (which uses Preferences,
+                // not the SPA's localStorage) overrides correctly.
+                if (LaunchSettings is not null)
+                {
+                    gameUrl += "&" + LaunchSettings.ToQueryString();
+                }
             }
             else if (!string.IsNullOrEmpty(DifficultyValue))
             {
@@ -72,6 +91,7 @@ namespace Maze.Maui.App.Views
             GameWebViewHandler.GameResultReceived -= OnGameResultReceived;
             MazeItem = null;
             DifficultyValue = null;
+            LaunchSettings = null;
             MazeGameWebView.Source = new UrlWebViewSource { Url = "about:blank" };
         }
 

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<toolkit:Popup xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+               xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+               xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+               x:Class="Maze.Maui.App.Views.Play3dCustomLaunchPopup"
+               CanBeDismissedByTappingOutsideOfPopup="False">
+
+    <Border Padding="20"
+            StrokeShape="RoundRectangle 8"
+            Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+
+        <VerticalStackLayout Spacing="12" MinimumWidthRequest="300">
+
+            <!-- Title -->
+            <Label x:Name="TitleLabel"
+                   Text="Play 3D"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center"
+                   Margin="0,0,0,4"/>
+
+            <!-- Sky -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="Sky"/>
+                <Picker x:Name="SkyPicker"/>
+            </VerticalStackLayout>
+
+            <!-- Quadrant wall types -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox x:Name="QuadrantWallTypesCheck" CheckedChanged="OnQuadrantWallTypesChanged"/>
+                <Label Text="Quadrant wall types" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+
+            <!-- Wall texture -->
+            <VerticalStackLayout x:Name="WallTextureStack" Spacing="4">
+                <Label x:Name="WallTextureLabel" Text="Wall texture"/>
+                <Picker x:Name="WallTexturePicker"/>
+            </VerticalStackLayout>
+
+            <!-- Varied wall tints -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox x:Name="WallTintCheck"/>
+                <Label x:Name="WallTintLabel" Text="Varied wall tints" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+
+            <!-- Dead-end objects -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox x:Name="DeadEndObjectsCheck"/>
+                <Label Text="Dead-end objects" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+
+            <!-- Wall decorations -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox x:Name="WallDecorationsCheck"/>
+                <Label Text="Sparse wall decorations" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+
+            <!-- Floor junction markers -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox x:Name="FloorAccentsCheck"/>
+                <Label Text="Floor junction markers" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+
+            <!-- Time limit -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="Time limit (seconds)"/>
+                <Entry x:Name="TimerEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+            </VerticalStackLayout>
+
+            <!-- Validation error -->
+            <Label x:Name="ErrorLabel"
+                   TextColor="{AppThemeBinding Light={StaticResource Fail}, Dark={StaticResource FailDark}}"
+                   FontSize="12"
+                   IsVisible="False"
+                   HorizontalOptions="Center"/>
+
+            <!-- Buttons -->
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,4,0,0">
+                <Button Grid.Column="0" x:Name="CancelButton" Text="Cancel" Clicked="OnCancelClicked"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+                <Button Grid.Column="1" x:Name="PlayButton" Text="Play" Clicked="OnPlayClicked"/>
+            </Grid>
+
+        </VerticalStackLayout>
+    </Border>
+
+</toolkit:Popup>
