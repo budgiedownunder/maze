@@ -152,3 +152,60 @@ test.describe('Game host pause button hidden on desktop', () => {
     await expect(page.locator('#touch-pause-btn')).toBeHidden()
   })
 })
+
+test.describe('Game host user-edited maze launch (?id=...)', () => {
+  // The /game/?id=<mazeId> path forces wallType: 'brick',
+  // landmarks.wallTint: false, and landmarks.wallMaterialVariation:
+  // false so the user's own maze layout reads cleanly without
+  // per-quadrant material flair or per-cell tint variation. This test
+  // stubs the wasm module to capture the JSON payload the host page
+  // sends to start_with_config and asserts the overrides are present.
+  test('sends wallType=brick, wallTint=false and wallMaterialVariation=false to start_with_config', async ({ page }) => {
+    // Stub the wasm JS module — a tiny shim that captures whatever
+    // payload start_with_config receives so the test can inspect it.
+    await page.route('**/maze_game_bevy_wasm.js**', (route) => {
+      route.fulfill({
+        contentType: 'application/javascript',
+        body: `
+          export default async function init() {}
+          export function start() {}
+          export function start_with_config(json) {
+            window.__lastStartConfigPayload = json;
+          }
+        `,
+      })
+    })
+    // Fulfill the wasm binary fetch with an empty 200 — the module
+    // script does `await fetch(WASM_URL)` BEFORE the ?id branch runs,
+    // so aborting it would throw early and never reach
+    // start_with_config. The stubbed init() ignores its argument so
+    // the empty body is harmless.
+    await page.route('**/maze_game_bevy_wasm_bg.wasm**', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/wasm', body: '' })
+    })
+    // Stub the maze fetch with a tiny synthetic maze so the host page
+    // builds + dispatches the start_with_config payload.
+    await page.route('**/api/v1/mazes/test-id*', (route) => {
+      route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'test-id',
+          definition: { grid: [['S', ' ', 'F']] },
+        }),
+      })
+    })
+    await page.goto('/game/index.html?t=fake&id=test-id')
+    await page.waitForFunction(
+      () => typeof (window as unknown as { __lastStartConfigPayload?: string }).__lastStartConfigPayload === 'string'
+    )
+    const payload = await page.evaluate(() =>
+      JSON.parse((window as unknown as { __lastStartConfigPayload: string }).__lastStartConfigPayload)
+    )
+    expect(payload.wallType).toBe('brick')
+    expect(payload.landmarks.wallTint).toBe(false)
+    expect(payload.landmarks.wallMaterialVariation).toBe(false)
+    expect(typeof payload.mazeJson).toBe('string')
+    const mazeDef = JSON.parse(payload.mazeJson)
+    expect(mazeDef.grid).toEqual([['S', ' ', 'F']])
+  })
+})

@@ -24,18 +24,17 @@ pub fn start() {
     app.run();
 }
 
-#[wasm_bindgen]
-pub fn start_with_maze(maze_json: &str) {
-    let mut app = make_app();
-    maze_game_bevy::build_app(&mut app, Some(maze_json));
-    app.run();
-}
-
 /// Shape of the JSON payload accepted by `start_with_config`. Mirrors the
 /// `Play3dConfigResponse` from the server endpoint, plus an optional
 /// `mazeJson` escape hatch for the `/game/?id=…` path. All other fields are
 /// fixed-per-session config (difficulty / dimensions / timer / seed / splash
 /// title) handed straight through to Bevy as a `GameConfig` resource.
+///
+/// Every field has a serde default so the host page can send a minimal
+/// payload — e.g. the `/game/?id=…` path only sets `mazeJson` + the two
+/// fixed overrides for user-edited mazes (`wallType` and
+/// `landmarks.wallMaterialVariation`) and lets the rest fall through to
+/// the same values as `GameConfig::default()`.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StartConfig {
@@ -45,6 +44,7 @@ struct StartConfig {
     rows: u32,
     #[serde(default)]
     cols: u32,
+    #[serde(default = "default_timer_seconds")]
     timer_seconds: f32,
     #[serde(default)]
     seed: u64,
@@ -54,6 +54,7 @@ struct StartConfig {
     minimap_cell_px: u32,
     #[serde(default = "default_minimap_radius")]
     minimap_radius: u32,
+    #[serde(default = "default_title")]
     title: String,
     #[serde(default)]
     mode: String,
@@ -130,6 +131,21 @@ fn default_minimap_radius() -> u32 {
     5
 }
 
+/// Timer the standalone game ships with when no preset / no override is
+/// supplied. Matches `GameConfig::default().timer_seconds` so omitting
+/// `timerSeconds` from the host payload yields the same value Bevy would
+/// have used on its own — single source of truth lives in `state.rs`,
+/// this is the wasm-boundary echo of it.
+fn default_timer_seconds() -> f32 {
+    60.0
+}
+
+/// Splash title the standalone game ships with when no preset / no
+/// override is supplied. Mirrors `GameConfig::default().title`.
+fn default_title() -> String {
+    "MAZE 3D".to_string()
+}
+
 /// Start the Bevy game with a host-supplied session config. Called by
 /// `/game/index.html` after it fetches the preset from
 /// `GET /api/v1/game/play3d-config?difficulty=…` (with optional `?seed=`
@@ -189,4 +205,62 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());
     app.run();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn start_config_omitted_fields_take_defaults() {
+        // The /game/?id=<id> host-page path now sends a minimal payload
+        // containing only the maze JSON plus the two user-edited-maze
+        // overrides. Every other field must deserialise to the same
+        // value `GameConfig::default()` would have used — otherwise the
+        // user-edited maze would silently inherit non-default values.
+        let json = r#"{
+            "wallType": "brick",
+            "landmarks": { "wallMaterialVariation": false },
+            "mazeJson": "{\"grid\":[[\"S\",\"F\"]]}"
+        }"#;
+        let cfg: StartConfig = serde_json::from_str(json).expect("minimal payload must parse");
+        assert_eq!(cfg.timer_seconds, 60.0);
+        assert_eq!(cfg.title, "MAZE 3D");
+        assert_eq!(cfg.rows, 0);
+        assert_eq!(cfg.cols, 0);
+        assert_eq!(cfg.seed, 0);
+        assert_eq!(cfg.min_solution_length, 0);
+        assert_eq!(cfg.minimap_cell_px, 10);
+        assert_eq!(cfg.minimap_radius, 5);
+        assert_eq!(cfg.mode, "");
+        assert_eq!(cfg.sky_type, "");
+        assert_eq!(cfg.wall_type, "brick");
+        assert!(cfg.difficulty.is_none());
+        assert!(cfg.maze_json.is_some());
+        // The single landmark override must take effect; the rest fall
+        // back to true.
+        assert!(cfg.landmarks.wall_tint);
+        assert!(cfg.landmarks.dead_end_objects);
+        assert!(cfg.landmarks.wall_decorations);
+        assert!(cfg.landmarks.floor_accents);
+        assert!(!cfg.landmarks.wall_material_variation);
+    }
+
+    #[test]
+    fn start_config_can_disable_wall_tint_and_material_variation_together() {
+        // The /game/?id=<id> path sends both landmarks toggles in one
+        // payload — make sure both flip and the rest stay defaulted.
+        let json = r#"{
+            "wallType": "brick",
+            "landmarks": { "wallTint": false, "wallMaterialVariation": false },
+            "mazeJson": "{\"grid\":[[\"S\",\"F\"]]}"
+        }"#;
+        let cfg: StartConfig = serde_json::from_str(json).expect("payload must parse");
+        assert!(!cfg.landmarks.wall_tint);
+        assert!(!cfg.landmarks.wall_material_variation);
+        // Other landmarks still default to true.
+        assert!(cfg.landmarks.dead_end_objects);
+        assert!(cfg.landmarks.wall_decorations);
+        assert!(cfg.landmarks.floor_accents);
+    }
 }

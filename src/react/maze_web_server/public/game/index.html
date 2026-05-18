@@ -392,9 +392,9 @@
     })();
   </script>
   <script type="module">
-    import { start, start_with_maze, start_with_config, default as init } from './maze_game_bevy_wasm.js';
+    import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=5';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=6';
     const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
@@ -427,9 +427,13 @@
     const mazeId = params.get('id');
 
     if (mazeId) {
-      // /game/?id=<mazeId> — a specific stored maze. Skip the difficulty
-      // config and let Bevy use Step 2 defaults (60 s clock, no seed/difficulty
-      // reported in GameResult).
+      // /game/?id=<mazeId> — a specific user-edited maze. Render with
+      // plain brick walls, NO per-quadrant wall_material_variation, and
+      // NO per-cell wall_tint variation so the user's own maze layout is
+      // the visual focus rather than the operator's per-difficulty
+      // texture flair. Every other StartConfig field is omitted and
+      // falls through to the wasm-boundary defaults (which match
+      // GameConfig::default()).
       const auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
       const token = (auth && auth.token) || params.get('t');
       clearInterval(timer);
@@ -439,10 +443,18 @@
       });
       if (!res.ok) throw new Error('Failed to load maze');
       const maze = await res.json();
-      const mazeJson = JSON.stringify(maze.definition);
-      document.getElementById('loading').remove();
-      canvas.focus({ preventScroll: true });
-      start_with_maze(mazeJson);
+      const startConfig = {
+        wallType: 'brick',
+        landmarks: { wallTint: false, wallMaterialVariation: false },
+        mazeJson: JSON.stringify(maze.definition),
+      };
+      try {
+        start_with_config(JSON.stringify(startConfig));
+        document.getElementById('loading').remove();
+        canvas.focus({ preventScroll: true });
+      } catch (err) {
+        showLoadingError(`Failed to start game: ${err}`);
+      }
     } else {
       // /game/?difficulty=<…> — fetch the server-side preset, allow a
       // ?seed=<n> override for replay / share variety, then start Bevy with
