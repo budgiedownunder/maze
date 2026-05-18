@@ -394,7 +394,7 @@
   <script type="module">
     import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=6';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=7';
     const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
@@ -427,13 +427,48 @@
     const mazeId = params.get('id');
 
     if (mazeId) {
-      // /game/?id=<mazeId> — a specific user-edited maze. Render with
-      // plain brick walls, NO per-quadrant wall_material_variation, and
-      // NO per-cell wall_tint variation so the user's own maze layout is
-      // the visual focus rather than the operator's per-difficulty
-      // texture flair. Every other StartConfig field is omitted and
-      // falls through to the wasm-boundary defaults (which match
-      // GameConfig::default()).
+      // /game/?id=<mazeId> — a specific user-edited maze. The React
+      // Play3dCustomLaunchModal writes the user's last-chosen launch
+      // settings to localStorage under MODE_STORAGE_KEY before
+      // navigating here; we read them back and build the StartConfig.
+      // If no settings are stored (e.g. the user opened /game/?id=…
+      // directly via URL), fall back to the same clean-look defaults
+      // the modal itself uses.
+      const MODE_STORAGE_KEY = 'play3dCustomLaunchSettings';
+      // Max maze-name length passed as the in-game status-bar `mode`
+      // label. The status bar is a fixed-width container (~140 px at
+      // 22 pt font in maze_game_bevy/src/hud/statusbar.rs); 20 chars is
+      // a heuristic that fits without overflowing. Longer names are
+      // truncated with an ellipsis.
+      const MODE_MAX_LENGTH = 20;
+      const DEFAULT_LAUNCH_SETTINGS = {
+        skyType: 'night',
+        wallType: 'brick',
+        wallTint: false,
+        wallMaterialVariation: false,
+        deadEndObjects: true,
+        wallDecorations: true,
+        floorAccents: true,
+        timerSeconds: 60,
+      };
+      function loadLaunchSettings() {
+        try {
+          const raw = localStorage.getItem(MODE_STORAGE_KEY);
+          if (!raw) return DEFAULT_LAUNCH_SETTINGS;
+          const parsed = JSON.parse(raw);
+          return { ...DEFAULT_LAUNCH_SETTINGS, ...parsed };
+        } catch (_) {
+          return DEFAULT_LAUNCH_SETTINGS;
+        }
+      }
+      function truncateMode(name) {
+        if (typeof name !== 'string') return 'Play';
+        const trimmed = name.trim();
+        if (trimmed.length === 0) return 'Play';
+        return trimmed.length > MODE_MAX_LENGTH
+          ? trimmed.slice(0, MODE_MAX_LENGTH - 1) + '…'
+          : trimmed;
+      }
       const auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
       const token = (auth && auth.token) || params.get('t');
       clearInterval(timer);
@@ -443,9 +478,19 @@
       });
       if (!res.ok) throw new Error('Failed to load maze');
       const maze = await res.json();
+      const settings = loadLaunchSettings();
       const startConfig = {
-        wallType: 'brick',
-        landmarks: { wallTint: false, wallMaterialVariation: false },
+        timerSeconds: settings.timerSeconds,
+        mode: truncateMode(maze.name),
+        skyType: settings.skyType,
+        wallType: settings.wallType,
+        landmarks: {
+          wallTint: settings.wallTint,
+          wallMaterialVariation: settings.wallMaterialVariation,
+          deadEndObjects: settings.deadEndObjects,
+          wallDecorations: settings.wallDecorations,
+          floorAccents: settings.floorAccents,
+        },
         mazeJson: JSON.stringify(maze.definition),
       };
       try {

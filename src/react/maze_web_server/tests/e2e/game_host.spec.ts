@@ -154,15 +154,11 @@ test.describe('Game host pause button hidden on desktop', () => {
 })
 
 test.describe('Game host user-edited maze launch (?id=...)', () => {
-  // The /game/?id=<mazeId> path forces wallType: 'brick',
-  // landmarks.wallTint: false, and landmarks.wallMaterialVariation:
-  // false so the user's own maze layout reads cleanly without
-  // per-quadrant material flair or per-cell tint variation. This test
-  // stubs the wasm module to capture the JSON payload the host page
-  // sends to start_with_config and asserts the overrides are present.
-  test('sends wallType=brick, wallTint=false and wallMaterialVariation=false to start_with_config', async ({ page }) => {
-    // Stub the wasm JS module — a tiny shim that captures whatever
-    // payload start_with_config receives so the test can inspect it.
+  // Common test setup: stub the wasm JS module so we can capture the
+  // JSON payload start_with_config receives, fulfill the wasm binary
+  // with an empty 200 so the module's `await fetch(WASM_URL)` succeeds,
+  // and stub the maze fetch with a synthetic maze + name.
+  async function stubGameHost(page: Page, mazeName: string) {
     await page.route('**/maze_game_bevy_wasm.js**', (route) => {
       route.fulfill({
         contentType: 'application/javascript',
@@ -175,37 +171,91 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
         `,
       })
     })
-    // Fulfill the wasm binary fetch with an empty 200 — the module
-    // script does `await fetch(WASM_URL)` BEFORE the ?id branch runs,
-    // so aborting it would throw early and never reach
-    // start_with_config. The stubbed init() ignores its argument so
-    // the empty body is harmless.
     await page.route('**/maze_game_bevy_wasm_bg.wasm**', (route) => {
       route.fulfill({ status: 200, contentType: 'application/wasm', body: '' })
     })
-    // Stub the maze fetch with a tiny synthetic maze so the host page
-    // builds + dispatches the start_with_config payload.
     await page.route('**/api/v1/mazes/test-id*', (route) => {
       route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
           id: 'test-id',
+          name: mazeName,
           definition: { grid: [['S', ' ', 'F']] },
         }),
       })
     })
-    await page.goto('/game/index.html?t=fake&id=test-id')
+  }
+
+  async function capturedPayload(page: Page) {
     await page.waitForFunction(
       () => typeof (window as unknown as { __lastStartConfigPayload?: string }).__lastStartConfigPayload === 'string'
     )
-    const payload = await page.evaluate(() =>
+    return await page.evaluate(() =>
       JSON.parse((window as unknown as { __lastStartConfigPayload: string }).__lastStartConfigPayload)
     )
+  }
+
+  test('falls back to clean defaults when localStorage is empty', async ({ page }) => {
+    await stubGameHost(page, 'My Maze')
+    await page.goto('/game/index.html?t=fake&id=test-id')
+    const payload = await capturedPayload(page)
     expect(payload.wallType).toBe('brick')
     expect(payload.landmarks.wallTint).toBe(false)
     expect(payload.landmarks.wallMaterialVariation).toBe(false)
+    expect(payload.landmarks.deadEndObjects).toBe(true)
+    expect(payload.landmarks.wallDecorations).toBe(true)
+    expect(payload.landmarks.floorAccents).toBe(true)
+    expect(payload.skyType).toBe('night')
+    expect(payload.timerSeconds).toBe(60)
+    expect(payload.mode).toBe('My Maze')
     expect(typeof payload.mazeJson).toBe('string')
     const mazeDef = JSON.parse(payload.mazeJson)
     expect(mazeDef.grid).toEqual([['S', ' ', 'F']])
+  })
+
+  test('reads localStorage settings written by the Play3dCustomLaunchModal', async ({ page }) => {
+    await stubGameHost(page, 'My Maze')
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'play3dCustomLaunchSettings',
+        JSON.stringify({
+          skyType: 'sunset',
+          wallType: 'wood',
+          wallTint: true,
+          wallMaterialVariation: false,
+          deadEndObjects: false,
+          wallDecorations: true,
+          floorAccents: false,
+          timerSeconds: 240,
+        })
+      )
+    })
+    await page.goto('/game/index.html?t=fake&id=test-id')
+    const payload = await capturedPayload(page)
+    expect(payload.skyType).toBe('sunset')
+    expect(payload.wallType).toBe('wood')
+    expect(payload.timerSeconds).toBe(240)
+    expect(payload.landmarks.wallTint).toBe(true)
+    expect(payload.landmarks.wallMaterialVariation).toBe(false)
+    expect(payload.landmarks.deadEndObjects).toBe(false)
+    expect(payload.landmarks.wallDecorations).toBe(true)
+    expect(payload.landmarks.floorAccents).toBe(false)
+  })
+
+  test('truncates long maze names so the status bar mode label fits the header', async ({ page }) => {
+    // Status bar fits ~20 chars at the configured font; longer names
+    // are truncated with an ellipsis so the label doesn't overflow.
+    await stubGameHost(page, 'This is a really long maze name that will not fit')
+    await page.goto('/game/index.html?t=fake&id=test-id')
+    const payload = await capturedPayload(page)
+    expect(payload.mode.length).toBeLessThanOrEqual(20)
+    expect(payload.mode).toMatch(/…$/)
+  })
+
+  test('uses "Play" when the maze name is empty / whitespace', async ({ page }) => {
+    await stubGameHost(page, '   ')
+    await page.goto('/game/index.html?t=fake&id=test-id')
+    const payload = await capturedPayload(page)
+    expect(payload.mode).toBe('Play')
   })
 })

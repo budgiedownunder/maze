@@ -305,6 +305,56 @@
   flex-shrink: 0;
 }
 
+/* Same horizontal-input layout for checkboxes inside a modal form — used
+   by the Play 3D custom-launch modal's landmark toggles. Mirrors
+   `.modal-radio` so the bullet/box + label sit on one row at the
+   modal's left edge instead of the input being stretched to 100% width
+   by the global form-input rule. */
+.modal-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+.modal-checkbox input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.modal-checkbox input[type='checkbox']:disabled + span {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Stacked label: text on top, input/select below, with a clear gap
+   between them. Used by the Play 3D custom-launch modal's dropdowns
+   and the time-limit number input — the default browser layout puts
+   the input flush against the label text, which reads as cramped. */
+.modal-stacked-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* The global `input { font-size: 1rem; padding: … }` rule in
+   index.css applies only to `<input>`. Without a matching rule,
+   `<select>` falls back to the browser's UA font (typically a
+   different font family + smaller size than the surrounding form
+   text), which reads as mismatched against the input fields beside
+   it. Apply the same family/size/padding so the dropdowns look like
+   the inputs do in e.g. the Generate Maze modal. */
+.modal-form select.input {
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+  box-sizing: border-box;
+  width: 100%;
+}
+
 /* ──────────────────────────────────────────────────────────
    About modal (centered icon + text layout)
 ────────────────────────────────────────────────────────── */

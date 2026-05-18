@@ -9,7 +9,17 @@ export const GameType = {
 } as const
 export type GameType = (typeof GameType)[keyof typeof GameType]
 
-export function usePlayMaze() {
+interface UsePlayMazeOptions {
+  /// Called after a successful solvability check for a `GameType.ThreeD`
+  /// launch instead of navigating directly. The page receiving the
+  /// callback typically opens the Play3dCustomLaunchModal with this
+  /// maze, then on the modal's Play action does the actual navigation
+  /// to `/game/?id=…`. When this callback is absent the hook falls back
+  /// to the legacy direct-navigation behaviour.
+  onLaunch3d?: (maze: Maze) => void
+}
+
+export function usePlayMaze(opts: UsePlayMazeOptions = {}) {
   const navigate = useNavigate()
   const [isChecking, setIsChecking] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -22,6 +32,8 @@ export function usePlayMaze() {
       await solveMaze(maze.definition)
       if (gameType === GameType.TwoD) {
         navigate('/play/' + encodeURIComponent(maze.id))
+      } else if (opts.onLaunch3d) {
+        opts.onLaunch3d(maze)
       } else {
         window.location.href = '/game/?id=' + encodeURIComponent(maze.id)
       }

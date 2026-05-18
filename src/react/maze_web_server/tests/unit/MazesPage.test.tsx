@@ -380,7 +380,7 @@ describe('MazesPage', () => {
     expect(play3dButtons).toHaveLength(2)
   })
 
-  it('clicking Play in 3D on solvable maze sets window.location.href to /game/?id=...', async () => {
+  it('clicking Play in 3D on solvable maze opens the custom-launch modal, then Play navigates to /game/?id=...', async () => {
     ;(solveMaze as Mock).mockResolvedValue([{ row: 0, col: 0 }])
 
     renderMazesPage()
@@ -391,6 +391,17 @@ describe('MazesPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: `Play in 3D ${mockMazeAlpha.name}` }))
 
+    // The Play3dCustomLaunchModal opens — no navigation yet.
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: /Play 3D — customise launch/i })).toBeInTheDocument(),
+    )
+    expect(locationStub.href).toBe('')
+
+    // Clicking Play inside the modal triggers the navigation. Scope
+    // the query to the dialog so "Play" doesn't collide with the row
+    // "Play" / "Play 3D" action buttons.
+    const dialog = screen.getByRole('dialog', { name: /Play 3D — customise launch/i })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Play' }))
     await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
     expect(mockNavigate).not.toHaveBeenCalled()
   })

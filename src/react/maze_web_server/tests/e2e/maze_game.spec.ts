@@ -117,13 +117,16 @@ test.describe('MazeGamePage', () => {
     await expect(page.getByRole('button', { name: 'Play in 3D' })).toBeVisible()
   })
 
-  test('3D play button on Mazes list navigates to /game/?id=...', async ({ page }) => {
+  test('3D play button on Mazes list opens the custom-launch modal, then Play navigates to /game/?id=...', async ({ page }) => {
     await page.route(/\/game\//, route => route.fulfill({
       contentType: 'text/html',
       body: '<html><body>stub</body></html>',
     }))
     await page.goto('/mazes')
     await page.getByRole('button', { name: 'Play in 3D Alpha', exact: true }).click()
+    const modal = page.getByRole('dialog', { name: /Play 3D — customise launch/i })
+    await expect(modal).toBeVisible()
+    await modal.getByRole('button', { name: 'Play', exact: true }).click()
     await page.waitForURL(/\/game\/\?id=/)
   })
 })
