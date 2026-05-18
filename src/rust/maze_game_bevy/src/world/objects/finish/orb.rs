@@ -1,5 +1,6 @@
 use crate::overlays::win::COLOR_ORB_LIGHT;
 use crate::palette::EMISSIVE_ONLY_BASE;
+use crate::state::GameState;
 use crate::world::CELL_SIZE;
 use bevy::prelude::*;
 
@@ -7,14 +8,13 @@ use bevy::prelude::*;
 
 /// Orb sphere radius (units).
 const ORB_RADIUS: f32 = 0.35;
-/// Orb resting Y position. Set to the player's eye height so the orb
-/// sits on the camera's optical axis — perspective projection only
-/// renders a sphere as a perfect circle when it's at the optical
-/// centre; at any other position the off-axis angle stretches the
-/// sphere into an ellipse, and the effect is most visible on narrow
-/// (portrait / phone) viewports where the vertical FOV is widest.
-/// Floating the orb at eye level keeps it circular on every aspect.
-const ORB_BASE_Y: f32 = 1.7;
+/// Orb resting Y position — hovers near the floor for a distinctive
+/// low glow source at the finish cell. Because the orb sits well below
+/// the camera's optical axis at close range, perspective projection
+/// stretches it into an ellipse the instant the player walks onto the
+/// finish cell — [`orb_system`] despawns the orb on `state.won` to
+/// avoid that visual.
+const ORB_BASE_Y: f32 = 0.7;
 /// Orb emissive RGB — warm gold.
 const ORB_EMISSIVE: LinearRgba = LinearRgba::new(1.2, 0.9, 0.1, 1.0);
 
@@ -81,9 +81,24 @@ pub(crate) fn spawn_orb(commands: &mut Commands, assets: &OrbAssets, r: usize, c
     ));
 }
 
-pub(crate) fn orb_system(time: Res<Time>, mut orb: Query<&mut Transform, With<FinishOrb>>) {
-    if let Ok(mut t) = orb.single_mut() {
-        t.translation.y = ORB_BASE_Y + BOB_AMPLITUDE * (time.elapsed_secs() * BOB_RATE).sin();
-        t.rotate_y(time.delta_secs() * SPIN_RATE);
+pub(crate) fn orb_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    state: Res<GameState>,
+    mut orb: Query<(Entity, &mut Transform), With<FinishOrb>>,
+) {
+    let Ok((entity, mut t)) = orb.single_mut() else {
+        return;
+    };
+    // On win, despawn the orb so its near-floor position doesn't read
+    // as a stretched ellipse at the close-range, off-axis viewing
+    // angle the player ends up at. The point light at the same
+    // position is left alone — the lingering glow reads as a
+    // celebratory effect at the finish cell.
+    if state.won {
+        commands.entity(entity).despawn();
+        return;
     }
+    t.translation.y = ORB_BASE_Y + BOB_AMPLITUDE * (time.elapsed_secs() * BOB_RATE).sin();
+    t.rotate_y(time.delta_secs() * SPIN_RATE);
 }

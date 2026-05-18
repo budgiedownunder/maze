@@ -372,6 +372,27 @@ mod tests {
     }
 
     #[test]
+    fn finish_orb_despawns_on_win() {
+        // Reaching the finish cell flips `state.won = true`; `orb_system`
+        // then despawns the FinishOrb so its near-floor position
+        // doesn't render as a perspective-stretched ellipse at the
+        // close, off-axis viewing angle the player ends up at.
+        let mut app = make_playing_app();
+        assert_eq!(
+            app.world_mut().query::<&FinishOrb>().iter(app.world()).count(),
+            1,
+            "sanity: orb should exist before win"
+        );
+        app.world_mut().resource_mut::<GameState>().won = true;
+        app.update();
+        assert_eq!(
+            app.world_mut().query::<&FinishOrb>().iter(app.world()).count(),
+            0,
+            "FinishOrb should be despawned after win"
+        );
+    }
+
+    #[test]
     fn wall_decorations_toggle_off_suppresses_spawns() {
         let mut app = make_playing_app_with_config(GameConfig {
             landmarks: Landmarks {
