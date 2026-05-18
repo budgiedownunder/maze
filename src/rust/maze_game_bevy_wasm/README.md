@@ -47,16 +47,16 @@ wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int \
 
 **PowerShell:**
 
-The inner double quotes around TOML string values (`\"fat\"`, `\"z\"`, `\"symbols\"`) are backslash-escaped so PowerShell's Windows-mode native-command argument passing preserves them when forwarding to `cargo`.
+Requires **PowerShell 7.3 or later** — relies on `$PSNativeCommandArgumentPassing = 'Windows'`, which became the default on Windows in PowerShell 7.3. On Windows PowerShell 5.1 or PowerShell 7.2 (with the legacy default), the embedded double quotes inside each `--config` value are not forwarded to `cargo` intact and the TOML parse will fail. Check with `$PSVersionTable.PSVersion`.
 
 ```powershell
 wasm-pack build --target web --no-typescript --out-dir ../../react/maze_web_server/public/game -- `
-  --config 'profile.release.lto=\"fat\"' `
+  --config 'profile.release.lto="fat"' `
   --config 'profile.release.codegen-units=1' `
-  --config 'profile.release.package.maze_game_bevy.opt-level=\"z\"' `
-  --config 'profile.release.package.maze_game_bevy.strip=\"symbols\"' `
-  --config 'profile.release.package.maze_game_bevy_wasm.opt-level=\"z\"' `
-  --config 'profile.release.package.maze_game_bevy_wasm.strip=\"symbols\"'
+  --config 'profile.release.package.maze_game_bevy.opt-level="z"' `
+  --config 'profile.release.package.maze_game_bevy.strip="symbols"' `
+  --config 'profile.release.package.maze_game_bevy_wasm.opt-level="z"' `
+  --config 'profile.release.package.maze_game_bevy_wasm.strip="symbols"'
 
 wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int `
   ../../react/maze_web_server/public/game/maze_game_bevy_wasm_bg.wasm `
