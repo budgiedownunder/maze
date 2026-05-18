@@ -125,13 +125,13 @@ The Maze MAUI application running on Windows, iOS, and Android.
 
 The React SPA running in a desktop browser.
 
-**Maze list**
+**Maze List**
 
 The mazes list page, showing the user's mazes. 
 
 <img src="./src/react/maze_web_server/screenshots/web-mazes.png" width="600">
 
-**Maze editor**
+**Maze Editor**
 
 The maze editor page, showing a solved maze.
 
