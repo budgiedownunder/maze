@@ -10,7 +10,7 @@ In addition to the API interfaces, it also supports the following documentation 
 
 | EndPoint                  | Description
 |:--------------------------|:------------
-| `/api-docs/v1/rapidoc`    | [RapiDoc](https://rapidocweb.com/) 
+| `/api-docs/v1/rapidoc`    | [RapiDoc](https://github.com/rapi-doc/RapiDoc) 
 | `/api-docs/v1/redoc`      | [ReDoc](https://redocly.com/)
 | `/api-docs/v1/swagger-ui/`| [Swagger UI](https://swagger.io/tools/swagger-ui/)
 | `/game/`                  | First-person 3D maze game — [`Bevy`](https://bevyengine.org/) WASM binary compiled from [`maze_game_bevy_wasm`](../maze_game_bevy_wasm/README.md); loads maze via `/api/v1/mazes/{id}` with bearer token; touch D-pad on mobile
