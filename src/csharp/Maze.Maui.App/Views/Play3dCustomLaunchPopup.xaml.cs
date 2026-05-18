@@ -31,7 +31,7 @@ namespace Maze.Maui.App.Views
         /// <summary>
         /// Constructor. Pre-fills the form from the previously-saved settings.
         /// </summary>
-        /// <param name="mazeName">Maze name to show in the popup title (truncated to fit)</param>
+        /// <param name="mazeName">Maze name shown in the popup title (wraps in the header if it's long)</param>
         public Play3dCustomLaunchPopup(string? mazeName = null)
         {
             InitializeComponent();

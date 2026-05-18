@@ -73,8 +73,9 @@ namespace Maze.Maui.App.Services
         /// <summary>
         /// Displays the Play 3D custom-launch picker (sky / wall texture /
         /// landmark toggles / time limit) for a user-edited maze as a popup
-        /// window. Pre-fills from <see cref="Models.Play3dCustomLaunchSettings.Load"/>;
-        /// on Play, the popup persists the chosen settings before returning
+        /// window. Pre-fills from
+        /// <see cref="Services.Play3dCustomLaunchSettingsStore.Load"/>; on
+        /// Play, the popup persists the chosen settings before returning
         /// them.
         /// </summary>
         /// <param name="mazeName">Maze name shown in the popup title</param>
