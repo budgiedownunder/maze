@@ -24,7 +24,7 @@ export function VerifyEmailPage() {
       .catch(() => setState('invalid'))
   }, [token])
 
-  const continueDestination = isAuthenticated ? '/mazes' : '/login'
+  const continueDestination = isAuthenticated ? '/' : '/login'
   const continueLabel = isAuthenticated ? 'Continue to your account' : 'Sign in'
 
   return (

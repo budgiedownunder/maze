@@ -5,12 +5,46 @@
                x:Class="Maze.Maui.App.Views.GenerateMazePopup"
                CanBeDismissedByTappingOutsideOfPopup="False">
 
-    <Border Padding="20"
+    <!--
+        Asymmetric padding: full vertical breathing room, reduced
+        left/right padding so the bottom button row keeps more
+        horizontal space for its button labels on narrow phone screens.
+
+        `MaximumWidthRequest` is the hard cap that prevents the popup
+        from sizing to the parent window's full width on desktop. The
+        ScrollView below claims Fill on the horizontal axis (its
+        measure pass reports the full constraint it was handed,
+        regardless of `HorizontalOptions`), which would stretch the
+        popup to the platform popup container's width without this
+        cap.
+    -->
+    <Border Padding="12,20"
+            MaximumWidthRequest="320"
             StrokeShape="RoundRectangle 8"
             Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
 
-        <VerticalStackLayout Spacing="12" MinimumWidthRequest="280">
+        <!--
+            Vertical scrolling on short viewports — the popup would
+            otherwise extend off-screen on phone landscape / smaller
+            phone-portrait. The ScrollView is bounded by
+            `MaximumHeightRequest`: content shorter than that doesn't
+            scroll (the popup stays at its natural height), longer
+            content scrolls inside the cap.
+
+            `HorizontalOptions="Center"` is needed to stop the
+            ScrollView from claiming Fill horizontally and dragging
+            the popup width up to the parent container's full width.
+        -->
+        <ScrollView MaximumHeightRequest="600" HorizontalOptions="Center">
+        <!--
+            No `MinimumWidthRequest` floor — the layout sizes to its
+            natural content width on every platform, which avoids any
+            overflow/clipping at the right edge on narrow phone
+            simulators. The Border above caps the upper end at
+            `MaximumWidthRequest="320"` for desktop.
+        -->
+        <VerticalStackLayout Spacing="12">
 
             <!-- Title -->
             <Label Text="Generate Maze"
@@ -54,13 +88,14 @@
 
             <!-- Buttons -->
             <Grid ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,4,0,0">
-                <Button Grid.Column="0" Text="Cancel" Clicked="OnCancelClicked"
+                <Button Grid.Column="0" x:Name="CancelButton" Text="Cancel" Clicked="OnCancelClicked"
                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                         TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
-                <Button Grid.Column="1" Text="Generate" Clicked="OnGenerateClicked"/>
+                <Button Grid.Column="1" x:Name="GenerateButton" Text="Generate" Clicked="OnGenerateClicked"/>
             </Grid>
 
         </VerticalStackLayout>
+        </ScrollView>
     </Border>
 
 </toolkit:Popup>

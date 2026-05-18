@@ -88,6 +88,23 @@ The following configuration settings exist:
 |          | `log_level`        | Text    | `info`            | `MAZE_WEB_SERVER_LOGGING_LOG_LEVEL`
 |          | `log_file_prefix`  | Text    | `maze_web_server_`| `MAZE_WEB_SERVER_LOGGING_LOG_FILE_PREFIX`
 | Features | `allow_signup`     | Boolean | `true`            | `MAZE_WEB_SERVER_FEATURES_ALLOW_SIGNUP`
+| Game (Play 3D) | `game.play3d.title`                         | Text    | `Maze 3D`  | (config-file only)
+|                | `game.play3d.<difficulty>.rows`             | Integer | `8`        | (config-file only)
+|                | `game.play3d.<difficulty>.cols`             | Integer | `8`        | (config-file only)
+|                | `game.play3d.<difficulty>.timer_seconds`    | Integer | `120`      | (config-file only)
+|                | `game.play3d.<difficulty>.seed`             | Integer | `0`        | (config-file only — fixed per difficulty for leaderboard fairness)
+|                | `game.play3d.<difficulty>.min_solution_length` | Integer | `0`     | (config-file only — `0` = no minimum; maps to the maze crate's `min_spine_length`)
+|                | `game.play3d.<difficulty>.minimap_cell_px`  | Integer | `10`    | (config-file only — on-screen pixel size of each minimap cell)
+|                | `game.play3d.<difficulty>.minimap_radius`   | Integer | `5`     | (config-file only — cells visible each direction from the player; minimap shows a 2r+1 square)
+|                | `game.play3d.<difficulty>.title`            | Text (optional) | (falls back to `game.play3d.title`) | (config-file only)
+|                | `game.play3d.<difficulty>.mode`             | Text    | `Play`     | (config-file only — free-text label shown in the in-game status bar, e.g. `Easy` / `Tricky` / `Hard`)
+|                | `game.play3d.<difficulty>.landmarks.wall_tint` | Boolean | `true` | (config-file only — when `true`, add random wall tinting; bypassed when `wall_material_variation` is `true`)
+|                | `game.play3d.<difficulty>.landmarks.dead_end_objects` | Boolean | `true` | (config-file only — when `true`, place random objects in dead-end cells)
+|                | `game.play3d.<difficulty>.landmarks.wall_decorations` | Boolean | `true` | (config-file only — when `true`, add random wall decorations )
+|                | `game.play3d.<difficulty>.landmarks.floor_accents` | Boolean | `true` | (config-file only — when `true`, place flat accents on the floor of 3- and 4-way junction cells)
+|                | `game.play3d.<difficulty>.landmarks.wall_material_variation` | Boolean | `true` | (config-file only — when `true`, split the maze into a 2×2 NW/NE/SW/SE grid and render each quadrant with its own wall material (brick / dressed stone / wood / cobblestone); supersedes `wall_tint`)
+|                | `game.play3d.<difficulty>.sky_type` | Text (`night` / `sunrise` / `day` / `sunset`) | `night` | (config-file only — atmospheric sky mode; unknown values fall back to `night`)
+|                | `game.play3d.<difficulty>.wall_type` | Text (`brick` / `dressed_stone` / `wood` / `cobblestone`) | `brick` | (config-file only — wall texture used by the per-cell tinted path; bypassed when `wall_material_variation` is `true`; unknown values fall back to `brick`)
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
@@ -160,6 +177,75 @@ log_level = "info"
 
 [features]
 allow_signup = true
+
+# Play 3D presets are fetched by /game/index.html on every game session, so a
+# change here propagates to every client without a rebuild. `seed` is fixed per
+# difficulty so leaderboard records on the same difficulty share the same maze
+# layout from day 1. `min_solution_length` is plumbed through to the maze
+# crate's `min_spine_length` generator option. `title` is the in-game splash
+# text — set it at the parent level or per difficulty.
+[game.play3d]
+title = "Maze 3D"
+
+[game.play3d.easy]
+mode = "Easy"
+rows = 8
+cols = 8
+timer_seconds = 120
+seed = 8080808
+min_solution_length = 30
+minimap_cell_px = 10
+minimap_radius = 5
+
+sky_type = "night"
+wall_type = "brick"
+
+[game.play3d.easy.landmarks]
+wall_tint = true
+dead_end_objects = true
+wall_decorations = true
+floor_accents = true
+wall_material_variation = true
+
+[game.play3d.tricky]
+mode = "Tricky"
+rows = 15
+cols = 15
+timer_seconds = 240
+seed = 15151515
+min_solution_length = 90
+minimap_cell_px = 10
+minimap_radius = 5
+
+sky_type = "night"
+wall_type = "brick"
+
+[game.play3d.tricky.landmarks]
+wall_tint = true
+dead_end_objects = true
+wall_decorations = true
+floor_accents = true
+wall_material_variation = true
+
+[game.play3d.hard]
+mode = "Hard"
+rows = 25
+cols = 25
+timer_seconds = 420
+seed = 25252525
+min_solution_length = 220
+minimap_cell_px = 10
+minimap_radius = 5
+
+sky_type = "night"
+wall_type = "brick"
+
+[game.play3d.hard.landmarks]
+wall_tint = true
+dead_end_objects = true
+wall_decorations = true
+floor_accents = true
+wall_material_variation = true
 
 [storage]
 # Backend selector: "file" (on-disk JSON layout) or "sql" (SQLite/Postgres/MySQL).
@@ -474,6 +560,45 @@ The following endpoints manage user identity:
 In addition, `GET /api/v1/features` returns an `oauth_providers` array describing the canonical name and human-readable display name of each provider currently enabled — clients render one button per entry.
 
 The full API reference (including maze and admin-user endpoints) is available interactively via the documentation endpoints listed above.
+
+## Game
+
+The 3D maze game (Bevy / WASM, served from `/game/`) fetches its session config at startup from the server, so a single edit to `config.toml` propagates to every client without a rebuild:
+
+| Method | Path | Auth required | Description |
+|:-------|:-----|:--------------|:------------|
+| `GET`  | `/api/v1/game/play3d-config?difficulty=easy\|tricky\|hard` | None | Returns the configured Play 3D preset for the difficulty: maze dimensions, time limit, fixed RNG seed, minimum solution-path length, and in-game splash title. Difficulty value is case-insensitive; unknown values return `400`. |
+
+Response shape (camelCase):
+
+```json
+{
+  "difficulty": "easy",
+  "rows": 8,
+  "cols": 8,
+  "timerSeconds": 120,
+  "seed": 8080808,
+  "minSolutionLength": 30,
+  "minimapCellPx": 10,
+  "minimapRadius": 5,
+  "title": "Maze 3D",
+  "mode": "Easy",
+  "landmarks": {
+    "wallTint": true,
+    "deadEndObjects": true,
+    "wallDecorations": true,
+    "floorAccents": true,
+    "wallMaterialVariation": true
+  },
+  "skyType": "night",
+  "wallType": "brick"
+}
+```
+
+- `seed` is **fixed per difficulty** (not minted per request) so leaderboard records on the same difficulty share the same maze layout from day 1. Override per-session via `/game/?difficulty=easy&seed=<n>` if variety is wanted.
+- `minSolutionLength` is plumbed through to the maze crate's `min_spine_length` generator option (with the crate's default `max_retries`). Set it too high and generation will error rather than produce a degenerate maze.
+- `minimapCellPx` / `minimapRadius` size the in-game minimap: `minimapCellPx` scales its on-screen footprint, `minimapRadius` controls how many cells around the player are visible (a `2r+1` square window). Both default to the shipped values (10 / 5).
+- `title` is the in-game splash text shown for ~2 s on game start. Override per difficulty via `[game.play3d.<difficulty>].title`.
 
 ### `GET /api/v1/users/me` shape
 

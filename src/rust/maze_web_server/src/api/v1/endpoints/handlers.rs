@@ -398,6 +398,127 @@ pub async fn get_features(
 }
 
 // **************************************************************************************************
+// Endpoint: GET /api/v1/game/play3d-config?difficulty=…
+// Handler:  get_play3d_config()
+// **************************************************************************************************
+/// Query parameters for `GET /api/v1/game/play3d-config`.
+#[derive(Deserialize, Debug)]
+pub struct Play3dConfigQuery {
+    /// Difficulty label: `easy`, `tricky`, or `hard` (case-insensitive).
+    pub difficulty: String,
+}
+
+/// Response body for `GET /api/v1/game/play3d-config?difficulty=…`.
+///
+/// Every fixed value the Bevy 3D game needs for a session is sourced from this
+/// response: the maze dimensions, the time limit, the RNG seed (fixed per
+/// difficulty for leaderboard fairness), the minimum solution-path length
+/// (plumbed to the maze crate's `min_spine_length`), and the in-game splash
+/// title (with optional per-difficulty override).
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Play3dConfigResponse {
+    /// Echo of the requested difficulty, normalised to lowercase.
+    pub difficulty: String,
+    /// Number of maze rows.
+    pub rows: u32,
+    /// Number of maze columns.
+    pub cols: u32,
+    /// Time limit, in seconds, before the player loses.
+    pub timer_seconds: u32,
+    /// Fixed RNG seed for the maze generator.
+    pub seed: u64,
+    /// Minimum start-to-finish path length the generator must hit.
+    pub min_solution_length: u32,
+    /// On-screen pixel size of each minimap cell.
+    pub minimap_cell_px: u32,
+    /// Number of minimap cells visible in each direction from the player.
+    pub minimap_radius: u32,
+    /// In-game splash title to show on the title screen.
+    pub title: String,
+    /// Free-text label shown in the in-game status bar.
+    pub mode: String,
+    /// Landmark settings.
+    pub landmarks: LandmarksResponse,
+    /// Sky type. Safely degrades to `night` if unrecognised.
+    pub sky_type: String,
+    /// Wall texture kind used by the per-cell tinted path (when
+    /// `landmarks.wallMaterialVariation` is off). One of `brick`,
+    /// `dressed_stone`, `wood`, `cobblestone`. Safely degrades to
+    /// `brick` if unrecognised.
+    pub wall_type: String,
+}
+
+/// JSON shape of the per-difficulty landmark toggles in
+/// [`Play3dConfigResponse`]. Mirrors `crate::config::game::LandmarksConfig`
+/// but renames fields to `camelCase` so they sit naturally alongside the
+/// rest of the response (e.g. `wallTint`).
+#[derive(Serialize, Deserialize, ToSchema, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LandmarksResponse {
+    /// Per-cell wall tint variation enabled for this difficulty.
+    pub wall_tint: bool,
+    /// Dead-end landmark objects enabled for this difficulty.
+    pub dead_end_objects: bool,
+    /// Sparse wall decorations enabled for this difficulty.
+    pub wall_decorations: bool,
+    /// Floor accents at junction cells enabled for this difficulty.
+    pub floor_accents: bool,
+    /// Per-quadrant wall material variation enabled for this difficulty.
+    /// When on, supersedes the per-cell tint variation.
+    pub wall_material_variation: bool,
+}
+
+#[utoipa::path(
+    summary = "Returns the configured Play 3D preset for a difficulty",
+    description = "Returns the maze dimensions, time limit, fixed RNG seed, minimum solution length, and splash title for the requested Play 3D difficulty. Difficulty values are case-insensitive: `easy`, `tricky`, `hard`. No authentication required.",
+    get,
+    path = "/api/v1/game/play3d-config",
+    params(
+        ("difficulty" = String, Query, description = "Difficulty label (easy | tricky | hard)")
+    ),
+    responses(
+        (status = 200, description = "Play 3D preset returned successfully", body = Play3dConfigResponse),
+        (status = 400, description = "Unknown difficulty label")
+    ),
+    tags = ["v1"]
+)]
+#[get("/game/play3d-config")]
+pub async fn get_play3d_config(
+    query: Query<Play3dConfigQuery>,
+    config: web::Data<AppConfig>,
+) -> Result<HttpResponse, Error> {
+    let raw = query.difficulty.trim();
+    let normalised = raw.to_ascii_lowercase();
+    let Some(preset) = config.game.play3d.lookup(&normalised) else {
+        return Err(actix_web::error::ErrorBadRequest(format!(
+            "Unknown difficulty: \"{raw}\". Expected one of: easy, tricky, hard."
+        )));
+    };
+    Ok(HttpResponse::Ok().json(Play3dConfigResponse {
+        difficulty: normalised.clone(),
+        rows: preset.rows,
+        cols: preset.cols,
+        timer_seconds: preset.timer_seconds,
+        seed: preset.seed,
+        min_solution_length: preset.min_solution_length,
+        minimap_cell_px: preset.minimap_cell_px,
+        minimap_radius: preset.minimap_radius,
+        title: config.game.play3d.resolved_title(&normalised),
+        mode: preset.mode.clone(),
+        landmarks: LandmarksResponse {
+            wall_tint: preset.landmarks.wall_tint,
+            dead_end_objects: preset.landmarks.dead_end_objects,
+            wall_decorations: preset.landmarks.wall_decorations,
+            floor_accents: preset.landmarks.floor_accents,
+            wall_material_variation: preset.landmarks.wall_material_variation,
+        },
+        sky_type: preset.sky_type.as_wire_str().to_string(),
+        wall_type: preset.wall_type.as_wire_str().to_string(),
+    }))
+}
+
+// **************************************************************************************************
 // Endpoint: PUT /api/v1/admin/features
 // Handler:  update_admin_features()
 // **************************************************************************************************

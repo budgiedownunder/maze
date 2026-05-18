@@ -89,6 +89,102 @@ data_dir = "data"
 # Can also be changed at runtime via PUT /api/v1/admin/features (admin only).
 allow_signup = true
 
+# ---- Game configuration ----
+# Play 3D presets — fetched by /game/index.html on every game session so a
+# change here propagates to every client without a rebuild. `seed` is fixed per
+# difficulty so leaderboard records on the same difficulty share the same maze
+# layout from day 1. `min_solution_length` is plumbed through to the maze
+# crate's `min_spine_length` generator option (with the crate's default
+# `max_retries`) so configured mazes are guaranteed non-trivial. `title` is the
+# in-game splash text (Bevy `setup_title`); set it at the `[game.play3d]` level
+# for all difficulties, or override per difficulty.
+# `minimap_cell_px` scales the minimap's on-screen footprint; `minimap_radius`
+# controls how many cells around the player are visible (a 2*r+1 square window).
+# Both default to the shipped values (10 / 5) when omitted.
+[game.play3d]
+title = "Maze 3D"
+
+[game.play3d.easy]
+title = "EASY 3D"
+mode = "Easy"
+rows = 10
+cols = 10
+timer_seconds = 120
+seed = 8080808
+min_solution_length = 15
+minimap_cell_px = 10
+minimap_radius = 5
+# Sky type — one of "night" | "sunrise" | "day" | "sunset". Default "night".
+sky_type = "night"
+# Wall texture kind for the per-cell tinted path (used when the
+# wall_material_variation landmark below is false). One of "brick" |
+# "dressed_stone" | "wood" | "cobblestone". Default "brick".
+wall_type = "brick"
+
+[game.play3d.easy.landmarks]
+# Per-cell wall tint variation — each cell's walls pick one of six
+# emissive variants seeded from (row, col, seed). Default true.
+# Bypassed when wall_material_variation = true.
+wall_tint = true
+# Dead-end landmark objects — every dead-end cell gets one of four
+# distinctive objects (brazier / urn / broken pillar / chest) picked
+# by hashing (row, col, seed). Default true.
+dead_end_objects = true
+# Sparse wall decorations — ~1 in 10 wall panels gets a
+# decoration (vent grate / faded poster / rune glyph / glowing glass)
+# on its inside face. Default true.
+wall_decorations = true
+# Floor accents at junctions — every 3- or 4-way junction cell
+# (excluding start / finish) gets one of four flat accents (moss /
+# cracked tile / mosaic / sigil) on its floor. Default true.
+floor_accents = true
+# Per-quadrant wall material variation — splits the maze into a
+# 2×2 NW/NE/SW/SE grid; each quadrant renders with its own wall
+# material (brick / dressed stone / wood / cobblestone), seed-permuted
+# so different seeds rotate the assignment. Supersedes wall_tint
+# when on. Default true.
+wall_material_variation = true
+
+[game.play3d.tricky]
+title = "TRICKY 3D"
+mode = "Tricky"
+rows = 25
+cols = 25
+timer_seconds = 240
+seed = 15151515
+min_solution_length = 35
+minimap_cell_px = 10
+minimap_radius = 5
+sky_type = "night"
+wall_type = "brick"
+
+[game.play3d.tricky.landmarks]
+wall_tint = true
+dead_end_objects = true
+wall_decorations = true
+floor_accents = true
+wall_material_variation = true
+
+[game.play3d.hard]
+title = "HARD 3D"
+mode = "Hard"
+rows = 40
+cols = 40
+timer_seconds = 600
+seed = 25252525
+min_solution_length = 45
+minimap_cell_px = 10
+minimap_radius = 5
+sky_type = "night"
+wall_type = "brick"
+
+[game.play3d.hard.landmarks]
+wall_tint = true
+dead_end_objects = true
+wall_decorations = true
+floor_accents = true
+wall_material_variation = true
+
 [oauth]
 # Master switch for OAuth sign-in. When false, no OAuth buttons are shown in
 # the front ends and no validation runs against the connector's section below.

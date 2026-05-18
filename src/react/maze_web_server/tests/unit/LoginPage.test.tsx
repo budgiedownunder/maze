@@ -58,14 +58,14 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled()
   })
 
-  it('navigates to /mazes on successful login when not first sign-in', async () => {
+  it('navigates to / on successful login when not first sign-in', async () => {
     mockLogin.mockResolvedValue({ isFirstSignIn: false })
     renderLoginPage()
     await userEvent.type(screen.getByLabelText(/email/i), 'test@example.com')
     await userEvent.type(screen.getByLabelText('Password'), 'Password1!')
     await userEvent.click(screen.getByRole('button', { name: /sign in/i }))
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith('/mazes', { replace: true, state: undefined }),
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true, state: undefined }),
     )
   })
 

@@ -47,6 +47,8 @@ wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int \
 
 **PowerShell:**
 
+Requires **PowerShell 7.3 or later** — relies on `$PSNativeCommandArgumentPassing = 'Windows'`, which became the default on Windows in PowerShell 7.3. On Windows PowerShell 5.1 or PowerShell 7.2 (with the legacy default), the embedded double quotes inside each `--config` value are not forwarded to `cargo` intact and the TOML parse will fail. Check with `$PSVersionTable.PSVersion`.
+
 ```powershell
 wasm-pack build --target web --no-typescript --out-dir ../../react/maze_web_server/public/game -- `
   --config 'profile.release.lto="fat"' `

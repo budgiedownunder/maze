@@ -992,7 +992,7 @@ describe('MazePage play', () => {
     expect(screen.getByRole('button', { name: 'Play in 3D' })).toBeInTheDocument()
   })
 
-  it('clean maze: Play in 3D sets window.location.href to /game/?id=...', async () => {
+  it('clean maze: Play in 3D opens the custom-launch modal, then Play navigates to /game/?id=...', async () => {
     await loadMazePage(`/mazes/${mockMazeAlpha.id}`)
 
     const locationStub = { href: '' }
@@ -1000,8 +1000,19 @@ describe('MazePage play', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
 
-    await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
+    // Modal opens after the solvability check; no navigation yet.
+    await waitFor(() =>
+      expect(screen.getByRole('dialog', { name: /Play 3D — customise launch/i })).toBeInTheDocument(),
+    )
     expect(mockSolveMaze).toHaveBeenCalled()
+    expect(locationStub.href).toBe('')
+
+    // Clicking Play inside the modal triggers the navigation. Scope
+    // the query to the dialog so "Play" doesn't collide with the
+    // toolbar's "Play in 2D" / "Play in 3D" buttons.
+    const dialog = screen.getByRole('dialog', { name: /Play 3D — customise launch/i })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Play' }))
+    await waitFor(() => expect(locationStub.href).toContain('/game/?id='))
   })
 
   it('dirty maze: Play in 3D opens Unsaved Changes confirm modal', async () => {

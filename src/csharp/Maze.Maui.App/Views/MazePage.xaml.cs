@@ -214,6 +214,29 @@ namespace Maze.Maui.App.Views
                 return;
             }
 
+            if (_viewModel.CanSave)
+            {
+                bool confirmed = await _dialogService.ShowConfirmation(
+                    "Unsaved Changes",
+                    "You have unsaved changes. Save and play?",
+                    "Save & Play",
+                    "Cancel"
+                );
+                if (!confirmed) return;
+                bool saved = await Save();
+                if (!saved) return;
+            }
+
+            // For 3D launches, show the per-launch custom popup so the
+            // user can pick sky / wall texture / landmark toggles / timer.
+            // Cancelling the popup aborts the launch.
+            Models.Play3dCustomLaunchSettings? launchSettings = null;
+            if (gameType == Models.GameType.ThreeD)
+            {
+                launchSettings = await _dialogService.ShowPlay3dCustomLaunchAsync(MazeItem.Name);
+                if (launchSettings is null) return;
+            }
+
             // 2D: pass in-memory definition directly (MazeGamePage renders from it)
             // 3D: pass the saved MazeItem by ID (Play3dGamePage fetches from server)
             Models.MazeItem navigationItem = gameType == Models.GameType.ThreeD
@@ -224,8 +247,12 @@ namespace Maze.Maui.App.Views
             try
             {
                 var route = gameType == Models.GameType.ThreeD ? nameof(Play3dGamePage) : nameof(MazeGamePage);
-                await Shell.Current.GoToAsync(route, true,
-                    new Dictionary<string, object> { { "MazeItem", navigationItem } });
+                var navArgs = new Dictionary<string, object> { { "MazeItem", navigationItem } };
+                if (launchSettings is not null)
+                {
+                    navArgs["LaunchSettings"] = launchSettings;
+                }
+                await Shell.Current.GoToAsync(route, true, navArgs);
                 await Task.Delay(500);
             }
             finally { _viewModel.IsBusy = false; }
@@ -839,7 +866,7 @@ namespace Maze.Maui.App.Views
         {
             if (_viewModel.IsBusy) return;
 
-            if (_viewModel.CanSave && e.Source == ShellNavigationSource.PopToRoot)
+            if (_viewModel.CanSave && e.Source != ShellNavigationSource.Push)
             {
                 var deferral = e.GetDeferral();
                 bool? choice = await _dialogService.ShowConfirmation(

@@ -153,10 +153,14 @@ namespace Maze.Maui.App.ViewModels
                 // arrival. First-time sign-ins are pushed straight onto AccountPage
                 // so the banner is the first thing they see; returning users land
                 // on the main page as usual. Mirrors the OAuth path below.
+                // The IsWelcome route parameter re-sets the flag on the new
+                // AccountPage *after* it binds — defence against any stale
+                // prior-page OnDisappearing that may race the flag flip here.
                 _accountViewModel.IsWelcomeMode = result.IsFirstSignIn;
                 await _navigationService.GoToRootAsync("//MainPage");
                 if (result.IsFirstSignIn)
-                    await _navigationService.GoToAsync(nameof(AccountPage));
+                    await _navigationService.GoToAsync(nameof(AccountPage),
+                        new Dictionary<string, object> { { "IsWelcome", true } });
             }
             catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
             {
@@ -205,7 +209,8 @@ namespace Maze.Maui.App.ViewModels
                 _accountViewModel.IsWelcomeMode = result.IsFirstSignIn;
                 await _navigationService.GoToRootAsync("//MainPage");
                 if (result.IsFirstSignIn)
-                    await _navigationService.GoToAsync(nameof(AccountPage));
+                    await _navigationService.GoToAsync(nameof(AccountPage),
+                        new Dictionary<string, object> { { "IsWelcome", true } });
             }
             catch (OAuthFlowFailedException ex)
             {

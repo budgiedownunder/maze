@@ -37,9 +37,27 @@ namespace Maze.Maui.App.Views
     ///     </tbody>
     ///  </table>
     /// </summary>
+    [QueryProperty(nameof(IsWelcome), "IsWelcome")]
     public partial class AccountPage : ContentPage
     {
         private readonly AccountViewModel _viewModel;
+
+        /// <summary>
+        /// Shell route parameter — when navigated with <c>IsWelcome=true</c>
+        /// (the post-first-sign-in landing path), flip the singleton VM's
+        /// <see cref="AccountViewModel.IsWelcomeMode"/> on. Setting it here,
+        /// after the page is constructed and bound, is robust against a
+        /// stale prior-page <c>OnDisappearing</c> racing the pre-navigation
+        /// flag flip in <c>LoginViewModel</c>/<c>SignUpViewModel</c>.
+        /// </summary>
+        public bool IsWelcome
+        {
+            set
+            {
+                if (value)
+                    _viewModel.IsWelcomeMode = true;
+            }
+        }
 
         /// <summary>The Email Addresses panel ViewModel — exposed as a
         /// public property so the XAML can reach it via

@@ -11,7 +11,7 @@ use crate::api::v1::endpoints::email_verification::{
     EmailVerificationConfirmRequest, EmailVerificationRequest,
 };
 use crate::api::v1::endpoints::handlers::{
-    AppFeaturesResponse,
+    AppFeaturesResponse, Play3dConfigResponse,
     LoginRequest, LoginResponse, RenewResponse,
     SignupRequest, UserItem, CreateUserRequest, UpdateUserRequest,
     ChangePasswordRequest, UpdateProfileRequest};
@@ -67,6 +67,8 @@ impl utoipa::Modify for LoginTokenAuth {
         // Features
         crate::api::v1::endpoints::handlers::get_features,
         crate::api::v1::endpoints::handlers::update_admin_features,
+        // Game presets
+        crate::api::v1::endpoints::handlers::get_play3d_config,
         // Login, logout, renew, signup
         crate::api::v1::endpoints::handlers::login,
         crate::api::v1::endpoints::handlers::logout,
@@ -111,7 +113,7 @@ impl utoipa::Modify for LoginTokenAuth {
     ),
     components(
         schemas(
-            AppFeaturesResponse, OAuthProviderPublic,
+            AppFeaturesResponse, OAuthProviderPublic, Play3dConfigResponse,
             LoginRequest, LoginResponse, RenewResponse,
             SignupRequest, CreateUserRequest, UpdateUserRequest, UserItem,
             ChangePasswordRequest, UpdateProfileRequest,

@@ -6,6 +6,7 @@ import { MazeGrid } from '../components/MazeGrid'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
 import { GenerateMazeModal } from '../components/GenerateMazeModal'
+import { Play3dCustomLaunchModal } from '../components/Play3dCustomLaunchModal'
 import { AlertModal } from '../components/AlertModal'
 import { generateMaze, solveMaze } from '../wasm/mazeWasm'
 import type { GenerateOptions } from '../types/api'
@@ -19,6 +20,7 @@ import { useWalkSpeed } from '../hooks/useWalkSpeed'
 import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { WalkSpeedControl } from '../components/WalkSpeedControl'
 import { getMaze, createMaze, updateMaze } from '../api/client'
+import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
 
 const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
 
@@ -82,7 +84,9 @@ export function MazePage() {
   const [solveError, setSolveError] = useState<string | null>(null)
 
   // Play state
-  const { play: playMaze, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } = usePlayMaze()
+  const [maze3dLaunch, setMaze3dLaunch] = useState<{ id: string; name: string } | null>(null)
+  const { play: playMaze, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } =
+    usePlayMaze({ onLaunch3d: m => setMaze3dLaunch({ id: m.id, name: m.name }) })
   const [showPlayDirtyConfirm, setShowPlayDirtyConfirm] = useState(false)
   const [pendingPlayGameType, setPendingPlayGameType] = useState<GameType>(GameType.TwoD)
 
@@ -456,6 +460,13 @@ export function MazePage() {
           title="Cannot Play Maze"
           message={playCheckError}
           onClose={clearPlayCheckError}
+        />
+      )}
+      {maze3dLaunch && (
+        <Play3dCustomLaunchModal
+          mazeName={maze3dLaunch.name}
+          onCancel={() => setMaze3dLaunch(null)}
+          onPlay={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
         />
       )}
 

@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test'
 
 test.beforeEach(async ({ page }) => {
-  // Log in to reach the mazes page
+  // Log in to reach the Home page (post-sign-in landing).
   await page.goto('/login')
   await page.getByLabel('Email').fill('test@example.com')
   await page.getByLabel('Password', { exact: true }).fill('Password1!')
   await page.getByRole('button', { name: /sign in/i }).click()
-  await expect(page).toHaveURL(/\/mazes/)
+  await expect(page).toHaveURL(/\/$/)
 })
 
 test('hamburger menu opens and closes on outside click', async ({ page }) => {
@@ -26,7 +26,7 @@ test('About modal opens and closes', async ({ page }) => {
   await expect(page.getByRole('dialog')).not.toBeVisible()
 })
 
-test('Home menu item navigates back to /mazes from /account', async ({ page }) => {
+test('Home menu item navigates back to home from /account', async ({ page }) => {
   // First go to /account so the back-to-Home navigation has somewhere to come from.
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /my account/i }).click()
@@ -34,7 +34,24 @@ test('Home menu item navigates back to /mazes from /account', async ({ page }) =
 
   await page.getByRole('button', { name: /open menu/i }).click()
   await page.getByRole('menuitem', { name: /^home$/i }).click()
-  await expect(page).toHaveURL(/\/mazes/)
+  await expect(page).toHaveURL(/\/$/)
+})
+
+test('Design & Play menu item navigates to /mazes', async ({ page }) => {
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await page.getByRole('menuitem', { name: /design & play/i }).click()
+  await expect(page).toHaveURL(/\/mazes$/)
+})
+
+test('hamburger menu Play 3D item opens the difficulty modal', async ({ page }) => {
+  await page.getByRole('button', { name: /open menu/i }).click()
+  await expect(page.getByRole('menuitem', { name: /play 3d/i })).toBeVisible()
+  await page.getByRole('menuitem', { name: /play 3d/i }).click()
+  await expect(page.getByRole('dialog', { name: /choose difficulty/i })).toBeVisible()
+  await expect(page.getByRole('radio', { name: /easy/i })).toBeChecked()
+  await page.getByRole('button', { name: /cancel/i }).click()
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(page).toHaveURL(/\/$/)
 })
 
 test('My Account page opens and shows profile fields', async ({ page }) => {

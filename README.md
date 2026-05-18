@@ -55,8 +55,7 @@ At this stage, the following areas are covered:
 - Implementing a `C#` [MAUI](https://dotnet.microsoft.com/en-us/apps/maui) application ([`Maze.Maui.App`](./src/csharp/Maze.Maui.App/README.md)) that utilises an underlying Web Assembly interop library ([`Maze.Interop`](./src/csharp/Maze.Interop/README.md)) via a wrapper API ([`Maze.Api`](./src/csharp/Maze.Api/README.md)), with user account self-management (sign-up, sign-in, edit profile, manage/verify email addresses, change/forgot password, delete account); OAuth sign-in (Google, GitHub, Facebook) when enabled; maze management (create, save, delete, rename, edit, generate, solve, walk solution, play)
 - Automating `C#` API documentation generation with `DocFX`
 
-- Implementing a first-person **3D maze game** in `Rust` using the [`Bevy`](https://bevyengine.org/) engine ([`maze_game_bevy`](./src/rust/maze_game_bevy/README.md)) — PBR rendering, procedural textures, minimap, camera tilt, gold-leaf rain on win, and a touch D-pad for mobile
-
+- Implementing a first-person **3D maze game** in `Rust` using the [`Bevy`](https://bevyengine.org/) engine ([`maze_game_bevy`](./src/rust/maze_game_bevy/README.md)) — PBR rendering, procedural textures, wall decorations,  minimap, camera tilt, gold-leaf rain on win, rain + lightning on lose, dead-end artifacts and touch support + D-pad for mobile
 - Compiling the `Bevy` game to WebAssembly ([`maze_game_bevy_wasm`](./src/rust/maze_game_bevy_wasm/README.md)) so the same game runs cross-platform — served at `/game/` by the Rust web server, launched from the React SPA, and embedded in the MAUI app via a `WebView`
 
 - Implementing automated `.NET` API testing with `xUnit` ([`Maze.Interop.Tests`](./src/csharp/Maze.Interop.Tests/README.md))

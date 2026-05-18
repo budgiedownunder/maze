@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
+import { Play3dCustomLaunchModal } from '../components/Play3dCustomLaunchModal'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { useTheme } from '../context/ThemeContext'
 import { useToken } from '../context/AuthContext'
 import { getMazes, deleteMaze, updateMaze, createMaze } from '../api/client'
 import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
+import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
 import { AlertModal } from '../components/AlertModal'
 import type { Maze } from '../types/api'
 
@@ -34,7 +36,10 @@ export function MazesPage() {
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const [isDuplicating, setIsDuplicating] = useState(false)
 
-  const { play, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } = usePlayMaze()
+  const [maze3dLaunch, setMaze3dLaunch] = useState<Maze | null>(null)
+
+  const { play, isChecking: isCheckingPlay, error: playCheckError, clearError: clearPlayCheckError } =
+    usePlayMaze({ onLaunch3d: setMaze3dLaunch })
 
   useEffect(() => {
     if (!token) return
@@ -158,6 +163,13 @@ export function MazesPage() {
           error={renameError}
           onConfirm={handleConfirmRename}
           onCancel={() => { setMazeToRename(null); setRenameError(null) }}
+        />
+      )}
+      {maze3dLaunch && (
+        <Play3dCustomLaunchModal
+          mazeName={maze3dLaunch.name}
+          onCancel={() => setMaze3dLaunch(null)}
+          onPlay={settings => launchPlay3dWithSettings(maze3dLaunch.id, settings)}
         />
       )}
       <header className="app-header">

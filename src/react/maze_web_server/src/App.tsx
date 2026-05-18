@@ -10,6 +10,7 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import { OAuthCallbackPage } from './pages/OAuthCallbackPage'
+import { HomePage } from './pages/HomePage'
 import { MazesPage } from './pages/MazesPage'
 import { MazePage } from './pages/MazePage'
 import { MazeGamePage } from './pages/MazeGamePage'
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
   { path: '/reset-password', element: <ResetPasswordPage /> },
   { path: '/verify-email', element: <VerifyEmailPage /> },
   { path: '/oauth/callback', element: <OAuthCallbackPage /> },
+  { path: '/', element: <ProtectedRoute><HomePage /></ProtectedRoute> },
   { path: '/mazes', element: <ProtectedRoute><MazesPage /></ProtectedRoute> },
   { path: '/mazes/new', element: <ProtectedRoute><MazePage /></ProtectedRoute> },
   { path: '/mazes/:id', element: <ProtectedRoute><MazePage /></ProtectedRoute> },

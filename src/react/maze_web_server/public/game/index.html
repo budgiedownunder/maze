@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Maze Game</title>
+  <title>Maze 3D</title>
   <style>
     * { margin: 0; padding: 0; }
     body {
@@ -47,10 +47,38 @@
       display: block;
       touch-action: none;
     }
+    #play-again {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      z-index: 20;
+      padding: 10px 24px;
+      font-family: sans-serif;
+      font-size: 1rem;
+      color: #fff;
+      /* Deliberately not #ac99ea — that's the D-pad / spinner accent, and the
+         button would visually merge into the D-pad on touch devices. */
+      background: #2f9e44;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
     #controls { display: none; }
     .game-dpad { display: none; }
+    /* Persistent in-canvas pause button. Always available on touch
+       devices regardless of the D-pad show/hide preference, so the
+       player has a discoverable way to reach the pause menu. Hidden on
+       pointer-fine devices (mouse / trackpad) where Space on the
+       keyboard already covers it. */
+    #touch-pause-btn { display: none; }
+    /* The Hide/Show D-pad button only makes sense on touch devices
+       (where the D-pad exists). Hide it on fine-pointer devices so the
+       pause menu collapses to just Resume + Restart. */
+    #pm-dpad-toggle { display: none; }
 
     @media (pointer: coarse) {
+      #pm-dpad-toggle { display: block; }
       #controls {
         display: flex;
         justify-content: center;
@@ -59,7 +87,7 @@
       }
       .game-dpad {
         display: grid;
-        grid-template-areas: "tiltdown up tiltup" "left . right";
+        grid-template-areas: "tiltdown up tiltup" "left pause right";
         gap: 4px;
         touch-action: none;
       }
@@ -95,12 +123,112 @@
         width: 24px;
         height: 24px;
       }
+      /* On touch devices the D-pad occupies the bottom strip — move the
+         Play Again button to the top so it doesn't overlap the controls.
+         Sits centred at top so the persistent pause button at the
+         top-right doesn't collide with it. */
+      #play-again {
+        top: 16px;
+        bottom: auto;
+      }
+      /* When the user has hidden the D-pad via the pause menu, the
+         #controls strip collapses and #play-again returns to the bottom
+         where it sits on desktop. */
+      body.dpad-hidden #controls { display: none; }
+      body.dpad-hidden #play-again { top: auto; bottom: 24px; }
+      /* Bottom-right corner of #game-wrap, which sits ABOVE the D-pad
+         strip in the flex column. Bottom-right is clear regardless of
+         D-pad visibility, sits well clear of the Bevy HUD elements
+         (status bar top-left, clock top-centre, minimap top-right),
+         and falls naturally under a right-hand thumb. */
+      #touch-pause-btn {
+        display: flex;
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
+        z-index: 20;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.6);
+        cursor: pointer;
+        align-items: center;
+        justify-content: center;
+        touch-action: none;
+        -webkit-touch-callout: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #touch-pause-btn img {
+        width: 24px;
+        height: 24px;
+        display: block;
+        pointer-events: none;
+      }
     }
+
+    /* In-game pause menu — a host-side HTML overlay shown when Bevy
+       reports paused=true via the maze-game-paused CustomEvent. Lives
+       outside the canvas so taps don't fall through to the Bevy
+       keyboard-input emulator. */
+    #pause-menu {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 20px 24px;
+      background: rgba(0, 0, 0, 0.85);
+      border: 2px solid #ac99ea;
+      border-radius: 12px;
+      font-family: sans-serif;
+    }
+    #pause-menu[hidden] { display: none; }
+    #pause-menu button {
+      min-width: 220px;
+      min-height: 48px;
+      padding: 12px 20px;
+      font-size: 1rem;
+      color: #fff;
+      background: #2f9e44;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    #pause-menu button.secondary { background: #495057; }
   </style>
 </head>
 <body>
+  <script>
+    /* Apply the persisted D-pad-hidden body class as early as possible
+       to avoid a flash of visible D-pad on touch devices when the
+       preference is "hidden". Runs before #controls is parsed below, so
+       the browser sees `display: none` on its first style resolution. */
+    (function () {
+      try {
+        if (localStorage.getItem('dpadHidden') === '1') {
+          document.body.classList.add('dpad-hidden');
+        }
+      } catch (_) { /* localStorage unavailable — ignore */ }
+    })();
+  </script>
   <div id="game-wrap">
-    <canvas id="bevy-canvas"></canvas>
+    <!-- tabindex="-1" makes the canvas focusable via script/mouse but
+         not via Tab key, so the existing `canvas.focus()` calls
+         actually take effect (canvas elements aren't focusable by
+         default). Necessary so keyboard input keeps reaching Bevy
+         after the player taps a pause-menu button or after a
+         Restart-triggered reload. -->
+    <canvas id="bevy-canvas" tabindex="-1"></canvas>
+    <button type="button" tabindex="-1" id="touch-pause-btn" aria-label="Pause">
+      <img src="/images/maze/dpad_pause.png" alt="" draggable="false">
+    </button>
     <div id="loading">
       <div class="spinner"></div>
       <p>Loading game… (<span id="elapsed">0s</span>)</p>
@@ -123,7 +251,15 @@
       <button type="button" tabindex="-1" class="tilt" style="grid-area:tiltdown" aria-label="Tilt down">
         <img src="/images/maze/tilt_down.png"  alt="" draggable="false">
       </button>
+      <button type="button" tabindex="-1" id="pause-btn" style="grid-area:pause" aria-label="Pause">
+        <img src="/images/maze/dpad_pause.png" alt="" draggable="false">
+      </button>
     </div>
+  </div>
+  <div id="pause-menu" hidden role="dialog" aria-label="Paused" aria-modal="true">
+    <button id="pm-resume" type="button">Resume</button>
+    <button id="pm-restart" type="button" class="secondary">Restart</button>
+    <button id="pm-dpad-toggle" type="button" class="secondary">Hide D-pad</button>
   </div>
   <script>
     (function() {
@@ -133,15 +269,149 @@
       if (!token) { location.replace('/'); }
     })();
   </script>
-  <script type="module">
-    import { start, start_with_maze, default as init } from './maze_game_bevy_wasm.js';
+  <script>
+    window.addEventListener('maze-game-result', function (e) {
+      // Forward the result to the MAUI platform bridge so the native host can
+      // capture it. Each platform exposes a different channel; a plain browser
+      // tab (React) has none — the CustomEvent itself remains observable.
+      try {
+        var payload = JSON.stringify(e.detail);
+        if (window.chrome && window.chrome.webview && window.chrome.webview.postMessage) {
+          window.chrome.webview.postMessage(payload);                       // Windows WebView2
+        } else if (window.MazeMauiHost && window.MazeMauiHost.onGameResult) {
+          window.MazeMauiHost.onGameResult(payload);                        // Android JavascriptInterface
+        } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.MazeMauiHost) {
+          window.webkit.messageHandlers.MazeMauiHost.postMessage(payload);  // iOS / MacCatalyst WKWebView
+        }
+      } catch (err) {
+        console.error('[game-result] bridge forward failed', err);
+      }
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=1';
+      // Offer a "Play Again" affordance — reloads /game/ with the same query
+      // string (difficulty / seed preserved). Works in both the React browser
+      // tab and the MAUI WebView.
+      showPlayAgain();
+    });
+
+    function showPlayAgain() {
+      if (document.getElementById('play-again')) return;
+      var btn = document.createElement('button');
+      btn.id = 'play-again';
+      btn.type = 'button';
+      btn.textContent = '↻ Play Again';
+      btn.addEventListener('click', function () { location.reload(); });
+      document.body.appendChild(btn);
+    }
+  </script>
+  <script>
+    /* Pause-menu wiring — opens on Bevy's `maze-game-paused` event,
+       offers Resume / Restart / D-pad-toggle controls suitable for
+       touch use. Synthesises a Space keydown/keyup on the canvas to
+       toggle Bevy's pause state, matching the existing D-pad pause
+       button. Lives in a vanilla script so it survives WASM load
+       failures (the module script below uses top-level await and may
+       throw if the WASM fetch fails). */
+    (function () {
+      var menu = document.getElementById('pause-menu');
+      var resume = document.getElementById('pm-resume');
+      var restart = document.getElementById('pm-restart');
+      var dpadToggle = document.getElementById('pm-dpad-toggle');
+      var canvas = document.getElementById('bevy-canvas');
+      // Both pause buttons share the same wiring and the same icon/label
+      // swap: the D-pad pause button (#pause-btn, inside #controls and
+      // only visible when the D-pad is shown) AND the persistent corner
+      // button (#touch-pause-btn, always visible on touch devices).
+      var pauseButtonIds = ['pause-btn', 'touch-pause-btn'];
+
+      function fire(key, type) {
+        canvas.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
+      }
+
+      function firePause() {
+        fire('Space', 'keydown');
+        fire('Space', 'keyup');
+      }
+
+      function refreshDpadLabel() {
+        dpadToggle.textContent = document.body.classList.contains('dpad-hidden')
+          ? 'Show D-pad'
+          : 'Hide D-pad';
+      }
+      refreshDpadLabel();
+
+      for (var i = 0; i < pauseButtonIds.length; i++) {
+        var btn = document.getElementById(pauseButtonIds[i]);
+        if (!btn) continue;
+        btn.addEventListener('pointerdown',   function (e) { e.preventDefault(); fire('Space', 'keydown'); });
+        btn.addEventListener('pointerup',     function (e) { e.preventDefault(); fire('Space', 'keyup');   });
+        btn.addEventListener('pointerleave',  function ()  { fire('Space', 'keyup'); });
+        btn.addEventListener('pointercancel', function ()  { fire('Space', 'keyup'); });
+        btn.addEventListener('contextmenu',   function (e) { e.preventDefault(); });
+      }
+
+      window.addEventListener('maze-game-paused', function (e) {
+        var paused = !!(e.detail && e.detail.paused);
+        if (paused) {
+          refreshDpadLabel();
+          menu.hidden = false;
+        } else {
+          menu.hidden = true;
+        }
+        for (var i = 0; i < pauseButtonIds.length; i++) {
+          var btn = document.getElementById(pauseButtonIds[i]);
+          if (!btn) continue;
+          var img = btn.querySelector('img');
+          if (img) img.src = paused ? '/images/maze/dpad_play.png' : '/images/maze/dpad_pause.png';
+          btn.setAttribute('aria-label', paused ? 'Resume' : 'Pause');
+        }
+      });
+
+      resume.addEventListener('click', function () {
+        // Same code path as the corner / D-pad pause buttons — Bevy
+        // toggles paused=false, the `maze-game-paused` listener above
+        // then hides the menu. Re-focus the canvas so subsequent
+        // keyboard input goes to Bevy rather than the (now hidden)
+        // Resume button.
+        firePause();
+        canvas.focus({ preventScroll: true });
+      });
+
+      restart.addEventListener('click', function () {
+        // Preserves the current query string (difficulty / seed / id)
+        // for parity with the post-game "Play Again" button.
+        location.reload();
+      });
+
+      dpadToggle.addEventListener('click', function () {
+        var hidden = document.body.classList.toggle('dpad-hidden');
+        try {
+          localStorage.setItem('dpadHidden', hidden ? '1' : '0');
+        } catch (_) { /* localStorage unavailable — ignore */ }
+        refreshDpadLabel();
+      });
+    })();
+  </script>
+  <script type="module">
+    import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
+
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=8';
+    const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
     const timer = setInterval(() => {
       document.getElementById('elapsed').textContent = `${++secs}s`;
     }, 1000);
+
+    function showLoadingError(message) {
+      clearInterval(timer);
+      const loading = document.getElementById('loading');
+      if (!loading) return;
+      const spinner = loading.querySelector('.spinner');
+      if (spinner) spinner.remove();
+      const p = loading.querySelector('p') ?? loading.appendChild(document.createElement('p'));
+      p.textContent = message;
+      p.style.color = '#ff7070';
+    }
 
     const t0 = performance.now();
     const response = await fetch(WASM_URL);
@@ -157,6 +427,78 @@
     const mazeId = params.get('id');
 
     if (mazeId) {
+      // /game/?id=<mazeId> — a specific user-edited maze. The React
+      // Play3dCustomLaunchModal writes the user's last-chosen launch
+      // settings to localStorage under MODE_STORAGE_KEY before
+      // navigating here; we read them back and build the StartConfig.
+      // If no settings are stored (e.g. the user opened /game/?id=…
+      // directly via URL), fall back to the same clean-look defaults
+      // the modal itself uses.
+      const MODE_STORAGE_KEY = 'play3dCustomLaunchSettings';
+      // Max maze-name length passed as the in-game status-bar `mode`
+      // label. The status bar is a fixed-width container (~140 px at
+      // 22 pt font in maze_game_bevy/src/hud/statusbar.rs); 20 chars is
+      // a heuristic that fits without overflowing. Longer names are
+      // truncated with an ellipsis.
+      const MODE_MAX_LENGTH = 20;
+      const DEFAULT_LAUNCH_SETTINGS = {
+        skyType: 'night',
+        wallType: 'brick',
+        wallTint: false,
+        wallMaterialVariation: false,
+        deadEndObjects: true,
+        wallDecorations: true,
+        floorAccents: true,
+        timerSeconds: 60,
+      };
+      function loadLaunchSettings() {
+        // Two channels write the per-launch settings:
+        //   - React SPA → localStorage (the Play3dCustomLaunchModal
+        //     writes to MODE_STORAGE_KEY before navigating).
+        //   - MAUI native popup → URL query params (each WebView has
+        //     its own isolated storage, so MAUI can't share the SPA's
+        //     localStorage — it serialises the settings into the URL
+        //     it asks the WebView to load).
+        // URL params win when both are present, so MAUI's explicit
+        // per-launch choice always overrides any stale localStorage.
+        const base = { ...DEFAULT_LAUNCH_SETTINGS };
+        try {
+          const raw = localStorage.getItem(MODE_STORAGE_KEY);
+          if (raw) Object.assign(base, JSON.parse(raw));
+        } catch (_) { /* malformed JSON or storage disabled — ignore */ }
+        // Then layer URL params on top, if any.
+        const readBool = (key, fallback) => {
+          const v = params.get(key);
+          if (v === '1' || v === 'true') return true;
+          if (v === '0' || v === 'false') return false;
+          return fallback;
+        };
+        const readStr = (key, fallback) => params.get(key) ?? fallback;
+        const readPosInt = (key, fallback) => {
+          const v = params.get(key);
+          if (v === null) return fallback;
+          const n = Number(v);
+          return Number.isFinite(n) && n > 0 ? n : fallback;
+        };
+        return {
+          skyType: readStr('skyType', base.skyType),
+          wallType: readStr('wallType', base.wallType),
+          wallTint: readBool('wallTint', base.wallTint),
+          wallMaterialVariation: readBool('wallMaterialVariation', base.wallMaterialVariation),
+          deadEndObjects: readBool('deadEndObjects', base.deadEndObjects),
+          wallDecorations: readBool('wallDecorations', base.wallDecorations),
+          floorAccents: readBool('floorAccents', base.floorAccents),
+          timerSeconds: readPosInt('timerSeconds', base.timerSeconds),
+        };
+      }
+      function truncateMode(name) {
+        if (typeof name !== 'string') return 'Play';
+        const trimmed = name.trim();
+        if (trimmed.length === 0) return 'Play';
+        return trimmed.length > MODE_MAX_LENGTH
+          ? trimmed.slice(0, MODE_MAX_LENGTH - 1) + '…'
+          : trimmed;
+      }
       const auth = JSON.parse(sessionStorage.getItem('auth') ?? 'null');
       const token = (auth && auth.token) || params.get('t');
       clearInterval(timer);
@@ -166,15 +508,61 @@
       });
       if (!res.ok) throw new Error('Failed to load maze');
       const maze = await res.json();
-      const mazeJson = JSON.stringify(maze.definition);
-      document.getElementById('loading').remove();
-      canvas.focus({ preventScroll: true });
-      start_with_maze(mazeJson);
+      const settings = loadLaunchSettings();
+      const startConfig = {
+        timerSeconds: settings.timerSeconds,
+        mode: truncateMode(maze.name),
+        skyType: settings.skyType,
+        wallType: settings.wallType,
+        landmarks: {
+          wallTint: settings.wallTint,
+          wallMaterialVariation: settings.wallMaterialVariation,
+          deadEndObjects: settings.deadEndObjects,
+          wallDecorations: settings.wallDecorations,
+          floorAccents: settings.floorAccents,
+        },
+        mazeJson: JSON.stringify(maze.definition),
+      };
+      try {
+        start_with_config(JSON.stringify(startConfig));
+        document.getElementById('loading').remove();
+        canvas.focus({ preventScroll: true });
+      } catch (err) {
+        showLoadingError(`Failed to start game: ${err}`);
+      }
     } else {
-      clearInterval(timer);
-      document.getElementById('loading').remove();
-      canvas.focus({ preventScroll: true });
-      start();
+      // /game/?difficulty=<…> — fetch the server-side preset, allow a
+      // ?seed=<n> override for replay / share variety, then start Bevy with
+      // the assembled GameConfig.
+      const difficulty = (params.get('difficulty') ?? DEFAULT_DIFFICULTY).trim();
+      const configUrl = `/api/v1/game/play3d-config?difficulty=${encodeURIComponent(difficulty)}`;
+      const cfgRes = await fetch(configUrl);
+      if (cfgRes.ok) {
+        const preset = await cfgRes.json();
+
+        // Optional ?seed=<n> URL override — lets a user replay an exact maze
+        // (or share its URL). Must parse as a finite integer; otherwise the
+        // configured seed stays in effect.
+        const seedOverride = params.get('seed');
+        if (seedOverride !== null && seedOverride !== '') {
+          const parsed = Number(seedOverride);
+          if (Number.isFinite(parsed) && Number.isInteger(parsed)) {
+            preset.seed = parsed;
+          }
+        }
+
+        try {
+          start_with_config(JSON.stringify(preset));
+          clearInterval(timer);
+          document.getElementById('loading').remove();
+          canvas.focus({ preventScroll: true });
+        } catch (err) {
+          showLoadingError(`Failed to start game: ${err}`);
+        }
+      } else {
+        const body = await cfgRes.text().catch(() => '');
+        showLoadingError(`Failed to load Play 3D config (${cfgRes.status}): ${body || cfgRes.statusText}`);
+      }
     }
 
     function fire(key, type) {
@@ -194,6 +582,111 @@
       btn.addEventListener('pointerleave',  () => fire(key, 'keyup'));
       btn.addEventListener('pointercancel', () => fire(key, 'keyup'));
       btn.addEventListener('contextmenu',   e => e.preventDefault());
+    }
+
+    // Pause-button click wiring lives in the vanilla pause-menu script
+    // higher up in this file — those listeners need to be attached
+    // before WASM loads so the buttons are usable as soon as the canvas
+    // appears (and remain testable when the WASM fetch is stubbed out).
+
+    // Canvas touch gestures — translate single-finger gestures to the same
+    // synthetic key events the D-pad already uses, so the Bevy side stays
+    // keyboard-driven. Swipe left/right → turn; swipe up/down → tilt
+    // (one incremental nudge per swipe); press-and-hold with no movement
+    // → move forward (held). Multi-touch is ignored to avoid pinch/zoom
+    // misfires. The D-pad lives in a separate `#controls` strip below the
+    // canvas, so its taps never hit these listeners.
+    {
+      const SWIPE_THRESHOLD = 30;   // px — minimum travel to classify as a swipe
+      const HOLD_DELAY = 250;       // ms — touch must be held this long with no movement to count as a hold
+      // ms to hold a synthetic KeyQ / KeyE for a swipe-up / swipe-down
+      // tilt. The Bevy side reads Q/E with `pressed()` (continuous), so
+      // an instant keydown+keyup (the swipe-left/right turn pattern)
+      // gives at most one frame of pitch ≈ 1° — invisible. Holding for
+      // ~250 ms at the configured pitch rate gives a clearly-visible
+      // ~15° nudge per swipe.
+      const TILT_HOLD_MS = 250;
+      let touchStart = null;        // { x, y, lastX, lastY }
+      let holdTimer = null;
+      let holdActive = false;
+
+      const cancelHold = () => {
+        if (holdTimer !== null) { clearTimeout(holdTimer); holdTimer = null; }
+        if (holdActive) { fire('ArrowUp', 'keyup'); holdActive = false; }
+      };
+
+      canvas.addEventListener('touchstart', e => {
+        if (e.touches.length !== 1) {
+          cancelHold();
+          touchStart = null;
+          return;
+        }
+        const t = e.touches[0];
+        touchStart = { x: t.clientX, y: t.clientY, lastX: t.clientX, lastY: t.clientY };
+        holdActive = false;
+        holdTimer = setTimeout(() => {
+          if (touchStart && !holdActive) {
+            holdActive = true;
+            fire('ArrowUp', 'keydown');
+          }
+        }, HOLD_DELAY);
+      }, { passive: true });
+
+      canvas.addEventListener('touchmove', e => {
+        if (!touchStart || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        touchStart.lastX = t.clientX;
+        touchStart.lastY = t.clientY;
+        // Once the touch has moved beyond the swipe threshold, it can no
+        // longer promote to a hold — cancel the pending hold timer.
+        if (!holdActive && holdTimer !== null) {
+          const dx = t.clientX - touchStart.x;
+          const dy = t.clientY - touchStart.y;
+          if (Math.hypot(dx, dy) > SWIPE_THRESHOLD) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+          }
+        }
+      }, { passive: true });
+
+      canvas.addEventListener('touchend', () => {
+        if (!touchStart) return;
+        if (holdTimer !== null) { clearTimeout(holdTimer); holdTimer = null; }
+        if (holdActive) {
+          fire('ArrowUp', 'keyup');
+          holdActive = false;
+        } else {
+          const dx = touchStart.lastX - touchStart.x;
+          const dy = touchStart.lastY - touchStart.y;
+          const absX = Math.abs(dx);
+          const absY = Math.abs(dy);
+          if (Math.max(absX, absY) >= SWIPE_THRESHOLD) {
+            if (absX > absY) {
+              // Turn: ArrowLeft/Right are read with `just_pressed()` on
+              // the Bevy side, so an instant keydown+keyup registers
+              // one 90° turn animation.
+              const key = dx > 0 ? 'ArrowRight' : 'ArrowLeft';
+              fire(key, 'keydown');
+              fire(key, 'keyup');
+            } else {
+              // Tilt: KeyQ/KeyE are read with `pressed()` (continuous
+              // hold for proportional pitch). Hold the synthetic key
+              // for TILT_HOLD_MS so the pitch accumulator moves a
+              // visible amount. Screen y grows downward, so swipe UP
+              // (negative dy) = tilt up = KeyQ.
+              const key = dy < 0 ? 'KeyQ' : 'KeyE';
+              fire(key, 'keydown');
+              setTimeout(() => fire(key, 'keyup'), TILT_HOLD_MS);
+            }
+          }
+        }
+        touchStart = null;
+      }, { passive: true });
+
+      canvas.addEventListener('touchcancel', () => {
+        cancelHold();
+        touchStart = null;
+      }, { passive: true });
     }
   </script>
 </body>

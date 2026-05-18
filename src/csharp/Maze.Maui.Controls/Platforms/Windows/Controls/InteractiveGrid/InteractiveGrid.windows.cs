@@ -43,6 +43,24 @@ namespace Maze.Maui.Controls.InteractiveGrid
 
         private void OnKeyDown(object sender, KeyRoutedEventArgs e)
         {
+            // We're a window-level PreviewKeyDown handler so we see every key
+            // anywhere in the window. Two filters keep the grid from
+            // swallowing keys that aren't meant for it:
+            //
+            // 1. Page check: skip when Shell.Current has navigated away from
+            //    the page that hosts this grid. CT.Maui v13 Popups are shown
+            //    as Shell-navigated PopupPages — typing inside a CT.Maui
+            //    Popup fires this handler with Shell.Current.CurrentPage set
+            //    to that PopupPage, not the maze editor page.
+            //
+            // 2. Overlay check: skip when the focused element is inside a
+            //    Microsoft.UI.Xaml.Controls.Primitives.Popup (e.g. MenuFlyout)
+            //    or a ContentDialog (Shell.DisplayPromptAsync). These overlay
+            //    in place without changing Shell.Current.CurrentPage, so the
+            //    page check alone wouldn't catch them.
+            if (!IsHostPageCurrent() || IsInsideOverlay(e.OriginalSource))
+                return;
+
             var key = GetKey(e.Key);
             OnProcessKeyDown(GetKeyState(), key, true);
             // Mark navigation keys as handled so WinUI elements (e.g. Shell ScrollViewer)
@@ -51,6 +69,47 @@ namespace Maze.Maui.Controls.InteractiveGrid
                 key == Keyboard.Key.Up || key == Keyboard.Key.Down ||
                 key == Keyboard.Key.Home || key == Keyboard.Key.End)
                 e.Handled = true;
+        }
+
+        /// <summary>
+        /// Returns <c>true</c> if the MAUI Page that hosts this grid is the
+        /// Shell's current page. False when Shell has navigated to a
+        /// different page (notably a CT MAUI <c>PopupPage</c>, which is how
+        /// v13 shows popups). The window-level key handler uses this to
+        /// stop processing keys destined for an unrelated page that
+        /// happens to share the same window.
+        /// </summary>
+        private bool IsHostPageCurrent()
+        {
+            var currentPage = Shell.Current?.CurrentPage;
+            if (currentPage is null) return true;
+            Element? element = this;
+            while (element is not null)
+            {
+                if (ReferenceEquals(element, currentPage)) return true;
+                element = element.Parent;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Returns <c>true</c> if <paramref name="source"/> sits inside a
+        /// Microsoft.UI.Xaml.Controls.Primitives.Popup (MenuFlyout etc.) or
+        /// a ContentDialog (Shell.DisplayPromptAsync / DisplayAlertAsync).
+        /// These overlay in place without changing Shell.Current.CurrentPage,
+        /// so the host-page check on its own wouldn't reject their keys.
+        /// </summary>
+        private static bool IsInsideOverlay(object? source)
+        {
+            var element = source as Microsoft.UI.Xaml.DependencyObject;
+            while (element is not null)
+            {
+                if (element is Microsoft.UI.Xaml.Controls.Primitives.Popup
+                    or Microsoft.UI.Xaml.Controls.ContentDialog)
+                    return true;
+                element = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(element);
+            }
+            return false;
         }
         /// <summary>
         /// Determines the current keyboard press state

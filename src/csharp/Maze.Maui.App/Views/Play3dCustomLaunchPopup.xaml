@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<toolkit:Popup xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+               xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+               xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+               x:Class="Maze.Maui.App.Views.Play3dCustomLaunchPopup"
+               CanBeDismissedByTappingOutsideOfPopup="False">
+
+    <!--
+        Asymmetric padding: full vertical breathing room, reduced
+        left/right padding so the bottom button row keeps more
+        horizontal space for its button labels on narrow phone screens.
+
+        `MaximumWidthRequest` on the Border is the hard cap that
+        prevents the popup from sizing to the parent window's full
+        width. Without this, the ScrollView wrapping the form claims
+        Fill on its horizontal axis (its measure pass reports the full
+        constraint it was handed, regardless of `HorizontalOptions`),
+        which makes the popup stretch to the platform popup
+        container's width. GenerateMazePopup doesn't have this problem
+        because it has no ScrollView — its content auto-sizes
+        naturally. 320 = 280 (content min) + 24 (Border's 12+12 H padding) +
+        a few px of headroom for the rounded-corner stroke.
+    -->
+    <Border Padding="12,20"
+            MaximumWidthRequest="320"
+            StrokeShape="RoundRectangle 8"
+            Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
+            BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+
+        <!--
+            Vertical scrolling on short viewports — this popup has more
+            controls than GenerateMazePopup and would otherwise extend
+            off-screen on phone landscape / smaller phone-portrait. The
+            ScrollView is bounded by `MaximumHeightRequest`: content
+            shorter than that doesn't scroll (the popup stays at its
+            natural height), longer content scrolls inside the cap.
+
+            `HorizontalOptions="Center"` prevents the ScrollView from
+            claiming Fill on the horizontal axis. Without it, ScrollView
+            defaults to Fill, takes the full width the popup container
+            offers, and passes that wide constraint down to its child —
+            which is why this popup was sizing close to the parent
+            window width while GenerateMazePopup (no ScrollView) sized
+            naturally to its content's MinimumWidthRequest.
+        -->
+        <ScrollView MaximumHeightRequest="600" HorizontalOptions="Center">
+        <!--
+            No `MinimumWidthRequest` floor — the layout sizes to its
+            natural content width on every platform, which is typically
+            the button row (~210 px) or the longest checkbox-row label.
+            The Border above still caps the upper end at
+            `MaximumWidthRequest="320"` for desktop.
+        -->
+        <VerticalStackLayout Spacing="6">
+
+            <!-- Title. WordWrap so a long maze name wraps onto a second
+                 line inside the popup width instead of pushing the
+                 popup wider / clipping at the screen edge. -->
+            <Label x:Name="TitleLabel"
+                   Text="Play 3D"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   HorizontalTextAlignment="Center"
+                   HorizontalOptions="Fill"
+                   LineBreakMode="WordWrap"
+                   Margin="0,0,0,4"/>
+
+            <!-- Sky -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="Sky"/>
+                <Picker x:Name="SkyPicker"/>
+            </VerticalStackLayout>
+
+            <!-- Quadrant wall types -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox x:Name="QuadrantWallTypesCheck" CheckedChanged="OnQuadrantWallTypesChanged"/>
+                <Label Text="Quadrant wall types" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+
+            <!-- Wall texture -->
+            <VerticalStackLayout x:Name="WallTextureStack" Spacing="4">
+                <Label x:Name="WallTextureLabel" Text="Wall texture"/>
+                <Picker x:Name="WallTexturePicker"/>
+            </VerticalStackLayout>
+
+            <!-- Varied wall tints -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox x:Name="WallTintCheck"/>
+                <Label x:Name="WallTintLabel" Text="Varied wall tints" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+
+            <!-- Dead-end objects -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox x:Name="DeadEndObjectsCheck"/>
+                <Label Text="Dead-end objects" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+
+            <!-- Wall decorations -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox x:Name="WallDecorationsCheck"/>
+                <Label Text="Sparse wall decorations" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+
+            <!-- Floor junction markers -->
+            <HorizontalStackLayout Spacing="8">
+                <CheckBox x:Name="FloorAccentsCheck"/>
+                <Label Text="Floor junction markers" VerticalOptions="Center"/>
+            </HorizontalStackLayout>
+
+            <!-- Time limit -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="Time limit (seconds)"/>
+                <Entry x:Name="TimerEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+            </VerticalStackLayout>
+
+            <!-- Validation error -->
+            <Label x:Name="ErrorLabel"
+                   TextColor="{AppThemeBinding Light={StaticResource Fail}, Dark={StaticResource FailDark}}"
+                   FontSize="12"
+                   IsVisible="False"
+                   HorizontalOptions="Center"/>
+
+            <!-- Buttons. Centred HorizontalStackLayout with explicit
+                 button widths so they don't span the full popup width
+                 (which would make a 4-char "Play" button absurdly
+                 wide). 100 px each is enough for the longest label
+                 ("Cancel") at the default button font size. -->
+            <HorizontalStackLayout HorizontalOptions="Center"
+                                   Spacing="10"
+                                   Margin="0,4,0,0">
+                <Button x:Name="CancelButton" Text="Cancel" WidthRequest="100" Clicked="OnCancelClicked"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+                <Button x:Name="PlayButton" Text="Play" WidthRequest="100" Clicked="OnPlayClicked"/>
+            </HorizontalStackLayout>
+
+        </VerticalStackLayout>
+        </ScrollView>
+    </Border>
+
+</toolkit:Popup>

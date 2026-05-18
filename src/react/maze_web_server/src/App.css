@@ -281,6 +281,89 @@
   margin-top: 0.5rem;
 }
 
+.modal-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.modal-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+/* Override the global `input { width: 100%; padding: … }` rule — radios need
+   their natural size, no padding, and no default margin so the bullet sits
+   flush with the modal's left edge and the label text sits right beside it. */
+.modal-radio input[type='radio'] {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* Same horizontal-input layout for checkboxes inside a modal form — used
+   by the Play 3D custom-launch modal's landmark toggles. Mirrors
+   `.modal-radio` so the bullet/box + label sit on one row at the
+   modal's left edge instead of the input being stretched to 100% width
+   by the global form-input rule. */
+.modal-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0;
+  cursor: pointer;
+}
+
+.modal-checkbox input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.modal-checkbox input[type='checkbox']:disabled + span {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Cap the modal's height to most of the viewport and scroll inside
+   when its content doesn't fit (phone portrait / short windows). The
+   Play 3D custom-launch modal carries many controls and would
+   otherwise overflow the screen on small viewports. */
+.modal-scrollable {
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+
+/* Stacked label: text on top, input/select below, with a clear gap
+   between them. Used by the Play 3D custom-launch modal's dropdowns
+   and the time-limit number input — the default browser layout puts
+   the input flush against the label text, which reads as cramped. */
+.modal-stacked-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* The global `input { font-size: 1rem; padding: … }` rule in
+   index.css applies only to `<input>`. Without a matching rule,
+   `<select>` falls back to the browser's UA font (typically a
+   different font family + smaller size than the surrounding form
+   text), which reads as mismatched against the input fields beside
+   it. Apply the same family/size/padding so the dropdowns look like
+   the inputs do in e.g. the Generate Maze modal. */
+.modal-form select.input {
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+  box-sizing: border-box;
+  width: 100%;
+}
+
 /* ──────────────────────────────────────────────────────────
    About modal (centered icon + text layout)
 ────────────────────────────────────────────────────────── */
@@ -580,6 +663,13 @@
   background: var(--surface-hover);
 }
 
+.menu-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 0.25rem 0;
+  list-style: none;
+}
+
 /* ──────────────────────────────────────────────────────────
    Password input (wrapper + toggle button)
 ────────────────────────────────────────────────────────── */
@@ -618,6 +708,92 @@
   display: flex;
   justify-content: center;
   padding: 2rem;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Home page (HomePage)
+────────────────────────────────────────────────────────── */
+
+.home-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.home-main {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  padding: 1.5rem;
+  display: flex;
+  align-items: flex-start;
+}
+
+.home-tiles {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.home-tile {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+}
+
+.home-tile:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent-border);
+}
+
+.home-tile-img {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+}
+
+.home-tile-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.home-tile-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.home-tile-desc {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+@media (max-width: 540px) {
+  .home-tile-img {
+    width: 96px;
+    height: 96px;
+  }
+  .home-tile-title {
+    font-size: 1.2rem;
+  }
 }
 
 /* ──────────────────────────────────────────────────────────

@@ -68,7 +68,7 @@ describe('VerifyEmailPage', () => {
 
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/email verified/i))
     await userEvent.click(screen.getByRole('button', { name: /continue to your account/i }))
-    expect(mockNavigate).toHaveBeenCalledWith('/mazes')
+    expect(mockNavigate).toHaveBeenCalledWith('/')
   })
 
   it('shows the invalid state on a 400 response', async () => {
