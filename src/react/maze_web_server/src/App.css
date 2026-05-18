@@ -330,6 +330,15 @@
   cursor: not-allowed;
 }
 
+/* Cap the modal's height to most of the viewport and scroll inside
+   when its content doesn't fit (phone portrait / short windows). The
+   Play 3D custom-launch modal carries many controls and would
+   otherwise overflow the screen on small viewports. */
+.modal-scrollable {
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+
 /* Stacked label: text on top, input/select below, with a clear gap
    between them. Used by the Play 3D custom-launch modal's dropdowns
    and the time-limit number input — the default browser layout puts

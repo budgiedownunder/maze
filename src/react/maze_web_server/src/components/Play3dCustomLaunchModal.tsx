@@ -59,7 +59,7 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
       className="modal-overlay"
       style={{ zIndex: 1200 }}
     >
-      <div className="modal modal-sm">
+      <div className="modal modal-sm modal-scrollable">
         <h2 className="modal-title">Play 3D — {mazeName}</h2>
         <form className="modal-form" onSubmit={handleSubmit}>
           <label className="modal-stacked-input">
