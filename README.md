@@ -45,7 +45,7 @@ At this stage, the following areas are covered:
 - Creating a `Rust` web server application ([`maze_web_server`](./src/rust/maze_web_server/README.md)) that:
   - Leverages the `Rust` library crates for calculation/gameplay ([`maze`](./src/rust/maze/README.md)) and storage ([`storage`](./src/rust/storage/README.md), with a choice of file-on-disk or SQL-backed persistence selected at runtime) and exposes them as a `REST`ful Web API
   - Uses [`actix`](https://actix.rs/) to serve the `HTTPS` API and [`utoipa`](https://docs.rs/utoipa/latest/utoipa/) to publish it as an [`OpenAPI`](https://www.openapis.org/)-compliant interface for use in third party products such as [`Swagger`](https://swagger.io/)
-  - Supports interactive documentation in the form of [RapiDoc](https://rapidocweb.com/), [Redoc](https://redocly.com/redoc) and [Swagger UI](https://swagger.io/tools/swagger-ui/)
+  - Supports interactive documentation in the form of [RapiDoc](https://github.com/rapi-doc/RapiDoc), [Redoc](https://redocly.com/redoc) and [Swagger UI](https://swagger.io/tools/swagger-ui/)
   - Serves a React Single Page Application (SPA) from a configurable static directory
   - Supports OAuth / OIDC sign-in via a pluggable `OAuthConnector` (Google, GitHub and Facebook built-in)
   - Provides email-driven password-reset and email-verification flows, orchestrated through the [`comms`](./src/rust/comms/README.md) crate's pluggable email provider system (currently: Mailgun, SMTP+OAuth2 → Microsoft/GMail) + logging
@@ -154,6 +154,12 @@ Playing a maze — the player navigates using keyboard or D-pad, with visited ce
 Playing a maze in first-person 3D — the Bevy engine runs entirely in-browser via WebAssembly.
 
 <img src="./src/react/maze_web_server/screenshots/web-3d-game.gif" width="600">
+
+## API
+
+The Rust [`maze_web_server`](./src/rust/maze_web_server/README.md#introduction) implements a rich, RESTful Web API supporting interactive documentation in the form of [RapiDoc](https://github.com/rapi-doc/RapiDoc), [Redoc](https://redocly.com/redoc) and [Swagger UI](https://swagger.io/tools/swagger-ui/)
+
+<img src="./src/rust/maze_web_server/screenshots/api/swagger.png" width="600">
 
 ## Getting Started
 
