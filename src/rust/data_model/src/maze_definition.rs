@@ -14,6 +14,8 @@ pub struct MazeDefinition {
     // - `'F'`:  Represents the finishing cell (limited to one).
     // - `'W'`:  Represents a wall.
     // - `' '`:  Represents an empty cell.
+    // - `'K'`:  Represents a cell holding a key (multiple allowed).
+    // - `'D'`:  Represents a door (multiple allowed).
     pub grid: Vec<Vec<char>>,
 }
 
@@ -42,7 +44,7 @@ impl<'de> Deserialize<'de> for MazeDefinition {
                 if !Self::is_valid_char(*ch) {
                     return Err(serde::de::Error::invalid_value(
                         serde::de::Unexpected::Char(*ch),
-                        &"valid characters are 'S', 'F', 'W' or ' '",
+                        &"valid characters are 'S', 'F', 'W', 'K', 'D' or ' '",
                     ));
                 }
             }
@@ -200,7 +202,7 @@ impl MazeDefinition {
     /// println!("Character 'S' is valid => {}", s_is_valid);
     /// ```
     pub fn is_valid_char(ch: char) -> bool {
-        matches!(ch, 'S' | 'F' | 'W' | ' ')
+        matches!(ch, 'S' | 'F' | 'W' | 'K' | 'D' | ' ')
     }
     /// Verifies whether the definition instance is empty, returning an error if it is
     ///
@@ -231,6 +233,8 @@ impl MazeDefinition {
     /// - `'F'`:  Represents the finishing cell (limited to one).
     /// - `'W'`:  Represents a wall.
     /// - `' '`:  Represents an empty cell.
+    /// - `'K'`:  Represents a cell holding a key (multiple allowed).
+    /// - `'D'`:  Represents a door (multiple allowed).
     ///
     /// # Arguments
     ///
@@ -286,7 +290,10 @@ impl MazeDefinition {
                     .iter()
                     .map(|value| match value {
                         'W' => MazeCellState::Wall,
-                        'S' | 'F' | ' ' => MazeCellState::Empty,
+                        // `K` (key) and `D` (door) are passable terrain at the
+                        // cell-state level; key/door game semantics live in the `maze`
+                        // crate. The solver therefore treats doors as openable.
+                        'S' | 'F' | ' ' | 'K' | 'D' => MazeCellState::Empty,
                         _ => panic!(
                             "internal error - grid contains unsupported cell character: {value}"
                         ),
@@ -347,6 +354,8 @@ impl MazeDefinition {
                         'S' => 'S',
                         'F' => 'F',
                         'W' => '\u{2588}',
+                        'K' => 'K',
+                        'D' => 'D',
                         ' ' => '\u{2591}',
                         _ => '-',
                     })
@@ -818,6 +827,34 @@ mod tests {
     }
 
     #[test]
+    fn is_valid_char_accepts_keys_and_doors() {
+        assert!(MazeDefinition::is_valid_char('K'));
+        assert!(MazeDefinition::is_valid_char('D'));
+    }
+
+    #[test]
+    fn can_create_new_from_vector_with_multiple_keys_and_doors() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', 'K', 'D', ' '],
+            vec!['K', 'D', ' ', 'F']
+        ];
+        let definition = MazeDefinition::from_vec(grid.clone());
+        assert_eq!(definition.row_count(), 2);
+        assert_eq!(definition.col_count(), 4);
+        assert_eq!(definition.grid, grid);
+    }
+
+    #[test]
+    fn can_deserialize_with_keys_and_doors() {
+        let s = r#"{"grid":[["S","K","D"," "],["K","D"," ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        let grid: Vec<Vec<char>> =
+            vec![vec!['S', 'K', 'D', ' '], vec!['K', 'D', ' ', 'F']];
+        assert_eq!(d.grid, grid);
+    }
+
+    #[test]
     #[should_panic(expected = "grid vector contains an invalid character 'X' at location [1, 2]")]
     fn cannot_create_new_from_vector_with_invalid_char() {
         #[rustfmt::skip]
@@ -1099,7 +1136,7 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "invalid value: character `X`, expected valid characters are 'S', 'F', 'W' or ' '"
+        expected = "invalid value: character `X`, expected valid characters are 'S', 'F', 'W', 'K', 'D' or ' '"
     )]
     fn cannot_deserialize_bad_json_invalid_char_1() {
         let s = r#"{"grid":[["S","X"," "],["F"," ","W"]]}"#;
