@@ -49,7 +49,7 @@ export function MazePage() {
     selectAll, activateCell, activateRow, activateCol,
     moveActive, moveActiveHome, moveActiveEnd,
     enableRangeMode, disableRangeMode,
-    setWall, setStart, setFinish, clearCell,
+    setWall, setStart, setFinish, setKey, setDoor, clearCell,
     insertRowsBefore, deleteRows, insertColsBefore, deleteCols,
     canInsertRows, canInsertColumns,
     applyGenerated, applySolution, clearSolution,
@@ -365,12 +365,20 @@ export function MazePage() {
       case 'F':
         if (!isBusy && selectionStatus.isSingleCell && !selectionStatus.isFinish && !selectionStatus.hasSolution) setFinish()
         break
+      case 'k':
+      case 'K':
+        if (!isBusy && !selectionStatus.hasSolution) setKey()
+        break
+      case 'd':
+      case 'D':
+        if (!isBusy && !selectionStatus.hasSolution) setDoor()
+        break
       case 'Delete':
       case 'Backspace':
         if (!isBusy && !selectionStatus.isEmpty && !selectionStatus.hasSolution) clearCell()
         break
     }
-  }, [isBusy, moveActive, moveActiveHome, moveActiveEnd, setWall, setStart, setFinish, clearCell, selectionStatus])
+  }, [isBusy, moveActive, moveActiveHome, moveActiveEnd, setWall, setStart, setFinish, setKey, setDoor, clearCell, selectionStatus])
 
   const headerTitle = isNew
     ? '(unsaved)'
@@ -551,6 +559,24 @@ export function MazePage() {
             </button>
             <button
               className="maze-toolbar-btn"
+              title="Set Key [K]"
+              aria-label="Set Key"
+              disabled={activeCell === null || selectionStatus.hasSolution || isWalking}
+              onClick={() => { setKey(); gridRef.current?.focus() }}
+            >
+              <img src="/images/maze/key_button.svg" alt="Set Key" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
+              title="Set Door [D]"
+              aria-label="Set Door"
+              disabled={activeCell === null || selectionStatus.hasSolution || isWalking}
+              onClick={() => { setDoor(); gridRef.current?.focus() }}
+            >
+              <img src="/images/maze/door_button.svg" alt="Set Door" />
+            </button>
+            <button
+              className="maze-toolbar-btn"
               title="Clear Cells [DEL]"
               aria-label="Clear"
               disabled={activeCell === null || selectionStatus.isEmpty || selectionStatus.hasSolution || isWalking}
@@ -713,6 +739,8 @@ export function MazePage() {
             [W]&nbsp;Wall&nbsp;&nbsp;&nbsp;
             [S]&nbsp;Start&nbsp;&nbsp;&nbsp;
             [F]&nbsp;Finish&nbsp;&nbsp;&nbsp;
+            [K]&nbsp;Key&nbsp;&nbsp;&nbsp;
+            [D]&nbsp;Door&nbsp;&nbsp;&nbsp;
             [DEL]&nbsp;Clear&nbsp;&nbsp;&nbsp;
             [&#x2190;&#x2191;&#x2192;&#x2193;]&nbsp;Move&nbsp;&nbsp;&nbsp;
             [Shift]&nbsp;Range

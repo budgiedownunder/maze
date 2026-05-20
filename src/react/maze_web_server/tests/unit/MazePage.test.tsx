@@ -234,6 +234,41 @@ describe('MazePage toolbar', () => {
     expect(within(newStartCell).getByAltText('Start')).toBeInTheDocument()
   })
 
+  it('Set Key is enabled on a selected cell', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 2,2'))
+    expect(screen.getByRole('button', { name: 'Set Key' })).not.toBeDisabled()
+  })
+
+  it('Set Door is enabled on a selected cell', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 2,2'))
+    expect(screen.getByRole('button', { name: 'Set Door' })).not.toBeDisabled()
+  })
+
+  it('clicking Set Key places a key in the cell', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Key' }))
+    const cellEl = screen.getByLabelText('Cell 1,1')
+    expect(within(cellEl).getByAltText('Key')).toBeInTheDocument()
+  })
+
+  it('clicking Set Door places a door in the cell', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Door' }))
+    const cellEl = screen.getByLabelText('Cell 1,1')
+    expect(within(cellEl).getByAltText('Door')).toBeInTheDocument()
+  })
+
+  it('Clear is enabled after placing a key', async () => {
+    await loadMazePage('/mazes/new')
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Key' }))
+    expect(screen.getByRole('button', { name: /^Clear$/ })).not.toBeDisabled()
+  })
+
   it('shift+click extends selection and disables Set Start / Set Finish', async () => {
     await loadMazePage('/mazes/new')
     await userEvent.click(screen.getByLabelText('Cell 1,1'))

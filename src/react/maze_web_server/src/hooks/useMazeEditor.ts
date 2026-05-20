@@ -120,6 +120,8 @@ export function useMazeEditor() {
     let containsWall = false
     let containsStart = false
     let containsFinish = false
+    let containsKey = false
+    let containsDoor = false
 
     for (let r = selectionRect.minRow; r <= selectionRect.maxRow; r++) {
       for (let c = selectionRect.minCol; c <= selectionRect.maxCol; c++) {
@@ -128,6 +130,8 @@ export function useMazeEditor() {
         if (cell === 'W') { containsWall = true; wallCount++ }
         else if (cell === 'S') containsStart = true
         else if (cell === 'F') containsFinish = true
+        else if (cell === 'K') containsKey = true
+        else if (cell === 'D') containsDoor = true
       }
     }
 
@@ -135,7 +139,8 @@ export function useMazeEditor() {
       selectionRect.minRow === selectionRect.maxRow &&
       selectionRect.minCol === selectionRect.maxCol
     const isAllWalls = totalCells > 0 && wallCount === totalCells
-    const isEmpty = !containsWall && !containsStart && !containsFinish
+    const isEmpty =
+      !containsWall && !containsStart && !containsFinish && !containsKey && !containsDoor
     const isStart = isSingleCell && containsStart
     const isFinish = isSingleCell && containsFinish
     const allColumnsSelected =
@@ -285,13 +290,15 @@ export function useMazeEditor() {
 
   // ── Cell editing ─────────────────────────────────────────────
 
-  const setWall = useCallback(() => {
+  // Sets every cell in the current selection to `char`, clears any displayed
+  // solution, and marks the maze dirty. No-op when nothing is selected.
+  const fillSelection = useCallback((char: string) => {
     if (!selectionRect) return
     setGrid(prev => {
       const next = prev.map(r => [...r])
       for (let r = selectionRect.minRow; r <= selectionRect.maxRow; r++) {
         for (let c = selectionRect.minCol; c <= selectionRect.maxCol; c++) {
-          next[r][c] = 'W'
+          next[r][c] = char
         }
       }
       return next
@@ -300,20 +307,20 @@ export function useMazeEditor() {
     setIsDirty(true)
   }, [selectionRect])
 
-  const setStart = useCallback(() => {
+  // Like `fillSelection`, but first clears any existing occurrence of `char`
+  // elsewhere in the grid — for cells limited to a single instance (start, finish).
+  const setUniqueCell = useCallback((char: string) => {
     if (!selectionRect) return
     setGrid(prev => {
       const next = prev.map(r => [...r])
-      // Clear any existing start cell
       for (let r = 0; r < next.length; r++) {
         for (let c = 0; c < next[r].length; c++) {
-          if (next[r][c] === 'S') next[r][c] = ' '
+          if (next[r][c] === char) next[r][c] = ' '
         }
       }
-      // Set the selected cell as start
       for (let r = selectionRect.minRow; r <= selectionRect.maxRow; r++) {
         for (let c = selectionRect.minCol; c <= selectionRect.maxCol; c++) {
-          next[r][c] = 'S'
+          next[r][c] = char
         }
       }
       return next
@@ -322,42 +329,12 @@ export function useMazeEditor() {
     setIsDirty(true)
   }, [selectionRect])
 
-  const setFinish = useCallback(() => {
-    if (!selectionRect) return
-    setGrid(prev => {
-      const next = prev.map(r => [...r])
-      // Clear any existing finish cell
-      for (let r = 0; r < next.length; r++) {
-        for (let c = 0; c < next[r].length; c++) {
-          if (next[r][c] === 'F') next[r][c] = ' '
-        }
-      }
-      // Set the selected cell as finish
-      for (let r = selectionRect.minRow; r <= selectionRect.maxRow; r++) {
-        for (let c = selectionRect.minCol; c <= selectionRect.maxCol; c++) {
-          next[r][c] = 'F'
-        }
-      }
-      return next
-    })
-    setSolutionState(null)
-    setIsDirty(true)
-  }, [selectionRect])
-
-  const clearCell = useCallback(() => {
-    if (!selectionRect) return
-    setGrid(prev => {
-      const next = prev.map(r => [...r])
-      for (let r = selectionRect.minRow; r <= selectionRect.maxRow; r++) {
-        for (let c = selectionRect.minCol; c <= selectionRect.maxCol; c++) {
-          next[r][c] = ' '
-        }
-      }
-      return next
-    })
-    setSolutionState(null)
-    setIsDirty(true)
-  }, [selectionRect])
+  const setWall = useCallback(() => fillSelection('W'), [fillSelection])
+  const setStart = useCallback(() => setUniqueCell('S'), [setUniqueCell])
+  const setFinish = useCallback(() => setUniqueCell('F'), [setUniqueCell])
+  const setKey = useCallback(() => fillSelection('K'), [fillSelection])
+  const setDoor = useCallback(() => fillSelection('D'), [fillSelection])
+  const clearCell = useCallback(() => fillSelection(' '), [fillSelection])
 
   // ── Structural editing ───────────────────────────────────────
 
@@ -500,6 +477,8 @@ export function useMazeEditor() {
     setWall,
     setStart,
     setFinish,
+    setKey,
+    setDoor,
     clearCell,
     insertRowsBefore,
     deleteRows,

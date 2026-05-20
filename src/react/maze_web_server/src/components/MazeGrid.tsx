@@ -29,6 +29,8 @@ function cellImage(cell: string): { src: string; alt: string } | null {
   if (cell === 'W') return { src: '/images/maze/wall.png', alt: 'Wall' }
   if (cell === 'S') return { src: '/images/maze/start_flag.png', alt: 'Start' }
   if (cell === 'F') return { src: '/images/maze/finish_flag.png', alt: 'Finish' }
+  if (cell === 'K') return { src: '/images/maze/key.svg', alt: 'Key' }
+  if (cell === 'D') return { src: '/images/maze/door.svg', alt: 'Door' }
   return null
 }
 

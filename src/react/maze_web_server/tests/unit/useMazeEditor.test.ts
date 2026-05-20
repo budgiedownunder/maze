@@ -353,6 +353,81 @@ describe('setFinish', () => {
 })
 
 // ──────────────────────────────────────────────────────────────
+// setKey / setDoor
+// ──────────────────────────────────────────────────────────────
+
+describe('setKey', () => {
+  it('sets a single selected cell to key', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.setKey())
+    expect(result.current.grid[1][1]).toBe('K')
+  })
+
+  it('sets all cells in selection rect to key (multiple allowed)', () => {
+    const result = setupHook(makeGrid(5, 5))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.activateCell(2, 2, true))
+    act(() => result.current.setKey())
+    for (let r = 1; r <= 2; r++) {
+      for (let c = 1; c <= 2; c++) {
+        expect(result.current.grid[r][c]).toBe('K')
+      }
+    }
+    expect(result.current.grid[0][0]).toBe(' ')
+  })
+
+  it('marks the maze as dirty', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(0, 0, false))
+    expect(result.current.isDirty).toBe(false)
+    act(() => result.current.setKey())
+    expect(result.current.isDirty).toBe(true)
+  })
+
+  it('does nothing when no cell is selected', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.setKey())
+    expect(result.current.isDirty).toBe(false)
+  })
+})
+
+describe('setDoor', () => {
+  it('sets a single selected cell to door', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.setDoor())
+    expect(result.current.grid[1][1]).toBe('D')
+  })
+
+  it('sets all cells in selection rect to door (multiple allowed)', () => {
+    const result = setupHook(makeGrid(5, 5))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.activateCell(2, 2, true))
+    act(() => result.current.setDoor())
+    for (let r = 1; r <= 2; r++) {
+      for (let c = 1; c <= 2; c++) {
+        expect(result.current.grid[r][c]).toBe('D')
+      }
+    }
+    expect(result.current.grid[0][0]).toBe(' ')
+  })
+
+  it('marks the maze as dirty', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(0, 0, false))
+    act(() => result.current.setDoor())
+    expect(result.current.isDirty).toBe(true)
+  })
+
+  it('does nothing when no cell is selected', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.setDoor())
+    expect(result.current.isDirty).toBe(false)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
 // clearCell
 // ──────────────────────────────────────────────────────────────
 
@@ -485,6 +560,22 @@ describe('selectionStatus', () => {
   it('isEmpty is false when selection contains a wall', () => {
     const grid = makeGrid(3, 3)
     grid[0][0] = 'W'
+    const result = setupHook(grid)
+    act(() => result.current.activateCell(0, 0, false))
+    expect(result.current.selectionStatus.isEmpty).toBe(false)
+  })
+
+  it('isEmpty is false when selection contains a key', () => {
+    const grid = makeGrid(3, 3)
+    grid[0][0] = 'K'
+    const result = setupHook(grid)
+    act(() => result.current.activateCell(0, 0, false))
+    expect(result.current.selectionStatus.isEmpty).toBe(false)
+  })
+
+  it('isEmpty is false when selection contains a door', () => {
+    const grid = makeGrid(3, 3)
+    grid[0][0] = 'D'
     const result = setupHook(grid)
     act(() => result.current.activateCell(0, 0, false))
     expect(result.current.selectionStatus.isEmpty).toBe(false)

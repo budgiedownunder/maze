@@ -60,6 +60,32 @@ describe('MazeGrid', () => {
     expect(img).toHaveAttribute('src', '/images/maze/finish_flag.png')
   })
 
+  it('renders Key image for K cells', () => {
+    render(
+      <MazeGrid
+        grid={[['K', ' '], [' ', ' ']]}
+        solution={null}
+        activeCell={null}
+        anchorCell={null}
+      />,
+    )
+    const img = screen.getByAltText('Key')
+    expect(img).toHaveAttribute('src', '/images/maze/key.svg')
+  })
+
+  it('renders Door image for D cells', () => {
+    render(
+      <MazeGrid
+        grid={[['D', ' '], [' ', ' ']]}
+        solution={null}
+        activeCell={null}
+        anchorCell={null}
+      />,
+    )
+    const img = screen.getByAltText('Door')
+    expect(img).toHaveAttribute('src', '/images/maze/door.svg')
+  })
+
   it('renders no content images for empty cells', () => {
     render(
       <MazeGrid

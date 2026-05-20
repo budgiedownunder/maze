@@ -179,6 +179,60 @@ test('clicking Clear removes a wall', async ({ page }) => {
   await expect(page.getByLabel('Cell 2,2').getByAltText('Wall')).not.toBeVisible()
 })
 
+test('clicking Clear removes a key (Clear is enabled on a key cell)', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Place a key on empty cell (0,1), then clear it
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Key' }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Key')).toBeVisible()
+
+  // Clear must be enabled on a key cell, and clicking it removes the key
+  await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Clear', exact: true }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Key')).not.toBeVisible()
+})
+
+test('Set Key button is enabled on a selected cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Cell (0,1) in Alpha maze is empty
+  await page.getByLabel('Cell 1,2').click()
+
+  await expect(page.getByRole('button', { name: 'Set Key' })).toBeEnabled()
+})
+
+test('Set Door button is enabled on a selected cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+
+  await expect(page.getByRole('button', { name: 'Set Door' })).toBeEnabled()
+})
+
+test('clicking Set Key places a key image in the cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Key' }).click()
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Key')).toBeVisible()
+})
+
+test('clicking Set Door places a door image in the cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Door' }).click()
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Door')).toBeVisible()
+})
+
 // ──────────────────────────────────────────────────────────────
 // Keyboard navigation
 // ──────────────────────────────────────────────────────────────
@@ -242,6 +296,28 @@ test('F shortcut sets the finish on an empty cell', async ({ page }) => {
   await expect(page.getByLabel('Cell 1,2').getByAltText('Finish')).toBeVisible()
   // Old finish should be cleared
   await expect(page.getByLabel('Cell 3,3').getByAltText('Finish')).not.toBeVisible()
+})
+
+test('K shortcut sets a key on the active cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Select empty cell (0,1) and press K
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByLabel('Maze grid').press('k')
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Key')).toBeVisible()
+})
+
+test('D shortcut sets a door on the active cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Select empty cell (0,1) and press D
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByLabel('Maze grid').press('d')
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Door')).toBeVisible()
 })
 
 test('Home key moves active cell to start of row', async ({ page }) => {
@@ -795,6 +871,8 @@ test('shortcut hint bar contains expected shortcuts', async ({ page }) => {
   await expect(hint).toContainText('[W]')
   await expect(hint).toContainText('[S]')
   await expect(hint).toContainText('[F]')
+  await expect(hint).toContainText('[K]')
+  await expect(hint).toContainText('[D]')
   await expect(hint).toContainText('[DEL]')
   await expect(hint).toContainText('[Shift] Range')
 })
