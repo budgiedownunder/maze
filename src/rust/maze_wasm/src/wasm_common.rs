@@ -122,10 +122,12 @@ pub enum DirectionWasm {
 #[cfg(feature = "wasm-bindgen")]
 #[wasm_bindgen]
 pub enum MoveResultWasm {
-    None     = 0,
-    Moved    = 1,
-    Blocked  = 2,
-    Complete = 3,
+    None                = 0,
+    Moved               = 1,
+    Blocked             = 2,
+    Complete            = 3,
+    BlockedByLockedDoor = 4,
+    StartedUnlocking    = 5,
 }
 
 /// Result returned by `maze_game_wasm_move_player`.
@@ -133,10 +135,12 @@ pub enum MoveResultWasm {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub enum MoveResultWasm {
-    None     = 0,
-    Moved    = 1,
-    Blocked  = 2,
-    Complete = 3,
+    None                = 0,
+    Moved               = 1,
+    Blocked             = 2,
+    Complete            = 3,
+    BlockedByLockedDoor = 4,
+    StartedUnlocking    = 5,
 }
 
 /// Converts a [`GenerationAlgorithmWasm`] value to the corresponding [`maze::GenerationAlgorithm`].

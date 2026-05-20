@@ -16,8 +16,11 @@ The `maze` crate is written in `Rust` and defines an API for calculating maze so
 - `MazeSolution` - represents a maze solution
 - `Solver` - represents a maze solver
 - `Direction` - enum representing a player movement direction (`None`, `Up`, `Down`, `Left`, `Right`)
-- `MoveResult` - enum representing the outcome of a move attempt (`None`, `Moved`, `Blocked`, `Complete`)
-- `MazeGame` - a running game session tracking player position, direction, visited cells, and completion
+- `MoveResult` - enum representing the outcome of a move attempt (`None`, `Moved`, `Blocked`, `Complete`, `BlockedByLockedDoor`, `StartedUnlocking`)
+- `DoorState` - enum representing a door's lifecycle (`Locked`, `Opening`, `Open`)
+- `BagItem` - enum representing an item carried in the player's bag (currently `Key`)
+- `GameEvent` - enum representing a time-based event emitted by `MazeGame::tick` (currently `DoorOpened`)
+- `MazeGame` - a running game session tracking player position, direction, visited cells, completion, the player's bag, and per-cell door state
 
 For solving a maze you would typically:
 1. Create a `maze` instance with `Maze::new()` defined in the `data_model` crate
@@ -35,7 +38,10 @@ The `game` module (`maze::game`) provides an interactive cell-based game session
 |:-----|:------------|
 | `MazeGame` | A running game session. Create with `MazeGame::from_json(json)`. |
 | `Direction` | `None` \| `Up` \| `Down` \| `Left` \| `Right` |
-| `MoveResult` | `None` \| `Moved` \| `Blocked` \| `Complete` |
+| `MoveResult` | `None` \| `Moved` \| `Blocked` \| `Complete` \| `BlockedByLockedDoor` \| `StartedUnlocking` |
+| `DoorState` | `Locked` \| `Opening { progress }` \| `Open` |
+| `BagItem` | `Key { id }` (serialises as `{"type":"key","id":…}`) |
+| `GameEvent` | `DoorOpened { cell }` |
 
 ### Usage
 
@@ -69,8 +75,14 @@ assert_eq!(game.visited_cells(), &[(0, 0), (0, 1), (0, 2)]);
 | `' '` (empty) | `Moved` |
 | `'S'` (start) | `Moved` |
 | `'F'` (finish) | `Complete` |
+| `'K'` (key) | `Moved` (key is not collected by moving — pick it up explicitly) |
+| `'D'` (door, open) | `Moved` |
+| `'D'` (door, locked, key held) | `StartedUnlocking` (key consumed; opens over time via `tick`) |
+| `'D'` (door, locked, no key / still opening) | `BlockedByLockedDoor` |
 | `'W'` (wall) | `Blocked` |
 | Out of bounds | `Blocked` |
+
+Keys are not collected by walking over them — call `MazeGame::pickup()` while standing on a key cell to add it to the bag. Doors open over real time rather than blocking permanently: holding against a locked door while carrying a key starts it opening, and `MazeGame::tick(dt_ms)` advances and completes the open (emitting `GameEvent::DoorOpened`). Collected items are read via `MazeGame::bag()`, doors via `MazeGame::doors()`, and uncollected keys via `MazeGame::keys()`.
 
 ## Getting Started
 

@@ -1,5 +1,6 @@
 use data_model::MazeDefinition;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Direction of player movement.
 ///
@@ -51,17 +52,100 @@ pub enum MoveResult {
     Blocked,
     /// The player reached the finish cell — the game is complete.
     Complete,
+    /// The move was blocked by a locked door (`'D'`) — either no key was held
+    /// or the door is still opening. The player did not move.
+    BlockedByLockedDoor,
+    /// The player held against a locked door (`'D'`) while carrying a key: a key
+    /// was consumed and the door began opening. The player did not move; the
+    /// door becomes passable once [`MazeGame::tick`] reports it
+    /// [`DoorState::Open`].
+    StartedUnlocking,
+}
+
+/// The lifecycle state of a door (`'D'`) cell.
+///
+/// A door starts [`DoorState::Locked`]. Holding against it with a key (via
+/// [`MazeGame::move_player`]) moves it to [`DoorState::Opening`]; once
+/// [`MazeGame::tick`] advances its progress to completion it becomes
+/// [`DoorState::Open`] — a permanent, passable state.
+///
+/// # Examples
+///
+/// ```
+/// use maze::DoorState;
+/// let phase = DoorState::Opening { progress: 0.0 };
+/// assert_eq!(phase, DoorState::Opening { progress: 0.0 });
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum DoorState {
+    /// Closed and locked; requires a key to open.
+    Locked,
+    /// Currently opening; `progress` runs `0.0..=1.0`.
+    Opening {
+        /// Fraction of the way open, `0.0..=1.0`.
+        progress: f32,
+    },
+    /// Fully open and permanently passable.
+    Open,
+}
+
+/// An item carried in the player's bag.
+///
+/// Modelled as a tagged enum so it serialises to self-describing JSON
+/// (e.g. `{"type":"key","id":3}`) across the WASM/JS boundary and is extensible
+/// with new item kinds. Keys are currently untyped — any key opens any door.
+///
+/// # Examples
+///
+/// ```
+/// use maze::BagItem;
+/// let item = BagItem::Key { id: 0 };
+/// assert_eq!(item, BagItem::Key { id: 0 });
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum BagItem {
+    /// A key that can open one door.
+    Key {
+        /// Stable identifier derived from the key's origin cell.
+        id: u32,
+    },
+}
+
+/// A time-based event emitted by [`MazeGame::tick`].
+///
+/// # Examples
+///
+/// ```
+/// use maze::GameEvent;
+/// let event = GameEvent::DoorOpened { cell: (0, 2) };
+/// assert_eq!(event, GameEvent::DoorOpened { cell: (0, 2) });
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GameEvent {
+    /// A door finished opening at the given `(row, col)` cell.
+    DoorOpened {
+        /// The door cell that opened.
+        cell: (usize, usize),
+    },
 }
 
 /// A running maze game session.
 ///
-/// Holds the grid, player position, facing direction, completion state, and the
-/// set of visited cells in visit order. Create with [`MazeGame::from_json`].
+/// Holds the grid, player position, facing direction, completion state, the set
+/// of visited cells in visit order, the player's bag, and per-cell door state.
+/// Create with [`MazeGame::from_json`].
 ///
 /// Cell rules applied during [`MazeGame::move_player`]:
-/// - `' '` or `'S'` → [`MoveResult::Moved`]
+/// - `' '`, `'S'`, or `'K'` → [`MoveResult::Moved`] (a key is not collected by
+///   moving onto it — use [`MazeGame::pickup`])
 /// - `'F'` → [`MoveResult::Complete`]
+/// - `'D'` (door) → [`MoveResult::Moved`] when already open, else
+///   [`MoveResult::StartedUnlocking`] (a key is held) or
+///   [`MoveResult::BlockedByLockedDoor`]
 /// - `'W'` or out-of-bounds → [`MoveResult::Blocked`]
+///
+/// Doors open over time — see [`MazeGame::tick`].
 ///
 /// # Examples
 ///
@@ -83,7 +167,16 @@ pub struct MazeGame {
     visited: Vec<(usize, usize)>,
     rows: usize,
     cols: usize,
+    /// Runtime door state per `'D'` cell, seeded `Locked` at construction.
+    doors: HashMap<(usize, usize), DoorState>,
+    /// Stable key id per `'K'` cell, assigned in row-major order at construction.
+    key_ids: HashMap<(usize, usize), u32>,
+    /// Items the player has collected, in pickup order.
+    bag: Vec<BagItem>,
 }
+
+/// Real-time duration a door takes to open once unlocking begins, in milliseconds.
+const DOOR_OPEN_MS: f32 = 1000.0;
 
 impl MazeGame {
     /// Creates a game session from a `MazeDefinition` JSON string, placing the
@@ -116,6 +209,24 @@ impl MazeGame {
 
         let visited = vec![(start.row, start.col)];
 
+        let mut doors = HashMap::new();
+        let mut key_ids = HashMap::new();
+        let mut next_key_id: u32 = 0;
+        for (r, row) in definition.grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                match ch {
+                    'D' => {
+                        doors.insert((r, c), DoorState::Locked);
+                    }
+                    'K' => {
+                        key_ids.insert((r, c), next_key_id);
+                        next_key_id += 1;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         Ok(MazeGame {
             grid: definition.grid,
             player_row: start.row,
@@ -125,6 +236,9 @@ impl MazeGame {
             visited,
             rows,
             cols,
+            doors,
+            key_ids,
+            bag: Vec::new(),
         })
     }
 
@@ -132,8 +246,13 @@ impl MazeGame {
     ///
     /// Returns [`MoveResult::Blocked`] if the target cell is a wall or out of
     /// bounds, [`MoveResult::Complete`] if the player reaches the finish cell,
-    /// and [`MoveResult::Moved`] otherwise. The player's facing direction is
-    /// always updated to `dir`, even when blocked.
+    /// and [`MoveResult::Moved`] for an empty, start, key, or already-open door
+    /// cell. Moving onto a key (`'K'`) does not collect it — use
+    /// [`MazeGame::pickup`]. A locked door (`'D'`) yields
+    /// [`MoveResult::StartedUnlocking`] when the player holds a key — consuming
+    /// it and beginning the open (see [`MazeGame::tick`]) — or
+    /// [`MoveResult::BlockedByLockedDoor`] otherwise. The player's facing
+    /// direction is always updated to `dir`, even when blocked.
     ///
     /// # Examples
     ///
@@ -180,7 +299,31 @@ impl MazeGame {
                 self.complete = true;
                 MoveResult::Complete
             }
-            ' ' | 'S' => {
+            'D' => match self.doors.get(&(new_row, new_col)).copied() {
+                Some(DoorState::Open) => {
+                    self.player_row = new_row;
+                    self.player_col = new_col;
+                    self.visited.push((new_row, new_col));
+                    MoveResult::Moved
+                }
+                Some(DoorState::Locked) => {
+                    if let Some(pos) = self
+                        .bag
+                        .iter()
+                        .position(|item| matches!(item, BagItem::Key { .. }))
+                    {
+                        self.bag.remove(pos);
+                        self.doors
+                            .insert((new_row, new_col), DoorState::Opening { progress: 0.0 });
+                        MoveResult::StartedUnlocking
+                    } else {
+                        MoveResult::BlockedByLockedDoor
+                    }
+                }
+                Some(DoorState::Opening { .. }) => MoveResult::BlockedByLockedDoor,
+                None => MoveResult::Blocked,
+            },
+            ' ' | 'S' | 'K' => {
                 self.player_row = new_row;
                 self.player_col = new_col;
                 self.visited.push((new_row, new_col));
@@ -270,7 +413,10 @@ impl MazeGame {
 
     /// Returns the maze grid as a 2-D slice of characters.
     ///
-    /// Each character is one of `'S'` (start), `'F'` (finish), `'W'` (wall), or `' '` (open).
+    /// Each character is one of `'S'` (start), `'F'` (finish), `'W'` (wall),
+    /// `'K'` (key), `'D'` (door), or `' '` (open). A collected key's cell becomes
+    /// `' '`; door cells keep their `'D'` character — their open/closed state is
+    /// tracked separately (see [`MazeGame::doors`]).
     ///
     /// # Examples
     ///
@@ -283,6 +429,134 @@ impl MazeGame {
     /// ```
     pub fn grid(&self) -> &[Vec<char>] {
         &self.grid
+    }
+
+    /// Advances time-based game state by `dt_ms` milliseconds, returning the
+    /// events that occurred (sorted by cell).
+    ///
+    /// Currently this drives door opening: each door in [`DoorState::Opening`]
+    /// has its progress advanced, and a door that completes transitions to
+    /// [`DoorState::Open`] (permanently passable) and emits
+    /// [`GameEvent::DoorOpened`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, Direction, MoveResult, GameEvent};
+    /// let json = r#"{"grid":[["S","K","D","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// game.move_player(Direction::Right); // step onto the key
+    /// game.pickup();                      // collect it
+    /// assert_eq!(game.move_player(Direction::Right), MoveResult::StartedUnlocking);
+    /// assert_eq!(game.tick(1000.0), vec![GameEvent::DoorOpened { cell: (0, 2) }]);
+    /// ```
+    pub fn tick(&mut self, dt_ms: f32) -> Vec<GameEvent> {
+        let mut events = Vec::new();
+        for (cell, phase) in self.doors.iter_mut() {
+            if let DoorState::Opening { progress } = phase {
+                *progress += dt_ms / DOOR_OPEN_MS;
+                if *progress >= 1.0 {
+                    *phase = DoorState::Open;
+                    events.push(GameEvent::DoorOpened { cell: *cell });
+                }
+            }
+        }
+        events.sort_by_key(|event| match event {
+            GameEvent::DoorOpened { cell } => *cell,
+        });
+        events
+    }
+
+    /// Returns the door cells and their current [`DoorState`], sorted by
+    /// `(row, col)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, DoorState};
+    /// let json = r#"{"grid":[["S","D","F"]]}"#;
+    /// let game = MazeGame::from_json(json).unwrap();
+    /// assert_eq!(game.doors(), vec![((0, 1), DoorState::Locked)]);
+    /// ```
+    pub fn doors(&self) -> Vec<((usize, usize), DoorState)> {
+        let mut doors: Vec<((usize, usize), DoorState)> = self
+            .doors
+            .iter()
+            .map(|(&cell, &phase)| (cell, phase))
+            .collect();
+        doors.sort_by_key(|&(cell, _)| cell);
+        doors
+    }
+
+    /// Returns the cells still holding an uncollected key (`'K'`) and the key's
+    /// stable id, sorted by `(row, col)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::MazeGame;
+    /// let json = r#"{"grid":[["S","K","F"]]}"#;
+    /// let game = MazeGame::from_json(json).unwrap();
+    /// assert_eq!(game.keys(), vec![((0, 1), 0)]);
+    /// ```
+    pub fn keys(&self) -> Vec<((usize, usize), u32)> {
+        let mut keys: Vec<((usize, usize), u32)> = self
+            .key_ids
+            .iter()
+            .filter_map(|(&(r, c), &id)| {
+                if self.grid[r][c] == 'K' {
+                    Some(((r, c), id))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        keys.sort_by_key(|&(cell, _)| cell);
+        keys
+    }
+
+    /// Returns the items currently in the player's bag, in pickup order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, Direction, BagItem};
+    /// let json = r#"{"grid":[["S","K","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// game.move_player(Direction::Right); // step onto the key
+    /// game.pickup();                      // collect it
+    /// assert_eq!(game.bag(), &[BagItem::Key { id: 0 }]);
+    /// ```
+    pub fn bag(&self) -> &[BagItem] {
+        &self.bag
+    }
+
+    /// Picks up the collectible item (currently a key) at the player's current
+    /// cell, adding it to the bag and clearing the cell. Returns the collected
+    /// [`BagItem`], or `None` if the current cell holds no collectible.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, Direction, BagItem};
+    /// let json = r#"{"grid":[["S","K","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// game.move_player(Direction::Right); // step onto the key cell
+    /// assert_eq!(game.pickup(), Some(BagItem::Key { id: 0 }));
+    /// assert_eq!(game.bag(), &[BagItem::Key { id: 0 }]);
+    /// assert_eq!(game.pickup(), None);    // nothing left to pick up
+    /// ```
+    pub fn pickup(&mut self) -> Option<BagItem> {
+        let cell = (self.player_row, self.player_col);
+        if self.grid[cell.0][cell.1] == 'K' {
+            let id = self.key_ids.get(&cell).copied().unwrap_or(0);
+            self.grid[cell.0][cell.1] = ' ';
+            let item = BagItem::Key { id };
+            self.bag.push(item.clone());
+            Some(item)
+        } else {
+            None
+        }
     }
 }
 
@@ -498,5 +772,178 @@ mod tests {
         let json = r#"{"grid":[["S"," ","F"]]}"#;
         let game = MazeGame::from_json(json).unwrap();
         assert_eq!(game.grid(), &[vec!['S', ' ', 'F']]);
+    }
+
+    // ── keys & doors — construction ─────────────────────────────────────────────
+
+    #[test]
+    fn from_json_seeds_doors_as_locked() {
+        let json = r#"{"grid":[["S","D","F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.doors(), vec![((0, 1), DoorState::Locked)]);
+    }
+
+    #[test]
+    fn from_json_lists_keys_with_ids() {
+        let json = r#"{"grid":[["S","K","F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.keys(), vec![((0, 1), 0)]);
+        assert!(game.bag().is_empty());
+    }
+
+    #[test]
+    fn from_json_assigns_key_ids_and_seeds_multiple_doors() {
+        #[rustfmt::skip]
+        let json = r#"{"grid":[["S","K"],["K","D"],["D","F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.keys(), vec![((0, 1), 0), ((1, 0), 1)]);
+        assert_eq!(
+            game.doors(),
+            vec![((1, 1), DoorState::Locked), ((2, 0), DoorState::Locked)]
+        );
+    }
+
+    // ── keys — explicit pickup ───────────────────────────────────────────────────
+
+    #[test]
+    fn moving_onto_key_does_not_collect_it() {
+        let json = r#"{"grid":[["S","K","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
+        assert_eq!(game.player_col(), 1);
+        assert!(game.bag().is_empty());
+        assert_eq!(game.grid()[0][1], 'K'); // key still present
+        assert_eq!(game.keys(), vec![((0, 1), 0)]);
+    }
+
+    #[test]
+    fn pickup_collects_key_at_current_cell() {
+        let json = r#"{"grid":[["S","K","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // stand on the key
+        assert_eq!(game.pickup(), Some(BagItem::Key { id: 0 }));
+        assert_eq!(game.bag(), &[BagItem::Key { id: 0 }]);
+        assert_eq!(game.grid()[0][1], ' '); // cell cleared
+        assert!(game.keys().is_empty());
+    }
+
+    #[test]
+    fn pickup_returns_none_when_no_key_present() {
+        let json = r#"{"grid":[["S","K","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.pickup(), None); // on the start cell
+        game.move_player(Direction::Right);
+        game.pickup();
+        assert_eq!(game.pickup(), None); // already collected
+    }
+
+    // ── doors — blocking & unlocking ─────────────────────────────────────────────
+
+    #[test]
+    fn locked_door_without_key_blocks_and_does_not_move() {
+        let json = r#"{"grid":[["S","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(
+            game.move_player(Direction::Right),
+            MoveResult::BlockedByLockedDoor
+        );
+        assert_eq!(game.player_col(), 0);
+        assert_eq!(game.doors(), vec![((0, 1), DoorState::Locked)]);
+    }
+
+    #[test]
+    fn door_blocks_if_key_not_picked_up() {
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // onto the key, but do not pick it up
+        assert_eq!(
+            game.move_player(Direction::Right),
+            MoveResult::BlockedByLockedDoor
+        );
+    }
+
+    #[test]
+    fn locked_door_with_key_starts_unlocking_and_consumes_key() {
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // onto the key
+        game.pickup(); // collect it
+        assert_eq!(
+            game.move_player(Direction::Right),
+            MoveResult::StartedUnlocking
+        );
+        assert_eq!(game.player_col(), 1); // did not step onto the door
+        assert!(game.bag().is_empty()); // key consumed
+        assert_eq!(
+            game.doors(),
+            vec![((0, 2), DoorState::Opening { progress: 0.0 })]
+        );
+    }
+
+    #[test]
+    fn moving_into_opening_door_blocks_without_consuming_another_key() {
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        game.pickup();
+        game.move_player(Direction::Right); // StartedUnlocking
+        assert_eq!(
+            game.move_player(Direction::Right),
+            MoveResult::BlockedByLockedDoor
+        );
+        assert!(game.bag().is_empty());
+    }
+
+    // ── doors — tick / opening ───────────────────────────────────────────────────
+
+    #[test]
+    fn tick_without_opening_doors_emits_nothing() {
+        let json = r#"{"grid":[["S","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert!(game.tick(1000.0).is_empty());
+        assert_eq!(game.doors(), vec![((0, 1), DoorState::Locked)]);
+    }
+
+    #[test]
+    fn tick_opens_door_after_countdown_and_emits_event() {
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        game.pickup();
+        game.move_player(Direction::Right); // StartedUnlocking
+        assert_eq!(
+            game.tick(1000.0),
+            vec![GameEvent::DoorOpened { cell: (0, 2) }]
+        );
+        assert_eq!(game.doors(), vec![((0, 2), DoorState::Open)]);
+    }
+
+    #[test]
+    fn tick_partial_progress_does_not_open() {
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        game.pickup();
+        game.move_player(Direction::Right); // StartedUnlocking
+        assert!(game.tick(500.0).is_empty());
+        assert!(game.tick(400.0).is_empty());
+        assert_eq!(
+            game.tick(200.0),
+            vec![GameEvent::DoorOpened { cell: (0, 2) }]
+        );
+    }
+
+    #[test]
+    fn opened_door_is_passable() {
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        game.pickup();
+        game.move_player(Direction::Right); // StartedUnlocking
+        game.tick(1000.0); // door opens
+        assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
+        assert_eq!(game.player_col(), 2);
+        assert_eq!(game.move_player(Direction::Right), MoveResult::Complete);
+        assert!(game.is_complete());
     }
 }

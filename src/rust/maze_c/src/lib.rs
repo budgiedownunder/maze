@@ -1762,7 +1762,8 @@ pub extern "C" fn maze_c_free_maze_game(ptr: *mut MazeGameC) {
 /// `dir` encoding: `0`=None, `1`=Up, `2`=Down, `3`=Left, `4`=Right.
 ///
 /// Returns the move result: `0`=None, `1`=Moved, `2`=Blocked, `3`=Complete,
-/// or `-1` for an unknown `dir` value.
+/// `4`=BlockedByLockedDoor, `5`=StartedUnlocking, or `-1` for an unknown `dir`
+/// value.
 ///
 /// # Examples
 ///
@@ -1789,6 +1790,8 @@ pub extern "C" fn maze_c_maze_game_move_player(ptr: *mut MazeGameC, dir: i32) ->
         maze::MoveResult::Moved => 1,
         maze::MoveResult::Blocked => 2,
         maze::MoveResult::Complete => 3,
+        maze::MoveResult::BlockedByLockedDoor => 4,
+        maze::MoveResult::StartedUnlocking => 5,
     }
 }
 

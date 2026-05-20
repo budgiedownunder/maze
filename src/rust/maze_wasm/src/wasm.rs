@@ -876,7 +876,7 @@ pub extern "C" fn free_generator_options_wasm(ptr: *mut GeneratorOptionsWasm) {
 // ── MazeGameWasm wasm-lite exports ───────────────────────────────────────────
 //
 // Direction i32 encoding: 0=None 1=Up 2=Down 3=Left 4=Right
-// MoveResult i32 encoding: 0=None 1=Moved 2=Blocked 3=Complete; -1=null pointer
+// MoveResult i32 encoding: 0=None 1=Moved 2=Blocked 3=Complete 4=BlockedByLockedDoor 5=StartedUnlocking; -1=null pointer
 //
 // NOTE: these integer encodings intentionally match the discriminant values of
 // DirectionWasm and MoveResultWasm in wasm_common.rs. If either enum is changed,
@@ -963,8 +963,8 @@ pub extern "C" fn free_maze_game_wasm(maze_game_wasm: *mut MazeGameWasm) {
 ///
 /// # Returns
 ///
-/// `0`=None, `1`=Moved, `2`=Blocked, `3`=Complete,
-/// or `-1` for a null pointer or unknown `dir` value.
+/// `0`=None, `1`=Moved, `2`=Blocked, `3`=Complete, `4`=BlockedByLockedDoor,
+/// `5`=StartedUnlocking, or `-1` for a null pointer or unknown `dir` value.
 ///
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
@@ -982,6 +982,8 @@ pub extern "C" fn maze_game_wasm_move_player(maze_game_wasm: *mut MazeGameWasm, 
         maze::MoveResult::Moved => 1,
         maze::MoveResult::Blocked => 2,
         maze::MoveResult::Complete => 3,
+        maze::MoveResult::BlockedByLockedDoor => 4,
+        maze::MoveResult::StartedUnlocking => 5,
     }
 }
 

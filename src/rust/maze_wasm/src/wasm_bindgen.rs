@@ -131,10 +131,12 @@ fn direction_to_wasm(dir: maze::Direction) -> DirectionWasm {
 
 fn move_result_to_wasm(result: maze::MoveResult) -> MoveResultWasm {
     match result {
-        maze::MoveResult::None     => MoveResultWasm::None,
-        maze::MoveResult::Moved    => MoveResultWasm::Moved,
-        maze::MoveResult::Blocked  => MoveResultWasm::Blocked,
-        maze::MoveResult::Complete => MoveResultWasm::Complete,
+        maze::MoveResult::None                => MoveResultWasm::None,
+        maze::MoveResult::Moved               => MoveResultWasm::Moved,
+        maze::MoveResult::Blocked             => MoveResultWasm::Blocked,
+        maze::MoveResult::Complete            => MoveResultWasm::Complete,
+        maze::MoveResult::BlockedByLockedDoor => MoveResultWasm::BlockedByLockedDoor,
+        maze::MoveResult::StartedUnlocking    => MoveResultWasm::StartedUnlocking,
     }
 }
 
