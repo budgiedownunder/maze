@@ -387,6 +387,7 @@ pub(crate) fn spawn_world(
                 &object_assets.door,
                 &wall_assets,
                 &decoration_assets.wall,
+                &mut materials,
                 &grid,
                 cell,
                 r,

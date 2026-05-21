@@ -146,6 +146,10 @@ pub struct GameConfig {
     /// as [`Landmarks::wall_tint`]. Default `Brick` so the pre-Step-14
     /// hard-coded look is preserved.
     pub wall_type: WallType,
+    /// Door open-animation style. Default `Swing`.
+    pub door_style: DoorStyle,
+    /// Key-holder appearance for `'K'` cells. Default `Pedestal`.
+    pub key_holder: KeyHolderStyle,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -238,6 +242,75 @@ impl WallType {
     }
 }
 
+/// Door open-animation styles. `Swing` only applies to a straight-corridor
+/// door (a single leaf hinged between the side walls); at any other topology —
+/// and for the other styles at every topology — a leaf is hung on each open
+/// edge, and `Swing` degrades to `Slide` there because a swing needs walls to
+/// anchor against. Default `Swing` preserves the topology-driven look the game
+/// shipped with.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DoorStyle {
+    #[default]
+    Swing,
+    Slide,
+    Portcullis,
+    Dissolve,
+}
+
+impl DoorStyle {
+    /// `snake_case` wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Swing => "swing",
+            Self::Slide => "slide",
+            Self::Portcullis => "portcullis",
+            Self::Dissolve => "dissolve",
+        }
+    }
+
+    /// Parses a wire string into a [`DoorStyle`]. Unknown values fall back to
+    /// [`DoorStyle::Swing`] — same forgiving policy as [`WallType::from_wire_str`].
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "slide" => Self::Slide,
+            "portcullis" => Self::Portcullis,
+            "dissolve" => Self::Dissolve,
+            _ => Self::Swing,
+        }
+    }
+}
+
+/// Key-holder styles for `'K'` cells. Default `Pedestal` preserves the shipped
+/// look. (These variants may later distinguish key *types*, not just looks.)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum KeyHolderStyle {
+    #[default]
+    Pedestal,
+    Chest,
+    FloatingKey,
+}
+
+impl KeyHolderStyle {
+    /// `snake_case` wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Pedestal => "pedestal",
+            Self::Chest => "chest",
+            Self::FloatingKey => "floating_key",
+        }
+    }
+
+    /// Parses a wire string into a [`KeyHolderStyle`]. Unknown values fall back
+    /// to [`KeyHolderStyle::Pedestal`].
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "chest" => Self::Chest,
+            "floating_key" => Self::FloatingKey,
+            _ => Self::Pedestal,
+        }
+    }
+}
+
 /// Toggle bag for the spatial-orientation landmark techniques. Each new
 /// landmark sub-step adds one field (default `true`). The host populates
 /// this from `[game.play3d.<difficulty>.landmarks]` in the server config.
@@ -299,6 +372,8 @@ impl Default for GameConfig {
             landmarks: Landmarks::default(),
             sky_type: SkyType::default(),
             wall_type: WallType::default(),
+            door_style: DoorStyle::default(),
+            key_holder: KeyHolderStyle::default(),
         }
     }
 }

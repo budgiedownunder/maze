@@ -74,16 +74,50 @@ pub(crate) fn build_keyhole_assets(
     }
 }
 
-/// Spawns a lock plate + keyhole (cone + disc cutout) on one face of the door,
-/// as children of the hinge `pivot` so they swing with the panel. `sign`
-/// selects the face: `+1.0` for the local `+Z` side, `-1.0` for `-Z`.
+impl KeyholeAssets {
+    /// The shared lock-plate material handle (for cloning into a per-leaf
+    /// alpha-blended copy on dissolve doors).
+    pub(crate) fn plate_handle(&self) -> Option<Handle<StandardMaterial>> {
+        self.plate_mat.clone()
+    }
+
+    /// The shared keyhole (cone + disc) material handle.
+    pub(crate) fn keyhole_handle(&self) -> Option<Handle<StandardMaterial>> {
+        self.keyhole_mat.clone()
+    }
+}
+
+/// Spawns a lock plate + keyhole on one face of the door using the keyhole's
+/// shared materials. `sign` selects the face: `+1.0` for local `+Z`, `-1.0` for
+/// `-Z`.
 pub(crate) fn spawn_keyhole_face(
     commands: &mut Commands,
     assets: &KeyholeAssets,
     pivot: Entity,
     sign: f32,
 ) {
-    if let (Some(mesh), Some(mat)) = (assets.cuboid_mesh.clone(), assets.plate_mat.clone()) {
+    spawn_keyhole_face_with(
+        commands,
+        assets,
+        pivot,
+        sign,
+        assets.plate_mat.clone(),
+        assets.keyhole_mat.clone(),
+    );
+}
+
+/// As [`spawn_keyhole_face`] but with caller-supplied plate / keyhole materials,
+/// so a dissolve leaf can pass its own cloned, alpha-blended copies that fade
+/// with the panel. The plate + keyhole (cone + disc) become children of `pivot`.
+pub(crate) fn spawn_keyhole_face_with(
+    commands: &mut Commands,
+    assets: &KeyholeAssets,
+    pivot: Entity,
+    sign: f32,
+    plate_mat: Option<Handle<StandardMaterial>>,
+    keyhole_mat: Option<Handle<StandardMaterial>>,
+) {
+    if let (Some(mesh), Some(mat)) = (assets.cuboid_mesh.clone(), plate_mat) {
         let plate = commands
             .spawn((
                 Mesh3d(mesh),
@@ -94,7 +128,7 @@ pub(crate) fn spawn_keyhole_face(
             .id();
         commands.entity(pivot).add_child(plate);
     }
-    if let (Some(mesh), Some(mat)) = (assets.cone_mesh.clone(), assets.keyhole_mat.clone()) {
+    if let (Some(mesh), Some(mat)) = (assets.cone_mesh.clone(), keyhole_mat.clone()) {
         let cone = commands
             .spawn((
                 Mesh3d(mesh),
@@ -105,7 +139,7 @@ pub(crate) fn spawn_keyhole_face(
             .id();
         commands.entity(pivot).add_child(cone);
     }
-    if let (Some(mesh), Some(mat)) = (assets.disc_mesh.clone(), assets.keyhole_mat.clone()) {
+    if let (Some(mesh), Some(mat)) = (assets.disc_mesh.clone(), keyhole_mat) {
         // Cylinder rotated 90° about X so the disc faces along the door normal.
         let disc = commands
             .spawn((

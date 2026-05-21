@@ -430,7 +430,7 @@
   <script type="module">
     import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=9';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=18';
     const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
@@ -461,6 +461,18 @@
     const canvas = document.getElementById('bevy-canvas');
     const params = new URLSearchParams(location.search);
     const mazeId = params.get('id');
+
+    // Throwaway dev overrides: ?doorStyle=&keyHolder= let us preview the door /
+    // key-holder styles before the proper per-launch UI lands. Remove once the
+    // custom-launch modal exposes these. Empty/absent → the Bevy side defaults
+    // (swing / pedestal).
+    function applyStyleOverrides(config) {
+      const doorStyle = params.get('doorStyle');
+      const keyHolder = params.get('keyHolder');
+      if (doorStyle) config.doorStyle = doorStyle;
+      if (keyHolder) config.keyHolder = keyHolder;
+      return config;
+    }
 
     if (mazeId) {
       // /game/?id=<mazeId> — a specific user-edited maze. The React
@@ -560,7 +572,7 @@
         mazeJson: JSON.stringify(maze.definition),
       };
       try {
-        start_with_config(JSON.stringify(startConfig));
+        start_with_config(JSON.stringify(applyStyleOverrides(startConfig)));
         document.getElementById('loading').remove();
         canvas.focus({ preventScroll: true });
       } catch (err) {
@@ -588,7 +600,7 @@
         }
 
         try {
-          start_with_config(JSON.stringify(preset));
+          start_with_config(JSON.stringify(applyStyleOverrides(preset)));
           clearInterval(timer);
           document.getElementById('loading').remove();
           canvas.focus({ preventScroll: true });

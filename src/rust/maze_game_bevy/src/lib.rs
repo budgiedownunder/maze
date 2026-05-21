@@ -6,7 +6,9 @@ mod palette;
 mod state;
 mod world;
 
-pub use state::{GameConfig, GameOutcome, GameResult, Landmarks, SkyType, WallType};
+pub use state::{
+    DoorStyle, GameConfig, GameOutcome, GameResult, KeyHolderStyle, Landmarks, SkyType, WallType,
+};
 pub use world::generate_maze_json;
 
 use bevy::prelude::*;

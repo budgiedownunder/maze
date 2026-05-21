@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use maze_game_bevy::{GameConfig, Landmarks, SkyType, WallType};
+use maze_game_bevy::{DoorStyle, GameConfig, KeyHolderStyle, Landmarks, SkyType, WallType};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
@@ -64,6 +64,10 @@ struct StartConfig {
     sky_type: String,
     #[serde(default)]
     wall_type: String,
+    #[serde(default)]
+    door_style: String,
+    #[serde(default)]
+    key_holder: String,
     #[serde(default)]
     maze_json: Option<String>,
 }
@@ -201,6 +205,8 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         },
         sky_type: SkyType::from_wire_str(&cfg.sky_type),
         wall_type: WallType::from_wire_str(&cfg.wall_type),
+        door_style: DoorStyle::from_wire_str(&cfg.door_style),
+        key_holder: KeyHolderStyle::from_wire_str(&cfg.key_holder),
     });
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());
     app.run();

@@ -1,38 +1,38 @@
 //! Door panels for `'D'` cells.
 //!
-//! A door is a primitive-rig leaf (or leaves) that fills the corridor opening at
-//! a `'D'` cell. It carries no maze-blocking geometry of its own — passability
-//! is decided entirely by [`maze::MazeGame`], which gates *entry into the cell
-//! from every side* until the door opens (the leaves are purely a *view* of the
+//! A door is one or more primitive-rig leaves filling the corridor opening at a
+//! `'D'` cell. It carries no maze-blocking geometry of its own — passability is
+//! decided entirely by [`maze::MazeGame`], which gates *entry into the cell from
+//! every side* until the door opens (the leaves are purely a *view* of the
 //! door's [`DoorState`]). Leaves render in the **same wall material as the cell
 //! they sit between** (see [`crate::world::walls::wall_kind_for_cell`]); a
-//! keyhole marks them as a door, and each is eligible for the same sparse wall
-//! decoration as a wall panel.
+//! keyhole marks them, and each is eligible for the same sparse wall decoration
+//! as a wall panel.
 //!
-//! Two rigs, picked from the cell's topology:
-//! - **Straight corridor** (exactly two open edges on opposing sides): a single
-//!   swinging leaf, centred in the cell, hinged against a side wall — the
-//!   familiar door swing, which only reads well when anchored between two facing
-//!   walls.
-//! - **Anything else** (corner, T-junction, open area, dead-end stub): a leaf on
-//!   each open edge that **slides down into the floor**. A swing would sweep
-//!   awkwardly through the open space beside the opening; a sliding leaf needs no
-//!   side anchor and seals the edge cleanly.
+//! **Style + placement.** [`crate::state::DoorStyle`] selects the open motion:
+//! - `Swing` only at a straight corridor (two opposing open edges) → a single
+//!   leaf, centred and hinged against the side walls.
+//! - Every other case — `Swing` at a non-corridor, and `Slide` / `Portcullis` /
+//!   `Dissolve` everywhere — hangs a leaf on **each open edge** (a swing can't
+//!   anchor there, so `Swing` falls back to `Slide`). The per-leaf motion is
+//!   recorded as a [`DoorMotion`] and applied each frame by
+//!   `door_animation_system`.
 //!
-//! The hinge angle / slide offset is driven each frame from the door's
-//! [`DoorState`] (`door_animation_system`); the underlying state advances
-//! deterministically in the `FixedUpdate` tick (`door_tick_system`). Once a door
-//! has finished opening it is pinned to its fully-open pose permanently — leaves
-//! are never despawned. The pieces live in sibling files — the slab in
-//! [`panel`], the keyhole in [`keyhole`], and the two rigs' open motions in
-//! [`swing`] and [`slide`].
+//! The motion rigs live in sibling files: [`swing`] (hinge), [`slide`] (drop
+//! into the floor), [`portcullis`] (rise into a framed gate), and [`dissolve`]
+//! (fade a per-leaf material). The slab is in [`panel`] and the lock in
+//! [`keyhole`]. The countdown advances deterministically in the `FixedUpdate`
+//! tick (`door_tick_system`); once open a leaf is pinned to its open pose
+//! permanently and never despawned.
 
+pub(crate) mod dissolve;
 pub(crate) mod keyhole;
 pub(crate) mod panel;
+pub(crate) mod portcullis;
 pub(crate) mod slide;
 pub(crate) mod swing;
 
-use crate::state::{GameConfig, GameState};
+use crate::state::{DoorStyle, GameConfig, GameState};
 use crate::world::decorations::wall::{
     wall_decoration_index, WallDecoration, WallDecorationAssets, DECORATION_OFFSET, DECORATION_Y,
 };
@@ -43,6 +43,16 @@ use maze::{DoorState, GameEvent};
 use panel::DOOR_THICKNESS;
 use std::f32::consts::{FRAC_PI_2, PI};
 
+/// How a single door leaf opens. Derived from [`DoorStyle`] per leaf (a `Swing`
+/// style degrades to `Slide` on per-edge leaves that can't anchor a hinge).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DoorMotion {
+    Swing,
+    Slide,
+    Portcullis,
+    Dissolve,
+}
+
 /// Marker on a door leaf's pivot entity. The panel, keyhole, and any decoration
 /// are children of this entity, so transforming it moves the whole leaf. A door
 /// cell may own several leaves (one per open edge); they share the cell's
@@ -51,23 +61,30 @@ use std::f32::consts::{FRAC_PI_2, PI};
 pub(crate) struct DoorMarker {
     /// Grid cell this leaf belongs to.
     pub(crate) cell: (usize, usize),
-    /// Yaw orienting the leaf so its local +X spans the opening and its local +Z
-    /// (keyhole / decoration face) points out toward the neighbour.
+    /// Yaw orienting the leaf so its local +X spans the opening and its local
+    /// +Z (keyhole / decoration face) points out toward the neighbour.
     closed_yaw: f32,
-    /// `true` if this leaf retracts by sliding into the floor; `false` if it
-    /// swings on a hinge.
-    slides: bool,
+    /// How this leaf opens.
+    motion: DoorMotion,
     /// The leaf's resting (closed) pivot translation, captured at spawn so the
-    /// slide animation can offset from it (and the swing animation can hold it).
+    /// slide / portcullis motions can offset from it (and swing / dissolve hold
+    /// it).
     base_translation: Vec3,
     /// Set once a [`GameEvent::DoorOpened`] has been applied — the door is then
     /// pinned to its fully-open pose permanently and never re-reads its state.
     opened: bool,
+    /// For [`DoorMotion::Dissolve`] only: the leaf's own cloned, alpha-blended
+    /// materials (panel + keyhole plate + keyhole) each paired with its base
+    /// emissive, so the whole leaf fades together without touching the shared
+    /// wall / keyhole materials. Empty for every other motion.
+    dissolve_materials: Vec<(Handle<StandardMaterial>, LinearRgba)>,
 }
 
 pub(crate) struct DoorAssets {
     panel: panel::PanelAssets,
     keyhole: keyhole::KeyholeAssets,
+    /// Unit cuboid for the portcullis frame (posts + lintel).
+    cuboid: Option<Handle<Mesh>>,
 }
 
 pub(crate) fn build_door_assets(
@@ -77,13 +94,12 @@ pub(crate) fn build_door_assets(
     DoorAssets {
         panel: panel::build_panel_assets(meshes),
         keyhole: keyhole::build_keyhole_assets(meshes, materials),
+        cuboid: meshes.as_mut().map(|m| m.add(Cuboid::new(1.0, 1.0, 1.0))),
     }
 }
 
 /// `true` when the door cell is a straight corridor — exactly two open edges on
-/// OPPOSING sides (N+S or E+W). Such a door renders as a single swinging leaf;
-/// every other topology uses per-edge sliding leaves. Out-of-bounds counts as a
-/// wall.
+/// OPPOSING sides (N+S or E+W). Out-of-bounds counts as a wall.
 fn is_straight_corridor(grid: &[Vec<char>], r: usize, c: usize) -> bool {
     let rows = grid.len();
     let cols = grid[r].len();
@@ -113,33 +129,74 @@ fn leaf_material(
 struct LeafSpec {
     closed_yaw: f32,
     pivot_translation: Vec3,
+    /// Centre of the opening this leaf seals (used for the portcullis frame).
+    edge_centre: Vec3,
     panel_mat: Option<Handle<StandardMaterial>>,
-    slides: bool,
-    /// Decoration hash face id (compass id of the sealed edge, or the corridor
+    motion: DoorMotion,
+    /// Decoration hash face id (the sealed edge's compass id, or the corridor
     /// axis for the single swing leaf).
     face_id: u32,
     /// Swing leaves are seen from both ends of the corridor, so they get a
-    /// keyhole on both faces; sliding leaves only on the outward face.
+    /// keyhole on both faces; per-edge leaves only on the outward face.
     keyhole_both_faces: bool,
 }
 
+/// Clones `src` into an alpha-blended dissolve material, records it in `out` so
+/// the fade can drive it, and returns the clone's handle. Falls back to `src`
+/// (unrecorded) when the clone can't be made (no material assets / missing
+/// source).
+fn clone_or(
+    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
+    src: &Option<Handle<StandardMaterial>>,
+    out: &mut Vec<(Handle<StandardMaterial>, LinearRgba)>,
+) -> Option<Handle<StandardMaterial>> {
+    if let Some((handle, base)) = dissolve::clone_blend(materials, src) {
+        out.push((handle.clone(), base));
+        Some(handle)
+    } else {
+        src.clone()
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn spawn_leaf(
     commands: &mut Commands,
     door_assets: &DoorAssets,
     decoration_assets: &WallDecorationAssets,
+    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
     r: usize,
     c: usize,
     config: &GameConfig,
     spec: LeafSpec,
 ) {
+    // A dissolve leaf renders the panel AND keyhole with their own alpha-blended
+    // clones so the whole leaf can fade without touching the shared materials;
+    // every other motion uses the shared materials directly.
+    let is_dissolve = spec.motion == DoorMotion::Dissolve;
+    let mut dissolve_materials = Vec::new();
+    let panel_mat = if is_dissolve {
+        clone_or(materials, &spec.panel_mat, &mut dissolve_materials)
+    } else {
+        spec.panel_mat.clone()
+    };
+    let (plate_mat, keyhole_mat) = if is_dissolve {
+        (
+            clone_or(materials, &door_assets.keyhole.plate_handle(), &mut dissolve_materials),
+            clone_or(materials, &door_assets.keyhole.keyhole_handle(), &mut dissolve_materials),
+        )
+    } else {
+        (None, None)
+    };
+
     let pivot = commands
         .spawn((
             DoorMarker {
                 cell: (r, c),
                 closed_yaw: spec.closed_yaw,
-                slides: spec.slides,
+                motion: spec.motion,
                 base_translation: spec.pivot_translation,
                 opened: false,
+                dissolve_materials,
             },
             Transform::from_translation(spec.pivot_translation)
                 .with_rotation(Quat::from_rotation_y(spec.closed_yaw)),
@@ -147,11 +204,27 @@ fn spawn_leaf(
         ))
         .id();
 
-    panel::spawn_panel(commands, &door_assets.panel, spec.panel_mat, pivot);
+    panel::spawn_panel(commands, &door_assets.panel, panel_mat, pivot);
     // Keyhole on the outward (+Z) face — the side the approaching player sees.
-    keyhole::spawn_keyhole_face(commands, &door_assets.keyhole, pivot, 1.0);
-    if spec.keyhole_both_faces {
-        keyhole::spawn_keyhole_face(commands, &door_assets.keyhole, pivot, -1.0);
+    // Dissolve leaves use their cloned (fading) materials; others the shared ones.
+    if is_dissolve {
+        keyhole::spawn_keyhole_face_with(commands, &door_assets.keyhole, pivot, 1.0, plate_mat, keyhole_mat);
+    } else {
+        keyhole::spawn_keyhole_face(commands, &door_assets.keyhole, pivot, 1.0);
+        if spec.keyhole_both_faces {
+            keyhole::spawn_keyhole_face(commands, &door_assets.keyhole, pivot, -1.0);
+        }
+    }
+
+    // A portcullis grille rises into a static wall-material frame.
+    if spec.motion == DoorMotion::Portcullis {
+        portcullis::spawn_frame(
+            commands,
+            door_assets.cuboid.clone(),
+            spec.panel_mat.clone(),
+            spec.edge_centre,
+            spec.closed_yaw,
+        );
     }
 
     // Eligible for the same sparse, seeded wall decoration as a wall panel, on
@@ -186,6 +259,7 @@ pub(crate) fn spawn_door_for_cell(
     door_assets: &DoorAssets,
     wall_assets: &WallAssets,
     decoration_assets: &WallDecorationAssets,
+    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
     grid: &[Vec<char>],
     cell: char,
     r: usize,
@@ -201,25 +275,29 @@ pub(crate) fn spawn_door_for_cell(
     let z = r as f32 * CELL_SIZE + 1.0;
     let kind = wall_kind_for_cell(r, c, rows, cols, config);
 
-    if is_straight_corridor(grid, r, c) {
-        // Single swinging leaf, centred in the cell and spanning the corridor.
-        // The corridor's side walls anchor the hinge so the leaf swings flush.
+    // A swinging door only reads well between two facing walls, so it's the one
+    // special case: a single central leaf in a straight corridor. Everything
+    // else seals each open edge with its own leaf.
+    if config.door_style == DoorStyle::Swing && is_straight_corridor(grid, r, c) {
         let normal_z = r > 0 && grid[r - 1][c] != 'W'; // N/S corridor → normal along Z
         let closed_yaw = if normal_z { 0.0 } else { FRAC_PI_2 };
-        let pivot_translation = Vec3::new(x, 0.0, z)
-            + Quat::from_rotation_y(closed_yaw) * Vec3::new(-PANEL_W / 2.0, 0.0, 0.0);
+        let edge_centre = Vec3::new(x, 0.0, z);
+        let pivot_translation =
+            edge_centre + Quat::from_rotation_y(closed_yaw) * Vec3::new(-PANEL_W / 2.0, 0.0, 0.0);
         spawn_leaf(
             commands,
             door_assets,
             decoration_assets,
+            materials,
             r,
             c,
             config,
             LeafSpec {
                 closed_yaw,
                 pivot_translation,
+                edge_centre,
                 panel_mat: leaf_material(wall_assets, kind, normal_z),
-                slides: false,
+                motion: DoorMotion::Swing,
                 face_id: if normal_z { 0 } else { 2 },
                 keyhole_both_faces: true,
             },
@@ -227,10 +305,13 @@ pub(crate) fn spawn_door_for_cell(
         return;
     }
 
-    // Not a clean opposing-wall corridor: a swing would sweep through the open
-    // space beside the opening. Seal each open edge with a leaf that slides down
-    // into the floor, positioned on that edge.
-    //
+    // Per-edge leaves. The chosen style's motion applies to each, except a
+    // `Swing` style degrades to `Slide` here (no walls to anchor a hinge).
+    let motion = match config.door_style {
+        DoorStyle::Swing | DoorStyle::Slide => DoorMotion::Slide,
+        DoorStyle::Portcullis => DoorMotion::Portcullis,
+        DoorStyle::Dissolve => DoorMotion::Dissolve,
+    };
     // (open?, closed_yaw, edge centre, decoration face id, normal-along-Z?)
     let edges = [
         (r > 0 && grid[r - 1][c] != 'W', PI, Vec3::new(x, 0.0, z - HALF_CELL), 0u32, true),
@@ -248,14 +329,16 @@ pub(crate) fn spawn_door_for_cell(
             commands,
             door_assets,
             decoration_assets,
+            materials,
             r,
             c,
             config,
             LeafSpec {
                 closed_yaw,
                 pivot_translation,
+                edge_centre,
                 panel_mat: leaf_material(wall_assets, kind, normal_z),
-                slides: true,
+                motion,
                 face_id,
                 keyhole_both_faces: false,
             },
@@ -294,11 +377,13 @@ pub(crate) fn door_tick_system(
     }
 }
 
-/// `Update`: drives each leaf from its door's [`DoorState`] — a locked door sits
-/// closed; an opening door swings/slides smoothly with its progress; an open (or
-/// `opened`-pinned) leaf stays fully retracted.
+/// `Update`: drives each leaf from its door's [`DoorState`], dispatching on the
+/// leaf's [`DoorMotion`] — swing rotates, slide / portcullis translate, dissolve
+/// fades its (own) material. A locked door sits closed; an opening one animates
+/// with its progress; an open (or `opened`-pinned) leaf stays fully open.
 pub(crate) fn door_animation_system(
     state: Res<GameState>,
+    mut materials: Option<ResMut<Assets<StandardMaterial>>>,
     mut doors: Query<(&DoorMarker, &mut Transform)>,
 ) {
     if doors.is_empty() {
@@ -319,10 +404,29 @@ pub(crate) fn door_animation_system(
                 _ => 0.0,
             }
         };
-        *transform = if marker.slides {
-            slide::leaf_transform(marker.base_translation, marker.closed_yaw, fraction)
-        } else {
-            swing::leaf_transform(marker.base_translation, marker.closed_yaw, fraction)
+        *transform = match marker.motion {
+            DoorMotion::Swing => {
+                swing::leaf_transform(marker.base_translation, marker.closed_yaw, fraction)
+            }
+            DoorMotion::Slide => {
+                slide::leaf_transform(marker.base_translation, marker.closed_yaw, fraction)
+            }
+            DoorMotion::Portcullis => {
+                portcullis::leaf_transform(marker.base_translation, marker.closed_yaw, fraction)
+            }
+            DoorMotion::Dissolve => {
+                // The leaf holds its closed pose; its materials (panel + keyhole)
+                // fade instead.
+                if let Some(mats) = materials.as_mut() {
+                    for (handle, base) in &marker.dissolve_materials {
+                        if let Some(mat) = mats.get_mut(handle) {
+                            dissolve::apply(mat, *base, fraction);
+                        }
+                    }
+                }
+                Transform::from_translation(marker.base_translation)
+                    .with_rotation(Quat::from_rotation_y(marker.closed_yaw))
+            }
         };
     }
 }
@@ -366,7 +470,6 @@ mod tests {
 
     #[test]
     fn corner_is_not_a_straight_corridor() {
-        // (1,1) has north (S) and east (F) open — adjacent, not opposing.
         let grid = vec![
             vec!['W', 'S', 'W'],
             vec!['W', 'D', 'F'],
@@ -377,7 +480,6 @@ mod tests {
 
     #[test]
     fn t_junction_is_not_a_straight_corridor() {
-        // (1,1) has north (S), south (open) and east (F) open — three edges.
         let grid = vec![
             vec!['W', 'S', 'W'],
             vec!['W', 'D', 'F'],

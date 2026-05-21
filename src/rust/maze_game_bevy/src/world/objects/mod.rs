@@ -47,5 +47,5 @@ pub(crate) fn spawn_objects_for_cell(
         c,
         config,
     );
-    key_holder::spawn_key_holder_for_cell(commands, &assets.key_holder, cell, r, c);
+    key_holder::spawn_key_holder_for_cell(commands, &assets.key_holder, config.key_holder, cell, r, c);
 }
