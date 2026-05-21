@@ -185,16 +185,29 @@ mod tests {
     }
 
     #[test]
-    fn keys_and_doors_spawn_markers() {
-        // One key at (0,1) and one door at (0,2) — each must spawn exactly one
-        // holder / door marker. Markers spawn even under MinimalPlugins (no
-        // mesh/material assets), so this asserts the per-cell wiring regardless
-        // of rendering.
+    fn corridor_door_is_a_single_swing_leaf() {
+        // One key at (0,1) and one door at (0,2). The door's open edges are on
+        // opposing sides (key to the west, finish to the east) — a straight
+        // corridor — so it renders as a single swinging leaf. Markers spawn even
+        // under MinimalPlugins (no mesh/material assets), so this asserts the
+        // topology dispatch regardless of rendering.
         let mut app = make_playing_app_with(r#"{"grid":[["S","K","D","F"]]}"#);
         let keys = app.world_mut().query::<&KeyMarker>().iter(app.world()).count();
         let doors = app.world_mut().query::<&DoorMarker>().iter(app.world()).count();
         assert_eq!(keys, 1, "expected one key holder");
-        assert_eq!(doors, 1, "expected one door");
+        assert_eq!(doors, 1, "a straight-corridor door is a single leaf");
+    }
+
+    #[test]
+    fn junction_door_seals_each_open_edge() {
+        // A door cell with three open neighbours (N=start, S=open, E=finish;
+        // W=wall) is not a straight corridor, so it seals each open edge with its
+        // own (sliding) leaf — three in total.
+        let mut app = make_playing_app_with(
+            r#"{"grid":[["W","S","W"],["W","D","F"],["W"," ","W"]]}"#,
+        );
+        let doors = app.world_mut().query::<&DoorMarker>().iter(app.world()).count();
+        assert_eq!(doors, 3, "a 3-open door cell seals each open edge");
     }
 
     #[test]

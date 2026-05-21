@@ -13,6 +13,8 @@
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::world::CELL_SIZE;
 use bevy::prelude::*;
+use bevy::render::render_resource::Face;
+use std::f32::consts::FRAC_PI_2;
 
 // ---------- Tuning constants ----------
 
@@ -30,6 +32,11 @@ const PEDESTAL_EMISSIVE: LinearRgba = LinearRgba::new(0.16, 0.16, 0.18, 1.0);
 /// Key emissive RGB — warm gold, bright enough to act as a small glow source.
 const KEY_EMISSIVE: LinearRgba = LinearRgba::new(1.2, 0.95, 0.2, 1.0);
 
+/// Inverted-hull outline scale for the key sub-meshes — a slightly larger black
+/// shell so each part (bow / shaft / teeth) reads as distinct instead of merging
+/// into one gold blob, matching the dead-end landmark outline trick.
+const OUTLINE_SCALE: f32 = 1.06;
+
 /// Marker on a key holder's root entity, keyed by grid cell. Picking the key up
 /// despawns this entity (and its pedestal / key children).
 #[derive(Component)]
@@ -46,11 +53,14 @@ pub(crate) struct FloatingKey {
 pub(crate) struct KeyHolderAssets {
     pedestal_mesh: Option<Handle<Mesh>>,
     pedestal_mat: Option<Handle<StandardMaterial>>,
-    /// Flattened cylinder used for the key's round bow.
+    /// Torus forming the key's round bow — a ring with a hole, matching the bag
+    /// icon. Pre-sized, so it's spawned with only a rotation (no scale).
     bow_mesh: Option<Handle<Mesh>>,
     /// Unit cuboid scaled per-piece into the shaft and teeth.
     cuboid_mesh: Option<Handle<Mesh>>,
     key_mat: Option<Handle<StandardMaterial>>,
+    /// Black inverted-hull outline material shared by the key sub-meshes.
+    outline_mat: Option<Handle<StandardMaterial>>,
 }
 
 pub(crate) fn build_key_holder_assets(
@@ -60,16 +70,29 @@ pub(crate) fn build_key_holder_assets(
     let pedestal_mesh = meshes
         .as_mut()
         .map(|m| m.add(Cylinder::new(PEDESTAL_RADIUS, PEDESTAL_HEIGHT)));
-    let bow_mesh = meshes.as_mut().map(|m| m.add(Cylinder::new(0.5, 1.0)));
+    // Torus::new(inner_hole_radius, outer_radius) — a ring with a hole through
+    // it, like the bag icon's bow.
+    let bow_mesh = meshes.as_mut().map(|m| m.add(Torus::new(0.085, 0.18)));
     let cuboid_mesh = meshes.as_mut().map(|m| m.add(Cuboid::new(1.0, 1.0, 1.0)));
     let pedestal_mat = build_emissive(materials, PEDESTAL_EMISSIVE);
     let key_mat = build_emissive(materials, KEY_EMISSIVE);
+    let outline_mat = materials.as_mut().map(|m| {
+        m.add(StandardMaterial {
+            base_color: Color::BLACK,
+            unlit: true,
+            // Render only the back faces of the enlarged shell so just a thin
+            // dark rim pokes past each part's silhouette (inverted-hull outline).
+            cull_mode: Some(Face::Front),
+            ..default()
+        })
+    });
     KeyHolderAssets {
         pedestal_mesh,
         pedestal_mat,
         bow_mesh,
         cuboid_mesh,
         key_mat,
+        outline_mat,
     }
 }
 
@@ -133,40 +156,72 @@ pub(crate) fn spawn_key_holder_for_cell(
         assets.cuboid_mesh.clone(),
         assets.key_mat.clone(),
     ) {
-        // Bow (round head) at the top — flattened disc lying in the X/Z plane.
-        let bow_entity = commands
-            .spawn((
-                Mesh3d(bow.clone()),
-                MeshMaterial3d(mat.clone()),
-                Transform::from_xyz(0.0, 0.2, 0.0).with_scale(Vec3::new(0.34, 0.06, 0.34)),
-            ))
-            .id();
+        let outline = assets.outline_mat.clone();
+        // Bow (round head) at the top — a ring with a hole, standing upright in
+        // the key's own plane (rotated 90° about X from the torus's default flat
+        // pose) so the hole faces the player as the key spins.
+        spawn_key_part(
+            commands,
+            key_group,
+            bow,
+            mat.clone(),
+            outline.clone(),
+            Transform::from_xyz(0.0, 0.27, 0.0).with_rotation(Quat::from_rotation_x(FRAC_PI_2)),
+        );
         // Shaft running down from the bow.
-        let shaft = commands
-            .spawn((
-                Mesh3d(cuboid.clone()),
-                MeshMaterial3d(mat.clone()),
-                Transform::from_xyz(0.0, -0.05, 0.0).with_scale(Vec3::new(0.08, 0.45, 0.08)),
-            ))
-            .id();
+        spawn_key_part(
+            commands,
+            key_group,
+            cuboid.clone(),
+            mat.clone(),
+            outline.clone(),
+            Transform::from_xyz(0.0, -0.05, 0.0).with_scale(Vec3::new(0.08, 0.45, 0.08)),
+        );
         // Two teeth jutting from the shaft's lower end.
-        let tooth_a = commands
-            .spawn((
-                Mesh3d(cuboid.clone()),
-                MeshMaterial3d(mat.clone()),
-                Transform::from_xyz(0.08, -0.22, 0.0).with_scale(Vec3::new(0.16, 0.06, 0.06)),
-            ))
+        spawn_key_part(
+            commands,
+            key_group,
+            cuboid.clone(),
+            mat.clone(),
+            outline.clone(),
+            Transform::from_xyz(0.08, -0.22, 0.0).with_scale(Vec3::new(0.16, 0.06, 0.06)),
+        );
+        spawn_key_part(
+            commands,
+            key_group,
+            cuboid,
+            mat,
+            outline,
+            Transform::from_xyz(0.06, -0.30, 0.0).with_scale(Vec3::new(0.12, 0.06, 0.06)),
+        );
+    }
+}
+
+/// Spawns one key sub-mesh as a child of `key_group`, paired with a slightly
+/// larger black inverted-hull outline sibling so the part reads as distinct from
+/// its neighbours rather than merging into one gold shape.
+fn spawn_key_part(
+    commands: &mut Commands,
+    key_group: Entity,
+    mesh: Handle<Mesh>,
+    body_mat: Handle<StandardMaterial>,
+    outline_mat: Option<Handle<StandardMaterial>>,
+    transform: Transform,
+) {
+    let body = commands
+        .spawn((Mesh3d(mesh.clone()), MeshMaterial3d(body_mat), transform))
+        .id();
+    commands.entity(key_group).add_child(body);
+    if let Some(outline) = outline_mat {
+        let outline_xform = Transform {
+            translation: transform.translation,
+            rotation: transform.rotation,
+            scale: transform.scale * OUTLINE_SCALE,
+        };
+        let edge = commands
+            .spawn((Mesh3d(mesh), MeshMaterial3d(outline), outline_xform))
             .id();
-        let tooth_b = commands
-            .spawn((
-                Mesh3d(cuboid),
-                MeshMaterial3d(mat),
-                Transform::from_xyz(0.06, -0.30, 0.0).with_scale(Vec3::new(0.12, 0.06, 0.06)),
-            ))
-            .id();
-        commands
-            .entity(key_group)
-            .add_children(&[bow_entity, shaft, tooth_a, tooth_b]);
+        commands.entity(key_group).add_child(edge);
     }
 }
 

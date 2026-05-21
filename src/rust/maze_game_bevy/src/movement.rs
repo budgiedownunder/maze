@@ -158,6 +158,8 @@ pub(crate) fn movement_system(
     }
 }
 
+/// Esc quits the native desktop app.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn quit_system(
     keys: Option<Res<ButtonInput<KeyCode>>>,
     mut exit: bevy::ecs::message::MessageWriter<AppExit>,
@@ -168,6 +170,13 @@ pub(crate) fn quit_system(
         }
     }
 }
+
+/// In the browser there is no application to quit, and writing `AppExit` would
+/// halt the Bevy loop and freeze the game (the timer stops with no way to
+/// resume). So Esc does not quit on wasm — it is handled as a pause toggle by
+/// [`crate::overlays::pause::pause_system`] instead, leaving this system a no-op.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn quit_system() {}
 
 /// Collects the key at the player's current cell on `F`. `MazeGame::pickup`
 /// already no-ops unless the player stands on an uncollected key, so success
