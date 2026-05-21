@@ -99,6 +99,7 @@ pub(crate) struct GameState {
     pub(crate) won: bool,
     pub(crate) lost: bool,
     pub(crate) paused: bool,
+    pub(crate) can_pickup: bool,
 }
 
 #[derive(Resource)]
@@ -378,6 +379,28 @@ pub(crate) fn dispatch_pause_state(paused: bool) {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn dispatch_pause_state(_paused: bool) {}
+
+/// Dispatches a `maze-game-can-pickup` CustomEvent on the browser `window` so
+/// the host page can show or hide a contextual pickup control as the player
+/// steps onto or off an uncollected key. Detail is `{ "canPickup": bool }`.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn dispatch_can_pickup(can_pickup: bool) {
+    use wasm_bindgen::JsValue;
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let json = format!("{{\"canPickup\":{}}}", can_pickup);
+    let detail = js_sys::JSON::parse(&json).unwrap_or(JsValue::NULL);
+    let init = web_sys::CustomEventInit::new();
+    init.set_detail(&detail);
+    if let Ok(event) = web_sys::CustomEvent::new_with_event_init_dict("maze-game-can-pickup", &init)
+    {
+        let _ = window.dispatch_event(&event);
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn dispatch_can_pickup(_can_pickup: bool) {}
 
 #[cfg(test)]
 mod tests {

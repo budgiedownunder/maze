@@ -1,6 +1,7 @@
 use crate::overlays::win;
 use crate::state::{
-    dispatch_game_result, Animation, GameClock, GameConfig, GameOutcome, GameResult, GameState,
+    dispatch_can_pickup, dispatch_game_result, Animation, GameClock, GameConfig, GameOutcome,
+    GameResult, GameState,
 };
 use crate::world::objects::key_holder::KeyMarker;
 use crate::world::{camera_pos_for, explore_cell_raw};
@@ -206,5 +207,22 @@ pub(crate) fn pickup_system(
                 commands.entity(entity).despawn();
             }
         }
+    }
+}
+
+/// Tracks whether the player stands on an uncollected key and pushes the change
+/// to the host page via [`dispatch_can_pickup`], so a touch device can show a
+/// contextual pickup control (and enable the double-tap pickup gesture). The
+/// flag is forced off once the game has resolved.
+pub(crate) fn pickup_prompt_system(mut state: ResMut<GameState>) {
+    let on_key = if state.won || state.lost {
+        false
+    } else {
+        let cell = (state.game.player_row(), state.game.player_col());
+        state.game.keys().iter().any(|(c, _)| *c == cell)
+    };
+    if on_key != state.can_pickup {
+        state.can_pickup = on_key;
+        dispatch_can_pickup(on_key);
     }
 }

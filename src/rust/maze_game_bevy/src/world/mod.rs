@@ -326,6 +326,7 @@ pub(crate) fn spawn_world(
         won: false,
         lost: false,
         paused: false,
+        can_pickup: false,
     });
 
     // Timer comes from `GameConfig.timer_seconds`. The default (60 s, see

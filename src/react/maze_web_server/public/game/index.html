@@ -72,6 +72,9 @@
        pointer-fine devices (mouse / trackpad) where Space on the
        keyboard already covers it. */
     #touch-pause-btn { display: none; }
+    /* Contextual pickup button — base hidden; shown on coarse pointers only
+       while the player stands on a key (see the @media block below). */
+    #pickup-btn { display: none; }
     /* The Hide/Show D-pad button only makes sense on touch devices
        (where the D-pad exists). Hide it on fine-pointer devices so the
        pause menu collapses to just Resume + Restart. */
@@ -167,6 +170,36 @@
         display: block;
         pointer-events: none;
       }
+      /* Contextual pickup button — bottom-LEFT of #game-wrap (mirror of the
+         pause button at bottom-right). Shown only while the player stands on a
+         key (body.can-pickup) and the D-pad is visible; when the D-pad is
+         hidden, the canvas double-tap gesture covers pickup instead. */
+      #pickup-btn {
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        z-index: 20;
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.6);
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        touch-action: none;
+        -webkit-touch-callout: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      body.can-pickup:not(.dpad-hidden) #pickup-btn { display: flex; }
+      #pickup-btn img {
+        width: 26px;
+        height: 26px;
+        display: block;
+        pointer-events: none;
+      }
     }
 
     /* In-game pause menu — a host-side HTML overlay shown when Bevy
@@ -228,6 +261,9 @@
     <canvas id="bevy-canvas" tabindex="-1"></canvas>
     <button type="button" tabindex="-1" id="touch-pause-btn" aria-label="Pause">
       <img src="/images/maze/dpad_pause.png" alt="" draggable="false">
+    </button>
+    <button type="button" tabindex="-1" id="pickup-btn" aria-label="Pick up key">
+      <img src="/images/maze/key.svg" alt="" draggable="false">
     </button>
     <div id="loading">
       <div class="spinner"></div>
@@ -394,7 +430,7 @@
   <script type="module">
     import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=8';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=9';
     const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
@@ -574,6 +610,7 @@
       { label: 'Turn right',   key: 'ArrowRight' },
       { label: 'Tilt up',      key: 'KeyQ'       },
       { label: 'Tilt down',    key: 'KeyE'       },
+      { label: 'Pick up key',  key: 'KeyF'       },
     ];
     for (const { label, key } of btnDefs) {
       const btn = document.querySelector(`[aria-label="${label}"]`);
@@ -583,6 +620,17 @@
       btn.addEventListener('pointercancel', () => fire(key, 'keyup'));
       btn.addEventListener('contextmenu',   e => e.preventDefault());
     }
+
+    // Contextual pickup: Bevy reports (via the maze-game-can-pickup event)
+    // whether the player stands on an uncollected key. Toggle the body class —
+    // CSS shows #pickup-btn on touch devices while it's set — and remember the
+    // state so the canvas double-tap gesture below knows when a pickup is
+    // available.
+    let canPickup = false;
+    window.addEventListener('maze-game-can-pickup', e => {
+      canPickup = !!(e.detail && e.detail.canPickup);
+      document.body.classList.toggle('can-pickup', canPickup);
+    });
 
     // Pause-button click wiring lives in the vanilla pause-menu script
     // higher up in this file — those listeners need to be attached
@@ -606,9 +654,11 @@
       // ~250 ms at the configured pitch rate gives a clearly-visible
       // ~15° nudge per swipe.
       const TILT_HOLD_MS = 250;
+      const DOUBLE_TAP_MS = 300;    // ms — max gap between two taps to count as a double-tap
       let touchStart = null;        // { x, y, lastX, lastY }
       let holdTimer = null;
       let holdActive = false;
+      let lastTapTime = 0;          // timestamp of the previous plain tap (for double-tap pickup)
 
       const cancelHold = () => {
         if (holdTimer !== null) { clearTimeout(holdTimer); holdTimer = null; }
@@ -677,6 +727,19 @@
               const key = dy < 0 ? 'KeyQ' : 'KeyE';
               fire(key, 'keydown');
               setTimeout(() => fire(key, 'keyup'), TILT_HOLD_MS);
+            }
+          } else {
+            // Plain tap (no swipe, no hold). A double-tap while standing on a
+            // key picks it up — the touch equivalent of pressing F, and the
+            // pickup path when the D-pad (and its button) are hidden. Harmless
+            // when there's nothing to grab (gated on canPickup).
+            const now = Date.now();
+            if (canPickup && now - lastTapTime < DOUBLE_TAP_MS) {
+              fire('KeyF', 'keydown');
+              fire('KeyF', 'keyup');
+              lastTapTime = 0;
+            } else {
+              lastTapTime = now;
             }
           }
         }

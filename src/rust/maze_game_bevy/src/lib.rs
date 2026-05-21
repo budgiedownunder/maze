@@ -13,7 +13,7 @@ use bevy::prelude::*;
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     use crate::hud::{bag, clock, minimap, statusbar};
-    use crate::movement::{movement_system, pickup_system, quit_system};
+    use crate::movement::{movement_system, pickup_prompt_system, pickup_system, quit_system};
     use crate::overlays::{lose, pause, title, win};
     use crate::state::{AppState, PendingMazeJson, TitleTimer};
     use crate::world::{
@@ -57,6 +57,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_holder_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pickup_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, pickup_prompt_system.run_if(in_state(AppState::Playing)))
         // The door countdown runs in `FixedUpdate` for deterministic, frame-rate
         // independent opening; the hinge animation reads the resulting state in
         // `Update` for smooth per-frame motion.
