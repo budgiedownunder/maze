@@ -103,15 +103,28 @@ pub fn generate_maze_json(
     Ok(grid_to_json(&maze.definition.grid))
 }
 
+/// Built-in fallback maze for the native binary and the bare wasm `start()`
+/// path (the React `/game/` flow always supplies a real maze). An 11×11
+/// perfect maze chosen to exercise the full feature set: a key (`K` at `(1,3)`)
+/// sits in a dead-end, the door (`D` at `(8,9)`) is the *only* cell adjacent to
+/// the finish so it gates `F` outright, and six further dead-ends pick up
+/// landmark objects (brazier / urn / pillar / chest). The intended solve is:
+/// collect the key, then hold against the door to open it before reaching the
+/// finish — see `demo_grid_is_well_formed` for the structural guarantees this
+/// layout upholds.
 pub(crate) fn demo_grid() -> Vec<Vec<char>> {
     vec![
-        vec!['S', ' ', ' ', ' ', ' ', ' ', ' '],
-        vec![' ', 'W', 'W', 'W', 'W', 'W', ' '],
-        vec![' ', 'W', ' ', ' ', ' ', 'W', ' '],
-        vec![' ', 'W', ' ', 'W', ' ', 'W', ' '],
-        vec![' ', ' ', ' ', 'W', ' ', ' ', ' '],
-        vec!['W', 'W', 'W', 'W', ' ', 'W', 'W'],
-        vec![' ', ' ', ' ', ' ', ' ', ' ', 'F'],
+        vec!['W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
+        vec!['W', 'S', ' ', 'K', ' ', ' ', ' ', ' ', ' ', ' ', 'W'],
+        vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', ' ', 'W'],
+        vec!['W', ' ', ' ', ' ', 'W', ' ', ' ', ' ', 'W', ' ', 'W'],
+        vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'W', 'W'],
+        vec!['W', ' ', 'W', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'W'],
+        vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'W', 'W'],
+        vec!['W', ' ', ' ', ' ', 'W', ' ', ' ', ' ', 'W', 'F', 'W'],
+        vec!['W', ' ', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'D', 'W'],
+        vec!['W', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'W'],
+        vec!['W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
     ]
 }
 
@@ -365,6 +378,20 @@ pub(crate) fn spawn_world(
                 c,
                 &config,
             );
+            // Doors are spawned here (not inside `spawn_objects_for_cell`)
+            // because the panel borrows the cell's wall material from
+            // `wall_assets`.
+            objects::door::spawn_door_for_cell(
+                &mut commands,
+                &object_assets.door,
+                &wall_assets,
+                &decoration_assets.wall,
+                &grid,
+                cell,
+                r,
+                c,
+                &config,
+            );
         }
     }
 
@@ -377,5 +404,6 @@ pub(crate) fn spawn_world(
     );
     hud::clock::spawn_clock_hud(&mut commands, &window);
     hud::statusbar::spawn_statusbar(&mut commands, &window, &config);
+    hud::bag::spawn_bag_hud(&mut commands, &window);
     pause::spawn_paused_overlay(&mut commands);
 }

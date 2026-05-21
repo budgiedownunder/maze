@@ -12,12 +12,17 @@ pub use world::generate_maze_json;
 use bevy::prelude::*;
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
-    use crate::hud::{clock, minimap, statusbar};
-    use crate::movement::{movement_system, quit_system};
+    use crate::hud::{bag, clock, minimap, statusbar};
+    use crate::movement::{movement_system, pickup_system, quit_system};
     use crate::overlays::{lose, pause, title, win};
     use crate::state::{AppState, PendingMazeJson, TitleTimer};
     use crate::world::{
-        objects::{self, dead_end::brazier_flicker_system},
+        objects::{
+            self,
+            dead_end::brazier_flicker_system,
+            door::{door_animation_system, door_tick_system},
+            key_holder::key_holder_system,
+        },
         sky, spawn_world,
     };
 
@@ -50,6 +55,14 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, key_holder_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, pickup_system.run_if(in_state(AppState::Playing)))
+        // The door countdown runs in `FixedUpdate` for deterministic, frame-rate
+        // independent opening; the hinge animation reads the resulting state in
+        // `Update` for smooth per-frame motion.
+        .add_systems(FixedUpdate, door_tick_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, door_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, bag::bag_hud_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pause::pause_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, sky::sky_dome_follow_camera.run_if(in_state(AppState::Playing)))
         .add_systems(Update, world::camera_fov_resize_system.run_if(in_state(AppState::Playing)))
@@ -69,7 +82,9 @@ mod tests {
         initial_facing,
         objects::{
             dead_end::{BrazierBowl, DeadEndObject},
+            door::DoorMarker,
             finish::orb::FinishOrb,
+            key_holder::KeyMarker,
         },
         sky::dome::SkyDome,
         walls::WallCell,
@@ -90,6 +105,18 @@ mod tests {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, StatesPlugin));
         build_app(&mut app, None);
+        app.update(); // OnEnter(TitleScreen) runs
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Playing);
+        app.update(); // OnExit(TitleScreen) + OnEnter(Playing) run
+        app
+    }
+
+    fn make_playing_app_with(maze_json: &str) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        build_app(&mut app, Some(maze_json));
         app.update(); // OnEnter(TitleScreen) runs
         app.world_mut()
             .resource_mut::<NextState<AppState>>()
@@ -158,6 +185,36 @@ mod tests {
     }
 
     #[test]
+    fn keys_and_doors_spawn_markers() {
+        // One key at (0,1) and one door at (0,2) — each must spawn exactly one
+        // holder / door marker. Markers spawn even under MinimalPlugins (no
+        // mesh/material assets), so this asserts the per-cell wiring regardless
+        // of rendering.
+        let mut app = make_playing_app_with(r#"{"grid":[["S","K","D","F"]]}"#);
+        let keys = app.world_mut().query::<&KeyMarker>().iter(app.world()).count();
+        let doors = app.world_mut().query::<&DoorMarker>().iter(app.world()).count();
+        assert_eq!(keys, 1, "expected one key holder");
+        assert_eq!(doors, 1, "expected one door");
+    }
+
+    #[test]
+    fn key_cell_has_no_dead_end_object() {
+        // A key sitting in a dead-end must show its holder, not a brazier/chest.
+        // Grid: a vertical stub where (2,1) is a dead-end holding a key.
+        let mut app = make_playing_app_with(
+            r#"{"grid":[["S"," ","F"],["W","K","W"],["W","W","W"]]}"#,
+        );
+        let dead_end = app
+            .world_mut()
+            .query::<&DeadEndObject>()
+            .iter(app.world())
+            .count();
+        let keys = app.world_mut().query::<&KeyMarker>().iter(app.world()).count();
+        assert_eq!(keys, 1, "expected the key holder");
+        assert_eq!(dead_end, 0, "key cell must not also get a dead-end object");
+    }
+
+    #[test]
     fn playing_no_title_entities() {
         let mut app = make_playing_app();
         let count = app.world_mut().query::<&TitleEntity>().iter(app.world()).count();
@@ -187,13 +244,15 @@ mod tests {
     fn build_app_with_none_uses_demo_grid() {
         let app = make_playing_app();
         let state = app.world().resource::<GameState>();
-        assert_eq!(state.grid.len(), 7);
-        assert_eq!(state.grid[0].len(), 7);
+        let demo = demo_grid();
+        assert_eq!(state.grid.len(), demo.len());
+        assert_eq!(state.grid[0].len(), demo[0].len());
     }
 
     #[test]
     fn initial_facing_prefers_south_when_open() {
-        let grid = demo_grid();
+        // South open → faced first (the S→E→N→W cycle starts at South).
+        let grid = vec![vec!['S'], vec![' ']];
         assert_eq!(initial_facing(&grid, 0, 0), GridFacing::South);
     }
 
@@ -410,13 +469,91 @@ mod tests {
     }
 
     #[test]
+    fn demo_grid_is_well_formed() {
+        use crate::world::demo_grid;
+        use crate::world::objects::dead_end::is_dead_end;
+        use std::collections::{HashSet, VecDeque};
+
+        let grid = demo_grid();
+        let rows = grid.len();
+        let cols = grid[0].len();
+
+        let count = |target: char| grid.iter().flatten().filter(|&&c| c == target).count();
+        assert_eq!(count('S'), 1, "exactly one start");
+        assert_eq!(count('F'), 1, "exactly one finish");
+        assert!(count('K') >= 1, "at least one key");
+        assert!(count('D') >= 1, "at least one door");
+
+        let find = |target: char| {
+            grid.iter()
+                .enumerate()
+                .find_map(|(r, row)| row.iter().position(|&c| c == target).map(|c| (r, c)))
+                .unwrap()
+        };
+        let start = find('S');
+
+        // BFS from the start. `doors_passable = false` models locked doors
+        // (treats 'D' as a wall); `true` models every door open.
+        let reachable = |doors_passable: bool| -> HashSet<(usize, usize)> {
+            let mut seen = HashSet::new();
+            let mut queue = VecDeque::new();
+            seen.insert(start);
+            queue.push_back(start);
+            while let Some((r, c)) = queue.pop_front() {
+                let mut neighbours = Vec::new();
+                if r > 0 {
+                    neighbours.push((r - 1, c));
+                }
+                if r + 1 < rows {
+                    neighbours.push((r + 1, c));
+                }
+                if c > 0 {
+                    neighbours.push((r, c - 1));
+                }
+                if c + 1 < cols {
+                    neighbours.push((r, c + 1));
+                }
+                for (nr, nc) in neighbours {
+                    let ch = grid[nr][nc];
+                    let passable = ch != 'W' && (doors_passable || ch != 'D');
+                    if passable && seen.insert((nr, nc)) {
+                        queue.push_back((nr, nc));
+                    }
+                }
+            }
+            seen
+        };
+
+        let finish = find('F');
+        let key = find('K');
+        let locked = reachable(false);
+        let unlocked = reachable(true);
+
+        // The door genuinely gates the finish, and the key is obtainable first.
+        assert!(!locked.contains(&finish), "finish must be gated by the door");
+        assert!(unlocked.contains(&finish), "finish reachable once the door opens");
+        assert!(locked.contains(&key), "key reachable while the door is locked");
+
+        // Several dead-ends remain for landmark objects (S/F/K/D excluded).
+        let mut dead_ends = 0;
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &cell) in row.iter().enumerate() {
+                if !matches!(cell, 'S' | 'F' | 'K' | 'D') && is_dead_end(&grid, r, c) {
+                    dead_ends += 1;
+                }
+            }
+        }
+        assert!(dead_ends >= 6, "expected >= 6 landmark dead-ends, got {dead_ends}");
+    }
+
+    #[test]
     fn playing_spawns_brazier_bowl_marker() {
-        // The demo grid contains at least one dead-end cell, and the
+        // The demo grid contains several dead-end cells, and the
         // dead-end-object hash is deterministic — so at least one of the
         // four landmark kinds will be spawned. We can't guarantee a
-        // brazier from a single demo grid (the hash picks one of four),
-        // so seed the config to force kind 0 (brazier) — `seed = 0` puts
-        // demo-grid cell (1,0) into the brazier branch via the hash.
+        // brazier from any single dead-end (the hash picks one of four),
+        // so sweep for a seed that forces kind 0 (brazier) on some
+        // landmark dead-end.
         let mut app = make_playing_app_with_config(GameConfig {
             seed: brazier_forcing_seed(),
             ..GameConfig::default()
@@ -440,7 +577,9 @@ mod tests {
         for seed in 0u64..1024 {
             for (r, row) in grid.iter().enumerate() {
                 for (c, &cell) in row.iter().enumerate() {
-                    if cell == 'S' || cell == 'F' {
+                    // Mirror `spawn_dead_end_object_for_cell`'s exclusions: only
+                    // cells that actually receive a landmark are candidates.
+                    if matches!(cell, 'S' | 'F' | 'K' | 'D') {
                         continue;
                     }
                     if is_dead_end(&grid, r, c) && dead_end_object_index(r, c, seed) == 0 {
