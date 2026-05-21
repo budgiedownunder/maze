@@ -447,6 +447,12 @@ pub struct Play3dConfigResponse {
     /// `dressed_stone`, `wood`, `cobblestone`. Safely degrades to
     /// `brick` if unrecognised.
     pub wall_type: String,
+    /// Door open-animation style. One of `swing`, `slide`, `portcullis`,
+    /// `dissolve`. Safely degrades to `swing` if unrecognised.
+    pub door_style: String,
+    /// Key-holder style for `'K'` cells. One of `pedestal`, `chest`,
+    /// `floating_key`. Safely degrades to `pedestal` if unrecognised.
+    pub key_holder: String,
 }
 
 /// JSON shape of the per-difficulty landmark toggles in
@@ -515,6 +521,8 @@ pub async fn get_play3d_config(
         },
         sky_type: preset.sky_type.as_wire_str().to_string(),
         wall_type: preset.wall_type.as_wire_str().to_string(),
+        door_style: preset.door_style.as_wire_str().to_string(),
+        key_holder: preset.key_holder.as_wire_str().to_string(),
     }))
 }
 

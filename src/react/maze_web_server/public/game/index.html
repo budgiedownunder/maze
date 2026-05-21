@@ -462,18 +462,6 @@
     const params = new URLSearchParams(location.search);
     const mazeId = params.get('id');
 
-    // Throwaway dev overrides: ?doorStyle=&keyHolder= let us preview the door /
-    // key-holder styles before the proper per-launch UI lands. Remove once the
-    // custom-launch modal exposes these. Empty/absent → the Bevy side defaults
-    // (swing / pedestal).
-    function applyStyleOverrides(config) {
-      const doorStyle = params.get('doorStyle');
-      const keyHolder = params.get('keyHolder');
-      if (doorStyle) config.doorStyle = doorStyle;
-      if (keyHolder) config.keyHolder = keyHolder;
-      return config;
-    }
-
     if (mazeId) {
       // /game/?id=<mazeId> — a specific user-edited maze. The React
       // Play3dCustomLaunchModal writes the user's last-chosen launch
@@ -492,6 +480,8 @@
       const DEFAULT_LAUNCH_SETTINGS = {
         skyType: 'night',
         wallType: 'brick',
+        doorStyle: 'swing',
+        keyHolder: 'pedestal',
         wallTint: false,
         wallMaterialVariation: false,
         deadEndObjects: true,
@@ -531,6 +521,8 @@
         return {
           skyType: readStr('skyType', base.skyType),
           wallType: readStr('wallType', base.wallType),
+          doorStyle: readStr('doorStyle', base.doorStyle),
+          keyHolder: readStr('keyHolder', base.keyHolder),
           wallTint: readBool('wallTint', base.wallTint),
           wallMaterialVariation: readBool('wallMaterialVariation', base.wallMaterialVariation),
           deadEndObjects: readBool('deadEndObjects', base.deadEndObjects),
@@ -562,6 +554,8 @@
         mode: truncateMode(maze.name),
         skyType: settings.skyType,
         wallType: settings.wallType,
+        doorStyle: settings.doorStyle,
+        keyHolder: settings.keyHolder,
         landmarks: {
           wallTint: settings.wallTint,
           wallMaterialVariation: settings.wallMaterialVariation,
@@ -572,7 +566,7 @@
         mazeJson: JSON.stringify(maze.definition),
       };
       try {
-        start_with_config(JSON.stringify(applyStyleOverrides(startConfig)));
+        start_with_config(JSON.stringify(startConfig));
         document.getElementById('loading').remove();
         canvas.focus({ preventScroll: true });
       } catch (err) {
@@ -600,7 +594,7 @@
         }
 
         try {
-          start_with_config(JSON.stringify(applyStyleOverrides(preset)));
+          start_with_config(JSON.stringify(preset));
           clearInterval(timer);
           document.getElementById('loading').remove();
           canvas.focus({ preventScroll: true });

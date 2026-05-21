@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import {
+  DOOR_STYLES,
+  KEY_HOLDER_STYLES,
   SKY_TYPES,
   WALL_TYPES,
   loadPlay3dCustomLaunchSettings,
   titleCaseWire,
+  type DoorStyle,
+  type KeyHolderStyle,
   type Play3dCustomLaunchSettings,
   type SkyType,
   type WallType,
@@ -19,6 +23,8 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
   const initial = loadPlay3dCustomLaunchSettings()
   const [skyType, setSkyType] = useState<SkyType>(initial.skyType)
   const [wallType, setWallType] = useState<WallType>(initial.wallType)
+  const [doorStyle, setDoorStyle] = useState<DoorStyle>(initial.doorStyle)
+  const [keyHolder, setKeyHolder] = useState<KeyHolderStyle>(initial.keyHolder)
   const [wallTint, setWallTint] = useState(initial.wallTint)
   const [wallMaterialVariation, setWallMaterialVariation] = useState(initial.wallMaterialVariation)
   const [deadEndObjects, setDeadEndObjects] = useState(initial.deadEndObjects)
@@ -42,6 +48,8 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
     onPlay({
       skyType,
       wallType,
+      doorStyle,
+      keyHolder,
       wallTint,
       wallMaterialVariation,
       deadEndObjects,
@@ -106,6 +114,32 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
               onChange={e => { setWallTint(e.target.checked); clearError() }}
             />
             <span>Varied wall tints</span>
+          </label>
+
+          <label className="modal-stacked-input">
+            Door style
+            <select
+              className="input"
+              value={doorStyle}
+              onChange={e => { setDoorStyle(e.target.value as DoorStyle); clearError() }}
+            >
+              {DOOR_STYLES.map(d => (
+                <option key={d} value={d}>{titleCaseWire(d)}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="modal-stacked-input">
+            Key holder
+            <select
+              className="input"
+              value={keyHolder}
+              onChange={e => { setKeyHolder(e.target.value as KeyHolderStyle); clearError() }}
+            >
+              {KEY_HOLDER_STYLES.map(k => (
+                <option key={k} value={k}>{titleCaseWire(k)}</option>
+              ))}
+            </select>
           </label>
 
           <label className="modal-checkbox">

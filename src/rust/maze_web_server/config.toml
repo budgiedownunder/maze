@@ -120,6 +120,18 @@ sky_type = "night"
 # wall_material_variation landmark below is false). One of "brick" |
 # "dressed_stone" | "wood" | "cobblestone". Default "brick".
 wall_type = "brick"
+# Door open-animation style — one of "swing" | "slide" | "portcullis" |
+# "dissolve". Default "swing". Applies to doors in authored mazes; generated
+# difficulty mazes don't place doors yet, so this has no visible effect on them.
+#door_style = "swing"
+#door_style = "slide"
+#door_style = "portcullis"
+#door_style = "dissolve"
+# Key-holder style for 'K' cells — one of "pedestal" | "chest" |
+# "floating_key". Default "pedestal".
+#key_holder = "pedestal"
+#key_holder = "chest"
+#key_holder = "floating_key"
 
 [game.play3d.easy.landmarks]
 # Per-cell wall tint variation — each cell's walls pick one of six

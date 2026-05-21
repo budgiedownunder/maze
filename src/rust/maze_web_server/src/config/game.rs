@@ -82,6 +82,12 @@ pub struct Play3dDifficultyConfig {
     /// `brick` so the no-config and pre-Step-14 behaviour is preserved.
     #[serde(default = "default_wall_type")]
     pub wall_type: WallTypeConfig,
+    /// Door open-animation style for this difficulty. Default `swing`.
+    #[serde(default = "default_door_style")]
+    pub door_style: DoorStyleConfig,
+    /// Key-holder style for `'K'` cells this difficulty. Default `pedestal`.
+    #[serde(default = "default_key_holder")]
+    pub key_holder: KeyHolderStyleConfig,
 }
 
 /// Atmospheric sky modes. Wire form (TOML / JSON) is lowercase
@@ -161,6 +167,78 @@ impl<'de> Deserialize<'de> for WallTypeConfig {
     }
 }
 
+/// Door open-animation style for the 3D game. Wire form (TOML / JSON) is
+/// `snake_case` (`"swing" | "slide" | "portcullis" | "dissolve"`). Unknown
+/// values deserialise as `Swing` rather than failing the entire `AppConfig`
+/// load — same forgiving policy as [`SkyTypeConfig`].
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DoorStyleConfig {
+    #[default]
+    Swing,
+    Slide,
+    Portcullis,
+    Dissolve,
+}
+
+impl DoorStyleConfig {
+    /// `snake_case` wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Swing => "swing",
+            Self::Slide => "slide",
+            Self::Portcullis => "portcullis",
+            Self::Dissolve => "dissolve",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for DoorStyleConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "slide" => Self::Slide,
+            "portcullis" => Self::Portcullis,
+            "dissolve" => Self::Dissolve,
+            _ => Self::Swing,
+        })
+    }
+}
+
+/// Key-holder style for `'K'` cells in the 3D game. Wire form (TOML / JSON) is
+/// `snake_case` (`"pedestal" | "chest" | "floating_key"`). Unknown values
+/// deserialise as `Pedestal` — same forgiving policy as [`SkyTypeConfig`].
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyHolderStyleConfig {
+    #[default]
+    Pedestal,
+    Chest,
+    FloatingKey,
+}
+
+impl KeyHolderStyleConfig {
+    /// `snake_case` wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Pedestal => "pedestal",
+            Self::Chest => "chest",
+            Self::FloatingKey => "floating_key",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for KeyHolderStyleConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "chest" => Self::Chest,
+            "floating_key" => Self::FloatingKey,
+            _ => Self::Pedestal,
+        })
+    }
+}
+
 /// Per-difficulty landmark / spatial-orientation toggles. New techniques
 /// add their own field here (default `true`) as they land — the schema
 /// is intentionally a flat record of booleans (or simple values) so
@@ -231,6 +309,8 @@ impl Default for Play3dDifficultyConfig {
             landmarks: LandmarksConfig::default(),
             sky_type: default_sky_type(),
             wall_type: default_wall_type(),
+            door_style: default_door_style(),
+            key_holder: default_key_holder(),
         }
     }
 }
@@ -295,6 +375,8 @@ impl Default for Play3dConfig {
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
                 wall_type: default_wall_type(),
+                door_style: default_door_style(),
+                key_holder: default_key_holder(),
             },
             tricky: Play3dDifficultyConfig {
                 rows: 15,
@@ -309,6 +391,8 @@ impl Default for Play3dConfig {
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
                 wall_type: default_wall_type(),
+                door_style: default_door_style(),
+                key_holder: default_key_holder(),
             },
             hard: Play3dDifficultyConfig {
                 rows: 25,
@@ -323,6 +407,8 @@ impl Default for Play3dConfig {
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
                 wall_type: default_wall_type(),
+                door_style: default_door_style(),
+                key_holder: default_key_holder(),
             },
         }
     }
@@ -418,6 +504,19 @@ fn default_sky_type() -> SkyTypeConfig {
 /// difficulty via `[game.play3d.<difficulty>] wall_type = "wood"`.
 fn default_wall_type() -> WallTypeConfig {
     WallTypeConfig::Brick
+}
+
+/// Door style defaults to swing — the topology-driven look the 3D game shipped
+/// with. Operators override per difficulty via
+/// `[game.play3d.<difficulty>] door_style = "portcullis"`.
+fn default_door_style() -> DoorStyleConfig {
+    DoorStyleConfig::Swing
+}
+
+/// Key-holder style defaults to pedestal. Operators override per difficulty via
+/// `[game.play3d.<difficulty>] key_holder = "chest"`.
+fn default_key_holder() -> KeyHolderStyleConfig {
+    KeyHolderStyleConfig::Pedestal
 }
 
 #[cfg(test)]
@@ -720,6 +819,132 @@ mod tests {
         assert_eq!(WallTypeConfig::DressedStone.as_wire_str(), "dressed_stone");
         assert_eq!(WallTypeConfig::Wood.as_wire_str(), "wood");
         assert_eq!(WallTypeConfig::Cobblestone.as_wire_str(), "cobblestone");
+    }
+
+    #[test]
+    fn door_style_round_trips_from_toml_and_defaults_to_swing() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            door_style = "portcullis"
+
+            [play3d.tricky]
+            rows = 12
+            cols = 12
+            timer_seconds = 180
+            seed = 43
+            min_solution_length = 60
+            door_style = "DISSOLVE"
+            # case-insensitive
+
+            [play3d.hard]
+            rows = 20
+            cols = 20
+            timer_seconds = 360
+            seed = 44
+            min_solution_length = 160
+            # door_style deliberately omitted — defaults to swing
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.door_style, DoorStyleConfig::Portcullis);
+        assert_eq!(cfg.play3d.tricky.door_style, DoorStyleConfig::Dissolve);
+        assert_eq!(cfg.play3d.hard.door_style, DoorStyleConfig::Swing);
+        assert_eq!(Play3dConfig::default().easy.door_style, DoorStyleConfig::Swing);
+    }
+
+    #[test]
+    fn unknown_door_style_falls_back_to_swing() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            door_style = "teleport"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
+        assert_eq!(cfg.play3d.easy.door_style, DoorStyleConfig::Swing);
+    }
+
+    #[test]
+    fn key_holder_round_trips_from_toml_and_defaults_to_pedestal() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            key_holder = "chest"
+
+            [play3d.tricky]
+            rows = 12
+            cols = 12
+            timer_seconds = 180
+            seed = 43
+            min_solution_length = 60
+            key_holder = "FLOATING_KEY"
+            # case-insensitive
+
+            [play3d.hard]
+            rows = 20
+            cols = 20
+            timer_seconds = 360
+            seed = 44
+            min_solution_length = 160
+            # key_holder deliberately omitted — defaults to pedestal
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.key_holder, KeyHolderStyleConfig::Chest);
+        assert_eq!(cfg.play3d.tricky.key_holder, KeyHolderStyleConfig::FloatingKey);
+        assert_eq!(cfg.play3d.hard.key_holder, KeyHolderStyleConfig::Pedestal);
+        assert_eq!(
+            Play3dConfig::default().easy.key_holder,
+            KeyHolderStyleConfig::Pedestal
+        );
+    }
+
+    #[test]
+    fn unknown_key_holder_falls_back_to_pedestal() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            key_holder = "vault"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
+        assert_eq!(cfg.play3d.easy.key_holder, KeyHolderStyleConfig::Pedestal);
+    }
+
+    #[test]
+    fn door_style_and_key_holder_as_wire_str_match_serde_form() {
+        assert_eq!(DoorStyleConfig::Swing.as_wire_str(), "swing");
+        assert_eq!(DoorStyleConfig::Slide.as_wire_str(), "slide");
+        assert_eq!(DoorStyleConfig::Portcullis.as_wire_str(), "portcullis");
+        assert_eq!(DoorStyleConfig::Dissolve.as_wire_str(), "dissolve");
+        assert_eq!(KeyHolderStyleConfig::Pedestal.as_wire_str(), "pedestal");
+        assert_eq!(KeyHolderStyleConfig::Chest.as_wire_str(), "chest");
+        assert_eq!(KeyHolderStyleConfig::FloatingKey.as_wire_str(), "floating_key");
     }
 
     #[test]

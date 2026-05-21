@@ -6069,6 +6069,33 @@ mod test_definitions {
         assert_eq!(body.minimap_radius, 9);
     }
 
+    #[actix_web::test]
+    async fn get_play3d_config_returns_door_and_key_holder_styles() {
+        use crate::config::game::{DoorStyleConfig, KeyHolderStyleConfig};
+        let mut user_defs = vec![];
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let mut app_config = AppConfig::default();
+        app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        app_config.comms.enabled = true;
+        // Easy gets explicit non-default styles; tricky keeps the defaults.
+        app_config.game.play3d.easy.door_style = DoorStyleConfig::Portcullis;
+        app_config.game.play3d.easy.key_holder = KeyHolderStyleConfig::Chest;
+        let (app, _, _, _, _) =
+            create_test_app_with_config(&mut user_defs, None, false, features, app_config).await;
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=easy", None, None);
+        let resp = test::call_service(&app, req).await;
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.door_style, "portcullis");
+        assert_eq!(body.key_holder, "chest");
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=tricky", None, None);
+        let resp = test::call_service(&app, req).await;
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.door_style, "swing");
+        assert_eq!(body.key_holder, "pedestal");
+    }
+
     // **************************************************************************************************
     // Tests: PUT /api/v1/admin/features
     // **************************************************************************************************

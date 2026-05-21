@@ -105,6 +105,8 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.landmarks.wall_material_variation` | Boolean | `true` | (config-file only — when `true`, split the maze into a 2×2 NW/NE/SW/SE grid and render each quadrant with its own wall material (brick / dressed stone / wood / cobblestone); supersedes `wall_tint`)
 |                | `game.play3d.<difficulty>.sky_type` | Text (`night` / `sunrise` / `day` / `sunset`) | `night` | (config-file only — atmospheric sky mode; unknown values fall back to `night`)
 |                | `game.play3d.<difficulty>.wall_type` | Text (`brick` / `dressed_stone` / `wood` / `cobblestone`) | `brick` | (config-file only — wall texture used by the per-cell tinted path; bypassed when `wall_material_variation` is `true`; unknown values fall back to `brick`)
+|                | `game.play3d.<difficulty>.door_style` | Text (`swing` / `slide` / `portcullis` / `dissolve`) | `swing` | (config-file only — door open-animation style; applies to authored mazes containing door cells; unknown values fall back to `swing`)
+|                | `game.play3d.<difficulty>.key_holder` | Text (`pedestal` / `chest` / `floating_key`) | `pedestal` | (config-file only — key-holder style for key cells; unknown values fall back to `pedestal`)
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
@@ -591,7 +593,9 @@ Response shape (camelCase):
     "wallMaterialVariation": true
   },
   "skyType": "night",
-  "wallType": "brick"
+  "wallType": "brick",
+  "doorStyle": "swing",
+  "keyHolder": "pedestal"
 }
 ```
 
@@ -599,6 +603,7 @@ Response shape (camelCase):
 - `minSolutionLength` is plumbed through to the maze crate's `min_spine_length` generator option (with the crate's default `max_retries`). Set it too high and generation will error rather than produce a degenerate maze.
 - `minimapCellPx` / `minimapRadius` size the in-game minimap: `minimapCellPx` scales its on-screen footprint, `minimapRadius` controls how many cells around the player are visible (a `2r+1` square window). Both default to the shipped values (10 / 5).
 - `title` is the in-game splash text shown for ~2 s on game start. Override per difficulty via `[game.play3d.<difficulty>].title`.
+- `doorStyle` (`swing` / `slide` / `portcullis` / `dissolve`) and `keyHolder` (`pedestal` / `chest` / `floating_key`) choose the 3D look of doors and key holders. They take effect for **authored mazes** that contain door or key cells (via the Play 3D custom-launch flow); generated difficulty mazes don't place doors/keys yet, so these have no visible effect on the difficulty presets themselves — they're plumbed for the custom-launch path and future automatic placement. Unknown values fall back to `swing` / `pedestal`.
 
 ### `GET /api/v1/users/me` shape
 

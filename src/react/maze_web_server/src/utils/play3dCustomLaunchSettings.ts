@@ -10,9 +10,17 @@ export type SkyType = (typeof SKY_TYPES)[number]
 export const WALL_TYPES = ['brick', 'dressed_stone', 'wood', 'cobblestone'] as const
 export type WallType = (typeof WALL_TYPES)[number]
 
+export const DOOR_STYLES = ['swing', 'slide', 'portcullis', 'dissolve'] as const
+export type DoorStyle = (typeof DOOR_STYLES)[number]
+
+export const KEY_HOLDER_STYLES = ['pedestal', 'chest', 'floating_key'] as const
+export type KeyHolderStyle = (typeof KEY_HOLDER_STYLES)[number]
+
 export interface Play3dCustomLaunchSettings {
   skyType: SkyType
   wallType: WallType
+  doorStyle: DoorStyle
+  keyHolder: KeyHolderStyle
   wallTint: boolean
   wallMaterialVariation: boolean
   deadEndObjects: boolean
@@ -24,6 +32,10 @@ export interface Play3dCustomLaunchSettings {
 export const PLAY3D_CUSTOM_LAUNCH_DEFAULTS: Play3dCustomLaunchSettings = {
   skyType: 'night',
   wallType: 'brick',
+  // Door / key-holder styles default to the topology-driven swing and the
+  // stone pedestal — the look the 3D game shipped with.
+  doorStyle: 'swing',
+  keyHolder: 'pedestal',
   // Match the prior hard-coded "clean look" overrides for user-edited
   // mazes — `wall_tint` and `wall_material_variation` off so the user's
   // layout is the visual focus by default. The user can still flip
@@ -56,10 +68,20 @@ export function loadPlay3dCustomLaunchSettings(): Play3dCustomLaunchSettings {
     const wallType: WallType = (WALL_TYPES as readonly string[]).includes(parsed.wallType ?? '')
       ? (parsed.wallType as WallType)
       : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.wallType
+    const doorStyle: DoorStyle = (DOOR_STYLES as readonly string[]).includes(parsed.doorStyle ?? '')
+      ? (parsed.doorStyle as DoorStyle)
+      : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.doorStyle
+    const keyHolder: KeyHolderStyle = (KEY_HOLDER_STYLES as readonly string[]).includes(
+      parsed.keyHolder ?? '',
+    )
+      ? (parsed.keyHolder as KeyHolderStyle)
+      : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.keyHolder
     const timer = Number(parsed.timerSeconds)
     return {
       skyType,
       wallType,
+      doorStyle,
+      keyHolder,
       wallTint: parsed.wallTint ?? PLAY3D_CUSTOM_LAUNCH_DEFAULTS.wallTint,
       wallMaterialVariation:
         parsed.wallMaterialVariation ?? PLAY3D_CUSTOM_LAUNCH_DEFAULTS.wallMaterialVariation,

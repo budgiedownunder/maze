@@ -65,10 +65,16 @@ describe('Play3dCustomLaunchModal', () => {
     await userEvent.type(timer, '120')
     const sky = screen.getByLabelText(/sky/i) as HTMLSelectElement
     await userEvent.selectOptions(sky, 'sunset')
+    const door = screen.getByLabelText(/door style/i) as HTMLSelectElement
+    await userEvent.selectOptions(door, 'portcullis')
+    const keyHolder = screen.getByLabelText(/key holder/i) as HTMLSelectElement
+    await userEvent.selectOptions(keyHolder, 'chest')
     await userEvent.click(screen.getByRole('button', { name: /play/i }))
     expect(onPlay).toHaveBeenCalledTimes(1)
     const settings = onPlay.mock.calls[0][0] as Play3dCustomLaunchSettings
     expect(settings.skyType).toBe('sunset')
+    expect(settings.doorStyle).toBe('portcullis')
+    expect(settings.keyHolder).toBe('chest')
     expect(settings.timerSeconds).toBe(120)
   })
 
@@ -83,6 +89,8 @@ describe('Play3dCustomLaunchModal', () => {
     const stored: Play3dCustomLaunchSettings = {
       skyType: 'day',
       wallType: 'wood',
+      doorStyle: 'dissolve',
+      keyHolder: 'floating_key',
       wallTint: true,
       wallMaterialVariation: false,
       deadEndObjects: false,
@@ -94,6 +102,8 @@ describe('Play3dCustomLaunchModal', () => {
     render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     expect((screen.getByLabelText(/sky/i) as HTMLSelectElement).value).toBe('day')
     expect((screen.getByLabelText(/wall texture/i) as HTMLSelectElement).value).toBe('wood')
+    expect((screen.getByLabelText(/door style/i) as HTMLSelectElement).value).toBe('dissolve')
+    expect((screen.getByLabelText(/key holder/i) as HTMLSelectElement).value).toBe('floating_key')
     expect(screen.getByLabelText(/varied wall tints/i)).toBeChecked()
     expect(screen.getByLabelText(/dead-end objects/i)).not.toBeChecked()
     expect(screen.getByLabelText(/sparse wall decorations/i)).not.toBeChecked()
@@ -130,6 +140,8 @@ describe('loadPlay3dCustomLaunchSettings', () => {
     const settings: Play3dCustomLaunchSettings = {
       skyType: 'sunset',
       wallType: 'cobblestone',
+      doorStyle: 'slide',
+      keyHolder: 'chest',
       wallTint: true,
       wallMaterialVariation: true,
       deadEndObjects: true,
