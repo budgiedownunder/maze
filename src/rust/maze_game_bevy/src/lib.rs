@@ -23,7 +23,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
             self,
             dead_end::brazier_flicker_system,
             door::{door_animation_system, door_tick_system},
-            key_holder::key_holder_system,
+            key_holder::{key_holder_system, key_sparks_system},
         },
         sky, spawn_world,
     };
@@ -58,6 +58,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_holder_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, key_sparks_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pickup_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pickup_prompt_system.run_if(in_state(AppState::Playing)))
         // The door countdown runs in `FixedUpdate` for deterministic, frame-rate
