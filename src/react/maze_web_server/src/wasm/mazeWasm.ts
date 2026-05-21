@@ -95,12 +95,39 @@ export type MazeGameDirection = typeof MazeGameDirection[keyof typeof MazeGameDi
 
 // Integer values match Rust MoveResultWasm / C# MoveResult exactly.
 export const MazeGamePlayerMoveResult = {
-  None:     0,
-  Moved:    1,
-  Blocked:  2,
-  Complete: 3,
+  None:                0,
+  Moved:               1,
+  Blocked:             2,
+  Complete:            3,
+  BlockedByLockedDoor: 4,
+  StartedUnlocking:    5,
 } as const
 export type MazeGamePlayerMoveResult = typeof MazeGamePlayerMoveResult[keyof typeof MazeGamePlayerMoveResult]
+
+// String values match the objects emitted by wasm_bindgen.rs (and the Rust DoorState /
+// GameEvent / BagItem variants). Consumers reference these constants, never the literals.
+export const MazeDoorState = {
+  Locked:  'locked',
+  Opening: 'opening',
+  Open:    'open',
+} as const
+export type MazeDoorState = typeof MazeDoorState[keyof typeof MazeDoorState]
+
+export const MazeGameEventType = {
+  DoorOpened: 'doorOpened',
+} as const
+export type MazeGameEventType = typeof MazeGameEventType[keyof typeof MazeGameEventType]
+
+export const MazeBagItemType = {
+  Key: 'key',
+} as const
+export type MazeBagItemType = typeof MazeBagItemType[keyof typeof MazeBagItemType]
+
+// Object shapes returned by the MazeGameWasm accessors.
+export interface MazeDoor { row: number; col: number; state: MazeDoorState }
+export interface MazeKeyCell { row: number; col: number; id: number }
+export type MazeBagItem = { type: typeof MazeBagItemType.Key; id: number }
+export type MazeGameEvent = { type: typeof MazeGameEventType.DoorOpened; row: number; col: number }
 
 export type { MazeGameWasm }
 
@@ -119,6 +146,31 @@ export async function createMazeGame(definitionJson: string): Promise<MazeGameWa
 export function moveMazeGamePlayer(game: MazeGameWasm, dir: MazeGameDirection): MazeGamePlayerMoveResult {
   // MazeGameDirection and DirectionWasm share identical integer values — cast is zero-cost.
   return game.move_player(dir as unknown as DirectionWasm) as unknown as MazeGamePlayerMoveResult
+}
+
+/** Picks up the item at the player's current cell, or null if the cell holds none. */
+export function pickupItem(game: MazeGameWasm): MazeBagItem | null {
+  return game.pickup() as unknown as MazeBagItem | null
+}
+
+/** Advances time-based state by dtMs milliseconds; returns the events that occurred. */
+export function tickGame(game: MazeGameWasm, dtMs: number): MazeGameEvent[] {
+  return game.tick(dtMs) as unknown as MazeGameEvent[]
+}
+
+/** Returns the door cells and their current state. */
+export function getDoors(game: MazeGameWasm): MazeDoor[] {
+  return game.doors() as unknown as MazeDoor[]
+}
+
+/** Returns the cells still holding an uncollected key. */
+export function getKeys(game: MazeGameWasm): MazeKeyCell[] {
+  return game.keys() as unknown as MazeKeyCell[]
+}
+
+/** Returns the player's bag contents, in pickup order. */
+export function getBag(game: MazeGameWasm): MazeBagItem[] {
+  return game.bag() as unknown as MazeBagItem[]
 }
 
 /** Frees the WASM game object. Call on unmount or when definitionJson changes. */

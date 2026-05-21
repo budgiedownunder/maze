@@ -53,6 +53,35 @@ test.describe('MazeGamePage', () => {
     await expect(page.getByAltText('Player')).toBeVisible()
   })
 
+  test('collecting a key opens a door and completes the maze', async ({ page }) => {
+    // KeyDoor maze grid: ['S', 'K', 'D', 'F']
+    await page.goto('/play/maze-keydoor')
+    await expect(page.getByAltText('Player')).toBeVisible()
+
+    // The key shows on the grid and the bag starts empty.
+    await expect(page.locator('.maze-grid-container').getByAltText('Key')).toBeVisible()
+    await expect(page.locator('.maze-bag')).toContainText('empty')
+
+    // Step onto the key (not auto-collected), then pick it up with E.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await page.keyboard.press('e')
+    await page.waitForTimeout(150)
+    // The key is now in the bag.
+    await expect(page.locator('.maze-bag').getByAltText('Key')).toBeVisible()
+
+    // Move toward the locked door — begins unlocking; the door opens over ~1s.
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByAltText('Door')).toBeHidden({ timeout: 3000 })
+
+    // Pass through the now-open door and reach the finish.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await expect(page.getByText('You win!')).toBeVisible()
+  })
+
   // ──────────────────────────────────────────────────────────────
   // Gameplay
   // ──────────────────────────────────────────────────────────────

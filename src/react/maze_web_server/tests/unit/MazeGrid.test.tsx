@@ -351,6 +351,8 @@ function makeGameObj(overrides: Partial<{
   player_direction: () => number
   is_complete: () => boolean
   visited_cells: () => Array<{ row: number; col: number }>
+  keys: () => Array<{ row: number; col: number; id: number }>
+  doors: () => Array<{ row: number; col: number; state: string }>
 }> = {}) {
   return {
     player_row:       vi.fn().mockReturnValue(0),
@@ -358,6 +360,8 @@ function makeGameObj(overrides: Partial<{
     player_direction: vi.fn().mockReturnValue(0), // MazeGameDirection.None
     is_complete:      vi.fn().mockReturnValue(false),
     visited_cells:    vi.fn().mockReturnValue([]),
+    keys:             vi.fn().mockReturnValue([]),
+    doors:            vi.fn().mockReturnValue([]),
     free:             vi.fn(),
     ...overrides,
   }
@@ -441,5 +445,39 @@ describe('MazeGrid game mode', () => {
     const cell = container.querySelector('td[aria-label="Cell 1,1"]')!
     await userEvent.click(cell)
     expect(onCellClick).not.toHaveBeenCalled()
+  })
+})
+
+describe('MazeGrid game mode — keys & doors', () => {
+  const KD_GRID = [['S', 'K', 'D', 'F']]
+
+  function renderKD(game: ReturnType<typeof makeGameObj>) {
+    return render(
+      <MazeGrid grid={KD_GRID} solution={null} activeCell={null} anchorCell={null} game={game as never} version={1} />,
+    )
+  }
+
+  it('renders a key for an uncollected key cell', () => {
+    const game = makeGameObj({ keys: () => [{ row: 0, col: 1, id: 0 }] })
+    renderKD(game)
+    expect(screen.getByAltText('Key')).toHaveAttribute('src', '/images/maze/key.svg')
+  })
+
+  it('does not render a key once it has been collected (omitted from keys())', () => {
+    const game = makeGameObj({ keys: () => [] })
+    renderKD(game)
+    expect(screen.queryByAltText('Key')).not.toBeInTheDocument()
+  })
+
+  it('renders a locked door', () => {
+    const game = makeGameObj({ doors: () => [{ row: 0, col: 2, state: 'locked' }] })
+    renderKD(game)
+    expect(screen.getByAltText('Door')).toHaveAttribute('src', '/images/maze/door.svg')
+  })
+
+  it('does not render an opened door (becomes a passage)', () => {
+    const game = makeGameObj({ doors: () => [{ row: 0, col: 2, state: 'open' }] })
+    renderKD(game)
+    expect(screen.queryByAltText('Door')).not.toBeInTheDocument()
   })
 })

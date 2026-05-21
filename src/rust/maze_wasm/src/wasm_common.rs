@@ -36,14 +36,6 @@ pub struct MazeGameWasm {
     pub game: MazeGame,
 }
 
-impl Clone for MazeWasm {
-    fn clone(&self) -> Self {
-        MazeWasm {
-            maze: self.maze.clone(),
-        }
-    }
-}
-
 /// Identifies the type of a maze cell.
 ///
 /// Returned by [`MazeWasm::get_cell_type`].

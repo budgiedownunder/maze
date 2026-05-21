@@ -87,6 +87,15 @@ const result = game.move_player(DirectionWasm.Right);
 // Array of { row: number, col: number } objects in visit order
 // Includes the start cell; only appended on successful moves
 const cells = game.visited_cells();
+
+// Keys are not collected by moving — call pickup() while standing on a key cell.
+const item  = game.pickup();   // → { type: 'key', id } or null
+const keys  = game.keys();     // → [{ row, col, id }]  (uncollected keys)
+const doors = game.doors();    // → [{ row, col, state: 'locked' | 'opening' | 'open' }]
+const bag   = game.bag();      // → [{ type: 'key', id }]  (collected items)
+
+// Advance time-based state (e.g. an opening door). Returns the events that occurred.
+const events = game.tick(16);  // → [{ type: 'doorOpened', row, col }]
 ```
 
 ### wasm-lite (C FFI)

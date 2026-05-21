@@ -73,8 +73,10 @@ impl MazeSolutionWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
+    ///     let solution = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.from_json(`{
     ///             \"id\":\"maze_id\",
     ///             \"name\":\"test\",
@@ -89,11 +91,14 @@ impl MazeSolutionWasm {
     ///                     [\"W\", \"W\", \" \", \"W\", \" \"]
     ///                 ]
     ///         }}`);
-    ///         let solution = maze.solve();
+    ///         solution = maze.solve();
     ///         let solutionPoints = solution.get_path_points();
     ///         console.log("Successfully solved maze. Solution points are: ", solutionPoints);
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (solution) solution.free();
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -129,6 +134,58 @@ fn direction_to_wasm(dir: maze::Direction) -> DirectionWasm {
     }
 }
 
+// The string values below ("key", "locked"/"opening"/"open", "doorOpened") are the
+// JavaScript API contract and must match the MazeBagItemType / MazeDoorState /
+// MazeGameEventType constants in src/react/maze_web_server/src/wasm/mazeWasm.ts.
+
+/// Converts a bag item to a JavaScript object (e.g. `{ type: "key", id }`).
+fn to_js_bag_item_obj(item: &maze::BagItem) -> Object {
+    let obj = Object::new();
+    match item {
+        maze::BagItem::Key { id } => {
+            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("key")).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(*id as f64)).unwrap();
+        }
+    }
+    obj
+}
+
+/// Converts a door cell and its state to a JavaScript object (`{ row, col, state }`).
+fn to_js_door_obj(row: usize, col: usize, state: maze::DoorState) -> Object {
+    let obj = Object::new();
+    Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(row as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(col as f64)).unwrap();
+    let state_str = match state {
+        maze::DoorState::Locked => "locked",
+        maze::DoorState::Opening { .. } => "opening",
+        maze::DoorState::Open => "open",
+    };
+    Reflect::set(&obj, &JsValue::from_str("state"), &JsValue::from_str(state_str)).unwrap();
+    obj
+}
+
+/// Converts an uncollected key cell and its id to a JavaScript object (`{ row, col, id }`).
+fn to_js_key_obj(row: usize, col: usize, id: u32) -> Object {
+    let obj = Object::new();
+    Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(row as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(col as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(id as f64)).unwrap();
+    obj
+}
+
+/// Converts a tick event to a JavaScript object (e.g. `{ type: "doorOpened", row, col }`).
+fn to_js_game_event_obj(event: &maze::GameEvent) -> Object {
+    let obj = Object::new();
+    match event {
+        maze::GameEvent::DoorOpened { cell: (row, col) } => {
+            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("doorOpened")).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
+        }
+    }
+    obj
+}
+
 fn move_result_to_wasm(result: maze::MoveResult) -> MoveResultWasm {
     match result {
         maze::MoveResult::None                => MoveResultWasm::None,
@@ -159,12 +216,15 @@ impl MazeGameWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let game = null;
     ///     try {
-    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
     ///         console.log("player_row() = ", game.player_row());
     ///         console.log("player_col() = ", game.player_col());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
     ///     }
     /// }
     /// run();
@@ -191,14 +251,17 @@ impl MazeGameWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let game = null;
     ///     try {
-    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
     ///         console.log("move_player(Right) = ", game.move_player(DirectionWasm.Right));
     ///         console.log("player_col() = ", game.player_col());
     ///         console.log("move_player(Right) = ", game.move_player(DirectionWasm.Right));
     ///         console.log("player_col() = ", game.player_col());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
     ///     }
     /// }
     /// run();
@@ -219,11 +282,14 @@ impl MazeGameWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let game = null;
     ///     try {
-    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
     ///         console.log("player_row() = ", game.player_row());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
     ///     }
     /// }
     /// run();
@@ -244,11 +310,14 @@ impl MazeGameWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let game = null;
     ///     try {
-    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
     ///         console.log("player_col() = ", game.player_col());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
     ///     }
     /// }
     /// run();
@@ -271,11 +340,14 @@ impl MazeGameWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let game = null;
     ///     try {
-    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
     ///         console.log("player_direction() = ", game.player_direction());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
     ///     }
     /// }
     /// run();
@@ -296,13 +368,16 @@ impl MazeGameWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let game = null;
     ///     try {
-    ///         let game = MazeGameWasm.from_json('{"grid":[["S","F"]]}');
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","F"]]}');
     ///         console.log("is_complete() before move = ", game.is_complete());
     ///         game.move_player(DirectionWasm.Right);
     ///         console.log("is_complete() after move = ", game.is_complete());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
     ///     }
     /// }
     /// run();
@@ -324,12 +399,15 @@ impl MazeGameWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let game = null;
     ///     try {
-    ///         let game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
     ///         game.move_player(DirectionWasm.Right);
     ///         console.log("visited_cells() = ", game.visited_cells());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
     ///     }
     /// }
     /// run();
@@ -338,6 +416,176 @@ impl MazeGameWasm {
         let result = Array::new();
         for &(row, col) in self.game.visited_cells() {
             result.push(&to_js_point_obj(&MazePoint { row, col }));
+        }
+        result
+    }
+
+    /// Picks up the collectible item (currently a key) at the player's current cell,
+    /// returning it as a `{ type, id }` object, or `null` if the cell holds none.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm, DirectionWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","K","F"]]}');
+    ///         game.move_player(DirectionWasm.Right);
+    ///         console.log("pickup() = ", game.pickup());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn pickup(&mut self) -> JsValue {
+        match self.game.pickup() {
+            Some(item) => to_js_bag_item_obj(&item).into(),
+            None => JsValue::NULL,
+        }
+    }
+
+    /// Advances time-based game state by `dt_ms` milliseconds, returning a JavaScript
+    /// `Array` of event objects (e.g. `{ type: "doorOpened", row, col }`).
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm, DirectionWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","K","D","F"]]}');
+    ///         game.move_player(DirectionWasm.Right); // onto the key
+    ///         game.pickup();                         // collect it
+    ///         game.move_player(DirectionWasm.Right); // start unlocking the door
+    ///         console.log("tick(1000) = ", game.tick(1000));
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn tick(&mut self, dt_ms: f32) -> Array {
+        let result = Array::new();
+        for event in self.game.tick(dt_ms) {
+            result.push(&to_js_game_event_obj(&event));
+        }
+        result
+    }
+
+    /// Returns the door cells and their current state as a JavaScript `Array` of
+    /// `{ row, col, state }` objects (`state` is `"locked"`, `"opening"`, or `"open"`).
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","D","F"]]}');
+    ///         console.log("doors() = ", game.doors());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn doors(&self) -> Array {
+        let result = Array::new();
+        for ((row, col), state) in self.game.doors() {
+            result.push(&to_js_door_obj(row, col, state));
+        }
+        result
+    }
+
+    /// Returns the uncollected key cells as a JavaScript `Array` of `{ row, col, id }`
+    /// objects.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","K","F"]]}');
+    ///         console.log("keys() = ", game.keys());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn keys(&self) -> Array {
+        let result = Array::new();
+        for ((row, col), id) in self.game.keys() {
+            result.push(&to_js_key_obj(row, col, id));
+        }
+        result
+    }
+
+    /// Returns the player's bag as a JavaScript `Array` of item objects
+    /// (e.g. `{ type: "key", id }`), in pickup order.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm, DirectionWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","K","F"]]}');
+    ///         game.move_player(DirectionWasm.Right);
+    ///         game.pickup();
+    ///         console.log("bag() = ", game.bag());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn bag(&self) -> Array {
+        let result = Array::new();
+        for item in self.game.bag() {
+            result.push(&to_js_bag_item_obj(item));
         }
         result
     }
@@ -364,12 +612,14 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
-    ///     import init, { MazeWasm } from 'maze_wasm.js';
-    ///         ///     try {
-    ///         let maze = new MazeWasm();
+    ///     let maze = null;
+    ///     try {
+    ///         maze = new MazeWasm();
     ///         console.log("Successfully created maze. Dimensions: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -379,10 +629,6 @@ impl MazeWasm {
     }
     #[wasm_bindgen]
     /// Resets the maze instance to empty
-    ///
-    /// # Returns
-    ///
-    /// The empty maze instance
     ///
     /// # Examples
     ///
@@ -397,21 +643,23 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         console.log("After resize(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///         maze.reset();
     ///         console.log("After reset(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
     /// ```
-    pub fn reset(&mut self) -> MazeWasm {
+    pub fn reset(&mut self) {
         self.maze.reset();
-        self.clone()
     }
     #[wasm_bindgen]
     /// Resizes the maze instance
@@ -437,13 +685,16 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm ();
+    ///         maze = new MazeWasm ();
     ///         console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s   )");
     ///         maze.resize(10, 5);
     ///         console.log("After resize(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -483,13 +734,16 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///         maze.insert_rows(0, 5);
     ///         console.log("After insert_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -530,8 +784,9 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///         maze.insert_rows(0, 5);
     ///         console.log("After insert_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
@@ -539,6 +794,8 @@ impl MazeWasm {
     ///         console.log("After delete_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -579,8 +836,9 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///         maze.insert_rows(0, 1);
     ///         console.log("After insert_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
@@ -588,6 +846,8 @@ impl MazeWasm {
     ///         console.log("After insert_cols(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -628,14 +888,17 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         console.log("After resize(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///         maze.delete_cols(1, 3);
     ///         console.log("After delete_cols(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -669,13 +932,16 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         console.log("After creation, is_empty() = ", maze.is_empty());
     ///         maze.resize(1,2);
     ///         console.log("After resize(), is_empty() = ", maze.is_empty());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -703,13 +969,16 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         console.log("After creation, get_row_count() = ", maze.get_row_count());
     ///         maze.resize(10, 5);
     ///         console.log("After resize(), get_row_count() = ", maze.get_row_count());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -737,13 +1006,16 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         console.log("After creation, get_col_count() = ", maze.get_col_count());
     ///         maze.resize(10, 5);
     ///         console.log("After resize(), get_col_count() = ", maze.get_col_count());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -781,12 +1053,15 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         console.log("get_cell(1, 2) = ", maze.get_cell(1, 2));
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -830,14 +1105,17 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         console.log("Before set_start_cell(), get_cell(1, 2) = ", maze.get_cell(1, 2));
     ///         maze.set_start_cell(1, 2);
     ///         console.log("After set_start_cell(), get_cell(1, 2) = ", maze.get_cell(1, 2));
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -883,13 +1161,16 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         maze.set_start_cell(1, 2);
     ///         console.log("get_start_cell() = ", maze.get_start_cell());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -928,14 +1209,17 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         console.log("Before set_finish_cell(), get_cell(3, 4) = ", maze.get_cell(3, 4));
     ///         maze.set_finish_cell(3, 4);
     ///         console.log("After set_finish_cell(), get_cell(3, 4) = ", maze.get_cell(3, 4));
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -981,13 +1265,16 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         maze.set_finish_cell(9, 4);
     ///         console.log("get_finish_cell() = ", maze.get_finish_cell());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -1029,8 +1316,9 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         maze.set_wall_cells(0, 1, 0, 3);
     ///         for (let col  = 0; col < 5; col ++) {
@@ -1038,6 +1326,8 @@ impl MazeWasm {
     ///         }
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -1085,8 +1375,9 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.resize(10, 5);
     ///         maze.set_wall_cells(0, 1, 0, 3);
     ///         for (let col  = 0; col < 5; col ++) {
@@ -1098,6 +1389,8 @@ impl MazeWasm {
     ///         }
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -1134,14 +1427,17 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.resize(6, 5);
     ///         maze.set_wall_cells(0, 1, 2, 4);
     ///         let json = maze.to_json();
     ///         console.log("to_json() returned: ", json);
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -1171,8 +1467,9 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.from_json(`{
     ///             \"id\":\"maze_id\",
     ///             \"name\":\"test\",
@@ -1194,6 +1491,8 @@ impl MazeWasm {
     ///         }
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -1226,8 +1525,10 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
+    ///     let solution = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.from_json(`{
     ///             \"id\":\"maze_id\",
     ///             \"name\":\"test\",
@@ -1242,11 +1543,14 @@ impl MazeWasm {
     ///                     [\"W\", \"W\", \" \", \"W\", \" \"]
     ///                 ]
     ///         }}`);
-    ///         let solution = maze.solve();
+    ///         solution = maze.solve();
     ///         let solutionPoints = solution.get_path_points();
     ///         console.log("Maze solve() succeeded. Solution points are: ", solutionPoints);
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (solution) solution.free();
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();
@@ -1293,8 +1597,9 @@ impl MazeWasm {
     /// async function run() {
     ///     await init();
     ///
+    ///     let maze = null;
     ///     try {
-    ///         let maze = new MazeWasm();
+    ///         maze = new MazeWasm();
     ///         maze.generate(
     ///             7,
     ///             5,
@@ -1312,6 +1617,8 @@ impl MazeWasm {
     ///         console.log("Maze generate() succeeded. Maze JSON is: ", json);
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
     ///     }
     /// }
     /// run();

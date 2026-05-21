@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 
 // vi.hoisted() ensures all mock helpers are initialised before vi.mock() hoisting.
-const { mockCreateMazeGame, mockMoveMazeGamePlayer, mockFreeMazeGame, mockGameInstance } =
-  vi.hoisted(() => {
+const {
+  mockCreateMazeGame, mockMoveMazeGamePlayer, mockFreeMazeGame,
+  mockPickupItem, mockTickGame, mockGetDoors, mockGameInstance,
+} = vi.hoisted(() => {
     const mockGameInstance = {
       player_row: vi.fn().mockReturnValue(0),
       player_col: vi.fn().mockReturnValue(0),
@@ -16,6 +18,9 @@ const { mockCreateMazeGame, mockMoveMazeGamePlayer, mockFreeMazeGame, mockGameIn
       mockCreateMazeGame: vi.fn().mockResolvedValue(mockGameInstance),
       mockMoveMazeGamePlayer: vi.fn().mockReturnValue(1), // Moved
       mockFreeMazeGame: vi.fn(),
+      mockPickupItem: vi.fn().mockReturnValue(null),
+      mockTickGame: vi.fn().mockReturnValue([]),
+      mockGetDoors: vi.fn().mockReturnValue([]),
       mockGameInstance,
     }
   })
@@ -24,8 +29,12 @@ vi.mock('../../src/wasm/mazeWasm', () => ({
   createMazeGame: mockCreateMazeGame,
   moveMazeGamePlayer: mockMoveMazeGamePlayer,
   freeMazeGame: mockFreeMazeGame,
+  pickupItem: mockPickupItem,
+  tickGame: mockTickGame,
+  getDoors: mockGetDoors,
   MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
-  MazeGamePlayerMoveResult: { None: 0, Moved: 1, Blocked: 2, Complete: 3 },
+  MazeGamePlayerMoveResult: { None: 0, Moved: 1, Blocked: 2, Complete: 3, BlockedByLockedDoor: 4, StartedUnlocking: 5 },
+  MazeDoorState: { Locked: 'locked', Opening: 'opening', Open: 'open' },
 }))
 
 import { useMazeGame, MazeGameDirection, MazeGamePlayerMoveResult } from '../../src/hooks/useMazeGame'
@@ -95,6 +104,30 @@ describe('useMazeGame', () => {
     const { result } = renderHook(() => useMazeGame(DEFINITION_JSON))
     await act(async () => {})
     act(() => { result.current[1](MazeGameDirection.Up) })
+    expect(result.current[0].version).toBe(0)
+  })
+
+  it('move BlockedByLockedDoor — version unchanged', async () => {
+    mockMoveMazeGamePlayer.mockReturnValue(MazeGamePlayerMoveResult.BlockedByLockedDoor)
+    const { result } = renderHook(() => useMazeGame(DEFINITION_JSON))
+    await act(async () => {})
+    act(() => { result.current[1](MazeGameDirection.Right) })
+    expect(result.current[0].version).toBe(0)
+  })
+
+  it('pickup picks up an item — version increments', async () => {
+    mockPickupItem.mockReturnValue({ type: 'key', id: 0 })
+    const { result } = renderHook(() => useMazeGame(DEFINITION_JSON))
+    await act(async () => {})
+    act(() => { result.current[2]() })
+    expect(result.current[0].version).toBe(1)
+  })
+
+  it('pickup with nothing to collect — version unchanged', async () => {
+    mockPickupItem.mockReturnValue(null)
+    const { result } = renderHook(() => useMazeGame(DEFINITION_JSON))
+    await act(async () => {})
+    act(() => { result.current[2]() })
     expect(result.current[0].version).toBe(0)
   })
 

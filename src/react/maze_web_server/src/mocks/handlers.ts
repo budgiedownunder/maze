@@ -60,6 +60,19 @@ export const mockMazeBeta: Maze = {
   },
 }
 
+// A keys-&-doors maze for game play. Kept out of `mockMazes` (and thus the maze
+// list) so list-count assertions stay at two; the GET /mazes/:id handler serves it
+// directly by id for deep-linked /play/maze-keydoor.
+export const mockMazeKeyDoor: Maze = {
+  id: 'maze-keydoor',
+  name: 'KeyDoor',
+  definition: {
+    grid: [
+      ['S', 'K', 'D', 'F'],
+    ],
+  },
+}
+
 export let mockMazes: Maze[] = [mockMazeAlpha, mockMazeBeta]
 
 export function resetMockMazes(): void {
@@ -252,6 +265,7 @@ export const handlers = [
 
   http.get(`${BASE}/mazes/:id`, ({ params }) => {
     const maze = mockMazes.find(m => m.id === params.id)
+      ?? (params.id === mockMazeKeyDoor.id ? mockMazeKeyDoor : undefined)
     if (!maze) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json(maze)
   }),

@@ -12,13 +12,16 @@ async function loadWasm() {
 
 // Test MazeWasm::new() example
 function testMazeNew() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         console.log("Successfully created maze. Dimensions: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -30,8 +33,9 @@ function testMazeNewExpectedOutput() {
 
 // Test MazeWasm::reset() example
 function testMazeReset() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.resize(10, 5);
         console.log("After resize(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
         maze.reset();
@@ -40,6 +44,8 @@ function testMazeReset() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -52,8 +58,9 @@ function testMazeResetExpectedOutput() {
 
 // Test MazeWasm::resize() example
 function testMazeResize() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
         maze.resize(10, 5);
         console.log("After resize(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
@@ -61,6 +68,8 @@ function testMazeResize() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -73,8 +82,9 @@ function testMazeResizeExpectedOutput() {
 
 // Test MazeWasm::insert_rows() example
 function testMazeInsertRows() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
         maze.insert_rows(0, 5);
         console.log("After insert_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
@@ -82,6 +92,8 @@ function testMazeInsertRows() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -94,8 +106,9 @@ function testMazeInsertRowsExpectedOutput() {
 
 // Test MazeWasm::delete_rows() example
 function testMazeDeleteRows() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
         maze.insert_rows(0, 5);
         console.log("After insert_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
@@ -105,6 +118,8 @@ function testMazeDeleteRows() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -118,8 +133,9 @@ function testMazeDeleteRowsExpectedOutput() {
 
 // Test MazeWasm::insert_cols() example
 function testMazeInsertCols() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         console.log("After creation, dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
         maze.insert_rows(0, 1);
         console.log("After insert_rows(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
@@ -129,6 +145,8 @@ function testMazeInsertCols() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -142,8 +160,9 @@ function testMazeInsertColsExpectedOutput() {
 
 // Test MazeWasm::delete_cols() example
 function testMazeDeleteCols() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.resize(10, 5);
         console.log("After resize(), dimensions are: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
         maze.delete_cols(1, 3);
@@ -152,6 +171,8 @@ function testMazeDeleteCols() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -164,8 +185,9 @@ function testMazeDeleteColsExpectedOutput() {
 
 // Test MazeWasm::is_empty() example
 function testMazeIsEmpty() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         console.log("After creation, is_empty() = ", maze.is_empty());
         maze.resize(1, 2);
         console.log("After resize(), is_empty() = ", maze.is_empty());
@@ -173,6 +195,8 @@ function testMazeIsEmpty() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -185,15 +209,18 @@ function testMazeIsEmptyExpectedOutput() {
 
 // Test MazeWasm::get_row_count() example
 function testMazeGetRowCount() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         console.log("After creation, get_row_count() = ", maze.get_row_count());
         maze.resize(10, 5);
         console.log("After resize(), get_row_count() = ", maze.get_row_count());
         return true;
     } catch (e) {
-        consolele.error("Operation failed: ", e);
+        console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -206,8 +233,9 @@ function testMazeGetRowCountExpectedOutput() {
 
 // Test MazeWasm::get_col_count() example
 function testMazeGetColCount() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         console.log("After creation, get_col_count() = ", maze.get_col_count());
         maze.resize(10, 5);
         console.log("After resize(), get_col_count() = ", maze.get_col_count());
@@ -215,6 +243,8 @@ function testMazeGetColCount() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -227,14 +257,17 @@ function testMazeGetColCountExpectedOutput() {
 
 // Test MazeWasm::get_cell() example
 function testMazeGetCell() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.resize(10, 5);
         console.log("get_cell(1, 2) = ", maze.get_cell(1, 2));
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -246,8 +279,9 @@ function testMazeGetCellExpectedOutput() {
 
 // Test MazeWasm::set_start_cell() example
 function testMazeSetStartCell() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.resize(10, 5);
         console.log("Before set_start_cell(), get_cell(1, 2) = ", maze.get_cell(1, 2));
         maze.set_start_cell(1, 2);
@@ -256,6 +290,8 @@ function testMazeSetStartCell() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -268,8 +304,9 @@ function testMazeSetStartCellExpectedOutput() {
 
 // Test MazeWasm::get_start_cell() example
 function testMazeGetStartCell() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.resize(10, 5);
         maze.set_start_cell(1, 2);
         console.log("get_start_cell() = ", maze.get_start_cell());
@@ -277,6 +314,8 @@ function testMazeGetStartCell() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -288,8 +327,9 @@ function testMazeGetStartCellExpectedOutput() {
 
 // Test MazeWasm::set_finish_cell() example
 function testMazeSetFinishCell() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.resize(10, 5);
         console.log("Before set_finish_cell(), get_cell(3, 4) = ", maze.get_cell(3, 4));
         maze.set_finish_cell(3, 4);
@@ -298,6 +338,8 @@ function testMazeSetFinishCell() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -310,8 +352,9 @@ function testMazeSetFinishCellExpectedOutput() {
 
 // Test MazeWasm::get_finish_cell() example
 function testMazeGetFinishCell() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.resize(10, 5);
         maze.set_finish_cell(9, 4);
         console.log("get_finish_cell() = ", maze.get_finish_cell());
@@ -319,6 +362,8 @@ function testMazeGetFinishCell() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -330,8 +375,9 @@ function testMazeGetFinishCellExpectedOutput() {
 
 // Test MazeWasm::set_wall_cells() example
 function testMazeSetWallCells() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.resize(10, 5);
         maze.set_wall_cells(0, 1, 0, 3);
         for (let col = 0; col < 5; col++) {
@@ -341,6 +387,8 @@ function testMazeSetWallCells() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -356,8 +404,9 @@ function testMazeSetWallCellsExpectedOutput() {
 
 // Test MazeWasm::clear_cells() example
 function testMazeClearCells() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.resize(10, 5);
         maze.set_wall_cells(0, 1, 0, 3);
         for (let col = 0; col < 5; col++) {
@@ -371,6 +420,8 @@ function testMazeClearCells() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -391,8 +442,9 @@ function testMazeClearCellsExpectedOutput() {
 
 // Test MazeWasm::to_json() example
 function testMazeToJSON() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.resize(6, 5);
         maze.set_wall_cells(0, 1, 2, 4);
         let json = maze.to_json();
@@ -401,6 +453,8 @@ function testMazeToJSON() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -412,8 +466,9 @@ function testMazeToJSONExpectedOutput() {
 
 // Test MazeWasm::from_json() example
 function testMazeFromJSON() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.from_json(`{
                     \"id\":\"maze_id\",
                     \"name\":\"test\",
@@ -437,6 +492,8 @@ function testMazeFromJSON() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -482,8 +539,10 @@ function testMazeFromJSONExpectedOutput() {
 
 // Test MazeWasm::solve() example
 function testMazeSolve() {
+    let maze = null;
+    let solution = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.from_json(`{
                     \"id\":\"maze_id\",
                     \"name\":\"test\",
@@ -498,13 +557,16 @@ function testMazeSolve() {
                             [\"W\", \"W\", \" \", \"W\", \" \"]
                         ]
                 }}`);
-        let solution = maze.solve();
+        solution = maze.solve();
         let solutionPoints = solution.get_path_points();
         console.log("Maze solve() succeeded. Solution points are: ", solutionPoints);
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (solution) solution.free();
+        if (maze) maze.free();
     }
 }
 
@@ -530,8 +592,9 @@ function testMazeSolveExpectedOutput() {
 
 // Test MazeWasm::generate() example
 function testMazeGenerate() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.generate(
             7,
             5,
@@ -551,6 +614,8 @@ function testMazeGenerate() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -562,8 +627,9 @@ function testMazeGenerateExpectedOutput() {
 
 // Test MazeWasm::generate() example with explicit seed
 function testMazeGenerateSeeded() {
+    let maze = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.generate(
             9,
             7,
@@ -578,10 +644,13 @@ function testMazeGenerateSeeded() {
             12345
         );
         console.log("Maze generate() with seed succeeded. Dimensions: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
-        return maze.get_row_count() === 9 && maze.get_col_count() === 7;
+        let dimensionsMatch = maze.get_row_count() === 9 && maze.get_col_count() === 7;
+        return dimensionsMatch;
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (maze) maze.free();
     }
 }
 
@@ -593,8 +662,10 @@ function testMazeGenerateSeededExpectedOutput() {
 
 // Test MazeSolutionWasm::get_path_points() example
 function testMazeSolutionGetPathPoints() {
+    let maze = null;
+    let solution = null;
     try {
-        let maze = new MazeWasm();
+        maze = new MazeWasm();
         maze.from_json(`{
             \"id\":\"maze_id\",
             \"name\":\"test\",
@@ -609,13 +680,16 @@ function testMazeSolutionGetPathPoints() {
                     [\"W\", \"W\", \" \", \"W\", \" \"]
                 ]
         }}`);
-        let solution = maze.solve();
+        solution = maze.solve();
         let solutionPoints = solution.get_path_points();
         console.log("Successfully solved maze. Solution points are: ", solutionPoints);
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (solution) solution.free();
+        if (maze) maze.free();
     }
 }
 
@@ -641,15 +715,18 @@ function testMazeSolutionGetPathPointsExpectedOutput() {
 
 // Test MazeGameWasm::from_json() example
 function testMazeGameFromJson() {
+    let game = null;
     try {
         let json = '{"grid":[["S"," ","F"]]}';
-        let game = MazeGameWasm.from_json(json);
+        game = MazeGameWasm.from_json(json);
         console.log("player_row() = ", game.player_row());
         console.log("player_col() = ", game.player_col());
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (game) game.free();
     }
 }
 
@@ -662,9 +739,10 @@ function testMazeGameFromJsonExpectedOutput() {
 
 // Test MazeGameWasm::move_player() example
 function testMazeGameMovePlayer() {
+    let game = null;
     try {
         let json = '{"grid":[["S"," ","F"]]}';
-        let game = MazeGameWasm.from_json(json);
+        game = MazeGameWasm.from_json(json);
         console.log("move_player(Right) = ", game.move_player(DirectionWasm.Right));
         console.log("player_col() = ", game.player_col());
         console.log("move_player(Right) = ", game.move_player(DirectionWasm.Right));
@@ -673,6 +751,8 @@ function testMazeGameMovePlayer() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (game) game.free();
     }
 }
 
@@ -687,14 +767,17 @@ function testMazeGameMovePlayerExpectedOutput() {
 
 // Test MazeGameWasm::player_row() example
 function testMazeGamePlayerRow() {
+    let game = null;
     try {
         let json = '{"grid":[["S"," ","F"]]}';
-        let game = MazeGameWasm.from_json(json);
+        game = MazeGameWasm.from_json(json);
         console.log("player_row() = ", game.player_row());
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (game) game.free();
     }
 }
 
@@ -706,14 +789,17 @@ function testMazeGamePlayerRowExpectedOutput() {
 
 // Test MazeGameWasm::player_col() example
 function testMazeGamePlayerCol() {
+    let game = null;
     try {
         let json = '{"grid":[["S"," ","F"]]}';
-        let game = MazeGameWasm.from_json(json);
+        game = MazeGameWasm.from_json(json);
         console.log("player_col() = ", game.player_col());
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (game) game.free();
     }
 }
 
@@ -725,14 +811,17 @@ function testMazeGamePlayerColExpectedOutput() {
 
 // Test MazeGameWasm::player_direction() example
 function testMazeGamePlayerDirection() {
+    let game = null;
     try {
         let json = '{"grid":[["S"," ","F"]]}';
-        let game = MazeGameWasm.from_json(json);
+        game = MazeGameWasm.from_json(json);
         console.log("player_direction() = ", game.player_direction());
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (game) game.free();
     }
 }
 
@@ -744,9 +833,10 @@ function testMazeGamePlayerDirectionExpectedOutput() {
 
 // Test MazeGameWasm::is_complete() example
 function testMazeGameIsComplete() {
+    let game = null;
     try {
         let json = '{"grid":[["S","F"]]}';
-        let game = MazeGameWasm.from_json(json);
+        game = MazeGameWasm.from_json(json);
         console.log("is_complete() before move = ", game.is_complete());
         game.move_player(DirectionWasm.Right);
         console.log("is_complete() after move = ", game.is_complete());
@@ -754,6 +844,8 @@ function testMazeGameIsComplete() {
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (game) game.free();
     }
 }
 
@@ -766,21 +858,140 @@ function testMazeGameIsCompleteExpectedOutput() {
 
 // Test MazeGameWasm::visited_cells() example
 function testMazeGameVisitedCells() {
+    let game = null;
     try {
         let json = '{"grid":[["S"," ","F"]]}';
-        let game = MazeGameWasm.from_json(json);
+        game = MazeGameWasm.from_json(json);
         game.move_player(DirectionWasm.Right);
         console.log("visited_cells() = ", game.visited_cells());
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
         return false;
+    } finally {
+        if (game) game.free();
     }
 }
 
 function testMazeGameVisitedCellsExpectedOutput() {
     return [
         "visited_cells() =  [ { row: 0, col: 0 }, { row: 0, col: 1 } ]"
+    ];
+}
+
+// Test MazeGameWasm::pickup() example
+function testMazeGamePickup() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","K","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        game.move_player(DirectionWasm.Right);
+        console.log("pickup() = ", game.pickup());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGamePickupExpectedOutput() {
+    return [
+        "pickup() =  { type: 'key', id: 0 }"
+    ];
+}
+
+// Test MazeGameWasm::doors() example
+function testMazeGameDoors() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","D","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("doors() = ", game.doors());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameDoorsExpectedOutput() {
+    return [
+        "doors() =  [ { row: 0, col: 1, state: 'locked' } ]"
+    ];
+}
+
+// Test MazeGameWasm::keys() example
+function testMazeGameKeys() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","K","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("keys() = ", game.keys());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameKeysExpectedOutput() {
+    return [
+        "keys() =  [ { row: 0, col: 1, id: 0 } ]"
+    ];
+}
+
+// Test MazeGameWasm::bag() example
+function testMazeGameBag() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","K","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        game.move_player(DirectionWasm.Right);
+        game.pickup();
+        console.log("bag() = ", game.bag());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameBagExpectedOutput() {
+    return [
+        "bag() =  [ { type: 'key', id: 0 } ]"
+    ];
+}
+
+// Test MazeGameWasm::tick() example
+function testMazeGameTick() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","K","D","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        game.move_player(DirectionWasm.Right); // onto the key
+        game.pickup();                          // collect it
+        game.move_player(DirectionWasm.Right); // start unlocking the door
+        console.log("tick(1000) = ", game.tick(1000));
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameTickExpectedOutput() {
+    return [
+        "tick(1000) =  [ { type: 'doorOpened', row: 0, col: 2 } ]"
     ];
 }
 
@@ -816,6 +1027,11 @@ const tests = [
     { name: "MazeGameWasm:player_direction() example", testFunction: testMazeGamePlayerDirection, expectedOutput: testMazeGamePlayerDirectionExpectedOutput },
     { name: "MazeGameWasm:is_complete() example", testFunction: testMazeGameIsComplete, expectedOutput: testMazeGameIsCompleteExpectedOutput },
     { name: "MazeGameWasm:visited_cells() example", testFunction: testMazeGameVisitedCells, expectedOutput: testMazeGameVisitedCellsExpectedOutput },
+    { name: "MazeGameWasm:pickup() example", testFunction: testMazeGamePickup, expectedOutput: testMazeGamePickupExpectedOutput },
+    { name: "MazeGameWasm:doors() example", testFunction: testMazeGameDoors, expectedOutput: testMazeGameDoorsExpectedOutput },
+    { name: "MazeGameWasm:keys() example", testFunction: testMazeGameKeys, expectedOutput: testMazeGameKeysExpectedOutput },
+    { name: "MazeGameWasm:bag() example", testFunction: testMazeGameBag, expectedOutput: testMazeGameBagExpectedOutput },
+    { name: "MazeGameWasm:tick() example", testFunction: testMazeGameTick, expectedOutput: testMazeGameTickExpectedOutput },
 ];
 
 const errorTemplate = (test, i, expected, logRows) =>

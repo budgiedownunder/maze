@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, u
 import type { CellPoint } from '../hooks/useMazeEditor'
 import type { WalkState } from '../hooks/useWalkAnimation'
 import type { MazeGameWasm } from 'maze_wasm'
-import { MazeGameDirection } from '../wasm/mazeWasm'
+import { MazeGameDirection, MazeDoorState, getKeys, getDoors } from '../wasm/mazeWasm'
 
 export const CELL_SIZE = 32
 export const HEADER_SIZE = 24
@@ -138,6 +138,20 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       if (!game) return null
       const cells = game.visited_cells() as unknown as Array<{ row: number; col: number }>
       return new Set(cells.map(c => `${c.row},${c.col}`))
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // In game mode, key/door visuals follow runtime state (not the static grid char):
+    // collected keys are gone, doors carry their open/locked/opening state.
+    const keyCells = useMemo(() => {
+      if (!game) return null
+      return new Set(getKeys(game).map(k => `${k.row},${k.col}`))
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const doorStateByCell = useMemo(() => {
+      if (!game) return null
+      const map = new Map<string, string>()
+      for (const d of getDoors(game)) map.set(`${d.row},${d.col}`, d.state)
+      return map
     }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const solutionMap = useMemo(
@@ -420,7 +434,19 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const walkedImgSrc = !isWalker ? walkInfo?.walkedMap.get(key) : undefined
                   const solutionImgSrc = solutionMap.get(key)
                   const isGamePlayer = game !== null && game !== undefined && playerRow === r && playerCol === c
-                  const img = (isWalker || isGamePlayer) ? null : cellImage(cell)
+                  let img = (isWalker || isGamePlayer) ? null : cellImage(cell)
+                  let imgStyle: React.CSSProperties | undefined
+                  // Game mode: a collected key disappears, an open door disappears, and
+                  // a door that is opening is dimmed. Editor mode renders K/D as-is.
+                  if (game && img) {
+                    if (cell === 'K') {
+                      if (!keyCells?.has(key)) img = null
+                    } else if (cell === 'D') {
+                      const st = doorStateByCell?.get(key)
+                      if (st === MazeDoorState.Open) img = null
+                      else if (st === MazeDoorState.Opening) imgStyle = { opacity: 0.5 }
+                    }
+                  }
                   return (
                     <td
                       key={`cell-${r}-${c}`}
@@ -432,7 +458,14 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                       {isWalker && (
                         <img src={walkInfo!.walkerImg} alt="Walker" className="maze-cell-solution-img" />
                       )}
-                      {!isWalker && img && <img src={img.src} alt={img.alt} />}
+                      {!isWalker && img && (
+                        <img
+                          src={img.src}
+                          alt={img.alt}
+                          className={cell === 'K' ? 'maze-cell-key-img' : undefined}
+                          style={imgStyle}
+                        />
+                      )}
                       {walkedImgSrc && cell !== 'S' && cell !== 'F' && (
                         <img src={walkedImgSrc} alt="Solution path" className="maze-cell-solution-img" />
                       )}

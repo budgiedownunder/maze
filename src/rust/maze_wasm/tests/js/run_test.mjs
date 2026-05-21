@@ -28,4 +28,7 @@ async function run() {
 }
 
 let success = await run();
-process.exit(success ? 0 : 1);
+// Set the exit code and let Node drain the event loop and exit naturally. Do NOT call
+// process.exit(): on Windows it terminates while the wasm module's libuv handles are still
+// closing, tripping an `UV_HANDLE_CLOSING` assertion abort after the tests have already passed.
+process.exitCode = success ? 0 : 1;
