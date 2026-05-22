@@ -28,6 +28,8 @@ For solving a maze you would typically:
 3. Solve for a `solution` using `Maze::solve()`.
 4. Access the `solution.path`  to determine the path through the maze
 
+`solve()` is **key-aware**. A maze containing doors (`'D'`) is solved over the state of which keys have been collected and which doors opened, returning the **shortest** route that actually completes it given the key→door gating — collecting the keys it needs and treating a door as passable once a key is held (doors are not minimised; the route may pass through several). It returns an error when the finish can't be reached, e.g. sealed behind a door with no reachable key. Because a route may backtrack to fetch a key, `solution.path` can revisit a cell (it is a walk, not a strictly simple path). Mazes with no doors solve as the plain shortest path.
+
 ## Game Module
 
 The `game` module (`maze::game`) provides an interactive cell-based game session driven by player input.
