@@ -114,7 +114,10 @@ seed = 8080808
 min_solution_length = 15
 minimap_cell_px = 10
 minimap_radius = 5
-# Sky type — one of "night" | "sunrise" | "day" | "sunset". Default "night".
+# Sky type — one of "night" | "sunrise" | "day" | "sunset" | "dungeon" |
+# "chamber". Default "night". "dungeon" caps the maze with a dark-rock ceiling
+# and "chamber" caps it with a ceiling in the wall material, instead of an
+# open sky.
 sky_type = "night"
 # Wall texture kind for the per-cell tinted path (used when the
 # wall_material_variation landmark below is false). One of "brick" |

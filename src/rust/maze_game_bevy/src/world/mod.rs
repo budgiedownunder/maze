@@ -1,6 +1,7 @@
 pub(crate) mod decorations;
 pub(crate) mod floor;
 pub(crate) mod objects;
+pub(crate) mod roof;
 pub(crate) mod sky;
 pub(crate) mod textures;
 pub(crate) mod walls;
@@ -353,6 +354,7 @@ pub(crate) fn spawn_world(
     let decoration_assets =
         decorations::build_decoration_assets(&mut meshes, &mut materials, &mut images);
     let object_assets = objects::build_object_assets(&mut meshes, &mut materials);
+    let roof_assets = roof::build_roof_assets(&mut meshes, &mut materials, &mut images, &config);
 
     for (r, row) in grid.iter().enumerate() {
         for (c, &cell) in row.iter().enumerate() {
@@ -394,6 +396,7 @@ pub(crate) fn spawn_world(
                 c,
                 &config,
             );
+            roof::spawn_roof_for_cell(&mut commands, &roof_assets, &wall_assets, &grid, r, c, &config);
         }
     }
 

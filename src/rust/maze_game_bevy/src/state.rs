@@ -155,7 +155,11 @@ pub struct GameConfig {
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
 /// dome texture + a paired light preset (see `world/sky`). Default is
 /// `Night` so a missing or unrecognised config value preserves the
-/// pre-Step-10 visual.
+/// pre-Step-10 visual. `Dungeon` and `Chamber` are the odd ones out: instead
+/// of an open sky they cap every passable cell with a ceiling and dim the
+/// lighting, for an enclosed feel. `Dungeon` uses a hewn dark-rock ceiling;
+/// `Chamber` uses the cell's own wall material, reading as a finished, built
+/// interior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SkyType {
     #[default]
@@ -163,6 +167,8 @@ pub enum SkyType {
     Sunrise,
     Day,
     Sunset,
+    Dungeon,
+    Chamber,
 }
 
 impl SkyType {
@@ -174,6 +180,8 @@ impl SkyType {
             Self::Sunrise => "sunrise",
             Self::Day => "day",
             Self::Sunset => "sunset",
+            Self::Dungeon => "dungeon",
+            Self::Chamber => "chamber",
         }
     }
 
@@ -187,6 +195,8 @@ impl SkyType {
             "sunrise" => Self::Sunrise,
             "day" => Self::Day,
             "sunset" => Self::Sunset,
+            "dungeon" => Self::Dungeon,
+            "chamber" => Self::Chamber,
             _ => Self::Night,
         }
     }

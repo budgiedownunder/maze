@@ -40,7 +40,7 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Per-cell wall tint variation** — pick one of six emissive variants for for wall panels, so different corridor sections have different shades. Bypassed when **per-quadrant wall material variation** is on for that difficulty.
 - **Configurable wall texture** — when **per-quadrant wall material variation** is off, the chosen wall texture (one of brick / dressed stone / wood / cobblestone) applies uniformly across the maze, with the per-cell tint variation still riding on top. Selected per difficulty via `[game.play3d.<difficulty>] wall_type`; default `brick`. Bypassed when **wall material variation** is on (same gating as `wall_tint`).
 - **Per-quadrant wall material variation** — splits the maze into a 2×2 NW/NE/SW/SE grid; each quadrant renders with its own wall material (brick / dressed stone / wood / cobblestone), with the quadrant-to-kind mapping permuted by the seed so different seeds rotate which quadrant gets which material. Supersedes the per-cell tint variation AND the configured `wall_type` when on. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_material_variation`. The wood and cobblestone textures are RGB-coloured at 128×128 with per-plank / per-cobble tone palettes (honey / oak / walnut / dark-walnut for wood; warm-light, warm-mid, brown-weathered, mossy-green for cobblestone); brick and dressed stone are still greyscale at 64×64 with emissive-tinted chromaticity.
-- **Atmospheric sky modes** — `night` (dense stars on deep indigo), `sunrise` (soft warm pink with medium stars), `day` (sky-blue with broken white/grey clouds), and `sunset` (warm orange with sparse dark clouds and sparse stars). Each mode renders a procedural panoramic dome around the player (gradient + cloud blobs baked into the dome texture; stars are tiny 3D entities parented to the dome so they stay angularly fixed in the sky as the player walks) and ships a paired ambient + directional light preset so the corridors visibly feel like the chosen time of day. Selected per difficulty via `[game.play3d.<difficulty>] sky_type`; default `night`.
+- **Atmospheric sky modes** — `night` (dense stars on deep indigo), `sunrise` (soft warm pink with medium stars), `day` (sky-blue with broken white/grey clouds), `sunset` (warm orange with sparse dark clouds and sparse stars), and two enclosed modes, `dungeon` and `chamber`. The open-air modes each render a procedural panoramic dome around the player (gradient + cloud blobs baked into the dome texture; stars are tiny 3D entities parented to the dome so they stay angularly fixed in the sky as the player walks) and ship a paired ambient + directional light preset so the corridors visibly feel like the chosen time of day. The enclosed modes instead cap every passable cell with a ceiling tile at the top of the walls and dim the lighting, sealing the player in (the dome behind is near-black so the grout gaps between tiles read as dark seams): `dungeon` uses a hewn dark-rock ceiling (a tileable rock-face texture tinted by a dim emissive), while `chamber` uses the cell's own wall material so the maze reads as a finished, built interior (brick maze → brick ceiling, timber maze → timber ceiling). Each ceiling tile is inset so a grid of dark grout lines separates adjacent tiles — that structure is what keeps it reading as a solid coffered ceiling rather than open sky. Selected per difficulty via `[game.play3d.<difficulty>] sky_type`; default `night`.
 - **Dead-end landmark objects** — every dead-end cell (passable cell with exactly one open neighbour, excluding start / finish) gets a distinctive landmark — a brazier, urn, broken pillar, or chest — picked by hashing `(row, col, seed)`. Each landmark is a composite of several scaled primitives (a brazier is column + bowl + halo with a sin-flicker on the bowl glow; an urn is a stacked-cylinder vase silhouette with two darker pattern bands wrapping the belly; a pillar is base + shaft + capital with vertical perimeter grooves around the discs; a chest is body + rounded lid + leather binding cross on every side face + lid-top binding + front-face keyhole). Every visible sub-mesh ships paired with a slightly-larger black sibling using the inverted-hull outline trick (`cull_mode: Face::Front`) so each part reads as distinct from its neighbours and from the corridor walls behind it. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] dead_end_objects`.
 - **Sparse wall decorations** — ~1 in 10 wall panels gets a decorative emissive decoration (vent grate, faded poster, rune glyph, or glowing glass) projected on its inside face. Placement and kind are seeded from `(row, col, face, seed)` so the same maze always decorates the same walls. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_decorations`.
 - **Floor accents at junctions** — every 3- or 4-way junction cell (passable cell with more than two open neighbours, excluding start / finish) gets a single flat accent on its floor — moss, cracked tile, mosaic, or arcane sigil — picked by hashing `(row, col, seed)`. Reinforces "this is a decision point" memory. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] floor_accents`.
@@ -103,6 +103,7 @@ src/
 │   │   ├── brick.rs        make_brick_texture (consumed by walls)
 │   │   ├── cobblestone.rs  make_cobblestone_texture (wall material variant)
 │   │   ├── dressed_stone.rs make_dressed_stone_texture (wall material variant)
+│   │   ├── rock.rs         make_rock_texture (tileable rock face for the dungeon ceiling)
 │   │   ├── tile.rs         make_tile_texture (consumed by floor tile/start/finish)
 │   │   └── wood.rs         make_wood_texture (wall material variant)
 │   ├── floor/              floor cells, grid lines, start, finish
@@ -148,16 +149,22 @@ src/
 │   │       ├── keyhole.rs  brass lock plate + dark keyhole cutout
 │   │       ├── swing.rs    swinging-leaf rig (straight corridors)
 │   │       └── slide.rs    sliding-leaf rig (corners / junctions; retracts into floor)
-│   └── sky/                sky / atmosphere modes
-│       ├── mod.rs          spawn_sky dispatcher + shared util fns (PRNG, sRGB byte conv)
-│       ├── dome.rs         inverted-sphere dome + camera-follow system
-│       ├── procedural.rs   sky-dome backdrop (gradient baker + make_sky_texture orchestrator)
-│       ├── clouds.rs       cloud blobs painted into the dome texture (CloudSpec + paint)
-│       ├── stars.rs        3D entity starfield (tiny emissive spheres, parented to dome)
-│       ├── day/mod.rs      bright sky-blue with broken clouds
-│       ├── night/mod.rs    deep indigo with dense stars
-│       ├── sunrise/mod.rs  soft warm pink with medium stars
-│       └── sunset/mod.rs   warm orange with sparse clouds + sparse stars
+│   ├── sky/                sky / atmosphere modes
+│   │   ├── mod.rs          spawn_sky dispatcher + shared util fns (PRNG, sRGB byte conv)
+│   │   ├── dome.rs         inverted-sphere dome + camera-follow system
+│   │   ├── procedural.rs   sky-dome backdrop (gradient baker + make_sky_texture orchestrator)
+│   │   ├── clouds.rs       cloud blobs painted into the dome texture (CloudSpec + paint)
+│   │   ├── stars.rs        3D entity starfield (tiny emissive spheres, parented to dome)
+│   │   ├── day/mod.rs      bright sky-blue with broken clouds
+│   │   ├── night/mod.rs    deep indigo with dense stars
+│   │   ├── sunrise/mod.rs  soft warm pink with medium stars
+│   │   ├── sunset/mod.rs   warm orange with sparse clouds + sparse stars
+│   │   ├── dungeon/mod.rs  enclosed: near-black cool dome + dim light (pairs with roof/dungeon.rs)
+│   │   └── chamber/mod.rs  enclosed: near-black warm dome + dim light (pairs with roof/chamber.rs)
+│   └── roof/               per-cell ceiling for the enclosed sky types
+│       ├── mod.rs          RoofCell + shared inset-tile mesh + per-sky-type dispatch
+│       ├── dungeon.rs      dark-rock ceiling material (textures/rock.rs)
+│       └── chamber.rs      ceiling in the cell's wall material
 ├── hud/                    HUD overlays
 │   ├── mod.rs              module declarations
 │   ├── minimap.rs          top-right minimap overlay

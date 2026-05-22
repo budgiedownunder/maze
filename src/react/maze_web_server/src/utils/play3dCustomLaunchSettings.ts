@@ -4,7 +4,7 @@
 // `public/game/index.html` reads the same key to build the StartConfig
 // it sends to the wasm boundary.
 
-export const SKY_TYPES = ['night', 'sunrise', 'day', 'sunset'] as const
+export const SKY_TYPES = ['night', 'sunrise', 'day', 'sunset', 'dungeon', 'chamber'] as const
 export type SkyType = (typeof SKY_TYPES)[number]
 
 export const WALL_TYPES = ['brick', 'dressed_stone', 'wood', 'cobblestone'] as const

@@ -21,8 +21,8 @@ describe('Play3dCustomLaunchModal', () => {
     const sky = screen.getByLabelText(/sky/i) as HTMLSelectElement
     const labels = Array.from(sky.options).map(o => o.textContent)
     const values = Array.from(sky.options).map(o => o.value)
-    expect(labels).toEqual(['Night', 'Sunrise', 'Day', 'Sunset'])
-    expect(values).toEqual(['night', 'sunrise', 'day', 'sunset'])
+    expect(labels).toEqual(['Night', 'Sunrise', 'Day', 'Sunset', 'Dungeon', 'Chamber'])
+    expect(values).toEqual(['night', 'sunrise', 'day', 'sunset', 'dungeon', 'chamber'])
   })
 
   it('renders wall texture options Title-Cased with underscore replaced', () => {

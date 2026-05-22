@@ -90,6 +90,7 @@ mod tests {
             finish::orb::FinishOrb,
             key_holder::KeyMarker,
         },
+        roof::RoofCell,
         sky::dome::SkyDome,
         walls::WallCell,
         CAMERA_EDGE_OFFSET, CAMERA_FOV_REFERENCE_ASPECT, CAMERA_FOV_VERTICAL_MAX_RADIANS,
@@ -186,6 +187,40 @@ mod tests {
         let grid = demo_grid();
         let expected = grid.iter().flat_map(|r| r.iter()).filter(|&&c| c != 'W').count();
         assert_eq!(count, expected, "floor cell count mismatch");
+    }
+
+    #[test]
+    fn no_roof_for_open_sky() {
+        // The default sky (Night) is open-air — no ceiling panels.
+        let mut app = make_playing_app();
+        let count = app.world_mut().query::<&RoofCell>().iter(app.world()).count();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn dungeon_sky_caps_every_passable_cell() {
+        let mut app = make_playing_app_with_config(GameConfig {
+            sky_type: SkyType::Dungeon,
+            ..GameConfig::default()
+        });
+        let count = app.world_mut().query::<&RoofCell>().iter(app.world()).count();
+        let grid = demo_grid();
+        let expected = grid.iter().flat_map(|r| r.iter()).filter(|&&c| c != 'W').count();
+        assert_eq!(count, expected, "dungeon sky caps every passable cell");
+    }
+
+    #[test]
+    fn chamber_sky_caps_every_passable_cell() {
+        // Chamber is the other roofed sky type — same per-cell ceiling coverage
+        // as dungeon, only the material differs (cell's wall material).
+        let mut app = make_playing_app_with_config(GameConfig {
+            sky_type: SkyType::Chamber,
+            ..GameConfig::default()
+        });
+        let count = app.world_mut().query::<&RoofCell>().iter(app.world()).count();
+        let grid = demo_grid();
+        let expected = grid.iter().flat_map(|r| r.iter()).filter(|&&c| c != 'W').count();
+        assert_eq!(count, expected, "chamber sky caps every passable cell");
     }
 
     #[test]
@@ -695,6 +730,19 @@ mod tests {
     }
 
     #[test]
+    fn dungeon_sky_spawns_dome_and_lights() {
+        // The dungeon caps cells with a ceiling but still spawns a (near-black)
+        // dome behind it and a dim ambient + overhead light, so the shared
+        // assertion holds.
+        assert_sky_spawns_dome_and_light(SkyType::Dungeon);
+    }
+
+    #[test]
+    fn chamber_sky_spawns_dome_and_lights() {
+        assert_sky_spawns_dome_and_light(SkyType::Chamber);
+    }
+
+    #[test]
     fn default_sky_type_is_night() {
         assert_eq!(GameConfig::default().sky_type, SkyType::Night);
     }
@@ -706,6 +754,8 @@ mod tests {
             SkyType::Sunrise,
             SkyType::Day,
             SkyType::Sunset,
+            SkyType::Dungeon,
+            SkyType::Chamber,
         ] {
             assert_eq!(SkyType::from_wire_str(st.as_wire_str()), st);
         }
