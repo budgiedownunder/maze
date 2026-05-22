@@ -41,6 +41,7 @@ const GENERATE_OPTIONS: GenerateOptions = {
   finishRow: 5,
   finishCol: 7,
   minSpineLength: 6,
+  doorCount: 0,
 }
 
 // Trivially solvable 1×3 grid: S at (0,0), open at (0,1), F at (0,2).
@@ -95,6 +96,22 @@ describe('generateMaze (real WASM)', () => {
 
   it('throws on invalid options (rowCount < 3)', async () => {
     await expect(generateMaze({ ...GENERATE_OPTIONS, rowCount: 2 })).rejects.toThrow()
+  })
+
+  it('auto-places matching keys and doors when doorCount > 0', async () => {
+    const def = await generateMaze({
+      ...GENERATE_OPTIONS,
+      rowCount: 15,
+      colCount: 15,
+      minSpineLength: 8,
+      doorCount: 3,
+    })
+    const flat = def.grid.flat()
+    const doors = flat.filter(c => c === 'D').length
+    const keys = flat.filter(c => c === 'K').length
+    expect(doors).toBeGreaterThan(0)
+    expect(doors).toBeLessThanOrEqual(3)
+    expect(keys).toBe(doors)
   })
 })
 

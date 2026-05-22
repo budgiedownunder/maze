@@ -2,6 +2,12 @@ export function isValidEmail(email: string): boolean {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)
 }
 
+// Maximum number of doors a generated maze may be seeded with. Mirrors
+// `MAX_AUTO_DOORS` in `src/rust/maze/src/generator.rs` (kept at 8 so keys+doors
+// stay within the key-aware solver's verification bound). The generator clamps
+// to this regardless; the Generate dialog uses it to bound the Doors input.
+export const MAX_DOOR_COUNT = 8
+
 // Returns true when the rows × cols product would exceed the server-reported
 // store cap. A null cap means the configured store imposes no cap, in which
 // case this always returns false.

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import type { GenerateOptions } from '../types/api'
-import { exceedsMazeCellCap } from '../utils/validation'
+import { exceedsMazeCellCap, MAX_DOOR_COUNT } from '../utils/validation'
 
 interface Props {
   grid: string[][]
@@ -24,6 +24,9 @@ function defaultsFromGrid(grid: string[][]) {
   const cols = grid[0]?.length || 5
   const start = findCell(grid, 'S')
   const finish = findCell(grid, 'F')
+  // Seed the Doors field with the number of doors already in the maze (so
+  // regenerating preserves the author's door count), falling back to 0.
+  const doors = grid.reduce((n, row) => n + row.filter(c => c === 'D').length, 0)
   return {
     rows: String(rows),
     cols: String(cols),
@@ -32,6 +35,7 @@ function defaultsFromGrid(grid: string[][]) {
     finishRow: String((finish?.row ?? rows - 1) + 1),
     finishCol: String((finish?.col ?? cols - 1) + 1),
     minSpineLength: '1',
+    doorCount: String(doors),
   }
 }
 
@@ -47,6 +51,7 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
   const [minSpineLength, setMinSpineLength] = useState(
     initialMinSpineLength != null ? String(initialMinSpineLength) : defaults.minSpineLength,
   )
+  const [doorCount, setDoorCount] = useState(defaults.doorCount)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   function handleSubmit(e: React.FormEvent) {
@@ -58,6 +63,7 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
     const fr = parseInt(finishRow, 10)
     const fc = parseInt(finishCol, 10)
     const msl = parseInt(minSpineLength, 10)
+    const doors = parseInt(doorCount, 10)
 
     if (!Number.isInteger(r) || r < 3) {
       setValidationError('Rows must be a whole number of 3 or more.')
@@ -95,9 +101,13 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
       setValidationError('Min Solution Length must be a whole number of 1 or more.')
       return
     }
+    if (!Number.isInteger(doors) || doors < 0 || doors > MAX_DOOR_COUNT) {
+      setValidationError(`Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
+      return
+    }
 
     setValidationError(null)
-    onGenerate({ rowCount: r, colCount: c, startRow: sr, startCol: sc, finishRow: fr, finishCol: fc, minSpineLength: msl })
+    onGenerate({ rowCount: r, colCount: c, startRow: sr, startCol: sc, finishRow: fr, finishCol: fc, minSpineLength: msl, doorCount: doors })
   }
 
   const displayError = validationError ?? error
@@ -141,6 +151,11 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
             Min Solution Length
             <input type="number" className="input" value={minSpineLength}
               onChange={e => { setMinSpineLength(e.target.value); setValidationError(null) }} />
+          </label>
+          <label>
+            Doors
+            <input type="number" className="input" value={doorCount}
+              onChange={e => { setDoorCount(e.target.value); setValidationError(null) }} />
           </label>
           {displayError && <p role="alert" className="error-msg">{displayError}</p>}
           <div className="modal-actions-row">

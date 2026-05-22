@@ -1579,6 +1579,7 @@ impl MazeWasm {
     /// * `max_retries` - Maximum generation attempts (undefined = default 100)
     /// * `branch_from_finish` - Whether to branch from the finish cell (undefined = default false)
     /// * `seed` - Seed (undefined = default random)
+    /// * `door_count` - Number of doors (each with one key) to auto-place (undefined = default 0)
     ///
     /// # Returns
     ///
@@ -1604,6 +1605,7 @@ impl MazeWasm {
     ///             7,
     ///             5,
     ///             GenerationAlgorithmWasm.RecursiveBacktracking,
+    ///             undefined,
     ///             undefined,
     ///             undefined,
     ///             undefined,
@@ -1637,6 +1639,7 @@ impl MazeWasm {
         max_retries: JsValue,
         branch_from_finish: JsValue,
         seed: JsValue,
+        door_count: JsValue,
     ) -> Result<(), JsValue> {
         let row_count = Self::arg_to_usize("row_count", row_count)?;
         let col_count = Self::arg_to_usize("col_count", col_count)?;
@@ -1673,6 +1676,8 @@ impl MazeWasm {
             seed.as_f64().map(|v| v as u64)
         };
 
+        let door_count = Self::opt_arg_to_usize("door_count", door_count)?;
+
         let options = GeneratorOptions {
             row_count,
             col_count,
@@ -1683,7 +1688,7 @@ impl MazeWasm {
             max_retries,
             branch_from_finish,
             seed,
-            door_count: None,
+            door_count,
         };
 
         let maze = Generator { options }

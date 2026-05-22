@@ -48,7 +48,7 @@ beforeEach(() => {
 // ── Rendering & defaults ─────────────────────────────────────────
 
 describe('GenerateMazeModal rendering and defaults', () => {
-  it('renders all 7 labelled fields', () => {
+  it('renders all 8 labelled fields', () => {
     renderModal()
     expect(screen.getByLabelText('Rows')).toBeInTheDocument()
     expect(screen.getByLabelText('Columns')).toBeInTheDocument()
@@ -57,6 +57,22 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Finish Row')).toBeInTheDocument()
     expect(screen.getByLabelText('Finish Column')).toBeInTheDocument()
     expect(screen.getByLabelText('Min Solution Length')).toBeInTheDocument()
+    expect(screen.getByLabelText('Doors')).toBeInTheDocument()
+  })
+
+  it('defaults Doors to 0 when the grid has no doors', () => {
+    renderModal()
+    expect(screen.getByLabelText('Doors')).toHaveValue(0)
+  })
+
+  it('initializes Doors from the number of doors already in the grid', () => {
+    const gridWithDoors: string[][] = [
+      ['S', 'D', ' '],
+      [' ', 'W', 'D'],
+      [' ', ' ', 'F'],
+    ]
+    renderModal({ grid: gridWithDoors })
+    expect(screen.getByLabelText('Doors')).toHaveValue(2)
   })
 
   it('defaults Rows and Columns to the grid dimensions', () => {
@@ -163,6 +179,16 @@ describe('GenerateMazeModal validation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Min Solution Length must be a whole number of 1 or more.')
   })
 
+  it('shows error when Doors exceeds the maximum', async () => {
+    await submitWith({ Doors: '9' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Doors must be a whole number between 0 and 8.')
+  })
+
+  it('shows error when Doors is negative', async () => {
+    await submitWith({ Doors: '-1' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Doors must be a whole number between 0 and 8.')
+  })
+
   it('does not call onGenerate when validation fails', async () => {
     await submitWith({ Rows: '2' })
     expect(mockOnGenerate).not.toHaveBeenCalled()
@@ -222,6 +248,7 @@ describe('GenerateMazeModal happy path', () => {
       finishRow: 3,
       finishCol: 3,
       minSpineLength: 1,
+      doorCount: 0,
     })
   })
 

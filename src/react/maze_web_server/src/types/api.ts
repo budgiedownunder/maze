@@ -79,4 +79,5 @@ export interface GenerateOptions {
   finishRow: number    // 1-based
   finishCol: number    // 1-based
   minSpineLength: number
+  doorCount: number    // number of doors (each with one key) to auto-place; 0 = none
 }

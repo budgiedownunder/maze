@@ -12,6 +12,7 @@ export interface GenerateOptions {
   finishRow: number    // 1-based
   finishCol: number    // 1-based
   minSpineLength: number
+  doorCount: number    // number of doors (each with one key) to auto-place; 0 = none
 }
 
 let initialized = false
@@ -48,7 +49,8 @@ export async function generateMaze(options: GenerateOptions): Promise<MazeDefini
         options.minSpineLength,
         100,        // max_retries
         undefined,  // branch_from_finish (use WASM default)
-        undefined   // seed (random)
+        undefined,  // seed (random)
+        options.doorCount,
       )
     } catch (ex) { throw toError(ex) }
     const parsed = JSON.parse(maze.to_json()) as { definition: MazeDefinition }
