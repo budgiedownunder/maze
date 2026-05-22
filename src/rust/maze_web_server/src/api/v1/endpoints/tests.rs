@@ -5927,7 +5927,7 @@ mod test_definitions {
         assert_eq!(body.cols, 8);
         assert_eq!(body.timer_seconds, 120);
         assert_eq!(body.seed, 8_080_808);
-        assert_eq!(body.min_solution_length, 30);
+        assert_eq!(body.min_solution_length, 12);
         assert_eq!(body.minimap_cell_px, 10);
         assert_eq!(body.minimap_radius, 5);
         assert_eq!(body.title, "Maze 3D");
@@ -5948,7 +5948,7 @@ mod test_definitions {
         assert_eq!(body.cols, 15);
         assert_eq!(body.timer_seconds, 240);
         assert_eq!(body.seed, 15_151_515);
-        assert_eq!(body.min_solution_length, 90);
+        assert_eq!(body.min_solution_length, 24);
         assert_eq!(body.door_count, 3);
 
         let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=hard", None, None);
@@ -5960,7 +5960,7 @@ mod test_definitions {
         assert_eq!(body.cols, 25);
         assert_eq!(body.timer_seconds, 420);
         assert_eq!(body.seed, 25_252_525);
-        assert_eq!(body.min_solution_length, 220);
+        assert_eq!(body.min_solution_length, 44);
         assert_eq!(body.door_count, 4);
     }
 

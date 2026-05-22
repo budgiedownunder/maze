@@ -161,117 +161,32 @@ impl Generator {
         };
         let mut rng = StdRng::seed_from_u64(seed_val);
 
-        const OFFSETS: [(i64, i64); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
-
-        let in_bounds = |r: i64, c: i64| -> bool {
-            r >= 0 && (r as usize) < rows && c >= 0 && (c as usize) < cols
-        };
-
-        // Returns true if carving from (from_r, from_c) into (nr, nc) would not create a cycle.
-        // A cycle would occur if (nr, nc) is already adjacent to any carved cell other than
-        // (from_r, from_c). In this grid-based representation, adjacency of two passable cells
-        // IS a passage — so we must ensure the new cell only touches its single parent.
-        let can_carve =
-            |grid: &[Vec<char>], from_r: usize, from_c: usize, nr: usize, nc: usize| -> bool {
-                for (dr, dc) in &OFFSETS {
-                    let rr = nr as i64 + dr;
-                    let cc = nc as i64 + dc;
-                    if !in_bounds(rr, cc) {
-                        continue;
-                    }
-                    let (rr, cc) = (rr as usize, cc as usize);
-                    if rr == from_r && cc == from_c {
-                        continue;
-                    }
-                    if grid[rr][cc] != 'W' {
-                        return false;
-                    }
-                }
-                true
-            };
-
-        // Collects unvisited ('W') neighbours of `cell` that pass can_carve, shuffled.
-        let collect_neighbors =
-            |grid: &[Vec<char>], cell: &MazePoint, rng: &mut StdRng| -> Vec<MazePoint> {
-                let mut result: Vec<MazePoint> = Vec::new();
-                for (dr, dc) in &OFFSETS {
-                    let nr = cell.row as i64 + dr;
-                    let nc = cell.col as i64 + dc;
-                    if !in_bounds(nr, nc) {
-                        continue;
-                    }
-                    let (nr, nc) = (nr as usize, nc as usize);
-                    if grid[nr][nc] != 'W' {
-                        continue;
-                    }
-                    if !can_carve(grid, cell.row, cell.col, nr, nc) {
-                        continue;
-                    }
-                    result.push(MazePoint { row: nr, col: nc });
-                }
-                result.shuffle(rng);
-                result
-            };
-
         // max_retries == 0 is a special sentinel that means "don't attempt at all".
         if max_retries == 0 {
             return Err(Error::Generate("max_retries is 0, no attempts made".to_string()));
         }
 
-        // A single iterative Depth-First Search (DFS) from start carves the full maze in one pass.
-        // can_carve ensures each new cell touches only its DFS parent, which guarantees
-        // the result is a spanning tree (perfect maze: exactly one path between any two cells).
-        // Cells are never un-carved, so each cell is visited at most once and generation
-        // is always O(n) regardless of grid size or RNG seed.
-        //
-        // After generation the maze is solved to check the spine length. Two retry conditions:
-        //   1. finish stayed 'W' — can_carve can block all paths to finish when its neighbours
-        //      all get carved before the DFS reaches it; retry with the next RNG draw.
-        //   2. spine shorter than min_spine — retry until the DFS produces a long enough path.
-        //
-        // branch_from_finish: when false, finish is carved but not pushed onto the DFS stack,
-        // keeping it as an unambiguous dead end with exactly one inbound passage.
+        // Each attempt carves a fresh perfect maze with the growing-tree algorithm
+        // (see `carve`), then solves it to check the spine length. Two retry
+        // conditions:
+        //   1. finish stayed 'W' — `can_carve` can block all paths to finish when
+        //      its neighbours all get carved first; retry with the next RNG draw.
+        //   2. spine shorter than min_spine — retry until a long enough path forms.
 
         let mut last_err = format!(
             "solution length is less than minimum solution length {min_spine}"
         );
 
         for _ in 0..max_retries {
-            let mut grid = vec![vec!['W'; cols]; rows];
-            grid[start.row][start.col] = ' ';
-
-            let init_neighbors = collect_neighbors(&grid, &start, &mut rng);
-            // Stack frame: (from_row, from_col, remaining_neighbors).
-            // from_row/from_col are stored as usize (Copy) so they can be read before the
-            // mutable pop() without conflicting borrows.
-            let mut stack: Vec<(usize, usize, Vec<MazePoint>)> =
-                vec![(start.row, start.col, init_neighbors)];
-
-            while let Some(frame) = stack.last_mut() {
-                let (from_row, from_col) = (frame.0, frame.1);
-                match frame.2.pop() {
-                    Some(next) => {
-                        // Re-check: grid may have changed since this frame was pushed.
-                        if grid[next.row][next.col] != 'W' {
-                            continue;
-                        }
-                        if !can_carve(&grid, from_row, from_col, next.row, next.col) {
-                            continue;
-                        }
-                        grid[next.row][next.col] = ' ';
-                        if !(next.row == finish.row
-                            && next.col == finish.col
-                            && !branch_from_finish)
-                        {
-                            let nbrs = collect_neighbors(&grid, &next, &mut rng);
-                            stack.push((next.row, next.col, nbrs));
-                        }
-                    }
-                    None => {
-                        stack.pop();
-                    }
-                }
-            }
+            let mut grid = carve(
+                rows,
+                cols,
+                &start,
+                &finish,
+                branch_from_finish,
+                RIVER_FACTOR,
+                &mut rng,
+            );
 
             // If finish was never carved (can_carve blocked all paths to it), retry.
             if grid[finish.row][finish.col] == 'W' {
@@ -318,6 +233,95 @@ impl Generator {
 
         Err(Error::Generate(last_err))
     }
+}
+
+/// River factor for the growing-tree carve: the probability of extending the
+/// **most-recently-carved** cell (a depth-first "river") rather than a **random**
+/// active cell (Prim's-style branching). `1.0` is pure recursive backtracking
+/// (long winding corridors, dead-end branches skewed toward the finish); `0.0`
+/// is pure Prim's (very bushy, short spines). The value below is tuned to flatten
+/// the branch-length distribution along the spine while keeping spines long
+/// enough for typical `min_spine_length`s and the wall fill close to the
+/// recursive-backtracking baseline (~39%).
+const RIVER_FACTOR: f64 = 0.8;
+
+/// 4-neighbour offsets (up, down, left, right) used by the carve.
+const CARVE_OFFSETS: [(i64, i64); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+
+/// Carves a perfect maze (a spanning tree) into a fresh `rows`×`cols` grid using
+/// the **growing-tree** algorithm. An active list of carved cells is grown: each
+/// step picks one — the newest with probability `river_factor`, otherwise a
+/// random active cell — and carves a random carve-able unvisited neighbour;
+/// a cell is dropped once it has none left. Picking newest reproduces recursive
+/// backtracking; picking random reproduces Prim's; a mix tunes branchiness
+/// (see [`RIVER_FACTOR`]).
+///
+/// `can_carve` admits a neighbour only if it touches no carved cell but its
+/// parent, so adjacent passable cells are always tree edges — no loops. Returns
+/// the grid as `' '` (passable) / `'W'` (wall): the start is carved and the
+/// finish is carved unless it was never reached; neither is marked `S`/`F`.
+fn carve(
+    rows: usize,
+    cols: usize,
+    start: &MazePoint,
+    finish: &MazePoint,
+    branch_from_finish: bool,
+    river_factor: f64,
+    rng: &mut StdRng,
+) -> Vec<Vec<char>> {
+    let in_bounds = |r: i64, c: i64| r >= 0 && (r as usize) < rows && c >= 0 && (c as usize) < cols;
+    // (nr, nc) may be carved from (fr, fc) only if it touches no carved cell but (fr, fc).
+    let can_carve = |grid: &[Vec<char>], fr: usize, fc: usize, nr: usize, nc: usize| -> bool {
+        for (dr, dc) in &CARVE_OFFSETS {
+            let (rr, cc) = (nr as i64 + dr, nc as i64 + dc);
+            if !in_bounds(rr, cc) {
+                continue;
+            }
+            let (rr, cc) = (rr as usize, cc as usize);
+            if (rr, cc) != (fr, fc) && grid[rr][cc] != 'W' {
+                return false;
+            }
+        }
+        true
+    };
+    // Carve-able unvisited neighbours of `cell`, shuffled.
+    let carveable = |grid: &[Vec<char>], cell: &MazePoint, rng: &mut StdRng| -> Vec<MazePoint> {
+        let mut out: Vec<MazePoint> = Vec::new();
+        for (dr, dc) in &CARVE_OFFSETS {
+            let (nr, nc) = (cell.row as i64 + dr, cell.col as i64 + dc);
+            if !in_bounds(nr, nc) {
+                continue;
+            }
+            let (nr, nc) = (nr as usize, nc as usize);
+            if grid[nr][nc] == 'W' && can_carve(grid, cell.row, cell.col, nr, nc) {
+                out.push(MazePoint { row: nr, col: nc });
+            }
+        }
+        out.shuffle(rng);
+        out
+    };
+
+    let mut grid = vec![vec!['W'; cols]; rows];
+    grid[start.row][start.col] = ' ';
+    let mut active: Vec<MazePoint> = vec![start.clone()];
+    while !active.is_empty() {
+        let idx = if active.len() == 1 || rng.gen_bool(river_factor) {
+            active.len() - 1 // newest — depth-first "river"
+        } else {
+            rng.gen_range(0..active.len()) // random — Prim's-style branching
+        };
+        let cell = active[idx].clone();
+        if let Some(next) = carveable(&grid, &cell, rng).into_iter().next() {
+            grid[next.row][next.col] = ' ';
+            // Keep the finish a clean dead-end unless branching from it is allowed.
+            if branch_from_finish || (next.row, next.col) != (finish.row, finish.col) {
+                active.push(next);
+            }
+        } else {
+            active.swap_remove(idx);
+        }
+    }
+    grid
 }
 
 /// Maximum number of doors auto-placed at generation. Keeps
@@ -441,13 +445,16 @@ fn find_key_cell(
 const MAX_DOOR_OFFSET: usize = 3;
 
 /// Selects up to `requested` (clamped to [`MAX_AUTO_DOORS`]) interior spine cells
-/// to host doors, walking the spine **from the finish back toward the start**.
-/// Each **junction** (a spine cell with a side branch — open-degree ≥ 3) anchors
-/// a door placed a random `1..=`[`MAX_DOOR_OFFSET`] cells *ahead* of it (toward
-/// the finish), keeping the junction's branch in the segment before the door for
-/// the key. Doors are kept ≥ 2 spine cells apart (room for each key segment). If
-/// the spine has too few junctions to meet the count, the remainder is topped up
-/// with 1-wide corridor cells. Returned ascending.
+/// to host doors, **evenly spread along the spine with a small random jitter**:
+/// for `n` doors, target slot centres are placed at `i·span/(n+1)` for
+/// `i = 1..=n` across the interior range, each jittered by ± a fraction of the
+/// slot. The actual anchor is the nearest **junction** (open-degree ≥ 3) within a
+/// half-slot window of the target — so the junction's branch stays in the segment
+/// before the door for the key — falling back to the target itself when no
+/// junction is close enough. The door then sits a random
+/// `1..=`[`MAX_DOOR_OFFSET`] cells *ahead* of the anchor. Doors are kept ≥ 2 spine
+/// cells apart (room for each key segment); any candidate that collides is
+/// dropped. Returned ascending.
 fn select_doors(
     grid: &[Vec<char>],
     spine: &[MazePoint],
@@ -459,42 +466,73 @@ fn select_doors(
     if cap == 0 || m < 5 {
         return Vec::new();
     }
-    let last_interior = m - 3; // highest interior index (m-2 is the finish's neighbour)
-    let degree = |j: usize| open_degree(grid, spine[j].row, spine[j].col);
-    let well_spaced = |chosen: &[usize], j: usize| chosen.iter().all(|&d| j.abs_diff(d) >= 2);
-    let mut chosen: Vec<usize> = Vec::new();
-    // Pass 1: junction anchors, finish → start; the door sits a random few cells
-    // ahead of each so the junction's branch stays available for the key.
-    for jx in (2..=last_interior).rev() {
-        if chosen.len() >= cap {
-            break;
-        }
-        if degree(jx) >= 3 {
-            let offset = rng.gen_range(1..=MAX_DOOR_OFFSET);
-            let door = (jx + offset).min(last_interior);
-            if door > jx && well_spaced(&chosen, door) {
-                chosen.push(door);
-            }
-        }
+    let lo = 2usize;
+    let hi = m - 3; // highest interior index (m-2 is the finish's neighbour)
+    if hi < lo {
+        return Vec::new();
     }
-    // Pass 2: top up with 1-wide corridor cells when junctions are too few.
-    if chosen.len() < cap {
-        for j in (2..=last_interior).rev() {
-            if chosen.len() >= cap {
+    let span = hi - lo + 1; // number of interior anchor positions
+    let degree = |j: usize| open_degree(grid, spine[j].row, spine[j].col);
+
+    let slot = span / (cap + 1); // ~spacing between consecutive target centres
+    let jitter_radius = slot / 3; // ± a third of the slot keeps doors inside their slot
+    let search_radius = (slot / 2).max(1); // how far from the target we'll look for a junction
+
+    let mut doors: Vec<usize> = Vec::new();
+    for i in 1..=cap {
+        let target_center = lo + (i * span) / (cap + 1);
+        let jitter: isize = if jitter_radius > 0 {
+            rng.gen_range(0..=2 * jitter_radius) as isize - jitter_radius as isize
+        } else {
+            0
+        };
+        let target = (target_center as isize + jitter)
+            .clamp(lo as isize, hi as isize) as usize;
+
+        // Nearest junction within `search_radius` cells of the target — prefer the
+        // exact target, then expand outward symmetrically.
+        let mut anchor: Option<usize> = None;
+        for r in 0..=search_radius {
+            let mut candidates: Vec<usize> = Vec::with_capacity(2);
+            if r == 0 {
+                candidates.push(target);
+            } else {
+                if target + r <= hi {
+                    candidates.push(target + r);
+                }
+                if target >= lo + r {
+                    candidates.push(target - r);
+                }
+            }
+            for c in candidates {
+                if degree(c) >= 3 {
+                    anchor = Some(c);
+                    break;
+                }
+            }
+            if anchor.is_some() {
                 break;
             }
-            if degree(j) == 2 && well_spaced(&chosen, j) {
-                chosen.push(j);
-            }
+        }
+        // Fall back to a corridor cell at the target if no junction is in range.
+        let anchor = anchor.unwrap_or(target);
+
+        // Door sits a random few cells ahead of the anchor (clamped to interior).
+        let offset = rng.gen_range(1..=MAX_DOOR_OFFSET);
+        let door = (anchor + offset).min(hi);
+        if door > anchor && doors.iter().all(|&d| door.abs_diff(d) >= 2) {
+            doors.push(door);
         }
     }
-    chosen.sort_unstable();
-    chosen
+    doors.sort_unstable();
+    doors.dedup();
+    doors
 }
 
 /// Places up to `requested` doors (each with one preceding key) onto the maze's
 /// start→finish `spine`, mutating `grid` in place. Doors are chosen by
-/// [`select_doors`] (a random few cells ahead of junctions, finish→start); each
+/// [`select_doors`] (evenly spread along the spine with a small random jitter,
+/// snapping to the nearest junction and sitting a few cells ahead of it); each
 /// door's key is hidden at the deepest dead-end of a branch in the spine segment
 /// before it (see [`find_key_cell`]) — typically the anchoring junction's own
 /// branch. The count is clamped to the available cells and to [`MAX_AUTO_DOORS`];
@@ -997,12 +1035,13 @@ mod tests {
         assert_eq!(count_char(&placed, 'K'), 1);
         // The key is in the junction's branch, at its deepest dead-end.
         assert_eq!(placed[2][2], 'K');
-        // The door is NOT on the junction — it sits ahead of it, in the corridor.
+        // The door is NOT on the junction — it sits ahead of it, in the corridor
+        // (exact column depends on the even-spread target plus jitter and offset).
         assert_ne!(placed[0][2], 'D');
         assert_eq!(
-            (3..=5).filter(|&c| placed[0][c] == 'D').count(),
+            (3..=7).filter(|&c| placed[0][c] == 'D').count(),
             1,
-            "door should sit a few cells ahead of the junction"
+            "door should sit on the spine ahead of the junction"
         );
 
         // The placed maze is key-aware solvable.

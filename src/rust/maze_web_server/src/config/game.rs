@@ -372,9 +372,11 @@ impl Play3dConfig {
 
 impl Default for Play3dConfig {
     fn default() -> Self {
-        // Defaults align with what the plan documents and what the standalone
-        // Bevy game uses when no config is fetched — keeping the no-config /
-        // misconfigured path behaving like Step 2 instead of crashing.
+        // Fallback presets for the no-config / misconfigured path. The
+        // `min_solution_length`s are kept comfortably below each grid's geometric
+        // minimum path so generation always succeeds with the bushier
+        // growing-tree generator (whose spines are shorter than the old
+        // recursive-backtracking "rivers"); operators raise them via config.toml.
         Self {
             title: default_play3d_title(),
             easy: Play3dDifficultyConfig {
@@ -382,7 +384,7 @@ impl Default for Play3dConfig {
                 cols: 8,
                 timer_seconds: 120,
                 seed: 8_080_808,
-                min_solution_length: 30,
+                min_solution_length: 12,
                 minimap_cell_px: default_minimap_cell_px(),
                 minimap_radius: default_minimap_radius(),
                 title: None,
@@ -399,7 +401,7 @@ impl Default for Play3dConfig {
                 cols: 15,
                 timer_seconds: 240,
                 seed: 15_151_515,
-                min_solution_length: 90,
+                min_solution_length: 24,
                 minimap_cell_px: default_minimap_cell_px(),
                 minimap_radius: default_minimap_radius(),
                 title: None,
@@ -416,7 +418,7 @@ impl Default for Play3dConfig {
                 cols: 25,
                 timer_seconds: 420,
                 seed: 25_252_525,
-                min_solution_length: 220,
+                min_solution_length: 44,
                 minimap_cell_px: default_minimap_cell_px(),
                 minimap_radius: default_minimap_radius(),
                 title: None,
