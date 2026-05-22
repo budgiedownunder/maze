@@ -40,6 +40,15 @@ pub struct GeneratorOptions {
     /// is used as before.
     #[serde(default)]
     pub seed: Option<u64>,
+    /// Number of doors (each paired with one key) to auto-place into the
+    /// generated maze. Doors are placed on the start→finish solution path at
+    /// 1-wide choke points, with each door's key hidden in a reachable dead-end
+    /// before it, so the maze stays solvable (verified with the key-aware
+    /// solver). The count is clamped to what the maze can hold and to a small
+    /// ceiling that keeps the key-aware solver in verifying range. `None` or
+    /// `Some(0)` (the default) places nothing — the lock-free maze as before.
+    #[serde(default)]
+    pub door_count: Option<usize>,
 }
 
 /// Generates a maze from a set of [`GeneratorOptions`].
@@ -61,6 +70,7 @@ pub struct GeneratorOptions {
 ///         max_retries: None,
 ///         branch_from_finish: None,
 ///         seed: None,
+///         door_count: None,
 ///     },
 /// };
 /// let maze = gen.generate().expect("generation should succeed");
@@ -132,6 +142,7 @@ impl Generator {
         let min_spine = opts.min_spine_length.unwrap_or((rows + cols) / 2);
         let max_retries = opts.max_retries.unwrap_or(100);
         let branch_from_finish = opts.branch_from_finish.unwrap_or(false);
+        let door_count = opts.door_count.unwrap_or(0);
 
         let seed_val: u64 = match opts.seed {
             Some(s) => s,
@@ -271,7 +282,26 @@ impl Generator {
 
             let maze = Maze::new(MazeDefinition::from_vec(grid));
             match (Solver { maze: &maze }).solve() {
-                Ok(solution) if solution.path.points.len() >= min_spine => return Ok(maze),
+                Ok(solution) if solution.path.points.len() >= min_spine => {
+                    if door_count == 0 {
+                        return Ok(maze);
+                    }
+                    // Auto-place keys/doors onto the solved spine, then confirm the
+                    // result is still solvable with the key-aware solver. On the rare
+                    // failure, fall through to retry with a fresh carve.
+                    let mut placed = maze.definition.grid.clone();
+                    place_keys_and_doors(&mut placed, &solution.path.points, door_count);
+                    let placed_maze = Maze::new(MazeDefinition::from_vec(placed));
+                    match (Solver { maze: &placed_maze }).solve() {
+                        Ok(sol2) if sol2.path.points.len() >= min_spine => {
+                            return Ok(placed_maze)
+                        }
+                        _ => {
+                            last_err =
+                                "key/door placement did not yield a solvable maze".to_string();
+                        }
+                    }
+                }
                 Ok(solution) => {
                     last_err = format!(
                         "solution length {} is less than minimum solution length {}",
@@ -286,6 +316,167 @@ impl Generator {
         }
 
         Err(Error::Generate(last_err))
+    }
+}
+
+/// Maximum number of doors auto-placed at generation. Keeps
+/// `keys + doors = 2 * doors ≤ 16` — the key-aware solver's `MAX_GATED_FEATURES`
+/// bound — so the placement-validation solve stays in true key-aware mode rather
+/// than falling back to the lock-blind solve.
+const MAX_AUTO_DOORS: usize = 8;
+
+/// Count of non-wall 4-neighbours of `(r, c)`.
+fn open_degree(grid: &[Vec<char>], r: usize, c: usize) -> usize {
+    let rows = grid.len();
+    let cols = grid[r].len();
+    let mut d = 0;
+    if r > 0 && grid[r - 1][c] != 'W' {
+        d += 1;
+    }
+    if r + 1 < rows && grid[r + 1][c] != 'W' {
+        d += 1;
+    }
+    if c > 0 && grid[r][c - 1] != 'W' {
+        d += 1;
+    }
+    if c + 1 < cols && grid[r][c + 1] != 'W' {
+        d += 1;
+    }
+    d
+}
+
+/// Passable (non-wall) 4-neighbours of `(r, c)`.
+fn passable_neighbours(grid: &[Vec<char>], r: usize, c: usize) -> Vec<(usize, usize)> {
+    let rows = grid.len();
+    let cols = grid[r].len();
+    let mut out = Vec::with_capacity(4);
+    if r > 0 && grid[r - 1][c] != 'W' {
+        out.push((r - 1, c));
+    }
+    if c > 0 && grid[r][c - 1] != 'W' {
+        out.push((r, c - 1));
+    }
+    if r + 1 < rows && grid[r + 1][c] != 'W' {
+        out.push((r + 1, c));
+    }
+    if c + 1 < cols && grid[r][c + 1] != 'W' {
+        out.push((r, c + 1));
+    }
+    out
+}
+
+/// Walks down a branch (a subtree hanging off the spine) from `start`, never
+/// stepping back to `came_from`, and returns a dead-end leaf cell. The maze is a
+/// perfect maze (a tree), so following any child each step terminates at a leaf.
+fn branch_dead_end(
+    grid: &[Vec<char>],
+    start: (usize, usize),
+    came_from: (usize, usize),
+) -> (usize, usize) {
+    let mut prev = came_from;
+    let mut cur = start;
+    loop {
+        match passable_neighbours(grid, cur.0, cur.1)
+            .into_iter()
+            .find(|&n| n != prev)
+        {
+            Some(n) => {
+                prev = cur;
+                cur = n;
+            }
+            None => return cur,
+        }
+    }
+}
+
+/// Finds a cell to hold a key within the spine segment spanning spine indices
+/// `[lo, hi]`: prefers a hidden dead-end in a branch hanging off a segment spine
+/// cell, else falls back to a segment spine cell itself (always passable and
+/// neither start/finish nor a door). Returns `None` only for an empty segment,
+/// which the door spacing prevents.
+fn find_key_cell(
+    grid: &[Vec<char>],
+    spine: &[MazePoint],
+    lo: usize,
+    hi: usize,
+) -> Option<(usize, usize)> {
+    if lo > hi {
+        return None;
+    }
+    // Prefer a dead-end down a branch off the segment, so the key isn't simply
+    // sitting on the through-route.
+    for j in lo..=hi {
+        let s = &spine[j];
+        let prev = if j > 0 {
+            Some((spine[j - 1].row, spine[j - 1].col))
+        } else {
+            None
+        };
+        let next = spine.get(j + 1).map(|p| (p.row, p.col));
+        for nb in passable_neighbours(grid, s.row, s.col) {
+            if Some(nb) == prev || Some(nb) == next {
+                continue; // stay off the spine
+            }
+            return Some(branch_dead_end(grid, nb, (s.row, s.col)));
+        }
+    }
+    // Fallback: a spine cell in the segment.
+    Some((spine[lo].row, spine[lo].col))
+}
+
+/// Places up to `requested` doors (each with one preceding key) onto the maze's
+/// start→finish `spine`, mutating `grid` in place. Doors land on interior 1-wide
+/// spine cells (so each gates the through-route without sealing a side branch),
+/// spaced out, and each door's key goes in the spine segment before it. The
+/// count is clamped to the available choke points and to [`MAX_AUTO_DOORS`]; the
+/// caller validates the result with the key-aware solver.
+fn place_keys_and_doors(grid: &mut [Vec<char>], spine: &[MazePoint], requested: usize) {
+    let m = spine.len();
+    if requested == 0 || m < 5 {
+        return;
+    }
+    // Door candidates: interior spine cells (excluding start, finish and their
+    // immediate neighbours) that are 1-wide corridors — degree 2, so their only
+    // open neighbours are the two adjacent spine cells. A door there gates the
+    // spine without cutting off a branch.
+    let candidates: Vec<usize> = (2..m - 2)
+        .filter(|&j| open_degree(grid, spine[j].row, spine[j].col) == 2)
+        .collect();
+    let n = requested.min(candidates.len()).min(MAX_AUTO_DOORS);
+    if n == 0 {
+        return;
+    }
+    // Spread the doors across the candidates, keeping a spine gap ≥ 2 between
+    // chosen doors so each leaves room for the next door's key segment.
+    let mut doors: Vec<usize> = Vec::with_capacity(n);
+    for k in 0..n {
+        let idx = if n == 1 {
+            candidates.len() / 2
+        } else {
+            k * (candidates.len() - 1) / (n - 1)
+        };
+        let cand = candidates[idx];
+        if doors.iter().all(|&d| cand.abs_diff(d) >= 2) {
+            doors.push(cand);
+        }
+    }
+    doors.sort_unstable();
+    doors.dedup();
+    if doors.is_empty() {
+        return;
+    }
+    for &j in &doors {
+        grid[spine[j].row][spine[j].col] = 'D';
+    }
+    // One key per door, in the segment of the spine before it. Keys are
+    // interchangeable, so collecting one per segment leaves the player with
+    // exactly one in hand at each door.
+    let mut prev_boundary = 0usize; // spine index of the previous door (0 = start)
+    for &dj in &doors {
+        if let Some((r, c)) = find_key_cell(grid, spine, prev_boundary + 1, dj - 1) {
+            grid[r][c] = 'K';
+        }
+        prev_boundary = dj;
     }
 }
 
@@ -307,6 +498,7 @@ mod tests {
                 max_retries: None,
                 branch_from_finish: None,
                 seed: None,
+                door_count: None,
             },
         }
     }
@@ -338,6 +530,7 @@ mod tests {
                 max_retries: None,
                 branch_from_finish: None,
                 seed: None,
+                door_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -356,6 +549,7 @@ mod tests {
                 max_retries: None,
                 branch_from_finish: None,
                 seed: None,
+                door_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -374,6 +568,7 @@ mod tests {
                 max_retries: None,
                 branch_from_finish: None,
                 seed: None,
+                door_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -486,6 +681,7 @@ mod tests {
                 max_retries: None,
                 branch_from_finish: None,
                 seed: None,
+                door_count: None,
             },
         };
         let maze = gen.generate().expect("should succeed");
@@ -509,6 +705,7 @@ mod tests {
                 max_retries: None,
                 branch_from_finish: None,
                 seed: None,
+                door_count: None,
             },
         };
         let maze = gen.generate().expect("should succeed");
@@ -536,6 +733,7 @@ mod tests {
                 max_retries: Some(5),
                 branch_from_finish: None,
                 seed: None,
+                door_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -554,6 +752,7 @@ mod tests {
                 max_retries: Some(0),
                 branch_from_finish: None,
                 seed: None,
+                door_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -574,6 +773,7 @@ mod tests {
                 max_retries: None,
                 branch_from_finish: None,
                 seed: Some(42),
+                door_count: None,
             },
         };
         let maze1 = make().generate().expect("should succeed");
@@ -594,10 +794,131 @@ mod tests {
                 max_retries: None,
                 branch_from_finish: None,
                 seed: Some(seed),
+                door_count: None,
             },
         };
         let maze1 = make(1).generate().expect("should succeed");
         let maze2 = make(2).generate().expect("should succeed");
         assert_ne!(maze1.definition.grid, maze2.definition.grid);
+    }
+
+    // --- Automatic key/door placement ---
+
+    fn make_with_doors(rows: usize, cols: usize, seed: u64, doors: usize) -> Generator {
+        Generator {
+            options: GeneratorOptions {
+                row_count: rows,
+                col_count: cols,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start: None,
+                finish: None,
+                min_spine_length: None,
+                max_retries: None,
+                branch_from_finish: None,
+                seed: Some(seed),
+                door_count: Some(doors),
+            },
+        }
+    }
+
+    fn count_char(grid: &[Vec<char>], ch: char) -> usize {
+        grid.iter().flatten().filter(|&&c| c == ch).count()
+    }
+
+    #[test]
+    fn door_count_zero_places_no_keys_or_doors() {
+        let maze = make_with_doors(15, 15, 7, 0)
+            .generate()
+            .expect("should succeed");
+        assert_eq!(count_char(&maze.definition.grid, 'D'), 0);
+        assert_eq!(count_char(&maze.definition.grid, 'K'), 0);
+    }
+
+    #[test]
+    fn auto_placed_maze_has_matching_keys_and_doors_and_is_solvable() {
+        let maze = make_with_doors(15, 15, 7, 3)
+            .generate()
+            .expect("should succeed");
+        let doors = count_char(&maze.definition.grid, 'D');
+        let keys = count_char(&maze.definition.grid, 'K');
+        assert!(doors >= 1, "expected at least one door, got {doors}");
+        assert!(doors <= 3, "should not exceed the requested 3, got {doors}");
+        assert_eq!(keys, doors, "one key is placed per door");
+        // The key-aware solver must find a completing route.
+        Solver { maze: &maze }
+            .solve()
+            .expect("auto-placed maze must be key-aware solvable");
+        // Still exactly one start and one finish.
+        assert_eq!(count_char(&maze.definition.grid, 'S'), 1);
+        assert_eq!(count_char(&maze.definition.grid, 'F'), 1);
+    }
+
+    #[test]
+    fn auto_placed_doors_lie_on_the_solution_spine() {
+        // Removing the doors/keys (back to ' ') and solving lock-blind gives the
+        // spine; every placed door must sit on it (placement only puts doors on
+        // the spine).
+        let maze = make_with_doors(15, 15, 11, 3)
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        let mut bare = grid.clone();
+        for row in bare.iter_mut() {
+            for cell in row.iter_mut() {
+                if *cell == 'D' || *cell == 'K' {
+                    *cell = ' ';
+                }
+            }
+        }
+        let bare_maze = Maze::new(MazeDefinition::from_vec(bare));
+        let spine: std::collections::HashSet<(usize, usize)> = Solver { maze: &bare_maze }
+            .solve()
+            .expect("bare maze solvable")
+            .path
+            .points
+            .iter()
+            .map(|p| (p.row, p.col))
+            .collect();
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &cell) in row.iter().enumerate() {
+                if cell == 'D' {
+                    assert!(spine.contains(&(r, c)), "door at ({r},{c}) is off the spine");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn door_count_is_clamped_on_a_small_maze_and_stays_solvable() {
+        // A 5x5 maze can't hold 8 doors; placement clamps and the result is
+        // still solvable with matching keys/doors.
+        let maze = make_with_doors(5, 5, 3, 8)
+            .generate()
+            .expect("should succeed");
+        let doors = count_char(&maze.definition.grid, 'D');
+        assert!(doors <= 8);
+        assert_eq!(count_char(&maze.definition.grid, 'K'), doors);
+        Solver { maze: &maze }.solve().expect("must stay solvable");
+    }
+
+    #[test]
+    fn door_count_never_exceeds_the_auto_cap() {
+        // Even with a huge request, no more than MAX_AUTO_DOORS are placed (keeps
+        // the key-aware solver within MAX_GATED_FEATURES for validation).
+        let maze = make_with_doors(31, 31, 99, 50)
+            .generate()
+            .expect("should succeed");
+        assert!(count_char(&maze.definition.grid, 'D') <= MAX_AUTO_DOORS);
+    }
+
+    #[test]
+    fn auto_placement_is_deterministic_for_a_fixed_seed() {
+        let a = make_with_doors(15, 15, 123, 3)
+            .generate()
+            .expect("should succeed");
+        let b = make_with_doors(15, 15, 123, 3)
+            .generate()
+            .expect("should succeed");
+        assert_eq!(a.definition.grid, b.definition.grid);
     }
 }

@@ -30,6 +30,8 @@ For solving a maze you would typically:
 
 `solve()` is **key-aware**. A maze containing doors (`'D'`) is solved over the state of which keys have been collected and which doors opened, returning the **shortest** route that actually completes it given the key→door gating — collecting the keys it needs and treating a door as passable once a key is held (doors are not minimised; the route may pass through several). It returns an error when the finish can't be reached, e.g. sealed behind a door with no reachable key. Because a route may backtrack to fetch a key, `solution.path` can revisit a cell (it is a walk, not a strictly simple path). Mazes with no doors solve as the plain shortest path.
 
+`Generator` can **auto-place keys and doors** via `GeneratorOptions.door_count` (default `0` = a lock-free maze). It places that many doors (clamped to the maze's choke points and a small ceiling) on the start→finish solution path at 1-wide corridors, each paired with a key hidden in a reachable dead-end before it, and verifies the result with the key-aware `solve()` so a generated maze with doors is always completable.
+
 ## Game Module
 
 The `game` module (`maze::game`) provides an interactive cell-based game session driven by player input.

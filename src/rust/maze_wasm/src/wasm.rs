@@ -849,6 +849,7 @@ pub extern "C" fn maze_wasm_generate(
         max_retries,
         branch_from_finish,
         seed: Some(opts.seed),
+        door_count: None,
     };
 
     let generator = Generator { options: generator_options };

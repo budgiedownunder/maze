@@ -3091,6 +3091,7 @@ mod test_definitions {
             max_retries,
             branch_from_finish: None,
             seed: None,
+            door_count: None,
         }
     }
 

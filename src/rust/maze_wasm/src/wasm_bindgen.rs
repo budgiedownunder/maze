@@ -1683,6 +1683,7 @@ impl MazeWasm {
             max_retries,
             branch_from_finish,
             seed,
+            door_count: None,
         };
 
         let maze = Generator { options }
