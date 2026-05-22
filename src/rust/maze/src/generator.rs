@@ -1,5 +1,6 @@
 use rand::seq::SliceRandom;
 use rand::rngs::StdRng;
+use rand::Rng;
 use rand::SeedableRng;
 
 use data_model::{Maze, MazeDefinition, MazePoint};
@@ -290,7 +291,7 @@ impl Generator {
                     // result is still solvable with the key-aware solver. On the rare
                     // failure, fall through to retry with a fresh carve.
                     let mut placed = maze.definition.grid.clone();
-                    place_keys_and_doors(&mut placed, &solution.path.points, door_count);
+                    place_keys_and_doors(&mut placed, &solution.path.points, door_count, &mut rng);
                     let placed_maze = Maze::new(MazeDefinition::from_vec(placed));
                     match (Solver { maze: &placed_maze }).solve() {
                         Ok(sol2) if sol2.path.points.len() >= min_spine => {
@@ -365,35 +366,38 @@ fn passable_neighbours(grid: &[Vec<char>], r: usize, c: usize) -> Vec<(usize, us
     out
 }
 
-/// Walks down a branch (a subtree hanging off the spine) from `start`, never
-/// stepping back to `came_from`, and returns a dead-end leaf cell. The maze is a
-/// perfect maze (a tree), so following any child each step terminates at a leaf.
-fn branch_dead_end(
+/// Iterative DFS over a branch (a subtree hanging off the spine), entered at
+/// `start` from `came_from`, returning the **deepest** dead-end leaf and its
+/// depth (cells walked from `start`, so a single-cell branch has depth 0). The
+/// maze is a perfect maze (a tree), so the branch is a finite subtree of leaves.
+fn deepest_leaf(
     grid: &[Vec<char>],
     start: (usize, usize),
     came_from: (usize, usize),
-) -> (usize, usize) {
-    let mut prev = came_from;
-    let mut cur = start;
-    loop {
-        match passable_neighbours(grid, cur.0, cur.1)
-            .into_iter()
-            .find(|&n| n != prev)
-        {
-            Some(n) => {
-                prev = cur;
-                cur = n;
+) -> ((usize, usize), usize) {
+    let mut best = (start, 0usize);
+    let mut stack = vec![(start, came_from, 0usize)];
+    while let Some((cur, prev, depth)) = stack.pop() {
+        let mut has_child = false;
+        for n in passable_neighbours(grid, cur.0, cur.1) {
+            if n == prev {
+                continue;
             }
-            None => return cur,
+            has_child = true;
+            stack.push((n, cur, depth + 1));
+        }
+        if !has_child && depth >= best.1 {
+            best = (cur, depth);
         }
     }
+    best
 }
 
-/// Finds a cell to hold a key within the spine segment spanning spine indices
-/// `[lo, hi]`: prefers a hidden dead-end in a branch hanging off a segment spine
-/// cell, else falls back to a segment spine cell itself (always passable and
-/// neither start/finish nor a door). Returns `None` only for an empty segment,
-/// which the door spacing prevents.
+/// Finds the key cell for the spine segment spanning spine indices `[lo, hi]`:
+/// the **deepest** dead-end across all branches hanging off the segment's spine
+/// cells, so the key is tucked as far off the through-route as the segment
+/// allows. Falls back to a segment spine cell when the segment has no branch.
+/// Returns `None` only for an empty segment, which the door spacing prevents.
 fn find_key_cell(
     grid: &[Vec<char>],
     spine: &[MazePoint],
@@ -403,8 +407,7 @@ fn find_key_cell(
     if lo > hi {
         return None;
     }
-    // Prefer a dead-end down a branch off the segment, so the key isn't simply
-    // sitting on the through-route.
+    let mut best: Option<((usize, usize), usize)> = None;
     for j in lo..=hi {
         let s = &spine[j];
         let prev = if j > 0 {
@@ -417,60 +420,104 @@ fn find_key_cell(
             if Some(nb) == prev || Some(nb) == next {
                 continue; // stay off the spine
             }
-            return Some(branch_dead_end(grid, nb, (s.row, s.col)));
+            let (cell, depth) = deepest_leaf(grid, nb, (s.row, s.col));
+            let length = depth + 1; // include the branch's root cell
+            if best.is_none_or(|(_, b)| length > b) {
+                best = Some((cell, length));
+            }
         }
     }
-    // Fallback: a spine cell in the segment.
+    if let Some((cell, _)) = best {
+        return Some(cell);
+    }
+    // Fallback: a spine cell in the segment (always passable, not start/finish/door).
     Some((spine[lo].row, spine[lo].col))
 }
 
-/// Places up to `requested` doors (each with one preceding key) onto the maze's
-/// start→finish `spine`, mutating `grid` in place. Doors land on interior 1-wide
-/// spine cells (so each gates the through-route without sealing a side branch),
-/// spaced out, and each door's key goes in the spine segment before it. The
-/// count is clamped to the available choke points and to [`MAX_AUTO_DOORS`]; the
-/// caller validates the result with the key-aware solver.
-fn place_keys_and_doors(grid: &mut [Vec<char>], spine: &[MazePoint], requested: usize) {
+/// How many cells past a junction a door may be placed. A door is positioned a
+/// random `1..=MAX_DOOR_OFFSET` cells *ahead* of its junction (toward the
+/// finish) rather than on it, so the junction — and its branch — stays in the
+/// segment before the door, available to hold the door's key.
+const MAX_DOOR_OFFSET: usize = 3;
+
+/// Selects up to `requested` (clamped to [`MAX_AUTO_DOORS`]) interior spine cells
+/// to host doors, walking the spine **from the finish back toward the start**.
+/// Each **junction** (a spine cell with a side branch — open-degree ≥ 3) anchors
+/// a door placed a random `1..=`[`MAX_DOOR_OFFSET`] cells *ahead* of it (toward
+/// the finish), keeping the junction's branch in the segment before the door for
+/// the key. Doors are kept ≥ 2 spine cells apart (room for each key segment). If
+/// the spine has too few junctions to meet the count, the remainder is topped up
+/// with 1-wide corridor cells. Returned ascending.
+fn select_doors(
+    grid: &[Vec<char>],
+    spine: &[MazePoint],
+    requested: usize,
+    rng: &mut StdRng,
+) -> Vec<usize> {
     let m = spine.len();
-    if requested == 0 || m < 5 {
-        return;
+    let cap = requested.min(MAX_AUTO_DOORS);
+    if cap == 0 || m < 5 {
+        return Vec::new();
     }
-    // Door candidates: interior spine cells (excluding start, finish and their
-    // immediate neighbours) that are 1-wide corridors — degree 2, so their only
-    // open neighbours are the two adjacent spine cells. A door there gates the
-    // spine without cutting off a branch.
-    let candidates: Vec<usize> = (2..m - 2)
-        .filter(|&j| open_degree(grid, spine[j].row, spine[j].col) == 2)
-        .collect();
-    let n = requested.min(candidates.len()).min(MAX_AUTO_DOORS);
-    if n == 0 {
-        return;
-    }
-    // Spread the doors across the candidates, keeping a spine gap ≥ 2 between
-    // chosen doors so each leaves room for the next door's key segment.
-    let mut doors: Vec<usize> = Vec::with_capacity(n);
-    for k in 0..n {
-        let idx = if n == 1 {
-            candidates.len() / 2
-        } else {
-            k * (candidates.len() - 1) / (n - 1)
-        };
-        let cand = candidates[idx];
-        if doors.iter().all(|&d| cand.abs_diff(d) >= 2) {
-            doors.push(cand);
+    let last_interior = m - 3; // highest interior index (m-2 is the finish's neighbour)
+    let degree = |j: usize| open_degree(grid, spine[j].row, spine[j].col);
+    let well_spaced = |chosen: &[usize], j: usize| chosen.iter().all(|&d| j.abs_diff(d) >= 2);
+    let mut chosen: Vec<usize> = Vec::new();
+    // Pass 1: junction anchors, finish → start; the door sits a random few cells
+    // ahead of each so the junction's branch stays available for the key.
+    for jx in (2..=last_interior).rev() {
+        if chosen.len() >= cap {
+            break;
+        }
+        if degree(jx) >= 3 {
+            let offset = rng.gen_range(1..=MAX_DOOR_OFFSET);
+            let door = (jx + offset).min(last_interior);
+            if door > jx && well_spaced(&chosen, door) {
+                chosen.push(door);
+            }
         }
     }
-    doors.sort_unstable();
-    doors.dedup();
+    // Pass 2: top up with 1-wide corridor cells when junctions are too few.
+    if chosen.len() < cap {
+        for j in (2..=last_interior).rev() {
+            if chosen.len() >= cap {
+                break;
+            }
+            if degree(j) == 2 && well_spaced(&chosen, j) {
+                chosen.push(j);
+            }
+        }
+    }
+    chosen.sort_unstable();
+    chosen
+}
+
+/// Places up to `requested` doors (each with one preceding key) onto the maze's
+/// start→finish `spine`, mutating `grid` in place. Doors are chosen by
+/// [`select_doors`] (a random few cells ahead of junctions, finish→start); each
+/// door's key is hidden at the deepest dead-end of a branch in the spine segment
+/// before it (see [`find_key_cell`]) — typically the anchoring junction's own
+/// branch. The count is clamped to the available cells and to [`MAX_AUTO_DOORS`];
+/// the caller validates the result with the key-aware solver.
+fn place_keys_and_doors(
+    grid: &mut [Vec<char>],
+    spine: &[MazePoint],
+    requested: usize,
+    rng: &mut StdRng,
+) {
+    if requested == 0 || spine.len() < 5 {
+        return;
+    }
+    let doors = select_doors(grid, spine, requested, rng);
     if doors.is_empty() {
         return;
     }
     for &j in &doors {
         grid[spine[j].row][spine[j].col] = 'D';
     }
-    // One key per door, in the segment of the spine before it. Keys are
-    // interchangeable, so collecting one per segment leaves the player with
-    // exactly one in hand at each door.
+    // One key per door, in the spine segment before it. Keys are interchangeable,
+    // so collecting one per segment leaves the player exactly one in hand at each
+    // door.
     let mut prev_boundary = 0usize; // spine index of the previous door (0 = start)
     for &dj in &doors {
         if let Some((r, c)) = find_key_cell(grid, spine, prev_boundary + 1, dj - 1) {
@@ -920,5 +967,48 @@ mod tests {
             .generate()
             .expect("should succeed");
         assert_eq!(a.definition.grid, b.definition.grid);
+    }
+
+    #[test]
+    fn places_door_ahead_of_a_junction_with_the_key_in_the_junction_branch() {
+        // Spine runs along row 0 (S..F). One junction at (0,2) has a 2-deep
+        // branch down to (2,2); the rest of the spine is plain corridor. With one
+        // door requested, it is placed a random few cells AHEAD of the junction
+        // (a corridor cell in cols 3–5, never on the junction itself), and the
+        // key goes into the junction's branch — its deepest dead-end (2,2) —
+        // which only stays reachable because the door sits past it.
+        #[rustfmt::skip]
+        let grid = vec![
+            vec!['S', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'F'],
+            vec!['W', 'W', ' ', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
+            vec!['W', 'W', ' ', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
+        ];
+        let maze = Maze::from_vec(grid.clone());
+        let spine = Solver { maze: &maze }
+            .solve()
+            .expect("bare maze solvable")
+            .path
+            .points;
+        let mut placed = grid.clone();
+        let mut rng = StdRng::seed_from_u64(1);
+        place_keys_and_doors(&mut placed, &spine, 1, &mut rng);
+
+        assert_eq!(count_char(&placed, 'D'), 1);
+        assert_eq!(count_char(&placed, 'K'), 1);
+        // The key is in the junction's branch, at its deepest dead-end.
+        assert_eq!(placed[2][2], 'K');
+        // The door is NOT on the junction — it sits ahead of it, in the corridor.
+        assert_ne!(placed[0][2], 'D');
+        assert_eq!(
+            (3..=5).filter(|&c| placed[0][c] == 'D').count(),
+            1,
+            "door should sit a few cells ahead of the junction"
+        );
+
+        // The placed maze is key-aware solvable.
+        let placed_maze = Maze::from_vec(placed);
+        Solver { maze: &placed_maze }
+            .solve()
+            .expect("placed maze must be solvable");
     }
 }
