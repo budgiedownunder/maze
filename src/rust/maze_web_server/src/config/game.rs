@@ -91,9 +91,11 @@ pub struct Play3dDifficultyConfig {
 }
 
 /// Atmospheric sky modes. Wire form (TOML / JSON) is lowercase
-/// (`"night" | "sunrise" | "day" | "sunset"`). Unknown values
-/// deserialise as `Night` rather than failing the entire `AppConfig`
-/// load — same forgiving policy as the rest of this module.
+/// (`"night" | "sunrise" | "day" | "sunset" | "dungeon" | "chamber"`).
+/// Unknown values deserialise as `Night` rather than failing the entire
+/// `AppConfig` load — same forgiving policy as the rest of this module.
+/// `Dungeon` swaps the open sky for a dark-rock ceiling over every cell;
+/// `Chamber` caps it instead with a ceiling in the cell's wall material.
 #[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SkyTypeConfig {
@@ -102,6 +104,8 @@ pub enum SkyTypeConfig {
     Sunrise,
     Day,
     Sunset,
+    Dungeon,
+    Chamber,
 }
 
 impl SkyTypeConfig {
@@ -112,6 +116,8 @@ impl SkyTypeConfig {
             Self::Sunrise => "sunrise",
             Self::Day => "day",
             Self::Sunset => "sunset",
+            Self::Dungeon => "dungeon",
+            Self::Chamber => "chamber",
         }
     }
 }
@@ -123,6 +129,8 @@ impl<'de> Deserialize<'de> for SkyTypeConfig {
             "sunrise" => Self::Sunrise,
             "day" => Self::Day,
             "sunset" => Self::Sunset,
+            "dungeon" => Self::Dungeon,
+            "chamber" => Self::Chamber,
             _ => Self::Night,
         })
     }
@@ -748,6 +756,8 @@ mod tests {
         assert_eq!(SkyTypeConfig::Sunrise.as_wire_str(), "sunrise");
         assert_eq!(SkyTypeConfig::Day.as_wire_str(), "day");
         assert_eq!(SkyTypeConfig::Sunset.as_wire_str(), "sunset");
+        assert_eq!(SkyTypeConfig::Dungeon.as_wire_str(), "dungeon");
+        assert_eq!(SkyTypeConfig::Chamber.as_wire_str(), "chamber");
     }
 
     #[test]
