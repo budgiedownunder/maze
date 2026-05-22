@@ -69,6 +69,8 @@ struct StartConfig {
     #[serde(default)]
     key_holder: String,
     #[serde(default)]
+    door_count: u32,
+    #[serde(default)]
     maze_json: Option<String>,
 }
 
@@ -177,6 +179,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
                 cfg.cols,
                 cfg.seed,
                 cfg.min_solution_length,
+                cfg.door_count,
             )
             .map_err(|err| JsValue::from_str(&format!("Maze generation failed: {err}")))?,
         )

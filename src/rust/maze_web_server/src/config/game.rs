@@ -88,6 +88,12 @@ pub struct Play3dDifficultyConfig {
     /// Key-holder style for `'K'` cells this difficulty. Default `pedestal`.
     #[serde(default = "default_key_holder")]
     pub key_holder: KeyHolderStyleConfig,
+    /// Number of doors (each paired with one key) the maze generator
+    /// auto-places into this difficulty's maze. Doors gate the solution path
+    /// and the maze stays solvable (key-aware verified). Clamped to what the
+    /// maze can hold. Default 0 = a lock-free maze.
+    #[serde(default = "default_play3d_door_count")]
+    pub door_count: u32,
 }
 
 /// Atmospheric sky modes. Wire form (TOML / JSON) is lowercase
@@ -319,6 +325,7 @@ impl Default for Play3dDifficultyConfig {
             wall_type: default_wall_type(),
             door_style: default_door_style(),
             key_holder: default_key_holder(),
+            door_count: default_play3d_door_count(),
         }
     }
 }
@@ -385,6 +392,7 @@ impl Default for Play3dConfig {
                 wall_type: default_wall_type(),
                 door_style: default_door_style(),
                 key_holder: default_key_holder(),
+                door_count: 2,
             },
             tricky: Play3dDifficultyConfig {
                 rows: 15,
@@ -401,6 +409,7 @@ impl Default for Play3dConfig {
                 wall_type: default_wall_type(),
                 door_style: default_door_style(),
                 key_holder: default_key_holder(),
+                door_count: 3,
             },
             hard: Play3dDifficultyConfig {
                 rows: 25,
@@ -417,6 +426,7 @@ impl Default for Play3dConfig {
                 wall_type: default_wall_type(),
                 door_style: default_door_style(),
                 key_holder: default_key_holder(),
+                door_count: 4,
             },
         }
     }
@@ -451,6 +461,9 @@ fn default_play3d_seed() -> u64 {
     0
 }
 fn default_play3d_min_solution_length() -> u32 {
+    0
+}
+fn default_play3d_door_count() -> u32 {
     0
 }
 
@@ -944,6 +957,36 @@ mod tests {
         "#;
         let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
         assert_eq!(cfg.play3d.easy.key_holder, KeyHolderStyleConfig::Pedestal);
+    }
+
+    #[test]
+    fn door_count_round_trips_from_toml_and_defaults_to_zero() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 15
+            cols = 15
+            timer_seconds = 120
+            seed = 42
+            min_solution_length = 20
+            door_count = 3
+
+            [play3d.tricky]
+            rows = 20
+            cols = 20
+            timer_seconds = 240
+            seed = 43
+            min_solution_length = 60
+            # door_count deliberately omitted — defaults to 0
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.door_count, 3);
+        assert_eq!(cfg.play3d.tricky.door_count, 0);
+        // The shipped fallback presets seed a few doors per difficulty.
+        assert_eq!(Play3dConfig::default().easy.door_count, 2);
+        assert_eq!(Play3dConfig::default().hard.door_count, 4);
     }
 
     #[test]
