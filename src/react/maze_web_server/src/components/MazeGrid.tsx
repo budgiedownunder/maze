@@ -433,6 +433,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const isWalker = walkInfo?.walkerKey === key
                   const walkedImgSrc = !isWalker ? walkInfo?.walkedMap.get(key) : undefined
                   const solutionImgSrc = solutionMap.get(key)
+                  const suppressFootstep = cell === 'S' || cell === 'F' || cell === 'K' || cell === 'D'
                   const isGamePlayer = game !== null && game !== undefined && playerRow === r && playerCol === c
                   let img = (isWalker || isGamePlayer) ? null : cellImage(cell)
                   let imgStyle: React.CSSProperties | undefined
@@ -466,10 +467,10 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                           style={imgStyle}
                         />
                       )}
-                      {walkedImgSrc && cell !== 'S' && cell !== 'F' && (
+                      {walkedImgSrc && !suppressFootstep && (
                         <img src={walkedImgSrc} alt="Solution path" className="maze-cell-solution-img" />
                       )}
-                      {!isWalker && solutionImgSrc && cell !== 'S' && cell !== 'F' && (
+                      {!isWalker && solutionImgSrc && !suppressFootstep && (
                         <img src={solutionImgSrc} alt="Solution path" className="maze-cell-solution-img" />
                       )}
                       {game && visitedSet?.has(key) && !isGamePlayer && (
