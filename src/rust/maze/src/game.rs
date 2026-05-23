@@ -1813,19 +1813,11 @@ mod tests {
 
     #[test]
     fn two_decoys_with_one_spare_key_strands_after_second_burn() {
-        // 2 keys (K0 + K_spare) on the spine, 2 off-spine decoys, 1 path
-        // door. Burning the first decoy is OK (spare key absorbs it); the
-        // second decoy strands.
-        //
-        //  Col:   0     1   2   3          4   5
-        //  Row 0: S     K0  K1  D_decoy1   D_path  F  (wait — D_decoy1 must be off-spine)
-        //
-        // Redesign so both decoys hang off spine cells:
-        //
-        //  Col:   0     1   2   3            4
-        //  Row 0: S     K0  K1  D_path       F
-        //  Row 1: D_d1  W   D_d2 W           W
-        //  Row 2: ' '   W   ' '  W           W
+        //  Pick up and then waste two keys on decoy1 and decoy2 doors  
+        //  Col:   0         1   2         3         4
+        //  Row 0: S         K0  K1        D_path    F
+        //  Row 1: D_decoy1  W   D_decoy2  W         W
+        //  Row 2: ' '       W   ' '       W         W
         #[rustfmt::skip]
         let json = r#"{"grid":[
             ["S","K","K","D","F"],
@@ -1864,9 +1856,6 @@ mod tests {
         //   - Pick K0, open D_path1 (consume K0).
         //   - Walk through, pick K1, open D_path2 (consume K1).
         //   - Walk to F.
-        // The strand sim sees both keys reachable (K0 cost 0, K1 cost 1 via
-        // D_path1 — but D_path1 is a SPINE door, weight 0 in the BFS, so K1
-        // actually has cost 0 too). accessible = 2, closed = 2 → 2>2 false.
         let json = r#"{"grid":[["S","K","D","K","D","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
         // Pick K0 at (0,1).
@@ -1895,17 +1884,8 @@ mod tests {
 
     #[test]
     fn key_on_spine_is_treated_as_free_at_start() {
-        // A `'K'` cell that's part of the lock-blind S→F path itself has an
-        // empty path-doors set (cost 0). It contributes to `accessible` from
-        // the moment from_json runs, before the player has walked onto it.
         let json = r#"{"grid":[["S","K","D","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
-        // Before any move, the player has bag = 0 but one cost-0 spine key.
-        // The sim's accessible = 1, closed_path = 1 → not stranded.
-        // We can only check this *indirectly* via a state that would fire a
-        // walk-through-D check: pick up the key, open the path door, walk
-        // through. If the spine key wasn't counted, the sim at construction
-        // would have flagged a foregone-conclusion strand.
         game.move_player(Direction::Right);
         game.pickup();
         game.move_player(Direction::Right); // StartedUnlocking
@@ -1925,9 +1905,6 @@ mod tests {
         //   - Walk through; pick K1, then K2.
         //   - Open D_path with one of them.
         //   - Walk to F.
-        // The sim sees K1 + K2 both at cost 1 via D_pile, accessible at
-        // start = 0 + 3 (greedy: K0 cost 0, K1 cost 1, virtual D_pile open,
-        // K2 cost 0). closed_path = 1, 1 > 3 false.
         //
         //  Col:   0   1   2     3       4
         //  Row 0: S   K0  ' '   D_path  F
