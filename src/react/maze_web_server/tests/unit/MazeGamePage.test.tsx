@@ -13,6 +13,8 @@ import { MazeGamePage } from '../../src/pages/MazeGamePage'
 const { mockMove, mockPickup, mockUseMazeGame, mockGameInstance } = vi.hoisted(() => {
   const mockGameInstance = {
     is_complete:      vi.fn().mockReturnValue(false),
+    is_lost:          vi.fn().mockReturnValue(false),
+    lose_reason:      vi.fn().mockReturnValue(null),
     player_row:       vi.fn().mockReturnValue(0),
     player_col:       vi.fn().mockReturnValue(0),
     player_direction: vi.fn().mockReturnValue(0),
@@ -44,8 +46,8 @@ vi.mock('../../src/components/MazeGrid', () => ({
 }))
 
 vi.mock('../../src/components/GameResultPopup', () => ({
-  GameResultPopup: ({ message, onClose }: { message: string; onClose: () => void }) => (
-    <div data-testid="game-result-popup">
+  GameResultPopup: ({ message, tone = 'success', onClose }: { message: string; tone?: 'success' | 'fail'; onClose: () => void }) => (
+    <div data-testid="game-result-popup" data-tone={tone}>
       <span>{message}</span>
       <button type="button" onClick={onClose}>Close</button>
     </div>
@@ -78,6 +80,8 @@ async function waitForLoad() {
 beforeEach(() => {
   vi.clearAllMocks()
   mockGameInstance.is_complete.mockReturnValue(false)
+  mockGameInstance.is_lost.mockReturnValue(false)
+  mockGameInstance.lose_reason.mockReturnValue(null)
   mockUseMazeGame.mockReturnValue([
     { game: mockGameInstance, version: 0, loading: false, error: null },
     mockMove,
@@ -198,6 +202,36 @@ describe('MazeGamePage', () => {
     renderPage()
     await waitFor(() => expect(screen.getByTestId('game-result-popup')).toBeInTheDocument())
     expect(screen.getByText('You win!')).toBeInTheDocument()
+    expect(screen.getByTestId('game-result-popup')).toHaveAttribute('data-tone', 'success')
+  })
+
+  it('GameResultPopup shows stranded message + fail tone when game is lost', async () => {
+    mockGameInstance.is_lost.mockReturnValue(true)
+    mockGameInstance.lose_reason.mockReturnValue('stranded')
+    renderPage()
+    await waitFor(() => expect(screen.getByTestId('game-result-popup')).toBeInTheDocument())
+    expect(screen.getByText("You're stranded!!")).toBeInTheDocument()
+    expect(screen.getByTestId('game-result-popup')).toHaveAttribute('data-tone', 'fail')
+  })
+
+  it('keyboard ignored when game is lost', async () => {
+    mockGameInstance.is_lost.mockReturnValue(true)
+    mockGameInstance.lose_reason.mockReturnValue('stranded')
+    renderPage()
+    await waitForLoad()
+    fireEvent.keyDown(window, { key: 'ArrowUp' })
+    expect(mockMove).not.toHaveBeenCalled()
+  })
+
+  it('D-pad buttons are aria-disabled when game is lost', async () => {
+    mockGameInstance.is_lost.mockReturnValue(true)
+    mockGameInstance.lose_reason.mockReturnValue('stranded')
+    renderPage()
+    await waitForLoad()
+    expect(screen.getByRole('button', { name: /move up/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: /move down/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: /move left/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: /move right/i })).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('Close button on GameResultPopup dismisses it', async () => {

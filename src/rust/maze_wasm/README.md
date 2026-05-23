@@ -78,7 +78,9 @@ const game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
 game.player_row();       // → number (0-based row index)
 game.player_col();       // → number (0-based column index)
 game.player_direction(); // → DirectionWasm (None=0, Up=1, Down=2, Left=3, Right=4)
-game.is_complete();      // → boolean
+game.is_complete();      // → boolean (player reached the finish)
+game.is_lost();          // → boolean (player stranded — too few keys for remaining real path doors)
+game.lose_reason();      // → 'stranded' | null
 
 // Returns MoveResultWasm (None=0, Moved=1, Blocked=2, Complete=3,
 //                         BlockedByLockedDoor=4, StartedUnlocking=5, Stranded=6)

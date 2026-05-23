@@ -599,6 +599,117 @@ mod tests {
     }
 
     #[test]
+    fn demo_grid_contains_a_decoy_door() {
+        // The demo grid must expose both a real path door AND a decoy: the
+        // player burning their lone key on the decoy is the on-ramp to
+        // experiencing the `Stranded` lose surface without going through the
+        // full Play-3D config flow. Structural check: exactly one of the
+        // grid's `'D'` cells lies on the lock-blind S→F path; any others are
+        // off-spine decoys.
+        use crate::world::demo_grid;
+        use maze::MazeGame;
+        use std::collections::{HashMap, HashSet, VecDeque};
+
+        let grid = demo_grid();
+        let rows = grid.len();
+        let cols = grid[0].len();
+
+        // Find S, F, and all D cells.
+        let find_one = |target: char| {
+            grid.iter()
+                .enumerate()
+                .find_map(|(r, row)| row.iter().position(|&c| c == target).map(|c| (r, c)))
+                .unwrap()
+        };
+        let start = find_one('S');
+        let finish = find_one('F');
+        let doors: HashSet<(usize, usize)> = grid
+            .iter()
+            .enumerate()
+            .flat_map(|(r, row)| {
+                row.iter()
+                    .enumerate()
+                    .filter(|(_, &c)| c == 'D')
+                    .map(move |(c, _)| (r, c))
+            })
+            .collect();
+        assert!(
+            doors.len() >= 2,
+            "demo grid needs at least one real path door + one decoy, got {}",
+            doors.len()
+        );
+
+        // Lock-blind BFS from S → F (every non-'W' cell passable) with parent
+        // pointers, so we can read the shortest-path doors back.
+        let mut parent: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
+        let mut visited: HashSet<(usize, usize)> = HashSet::new();
+        let mut q: VecDeque<(usize, usize)> = VecDeque::new();
+        visited.insert(start);
+        q.push_back(start);
+        while let Some((r, c)) = q.pop_front() {
+            if (r, c) == finish {
+                break;
+            }
+            let mut neighbours = Vec::with_capacity(4);
+            if r > 0 {
+                neighbours.push((r - 1, c));
+            }
+            if r + 1 < rows {
+                neighbours.push((r + 1, c));
+            }
+            if c > 0 {
+                neighbours.push((r, c - 1));
+            }
+            if c + 1 < cols {
+                neighbours.push((r, c + 1));
+            }
+            for n in neighbours {
+                if grid[n.0][n.1] == 'W' {
+                    continue;
+                }
+                if visited.insert(n) {
+                    parent.insert(n, (r, c));
+                    q.push_back(n);
+                }
+            }
+        }
+        assert!(visited.contains(&finish), "finish must be lock-blind reachable");
+
+        // Walk back from F to find which D cells lie on the spine.
+        let mut spine_doors: HashSet<(usize, usize)> = HashSet::new();
+        let mut cur = finish;
+        while cur != start {
+            if doors.contains(&cur) {
+                spine_doors.insert(cur);
+            }
+            cur = parent[&cur];
+        }
+        assert_eq!(
+            spine_doors.len(),
+            1,
+            "demo grid should have exactly one real path door on the spine, got {}",
+            spine_doors.len()
+        );
+        let decoy_count = doors.len() - spine_doors.len();
+        assert!(
+            decoy_count >= 1,
+            "demo grid should have at least one off-spine decoy, got {decoy_count}"
+        );
+
+        // Cross-check with the actual `MazeGame` runtime: at construction it
+        // identifies the spine doors via the same algorithm and exposes the
+        // count via `path_doors_remaining_closed` (indirectly, via the lose
+        // semantics). We can verify here that constructing a `MazeGame` from
+        // the demo grid succeeds and reports neither complete nor lost — a
+        // cheap end-to-end smoke check that the demo grid is a valid
+        // starting state for the strand scenario.
+        let json = crate::world::grid_to_json(&grid);
+        let game = MazeGame::from_json(&json).expect("demo grid loads as a game");
+        assert!(!game.is_complete(), "fresh game must not be complete");
+        assert!(!game.is_lost(), "fresh game must not be lost");
+    }
+
+    #[test]
     fn playing_spawns_brazier_bowl_marker() {
         // The demo grid contains several dead-end cells, and the
         // dead-end-object hash is deterministic — so at least one of the

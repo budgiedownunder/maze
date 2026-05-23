@@ -11,6 +11,8 @@ const {
       player_col: vi.fn().mockReturnValue(0),
       player_direction: vi.fn().mockReturnValue(0),
       is_complete: vi.fn().mockReturnValue(false),
+      is_lost: vi.fn().mockReturnValue(false),
+      lose_reason: vi.fn().mockReturnValue(null),
       visited_cells: vi.fn().mockReturnValue([]),
       free: vi.fn(),
     }
@@ -33,7 +35,7 @@ vi.mock('../../src/wasm/mazeWasm', () => ({
   tickGame: mockTickGame,
   getDoors: mockGetDoors,
   MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
-  MazeGamePlayerMoveResult: { None: 0, Moved: 1, Blocked: 2, Complete: 3, BlockedByLockedDoor: 4, StartedUnlocking: 5 },
+  MazeGamePlayerMoveResult: { None: 0, Moved: 1, Blocked: 2, Complete: 3, BlockedByLockedDoor: 4, StartedUnlocking: 5, Stranded: 6 },
   MazeDoorState: { Locked: 'locked', Opening: 'opening', Open: 'open' },
 }))
 

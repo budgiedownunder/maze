@@ -1,4 +1,4 @@
-use crate::overlays::win;
+use crate::overlays::{lose, win};
 use crate::state::{
     dispatch_can_pickup, dispatch_game_result, Animation, GameClock, GameConfig, GameOutcome,
     GameResult, GameState,
@@ -50,6 +50,25 @@ pub(crate) fn movement_system(
             win::spawn_win_overlay(&mut commands);
             dispatch_game_result(&GameResult {
                 outcome: GameOutcome::Win,
+                elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
+                difficulty: config.difficulty.clone(),
+                rows: state.grid.len() as u32,
+                cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,
+                seed: if config.rows > 0 { Some(config.seed) } else { None },
+                extras: std::collections::BTreeMap::new(),
+            });
+        } else if !state.lost && state.game.is_lost() {
+            // The just-completed move flipped the inner MazeGame to a lost
+            // state (walked through an open door no longer carrying enough
+            // keys to finish). Surface it visually here — once the camera
+            // has settled on the destination cell — so the player
+            // experiences the door-through first, then sees the message.
+            // Stranded is the only `MazeGame`-driven lose cause; the
+            // host-driven timeout path lives entirely in `tick_clock_system`.
+            state.lost = true;
+            lose::spawn_lose_overlay(&mut commands, "You're stranded!");
+            dispatch_game_result(&GameResult {
+                outcome: GameOutcome::Lose,
                 elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
                 difficulty: config.difficulty.clone(),
                 rows: state.grid.len() as u32,

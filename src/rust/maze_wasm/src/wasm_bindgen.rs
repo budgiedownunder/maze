@@ -387,6 +387,70 @@ impl MazeGameWasm {
         self.game.is_complete()
     }
 
+    /// Returns `true` if the game has ended in a loss — currently triggered
+    /// only when the player walks through an open door without enough keys
+    /// remaining to open every real door on the solution path. Pair with
+    /// [`MazeGameWasm::lose_reason`] for the cause.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","F"]]}');
+    ///         console.log("is_lost() = ", game.is_lost());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn is_lost(&self) -> bool {
+        self.game.is_lost()
+    }
+
+    /// Returns the lose reason — `"stranded"` if the player walked through a
+    /// door no longer holding enough keys to reach the finish, or `null`
+    /// while the game is still in progress or already won.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","F"]]}');
+    ///         console.log("lose_reason() = ", game.lose_reason());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn lose_reason(&self) -> JsValue {
+        match self.game.lose_reason() {
+            Some(maze::LoseReason::Stranded) => JsValue::from_str("stranded"),
+            None => JsValue::NULL,
+        }
+    }
+
     /// Returns all cells visited by the player (including start) in visit order,
     /// as a JavaScript `Array` of `{row, col}` objects.
     ///

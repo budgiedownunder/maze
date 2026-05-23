@@ -32,7 +32,7 @@ pub(crate) struct LightningQuad {
     pub(crate) duration: f32,
 }
 
-pub(crate) fn spawn_lose_overlay(commands: &mut Commands) {
+pub(crate) fn spawn_lose_overlay(commands: &mut Commands, subtitle: &str) {
     commands.spawn((
         LoseOverlay,
         LoseBackground,
@@ -54,7 +54,7 @@ pub(crate) fn spawn_lose_overlay(commands: &mut Commands) {
     commands.spawn((
         LoseOverlay,
         LoseSubText,
-        Text2d::new("Time's up"),
+        Text2d::new(subtitle),
         TextFont { font_size: 24.0, ..default() },
         TextColor(Color::WHITE),
         Transform::from_xyz(0.0, -36.0, 11.0),

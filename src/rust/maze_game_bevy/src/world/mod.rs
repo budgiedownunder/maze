@@ -109,17 +109,20 @@ pub fn generate_maze_json(
 /// Built-in fallback maze for the native binary and the bare wasm `start()`
 /// path (the React `/game/` flow always supplies a real maze). An 11×11
 /// perfect maze chosen to exercise the full feature set: a key (`K` at `(1,3)`)
-/// sits in a dead-end, the door (`D` at `(8,9)`) is the *only* cell adjacent to
-/// the finish so it gates `F` outright, and six further dead-ends pick up
-/// landmark objects (brazier / urn / pillar / chest). The intended solve is:
-/// collect the key, then hold against the door to open it before reaching the
-/// finish — see `demo_grid_is_well_formed` for the structural guarantees this
-/// layout upholds.
+/// sits along a corridor, the real path door (`D` at `(8,9)`) is the *only*
+/// cell adjacent to the finish so it gates `F` outright, a **decoy** door
+/// (`D` at `(2,9)`) hangs off the top-right branch (so a player tempted to
+/// burn their only key on it strands themselves), and several further
+/// dead-ends pick up landmark objects (brazier / urn / pillar / chest). The
+/// intended solve is: collect the key, navigate the spine down and east,
+/// then hold against the real door to open it before reaching the finish.
+/// See `demo_grid_is_well_formed` for the structural guarantees this layout
+/// upholds.
 pub(crate) fn demo_grid() -> Vec<Vec<char>> {
     vec![
         vec!['W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
         vec!['W', 'S', ' ', 'K', ' ', ' ', ' ', ' ', ' ', ' ', 'W'],
-        vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', ' ', 'W'],
+        vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'D', 'W'],
         vec!['W', ' ', ' ', ' ', 'W', ' ', ' ', ' ', 'W', ' ', 'W'],
         vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'W', 'W'],
         vec!['W', ' ', 'W', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'W'],

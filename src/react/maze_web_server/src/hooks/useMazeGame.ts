@@ -94,7 +94,7 @@ export function useMazeGame(
 
   const move = useCallback((dir: MazeGameDirection) => {
     if (!gameRef.current) return
-    if (gameRef.current.is_complete()) return
+    if (gameRef.current.is_complete() || gameRef.current.is_lost()) return
     const now = Date.now()
     if (dir !== lastMoveDirectionRef.current) lastMoveTickRef.current = 0
     if (now - lastMoveTickRef.current < MOVE_INTERVAL_MS) return
@@ -104,7 +104,8 @@ export function useMazeGame(
     if (
       result === MazeGamePlayerMoveResult.Moved ||
       result === MazeGamePlayerMoveResult.Complete ||
-      result === MazeGamePlayerMoveResult.StartedUnlocking
+      result === MazeGamePlayerMoveResult.StartedUnlocking ||
+      result === MazeGamePlayerMoveResult.Stranded
     ) {
       bumpVersion()
     }

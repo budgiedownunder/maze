@@ -76,8 +76,12 @@ pub enum MoveResult {
 /// Why a game ended in a loss.
 ///
 /// Set when the game transitions to a lost state (see [`MazeGame::is_lost`]).
-/// Extensible: future variants could cover death events, environmental hazards,
-/// etc.
+/// Currently the only loss the maze runtime tracks itself is
+/// [`LoseReason::Stranded`]; host-driven losses such as a wall-clock timeout
+/// are handled at the host layer (e.g. the 3D game's `tick_clock_system`
+/// owns its own countdown) and don't propagate through this enum. The enum
+/// stays extensible for future per-step lose causes (death events,
+/// environmental hazards, etc.).
 ///
 /// # Examples
 ///
@@ -88,9 +92,6 @@ pub enum MoveResult {
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LoseReason {
-    /// The wall-clock countdown reached zero — signalled by the caller via
-    /// [`MazeGame::time_out`].
-    Timeout,
     /// The player no longer holds enough keys (collected + still in the world)
     /// to open every real door remaining on the solution path. Set when the
     /// player walks through an open door and the inequality
@@ -184,8 +185,7 @@ pub enum GameEvent {
 /// - `'W'` or out-of-bounds → [`MoveResult::Blocked`]
 ///
 /// Doors open over time — see [`MazeGame::tick`]. The lose state is queried via
-/// [`MazeGame::is_lost`] / [`MazeGame::lose_reason`]; [`MazeGame::time_out`]
-/// sets it from the caller's countdown.
+/// [`MazeGame::is_lost`] / [`MazeGame::lose_reason`].
 ///
 /// # Examples
 ///
@@ -762,39 +762,24 @@ impl MazeGame {
         self.bag.len() as u32 + sim_collected
     }
 
-    /// Marks the game as lost with [`LoseReason::Timeout`] — called by the
-    /// caller when the wall-clock countdown reaches zero. Idempotent: a
-    /// subsequent call does not overwrite an existing [`LoseReason`] (e.g. if
-    /// the player was already stranded).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use maze::{MazeGame, LoseReason};
-    /// let json = r#"{"grid":[["S"," ","F"]]}"#;
-    /// let mut game = MazeGame::from_json(json).unwrap();
-    /// game.time_out();
-    /// assert!(game.is_lost());
-    /// assert_eq!(game.lose_reason(), Some(LoseReason::Timeout));
-    /// ```
-    pub fn time_out(&mut self) {
-        if !self.lost {
-            self.lost = true;
-            self.lose_reason = Some(LoseReason::Timeout);
-        }
-    }
-
     /// Whether the game has ended in a loss. Mutually exclusive in practice
     /// with [`Self::is_complete`].
     ///
     /// # Examples
     ///
     /// ```
-    /// use maze::MazeGame;
-    /// let json = r#"{"grid":[["S"," ","F"]]}"#;
+    /// use maze::{MazeGame, Direction, MoveResult};
+    /// // Tiny maze with one key on the spine + a decoy door off the key cell —
+    /// // walking through the decoy after picking up the only key strands the
+    /// // player and flips `is_lost()` to true.
+    /// let json = r#"{"grid":[["S","K","D","F"],["W","D","W","W"],["W"," ","W","W"]]}"#;
     /// let mut game = MazeGame::from_json(json).unwrap();
+    /// game.move_player(Direction::Right);
+    /// game.pickup();
+    /// game.move_player(Direction::Down); // StartedUnlocking the decoy
+    /// game.tick(1000.0);
     /// assert!(!game.is_lost());
-    /// game.time_out();
+    /// assert_eq!(game.move_player(Direction::Down), MoveResult::Stranded);
     /// assert!(game.is_lost());
     /// ```
     pub fn is_lost(&self) -> bool {
@@ -806,12 +791,16 @@ impl MazeGame {
     /// # Examples
     ///
     /// ```
-    /// use maze::{MazeGame, LoseReason};
-    /// let json = r#"{"grid":[["S"," ","F"]]}"#;
+    /// use maze::{MazeGame, Direction, LoseReason};
+    /// let json = r#"{"grid":[["S","K","D","F"],["W","D","W","W"],["W"," ","W","W"]]}"#;
     /// let mut game = MazeGame::from_json(json).unwrap();
     /// assert_eq!(game.lose_reason(), None);
-    /// game.time_out();
-    /// assert_eq!(game.lose_reason(), Some(LoseReason::Timeout));
+    /// game.move_player(Direction::Right);
+    /// game.pickup();
+    /// game.move_player(Direction::Down);
+    /// game.tick(1000.0);
+    /// game.move_player(Direction::Down); // Stranded
+    /// assert_eq!(game.lose_reason(), Some(LoseReason::Stranded));
     /// ```
     pub fn lose_reason(&self) -> Option<LoseReason> {
         self.lose_reason
@@ -1464,7 +1453,7 @@ mod tests {
         assert!(game.is_complete());
     }
 
-    // ── lose state — initial & timeout ───────────────────────────────────────────
+    // ── lose state — initial ─────────────────────────────────────────────────────
 
     #[test]
     fn new_game_is_neither_won_nor_lost() {
@@ -1473,46 +1462,6 @@ mod tests {
         assert!(!game.is_complete());
         assert!(!game.is_lost());
         assert_eq!(game.lose_reason(), None);
-    }
-
-    #[test]
-    fn time_out_marks_game_lost_with_timeout_reason() {
-        let json = r#"{"grid":[["S"," ","F"]]}"#;
-        let mut game = MazeGame::from_json(json).unwrap();
-        game.time_out();
-        assert!(game.is_lost());
-        assert_eq!(game.lose_reason(), Some(LoseReason::Timeout));
-    }
-
-    #[test]
-    fn time_out_is_idempotent() {
-        let json = r#"{"grid":[["S"," ","F"]]}"#;
-        let mut game = MazeGame::from_json(json).unwrap();
-        game.time_out();
-        game.time_out();
-        assert_eq!(game.lose_reason(), Some(LoseReason::Timeout));
-    }
-
-    #[test]
-    fn time_out_after_stranded_preserves_stranded_reason() {
-        // Same layout as `decoy_door_with_only_one_key_strands_on_walk_through`
-        // — strand the player, then fire time_out; the original Stranded
-        // reason must survive (a timer race must not erase what really lost
-        // the game).
-        #[rustfmt::skip]
-        let json = r#"{"grid":[
-            ["S","K","D","F"],
-            ["W","D","W","W"],
-            ["W"," ","W","W"]
-        ]}"#;
-        let mut game = MazeGame::from_json(json).unwrap();
-        game.move_player(Direction::Right);
-        game.pickup();
-        game.move_player(Direction::Down);
-        game.tick(1000.0);
-        assert_eq!(game.move_player(Direction::Down), MoveResult::Stranded);
-        game.time_out();
-        assert_eq!(game.lose_reason(), Some(LoseReason::Stranded));
     }
 
     // ── stranded detection — path doors & decoys ─────────────────────────────────
@@ -1680,23 +1629,6 @@ mod tests {
         game.move_player(Direction::Right);
         assert!(!game.is_lost());
         assert_eq!(game.lose_reason(), None);
-    }
-
-    #[test]
-    fn time_out_after_complete_still_marks_lost() {
-        // Documented contract: complete and lost are mutually exclusive in
-        // practice, but time_out from the caller is unconditional — once the
-        // countdown fires, the caller may not yet know the player just
-        // finished. We accept the call and mark lost = true. UIs gate this
-        // by checking is_complete first.
-        let json = r#"{"grid":[["S","F"]]}"#;
-        let mut game = MazeGame::from_json(json).unwrap();
-        game.move_player(Direction::Right);
-        assert!(game.is_complete());
-        game.time_out();
-        // The lose state is set, but is_complete still reflects the win.
-        assert!(game.is_lost());
-        assert!(game.is_complete());
     }
 
     // ── stranded detection — chained keys & key-pile scenarios ───────────────────

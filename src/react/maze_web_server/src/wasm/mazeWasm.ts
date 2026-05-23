@@ -103,8 +103,16 @@ export const MazeGamePlayerMoveResult = {
   Complete:            3,
   BlockedByLockedDoor: 4,
   StartedUnlocking:    5,
+  Stranded:            6,
 } as const
 export type MazeGamePlayerMoveResult = typeof MazeGamePlayerMoveResult[keyof typeof MazeGamePlayerMoveResult]
+
+// String values match the strings emitted by `MazeGameWasm::lose_reason()` in
+// wasm_bindgen.rs. Consumers reference these constants, never the literals.
+export const MazeGameLoseReason = {
+  Stranded: 'stranded',
+} as const
+export type MazeGameLoseReason = typeof MazeGameLoseReason[keyof typeof MazeGameLoseReason]
 
 // String values match the objects emitted by wasm_bindgen.rs (and the Rust DoorState /
 // GameEvent / BagItem variants). Consumers reference these constants, never the literals.
@@ -173,6 +181,16 @@ export function getKeys(game: MazeGameWasm): MazeKeyCell[] {
 /** Returns the player's bag contents, in pickup order. */
 export function getBag(game: MazeGameWasm): MazeBagItem[] {
   return game.bag() as unknown as MazeBagItem[]
+}
+
+/** Whether the game has ended in a loss (player stranded — too few keys for remaining real path doors). */
+export function isMazeGameLost(game: MazeGameWasm): boolean {
+  return game.is_lost()
+}
+
+/** Lose reason ('stranded'), or null while the game is still in play or already won. */
+export function mazeGameLoseReason(game: MazeGameWasm): MazeGameLoseReason | null {
+  return game.lose_reason() as unknown as MazeGameLoseReason | null
 }
 
 /** Frees the WASM game object. Call on unmount or when definitionJson changes. */

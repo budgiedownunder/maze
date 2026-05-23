@@ -49,11 +49,12 @@ export function MazeGamePage() {
   )
 
   const isComplete = game?.is_complete() ?? false
+  const isLost = game?.is_lost() ?? false
   const [showResult, setShowResult] = useState(false)
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (isComplete) setShowResult(true)
-  }, [isComplete])
+    if (isComplete || isLost) setShowResult(true)
+  }, [isComplete, isLost])
 
   const repeatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const repeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -75,7 +76,7 @@ export function MazeGamePage() {
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (game?.is_complete()) return
+      if (game?.is_complete() || game?.is_lost()) return
       if (e.key === 'e' || e.key === 'E') { e.preventDefault(); pickup(); return }
       const dir = KEY_MAP[e.key]
       if (dir !== undefined) { e.preventDefault(); move(dir) }
@@ -131,16 +132,16 @@ export function MazeGamePage() {
             </div>
 
             <div className="game-dpad" aria-label="D-pad">
-              <button type="button" aria-label="Move up"    onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Up) }}    onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete} style={{ gridArea: 'up' }}>
+              <button type="button" aria-label="Move up"    onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Up) }}    onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'up' }}>
                 <img src="/images/maze/dpad_up.png" alt="" draggable={false} />
               </button>
-              <button type="button" aria-label="Move left"  onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Left) }}  onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete} style={{ gridArea: 'left' }}>
+              <button type="button" aria-label="Move left"  onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Left) }}  onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'left' }}>
                 <img src="/images/maze/dpad_left.png" alt="" draggable={false} />
               </button>
-              <button type="button" aria-label="Move down"  onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Down) }}  onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete} style={{ gridArea: 'down' }}>
+              <button type="button" aria-label="Move down"  onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Down) }}  onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'down' }}>
                 <img src="/images/maze/dpad_down.png" alt="" draggable={false} />
               </button>
-              <button type="button" aria-label="Move right" onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Right) }} onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete} style={{ gridArea: 'right' }}>
+              <button type="button" aria-label="Move right" onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Right) }} onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'right' }}>
                 <img src="/images/maze/dpad_right.png" alt="" draggable={false} />
               </button>
               <button type="button" aria-label="Pick up" onClick={() => pickup()} onContextMenu={e => e.preventDefault()} aria-disabled={!onKey} style={{ gridArea: 'pick' }}>
@@ -158,7 +159,8 @@ export function MazeGamePage() {
 
             {showResult && (
               <GameResultPopup
-                message="You win!"
+                message={isLost ? "You're stranded!!" : 'You win!'}
+                tone={isLost ? 'fail' : 'success'}
                 onClose={() => setShowResult(false)}
               />
             )}

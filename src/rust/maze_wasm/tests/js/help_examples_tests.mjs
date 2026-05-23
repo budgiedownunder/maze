@@ -606,6 +606,7 @@ function testMazeGenerate() {
             undefined,
             undefined,
             undefined,
+            undefined,
             undefined
         );
         let json = maze.to_json();
@@ -856,6 +857,50 @@ function testMazeGameIsCompleteExpectedOutput() {
     ];
 }
 
+// Test MazeGameWasm::is_lost() example
+function testMazeGameIsLost() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("is_lost() = ", game.is_lost());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameIsLostExpectedOutput() {
+    return [
+        "is_lost() =  false"
+    ];
+}
+
+// Test MazeGameWasm::lose_reason() example
+function testMazeGameLoseReason() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("lose_reason() = ", game.lose_reason());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameLoseReasonExpectedOutput() {
+    return [
+        "lose_reason() =  null"
+    ];
+}
+
 // Test MazeGameWasm::visited_cells() example
 function testMazeGameVisitedCells() {
     let game = null;
@@ -1026,6 +1071,8 @@ const tests = [
     { name: "MazeGameWasm:player_col() example", testFunction: testMazeGamePlayerCol, expectedOutput: testMazeGamePlayerColExpectedOutput },
     { name: "MazeGameWasm:player_direction() example", testFunction: testMazeGamePlayerDirection, expectedOutput: testMazeGamePlayerDirectionExpectedOutput },
     { name: "MazeGameWasm:is_complete() example", testFunction: testMazeGameIsComplete, expectedOutput: testMazeGameIsCompleteExpectedOutput },
+    { name: "MazeGameWasm:is_lost() example", testFunction: testMazeGameIsLost, expectedOutput: testMazeGameIsLostExpectedOutput },
+    { name: "MazeGameWasm:lose_reason() example", testFunction: testMazeGameLoseReason, expectedOutput: testMazeGameLoseReasonExpectedOutput },
     { name: "MazeGameWasm:visited_cells() example", testFunction: testMazeGameVisitedCells, expectedOutput: testMazeGameVisitedCellsExpectedOutput },
     { name: "MazeGameWasm:pickup() example", testFunction: testMazeGamePickup, expectedOutput: testMazeGamePickupExpectedOutput },
     { name: "MazeGameWasm:doors() example", testFunction: testMazeGameDoors, expectedOutput: testMazeGameDoorsExpectedOutput },

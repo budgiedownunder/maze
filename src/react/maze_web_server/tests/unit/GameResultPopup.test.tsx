@@ -21,9 +21,15 @@ describe('GameResultPopup', () => {
     expect(screen.getByText('You did it!')).toBeInTheDocument()
   })
 
-  it('renders celebrate.gif', () => {
+  it('renders celebrate.gif by default (success tone)', () => {
     renderPopup()
     expect(screen.getByAltText('Celebration')).toHaveAttribute('src', '/images/maze/celebrate.gif')
+  })
+
+  it('omits the celebration image when tone is fail', () => {
+    render(<GameResultPopup message="You're stranded!!" tone="fail" onClose={vi.fn()} />)
+    expect(screen.queryByAltText('Celebration')).not.toBeInTheDocument()
+    expect(screen.getByText("You're stranded!!")).toBeInTheDocument()
   })
 
   it('Close button calls onClose', async () => {
