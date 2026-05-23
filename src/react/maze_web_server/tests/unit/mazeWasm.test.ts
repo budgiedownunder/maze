@@ -93,6 +93,8 @@ const sampleOptions: GenerateOptions = {
   finishCol: 7,
   minSpineLength: 6,
   doorCount: 2,
+  spareDoors: 1,
+  spareKeys: 1,
 }
 
 beforeEach(() => {
@@ -129,7 +131,9 @@ describe('generateMaze', () => {
       100,  // max_retries
       undefined,
       undefined,
-      2     // doorCount
+      2,    // doorCount
+      1,    // spareDoors
+      1,    // spareKeys
     )
   })
 

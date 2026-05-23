@@ -42,6 +42,8 @@ const GENERATE_OPTIONS: GenerateOptions = {
   finishCol: 7,
   minSpineLength: 6,
   doorCount: 0,
+  spareDoors: 0,
+  spareKeys: 0,
 }
 
 // Trivially solvable 1×3 grid: S at (0,0), open at (0,1), F at (0,2).

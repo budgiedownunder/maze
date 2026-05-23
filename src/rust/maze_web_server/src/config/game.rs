@@ -94,6 +94,18 @@ pub struct Play3dDifficultyConfig {
     /// maze can hold. Default 0 = a lock-free maze.
     #[serde(default = "default_play3d_door_count")]
     pub door_count: u32,
+    /// Number of decoy doors planted on off-spine branches after the maze
+    /// passes the solvability check. A decoy is visually indistinguishable
+    /// from a real path door — opening one burns a key the player might have
+    /// needed for a real door and (when the spare budget is exhausted)
+    /// strands them. Clamped to `MAX_AUTO_DOORS` and to feasibility. Default
+    /// 0 = no decoys.
+    #[serde(default = "default_play3d_spare_doors")]
+    pub spare_doors: u32,
+    /// Number of spare keys planted on off-spine branches, giving the player
+    /// a budget to burn on decoys before they risk stranding. Default 0.
+    #[serde(default = "default_play3d_spare_keys")]
+    pub spare_keys: u32,
 }
 
 /// Atmospheric sky modes. Wire form (TOML / JSON) is lowercase
@@ -326,6 +338,8 @@ impl Default for Play3dDifficultyConfig {
             door_style: default_door_style(),
             key_holder: default_key_holder(),
             door_count: default_play3d_door_count(),
+            spare_doors: default_play3d_spare_doors(),
+            spare_keys: default_play3d_spare_keys(),
         }
     }
 }
@@ -395,6 +409,8 @@ impl Default for Play3dConfig {
                 door_style: default_door_style(),
                 key_holder: default_key_holder(),
                 door_count: 2,
+                spare_doors: 0,
+                spare_keys: 0,
             },
             tricky: Play3dDifficultyConfig {
                 rows: 15,
@@ -412,6 +428,8 @@ impl Default for Play3dConfig {
                 door_style: default_door_style(),
                 key_holder: default_key_holder(),
                 door_count: 3,
+                spare_doors: 2,
+                spare_keys: 1,
             },
             hard: Play3dDifficultyConfig {
                 rows: 25,
@@ -429,6 +447,8 @@ impl Default for Play3dConfig {
                 door_style: default_door_style(),
                 key_holder: default_key_holder(),
                 door_count: 4,
+                spare_doors: 3,
+                spare_keys: 1,
             },
         }
     }
@@ -466,6 +486,12 @@ fn default_play3d_min_solution_length() -> u32 {
     0
 }
 fn default_play3d_door_count() -> u32 {
+    0
+}
+fn default_play3d_spare_doors() -> u32 {
+    0
+}
+fn default_play3d_spare_keys() -> u32 {
     0
 }
 
@@ -989,6 +1015,41 @@ mod tests {
         // The shipped fallback presets seed a few doors per difficulty.
         assert_eq!(Play3dConfig::default().easy.door_count, 2);
         assert_eq!(Play3dConfig::default().hard.door_count, 4);
+    }
+
+    #[test]
+    fn spare_doors_and_spare_keys_round_trip_from_toml_and_default_to_zero() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 15
+            cols = 15
+            timer_seconds = 120
+            seed = 42
+            min_solution_length = 20
+            spare_doors = 2
+            spare_keys = 1
+
+            [play3d.tricky]
+            rows = 20
+            cols = 20
+            timer_seconds = 240
+            seed = 43
+            min_solution_length = 60
+            # spare_doors / spare_keys deliberately omitted — default to 0
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.spare_doors, 2);
+        assert_eq!(cfg.play3d.easy.spare_keys, 1);
+        assert_eq!(cfg.play3d.tricky.spare_doors, 0);
+        assert_eq!(cfg.play3d.tricky.spare_keys, 0);
+        // The shipped fallback presets ramp the strand risk by difficulty.
+        let d = Play3dConfig::default();
+        assert_eq!((d.easy.spare_doors, d.easy.spare_keys), (0, 0));
+        assert_eq!((d.tricky.spare_doors, d.tricky.spare_keys), (2, 1));
+        assert_eq!((d.hard.spare_doors, d.hard.spare_keys), (3, 1));
     }
 
     #[test]

@@ -71,6 +71,10 @@ struct StartConfig {
     #[serde(default)]
     door_count: u32,
     #[serde(default)]
+    spare_doors: u32,
+    #[serde(default)]
+    spare_keys: u32,
+    #[serde(default)]
     maze_json: Option<String>,
 }
 
@@ -180,6 +184,8 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
                 cfg.seed,
                 cfg.min_solution_length,
                 cfg.door_count,
+                cfg.spare_doors,
+                cfg.spare_keys,
             )
             .map_err(|err| JsValue::from_str(&format!("Maze generation failed: {err}")))?,
         )
@@ -244,6 +250,9 @@ mod tests {
         assert_eq!(cfg.mode, "");
         assert_eq!(cfg.sky_type, "");
         assert_eq!(cfg.wall_type, "brick");
+        assert_eq!(cfg.door_count, 0);
+        assert_eq!(cfg.spare_doors, 0);
+        assert_eq!(cfg.spare_keys, 0);
         assert!(cfg.difficulty.is_none());
         assert!(cfg.maze_json.is_some());
         // The single landmark override must take effect; the rest fall

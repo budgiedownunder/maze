@@ -139,6 +139,8 @@ wall_type = "brick"
 # difficulty's maze. Doors gate the solution path and the maze stays solvable.
 # Clamped to what the maze can hold (max 8). Default 0 = a lock-free maze.
 door_count = 2
+spare_doors = 0
+spare_keys = 0
 
 [game.play3d.easy.landmarks]
 # Per-cell wall tint variation — each cell's walls pick one of six
@@ -177,6 +179,8 @@ minimap_radius = 5
 sky_type = "night"
 wall_type = "brick"
 door_count = 3
+spare_doors = 2
+spare_keys = 1
 
 [game.play3d.tricky.landmarks]
 wall_tint = true
@@ -198,6 +202,8 @@ minimap_radius = 5
 sky_type = "night"
 wall_type = "brick"
 door_count = 4
+spare_doors = 3
+spare_keys = 1
 
 [game.play3d.hard.landmarks]
 wall_tint = true

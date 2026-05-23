@@ -456,6 +456,13 @@ pub struct Play3dConfigResponse {
     /// Number of doors (each with one key) the generator auto-places into the
     /// maze for this difficulty. `0` = a lock-free maze.
     pub door_count: u32,
+    /// Number of decoy doors planted on off-spine branches. Opening one burns
+    /// a key the player may have needed for a real door, potentially
+    /// stranding them. `0` = no decoys.
+    pub spare_doors: u32,
+    /// Number of spare keys planted on off-spine branches — a budget the
+    /// player can spend on decoys before they risk stranding. `0` = none.
+    pub spare_keys: u32,
 }
 
 /// JSON shape of the per-difficulty landmark toggles in
@@ -527,6 +534,8 @@ pub async fn get_play3d_config(
         door_style: preset.door_style.as_wire_str().to_string(),
         key_holder: preset.key_holder.as_wire_str().to_string(),
         door_count: preset.door_count,
+        spare_doors: preset.spare_doors,
+        spare_keys: preset.spare_keys,
     }))
 }
 

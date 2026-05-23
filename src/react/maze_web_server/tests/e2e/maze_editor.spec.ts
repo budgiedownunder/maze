@@ -701,7 +701,9 @@ test('Generate Maze dialog has all expected fields', async ({ page }) => {
   await expect(dialog.getByLabel('Finish Row')).toBeVisible()
   await expect(dialog.getByLabel('Finish Column')).toBeVisible()
   await expect(dialog.getByLabel('Min Solution Length')).toBeVisible()
-  await expect(dialog.getByLabel('Doors')).toBeVisible()
+  await expect(dialog.getByLabel('Doors', { exact: true })).toBeVisible()
+  await expect(dialog.getByLabel('Spare Doors')).toBeVisible()
+  await expect(dialog.getByLabel('Spare Keys')).toBeVisible()
 })
 
 test('Generate Maze dialog defaults reflect the current grid dimensions', async ({ page }) => {
@@ -743,7 +745,7 @@ test('generating with doors places key and door cells in the grid', async ({ pag
   await dialog.getByLabel('Finish Row').fill('15')
   await dialog.getByLabel('Finish Column').fill('15')
   await dialog.getByLabel('Min Solution Length').fill('8')
-  await dialog.getByLabel('Doors').fill('3')
+  await dialog.getByLabel('Doors', { exact: true }).fill('3')
   await dialog.getByRole('button', { name: 'Generate' }).click()
   await expect(page.getByRole('dialog', { name: 'Generate Maze' })).not.toBeVisible()
   // Auto-placed key and door cells render their icons in the editor grid.

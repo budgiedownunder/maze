@@ -1916,6 +1916,67 @@ mod tests {
     }
 
     #[test]
+    fn does_not_strand_when_player_takes_an_alternative_solution_path() {
+        // Regression for a real bug found in manual play. Multi-path maze:
+        // there are two routes from S to F, each crossing a different door.
+        // The lock-blind shortest path picks one (S → D(0,1) → (1,2) → D(1,3)
+        // → F); the *other* route (S → … → D(2,1) → (1,2) → D(1,3) → F)
+        // happens to be even shorter and is what the key-aware solver shows
+        // to the player. The static `path_doors_remaining_closed` counter
+        // is invariant to which route the player picks — it stays at 2 (both
+        // lock-blind spine doors) even after the player opens D(2,1), which
+        // makes the (1,2)-side of the spine reachable WITHOUT crossing
+        // D(0,1). The strand check then over-counts required doors and
+        // falsely strands the player.
+        //
+        //         c0     c1    c2    c3    c4
+        //  r0:    S      D     ' '    W     W
+        //  r1:   ' '     W     K      D     F
+        //  r2:   ' '     D     ' '    W     W
+        //  r3:   ' '     W     W      W     W
+        //  r4:    K      D     ' '    W     W
+        //
+        // Both (0,1) and (2,1) connect S's left-column branch to the row
+        // containing the spine key K(1,2). From K(1,2) the player needs one
+        // more key to open D(1,3) — but K(1,2) itself is a key! So the
+        // route is: pick up K(4,0); walk to D(?,1), open it; walk to
+        // K(1,2), pick up; walk to D(1,3), open it; reach F. Two keys, two
+        // doors — solvable via *either* of the two left-side doors. The
+        // strand check must accept either choice.
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S","D"," ","W","W"],
+            [" ","W","K","D","F"],
+            [" ","D"," ","W","W"],
+            [" ","W","W","W","W"],
+            ["K","D"," ","W","W"]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        // Walk down the left column to K(4,0) and pick it up.
+        game.move_player(Direction::Down); // (1,0)
+        game.move_player(Direction::Down); // (2,0)
+        game.move_player(Direction::Down); // (3,0)
+        game.move_player(Direction::Down); // (4,0) = K
+        game.pickup();
+        // Walk back up to (2,0).
+        game.move_player(Direction::Up);   // (3,0)
+        game.move_player(Direction::Up);   // (2,0)
+        // Open D(2,1) — the OFF-lock-blind-spine door — and walk through.
+        game.move_player(Direction::Right); // StartedUnlocking D(2,1)
+        game.tick(1000.0);
+        let result = game.move_player(Direction::Right); // through D(2,1)
+        assert_eq!(
+            result,
+            MoveResult::Moved,
+            "expected Moved (alt path still leads to F via K(1,2) + D(1,3)), got {result:?}"
+        );
+        assert!(
+            !game.is_lost(),
+            "must not strand when the player takes a valid alternative route to the spine"
+        );
+    }
+
+    #[test]
     fn walking_through_an_already_opened_decoy_with_no_keys_does_not_re_strand() {
         // Once `lost` is set, the walk-through check short-circuits and
         // returns plain `Moved`. Confirmed elsewhere via the "terminal"

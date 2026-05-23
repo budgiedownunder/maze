@@ -5934,6 +5934,8 @@ mod test_definitions {
         assert_eq!(body.minimap_radius, 5);
         assert_eq!(body.title, "Maze 3D");
         assert_eq!(body.door_count, 2);
+        assert_eq!(body.spare_doors, 0);
+        assert_eq!(body.spare_keys, 0);
     }
 
     #[actix_web::test]
@@ -5952,6 +5954,8 @@ mod test_definitions {
         assert_eq!(body.seed, 15_151_515);
         assert_eq!(body.min_solution_length, 24);
         assert_eq!(body.door_count, 3);
+        assert_eq!(body.spare_doors, 2);
+        assert_eq!(body.spare_keys, 1);
 
         let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=hard", None, None);
         let resp = test::call_service(&app, req).await;
@@ -5964,6 +5968,8 @@ mod test_definitions {
         assert_eq!(body.seed, 25_252_525);
         assert_eq!(body.min_solution_length, 44);
         assert_eq!(body.door_count, 4);
+        assert_eq!(body.spare_doors, 3);
+        assert_eq!(body.spare_keys, 1);
     }
 
     #[actix_web::test]

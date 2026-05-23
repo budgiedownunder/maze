@@ -226,6 +226,33 @@ describe('GenerateMazeModal validation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Doors must be a whole number between 0 and 8.')
   })
 
+  it('shows error when Spare Doors exceeds the maximum', async () => {
+    await submitWith({ 'Spare Doors': '9' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Spare Doors must be a whole number between 0 and 8.')
+  })
+
+  it('shows error when Spare Doors is negative', async () => {
+    await submitWith({ 'Spare Doors': '-1' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Spare Doors must be a whole number between 0 and 8.')
+  })
+
+  it('shows error when Spare Keys exceeds the maximum', async () => {
+    await submitWith({ 'Spare Keys': '9' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 8.')
+  })
+
+  it('shows error when Spare Keys is negative', async () => {
+    await submitWith({ 'Spare Keys': '-1' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 8.')
+  })
+
+  it('passes spare doors + spare keys through on a valid submit', async () => {
+    await submitWith({ 'Spare Doors': '2', 'Spare Keys': '1' })
+    expect(mockOnGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ spareDoors: 2, spareKeys: 1 }),
+    )
+  })
+
   it('does not call onGenerate when validation fails', async () => {
     await submitWith({ Rows: '2' })
     expect(mockOnGenerate).not.toHaveBeenCalled()
@@ -286,6 +313,8 @@ describe('GenerateMazeModal happy path', () => {
       finishCol: 3,
       minSpineLength: 1,
       doorCount: 0,
+      spareDoors: 0,
+      spareKeys: 0,
     })
   })
 

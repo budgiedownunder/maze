@@ -26,6 +26,9 @@ function defaultsFromGrid(grid: string[][]) {
   const finish = findCell(grid, 'F')
   // Seed the Doors field with the number of doors already in the maze (so
   // regenerating preserves the author's door count), falling back to 0.
+  // Spare Doors and Spare Keys default to 0 — the grid alone can't tell us
+  // which `'D'` cells were decoys vs real path doors, so the safe default is
+  // "no extras" and let the author opt in.
   const doors = grid.reduce((n, row) => n + row.filter(c => c === 'D').length, 0)
   return {
     rows: String(rows),
@@ -36,6 +39,8 @@ function defaultsFromGrid(grid: string[][]) {
     finishCol: String((finish?.col ?? cols - 1) + 1),
     minSpineLength: '1',
     doorCount: String(doors),
+    spareDoors: '0',
+    spareKeys: '0',
   }
 }
 
@@ -52,6 +57,8 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
     initialMinSpineLength != null ? String(initialMinSpineLength) : defaults.minSpineLength,
   )
   const [doorCount, setDoorCount] = useState(defaults.doorCount)
+  const [spareDoors, setSpareDoors] = useState(defaults.spareDoors)
+  const [spareKeys, setSpareKeys] = useState(defaults.spareKeys)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   function handleSubmit(e: React.FormEvent) {
@@ -64,6 +71,8 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
     const fc = parseInt(finishCol, 10)
     const msl = parseInt(minSpineLength, 10)
     const doors = parseInt(doorCount, 10)
+    const sdoors = parseInt(spareDoors, 10)
+    const skeys = parseInt(spareKeys, 10)
 
     if (!Number.isInteger(r) || r < 3) {
       setValidationError('Rows must be a whole number of 3 or more.')
@@ -105,16 +114,35 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
       setValidationError(`Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
       return
     }
+    if (!Number.isInteger(sdoors) || sdoors < 0 || sdoors > MAX_DOOR_COUNT) {
+      setValidationError(`Spare Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
+      return
+    }
+    if (!Number.isInteger(skeys) || skeys < 0 || skeys > MAX_DOOR_COUNT) {
+      setValidationError(`Spare Keys must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
+      return
+    }
 
     setValidationError(null)
-    onGenerate({ rowCount: r, colCount: c, startRow: sr, startCol: sc, finishRow: fr, finishCol: fc, minSpineLength: msl, doorCount: doors })
+    onGenerate({
+      rowCount: r,
+      colCount: c,
+      startRow: sr,
+      startCol: sc,
+      finishRow: fr,
+      finishCol: fc,
+      minSpineLength: msl,
+      doorCount: doors,
+      spareDoors: sdoors,
+      spareKeys: skeys,
+    })
   }
 
   const displayError = validationError ?? error
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Generate Maze" className="modal-overlay" style={{ zIndex: 1200, cursor: isLoading ? 'wait' : undefined }}>
-      <div className="modal modal-sm">
+      <div className="modal modal-sm modal-scrollable">
         <h2 className="modal-title">Generate Maze</h2>
         {/* noValidate keeps the in-modal JS validation as the source of truth —
             otherwise the `min`/`max` attributes on the number inputs below
@@ -162,6 +190,16 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
             Doors
             <input type="number" className="input" value={doorCount} min={0} max={MAX_DOOR_COUNT}
               onChange={e => { setDoorCount(e.target.value); setValidationError(null) }} />
+          </label>
+          <label>
+            Spare Doors
+            <input type="number" className="input" value={spareDoors} min={0} max={MAX_DOOR_COUNT}
+              onChange={e => { setSpareDoors(e.target.value); setValidationError(null) }} />
+          </label>
+          <label>
+            Spare Keys
+            <input type="number" className="input" value={spareKeys} min={0} max={MAX_DOOR_COUNT}
+              onChange={e => { setSpareKeys(e.target.value); setValidationError(null) }} />
           </label>
           {displayError && <p role="alert" className="error-msg">{displayError}</p>}
           <div className="modal-actions-row">

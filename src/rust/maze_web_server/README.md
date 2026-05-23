@@ -107,6 +107,9 @@ The following configuration settings exist:
 |                | `game.play3d.<difficulty>.wall_type` | Text (`brick` / `dressed_stone` / `wood` / `cobblestone`) | `brick` | (config-file only — wall texture used by the per-cell tinted path; bypassed when `wall_material_variation` is `true`; unknown values fall back to `brick`)
 |                | `game.play3d.<difficulty>.door_style` | Text (`swing` / `slide` / `portcullis` / `dissolve`) | `swing` | (config-file only — door open-animation style; applies to authored mazes containing door cells; unknown values fall back to `swing`)
 |                | `game.play3d.<difficulty>.key_holder` | Text (`pedestal` / `chest` / `floating_key`) | `pedestal` | (config-file only — key-holder style for key cells; unknown values fall back to `pedestal`)
+|                | `game.play3d.<difficulty>.door_count` | Integer | `0` | (config-file only — number of real path doors (each paired with one key) the generator auto-places on the maze's spine; clamped to 8 and to what the maze can hold; `0` = a lock-free maze)
+|                | `game.play3d.<difficulty>.spare_doors` | Integer | `0` | (config-file only — number of decoy doors planted on off-spine branches; visually indistinguishable from real path doors so opening one burns a key the player may have needed for a real door, potentially stranding them; clamped to 8 and to feasibility)
+|                | `game.play3d.<difficulty>.spare_keys` | Integer | `0` | (config-file only — number of spare keys planted on off-spine branches, giving the player a budget to spend on decoys before they risk stranding)
 | OAuth    | `oauth.enabled`    | Boolean | `false`           | `MAZE_WEB_SERVER_OAUTH_ENABLED`
 |          | `oauth.connector`  | Text (`internal` / `auth0`) | `internal` | `MAZE_WEB_SERVER_OAUTH_CONNECTOR`
 |          | `oauth.mobile_redirect_scheme` | Text | `maze-app` | `MAZE_WEB_SERVER_OAUTH_MOBILE_REDIRECT_SCHEME`
@@ -201,6 +204,11 @@ minimap_radius = 5
 
 sky_type = "night"
 wall_type = "brick"
+# Real path doors (each with one key) auto-placed on the spine. Easy mode
+# ships with a couple; spares stay off so easy mode carries no strand risk.
+door_count = 2
+spare_doors = 0
+spare_keys = 0
 
 [game.play3d.easy.landmarks]
 wall_tint = true
@@ -221,6 +229,12 @@ minimap_radius = 5
 
 sky_type = "night"
 wall_type = "brick"
+# Tricky raises real doors to 3 and introduces decoys + a spare. With one
+# spare key, the player can absorb a single decoy mistake; a second wrong
+# door strands them.
+door_count = 3
+spare_doors = 2
+spare_keys = 1
 
 [game.play3d.tricky.landmarks]
 wall_tint = true
@@ -241,6 +255,12 @@ minimap_radius = 5
 
 sky_type = "night"
 wall_type = "brick"
+# Hard adds a third decoy on top of one extra real path door, keeping the
+# same one-mistake margin as tricky but with more decoy choices to
+# navigate around.
+door_count = 4
+spare_doors = 3
+spare_keys = 1
 
 [game.play3d.hard.landmarks]
 wall_tint = true
@@ -595,7 +615,10 @@ Response shape (camelCase):
   "skyType": "night",
   "wallType": "brick",
   "doorStyle": "swing",
-  "keyHolder": "pedestal"
+  "keyHolder": "pedestal",
+  "doorCount": 2,
+  "spareDoors": 0,
+  "spareKeys": 0
 }
 ```
 
@@ -603,7 +626,9 @@ Response shape (camelCase):
 - `minSolutionLength` is plumbed through to the maze crate's `min_spine_length` generator option (with the crate's default `max_retries`). Set it too high and generation will error rather than produce a degenerate maze.
 - `minimapCellPx` / `minimapRadius` size the in-game minimap: `minimapCellPx` scales its on-screen footprint, `minimapRadius` controls how many cells around the player are visible (a `2r+1` square window). Both default to the shipped values (10 / 5).
 - `title` is the in-game splash text shown for ~2 s on game start. Override per difficulty via `[game.play3d.<difficulty>].title`.
-- `doorStyle` (`swing` / `slide` / `portcullis` / `dissolve`) and `keyHolder` (`pedestal` / `chest` / `floating_key`) choose the 3D look of doors and key holders. They take effect for **authored mazes** that contain door or key cells (via the Play 3D custom-launch flow); generated difficulty mazes don't place doors/keys yet, so these have no visible effect on the difficulty presets themselves — they're plumbed for the custom-launch path and future automatic placement. Unknown values fall back to `swing` / `pedestal`.
+- `doorStyle` (`swing` / `slide` / `portcullis` / `dissolve`) and `keyHolder` (`pedestal` / `chest` / `floating_key`) choose the 3D look of doors and key holders. Unknown values fall back to `swing` / `pedestal`.
+- `doorCount` is the number of real path doors (each paired with one key) the generator auto-places on the maze's spine, clamped to 8 and to what the maze can hold (`0` = lock-free).
+- `spareDoors` / `spareKeys` scatter **decoys** + a **safety budget** onto off-spine branches after the solvability check. Decoys are visually indistinguishable from real path doors — opening one burns a key the player may have needed for a real door, potentially stranding them; spare keys give the player room to absorb that mistake. The shipped tricky and hard presets ramp the strand risk (`tricky: 2/1`, `hard: 3/1`); easy mode ships with both at `0` for no strand risk.
 
 ### `GET /api/v1/users/me` shape
 

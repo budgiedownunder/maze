@@ -87,6 +87,8 @@ pub fn generate_maze_json(
     seed: u64,
     min_solution_length: u32,
     door_count: u32,
+    spare_doors: u32,
+    spare_keys: u32,
 ) -> Result<String, String> {
     let options = GeneratorOptions {
         row_count: rows as usize,
@@ -99,8 +101,8 @@ pub fn generate_maze_json(
         branch_from_finish: None,
         seed: Some(seed),
         door_count: Some(door_count as usize),
-        spare_doors: None,
-        spare_keys: None,
+        spare_doors: Some(spare_doors as usize),
+        spare_keys: Some(spare_keys as usize),
     };
     let maze = Generator { options }
         .generate()
