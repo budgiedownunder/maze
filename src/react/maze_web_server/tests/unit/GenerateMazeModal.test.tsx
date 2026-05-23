@@ -65,6 +65,43 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Doors')).toHaveValue(0)
   })
 
+  it('caps the Doors spinner at 0 and the maximum permitted count', () => {
+    // min/max attributes bound the native spinner so a user can't click below
+    // 0 or above 8. The form's noValidate (asserted below) keeps submit
+    // unblocked so the in-modal JS validation still fires for typed
+    // out-of-range values.
+    renderModal()
+    const doors = screen.getByLabelText('Doors')
+    expect(doors).toHaveAttribute('min', '0')
+    expect(doors).toHaveAttribute('max', '8')
+  })
+
+  it('caps each number input spinner at its minimum valid value', () => {
+    // Rows/Columns must be ≥ 3 (the smallest valid grid); the rest only need to
+    // stay ≥ 0 (the JS validation enforces stricter lower bounds at submit
+    // time, but the spinner just shouldn't go negative).
+    renderModal()
+    expect(screen.getByLabelText('Rows')).toHaveAttribute('min', '3')
+    expect(screen.getByLabelText('Columns')).toHaveAttribute('min', '3')
+    for (const label of [
+      'Start Row',
+      'Start Column',
+      'Finish Row',
+      'Finish Column',
+      'Min Solution Length',
+      'Doors',
+    ]) {
+      expect(screen.getByLabelText(label)).toHaveAttribute('min', '0')
+    }
+  })
+
+  it('disables native form validation so the in-modal error message still fires', () => {
+    const { container } = renderModal()
+    const form = container.querySelector('form')
+    expect(form).not.toBeNull()
+    expect(form).toHaveAttribute('novalidate')
+  })
+
   it('initializes Doors from the number of doors already in the grid', () => {
     const gridWithDoors: string[][] = [
       ['S', 'D', ' '],
