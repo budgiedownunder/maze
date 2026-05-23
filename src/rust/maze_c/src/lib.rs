@@ -1609,6 +1609,8 @@ pub extern "C" fn maze_c_maze_generate(
         branch_from_finish,
         seed: Some(opts.seed),
         door_count: None,
+        spare_doors: None,
+        spare_keys: None,
     };
 
     let generator = Generator {

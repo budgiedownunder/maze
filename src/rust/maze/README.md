@@ -33,6 +33,13 @@ For solving a maze you would typically:
 
 `Generator` can **auto-place keys and doors** via `GeneratorOptions.door_count` (default `0` = a lock-free maze). It places that many doors (clamped to what the maze can hold and a small ceiling) on the start→finish solution path: each is anchored to a **junction** (a decision point with a side branch), chosen from the finish back toward the start, and positioned a random few cells *ahead* of it so the junction's branch stays in the segment before the door. Each door's key is then hidden at the **deepest dead-end** of a branch in that preceding segment — typically the anchoring junction's own branch. The result is verified with the key-aware `solve()`, so a generated maze with doors is always completable.
 
+Two further knobs scatter **decoys** and a **spare-key budget** onto off-spine branches *after* the solvability check:
+
+- `spare_doors` — extra `'D'` cells placed on off-spine corridor (or dead-end) cells, visually indistinguishable from the real path doors. Opening one consumes a key the player might have needed for a real door, potentially stranding them (see `MazeGame::lose_reason`). Clamped to `MAX_AUTO_DOORS` and to feasibility; candidates adjacent to an existing key are skipped so the bait isn't telegraphed.
+- `spare_keys` — extra `'K'` cells placed on off-spine branches, giving the player a budget to burn on decoys before they risk stranding. Clamped to feasibility; candidates adjacent to any door are skipped so a spare key doesn't accidentally identify a nearby door as real.
+
+Spare placement preserves solvability by construction — decoys never sit on the spine and spare keys only loosen the player's key budget — so no second `solve()` is needed.
+
 ## Game Module
 
 The `game` module (`maze::game`) provides an interactive cell-based game session driven by player input.

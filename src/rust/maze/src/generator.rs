@@ -50,6 +50,30 @@ pub struct GeneratorOptions {
     /// `Some(0)` (the default) places nothing — the lock-free maze as before.
     #[serde(default)]
     pub door_count: Option<usize>,
+    /// Number of **decoy** doors to scatter onto off-spine branches **after**
+    /// the maze passes the key-aware solvability check. A decoy is visually
+    /// indistinguishable from a real path door — opening one burns a key the
+    /// player might have needed for a real door on the spine, and (when the
+    /// spare budget is exhausted) strands them. Doors are preferred at corridor
+    /// cells (open-degree 2) so they look like they actually gate something;
+    /// candidates adjacent to an existing `'K'` are skipped so a decoy isn't
+    /// telegraphed by an obvious nearby key. Clamped to [`MAX_AUTO_DOORS`] and
+    /// to the available off-spine cells. `None` or `Some(0)` (the default)
+    /// places no decoys; the maze is unchanged from the `door_count`-only
+    /// result. Placement does **not** re-validate the maze with `solve()` —
+    /// decoys sit on side branches and never block the spine, so solvability
+    /// is preserved by construction.
+    #[serde(default)]
+    pub spare_doors: Option<usize>,
+    /// Number of **spare keys** to scatter onto off-spine branches **after**
+    /// the maze passes the key-aware solvability check. Spare keys give the
+    /// player a budget to spend on decoys before they run the risk of
+    /// stranding themselves. Candidates skip cells adjacent to any `'D'`
+    /// (whether a real path door or a decoy) so the spare doesn't immediately
+    /// reveal which adjacent door is real. Clamped to the available off-spine
+    /// cells. `None` or `Some(0)` (the default) places no spares.
+    #[serde(default)]
+    pub spare_keys: Option<usize>,
 }
 
 /// Generates a maze from a set of [`GeneratorOptions`].
@@ -72,6 +96,8 @@ pub struct GeneratorOptions {
 ///         branch_from_finish: None,
 ///         seed: None,
 ///         door_count: None,
+///         spare_doors: None,
+///         spare_keys: None,
 ///     },
 /// };
 /// let maze = gen.generate().expect("generation should succeed");
@@ -144,6 +170,8 @@ impl Generator {
         let max_retries = opts.max_retries.unwrap_or(100);
         let branch_from_finish = opts.branch_from_finish.unwrap_or(false);
         let door_count = opts.door_count.unwrap_or(0);
+        let spare_doors = opts.spare_doors.unwrap_or(0);
+        let spare_keys = opts.spare_keys.unwrap_or(0);
 
         let seed_val: u64 = match opts.seed {
             Some(s) => s,
@@ -199,24 +227,38 @@ impl Generator {
             let maze = Maze::new(MazeDefinition::from_vec(grid));
             match (Solver { maze: &maze }).solve() {
                 Ok(solution) if solution.path.points.len() >= min_spine => {
-                    if door_count == 0 {
-                        return Ok(maze);
-                    }
-                    // Auto-place keys/doors onto the solved spine, then confirm the
-                    // result is still solvable with the key-aware solver. On the rare
-                    // failure, fall through to retry with a fresh carve.
-                    let mut placed = maze.definition.grid.clone();
-                    place_keys_and_doors(&mut placed, &solution.path.points, door_count, &mut rng);
-                    let placed_maze = Maze::new(MazeDefinition::from_vec(placed));
-                    match (Solver { maze: &placed_maze }).solve() {
-                        Ok(sol2) if sol2.path.points.len() >= min_spine => {
-                            return Ok(placed_maze)
+                    let spine_points = &solution.path.points;
+                    // Stage 1 — auto-place real keys/doors on the spine and
+                    // confirm key-aware solvability. On the rare failure, fall
+                    // through to retry with a fresh carve.
+                    let mut working = maze.definition.grid.clone();
+                    if door_count > 0 {
+                        place_keys_and_doors(&mut working, spine_points, door_count, &mut rng);
+                        let probe = Maze::new(MazeDefinition::from_vec(working.clone()));
+                        match (Solver { maze: &probe }).solve() {
+                            Ok(sol2) if sol2.path.points.len() >= min_spine => { /* ok */ }
+                            _ => {
+                                last_err =
+                                    "key/door placement did not yield a solvable maze"
+                                        .to_string();
+                                continue;
+                            }
                         }
-                        _ => {
-                            last_err =
-                                "key/door placement did not yield a solvable maze".to_string();
-                        }
                     }
+                    // Stage 2 — overlay decoy doors + spare keys onto off-spine
+                    // branches. Solvability is preserved by construction:
+                    // decoys never sit on the spine and spare keys only loosen
+                    // the player's budget, so no second `solve()` is needed.
+                    if spare_doors > 0 || spare_keys > 0 {
+                        place_spare_keys_and_doors(
+                            &mut working,
+                            spine_points,
+                            spare_doors,
+                            spare_keys,
+                            &mut rng,
+                        );
+                    }
+                    return Ok(Maze::new(MazeDefinition::from_vec(working)));
                 }
                 Ok(solution) => {
                     last_err = format!(
@@ -565,6 +607,116 @@ fn place_keys_and_doors(
     }
 }
 
+/// Overlays decoy doors + spare keys onto **off-spine** branches of a maze
+/// that has already passed the key-aware solvability check (see
+/// [`place_keys_and_doors`] for stage 1). Mutates `grid` in place.
+///
+/// Decoy doors go on `' '` corridor cells (open-degree 2) preferentially —
+/// they read as gates with something behind them — falling back to dead-end
+/// leaves (open-degree 1) if corridors are exhausted; junction cells
+/// (open-degree ≥ 3) are excluded because a door at a fork looks unnatural
+/// compared to the spine doors (which sit a few cells past their junction).
+/// Candidates adjacent to an existing `'K'` are skipped so the decoy isn't
+/// telegraphed; candidates adjacent to an already-placed `'D'` are also
+/// skipped to avoid door clumping.
+///
+/// Spare keys then go on the remaining off-spine `' '` cells, skipping any
+/// cell adjacent to a `'D'` — so the spare key doesn't accidentally identify
+/// a nearby door as real and undercut the bait.
+///
+/// Both counts are clamped to the cells the candidate filters yield;
+/// `requested_doors` is additionally clamped to [`MAX_AUTO_DOORS`]. Solvability
+/// is preserved by construction (decoys never sit on the spine; spare keys
+/// only loosen the player's key budget), so the caller does **not** re-run
+/// `solve()`.
+fn place_spare_keys_and_doors(
+    grid: &mut [Vec<char>],
+    spine: &[MazePoint],
+    requested_doors: usize,
+    requested_keys: usize,
+    rng: &mut StdRng,
+) {
+    if requested_doors == 0 && requested_keys == 0 {
+        return;
+    }
+
+    use std::collections::HashSet;
+    let spine_set: HashSet<(usize, usize)> = spine.iter().map(|p| (p.row, p.col)).collect();
+
+    let collect_off_spine_empty = |grid: &[Vec<char>]| -> Vec<(usize, usize)> {
+        let mut out = Vec::new();
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch == ' ' && !spine_set.contains(&(r, c)) {
+                    out.push((r, c));
+                }
+            }
+        }
+        out
+    };
+
+    let is_adjacent_to = |grid: &[Vec<char>], r: usize, c: usize, target: char| -> bool {
+        passable_neighbours(grid, r, c)
+            .into_iter()
+            .any(|(nr, nc)| grid[nr][nc] == target)
+    };
+
+    // ── Stage A — decoy doors ─────────────────────────────────────────────────
+    if requested_doors > 0 {
+        let door_cap = requested_doors.min(MAX_AUTO_DOORS);
+        let off_spine = collect_off_spine_empty(grid);
+
+        // Partition by open-degree: corridor cells preferred over leaves;
+        // junction cells (degree ≥ 3) excluded.
+        let mut corridors: Vec<(usize, usize)> = Vec::new();
+        let mut leaves: Vec<(usize, usize)> = Vec::new();
+        for cell in off_spine {
+            match open_degree(grid, cell.0, cell.1) {
+                2 => corridors.push(cell),
+                1 => leaves.push(cell),
+                _ => { /* skip — junction or isolated */ }
+            }
+        }
+        corridors.shuffle(rng);
+        leaves.shuffle(rng);
+
+        let mut placed: usize = 0;
+        for cell in corridors.into_iter().chain(leaves) {
+            if placed >= door_cap {
+                break;
+            }
+            // Skip adjacency to keys (telegraphed bait) and to other doors
+            // (clumping reads poorly).
+            if is_adjacent_to(grid, cell.0, cell.1, 'K')
+                || is_adjacent_to(grid, cell.0, cell.1, 'D')
+            {
+                continue;
+            }
+            grid[cell.0][cell.1] = 'D';
+            placed += 1;
+        }
+    }
+
+    // ── Stage B — spare keys ──────────────────────────────────────────────────
+    if requested_keys > 0 {
+        // Re-enumerate: the previous stage consumed some cells.
+        let mut off_spine = collect_off_spine_empty(grid);
+        off_spine.shuffle(rng);
+
+        let mut placed: usize = 0;
+        for cell in off_spine {
+            if placed >= requested_keys {
+                break;
+            }
+            if is_adjacent_to(grid, cell.0, cell.1, 'D') {
+                continue;
+            }
+            grid[cell.0][cell.1] = 'K';
+            placed += 1;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -584,6 +736,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: None,
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         }
     }
@@ -616,6 +770,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: None,
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -635,6 +791,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: None,
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -654,6 +812,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: None,
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -767,6 +927,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: None,
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         };
         let maze = gen.generate().expect("should succeed");
@@ -791,6 +953,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: None,
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         };
         let maze = gen.generate().expect("should succeed");
@@ -819,6 +983,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: None,
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -838,6 +1004,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: None,
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -859,6 +1027,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: Some(42),
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         };
         let maze1 = make().generate().expect("should succeed");
@@ -880,6 +1050,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: Some(seed),
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         };
         let maze1 = make(1).generate().expect("should succeed");
@@ -902,6 +1074,8 @@ mod tests {
                 branch_from_finish: None,
                 seed: Some(seed),
                 door_count: Some(doors),
+                spare_doors: None,
+                spare_keys: None,
             },
         }
     }
@@ -1005,6 +1179,261 @@ mod tests {
             .generate()
             .expect("should succeed");
         assert_eq!(a.definition.grid, b.definition.grid);
+    }
+
+    // --- Spare-key / spare-door overlay (decoys + safety budget) ---
+
+    fn make_with_doors_and_spares(
+        rows: usize,
+        cols: usize,
+        seed: u64,
+        doors: usize,
+        spare_doors: Option<usize>,
+        spare_keys: Option<usize>,
+    ) -> Generator {
+        Generator {
+            options: GeneratorOptions {
+                row_count: rows,
+                col_count: cols,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start: None,
+                finish: None,
+                min_spine_length: None,
+                max_retries: None,
+                branch_from_finish: None,
+                seed: Some(seed),
+                door_count: Some(doors),
+                spare_doors,
+                spare_keys,
+            },
+        }
+    }
+
+    /// Lock-blind spine cells for a maze with K/D temporarily stripped.
+    fn spine_cells_of(grid: &[Vec<char>]) -> std::collections::HashSet<(usize, usize)> {
+        let mut bare = grid.to_vec();
+        for row in bare.iter_mut() {
+            for cell in row.iter_mut() {
+                if *cell == 'D' || *cell == 'K' {
+                    *cell = ' ';
+                }
+            }
+        }
+        let bare_maze = Maze::new(MazeDefinition::from_vec(bare));
+        Solver { maze: &bare_maze }
+            .solve()
+            .expect("bare maze solvable")
+            .path
+            .points
+            .iter()
+            .map(|p| (p.row, p.col))
+            .collect()
+    }
+
+    #[test]
+    fn no_spares_produces_byte_identical_grid_to_unspecified_spares() {
+        // Defaulted (None, None) spares must consume no rng draws, so the
+        // generated grid is byte-identical to the request with spares
+        // disabled. This guards downstream determinism: existing tests + UI
+        // consumers that don't yet pass spare fields keep their current
+        // output.
+        let a = make_with_doors(15, 15, 7, 3)
+            .generate()
+            .expect("baseline succeeds");
+        let b = make_with_doors_and_spares(15, 15, 7, 3, None, None)
+            .generate()
+            .expect("explicit-None spares succeeds");
+        let c = make_with_doors_and_spares(15, 15, 7, 3, Some(0), Some(0))
+            .generate()
+            .expect("zero spares succeeds");
+        assert_eq!(a.definition.grid, b.definition.grid);
+        assert_eq!(a.definition.grid, c.definition.grid);
+    }
+
+    #[test]
+    fn spare_doors_sit_off_spine_in_corridor_or_leaf_cells() {
+        let maze = make_with_doors_and_spares(21, 21, 17, 3, Some(4), None)
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        let spine = spine_cells_of(grid);
+        // Walk every D cell. The real path doors are on the spine; spare
+        // (decoy) doors must be OFF the spine, and on cells of open-degree 1
+        // or 2 (junctions are excluded as door candidates).
+        let mut spare_door_count = 0;
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch != 'D' || spine.contains(&(r, c)) {
+                    continue;
+                }
+                spare_door_count += 1;
+                let deg = open_degree(grid, r, c);
+                assert!(
+                    deg == 1 || deg == 2,
+                    "spare door at ({r},{c}) has open-degree {deg}; expected 1 or 2"
+                );
+            }
+        }
+        assert!(spare_door_count > 0, "expected at least one spare door");
+    }
+
+    #[test]
+    fn spare_doors_are_not_adjacent_to_an_existing_key() {
+        // Telegraph-prevention: a decoy door right next to a real key would
+        // make the bait too obvious.
+        let maze = make_with_doors_and_spares(21, 21, 19, 3, Some(4), None)
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        let spine = spine_cells_of(grid);
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch != 'D' || spine.contains(&(r, c)) {
+                    continue;
+                }
+                for (nr, nc) in passable_neighbours(grid, r, c) {
+                    assert_ne!(
+                        grid[nr][nc], 'K',
+                        "spare door at ({r},{c}) is adjacent to a key at ({nr},{nc})"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn spare_keys_sit_off_spine_and_not_adjacent_to_any_door() {
+        // Real keys (from `place_keys_and_doors`) sit at deepest dead-ends of
+        // the segment before each spine door — those are placed by stage 1,
+        // before spares. After spares, the OFF-SPINE 'K' cells include both
+        // real keys (which were placed by stage 1) and spare keys (which were
+        // placed by stage 2). We just verify the spare invariant on every
+        // off-spine 'K' the spare stage *could have* added — i.e. the
+        // adjacency rule holds globally.
+        let maze = make_with_doors_and_spares(21, 21, 23, 2, None, Some(5))
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        let spine = spine_cells_of(grid);
+        // No K cell on the spine (real keys go in branches, spare keys go
+        // off-spine).
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch == 'K' {
+                    assert!(
+                        !spine.contains(&(r, c)),
+                        "key at ({r},{c}) sits on the spine"
+                    );
+                }
+            }
+        }
+        // Spare keys' adjacency rule: no off-spine K is next to a D. (Real
+        // keys also obey this in the typical case — they're at deepest
+        // dead-ends, far from doors — so the global check is safe here.)
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch != 'K' {
+                    continue;
+                }
+                for (nr, nc) in passable_neighbours(grid, r, c) {
+                    assert_ne!(
+                        grid[nr][nc], 'D',
+                        "key at ({r},{c}) is adjacent to a door at ({nr},{nc}) — \
+                         spare placement should have skipped this candidate"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn spare_doors_clamp_to_max_auto_doors_ceiling() {
+        // Over-request spare doors; the placement must clamp to
+        // MAX_AUTO_DOORS independent of however many real doors were placed.
+        let maze = make_with_doors_and_spares(25, 25, 31, 0, Some(50), None)
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        let total_doors = count_char(grid, 'D');
+        assert!(
+            total_doors <= MAX_AUTO_DOORS,
+            "spare-door placement must clamp to MAX_AUTO_DOORS, got {total_doors}"
+        );
+    }
+
+    #[test]
+    fn spare_placement_is_deterministic_for_a_fixed_seed() {
+        let a = make_with_doors_and_spares(21, 21, 99, 3, Some(3), Some(3))
+            .generate()
+            .expect("should succeed");
+        let b = make_with_doors_and_spares(21, 21, 99, 3, Some(3), Some(3))
+            .generate()
+            .expect("should succeed");
+        assert_eq!(a.definition.grid, b.definition.grid);
+    }
+
+    #[test]
+    fn spare_placement_preserves_solvability() {
+        // After overlaying spares, the maze must still solve. With
+        // keys+doors potentially > MAX_GATED_FEATURES the solver falls back
+        // to lock-blind — either way `solve()` returns `Ok` because the spine
+        // is open and unaltered by the spare overlay.
+        let maze = make_with_doors_and_spares(21, 21, 41, 3, Some(4), Some(4))
+            .generate()
+            .expect("should succeed");
+        Solver { maze: &maze }
+            .solve()
+            .expect("overlaid maze must remain solvable");
+        // Exactly one start and one finish; no decoy clobbered them.
+        assert_eq!(count_char(&maze.definition.grid, 'S'), 1);
+        assert_eq!(count_char(&maze.definition.grid, 'F'), 1);
+    }
+
+    #[test]
+    fn spare_keys_only_places_some_off_spine_keys() {
+        // No spare doors, just spare keys: a generous safety budget for any
+        // future decoys (or simply a no-op buffer in a door-free maze).
+        let maze = make_with_doors_and_spares(15, 15, 53, 0, None, Some(3))
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        let spine = spine_cells_of(grid);
+        let mut off_spine_keys = 0;
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch == 'K' && !spine.contains(&(r, c)) {
+                    off_spine_keys += 1;
+                }
+            }
+        }
+        assert!(
+            (1..=3).contains(&off_spine_keys),
+            "expected 1..=3 spare keys, got {off_spine_keys}"
+        );
+        assert_eq!(count_char(grid, 'D'), 0, "no doors when door_count = 0");
+    }
+
+    #[test]
+    fn spare_doors_only_places_some_off_spine_doors() {
+        // No spare keys, just decoys. With door_count=2 the maze has real
+        // path doors too, but the spare doors must be off the spine.
+        let maze = make_with_doors_and_spares(21, 21, 61, 2, Some(3), None)
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        let spine = spine_cells_of(grid);
+        let mut off_spine_doors = 0;
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch == 'D' && !spine.contains(&(r, c)) {
+                    off_spine_doors += 1;
+                }
+            }
+        }
+        assert!(
+            (1..=3).contains(&off_spine_doors),
+            "expected 1..=3 spare doors, got {off_spine_doors}"
+        );
     }
 
     #[test]

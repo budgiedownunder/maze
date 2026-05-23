@@ -99,6 +99,8 @@ pub fn generate_maze_json(
         branch_from_finish: None,
         seed: Some(seed),
         door_count: Some(door_count as usize),
+        spare_doors: None,
+        spare_keys: None,
     };
     let maze = Generator { options }
         .generate()

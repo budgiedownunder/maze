@@ -850,6 +850,8 @@ pub extern "C" fn maze_wasm_generate(
         branch_from_finish,
         seed: Some(opts.seed),
         door_count: None,
+        spare_doors: None,
+        spare_keys: None,
     };
 
     let generator = Generator { options: generator_options };

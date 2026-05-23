@@ -602,6 +602,8 @@ pub trait App: LinePrinter + Send {
                 branch_from_finish: None,
                 seed: None,
                 door_count: None,
+                spare_doors: None,
+                spare_keys: None,
             },
         };
         match gen.generate() {

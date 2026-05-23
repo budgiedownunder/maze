@@ -1754,6 +1754,8 @@ impl MazeWasm {
             branch_from_finish,
             seed,
             door_count,
+            spare_doors: None,
+            spare_keys: None,
         };
 
         let maze = Generator { options }
