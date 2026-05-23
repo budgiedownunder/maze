@@ -51,6 +51,9 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 | 1 | Moved |
 | 2 | Blocked |
 | 3 | Complete |
+| 4 | BlockedByLockedDoor |
+| 5 | StartedUnlocking |
+| 6 | Stranded |
 | -1 | Unknown direction value |
 
 **Memory ownership:** The caller must call `maze_c_free_maze_game` when done. Passing `null` to `free` is safe and has no effect.

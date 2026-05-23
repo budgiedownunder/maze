@@ -81,7 +81,7 @@ game.player_direction(); // → DirectionWasm (None=0, Up=1, Down=2, Left=3, Rig
 game.is_complete();      // → boolean
 
 // Returns MoveResultWasm (None=0, Moved=1, Blocked=2, Complete=3,
-//                         BlockedByLockedDoor=4, StartedUnlocking=5)
+//                         BlockedByLockedDoor=4, StartedUnlocking=5, Stranded=6)
 const result = game.move_player(DirectionWasm.Right);
 
 // Array of { row: number, col: number } objects in visit order
@@ -105,7 +105,7 @@ For non-JS WASM hosts (Wasmtime, .NET, native via P/Invoke).
 ```c
 // Direction encoding: 0=None, 1=Up, 2=Down, 3=Left, 4=Right
 // MoveResult encoding: 0=None, 1=Moved, 2=Blocked, 3=Complete,
-//                      4=BlockedByLockedDoor, 5=StartedUnlocking, -1=null pointer
+//                      4=BlockedByLockedDoor, 5=StartedUnlocking, 6=Stranded, -1=null pointer
 
 MazeGameWasm* new_maze_game_wasm(const u8* json_string_ptr);  // returns null on error
 void          free_maze_game_wasm(MazeGameWasm* maze_game_wasm);

@@ -120,6 +120,7 @@ pub enum MoveResultWasm {
     Complete            = 3,
     BlockedByLockedDoor = 4,
     StartedUnlocking    = 5,
+    Stranded            = 6,
 }
 
 /// Result returned by `maze_game_wasm_move_player`.
@@ -133,6 +134,7 @@ pub enum MoveResultWasm {
     Complete            = 3,
     BlockedByLockedDoor = 4,
     StartedUnlocking    = 5,
+    Stranded            = 6,
 }
 
 /// Converts a [`GenerationAlgorithmWasm`] value to the corresponding [`maze::GenerationAlgorithm`].

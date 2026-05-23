@@ -16,11 +16,12 @@ The `maze` crate is written in `Rust` and defines an API for calculating maze so
 - `MazeSolution` - represents a maze solution
 - `Solver` - represents a maze solver
 - `Direction` - enum representing a player movement direction (`None`, `Up`, `Down`, `Left`, `Right`)
-- `MoveResult` - enum representing the outcome of a move attempt (`None`, `Moved`, `Blocked`, `Complete`, `BlockedByLockedDoor`, `StartedUnlocking`)
+- `MoveResult` - enum representing the outcome of a move attempt (`None`, `Moved`, `Blocked`, `Complete`, `BlockedByLockedDoor`, `StartedUnlocking`, `Stranded`)
+- `LoseReason` - enum representing why a game ended in a loss (`Timeout`, `Stranded`)
 - `DoorState` - enum representing a door's lifecycle (`Locked`, `Opening`, `Open`)
 - `BagItem` - enum representing an item carried in the player's bag (currently `Key`)
 - `GameEvent` - enum representing a time-based event emitted by `MazeGame::tick` (currently `DoorOpened`)
-- `MazeGame` - a running game session tracking player position, direction, visited cells, completion, the player's bag, and per-cell door state
+- `MazeGame` - a running game session tracking player position, direction, visited cells, completion, lose state, the player's bag, and per-cell door state
 
 For solving a maze you would typically:
 1. Create a `maze` instance with `Maze::new()` defined in the `data_model` crate
@@ -42,7 +43,8 @@ The `game` module (`maze::game`) provides an interactive cell-based game session
 |:-----|:------------|
 | `MazeGame` | A running game session. Create with `MazeGame::from_json(json)`. |
 | `Direction` | `None` \| `Up` \| `Down` \| `Left` \| `Right` |
-| `MoveResult` | `None` \| `Moved` \| `Blocked` \| `Complete` \| `BlockedByLockedDoor` \| `StartedUnlocking` |
+| `MoveResult` | `None` \| `Moved` \| `Blocked` \| `Complete` \| `BlockedByLockedDoor` \| `StartedUnlocking` \| `Stranded` |
+| `LoseReason` | `Timeout` \| `Stranded` |
 | `DoorState` | `Locked` \| `Opening { progress }` \| `Open` |
 | `BagItem` | `Key { id }` (serialises as `{"type":"key","id":…}`) |
 | `GameEvent` | `DoorOpened { cell }` |
@@ -80,13 +82,15 @@ assert_eq!(game.visited_cells(), &[(0, 0), (0, 1), (0, 2)]);
 | `'S'` (start) | `Moved` |
 | `'F'` (finish) | `Complete` |
 | `'K'` (key) | `Moved` (key is not collected by moving — pick it up explicitly) |
-| `'D'` (door, open) | `Moved` |
+| `'D'` (door, open) | `Moved` — or `Stranded` if walking through leaves the player without enough keys for the remaining real doors on the solution path |
 | `'D'` (door, locked, key held) | `StartedUnlocking` (key consumed; opens over time via `tick`) |
 | `'D'` (door, locked, no key / still opening) | `BlockedByLockedDoor` |
 | `'W'` (wall) | `Blocked` |
 | Out of bounds | `Blocked` |
 
 Keys are not collected by walking over them — call `MazeGame::pickup()` while standing on a key cell to add it to the bag. Doors open over real time rather than blocking permanently: holding against a locked door while carrying a key starts it opening, and `MazeGame::tick(dt_ms)` advances and completes the open (emitting `GameEvent::DoorOpened`). Collected items are read via `MazeGame::bag()`, doors via `MazeGame::doors()`, and uncollected keys via `MazeGame::keys()`.
+
+The game also tracks a lose state: `MazeGame::is_lost()` and `MazeGame::lose_reason()` report whether the session has ended in a loss and why. `MazeGame::time_out()` sets it to `LoseReason::Timeout` (called by the host when a wall-clock countdown reaches zero); walking through an open door that leaves the player with too few keys for the remaining real path doors sets it to `LoseReason::Stranded` (and `move_player` returns `MoveResult::Stranded` at the moment of detection).
 
 ## Getting Started
 

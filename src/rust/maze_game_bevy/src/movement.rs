@@ -119,7 +119,12 @@ pub(crate) fn movement_system(
         } else if forward {
             let dir = state.facing.to_direction();
             match state.game.move_player(dir) {
-                MoveResult::Moved | MoveResult::Complete => {
+                // `Stranded` reports a successful step onto an open door cell
+                // that has just left the player too short of keys to finish —
+                // the move itself succeeded, so the camera follows; the lose
+                // surface (HUD message) is wired separately via
+                // `game.is_lost()` / `game.lose_reason()`.
+                MoveResult::Moved | MoveResult::Complete | MoveResult::Stranded => {
                     let (row, col) = (state.game.player_row(), state.game.player_col());
                     let nrows = state.grid.len();
                     let ncols = state.grid[0].len();

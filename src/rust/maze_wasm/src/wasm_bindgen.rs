@@ -194,6 +194,7 @@ fn move_result_to_wasm(result: maze::MoveResult) -> MoveResultWasm {
         maze::MoveResult::Complete            => MoveResultWasm::Complete,
         maze::MoveResult::BlockedByLockedDoor => MoveResultWasm::BlockedByLockedDoor,
         maze::MoveResult::StartedUnlocking    => MoveResultWasm::StartedUnlocking,
+        maze::MoveResult::Stranded            => MoveResultWasm::Stranded,
     }
 }
 

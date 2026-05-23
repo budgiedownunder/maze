@@ -1,6 +1,6 @@
 use data_model::MazeDefinition;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Direction of player movement.
 ///
@@ -60,6 +60,36 @@ pub enum MoveResult {
     /// door becomes passable once [`MazeGame::tick`] reports it
     /// [`DoorState::Open`].
     StartedUnlocking,
+    /// The player moved successfully through an open door (`'D'`) and now holds
+    /// too few keys to open every remaining real door on the solution path —
+    /// the game is unwinnable. [`MazeGame::lose_reason`] returns
+    /// `Some(LoseReason::Stranded)` and [`MazeGame::is_lost`] returns `true`.
+    Stranded,
+}
+
+/// Why a game ended in a loss.
+///
+/// Set when the game transitions to a lost state (see [`MazeGame::is_lost`]).
+/// Extensible: future variants could cover death events, environmental hazards,
+/// etc.
+///
+/// # Examples
+///
+/// ```
+/// use maze::LoseReason;
+/// let reason = LoseReason::Stranded;
+/// assert_eq!(reason, LoseReason::Stranded);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LoseReason {
+    /// The wall-clock countdown reached zero — signalled by the caller via
+    /// [`MazeGame::time_out`].
+    Timeout,
+    /// The player no longer holds enough keys (collected + still in the world)
+    /// to open every real door remaining on the solution path. Set when the
+    /// player walks through an open door and the inequality
+    /// `path_doors_remaining_closed > available_keys` is true.
+    Stranded,
 }
 
 /// The lifecycle state of a door (`'D'`) cell.
@@ -133,19 +163,23 @@ pub enum GameEvent {
 /// A running maze game session.
 ///
 /// Holds the grid, player position, facing direction, completion state, the set
-/// of visited cells in visit order, the player's bag, and per-cell door state.
+/// of visited cells in visit order, the player's bag, per-cell door state, and
+/// the lose state (set when the player runs out of time or strands themselves).
 /// Create with [`MazeGame::from_json`].
 ///
 /// Cell rules applied during [`MazeGame::move_player`]:
 /// - `' '`, `'S'`, or `'K'` → [`MoveResult::Moved`] (a key is not collected by
 ///   moving onto it — use [`MazeGame::pickup`])
 /// - `'F'` → [`MoveResult::Complete`]
-/// - `'D'` (door) → [`MoveResult::Moved`] when already open, else
-///   [`MoveResult::StartedUnlocking`] (a key is held) or
-///   [`MoveResult::BlockedByLockedDoor`]
+/// - `'D'` (door) → [`MoveResult::Moved`] when already open (or
+///   [`MoveResult::Stranded`] when walking through has left too few keys for
+///   the remaining real path doors), else [`MoveResult::StartedUnlocking`]
+///   (a key is held) or [`MoveResult::BlockedByLockedDoor`]
 /// - `'W'` or out-of-bounds → [`MoveResult::Blocked`]
 ///
-/// Doors open over time — see [`MazeGame::tick`].
+/// Doors open over time — see [`MazeGame::tick`]. The lose state is queried via
+/// [`MazeGame::is_lost`] / [`MazeGame::lose_reason`]; [`MazeGame::time_out`]
+/// sets it from the caller's countdown.
 ///
 /// # Examples
 ///
@@ -173,6 +207,30 @@ pub struct MazeGame {
     key_ids: HashMap<(usize, usize), u32>,
     /// Items the player has collected, in pickup order.
     bag: Vec<BagItem>,
+    /// Cells holding a real door on the lock-blind shortest path from `'S'` to
+    /// `'F'` — the doors the player must open to finish the maze. Computed once
+    /// in [`MazeGame::from_json`] and never mutated. Any `'D'` cell **not** in
+    /// this set is a decoy: opening it consumes a key without bringing the
+    /// player closer to the finish.
+    solution_path_doors: HashSet<(usize, usize)>,
+    /// Number of doors in [`Self::solution_path_doors`] that are still
+    /// `Locked` / `Opening` (i.e. not yet committed open by the player). Seeded
+    /// to `solution_path_doors.len()` and decremented once per path-door at the
+    /// moment the player commits a key to it (the `StartedUnlocking` branch of
+    /// [`Self::move_player`]).
+    path_doors_remaining_closed: u32,
+    /// Total keys still available to the player: keys currently in the bag plus
+    /// uncollected `'K'` cells in the world. Seeded to the total `'K'` count at
+    /// construction and decremented once each time a key is consumed at a door
+    /// (`StartedUnlocking`). Pickup is a no-op for this counter — a key just
+    /// moves from "in the world" to "in the bag".
+    available_keys: u32,
+    /// Whether the game has ended in a loss (see [`Self::lose_reason`]).
+    lost: bool,
+    /// Why the game was lost. `None` until the game transitions to a lost
+    /// state. Mutually exclusive with [`Self::complete`] in practice — the game
+    /// is either won, lost, or in progress.
+    lose_reason: Option<LoseReason>,
 }
 
 /// Real-time duration a door takes to open once unlocking begins, in milliseconds.
@@ -212,6 +270,7 @@ impl MazeGame {
         let mut doors = HashMap::new();
         let mut key_ids = HashMap::new();
         let mut next_key_id: u32 = 0;
+        let mut total_keys: u32 = 0;
         for (r, row) in definition.grid.iter().enumerate() {
             for (c, &ch) in row.iter().enumerate() {
                 match ch {
@@ -221,11 +280,16 @@ impl MazeGame {
                     'K' => {
                         key_ids.insert((r, c), next_key_id);
                         next_key_id += 1;
+                        total_keys += 1;
                     }
                     _ => {}
                 }
             }
         }
+
+        let solution_path_doors =
+            compute_solution_path_doors(&definition.grid, (start.row, start.col));
+        let path_doors_remaining_closed = solution_path_doors.len() as u32;
 
         Ok(MazeGame {
             grid: definition.grid,
@@ -239,6 +303,11 @@ impl MazeGame {
             doors,
             key_ids,
             bag: Vec::new(),
+            solution_path_doors,
+            path_doors_remaining_closed,
+            available_keys: total_keys,
+            lost: false,
+            lose_reason: None,
         })
     }
 
@@ -251,8 +320,12 @@ impl MazeGame {
     /// [`MazeGame::pickup`]. A locked door (`'D'`) yields
     /// [`MoveResult::StartedUnlocking`] when the player holds a key — consuming
     /// it and beginning the open (see [`MazeGame::tick`]) — or
-    /// [`MoveResult::BlockedByLockedDoor`] otherwise. The player's facing
-    /// direction is always updated to `dir`, even when blocked.
+    /// [`MoveResult::BlockedByLockedDoor`] otherwise. Stepping onto an open
+    /// door cell while the player no longer holds enough keys to open every
+    /// remaining real door on the solution path yields [`MoveResult::Stranded`]
+    /// — the move still succeeds, but the game transitions to lost with
+    /// [`LoseReason::Stranded`]. The player's facing direction is always
+    /// updated to `dir`, even when blocked.
     ///
     /// # Examples
     ///
@@ -304,7 +377,19 @@ impl MazeGame {
                     self.player_row = new_row;
                     self.player_col = new_col;
                     self.visited.push((new_row, new_col));
-                    MoveResult::Moved
+                    // Walked through an open door — the user-spec trigger point
+                    // for stranded detection. The counters were updated at the
+                    // moment the key was committed (StartedUnlocking below), so
+                    // the inequality reflects the post-commit state.
+                    if !self.lost
+                        && self.path_doors_remaining_closed > self.available_keys
+                    {
+                        self.lost = true;
+                        self.lose_reason = Some(LoseReason::Stranded);
+                        MoveResult::Stranded
+                    } else {
+                        MoveResult::Moved
+                    }
                 }
                 Some(DoorState::Locked) => {
                     if let Some(pos) = self
@@ -315,6 +400,16 @@ impl MazeGame {
                         self.bag.remove(pos);
                         self.doors
                             .insert((new_row, new_col), DoorState::Opening { progress: 0.0 });
+                        // Commit the key: both counters drop in lock-step for a
+                        // path door (LHS-1, RHS-1 → inequality preserved); for
+                        // a decoy only RHS drops, which may flip the
+                        // inequality and surface as `Stranded` when the player
+                        // later walks through this (or any) open door.
+                        self.available_keys = self.available_keys.saturating_sub(1);
+                        if self.solution_path_doors.contains(&(new_row, new_col)) {
+                            self.path_doors_remaining_closed =
+                                self.path_doors_remaining_closed.saturating_sub(1);
+                        }
                         MoveResult::StartedUnlocking
                     } else {
                         MoveResult::BlockedByLockedDoor
@@ -558,6 +653,146 @@ impl MazeGame {
             None
         }
     }
+
+    /// Marks the game as lost with [`LoseReason::Timeout`] — called by the
+    /// caller when the wall-clock countdown reaches zero. Idempotent: a
+    /// subsequent call does not overwrite an existing [`LoseReason`] (e.g. if
+    /// the player was already stranded).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, LoseReason};
+    /// let json = r#"{"grid":[["S"," ","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// game.time_out();
+    /// assert!(game.is_lost());
+    /// assert_eq!(game.lose_reason(), Some(LoseReason::Timeout));
+    /// ```
+    pub fn time_out(&mut self) {
+        if !self.lost {
+            self.lost = true;
+            self.lose_reason = Some(LoseReason::Timeout);
+        }
+    }
+
+    /// Whether the game has ended in a loss. Mutually exclusive in practice
+    /// with [`Self::is_complete`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::MazeGame;
+    /// let json = r#"{"grid":[["S"," ","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// assert!(!game.is_lost());
+    /// game.time_out();
+    /// assert!(game.is_lost());
+    /// ```
+    pub fn is_lost(&self) -> bool {
+        self.lost
+    }
+
+    /// Why the game was lost — `None` while in progress or won.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, LoseReason};
+    /// let json = r#"{"grid":[["S"," ","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// assert_eq!(game.lose_reason(), None);
+    /// game.time_out();
+    /// assert_eq!(game.lose_reason(), Some(LoseReason::Timeout));
+    /// ```
+    pub fn lose_reason(&self) -> Option<LoseReason> {
+        self.lose_reason
+    }
+}
+
+/// Computes the set of door cells that gate the lock-blind shortest path from
+/// the start cell `'S'` to the finish cell `'F'`. Walls (`'W'`) block; every
+/// other cell (including `'K'` and `'D'`) is treated as passable — so the set
+/// is exactly the doors the player must open to complete the maze, with no
+/// detour for keys folded in.
+///
+/// Returns an empty set if the grid has no `'F'` cell or the finish is
+/// unreachable. Both are defensive — the maze pipeline produces only solvable
+/// mazes with a finish — but keep the runtime robust against hand-authored
+/// edge cases.
+fn compute_solution_path_doors(
+    grid: &[Vec<char>],
+    start: (usize, usize),
+) -> HashSet<(usize, usize)> {
+    let rows = grid.len();
+    let cols = if rows > 0 { grid[0].len() } else { 0 };
+
+    // Locate the finish cell — first `'F'` in row-major order (mazes have at
+    // most one, enforced by `data_model` validation).
+    let mut finish: Option<(usize, usize)> = None;
+    'find_finish: for (r, row) in grid.iter().enumerate() {
+        for (c, &ch) in row.iter().enumerate() {
+            if ch == 'F' {
+                finish = Some((r, c));
+                break 'find_finish;
+            }
+        }
+    }
+    let Some(finish) = finish else {
+        return HashSet::new();
+    };
+
+    // Lock-blind BFS from `start`, recording each cell's parent so the path can
+    // be reconstructed once `finish` is dequeued.
+    let mut parent: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
+    let mut visited: HashSet<(usize, usize)> = HashSet::new();
+    let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
+    visited.insert(start);
+    queue.push_back(start);
+
+    while let Some((r, c)) = queue.pop_front() {
+        if (r, c) == finish {
+            // Walk back along `parent`, collecting any door cells on the path.
+            let mut path_doors: HashSet<(usize, usize)> = HashSet::new();
+            let mut cur = (r, c);
+            loop {
+                if grid[cur.0][cur.1] == 'D' {
+                    path_doors.insert(cur);
+                }
+                if cur == start {
+                    return path_doors;
+                }
+                cur = parent[&cur];
+            }
+        }
+
+        // 4-neighbour expansion — same order as the Lee solver (Up, Left, Down,
+        // Right) for parity, though the path doors set is order-agnostic.
+        let mut neighbours: Vec<(usize, usize)> = Vec::with_capacity(4);
+        if r > 0 {
+            neighbours.push((r - 1, c));
+        }
+        if c > 0 {
+            neighbours.push((r, c - 1));
+        }
+        if r + 1 < rows {
+            neighbours.push((r + 1, c));
+        }
+        if c + 1 < cols {
+            neighbours.push((r, c + 1));
+        }
+        for (nr, nc) in neighbours {
+            if grid[nr][nc] == 'W' {
+                continue;
+            }
+            if visited.insert((nr, nc)) {
+                parent.insert((nr, nc), (r, c));
+                queue.push_back((nr, nc));
+            }
+        }
+    }
+
+    HashSet::new()
 }
 
 #[cfg(test)]
@@ -944,6 +1179,203 @@ mod tests {
         assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
         assert_eq!(game.player_col(), 2);
         assert_eq!(game.move_player(Direction::Right), MoveResult::Complete);
+        assert!(game.is_complete());
+    }
+
+    // ── lose state — initial & timeout ───────────────────────────────────────────
+
+    #[test]
+    fn new_game_is_neither_won_nor_lost() {
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        assert!(!game.is_complete());
+        assert!(!game.is_lost());
+        assert_eq!(game.lose_reason(), None);
+    }
+
+    #[test]
+    fn time_out_marks_game_lost_with_timeout_reason() {
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.time_out();
+        assert!(game.is_lost());
+        assert_eq!(game.lose_reason(), Some(LoseReason::Timeout));
+    }
+
+    #[test]
+    fn time_out_is_idempotent() {
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.time_out();
+        game.time_out();
+        assert_eq!(game.lose_reason(), Some(LoseReason::Timeout));
+    }
+
+    #[test]
+    fn time_out_after_stranded_preserves_stranded_reason() {
+        // Same layout as `decoy_door_with_only_one_key_strands_on_walk_through`
+        // — strand the player, then fire time_out; the original Stranded
+        // reason must survive (a timer race must not erase what really lost
+        // the game).
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S","K","D","F"],
+            ["W","D","W","W"],
+            ["W"," ","W","W"]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        game.pickup();
+        game.move_player(Direction::Down);
+        game.tick(1000.0);
+        assert_eq!(game.move_player(Direction::Down), MoveResult::Stranded);
+        game.time_out();
+        assert_eq!(game.lose_reason(), Some(LoseReason::Stranded));
+    }
+
+    // ── stranded detection — path doors & decoys ─────────────────────────────────
+
+    #[test]
+    fn solo_path_door_walked_through_does_not_strand() {
+        // S · K · D · F — one real door on the path, exactly one key. Opening
+        // and walking through it preserves the inequality (1>0 false after
+        // path-door commit: both counters drop to 0).
+        let json = r#"{"grid":[["S","K","D","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        game.pickup();
+        game.move_player(Direction::Right); // StartedUnlocking
+        game.tick(1000.0); // door opens
+        assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
+        assert!(!game.is_lost());
+        assert_eq!(game.lose_reason(), None);
+    }
+
+    #[test]
+    fn decoy_door_with_spare_key_does_not_strand() {
+        // S · K · K · D(decoy) — two keys, one decoy door (no path door
+        // anywhere since F is reachable without crossing any door). After
+        // opening the decoy: path_remaining=0, available=1 (one key still in
+        // bag — picked up second key first). 0 > 1 false, not stranded.
+        //
+        // Grid layout (the decoy hangs off a side branch; F is in the main
+        // corridor with no door gating it):
+        //  S · K · K
+        //          |
+        //          D  (decoy — opening it leads to a dead end ' ' below)
+        //          |
+        //          ' '
+        // ... reached via going down from the second K
+        //
+        // F sits on the top row at the right, accessible without any door.
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S","K","K","F"],
+            ["W","W","D","W"],
+            ["W","W"," ","W"]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        // Pick up both keys.
+        game.move_player(Direction::Right);
+        game.pickup();
+        game.move_player(Direction::Right);
+        game.pickup();
+        // Walk down through the decoy.
+        game.move_player(Direction::Down); // StartedUnlocking the decoy at (1,2)
+        game.tick(1000.0);
+        let result = game.move_player(Direction::Down); // walk through decoy
+        assert_eq!(result, MoveResult::Moved);
+        assert!(!game.is_lost());
+    }
+
+    #[test]
+    fn decoy_door_with_only_one_key_strands_on_walk_through() {
+        // Lock-blind path is the top row: S → K → D(real) → F. Path doors = 1,
+        // total keys = 1. The decoy at (1,1) hangs off a side branch from the
+        // key cell. If the player detours into the decoy first, they spend
+        // their only key on it → available_keys=0, path_remaining=1 → 1>0,
+        // stranded once they walk through.
+        //
+        //  S  K  D(real)  F
+        //     |
+        //     D(decoy)
+        //     |
+        //     ' '
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S","K","D","F"],
+            ["W","D","W","W"],
+            ["W"," ","W","W"]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        // Grab the key at (0,1).
+        game.move_player(Direction::Right);
+        game.pickup();
+        // Walk down into the decoy at (1,1).
+        game.move_player(Direction::Down); // StartedUnlocking the decoy
+        game.tick(1000.0);
+        // Walk through the decoy — this is the trigger point.
+        let result = game.move_player(Direction::Down);
+        assert_eq!(result, MoveResult::Stranded);
+        assert!(game.is_lost());
+        assert_eq!(game.lose_reason(), Some(LoseReason::Stranded));
+    }
+
+    #[test]
+    fn stranded_state_is_terminal_subsequent_moves_do_not_change_reason() {
+        // Once stranded, walking off the door and back onto it must not
+        // re-surface Stranded — the `!self.lost` guard short-circuits the
+        // walk-through check on every subsequent crossing.
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S","K","D","F"],
+            ["W","D","W","W"],
+            ["W"," ","W","W"]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        game.pickup();
+        game.move_player(Direction::Down); // StartedUnlocking the decoy
+        game.tick(1000.0);
+        // First walk-through — strands.
+        assert_eq!(game.move_player(Direction::Down), MoveResult::Stranded);
+        // Step off the door (back up to the now-empty key cell), then step
+        // back onto the open door — the second walk-through must be a plain
+        // Moved with no fresh Stranded surfaced.
+        assert_eq!(game.move_player(Direction::Up), MoveResult::Moved);
+        assert_eq!(game.move_player(Direction::Down), MoveResult::Moved);
+        // The lose reason stays Stranded throughout.
+        assert!(game.is_lost());
+        assert_eq!(game.lose_reason(), Some(LoseReason::Stranded));
+    }
+
+    #[test]
+    fn no_doors_means_no_strand_ever() {
+        // A maze with no doors has an empty solution_path_doors set →
+        // path_doors_remaining_closed starts at 0, can never exceed
+        // available_keys, no walk-through-D events.
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        game.move_player(Direction::Right);
+        assert!(!game.is_lost());
+        assert_eq!(game.lose_reason(), None);
+    }
+
+    #[test]
+    fn time_out_after_complete_still_marks_lost() {
+        // Documented contract: complete and lost are mutually exclusive in
+        // practice, but time_out from the caller is unconditional — once the
+        // countdown fires, the caller may not yet know the player just
+        // finished. We accept the call and mark lost = true. UIs gate this
+        // by checking is_complete first.
+        let json = r#"{"grid":[["S","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right);
+        assert!(game.is_complete());
+        game.time_out();
+        // The lose state is set, but is_complete still reflects the win.
+        assert!(game.is_lost());
         assert!(game.is_complete());
     }
 }
