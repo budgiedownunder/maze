@@ -2,11 +2,16 @@ use data_model::MazeDefinition;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
-/// Per-uncollected-`'K'`-cell, the set of door-sets achieving the minimum
-/// number of non-spine doors on any path from that key back to the spine.
-/// Almost always a singleton `Vec` entry for perfect mazes; multi-element
-/// entries arise only on loopy authored mazes with tied min-cost paths.
-type KeyMinPaths = HashMap<(usize, usize), Vec<HashSet<(usize, usize)>>>;
+/// Combined `'K'` + `'D'` cell count above which the strand check's
+/// state-space BFS falls back to lock-blind key reachability.
+///
+/// The BFS explores `(cell, collected_keys_bitmask, opened_doors_bitmask)`
+/// states; its size is bounded by `cells * 2^(K+D)`, so we cap K+D at the
+/// same width the `u32` masks afford and the solver itself uses. Above
+/// the cap, the fallback over-counts keys (treats every door as
+/// passable), which is safe for the strand inequality — over-counting
+/// keys only ever delays a strand, never invents one.
+const MAX_GATED_FEATURES: usize = 16;
 
 /// Direction of player movement.
 ///
@@ -66,10 +71,13 @@ pub enum MoveResult {
     /// door becomes passable once [`MazeGame::tick`] reports it
     /// [`DoorState::Open`].
     StartedUnlocking,
-    /// The player moved successfully through an open door (`'D'`) and now holds
-    /// too few keys to open every remaining real door on the solution path —
-    /// the game is unwinnable. [`MazeGame::lose_reason`] returns
-    /// `Some(LoseReason::Stranded)` and [`MazeGame::is_lost`] returns `true`.
+    /// The player moved successfully through an open door (`'D'`) and the
+    /// number of keys they can still hold (`bag.len()` + reachable
+    /// uncollected `'K'` cells) is now less than the number of closed
+    /// doors on every remaining route from the current cell to the
+    /// finish — the game is unwinnable. [`MazeGame::lose_reason`]
+    /// returns `Some(LoseReason::Stranded)` and [`MazeGame::is_lost`]
+    /// returns `true`.
     Stranded,
 }
 
@@ -179,9 +187,10 @@ pub enum GameEvent {
 ///   moving onto it — use [`MazeGame::pickup`])
 /// - `'F'` → [`MoveResult::Complete`]
 /// - `'D'` (door) → [`MoveResult::Moved`] when already open (or
-///   [`MoveResult::Stranded`] when walking through has left too few keys for
-///   the remaining real path doors), else [`MoveResult::StartedUnlocking`]
-///   (a key is held) or [`MoveResult::BlockedByLockedDoor`]
+///   [`MoveResult::Stranded`] when walking through leaves the player with
+///   fewer reachable keys than closed doors remaining on any route to the
+///   finish), else [`MoveResult::StartedUnlocking`] (a key is held) or
+///   [`MoveResult::BlockedByLockedDoor`]
 /// - `'W'` or out-of-bounds → [`MoveResult::Blocked`]
 ///
 /// Doors open over time — see [`MazeGame::tick`]. The lose state is queried via
@@ -218,19 +227,6 @@ pub struct MazeGame {
     /// defensive case of a maze with no `'F'` cell (the maze pipeline
     /// rejects such mazes; we keep the runtime resilient).
     finish: Option<(usize, usize)>,
-    /// Per-uncollected-`'K'`-cell, the set of door-sets achieving the minimum
-    /// number of non-spine doors on any path from that key back to the spine.
-    /// Tracks all tied min-cost paths so that opening a door on one path
-    /// correctly drops the key's cost only when no shorter alternative exists.
-    /// Almost always a singleton-path entry for perfect mazes (every generated
-    /// maze, virtually every authored one); multi-element entries arise only
-    /// when a loopy authored maze has two paths of equal door cost to the same
-    /// key. Keys that the player can't reach lock-blind (walled-off pockets in
-    /// a hand-authored grid) are simply absent from this map and never count
-    /// toward the strand-check budget. Mutated as doors open (the opened door
-    /// is removed from every path it appears in) and as keys are picked up
-    /// (the key's entry is removed).
-    key_min_paths: KeyMinPaths,
     /// Whether the game has ended in a loss (see [`Self::lose_reason`]).
     lost: bool,
     /// Why the game was lost. `None` until the game transitions to a lost
@@ -291,8 +287,6 @@ impl MazeGame {
             }
         }
 
-        let reachability =
-            compute_strand_reachability(&definition.grid, (start.row, start.col));
         // Cache the finish cell once — the strand check needs it on every
         // door walk-through and we don't want to grid-scan each time.
         let finish = definition
@@ -314,7 +308,6 @@ impl MazeGame {
             key_ids,
             bag: Vec::new(),
             finish,
-            key_min_paths: reachability.key_min_paths,
             lost: false,
             lose_reason: None,
         })
@@ -330,11 +323,11 @@ impl MazeGame {
     /// [`MoveResult::StartedUnlocking`] when the player holds a key — consuming
     /// it and beginning the open (see [`MazeGame::tick`]) — or
     /// [`MoveResult::BlockedByLockedDoor`] otherwise. Stepping onto an open
-    /// door cell while the player no longer holds enough keys to open every
-    /// remaining real door on the solution path yields [`MoveResult::Stranded`]
-    /// — the move still succeeds, but the game transitions to lost with
-    /// [`LoseReason::Stranded`]. The player's facing direction is always
-    /// updated to `dir`, even when blocked.
+    /// door cell while the player's reachable-key count is below the number
+    /// of closed doors remaining on any route to the finish yields
+    /// [`MoveResult::Stranded`] — the move still succeeds, but the game
+    /// transitions to lost with [`LoseReason::Stranded`]. The player's
+    /// facing direction is always updated to `dir`, even when blocked.
     ///
     /// # Examples
     ///
@@ -386,12 +379,11 @@ impl MazeGame {
                     self.player_row = new_row;
                     self.player_col = new_col;
                     self.visited.push((new_row, new_col));
-                    // Walked through an open door — the user-spec trigger
-                    // point for stranded detection. Compare the minimum
-                    // closed doors the player must open to reach F from
-                    // their *current cell* (recomputed each time so it
-                    // accounts for shortcuts opened off the lock-blind
-                    // spine) against the keys they can still get hold of.
+                    // Walked through an open door — the trigger point for
+                    // stranded detection. Compare the minimum closed doors
+                    // on any route from the player's current cell to F
+                    // against the keys they can still hold (bag + keys
+                    // reachable from the current world state).
                     if !self.lost
                         && self.closed_doors_to_finish() > self.simulate_reachable_keys()
                     {
@@ -411,19 +403,11 @@ impl MazeGame {
                         self.bag.remove(pos);
                         self.doors
                             .insert((new_row, new_col), DoorState::Opening { progress: 0.0 });
-                        // Commit the key. For every uncollected key whose
-                        // min-cost path(s) to the spine traverse this door,
-                        // remove the door from those paths so the key's
-                        // effective cost drops by one (or stays the same if
-                        // a tied path didn't go through it). The
-                        // "doors-to-finish" half of the strand inequality is
-                        // recomputed on demand at walk-through time, so no
-                        // counter needs decrementing here.
-                        for paths in self.key_min_paths.values_mut() {
-                            for path in paths.iter_mut() {
-                                path.remove(&(new_row, new_col));
-                            }
-                        }
+                        // Both halves of the strand inequality are recomputed
+                        // on demand at walk-through time — see
+                        // [`Self::closed_doors_to_finish`] and
+                        // [`Self::simulate_reachable_keys`] — so no per-key
+                        // bookkeeping is needed when a door commits.
                         MoveResult::StartedUnlocking
                     } else {
                         MoveResult::BlockedByLockedDoor
@@ -662,29 +646,12 @@ impl MazeGame {
             self.grid[cell.0][cell.1] = ' ';
             let item = BagItem::Key { id };
             self.bag.push(item.clone());
-            // Drop the picked-up key from the strand-check map — it's now in
-            // the bag, counted directly as `bag.len()`, no longer "uncollected
-            // but reachable".
-            self.key_min_paths.remove(&cell);
             Some(item)
         } else {
             None
         }
     }
 
-    /// Greedy simulation of how many keys the player could still collect from
-    /// the current state — `bag.len()` plus the number of uncollected keys
-    /// reachable given the budget of keys they could spend on intervening
-    /// doors. Used by [`Self::move_player`]'s walk-through-door strand check.
-    ///
-    /// Iteratively picks the uncollected key whose minimum still-closed
-    /// path-door count is cheapest under the current set of virtually-opened
-    /// doors. If the player's running budget covers that cost, the simulation
-    /// "spends" those keys to virtually open the path, then "collects" the key
-    /// (budget regains one). Repeats until either no uncollected key is left
-    /// or no remaining key is affordable. The greedy is correct for perfect
-    /// mazes (each key has a single min-cost path; opening doors only ever
-    /// makes other keys cheaper, never costlier).
     /// Minimum number of currently-`Locked` `'D'` cells on any path from the
     /// player's current cell to the finish. Lock-blind 0-1 BFS: entering a
     /// `Locked` door costs 1, every other passable step costs 0 (walls
@@ -692,11 +659,10 @@ impl MazeGame {
     /// already committed). Returns `u32::MAX` if the finish is unreachable
     /// (defensive — the maze pipeline rejects unsolvable mazes).
     ///
-    /// Computed on demand at each walk-through-D strand check so that
-    /// opening a non-spine door which creates a shortcut to a downstream
-    /// spine cell correctly drops the count: the new route may cross fewer
-    /// closed doors than the original lock-blind S→F spine did, which a
-    /// static seed-once counter can't see.
+    /// Computed on demand at each walk-through-D strand check: opening a
+    /// door anywhere can create a shortcut whose route to F crosses
+    /// fewer closed doors than the previous best, and the count needs
+    /// to reflect the world state at the moment of the check.
     fn closed_doors_to_finish(&self) -> u32 {
         let Some(finish) = self.finish else {
             return u32::MAX;
@@ -711,12 +677,6 @@ impl MazeGame {
             if (r, c) == finish {
                 return d;
             }
-            // Skip stale entries left in the deque by a later, shorter
-            // discovery — same idiom as the construction-time BFS.
-            // (Without this guard we'd re-expand cells redundantly.)
-            // process_order isn't needed: we just check the canonical dist
-            // and bail if we're stale.
-            // 4-neighbour expansion.
             let mut neighbours: Vec<(usize, usize)> = Vec::with_capacity(4);
             if r > 0 {
                 neighbours.push((r - 1, c));
@@ -758,71 +718,128 @@ impl MazeGame {
         u32::MAX
     }
 
+    /// How many keys the player could still hold from the current
+    /// state — `bag.len()` plus the largest number of uncollected `'K'`
+    /// cells reachable on any play sequence. Used by
+    /// [`Self::move_player`]'s walk-through-door strand check.
+    ///
+    /// State-space BFS from the player's current cell over
+    /// `(cell, collected_keys_mask, opened_doors_mask)`. A neighbour is
+    /// reachable if it's passable; a still-`Locked` `'D'` is passable
+    /// only when the player has an unspent key in hand
+    /// (`bag.len() + collected.count_ones() > opened.count_ones()`), at
+    /// which point the door's bit is set in `opened` and the key is
+    /// virtually spent. Walking onto a `'K'` sets the key's bit in
+    /// `collected`. Already-`Open` and `Opening` doors aren't indexed —
+    /// they're passable for free (the key has already been committed).
+    /// Returns `bag.len() + max(collected.count_ones())` over all
+    /// reachable states.
+    ///
+    /// Falls back to [`Self::lock_blind_reachable_keys`] when
+    /// `#K + #D > MAX_GATED_FEATURES` — the state space is exponential
+    /// in their sum. The fallback over-counts reachable keys (treats
+    /// every door as passable), which is safe for the strand inequality:
+    /// over-counting keys only ever delays a strand, never invents one.
     fn simulate_reachable_keys(&self) -> u32 {
-        // Doors that are already permanently open (or committed to opening).
-        let virtually_open: HashSet<(usize, usize)> = self
-            .doors
-            .iter()
-            .filter(|(_, state)| !matches!(state, DoorState::Locked))
-            .map(|(&cell, _)| cell)
-            .collect();
-
-        // Per-uncollected-key, the still-closed door sets — one Vec entry per
-        // tied min-cost path. Cloned so the simulation can mutate freely.
-        let mut sim_paths: KeyMinPaths = self
-            .key_min_paths
-            .iter()
-            .map(|(&k, paths)| {
-                let pruned: Vec<HashSet<(usize, usize)>> = paths
-                    .iter()
-                    .map(|p| p.difference(&virtually_open).copied().collect())
-                    .collect();
-                (k, pruned)
-            })
-            .collect();
-
-        let mut sim_budget: u32 = self.bag.len() as u32;
-        let mut sim_collected: u32 = 0;
-
-        loop {
-            // Pick the uncollected key with the cheapest current path cost.
-            let mut best: Option<((usize, usize), u32, usize)> = None;
-            for (&k, paths) in sim_paths.iter() {
-                if let Some((min_cost, min_idx)) = paths
-                    .iter()
-                    .enumerate()
-                    .map(|(i, p)| (p.len() as u32, i))
-                    .min_by_key(|&(cost, _)| cost)
-                {
-                    if best.is_none_or(|(_, bc, _)| min_cost < bc) {
-                        best = Some((k, min_cost, min_idx));
+        let mut key_bit: HashMap<(usize, usize), u32> = HashMap::new();
+        let mut door_bit: HashMap<(usize, usize), u32> = HashMap::new();
+        for (r, row) in self.grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                match ch {
+                    'K' => {
+                        let idx = key_bit.len() as u32;
+                        key_bit.insert((r, c), idx);
                     }
-                }
-            }
-            let Some((k_star, cost, path_idx)) = best else {
-                break;
-            };
-            if sim_budget < cost {
-                break;
-            }
-            // Virtually spend keys on the cheapest path's still-closed doors,
-            // then collect K* (+1 to budget).
-            sim_budget = sim_budget - cost + 1;
-            sim_collected += 1;
-            // The doors on this path are now virtually open — strip them from
-            // every other key's tracked paths.
-            let newly_open = sim_paths[&k_star][path_idx].clone();
-            sim_paths.remove(&k_star);
-            for paths in sim_paths.values_mut() {
-                for path in paths.iter_mut() {
-                    for door in newly_open.iter() {
-                        path.remove(door);
+                    'D' if matches!(self.doors.get(&(r, c)), Some(DoorState::Locked)) => {
+                        let idx = door_bit.len() as u32;
+                        door_bit.insert((r, c), idx);
                     }
+                    _ => {}
                 }
             }
         }
 
-        self.bag.len() as u32 + sim_collected
+        if key_bit.len() + door_bit.len() > MAX_GATED_FEATURES {
+            return self.bag.len() as u32 + self.lock_blind_reachable_keys();
+        }
+
+        let start = ((self.player_row, self.player_col), 0u32, 0u32);
+        let mut visited: HashSet<((usize, usize), u32, u32)> = HashSet::new();
+        let mut queue: VecDeque<((usize, usize), u32, u32)> = VecDeque::new();
+        visited.insert(start);
+        queue.push_back(start);
+        let mut max_collected: u32 = 0;
+        let bag_keys = self.bag.len() as u32;
+        while let Some(((r, c), collected, opened)) = queue.pop_front() {
+            max_collected = max_collected.max(collected.count_ones());
+            let mut neighbours: Vec<(usize, usize)> = Vec::with_capacity(4);
+            if r > 0 {
+                neighbours.push((r - 1, c));
+            }
+            if c > 0 {
+                neighbours.push((r, c - 1));
+            }
+            if r + 1 < self.rows {
+                neighbours.push((r + 1, c));
+            }
+            if c + 1 < self.cols {
+                neighbours.push((r, c + 1));
+            }
+            for (nr, nc) in neighbours {
+                let ch = self.grid[nr][nc];
+                if ch == 'W' {
+                    continue;
+                }
+                let (next_collected, next_opened) =
+                    if let Some(&idx) = door_bit.get(&(nr, nc)) {
+                        let bit = 1u32 << idx;
+                        if opened & bit == 0 {
+                            // Spending a key — need one in hand.
+                            if bag_keys + collected.count_ones() <= opened.count_ones() {
+                                continue;
+                            }
+                            (collected, opened | bit)
+                        } else {
+                            (collected, opened)
+                        }
+                    } else if let Some(&idx) = key_bit.get(&(nr, nc)) {
+                        (collected | (1u32 << idx), opened)
+                    } else {
+                        (collected, opened)
+                    };
+                let next = ((nr, nc), next_collected, next_opened);
+                if visited.insert(next) {
+                    queue.push_back(next);
+                }
+            }
+        }
+
+        bag_keys + max_collected
+    }
+
+    /// Lock-blind fallback for [`Self::simulate_reachable_keys`] when
+    /// `#K + #D > MAX_GATED_FEATURES`: count the `'K'` cells reachable
+    /// from the player's current cell treating every door as passable.
+    /// An upper bound on the true reachable-keys count, which is safe
+    /// for the strand inequality.
+    fn lock_blind_reachable_keys(&self) -> u32 {
+        let start = (self.player_row, self.player_col);
+        let mut visited: HashSet<(usize, usize)> = HashSet::new();
+        let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
+        visited.insert(start);
+        queue.push_back(start);
+        let mut count: u32 = 0;
+        while let Some((r, c)) = queue.pop_front() {
+            if self.grid[r][c] == 'K' {
+                count += 1;
+            }
+            for (nr, nc) in passable_neighbours(r, c, &self.grid, self.rows, self.cols) {
+                if visited.insert((nr, nc)) {
+                    queue.push_back((nr, nc));
+                }
+            }
+        }
+        count
     }
 
     /// Whether the game has ended in a loss. Mutually exclusive in practice
@@ -870,20 +887,6 @@ impl MazeGame {
     }
 }
 
-/// Output of [`compute_strand_reachability`] — the per-key min-path state
-/// needed to seed the strand check. (The doors-to-finish half of the
-/// strand inequality is recomputed dynamically by
-/// [`MazeGame::closed_doors_to_finish`], so no pre-baked spine-door set is
-/// stored here.)
-struct StrandReachability {
-    /// Per uncollected `'K'` cell that's lock-blind reachable from the start,
-    /// the set of door-sets achieving the minimum number of non-spine doors
-    /// on any path from that key back to the spine. Keys that are walled off
-    /// from the start are simply absent from this map. See the field comment
-    /// on [`MazeGame::key_min_paths`] for the runtime semantics.
-    key_min_paths: KeyMinPaths,
-}
-
 /// Returns 4-neighbours of `(r, c)` in `(Up, Left, Down, Right)` order, in
 /// bounds and excluding `'W'` cells.
 fn passable_neighbours(
@@ -907,218 +910,6 @@ fn passable_neighbours(
         out.push((r, c + 1));
     }
     out
-}
-
-/// Builds the per-key min-cost paths needed to seed
-/// [`MazeGame::simulate_reachable_keys`]:
-///
-/// 1. **The spine.** Lock-blind BFS from `'S'` to `'F'` (every non-`'W'` cell
-///    treated as passable) gives a shortest path. Spine cells are the
-///    sources for the 0-1 BFS in step 2; they're computed locally and
-///    consumed there, not returned to the caller.
-/// 2. **Per-key min-cost paths to the spine.** Multi-source 0-1 BFS from the
-///    union of spine cells, with edge weight 1 only for entering a non-spine
-///    `'D'` cell and 0 elsewhere, gives every cell's minimum number of
-///    non-spine doors to reach the spine. A predecessor walk back from each
-///    reachable `'K'` cell enumerates every tied min-cost path and records
-///    its set of off-spine door cells. Keys with the same door-set across
-///    multiple tied paths are de-duped so the simulation's "pick the min" is
-///    deterministic.
-///
-/// `key_min_paths` is empty for grids without a reachable finish — defensive
-/// against hand-authored edge cases (no `'F'`, walled-off finish). In those
-/// degenerate cases `closed_doors_to_finish` returns `u32::MAX` and the
-/// strand inequality can never fire.
-fn compute_strand_reachability(
-    grid: &[Vec<char>],
-    start: (usize, usize),
-) -> StrandReachability {
-    let rows = grid.len();
-    let cols = if rows > 0 { grid[0].len() } else { 0 };
-
-    // ── 1. Lock-blind BFS S → F to identify the spine ──────────────────────
-    let mut finish: Option<(usize, usize)> = None;
-    'find_finish: for (r, row) in grid.iter().enumerate() {
-        for (c, &ch) in row.iter().enumerate() {
-            if ch == 'F' {
-                finish = Some((r, c));
-                break 'find_finish;
-            }
-        }
-    }
-
-    let mut parent: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
-    let mut visited: HashSet<(usize, usize)> = HashSet::new();
-    let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
-    visited.insert(start);
-    queue.push_back(start);
-    while let Some((r, c)) = queue.pop_front() {
-        for (nr, nc) in passable_neighbours(r, c, grid, rows, cols) {
-            if visited.insert((nr, nc)) {
-                parent.insert((nr, nc), (r, c));
-                queue.push_back((nr, nc));
-            }
-        }
-    }
-
-    // Walk back from F to materialise the spine cells (S … F inclusive).
-    let spine_cells: HashSet<(usize, usize)> = match finish {
-        Some(f) if visited.contains(&f) => {
-            let mut cells: HashSet<(usize, usize)> = HashSet::new();
-            let mut cur = f;
-            loop {
-                cells.insert(cur);
-                if cur == start {
-                    break;
-                }
-                cur = parent[&cur];
-            }
-            cells
-        }
-        _ => HashSet::new(),
-    };
-    // No spine ⇒ no strand check ⇒ no key paths needed.
-    if spine_cells.is_empty() {
-        return StrandReachability {
-            key_min_paths: HashMap::new(),
-        };
-    }
-
-    // ── 2. Multi-source 0-1 BFS from spine to every reachable cell ─────────
-    //
-    // Edge weight when stepping into `(nr, nc)` is 1 if that cell is a
-    // non-spine `'D'`, else 0. Spine doors contribute 0 because the cost
-    // of opening them lives on the other side of the strand inequality —
-    // see `closed_doors_to_finish`, which counts them dynamically against
-    // the player's current cell.
-    //
-    // Each cell is also assigned a `process_order` — the BFS finalization
-    // index. That total order across same-dist cells lets the predecessor
-    // build below break 0-edge ties acyclically: only neighbours processed
-    // before this cell can be its predecessor. Without that tie-break, two
-    // adjacent same-dist cells connected by a 0-edge would each list the
-    // other as a predecessor, and any path enumeration would loop.
-    let edge_cost = |cell: (usize, usize)| -> u32 {
-        if grid[cell.0][cell.1] == 'D' && !spine_cells.contains(&cell) {
-            1
-        } else {
-            0
-        }
-    };
-
-    let mut dist: HashMap<(usize, usize), u32> = HashMap::new();
-    let mut process_order: HashMap<(usize, usize), u32> = HashMap::new();
-    let mut next_order: u32 = 0;
-    let mut deque: VecDeque<(usize, usize)> = VecDeque::new();
-    for &cell in spine_cells.iter() {
-        dist.insert(cell, 0);
-        deque.push_back(cell);
-    }
-    while let Some((r, c)) = deque.pop_front() {
-        // Skip stale dupes left in the deque by an earlier shorter-path update.
-        if process_order.contains_key(&(r, c)) {
-            continue;
-        }
-        process_order.insert((r, c), next_order);
-        next_order += 1;
-        let d = dist[&(r, c)];
-        for (nr, nc) in passable_neighbours(r, c, grid, rows, cols) {
-            let nd = d + edge_cost((nr, nc));
-            if dist.get(&(nr, nc)).is_none_or(|&existing| nd < existing) {
-                dist.insert((nr, nc), nd);
-                if edge_cost((nr, nc)) == 0 {
-                    deque.push_front((nr, nc));
-                } else {
-                    deque.push_back((nr, nc));
-                }
-            }
-        }
-    }
-
-    // Predecessor map: every neighbour `n` of cell `c` such that
-    // `dist[n] + edge_cost(c) == dist[c]` lies on a min-cost path into `c`.
-    // We additionally require `process_order[n] < process_order[c]` so that
-    // 0-edge same-dist siblings can't claim each other as predecessors —
-    // the first such sibling popped is the "upstream" one in BFS terms.
-    let mut preds: HashMap<(usize, usize), Vec<(usize, usize)>> = HashMap::new();
-    for (&cell, &d) in dist.iter() {
-        if spine_cells.contains(&cell) {
-            continue; // spine cells are sources — no preds needed
-        }
-        let cost_into = edge_cost(cell);
-        let Some(&cell_order) = process_order.get(&cell) else {
-            continue;
-        };
-        for n in passable_neighbours(cell.0, cell.1, grid, rows, cols) {
-            if let (Some(&nd), Some(&n_order)) =
-                (dist.get(&n), process_order.get(&n))
-            {
-                if nd + cost_into == d && n_order < cell_order {
-                    preds.entry(cell).or_default().push(n);
-                }
-            }
-        }
-    }
-
-    // For each reachable `'K'`, recursively enumerate every min-cost path to
-    // the spine. The path's door set is exactly the non-spine `'D'` cells
-    // encountered on the way (the key cell itself is `'K'`, not a door, and
-    // the path terminates at a spine cell which is treated as cost 0).
-    fn enumerate_paths(
-        cell: (usize, usize),
-        grid: &[Vec<char>],
-        preds: &HashMap<(usize, usize), Vec<(usize, usize)>>,
-        spine_cells: &HashSet<(usize, usize)>,
-        memo: &mut KeyMinPaths,
-    ) -> Vec<HashSet<(usize, usize)>> {
-        if spine_cells.contains(&cell) {
-            return vec![HashSet::new()];
-        }
-        if let Some(cached) = memo.get(&cell) {
-            return cached.clone();
-        }
-        let mut out: Vec<HashSet<(usize, usize)>> = Vec::new();
-        let cell_is_off_spine_door =
-            grid[cell.0][cell.1] == 'D' && !spine_cells.contains(&cell);
-        if let Some(predecessors) = preds.get(&cell) {
-            for &p in predecessors {
-                let sub_paths = enumerate_paths(p, grid, preds, spine_cells, memo);
-                for sub in sub_paths {
-                    let mut path = sub.clone();
-                    if cell_is_off_spine_door {
-                        path.insert(cell);
-                    }
-                    out.push(path);
-                }
-            }
-        }
-        memo.insert(cell, out.clone());
-        out
-    }
-
-    let mut memo: KeyMinPaths = HashMap::new();
-    let mut key_min_paths: KeyMinPaths =
-        HashMap::new();
-    for (r, row) in grid.iter().enumerate() {
-        for (c, &ch) in row.iter().enumerate() {
-            if ch == 'K' && dist.contains_key(&(r, c)) {
-                let mut paths = enumerate_paths((r, c), grid, &preds, &spine_cells, &mut memo);
-                // De-duplicate tied paths whose off-spine-door SETS happen to
-                // coincide — only the door sets matter to the simulation.
-                paths.sort_by(|a, b| {
-                    let mut av: Vec<(usize, usize)> = a.iter().copied().collect();
-                    av.sort();
-                    let mut bv: Vec<(usize, usize)> = b.iter().copied().collect();
-                    bv.sort();
-                    av.cmp(&bv)
-                });
-                paths.dedup();
-                key_min_paths.insert((r, c), paths);
-            }
-        }
-    }
-
-    StrandReachability { key_min_paths }
 }
 
 #[cfg(test)]
@@ -2055,5 +1846,109 @@ mod tests {
         // again.
         game.move_player(Direction::Up);
         assert_eq!(game.move_player(Direction::Down), MoveResult::Moved);
+    }
+
+    // ── stranded detection — keys-side multi-path reachability ───────────────────
+
+    #[test]
+    fn does_not_strand_when_key_becomes_reachable_via_an_off_tracked_path() {
+        // Keys-side analogue of the doors-side multi-path bug fixed in
+        // 7E.5. The off-spine key K1(3,0) has TWO lock-blind paths back to
+        // the spine:
+        //   - via Dx(2,0) — cost 1 (single off-spine door; the tracked path)
+        //   - via Dz(2,2) + Dy(1,2) — cost 2 (NOT tracked in `key_min_paths`)
+        //
+        // After the player burns K0 + K_s on the Dy and Dz decoys, K1 is
+        // freely reachable via (2,2) → (3,2) → (3,1) → (3,0) — no closed
+        // doors on that route. But the static `key_min_paths` still lists
+        // [{Dx}] for K1 (Dx is still Locked, and neither Dy nor Dz was on
+        // the tracked path so opening them didn't drop the cost), so the
+        // greedy `simulate_reachable_keys` thinks K1 costs 1 key. With
+        // budget 0 it can't afford it, returns 0, and the inequality
+        // `closed_doors_to_finish(=1, just D_p) > available(=0)` falsely
+        // strands the player.
+        //
+        //         c0   c1   c2   c3   c4
+        //  r0:    S    K0   K_s  D_p  F
+        //  r1:   ' '   W    Dy   W    W
+        //  r2:    Dx   W    Dz   W    W
+        //  r3:    K1  ' '  ' '   W    W
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S","K","K","D","F"],
+            [" ","W","D","W","W"],
+            ["D","W","D","W","W"],
+            ["K"," "," ","W","W"]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        // Pick up K0 + K_s (bag = 2).
+        game.move_player(Direction::Right); // (0,1) K0
+        game.pickup();
+        game.move_player(Direction::Right); // (0,2) K_s
+        game.pickup();
+        assert_eq!(game.bag().len(), 2);
+        // Burn one key opening Dy(1,2), walk through.
+        game.move_player(Direction::Down); // StartedUnlocking Dy
+        game.tick(1000.0);
+        assert_eq!(game.move_player(Direction::Down), MoveResult::Moved);
+        assert!(!game.is_lost());
+        // Burn the other key opening Dz(2,2). This is the bug-trigger
+        // walk-through: K1 is now freely reachable via the off-tracked
+        // route, so the player has 1 future key for the 1 remaining
+        // closed door (D_p) — strand must NOT fire.
+        game.move_player(Direction::Down); // StartedUnlocking Dz
+        game.tick(1000.0);
+        let result = game.move_player(Direction::Down);
+        assert_eq!(
+            result,
+            MoveResult::Moved,
+            "K1 is freely reachable via (2,2)→(3,2)→(3,1)→(3,0); \
+             the strand check must not fire on this walk-through (got {result:?})"
+        );
+        assert!(
+            !game.is_lost(),
+            "the player has 1 future key (K1) for the 1 remaining closed door (D_p)"
+        );
+    }
+
+    #[test]
+    fn strand_still_fires_when_only_tracked_path_to_key_is_walled_off() {
+        // Negative control for the multi-path keys-side fix: same shape
+        // as the multi-path-bug test, but with (3,1) replaced by W. K1
+        // now has only ONE lock-blind path back to the spine (via Dx).
+        // After the player burns K0 + K_s on the Dy/Dz decoys, K1 is
+        // genuinely unreachable (Dx still Locked, bag empty, the alt
+        // route (3,2)→(3,1) is now walled off), so the strand check
+        // must still fire. Verifies the keys-side BFS doesn't
+        // over-correct away from real strands.
+        //
+        //         c0   c1   c2   c3   c4
+        //  r0:    S    K0   K_s  D_p  F
+        //  r1:   ' '   W    Dy   W    W
+        //  r2:    Dx   W    Dz   W    W
+        //  r3:    K1   W   ' '   W    W      <- (3,1) is W; alt route closed
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S","K","K","D","F"],
+            [" ","W","D","W","W"],
+            ["D","W","D","W","W"],
+            ["K","W"," ","W","W"]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // (0,1) K0
+        game.pickup();
+        game.move_player(Direction::Right); // (0,2) K_s
+        game.pickup();
+        game.move_player(Direction::Down); // StartedUnlocking Dy
+        game.tick(1000.0);
+        assert_eq!(game.move_player(Direction::Down), MoveResult::Moved);
+        assert!(!game.is_lost());
+        game.move_player(Direction::Down); // StartedUnlocking Dz
+        game.tick(1000.0);
+        // K1 is genuinely unreachable now: (3,1)=W cuts the alt route,
+        // and Dx is still Locked with no keys to open it.
+        assert_eq!(game.move_player(Direction::Down), MoveResult::Stranded);
+        assert!(game.is_lost());
+        assert_eq!(game.lose_reason(), Some(LoseReason::Stranded));
     }
 }
