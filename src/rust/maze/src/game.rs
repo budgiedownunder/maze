@@ -383,9 +383,15 @@ impl MazeGame {
                     // stranded detection. Compare the minimum closed doors
                     // on any route from the player's current cell to F
                     // against the keys they can still hold (bag + keys
-                    // reachable from the current world state).
+                    // reachable from the current world state). The
+                    // `closed > bag_keys` guard skips the state-space BFS
+                    // whenever the bag alone already covers the remaining
+                    // closed doors — the common play state.
+                    let closed = self.closed_doors_to_finish();
+                    let bag_keys = self.bag.len() as u32;
                     if !self.lost
-                        && self.closed_doors_to_finish() > self.simulate_reachable_keys()
+                        && closed > bag_keys
+                        && closed > self.simulate_reachable_keys()
                     {
                         self.lost = true;
                         self.lose_reason = Some(LoseReason::Stranded);
