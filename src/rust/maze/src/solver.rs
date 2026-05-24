@@ -3,11 +3,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use data_model::{Maze, MazeCellState, MazePoint};
 use crate::{Error, MazePath, MazePointOffset, MazeSolution};
 
-/// Upper bound on `(#keys + #doors)` for which the key-aware search runs. The
-/// search is exponential in that sum (it tracks which keys are held and which
-/// doors are open as bitmasks), so beyond this a pathological maze could be
-/// slow. Hand-authored mazes are nowhere near it; past the bound we fall back
-/// to the lock-blind Lee solve rather than risk a long search.
+/// Upper bound on `(#keys + #doors)` for which the key-aware search runs.
+/// The search is exponential in that sum (it tracks which keys are held and
+/// which doors are open as `u32` bitmasks), so beyond this a pathological
+/// maze could be slow. Above the bound the solver returns an error rather
+/// than silently falling back to a key-blind solve — a "shortest path"
+/// that ignores locked doors would lie about playability.
 const MAX_GATED_FEATURES: usize = 16;
 
 /// Identifies a node in the key-aware search: a cell plus the history that
@@ -154,16 +155,20 @@ impl Solver<'_> {
     }
     /// Attempts to solve the path between the start and end point defined within the maze referenced by the solver instance
     ///
-    /// The returned path is **key-aware**: if the maze contains doors (`D`), the
-    /// solution is the **shortest** route that actually completes the maze given
-    /// key→door gating — detouring to collect the keys it needs, treating a door
-    /// as passable once a key is in hand, irrespective of how many doors it ends
-    /// up passing through. A maze whose finish is sealed behind a door with no
-    /// reachable key returns an error, where the old lock-blind solve would have
-    /// reported a (un-walkable) route. Mazes with no doors take the original
-    /// shortest-path solve unchanged. Because a key route may need to backtrack
-    /// (collect a key, return through a junction), the path can revisit a cell,
-    /// so it is a *walk* rather than a strictly simple path.
+    /// The returned path is **key-aware**: if the maze contains any door
+    /// (`D`), the solution is the **shortest** route that actually completes
+    /// the maze given key→door gating — detouring to collect the keys it
+    /// needs, treating a door as passable once a key is in hand, irrespective
+    /// of how many doors it ends up passing through. A maze whose finish is
+    /// sealed behind a door with no reachable key returns an error, where
+    /// the old lock-blind solve would have reported a (un-walkable) route.
+    /// A maze whose combined `'K'` + `'D'` count exceeds the key-aware
+    /// solver's capacity (`MAX_GATED_FEATURES`) also returns an error
+    /// rather than silently degrading to a key-blind walk that would lie
+    /// about playability. Mazes with no doors take the original
+    /// shortest-path Lee solve unchanged. Because a key route may need to
+    /// backtrack (collect a key, return through a junction), the path can
+    /// revisit a cell, so it is a *walk* rather than a strictly simple path.
     ///
     /// # Returns
     ///
@@ -271,11 +276,15 @@ impl Solver<'_> {
             }
         }
 
-        // The search is exponential in (#keys + #doors). Hand-authored mazes are
-        // tiny; for a pathological count, fall back to the lock-blind Lee solve
-        // rather than risk a long search (see MAX_GATED_FEATURES).
+        // The search is exponential in (#keys + #doors). Above the cap we
+        // refuse to solve rather than silently degrade to a key-blind walk
+        // that would treat locked doors as passable — see MAX_GATED_FEATURES.
         if key_bit.len() + door_bit.len() > MAX_GATED_FEATURES {
-            return self.solve_lee(start, end);
+            return Err(Error::Solve(format!(
+                "maze has too many keys + doors ({}) for the key-aware solver (max {})",
+                key_bit.len() + door_bit.len(),
+                MAX_GATED_FEATURES,
+            )));
         }
 
         // BFS: every move costs one step, so the first time a state on the
@@ -505,6 +514,32 @@ mod tests {
             !pts.contains(&pt(6, 4)),
             "does not take the longer (6,4) detour"
         );
+    }
+
+    #[test]
+    fn over_capacity_maze_returns_error_not_silent_lee() {
+        // A grid whose combined `'K'` + `'D'` count exceeds
+        // `MAX_GATED_FEATURES` (17 > 16) must surface an error rather than
+        // falling back to the lock-blind Lee solve — that fallback would
+        // return a "shortest path" that walks through locked doors as if
+        // they were open, misrepresenting the maze as playable when it
+        // might not be.
+        let mut row: Vec<char> = vec!['S'];
+        for _ in 0..17 {
+            row.push('D'); // 17 doors → K+D = 17 > 16
+        }
+        row.push('F');
+        let result = solve_grid(vec![row]);
+        match result {
+            Ok(_) => panic!("expected over-capacity error, got a solution"),
+            Err(error) => {
+                let msg = format!("{error}");
+                assert!(
+                    msg.contains("too many keys + doors"),
+                    "expected over-capacity error, got: {msg}"
+                );
+            }
+        }
     }
 
     #[test]
