@@ -1034,6 +1034,84 @@ namespace Maze.Api.Tests
                 $"Seeds {seedA} and {seedB} produced identical mazes — seed precision may be lost (ulong→float truncation)");
         }
 
+        // --- Maze.MaxTotalFeatures / ExceedsGenerateFeatureCap + Key/Door generation round-trip ---
+
+        /// <summary>
+        /// Pins <see cref="Maze.MaxTotalFeatures"/> to 16 so the React-side
+        /// <c>MAX_TOTAL_FEATURES</c> constant and the Rust-side
+        /// <c>maze::MAX_TOTAL_FEATURES</c> stay in sync.
+        /// </summary>
+        [Fact]
+        public void MaxTotalFeatures_IsSixteen()
+        {
+            Assert.Equal(16u, Maze.MaxTotalFeatures);
+        }
+
+        /// <summary>
+        /// Confirms the budget formula <c>2 * doorCount + spareDoors + spareKeys</c>:
+        /// at-cap is accepted, just-over is rejected.
+        /// </summary>
+        [Fact]
+        public void ExceedsGenerateFeatureCap_BoundaryValues()
+        {
+            // At cap (2*8 = 16): allowed
+            Assert.False(Maze.ExceedsGenerateFeatureCap(8, 0, 0));
+            // Just over (2*8 + 1 = 17): rejected
+            Assert.True(Maze.ExceedsGenerateFeatureCap(8, 1, 0));
+            // Spread evenly at cap (8 + 4 + 4 = 16): allowed
+            Assert.False(Maze.ExceedsGenerateFeatureCap(4, 4, 4));
+            // Spread evenly just over (8 + 4 + 5 = 17): rejected
+            Assert.True(Maze.ExceedsGenerateFeatureCap(4, 4, 5));
+            // All-zero: trivially allowed
+            Assert.False(Maze.ExceedsGenerateFeatureCap(0, 0, 0));
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> threads <c>DoorCount</c>,
+        /// <c>SpareDoors</c>, and <c>SpareKeys</c> through to the Rust generator
+        /// by checking the produced grid's key and door cell counts.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithKeysAndDoors_PlacesThemInTheProducedGrid()
+        {
+            using Maze maze = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 15,
+                ColCount = 15,
+                Seed = 7,
+                MinSpineLength = 8,
+                DoorCount = 3,
+                SpareDoors = 2,
+                SpareKeys = 1,
+            });
+            string json = maze.ToJson();
+            int dCount = json.Split('D').Length - 1;
+            int kCount = json.Split('K').Length - 1;
+            Assert.Equal(5, dCount); // 3 real + 2 spare doors
+            Assert.Equal(4, kCount); // 3 real + 1 spare key
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> propagates the Rust
+        /// generator's key + door cap rejection as a thrown exception.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithKeysPlusDoorsOverCap_ShouldThrow()
+        {
+            var exception = Assert.ThrowsAny<Exception>(() =>
+            {
+                Maze.Generate(new Maze.GenerationOptions
+                {
+                    RowCount = 15,
+                    ColCount = 15,
+                    Seed = 7,
+                    DoorCount = 8,
+                    SpareKeys = 1, // 2*8 + 0 + 1 = 17 > 16
+                });
+            });
+            Assert.Contains("exceeds the cap", exception.Message);
+        }
+
         // --- MazeGame tests ---
 
         // 1 row, 3 cols: S[0,0]  [0,1]  F[0,2]

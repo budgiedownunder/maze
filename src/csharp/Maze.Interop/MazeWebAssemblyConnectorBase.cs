@@ -105,6 +105,9 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? generatorOptionsSetMinSpineLength;
         protected IWebAssemblyFunction? generatorOptionsSetMaxRetries;
         protected IWebAssemblyFunction? generatorOptionsSetBranchFromFinish;
+        protected IWebAssemblyFunction? generatorOptionsSetDoorCount;
+        protected IWebAssemblyFunction? generatorOptionsSetSpareDoors;
+        protected IWebAssemblyFunction? generatorOptionsSetSpareKeys;
         protected IWebAssemblyFunction? mazeGenerate;
         protected IWebAssemblyFunction? freeGeneratorOptions;
         protected IWebAssemblyFunction? newMazeGame;
@@ -575,6 +578,27 @@ namespace Maze.Interop
         public void GeneratorOptionsSetBranchFromFinish(UIntPtr optionsPtr, byte value)
         {
             generatorOptionsSetBranchFromFinish?.Invoke((long)(uint)optionsPtr, (int)value);
+        }
+        /// <summary>Sets the door_count on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of real path doors to auto-place (0 = none)</param>
+        public void GeneratorOptionsSetDoorCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetDoorCount?.Invoke((long)(uint)optionsPtr, value);
+        }
+        /// <summary>Sets the spare_doors on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of decoy doors to plant on off-spine branches (0 = none)</param>
+        public void GeneratorOptionsSetSpareDoors(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetSpareDoors?.Invoke((long)(uint)optionsPtr, value);
+        }
+        /// <summary>Sets the spare_keys on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of spare keys to plant on off-spine branches (0 = none)</param>
+        public void GeneratorOptionsSetSpareKeys(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetSpareKeys?.Invoke((long)(uint)optionsPtr, value);
         }
         /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails

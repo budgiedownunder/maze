@@ -606,6 +606,34 @@ namespace Maze.Interop
             connector.GeneratorOptionsSetBranchFromFinish(optionsPtr, value);
         }
         /// <summary>
+        /// Sets the door_count on a <c>GeneratorOptions</c> (0 = none, the default).
+        /// Real path doors auto-placed on the spine by the Rust generator; each
+        /// real door contributes one key and one door cell to the
+        /// produced grid, so the joint cap is <c>2 * door_count + spare_doors +
+        /// spare_keys &lt;= MAX_TOTAL_FEATURES (16)</c>.
+        /// </summary>
+        public void GeneratorOptionsSetDoorCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetDoorCount(optionsPtr, value);
+        }
+        /// <summary>
+        /// Sets the spare_doors on a <c>GeneratorOptions</c> (0 = none, the
+        /// default). Decoy doors planted on off-spine branches.
+        /// </summary>
+        public void GeneratorOptionsSetSpareDoors(UIntPtr optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetSpareDoors(optionsPtr, value);
+        }
+        /// <summary>
+        /// Sets the spare_keys on a <c>GeneratorOptions</c> (0 = none, the
+        /// default). Spare keys planted on off-spine branches, giving the
+        /// player a budget to burn on decoys before they risk stranding.
+        /// </summary>
+        public void GeneratorOptionsSetSpareKeys(UIntPtr optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetSpareKeys(optionsPtr, value);
+        }
+        /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails
         /// </summary>
         /// <param name="mazePtr">Pointer to maze</param>

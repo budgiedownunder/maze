@@ -51,6 +51,9 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_min_spine_length(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_max_retries(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_branch_from_finish(IntPtr ptr, byte value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_door_count(IntPtr ptr, UInt32 value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_spare_doors(IntPtr ptr, UInt32 value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_spare_keys(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern byte maze_c_maze_generate(IntPtr mazePtr, IntPtr optsPtr);
         [DllImport("__Internal")] private static extern IntPtr maze_c_new_maze_game([MarshalAs(UnmanagedType.LPUTF8Str)] string json);
         [DllImport("__Internal")] private static extern void   maze_c_free_maze_game(IntPtr ptr);
@@ -276,6 +279,21 @@ namespace Maze.Interop
         public void GeneratorOptionsSetBranchFromFinish(UIntPtr optionsPtr, byte value)
         {
             maze_c_generator_options_set_branch_from_finish((IntPtr)(ulong)optionsPtr, value);
+        }
+
+        public void GeneratorOptionsSetDoorCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_door_count((IntPtr)(ulong)optionsPtr, value);
+        }
+
+        public void GeneratorOptionsSetSpareDoors(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_spare_doors((IntPtr)(ulong)optionsPtr, value);
+        }
+
+        public void GeneratorOptionsSetSpareKeys(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_spare_keys((IntPtr)(ulong)optionsPtr, value);
         }
 
         public void MazeGenerate(UIntPtr mazePtr, UIntPtr optionsPtr)

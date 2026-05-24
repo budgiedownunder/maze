@@ -1009,6 +1009,64 @@ namespace Maze.Interop.Tests
         }
 
         /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetDoorCount"/>,
+        /// <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetSpareDoors"/>, and
+        /// <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetSpareKeys"/> produce a grid 
+        /// containing the requested key/door cell counts.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithKeysAndDoors_PlacesThemInTheProducedGrid()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(15, 15, MazeGenerationAlgorithm.RecursiveBacktracking, 7);
+            try
+            {
+                interop.GeneratorOptionsSetDoorCount(optionsPtr, 3);
+                interop.GeneratorOptionsSetSpareDoors(optionsPtr, 2);
+                interop.GeneratorOptionsSetSpareKeys(optionsPtr, 1);
+                interop.MazeGenerate(mazePtr, optionsPtr);
+                string json = interop.MazeToJson(mazePtr);
+                int dCount = json.Split('D').Length - 1;
+                int kCount = json.Split('K').Length - 1;
+                // Each real door places one 'K' + one 'D'; spares add their kind only.
+                Assert.Equal(5, dCount); // 3 real doors + 2 spare doors
+                Assert.Equal(4, kCount); // 3 real keys + 1 spare key
+            }
+            finally
+            {
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms that the generator's key + door cap (mirrored at the
+        /// <c>Maze.MaxTotalFeatures</c> layer) surfaces as a thrown exception
+        /// when the request would exceed it.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithKeysPlusDoorsOverCap_ShouldThrow()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(15, 15, MazeGenerationAlgorithm.RecursiveBacktracking, 7);
+            try
+            {
+                // 2 * 8 + 0 + 1 = 17 > 16
+                interop.GeneratorOptionsSetDoorCount(optionsPtr, 8);
+                interop.GeneratorOptionsSetSpareKeys(optionsPtr, 1);
+                var ex = Assert.Throws<Exception>(() => interop.MazeGenerate(mazePtr, optionsPtr));
+                Assert.Contains("exceeds the cap", ex.Message);
+            }
+            finally
+            {
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
+            }
+        }
+
+        /// <summary>
         /// Confirms that <see cref="Maze.Interop.MazeInterop.NewGeneratorOptions"/> fails if an invalid row count is specified
         /// </summary>
         [Fact]

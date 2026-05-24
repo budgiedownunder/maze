@@ -43,6 +43,7 @@ pub struct MazeC {
 /// - `min_spine_length`: `0` = use default (`(row_count + col_count) / 2`)
 /// - `max_retries`: `0` = use default (100)
 /// - `branch_from_finish`: `0` = false (default), `1` = true
+/// - `door_count` / `spare_doors` / `spare_keys`: `0` = none (default)
 ///
 /// # Examples
 ///
@@ -69,6 +70,9 @@ pub struct MazeCGeneratorOptions {
     pub min_spine_length: u32,
     pub max_retries: u32,
     pub branch_from_finish: u8,
+    pub door_count: u32,
+    pub spare_doors: u32,
+    pub spare_keys: u32,
 }
 
 /// Opaque game session handle, exposed to C# via P/Invoke.
@@ -1359,6 +1363,9 @@ pub extern "C" fn maze_c_new_generator_options(
         min_spine_length: 0,
         max_retries: 0,
         branch_from_finish: 0,
+        door_count: 0,
+        spare_doors: 0,
+        spare_keys: 0,
     });
     increment_num_objects_allocated();
     Box::into_raw(opts)
@@ -1524,6 +1531,89 @@ pub extern "C" fn maze_c_generator_options_set_branch_from_finish(
     opts.branch_from_finish = value;
 }
 
+/// Sets the number of real path doors auto-placed on the spine.
+///
+/// `0` (the default) places none; the value is clamped further by the Rust
+/// generator (see `maze::MAX_AUTO_DOORS`) and rejected outright if
+/// `2 * door_count + spare_doors + spare_keys` exceeds the key-aware
+/// solver's `maze::MAX_TOTAL_FEATURES` cap (see [`maze_c_maze_generate`]).
+///
+/// # Examples
+///
+/// Create generator options and set the door count to 3.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_door_count(opts, 3);
+/// assert_eq!(unsafe { (*opts).door_count }, 3);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_door_count(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.door_count = value;
+}
+
+/// Sets the number of decoy doors planted on off-spine branches.
+///
+/// `0` (the default) places none. See [`maze_c_generator_options_set_door_count`]
+/// for the joint cap that applies across all three K/D fields.
+///
+/// # Examples
+///
+/// Create generator options and set the spare-door count to 2.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_spare_doors(opts, 2);
+/// assert_eq!(unsafe { (*opts).spare_doors }, 2);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_spare_doors(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.spare_doors = value;
+}
+
+/// Sets the number of spare keys planted on off-spine branches.
+///
+/// `0` (the default) places none. See [`maze_c_generator_options_set_door_count`]
+/// for the joint cap that applies across all three K/D fields.
+///
+/// # Examples
+///
+/// Create generator options and set the spare-key count to 2.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_spare_keys(opts, 2);
+/// assert_eq!(unsafe { (*opts).spare_keys }, 2);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_spare_keys(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.spare_keys = value;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Maze generation
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1608,9 +1698,9 @@ pub extern "C" fn maze_c_maze_generate(
         max_retries,
         branch_from_finish,
         seed: Some(opts.seed),
-        door_count: None,
-        spare_doors: None,
-        spare_keys: None,
+        door_count: Some(opts.door_count as usize),
+        spare_doors: Some(opts.spare_doors as usize),
+        spare_keys: Some(opts.spare_keys as usize),
     };
 
     let generator = Generator {

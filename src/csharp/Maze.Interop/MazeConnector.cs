@@ -234,6 +234,18 @@ namespace Maze.Interop
         /// <param name="optionsPtr">Pointer to the generator options</param>
         /// <param name="value">Non-zero to enable branching from the finish cell</param>
         public void GeneratorOptionsSetBranchFromFinish(UIntPtr optionsPtr, byte value);
+        /// <summary>Sets the number of real path doors to auto-place on the spine (0 = none, the default)</summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of doors to place</param>
+        public void GeneratorOptionsSetDoorCount(UIntPtr optionsPtr, UInt32 value);
+        /// <summary>Sets the number of decoy doors to plant on off-spine branches (0 = none, the default)</summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of spare doors to place</param>
+        public void GeneratorOptionsSetSpareDoors(UIntPtr optionsPtr, UInt32 value);
+        /// <summary>Sets the number of spare keys to plant on off-spine branches (0 = none, the default)</summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of spare keys to place</param>
+        public void GeneratorOptionsSetSpareKeys(UIntPtr optionsPtr, UInt32 value);
         /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails
         /// </summary>

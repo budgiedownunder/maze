@@ -724,6 +724,7 @@ fn ptr_to_string(ptr: *const u8) -> String {
 /// - min_spine_length:     `0`        = use default ((row_count + col_count) / 2)
 /// - max_retries:          `0`        = use default (100)
 /// - branch_from_finish:   `0` = false (default), `1` = true
+/// - door_count / spare_doors / spare_keys: `0` = none (default)
 #[cfg(feature = "wasm-lite")]
 #[repr(C)]
 pub struct GeneratorOptionsWasm {
@@ -738,6 +739,9 @@ pub struct GeneratorOptionsWasm {
     pub min_spine_length:   u32,
     pub max_retries:        u32,
     pub branch_from_finish: u8,
+    pub door_count:         u32,
+    pub spare_doors:        u32,
+    pub spare_keys:         u32,
 }
 /// Creates a new `GeneratorOptionsWasm` with the given required fields and default optional fields.
 ///
@@ -764,6 +768,9 @@ pub extern "C" fn new_generator_options_wasm(
         min_spine_length:   0,
         max_retries:        0,
         branch_from_finish: 0,
+        door_count:         0,
+        spare_doors:        0,
+        spare_keys:         0,
     });
     increment_num_objects_allocated();
     Box::into_raw(opts)
@@ -810,6 +817,33 @@ pub extern "C" fn generator_options_set_branch_from_finish(ptr: *mut GeneratorOp
     let opts = unsafe { &mut *ptr };
     opts.branch_from_finish = value;
 }
+/// Sets the number of real path doors auto-placed on the spine
+/// (`0` = none, the default).
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_door_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.door_count = value;
+}
+/// Sets the number of decoy doors planted on off-spine branches
+/// (`0` = none, the default).
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_spare_doors(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.spare_doors = value;
+}
+/// Sets the number of spare keys planted on off-spine branches
+/// (`0` = none, the default).
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_spare_keys(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.spare_keys = value;
+}
 /// Generates a maze, populating the given `MazeWasm`.
 ///
 /// # Returns
@@ -849,9 +883,9 @@ pub extern "C" fn maze_wasm_generate(
         max_retries,
         branch_from_finish,
         seed: Some(opts.seed),
-        door_count: None,
-        spare_doors: None,
-        spare_keys: None,
+        door_count: Some(opts.door_count as usize),
+        spare_doors: Some(opts.spare_doors as usize),
+        spare_keys: Some(opts.spare_keys as usize),
     };
 
     let generator = Generator { options: generator_options };
