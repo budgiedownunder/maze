@@ -13,7 +13,7 @@
 
 use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
 use crate::{
-    validation::{validate_email_format, validate_maze_cell_count, validate_user_fields},
+    validation::{validate_email_format, validate_maze_cell_count, validate_maze_feature_count, validate_user_fields},
     Error, MazeItem, Store,
 };
 use async_trait::async_trait;
@@ -2642,6 +2642,7 @@ impl MazeStore for SqlStore {
             maze.definition.col_count(),
             MAX_MAZE_CELLS,
         )?;
+        validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
 
         let existing = sqlx::query(&q(
             self.kind,
@@ -2809,6 +2810,7 @@ impl MazeStore for SqlStore {
             maze.definition.col_count(),
             MAX_MAZE_CELLS,
         )?;
+        validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
         let definition_json = serde_json::to_string(&maze)?;
         let result = sqlx::query(&q(
             self.kind,

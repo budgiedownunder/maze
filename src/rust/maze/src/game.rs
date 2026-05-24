@@ -1,17 +1,7 @@
+use crate::MAX_TOTAL_FEATURES;
 use data_model::MazeDefinition;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-
-/// Combined `'K'` + `'D'` cell count above which the strand check's
-/// state-space BFS falls back to lock-blind key reachability.
-///
-/// The BFS explores `(cell, collected_keys_bitmask, opened_doors_bitmask)`
-/// states; its size is bounded by `cells * 2^(K+D)`, so we cap K+D at the
-/// same width the `u32` masks afford and the solver itself uses. Above
-/// the cap, the fallback over-counts keys (treats every door as
-/// passable), which is safe for the strand inequality — over-counting
-/// keys only ever delays a strand, never invents one.
-const MAX_GATED_FEATURES: usize = 16;
 
 /// Direction of player movement.
 ///
@@ -742,7 +732,7 @@ impl MazeGame {
     /// reachable states.
     ///
     /// Falls back to [`Self::lock_blind_reachable_keys`] when
-    /// `#K + #D > MAX_GATED_FEATURES` — the state space is exponential
+    /// `#K + #D > MAX_TOTAL_FEATURES` — the state space is exponential
     /// in their sum. The fallback over-counts reachable keys (treats
     /// every door as passable), which is safe for the strand inequality:
     /// over-counting keys only ever delays a strand, never invents one.
@@ -765,7 +755,7 @@ impl MazeGame {
             }
         }
 
-        if key_bit.len() + door_bit.len() > MAX_GATED_FEATURES {
+        if key_bit.len() + door_bit.len() > MAX_TOTAL_FEATURES {
             return self.bag.len() as u32 + self.lock_blind_reachable_keys();
         }
 
@@ -824,7 +814,7 @@ impl MazeGame {
     }
 
     /// Lock-blind fallback for [`Self::simulate_reachable_keys`] when
-    /// `#K + #D > MAX_GATED_FEATURES`: count the `'K'` cells reachable
+    /// `#K + #D > MAX_TOTAL_FEATURES`: count the `'K'` cells reachable
     /// from the player's current cell treating every door as passable.
     /// An upper bound on the true reachable-keys count, which is safe
     /// for the strand inequality.

@@ -173,6 +173,15 @@ impl Generator {
         let spare_doors = opts.spare_doors.unwrap_or(0);
         let spare_keys = opts.spare_keys.unwrap_or(0);
 
+        let total_features = 2 * door_count + spare_doors + spare_keys;
+        if total_features > crate::MAX_TOTAL_FEATURES {
+            return Err(Error::Generate(format!(
+                "requested keys + doors ({total_features}) exceeds the cap ({}): \
+                 2 * door_count ({door_count}) + spare_doors ({spare_doors}) + spare_keys ({spare_keys})",
+                crate::MAX_TOTAL_FEATURES,
+            )));
+        }
+
         let seed_val: u64 = match opts.seed {
             Some(s) => s,
             None => {
@@ -367,7 +376,7 @@ fn carve(
 }
 
 /// Maximum number of doors auto-placed at generation. Keeps
-/// `keys + doors = 2 * doors ≤ 16` — the key-aware solver's `MAX_GATED_FEATURES`
+/// `keys + doors = 2 * doors ≤ 16` — the key-aware solver's `MAX_TOTAL_FEATURES`
 /// bound — so the placement-validation solve stays in true key-aware mode rather
 /// than falling back to the lock-blind solve.
 const MAX_AUTO_DOORS: usize = 8;
@@ -1161,13 +1170,13 @@ mod tests {
     }
 
     #[test]
-    fn door_count_never_exceeds_the_auto_cap() {
-        // Even with a huge request, no more than MAX_AUTO_DOORS are placed (keeps
-        // the key-aware solver within MAX_GATED_FEATURES for validation).
-        let maze = make_with_doors(31, 31, 99, 50)
-            .generate()
-            .expect("should succeed");
-        assert!(count_char(&maze.definition.grid, 'D') <= MAX_AUTO_DOORS);
+    fn huge_door_count_is_rejected_at_the_entry_point() {
+        // door_count alone contributes `2 * door_count` to the K+D budget (one
+        // K and one D each); anything past `MAX_AUTO_DOORS` (= 8) is already
+        // past the cap and gets refused up front rather than silently
+        // clamped.
+        let result = make_with_doors(31, 31, 99, 50).generate();
+        assert!(result.is_err(), "huge door_count must error, not clamp");
     }
 
     #[test]
@@ -1348,9 +1357,10 @@ mod tests {
 
     #[test]
     fn spare_doors_clamp_to_max_auto_doors_ceiling() {
-        // Over-request spare doors; the placement must clamp to
-        // MAX_AUTO_DOORS independent of however many real doors were placed.
-        let maze = make_with_doors_and_spares(25, 25, 31, 0, Some(50), None)
+        // Over-request spare doors (right up to the K+D budget); the placement
+        // must clamp to MAX_AUTO_DOORS independent of however many real doors
+        // were placed.
+        let maze = make_with_doors_and_spares(25, 25, 31, 0, Some(crate::MAX_TOTAL_FEATURES), None)
             .generate()
             .expect("should succeed");
         let grid = &maze.definition.grid;
@@ -1359,6 +1369,26 @@ mod tests {
             total_doors <= MAX_AUTO_DOORS,
             "spare-door placement must clamp to MAX_AUTO_DOORS, got {total_doors}"
         );
+    }
+
+    #[test]
+    fn generate_errors_when_total_features_exceeds_cap() {
+        // 2 * door_count + spare_doors + spare_keys > MAX_TOTAL_FEATURES must
+        // be rejected at the entry point so over-cap requests never silently
+        // get partially clamped into a smaller-than-asked maze. Choose a
+        // request that just exceeds the cap: door_count=8 (16) + spare_keys=1
+        // = 17. Same shape as the Gen 1 bug that motivated the cap.
+        let result = make_with_doors_and_spares(21, 21, 7, 8, None, Some(1)).generate();
+        match result {
+            Ok(_) => panic!("expected over-cap error, got Ok"),
+            Err(e) => {
+                let msg = format!("{e}");
+                assert!(
+                    msg.contains("exceeds the cap"),
+                    "expected over-cap error, got: {msg}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -1375,7 +1405,7 @@ mod tests {
     #[test]
     fn spare_placement_preserves_solvability() {
         // After overlaying spares, the maze must still solve. With
-        // keys+doors potentially > MAX_GATED_FEATURES the solver falls back
+        // keys+doors potentially > MAX_TOTAL_FEATURES the solver falls back
         // to lock-blind — either way `solve()` returns `Ok` because the spine
         // is open and unaltered by the spare overlay.
         let maze = make_with_doors_and_spares(21, 21, 41, 3, Some(4), Some(4))

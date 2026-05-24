@@ -21,6 +21,7 @@ import { usePlayMaze, GameType } from '../hooks/usePlayMaze'
 import { WalkSpeedControl } from '../components/WalkSpeedControl'
 import { getMaze, createMaze, updateMaze } from '../api/client'
 import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
+import { countKeysAndDoors, exceedsKeyDoorCap, MAX_TOTAL_FEATURES } from '../utils/validation'
 
 const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
 
@@ -135,8 +136,21 @@ export function MazePage() {
       .finally(() => setIsLoading(false))
   }, [token, id, isNew, initFromDefinition])
 
+  function tooManyFeaturesMessage(): string {
+    const { keys, doors } = countKeysAndDoors(grid)
+    return (
+      `This maze has ${keys} keys + ${doors} doors = ${keys + doors}, ` +
+      `over the limit of ${MAX_TOTAL_FEATURES}. ` +
+      `Remove some key or door cells before saving.`
+    )
+  }
+
   async function handleSaveNew(name: string) {
     if (!token) return
+    if (exceedsKeyDoorCap(grid)) {
+      setSaveError(tooManyFeaturesMessage())
+      return
+    }
     setIsSaving(true)
     setSaveError(null)
     try {
@@ -155,6 +169,10 @@ export function MazePage() {
 
   async function handleSaveExisting() {
     if (!token || !mazeId) return
+    if (exceedsKeyDoorCap(grid)) {
+      setSaveError(tooManyFeaturesMessage())
+      return
+    }
     setIsSaving(true)
     setSaveError(null)
     try {

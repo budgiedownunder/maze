@@ -257,6 +257,25 @@ describe('GenerateMazeModal validation', () => {
     await submitWith({ Rows: '2' })
     expect(mockOnGenerate).not.toHaveBeenCalled()
   })
+
+  // Cross-field K + D budget: each real door brings one key, so the formula
+  // is 2 * Doors + Spare Doors + Spare Keys <= MAX_TOTAL_FEATURES (16).
+  it('rejects when 2*Doors + Spare Doors + Spare Keys exceeds the K + D budget', async () => {
+    // 2*7 + 1 + 2 = 17 > 16 — over the cap. Field-level limits all individually pass.
+    await submitWith({ Doors: '7', 'Spare Doors': '1', 'Spare Keys': '2' })
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /Total keys \+ doors \(17\) exceeds the limit of 16/,
+    )
+    expect(mockOnGenerate).not.toHaveBeenCalled()
+  })
+
+  it('accepts when 2*Doors + Spare Doors + Spare Keys equals the K + D budget', async () => {
+    // 2*8 + 0 + 0 = 16 — exactly at the cap, should submit.
+    await submitWith({ Doors: '8', 'Spare Doors': '0', 'Spare Keys': '0' })
+    expect(mockOnGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ doorCount: 8, spareDoors: 0, spareKeys: 0 }),
+    )
+  })
 })
 
 // ── max_maze_cells cap ───────────────────────────────────────────

@@ -25,3 +25,13 @@ pub use maze_path_direction::MazePathDirection;
 pub use maze_point_offset::MazePointOffset;
 pub use maze_solution::MazeSolution;
 pub use solver::Solver;
+
+/// Maximum combined count of `'K'` + `'D'` cells a maze may carry. The
+/// key-aware solver tracks each as a bit in a `u32` mask, so its search
+/// is exponential in their sum; above this cap the solver refuses rather
+/// than degrade to a key-blind walk that would misrepresent sealed mazes
+/// as playable. Generation, the React Generate dialog, the React editor
+/// save flow, and the server save endpoint all enforce the same cap so
+/// the solver's error path never fires for a maze produced through the
+/// supported tools.
+pub const MAX_TOTAL_FEATURES: usize = 16;

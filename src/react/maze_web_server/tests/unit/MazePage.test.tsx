@@ -499,6 +499,41 @@ describe('MazePage save and refresh', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Save Maze' })).not.toBeInTheDocument())
   })
 
+  it('Save refuses an existing maze whose K + D total exceeds the cap', async () => {
+    // Override GET to return a maze with 9 keys + 8 doors = 17, over the
+    // MAX_TOTAL_FEATURES limit of 16. The client-side guard in
+    // handleSaveExisting catches it before any PUT goes out.
+    const overCapMaze = {
+      id: 'maze-overcap',
+      name: 'OverCap',
+      definition: {
+        grid: [
+          ['S', 'K', 'K', 'K', 'K', 'K', 'K', 'K', 'K'],
+          [' ', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'],
+          ['F', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'K'],
+        ],
+      },
+    }
+    const updateSpy = vi.fn()
+    server.use(
+      http.get('/api/v1/mazes/:id', () => HttpResponse.json(overCapMaze)),
+      http.put('/api/v1/mazes/:id', () => {
+        updateSpy()
+        return new HttpResponse(null, { status: 200 })
+      }),
+    )
+    await loadMazePage(`/mazes/${overCapMaze.id}`)
+    // Dirty the grid (turn a blank cell into a wall) so Save is enabled
+    // without changing the K + D count.
+    await userEvent.click(screen.getByLabelText('Cell 3,2'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(updateSpy).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /9 keys \+ 8 doors = 17.*over the limit of 16/,
+    )
+  })
+
   it('save name modal shows API error and stays open', async () => {
     server.use(
       http.post('/api/v1/mazes', () => new HttpResponse('A maze with that name already exists.', { status: 409 })),

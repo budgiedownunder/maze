@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import type { GenerateOptions } from '../types/api'
-import { exceedsMazeCellCap, MAX_DOOR_COUNT } from '../utils/validation'
+import { exceedsGenerateFeatureCap, exceedsMazeCellCap, MAX_DOOR_COUNT, MAX_TOTAL_FEATURES } from '../utils/validation'
 
 interface Props {
   grid: string[][]
@@ -120,6 +120,18 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
     }
     if (!Number.isInteger(skeys) || skeys < 0 || skeys > MAX_DOOR_COUNT) {
       setValidationError(`Spare Keys must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
+      return
+    }
+    // Cross-field budget: each real door contributes one 'K' and one 'D' to
+    // the generated grid, so the formula counts doors twice. The cap mirrors
+    // the key-aware solver's MAX_TOTAL_FEATURES so a generated maze always
+    // has a solvable path the editor can display.
+    if (exceedsGenerateFeatureCap(doors, sdoors, skeys)) {
+      const total = 2 * doors + sdoors + skeys
+      setValidationError(
+        `Total keys + doors (${total}) exceeds the limit of ${MAX_TOTAL_FEATURES}. ` +
+          `Each door brings a key, so the count is 2·Doors + Spare Doors + Spare Keys.`,
+      )
       return
     }
 

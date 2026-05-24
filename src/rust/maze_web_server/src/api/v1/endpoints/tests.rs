@@ -23,7 +23,7 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::{validate_maze_cell_count, validate_user_fields}};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
     use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
@@ -261,6 +261,7 @@ mod test_definitions {
                 maze.definition.col_count(),
                 MOCK_MAX_MAZE_CELLS,
             )?;
+            validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
             let id = MockMaze::create_id_from_name(&maze.name);
 
             if mock_user.mazes.contains_key(&id) {
@@ -296,6 +297,7 @@ mod test_definitions {
                 maze.definition.col_count(),
                 MOCK_MAX_MAZE_CELLS,
             )?;
+            validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
             if mock_user.mazes.contains_key(&maze.id) {
                 mock_user.mazes.insert(
                     maze.id.to_string(),
@@ -781,6 +783,19 @@ mod test_definitions {
 
     fn new_sized_maze(id: &str, name: &str, rows: usize, cols: usize) -> Maze {
         let mut maze = Maze::new(MazeDefinition::new(rows, cols));
+        maze.id = id.to_string();
+        maze.name = name.to_string();
+        maze
+    }
+
+    /// Builds a maze with 9 'K' + 8 'D' cells (17 > maze::MAX_TOTAL_FEATURES)
+    /// so the handler / store K + D cap rejects it.
+    fn new_too_many_features_maze(id: &str, name: &str) -> Maze {
+        let mut row: Vec<char> = vec!['S'];
+        row.extend(std::iter::repeat_n('K', 9));
+        row.extend(std::iter::repeat_n('D', 8));
+        row.push('F');
+        let mut maze: Maze = Maze::new(MazeDefinition::from_vec(vec![row]));
         maze.id = id.to_string();
         maze.name = name.to_string();
         maze
@@ -2868,6 +2883,21 @@ mod test_definitions {
         .await;
     }
 
+    #[actix_web::test]
+    async fn cannot_create_maze_that_exceeds_feature_cap() {
+        // 9 keys + 8 doors = 17 > maze::MAX_TOTAL_FEATURES (16). The
+        // store-level validate_maze_feature_count rejects, the handler maps
+        // it to 422.
+        run_create_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            new_too_many_features_maze("", "over_feature_cap_maze"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        )
+        .await;
+    }
+
     // Get maze
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
@@ -2946,6 +2976,21 @@ mod test_definitions {
             true,
             id,
             new_sized_maze(id, "maze_a", 70, 60),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        )
+        .await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_maze_that_exceeds_feature_cap() {
+        // 9 keys + 8 doors = 17 > maze::MAX_TOTAL_FEATURES (16).
+        let id = "maze_a.json";
+        run_update_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::ThreeMazes),
+            Some(VALID_USERNAME_1),
+            true,
+            id,
+            new_too_many_features_maze(id, "maze_a"),
             StatusCode::UNPROCESSABLE_ENTITY,
         )
         .await;

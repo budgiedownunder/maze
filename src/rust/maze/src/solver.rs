@@ -1,15 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use data_model::{Maze, MazeCellState, MazePoint};
-use crate::{Error, MazePath, MazePointOffset, MazeSolution};
-
-/// Upper bound on `(#keys + #doors)` for which the key-aware search runs.
-/// The search is exponential in that sum (it tracks which keys are held and
-/// which doors are open as `u32` bitmasks), so beyond this a pathological
-/// maze could be slow. Above the bound the solver returns an error rather
-/// than silently falling back to a key-blind solve — a "shortest path"
-/// that ignores locked doors would lie about playability.
-const MAX_GATED_FEATURES: usize = 16;
+use crate::{Error, MAX_TOTAL_FEATURES, MazePath, MazePointOffset, MazeSolution};
 
 /// Identifies a node in the key-aware search: a cell plus the history that
 /// decides what's passable from here — which keys have been collected and which
@@ -163,7 +155,7 @@ impl Solver<'_> {
     /// sealed behind a door with no reachable key returns an error, where
     /// the old lock-blind solve would have reported a (un-walkable) route.
     /// A maze whose combined `'K'` + `'D'` count exceeds the key-aware
-    /// solver's capacity (`MAX_GATED_FEATURES`) also returns an error
+    /// solver's capacity (`MAX_TOTAL_FEATURES`) also returns an error
     /// rather than silently degrading to a key-blind walk that would lie
     /// about playability. Mazes with no doors take the original
     /// shortest-path Lee solve unchanged. Because a key route may need to
@@ -278,12 +270,12 @@ impl Solver<'_> {
 
         // The search is exponential in (#keys + #doors). Above the cap we
         // refuse to solve rather than silently degrade to a key-blind walk
-        // that would treat locked doors as passable — see MAX_GATED_FEATURES.
-        if key_bit.len() + door_bit.len() > MAX_GATED_FEATURES {
+        // that would treat locked doors as passable — see MAX_TOTAL_FEATURES.
+        if key_bit.len() + door_bit.len() > MAX_TOTAL_FEATURES {
             return Err(Error::Solve(format!(
                 "maze has too many keys + doors ({}) for the key-aware solver (max {})",
                 key_bit.len() + door_bit.len(),
-                MAX_GATED_FEATURES,
+                MAX_TOTAL_FEATURES,
             )));
         }
 
@@ -519,15 +511,13 @@ mod tests {
     #[test]
     fn over_capacity_maze_returns_error_not_silent_lee() {
         // A grid whose combined `'K'` + `'D'` count exceeds
-        // `MAX_GATED_FEATURES` (17 > 16) must surface an error rather than
+        // `MAX_TOTAL_FEATURES` (17 > 16) must surface an error rather than
         // falling back to the lock-blind Lee solve — that fallback would
         // return a "shortest path" that walks through locked doors as if
         // they were open, misrepresenting the maze as playable when it
         // might not be.
         let mut row: Vec<char> = vec!['S'];
-        for _ in 0..17 {
-            row.push('D'); // 17 doors → K+D = 17 > 16
-        }
+        row.extend(std::iter::repeat_n('D', 17)); // 17 doors → K+D = 17 > 16
         row.push('F');
         let result = solve_grid(vec![row]);
         match result {
