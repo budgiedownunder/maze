@@ -23,6 +23,14 @@
             StrokeShape="RoundRectangle 8"
             Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+        <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="12">
+
+            <!-- Title -->
+            <Label Grid.Row="0"
+                   Text="Generate Maze"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center"/>
 
         <!--
             Vertical scrolling on short viewports — the popup would
@@ -36,7 +44,7 @@
             ScrollView from claiming Fill horizontally and dragging
             the popup width up to the parent container's full width.
         -->
-        <ScrollView MaximumHeightRequest="600" HorizontalOptions="Center">
+        <ScrollView Grid.Row="1" MaximumHeightRequest="500" HorizontalOptions="Center">
         <!--
             No `MinimumWidthRequest` floor — the layout sizes to its
             natural content width on every platform, which avoids any
@@ -45,13 +53,6 @@
             `MaximumWidthRequest="320"` for desktop.
         -->
         <VerticalStackLayout Spacing="12">
-
-            <!-- Title -->
-            <Label Text="Generate Maze"
-                   FontSize="18"
-                   FontAttributes="Bold"
-                   HorizontalOptions="Center"
-                   Margin="0,0,0,4"/>
 
             <!-- Fields -->
             <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
@@ -95,16 +96,18 @@
                    IsVisible="False"
                    HorizontalOptions="Center"/>
 
-            <!-- Buttons -->
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,4,0,0">
-                <Button Grid.Column="0" x:Name="CancelButton" Text="Cancel" Clicked="OnCancelClicked"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
-                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
-                <Button Grid.Column="1" x:Name="GenerateButton" Text="Generate" Clicked="OnGenerateClicked"/>
-            </Grid>
-
         </VerticalStackLayout>
         </ScrollView>
+
+        <!-- Buttons: pinned outside the ScrollView so Cancel/Generate stay visible. -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="10">
+            <Button Grid.Column="0" x:Name="CancelButton" Text="Cancel" Clicked="OnCancelClicked"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+            <Button Grid.Column="1" x:Name="GenerateButton" Text="Generate" Clicked="OnGenerateClicked"/>
+        </Grid>
+
+        </Grid>
     </Border>
 
 </toolkit:Popup>
