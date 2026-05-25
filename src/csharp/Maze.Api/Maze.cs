@@ -131,11 +131,20 @@ namespace Maze.Api
             public UInt32? SpareKeys { get; set; }
         }
         /// <summary>
-        /// Maximum combined count of key and door cells any maze may carry. 
+        /// Maximum combined count of key and door cells any maze may carry.
         /// Mirrors <c>maze::MAX_TOTAL_FEATURES</c> on the Rust
         /// side.
         /// </summary>
         public const UInt32 MaxTotalFeatures = 16;
+        /// <summary>
+        /// Maximum value accepted by each of <see cref="GenerationOptions.DoorCount"/>,
+        /// <see cref="GenerationOptions.SpareDoors"/>, and
+        /// <see cref="GenerationOptions.SpareKeys"/> individually. The generator
+        /// clamps real-door counts to this internally (see <c>maze::MAX_AUTO_DOORS</c>);
+        /// per-field UI validation rejects above-cap requests up front so the cross-field
+        /// rule in <see cref="ExceedsGenerateFeatureCap"/> never has to handle silly inputs.
+        /// </summary>
+        public const UInt32 MaxDoorCount = 8;
         /// <summary>
         /// Returns <c>true</c> when a Generate request's planned key + door cell
         /// count would exceed <see cref="MaxTotalFeatures"/>. Each real door

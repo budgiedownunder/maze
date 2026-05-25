@@ -60,11 +60,16 @@ namespace Maze.Maui.App.Views
         /// <param name="finishRow">Default finish cell row (0-based)</param>
         /// <param name="finishCol">Default finish cell column (0-based)</param>
         /// <param name="minSolutionLength">Default minimum solution length</param>
+        /// <param name="doorCount">Default number of real path doors to auto-place (0 = none)</param>
+        /// <param name="spareDoors">Default number of decoy doors to plant (0 = none)</param>
+        /// <param name="spareKeys">Default number of spare keys to plant (0 = none)</param>
         /// <param name="maxMazeCells">Server-reported cell-count cap (<c>AppFeatures.MaxMazeCells</c>); <c>null</c> means no cap</param>
         /// <param name="generationError">Optional error message from a previous generation attempt, displayed inline</param>
         public GenerateMazePopup(uint rows, uint cols,
             uint startRow, uint startCol, uint finishRow, uint finishCol,
-            uint minSolutionLength, int? maxMazeCells = null, string? generationError = null)
+            uint minSolutionLength,
+            uint doorCount = 0, uint spareDoors = 0, uint spareKeys = 0,
+            int? maxMazeCells = null, string? generationError = null)
         {
             InitializeComponent();
             _maxMazeCells = maxMazeCells;
@@ -79,6 +84,10 @@ namespace Maze.Maui.App.Views
             FinishColEntry.Text = (finishCol + 1).ToString();
 
             MinSolutionLengthEntry.Text = minSolutionLength.ToString();
+
+            DoorCountEntry.Text = doorCount.ToString();
+            SpareDoorsEntry.Text = spareDoors.ToString();
+            SpareKeysEntry.Text = spareKeys.ToString();
 
             if (generationError is not null)
             {
@@ -172,6 +181,9 @@ namespace Maze.Maui.App.Views
                 finishRowText: FinishRowEntry.Text,
                 finishColText: FinishColEntry.Text,
                 minSolutionLengthText: MinSolutionLengthEntry.Text,
+                doorCountText: DoorCountEntry.Text,
+                spareDoorsText: SpareDoorsEntry.Text,
+                spareKeysText: SpareKeysEntry.Text,
                 maxMazeCells: _maxMazeCells,
                 out var parsed,
                 out error))
@@ -189,6 +201,9 @@ namespace Maze.Maui.App.Views
                 FinishRow = parsed.FinishRow,
                 FinishCol = parsed.FinishCol,
                 MinSpineLength = parsed.MinSolutionLength,
+                DoorCount = parsed.DoorCount,
+                SpareDoors = parsed.SpareDoors,
+                SpareKeys = parsed.SpareKeys,
             };
             return true;
         }

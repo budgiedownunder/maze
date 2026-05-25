@@ -5,6 +5,12 @@
 // guarded happy paths actually invoke them. This no-op stub preserves
 // instance state so the analyzer is satisfied that each method touches
 // something on `this`.
+//
+// The MaxTotalFeatures / MaxDoorCount constants and the
+// ExceedsGenerateFeatureCap helper are pure data + arithmetic — they
+// don't touch the wasm runtime, so they're mirrored here verbatim
+// from the production class so the linked GenerateMazeOptionsParser
+// compiles inside this test host.
 namespace Maze.Api
 {
     public sealed class Maze : IDisposable
@@ -19,6 +25,11 @@ namespace Maze.Api
         public int ColCount { get; set; }
         public string Json { get; private set; } = "{}";
         public bool Solved { get; private set; }
+
+        public const UInt32 MaxTotalFeatures = 16;
+        public const UInt32 MaxDoorCount = 8;
+        public static bool ExceedsGenerateFeatureCap(UInt32 doorCount, UInt32 spareDoors, UInt32 spareKeys)
+            => 2 * doorCount + spareDoors + spareKeys > MaxTotalFeatures;
 
         public string ToJson() => Json;
         public void FromJson(string json) => Json = json;

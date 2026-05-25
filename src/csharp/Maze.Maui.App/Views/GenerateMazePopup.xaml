@@ -54,7 +54,7 @@
                    Margin="0,0,0,4"/>
 
             <!-- Fields -->
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
 
                 <Label Grid.Row="0" Grid.Column="0" Text="Rows" VerticalOptions="Center"/>
                 <Entry Grid.Row="0" Grid.Column="1" x:Name="RowsEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
@@ -76,6 +76,15 @@
 
                 <Label Grid.Row="6" Grid.Column="0" Text="Min Solution Length" VerticalOptions="Center"/>
                 <Entry Grid.Row="6" Grid.Column="1" x:Name="MinSolutionLengthEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="7" Grid.Column="0" Text="Doors" VerticalOptions="Center"/>
+                <Entry Grid.Row="7" Grid.Column="1" x:Name="DoorCountEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="8" Grid.Column="0" Text="Spare Doors" VerticalOptions="Center"/>
+                <Entry Grid.Row="8" Grid.Column="1" x:Name="SpareDoorsEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="9" Grid.Column="0" Text="Spare Keys" VerticalOptions="Center"/>
+                <Entry Grid.Row="9" Grid.Column="1" x:Name="SpareKeysEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
 
             </Grid>
 

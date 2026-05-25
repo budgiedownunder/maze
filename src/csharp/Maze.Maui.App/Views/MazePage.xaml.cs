@@ -484,11 +484,12 @@ namespace Maze.Maui.App.Views
                 uint minSolutionLength = _lastMinSolutionLength is uint last && last <= rows * cols
                     ? last
                     : defaultMinSolutionLength;
+                uint doorCount = 0, spareDoors = 0, spareKeys = 0;
                 string? generationError = null;
 
                 while (true)
                 {
-                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, _appFeaturesService.Features.MaxMazeCells, generationError);
+                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, doorCount, spareDoors, spareKeys, _appFeaturesService.Features.MaxMazeCells, generationError);
                     IPopupResult<Maze.GenerationOptions?> result = await this.ShowPopupAsync<Maze.GenerationOptions?>(popup);
 
                     if (result.WasDismissedByTappingOutsideOfPopup || result.Result is not Maze.GenerationOptions popupOptions)
@@ -504,6 +505,9 @@ namespace Maze.Maui.App.Views
                         FinishRow = popupOptions.FinishRow,
                         FinishCol = popupOptions.FinishCol,
                         MinSpineLength = popupOptions.MinSpineLength,
+                        DoorCount = popupOptions.DoorCount,
+                        SpareDoors = popupOptions.SpareDoors,
+                        SpareKeys = popupOptions.SpareKeys,
                     };
 
                     bool generationSucceeded = false;
@@ -531,6 +535,9 @@ namespace Maze.Maui.App.Views
                         finishRow = popupOptions.FinishRow ?? finishRow;
                         finishCol = popupOptions.FinishCol ?? finishCol;
                         minSolutionLength = popupOptions.MinSpineLength ?? minSolutionLength;
+                        doorCount = popupOptions.DoorCount ?? doorCount;
+                        spareDoors = popupOptions.SpareDoors ?? spareDoors;
+                        spareKeys = popupOptions.SpareKeys ?? spareKeys;
                     }
                     finally
                     {
