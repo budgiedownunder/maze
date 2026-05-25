@@ -148,6 +148,8 @@ namespace Maze.Maui.App.Views
             _viewModel.SetWallRequested += (s, e) => { ChangeSelectionToWall(); };
             _viewModel.SetStartRequested += (s, e) => { ChangeSelectionToStart(); };
             _viewModel.SetFinishRequested += (s, e) => { ChangeSelectionToFinish(); };
+            _viewModel.SetKeyRequested += (s, e) => { ChangeSelectionToKey(); };
+            _viewModel.SetDoorRequested += (s, e) => { ChangeSelectionToDoor(); };
             _viewModel.ClearRequested += (s, e) => { ClearSelection(); };
             _viewModel.SolveRequested += (s, e) => { Solve(); };
             _viewModel.WalkSolutionRequested += async (s, e) => { await WalkSolution(); };
@@ -306,6 +308,14 @@ namespace Maze.Maui.App.Views
                     if (_viewModel.CanSetFinish)
                         _viewModel.SetFinishCommand.Execute(null);
                     break;
+                case Controls.Keyboard.Key.K:
+                    if (_viewModel.CanSetKey)
+                        _viewModel.SetKeyCommand.Execute(null);
+                    break;
+                case Controls.Keyboard.Key.D:
+                    if (_viewModel.CanSetDoor)
+                        _viewModel.SetDoorCommand.Execute(null);
+                    break;
                 case Controls.Keyboard.Key.Delete:
                     if (_viewModel.CanClear)
                         _viewModel.ClearCommand.Execute(null);
@@ -335,6 +345,20 @@ namespace Maze.Maui.App.Views
         private void ChangeSelectionToFinish()
         {
             ChangeSelectedCellsContent(Maze.CellType.Finish);
+        }
+        /// <summary>
+        /// Changes the selected cells to key cells
+        /// </summary>
+        private void ChangeSelectionToKey()
+        {
+            ChangeSelectedCellsContent(Maze.CellType.Key);
+        }
+        /// <summary>
+        /// Changes the selected cells to door cells
+        /// </summary>
+        private void ChangeSelectionToDoor()
+        {
+            ChangeSelectedCellsContent(Maze.CellType.Door);
         }
         /// <summary>
         /// Clears the selected cell(s) content
@@ -658,6 +682,8 @@ namespace Maze.Maui.App.Views
             _viewModel.CanSetWall = !status.IsAllWalls && !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanSetStart = status.IsSingleCell && !status.IsStart && !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanSetFinish = status.IsSingleCell && !status.IsFinish && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanSetKey = !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanSetDoor = !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanClear = !status.IsEmpty && !IsSolutionDisplayed && !_isWalking;
         }
         /// <summary>

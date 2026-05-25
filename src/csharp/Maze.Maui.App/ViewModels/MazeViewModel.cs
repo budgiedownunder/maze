@@ -70,6 +70,16 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Event handler</returns>
         public event EventHandler? SetFinishRequested;
         /// <summary>
+        /// Represents a set key cell(s) requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetKeyRequested;
+        /// <summary>
+        /// Represents a set door cell(s) requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetDoorRequested;
+        /// <summary>
         /// Represents a clear cells requested event handler
         /// </summary>
         /// <returns>Event handler</returns>
@@ -174,6 +184,18 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Boolean value</returns>
         [ObservableProperty]
         protected bool canSetFinish = false;
+        /// <summary>
+        /// Indicates whether key cells can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool canSetKey = false;
+        /// <summary>
+        /// Indicates whether door cells can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool canSetDoor = false;
         /// <summary>
         /// Indicates whether the currently selected cells can be cleared
         /// </summary>
@@ -331,6 +353,26 @@ namespace Maze.Maui.App.ViewModels
             UpdateCanSaveRefresh(true);
         }
         /// <summary>
+        /// Set key cell(s) within selection command
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        private async Task SetKeyAsync()
+        {
+            await RunRequest(SetKeyRequested);
+            UpdateCanSaveRefresh(true);
+        }
+        /// <summary>
+        /// Set door cell(s) within selection command
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        private async Task SetDoorAsync()
+        {
+            await RunRequest(SetDoorRequested);
+            UpdateCanSaveRefresh(true);
+        }
+        /// <summary>
         /// Clear selected cell content command
         /// </summary>
         /// <returns>Task</returns>
@@ -395,12 +437,26 @@ namespace Maze.Maui.App.ViewModels
             await RunRequest(WalkSolutionRequested);
         }
         /// <summary>
-        /// Saves the given maze definition
+        /// Saves the given maze definition. Refuses the save up-front when the
+        /// grid carries more key + door cells than the key-aware
+        /// solver can handle (<see cref="Api.Maze.MaxTotalFeatures"/>)
         /// </summary>
         /// <param name="definition">Maze definition</param>
         /// <returns>Task containing a boolean result</returns>
         public async Task<bool> SaveMaze(Api.Maze definition)
         {
+            (uint keys, uint doors) = CountKeysAndDoors(definition);
+            if (keys + doors > Api.Maze.MaxTotalFeatures)
+            {
+                await _dialogService.ShowAlert(
+                    "Cannot save",
+                    $"This maze has {keys} keys + {doors} doors = {keys + doors}, " +
+                    $"over the limit of {Api.Maze.MaxTotalFeatures}. " +
+                    "Remove some key or door cells before saving.",
+                    "OK");
+                return false;
+            }
+
             bool saved = false;
 
             try
@@ -421,6 +477,28 @@ namespace Maze.Maui.App.ViewModels
                 await _dialogService.ShowAlert("Error", $"Failed to save maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
             }
             return saved;
+        }
+        /// <summary>
+        /// Counts the key and door cells in the supplied maze definition. 
+        /// Walks the grid via <see cref="Api.Maze.GetCellType"/>.
+        /// </summary>
+        private static (uint keys, uint doors) CountKeysAndDoors(Api.Maze definition)
+        {
+            uint keys = 0, doors = 0;
+            uint rows = definition.RowCount;
+            uint cols = definition.ColCount;
+            for (uint r = 0; r < rows; r++)
+            {
+                for (uint c = 0; c < cols; c++)
+                {
+                    switch (definition.GetCellType(r, c))
+                    {
+                        case Api.Maze.CellType.Key: keys++; break;
+                        case Api.Maze.CellType.Door: doors++; break;
+                    }
+                }
+            }
+            return (keys, doors);
         }
         /// <summary>
         /// Prompts the user for a maze name and then creates a new maze item with that name and 

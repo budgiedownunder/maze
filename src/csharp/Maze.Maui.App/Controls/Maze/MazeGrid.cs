@@ -147,6 +147,7 @@ namespace Maze.Maui.App
             CellRange? currentSelection = CurrentSelection;
             int cellCount = 0;
             bool singleCell = false, containsStart = false, containsFinish = false, containsWall = false;
+            bool containsKey = false, containsDoor = false;
             int numWalls = 0;
             if (currentSelection is not null)
             {
@@ -169,6 +170,12 @@ namespace Maze.Maui.App
                                 containsWall = true;
                                 numWalls++;
                                 break;
+                            case CellType.Key:
+                                containsKey = true;
+                                break;
+                            case CellType.Door:
+                                containsDoor = true;
+                                break;
                         }
                     }
                 }
@@ -179,6 +186,8 @@ namespace Maze.Maui.App
                 ContainsWall = containsWall,
                 ContainsStart = containsStart,
                 ContainsFinish = containsFinish,
+                ContainsKey = containsKey,
+                ContainsDoor = containsDoor,
                 IsAllWalls = containsWall && numWalls == cellCount
             };
         }
@@ -431,6 +440,8 @@ namespace Maze.Maui.App
 
                 case CellType.Wall:
                 case CellType.Empty:
+                case CellType.Key:
+                case CellType.Door:
                     SetSelectionContentToType(cellType);
                     break;
             }
@@ -524,6 +535,8 @@ namespace Maze.Maui.App
                         case CellType.Start: maze.SetStartCell((uint)row, (uint)column); break;
                         case CellType.Finish: maze.SetFinishCell((uint)row, (uint)column); break;
                         case CellType.Wall: maze.SetWallCells((uint)row, (uint)column, (uint)row, (uint)column); break;
+                        case CellType.Key: maze.SetKeyCells((uint)row, (uint)column, (uint)row, (uint)column); break;
+                        case CellType.Door: maze.SetDoorCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                     }
                 }
             }
@@ -1050,6 +1063,16 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool ContainsFinish { get; set; } = false;
         /// <summary>
+        /// Indicates whether the selection contains a key cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool ContainsKey { get; set; } = false;
+        /// <summary>
+        /// Indicates whether the selection contains a door cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool ContainsDoor { get; set; } = false;
+        /// <summary>
         /// Indicates whether the selection is a single cell
         /// </summary>
         /// <returns>Boolean</returns>
@@ -1070,10 +1093,13 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool IsFinish { get => IsSingleCell && ContainsFinish; }
         /// <summary>
-        /// Indicates whether the selection contains all empty cells
+        /// Indicates whether the selection contains all empty cells. K and D
+        /// cells count as non-empty so that the Clear button enables on a
+        /// selection that contains them — mirrors the React editor's
+        /// <c>selectionStatus.isEmpty</c> rule.
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool IsEmpty { get => !ContainsWall && !ContainsStart && !ContainsFinish; }
+        public bool IsEmpty { get => !ContainsWall && !ContainsStart && !ContainsFinish && !ContainsKey && !ContainsDoor; }
         /// <summary>
         /// Constructor
         /// </summary>
@@ -1199,6 +1225,16 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool IsFinish { get => CellType == CellType.Finish; }
         /// <summary>
+        /// Indicates whether the cell is a key cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool IsKey { get => CellType == CellType.Key; }
+        /// <summary>
+        /// Indicates whether the cell is a door cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool IsDoor { get => CellType == CellType.Door; }
+        /// <summary>
         /// Indicates whether the cell is a start or finish cell
         /// </summary>
         /// <returns>Boolean</returns>
@@ -1216,6 +1252,8 @@ namespace Maze.Maui.App
                 case CellType.Start:
                 case CellType.Finish:
                 case CellType.Wall:
+                case CellType.Key:
+                case CellType.Door:
                     Content = new Image
                     {
                         Source = GetImageName(true),
@@ -1245,6 +1283,10 @@ namespace Maze.Maui.App
                     return preferFlag ? "finish_flag.png" : "finish_sign.png";
                 case CellType.Wall:
                     return "wall.png";
+                case CellType.Key:
+                    return "key.png";
+                case CellType.Door:
+                    return "door.png";
             }
             return "";
         }
@@ -1313,7 +1355,12 @@ namespace Maze.Maui.App
         /// <param name="pathDirection">Path direction</param>
         public void SetSolutionPath(PathDirection pathDirection)
         {
-            if (IsEmpty || IsStartOrFinish)
+            // Empty cells get a footstep image; Start/Finish/Key/Door keep
+            // their existing icon and just gain a green BackgroundColor that
+            // shows through the icon's transparent border. (Key/Door PNGs
+            // ship with transparent corners specifically so the highlight
+            // is visible here.)
+            if (IsEmpty || IsStartOrFinish || IsKey || IsDoor)
             {
                 solutionPathDirection = pathDirection;
 
