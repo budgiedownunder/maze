@@ -120,6 +120,14 @@ namespace Maze.Interop
             /// A cell containing a wall, meaning it can't be passed through
             /// </summary>
             Wall = 3,
+            /// <summary>
+            /// A cell containing a key that can be picked up at gameplay time
+            /// </summary>
+            Key = 4,
+            /// <summary>
+            /// A cell containing a door that blocks passage until unlocked by a key
+            /// </summary>
+            Door = 5,
         }
         /// <summary>
         /// Private constructor (singleton pattern)
@@ -414,6 +422,22 @@ namespace Maze.Interop
         public void MazeSetWallCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             connector.MazeSetWallCells(mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells in a maze to keys, or throws an
+        /// exception if the cells cannot be set.
+        /// </summary>
+        public void MazeSetKeyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            connector.MazeSetKeyCells(mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells in a maze to doors, or throws an
+        /// exception if the cells cannot be set.
+        /// </summary>
+        public void MazeSetDoorCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            connector.MazeSetDoorCells(mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
         /// Clears a range of wall cells within a maze, or will throw an exception

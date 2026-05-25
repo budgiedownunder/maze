@@ -698,6 +698,57 @@ namespace Maze.Interop.Tests
             FreeMaze(mazePtr);
         }
         /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetKeyCells"/>
+        /// sets a range to keys and that
+        /// <see cref="Maze.Interop.MazeInterop.MazeGetCellType"/> returns
+        /// <see cref="MazeCellType.Key"/> (4) for those cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetKeyCells_SucceedsForValidCellRange()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(5, 10);
+            interop.MazeSetKeyCells(mazePtr, 1, 1, 2, 3);
+            AssertRangeCellType(mazePtr, 1, 1, 2, 3, MazeCellType.Key);
+            FreeMaze(mazePtr);
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetDoorCells"/>
+        /// sets a range to doors and that
+        /// <see cref="Maze.Interop.MazeInterop.MazeGetCellType"/> returns
+        /// <see cref="MazeCellType.Door"/> (5) for those cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetDoorCells_SucceedsForValidCellRange()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(5, 10);
+            interop.MazeSetDoorCells(mazePtr, 0, 4, 1, 5);
+            AssertRangeCellType(mazePtr, 0, 4, 1, 5, MazeCellType.Door);
+            FreeMaze(mazePtr);
+        }
+        /// <summary>
+        /// Confirms that key and door cells round-trip through
+        /// <see cref="Maze.Interop.MazeInterop.MazeToJson"/> with the
+        /// expected `'K'` / `'D'` characters in the grid JSON.
+        /// </summary>
+        [Fact]
+        public void MazeSetKeyAndDoorCells_RoundTripsThroughMazeToJson()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(1, 4);
+            interop.MazeSetStartCell(mazePtr, 0, 0);
+            interop.MazeSetKeyCells(mazePtr, 0, 1, 0, 1);
+            interop.MazeSetDoorCells(mazePtr, 0, 2, 0, 2);
+            interop.MazeSetFinishCell(mazePtr, 0, 3);
+            string json = interop.MazeToJson(mazePtr);
+            FreeMaze(mazePtr);
+            Assert.Contains("\"S\"", json);
+            Assert.Contains("\"K\"", json);
+            Assert.Contains("\"D\"", json);
+            Assert.Contains("\"F\"", json);
+        }
+        /// <summary>
         /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeToJson"/> succeeds and produces the expected output
         /// </summary>
         [Fact]

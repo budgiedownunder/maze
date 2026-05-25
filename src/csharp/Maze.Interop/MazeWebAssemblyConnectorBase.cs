@@ -83,6 +83,8 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? mazeSetFinishCell;
         protected IWebAssemblyFunction? mazeGetFinishCell;
         protected IWebAssemblyFunction? mazeSetWallCells;
+        protected IWebAssemblyFunction? mazeSetKeyCells;
+        protected IWebAssemblyFunction? mazeSetDoorCells;
         protected IWebAssemblyFunction? mazeClearCells;
         protected IWebAssemblyFunction? mazeInsertRows;
         protected IWebAssemblyFunction? mazeDeleteRows;
@@ -273,6 +275,20 @@ namespace Maze.Interop
         public void MazeSetWallCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             UInt32 errorPtr = (UInt32)(Int32)(mazeSetWallCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>Sets a range of cells in a maze to keys</summary>
+        public void MazeSetKeyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            UInt32 errorPtr = (UInt32)(Int32)(mazeSetKeyCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>Sets a range of cells in a maze to doors</summary>
+        public void MazeSetDoorCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            UInt32 errorPtr = (UInt32)(Int32)(mazeSetDoorCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
             if (errorPtr != 0)
                 TidyAndThrowError(errorPtr);
         }

@@ -280,6 +280,8 @@ namespace Maze.Interop
             mazeSetFinishCell = ResolveFunction("maze_wasm_set_finish_cell");
             mazeGetFinishCell = ResolveFunction("maze_wasm_get_finish_cell");
             mazeSetWallCells = ResolveFunction("maze_wasm_set_wall_cells");
+            mazeSetKeyCells = ResolveFunction("maze_wasm_set_key_cells");
+            mazeSetDoorCells = ResolveFunction("maze_wasm_set_door_cells");
             mazeClearCells = ResolveFunction("maze_wasm_clear_cells");
             mazeInsertRows = ResolveFunction("maze_wasm_insert_rows");
             mazeDeleteRows = ResolveFunction("maze_wasm_delete_rows");

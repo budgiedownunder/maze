@@ -206,6 +206,42 @@ pub extern "C" fn maze_wasm_set_wall_cells(
     set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'W')
 }
 
+/// Sets cells to keys (`'K'`) in a `MazeWasm`. Mirrors
+/// [`maze_wasm_set_wall_cells`] for the `'K'` cell character.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+///
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_key_cells(
+    maze_wasm: *mut MazeWasm,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u32 {
+    set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'K')
+}
+
+/// Sets cells to doors (`'D'`) in a `MazeWasm`. Mirrors
+/// [`maze_wasm_set_wall_cells`] for the `'D'` cell character.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+///
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_door_cells(
+    maze_wasm: *mut MazeWasm,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u32 {
+    set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'D')
+}
+
 /// Sets cells values in a `MazeWasm` to empty
 ///
 /// # Returns

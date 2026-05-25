@@ -29,6 +29,8 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern byte maze_c_maze_set_finish_cell(IntPtr ptr, UInt32 row, UInt32 col);
         [DllImport("__Internal")] private static extern byte maze_c_maze_get_finish_cell(IntPtr ptr, out UInt32 outRow, out UInt32 outCol);
         [DllImport("__Internal")] private static extern byte maze_c_maze_set_wall_cells(IntPtr ptr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
+        [DllImport("__Internal")] private static extern byte maze_c_maze_set_key_cells(IntPtr ptr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
+        [DllImport("__Internal")] private static extern byte maze_c_maze_set_door_cells(IntPtr ptr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
         [DllImport("__Internal")] private static extern byte maze_c_maze_clear_cells(IntPtr ptr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
         [DllImport("__Internal")] private static extern byte maze_c_maze_insert_rows(IntPtr ptr, UInt32 startRow, UInt32 count);
         [DllImport("__Internal")] private static extern byte maze_c_maze_delete_rows(IntPtr ptr, UInt32 startRow, UInt32 count);
@@ -157,6 +159,16 @@ namespace Maze.Interop
         public void MazeSetWallCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             ThrowIfError(maze_c_maze_set_wall_cells((IntPtr)(ulong)mazePtr, startRow, startCol, endRow, endCol));
+        }
+
+        public void MazeSetKeyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            ThrowIfError(maze_c_maze_set_key_cells((IntPtr)(ulong)mazePtr, startRow, startCol, endRow, endCol));
+        }
+
+        public void MazeSetDoorCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            ThrowIfError(maze_c_maze_set_door_cells((IntPtr)(ulong)mazePtr, startRow, startCol, endRow, endCol));
         }
 
         public void MazeClearCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)

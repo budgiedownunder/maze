@@ -678,7 +678,7 @@ impl MazeDefinition {
             return Err(Error::MazeValidation(format!("invalid 'to' point {to}")));
         }
         match value {
-            'W' | ' ' => {
+            'W' | 'K' | 'D' | ' ' => {
                 let top_row = from.row.min(to.row);
                 let bottom_row = from.row.max(to.row);
                 let left_col = from.col.min(to.col);

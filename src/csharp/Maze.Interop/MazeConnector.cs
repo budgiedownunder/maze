@@ -103,6 +103,20 @@ namespace Maze.Interop
         /// <returns>Nothing</returns>
         public void MazeSetWallCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
         /// <summary>
+        /// Sets a range of cells in a maze to keys or throws an
+        /// exception if the cells cannot be set. Mirrors
+        /// <see cref="MazeSetWallCells(UIntPtr,uint,uint,uint,uint)"/> for the
+        /// `'K'` cell character.
+        /// </summary>
+        public void MazeSetKeyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
+        /// <summary>
+        /// Sets a range of cells in a maze to doors, or throws an
+        /// exception if the cells cannot be set. Mirrors
+        /// <see cref="MazeSetWallCells(UIntPtr,uint,uint,uint,uint)"/> for the
+        /// `'D'` cell character.
+        /// </summary>
+        public void MazeSetDoorCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
+        /// <summary>
         /// Clears a range of wall cells within a maze, or will throw an exception
         /// if the cells cannot be cleared
         /// </summary>

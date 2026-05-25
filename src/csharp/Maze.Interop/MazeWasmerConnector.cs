@@ -916,6 +916,8 @@ hasResult)
                 { "maze_wasm_set_finish_cell", () => ref this.mazeSetFinishCell },
                 { "maze_wasm_get_finish_cell", () => ref this.mazeGetFinishCell },
                 { "maze_wasm_set_wall_cells", () => ref this.mazeSetWallCells },
+                { "maze_wasm_set_key_cells", () => ref this.mazeSetKeyCells },
+                { "maze_wasm_set_door_cells", () => ref this.mazeSetDoorCells },
                 { "maze_wasm_clear_cells", () => ref this.mazeClearCells },
                 { "maze_wasm_insert_rows", () => ref this.mazeInsertRows },
                 { "maze_wasm_delete_rows", () => ref this.mazeDeleteRows },

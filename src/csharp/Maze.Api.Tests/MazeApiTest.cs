@@ -572,6 +572,55 @@ namespace Maze.Api.Tests
             }
         }
         /// <summary>
+        /// Confirms that <see cref="Maze.SetKeyCells"/> succeeds and
+        /// <see cref="Maze.GetCellType"/> returns <see cref="Maze.CellType.Key"/>
+        /// for the affected cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetKeyCells_SucceedsForValidCellRange()
+        {
+            using (Maze maze = new Maze(5, 10))
+            {
+                maze.SetKeyCells(1, 1, 2, 3);
+                AssertRangeCellType(maze, 1, 1, 2, 3, Maze.CellType.Key);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.SetDoorCells"/> succeeds and
+        /// <see cref="Maze.GetCellType"/> returns <see cref="Maze.CellType.Door"/>
+        /// for the affected cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetDoorCells_SucceedsForValidCellRange()
+        {
+            using (Maze maze = new Maze(5, 10))
+            {
+                maze.SetDoorCells(0, 4, 1, 5);
+                AssertRangeCellType(maze, 0, 4, 1, 5, Maze.CellType.Door);
+            }
+        }
+        /// <summary>
+        /// Confirms that K and D cells round-trip through
+        /// <see cref="Maze.ToJson"/> with the expected `'K'` / `'D'`
+        /// characters in the grid JSON.
+        /// </summary>
+        [Fact]
+        public void MazeSetKeyAndDoorCells_RoundTripsThroughToJson()
+        {
+            using (Maze maze = new Maze(1, 4))
+            {
+                maze.SetStartCell(0, 0);
+                maze.SetKeyCells(0, 1, 0, 1);
+                maze.SetDoorCells(0, 2, 0, 2);
+                maze.SetFinishCell(0, 3);
+                string json = maze.ToJson();
+                Assert.Contains("\"S\"", json);
+                Assert.Contains("\"K\"", json);
+                Assert.Contains("\"D\"", json);
+                Assert.Contains("\"F\"", json);
+            }
+        }
+        /// <summary>
         /// Confirms that <see cref="Maze.ToJson"/> succeeds
         /// </summary>
         [Fact]

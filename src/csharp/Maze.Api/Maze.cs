@@ -53,6 +53,14 @@ namespace Maze.Api
             /// A cell containing a wall, meaning it can't be passed through
             /// </summary>
             Wall = 3,
+            /// <summary>
+            /// A cell containing a key that can be picked up at gameplay time
+            /// </summary>
+            Key = 4,
+            /// <summary>
+            /// A cell containing a door that blocks passage until unlocked by a key
+            /// </summary>
+            Door = 5,
         }
 
         /// <summary>
@@ -422,6 +430,30 @@ namespace Maze.Api
         public void SetWallCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             Interop.MazeSetWallCells(_mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells to keys within a maze, or will throw
+        /// an exception if the keys cannot be set.
+        /// </summary>
+        /// <param name="startRow">Target start row</param>
+        /// <param name="startCol">Target start column</param>
+        /// <param name="endRow">Target end row</param>
+        /// <param name="endCol">Target end column</param>
+        public void SetKeyCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            Interop.MazeSetKeyCells(_mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells to doors within a maze, or will throw
+        /// an exception if the doors cannot be set.
+        /// </summary>
+        /// <param name="startRow">Target start row</param>
+        /// <param name="startCol">Target start column</param>
+        /// <param name="endRow">Target end row</param>
+        /// <param name="endCol">Target end column</param>
+        public void SetDoorCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            Interop.MazeSetDoorCells(_mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
         /// Inserts rows into the maze, or will throw an exception if the rows cannot be inserted

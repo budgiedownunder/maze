@@ -46,6 +46,8 @@ pub enum MazeCellTypeWasm {
     Start,
     Finish,
     Wall,
+    Key,
+    Door,
 }
 
 /// Identifies the type of a maze cell.
@@ -58,6 +60,8 @@ pub enum MazeCellTypeWasm {
     Start,
     Finish,
     Wall,
+    Key,
+    Door,
 }
 
 /// Identifies the maze generation algorithm to use.
@@ -156,6 +160,8 @@ pub fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
         'S' => MazeCellTypeWasm::Start,
         'F' => MazeCellTypeWasm::Finish,
         'W' => MazeCellTypeWasm::Wall,
+        'K' => MazeCellTypeWasm::Key,
+        'D' => MazeCellTypeWasm::Door,
         _ => MazeCellTypeWasm::Empty,
     }
 }

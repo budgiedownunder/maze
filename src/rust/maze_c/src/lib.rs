@@ -452,6 +452,8 @@ pub unsafe extern "C" fn maze_c_maze_get_cell_type(
         'S' => 1,
         'F' => 2,
         'W' => 3,
+        'K' => 4,
+        'D' => 5,
         _ => 0,
     };
     if !out_cell_type.is_null() {
@@ -736,6 +738,74 @@ pub extern "C" fn maze_c_maze_set_wall_cells(
 ) -> u8 {
     clear_last_error();
     set_cell_range(ptr, start_row, start_col, end_row, end_col, 'W')
+}
+
+/// Sets a rectangular range of cells to keys (`'K'`). Returns `1` on success, `0` on error.
+///
+/// # Examples
+///
+/// Resize a maze to 3 × 3, set cell (1, 1) as a key, and assert its cell
+/// type is Key (4).
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 3, 3);
+///
+/// let ok = maze_c_maze_set_key_cells(ptr, 1, 1, 1, 1);
+/// assert_eq!(ok, 1);
+///
+/// let mut ct: u32 = 0;
+/// unsafe { maze_c_maze_get_cell_type(ptr, 1, 1, &mut ct) };
+/// assert_eq!(ct, 4, "expected Key at (1, 1)");
+///
+/// maze_c_free_maze(ptr);
+/// ```
+#[no_mangle]
+pub extern "C" fn maze_c_maze_set_key_cells(
+    ptr: *mut MazeC,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u8 {
+    clear_last_error();
+    set_cell_range(ptr, start_row, start_col, end_row, end_col, 'K')
+}
+
+/// Sets a rectangular range of cells to doors (`'D'`). Returns `1` on success, `0` on error.
+///
+/// # Examples
+///
+/// Resize a maze to 3 × 3, set cell (1, 2) as a door, and assert its cell
+/// type is Door (5).
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 3, 3);
+///
+/// let ok = maze_c_maze_set_door_cells(ptr, 1, 2, 1, 2);
+/// assert_eq!(ok, 1);
+///
+/// let mut ct: u32 = 0;
+/// unsafe { maze_c_maze_get_cell_type(ptr, 1, 2, &mut ct) };
+/// assert_eq!(ct, 5, "expected Door at (1, 2)");
+///
+/// maze_c_free_maze(ptr);
+/// ```
+#[no_mangle]
+pub extern "C" fn maze_c_maze_set_door_cells(
+    ptr: *mut MazeC,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u8 {
+    clear_last_error();
+    set_cell_range(ptr, start_row, start_col, end_row, end_col, 'D')
 }
 
 /// Clears (empties) a rectangular range of cells. Returns `1` on success, `0` on error.
@@ -2310,6 +2380,69 @@ mod tests {
                 assert_eq!(ct, 3, "expected Wall at ({r},{c})");
             }
         }
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn can_set_key_cells() {
+        let ptr = new_maze();
+        maze_c_maze_resize(ptr, 5, 5);
+        let ok = maze_c_maze_set_key_cells(ptr, 1, 1, 3, 3);
+        assert_eq!(ok, 1);
+        for r in 0..5_u32 {
+            for c in 0..5_u32 {
+                let mut ct: u32 = 99;
+                unsafe { maze_c_maze_get_cell_type(ptr, r, c, &mut ct) };
+                let inside = (1..=3).contains(&r) && (1..=3).contains(&c);
+                assert_eq!(
+                    ct,
+                    if inside { 4 } else { 0 },
+                    "expected {} at ({r},{c})",
+                    if inside { "Key" } else { "Empty" },
+                );
+            }
+        }
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn can_set_door_cells() {
+        let ptr = new_maze();
+        maze_c_maze_resize(ptr, 5, 5);
+        let ok = maze_c_maze_set_door_cells(ptr, 0, 4, 2, 4);
+        assert_eq!(ok, 1);
+        for r in 0..5_u32 {
+            for c in 0..5_u32 {
+                let mut ct: u32 = 99;
+                unsafe { maze_c_maze_get_cell_type(ptr, r, c, &mut ct) };
+                let inside = (0..=2).contains(&r) && c == 4;
+                assert_eq!(
+                    ct,
+                    if inside { 5 } else { 0 },
+                    "expected {} at ({r},{c})",
+                    if inside { "Door" } else { "Empty" },
+                );
+            }
+        }
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn set_key_cells_fails_for_empty_maze() {
+        let ptr = new_maze();
+        let ok = maze_c_maze_set_key_cells(ptr, 0, 0, 0, 0);
+        assert_eq!(ok, 0);
+        assert!(last_error_str().is_some());
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn set_door_cells_fails_for_invalid_end_location() {
+        let ptr = new_maze();
+        maze_c_maze_resize(ptr, 3, 3);
+        let ok = maze_c_maze_set_door_cells(ptr, 0, 0, 5, 5);
+        assert_eq!(ok, 0);
+        assert!(last_error_str().is_some());
         unsafe { maze_c_free_maze(ptr) };
     }
 
