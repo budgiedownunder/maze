@@ -445,7 +445,7 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Task containing a boolean result</returns>
         public async Task<bool> SaveMaze(Api.Maze definition)
         {
-            (uint keys, uint doors) = CountKeysAndDoors(definition);
+            (uint keys, uint doors) = Utils.MazeCellCounter.CountKeysAndDoors(definition);
             if (keys + doors > Api.Maze.MaxTotalFeatures)
             {
                 await _dialogService.ShowAlert(
@@ -477,28 +477,6 @@ namespace Maze.Maui.App.ViewModels
                 await _dialogService.ShowAlert("Error", $"Failed to save maze\n\n{ex.Message.CapitalizeFirst()}", "OK");
             }
             return saved;
-        }
-        /// <summary>
-        /// Counts the key and door cells in the supplied maze definition. 
-        /// Walks the grid via <see cref="Api.Maze.GetCellType"/>.
-        /// </summary>
-        private static (uint keys, uint doors) CountKeysAndDoors(Api.Maze definition)
-        {
-            uint keys = 0, doors = 0;
-            uint rows = definition.RowCount;
-            uint cols = definition.ColCount;
-            for (uint r = 0; r < rows; r++)
-            {
-                for (uint c = 0; c < cols; c++)
-                {
-                    switch (definition.GetCellType(r, c))
-                    {
-                        case Api.Maze.CellType.Key: keys++; break;
-                        case Api.Maze.CellType.Door: doors++; break;
-                    }
-                }
-            }
-            return (keys, doors);
         }
         /// <summary>
         /// Prompts the user for a maze name and then creates a new maze item with that name and 

@@ -508,7 +508,13 @@ namespace Maze.Maui.App.Views
                 uint minSolutionLength = _lastMinSolutionLength is uint last && last <= rows * cols
                     ? last
                     : defaultMinSolutionLength;
-                uint doorCount = 0, spareDoors = 0, spareKeys = 0;
+                // Seed Doors from the existing 'D' cell count so regenerating
+                // preserves the author's door count. Spare Doors / Spare Keys
+                // stay at 0 — the grid alone can't tell us which dootr/key
+                // cells were decoys vs real path doors, so the safe default
+                // is "no extras" and let the author opt in.
+                uint doorCount = current.IsEmpty ? 0 : MazeCellCounter.CountCellsOfType(current, Maze.CellType.Door);
+                uint spareDoors = 0, spareKeys = 0;
                 string? generationError = null;
 
                 while (true)
