@@ -118,6 +118,11 @@ i32           maze_game_wasm_player_direction(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_is_complete(MazeGameWasm* maze_game_wasm);      // 1=true, 0=false, -1=null
 i32           maze_game_wasm_is_lost(MazeGameWasm* maze_game_wasm);           // 1=true, 0=false, -1=null
 i32           maze_game_wasm_lose_reason(MazeGameWasm* maze_game_wasm);       // 0=None, 1=Stranded, -1=null
+i32           maze_game_wasm_pickup(MazeGameWasm* maze_game_wasm,
+                                    u32* kind_out, u32* id_out);              // 0=ok, -1=no item / null
+i32           maze_game_wasm_bag_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_bag_item(MazeGameWasm* maze_game_wasm, i32 index,
+                                          u32* kind_out, u32* id_out);        // 0=ok, -1=error
 i32           maze_game_wasm_visited_cell_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_visited_cell(MazeGameWasm* maze_game_wasm, i32 index,
                                               i32* row_out, i32* col_out);   // 0=ok, -1=error

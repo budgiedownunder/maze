@@ -66,6 +66,9 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_is_complete(IntPtr ptr);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_is_lost(IntPtr ptr);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_lose_reason(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_pickup(IntPtr ptr, out uint kindOut, out uint idOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_bag_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_bag_item(IntPtr ptr, int index, out uint kindOut, out uint idOut);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_visited_cell_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_visited_cell(IntPtr ptr, int index, out int rowOut, out int colOut);
 
@@ -366,6 +369,25 @@ namespace Maze.Interop
         public int MazeGameLoseReason(UIntPtr gamePtr)
         {
             return maze_c_maze_game_lose_reason((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGamePickup(UIntPtr gamePtr, out MazeInterop.MazeBagItem item)
+        {
+            byte result = maze_c_maze_game_pickup((IntPtr)(ulong)gamePtr, out uint kind, out uint id);
+            item = new MazeInterop.MazeBagItem { Kind = (MazeInterop.MazeBagItemKind)kind, Id = id };
+            return result != 0;
+        }
+
+        public int MazeGameBagCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_bag_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetBagItem(UIntPtr gamePtr, int index, out MazeInterop.MazeBagItem item)
+        {
+            byte result = maze_c_maze_game_get_bag_item((IntPtr)(ulong)gamePtr, index, out uint kind, out uint id);
+            item = new MazeInterop.MazeBagItem { Kind = (MazeInterop.MazeBagItemKind)kind, Id = id };
+            return result != 0;
         }
 
         public int MazeGameVisitedCellCount(UIntPtr gamePtr)

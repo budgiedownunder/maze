@@ -2101,6 +2101,153 @@ pub extern "C" fn maze_c_maze_game_lose_reason(ptr: *mut MazeGameC) -> i32 {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — bag / pickup
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Attempts to pick up a collectible at the player's current cell.
+///
+/// On success returns `1` and writes the kind / id of the picked item into
+/// `*out_kind` / `*out_id`. On failure (no collectible at the player's cell)
+/// returns `0` and the out-parameters are not written.
+///
+/// `kind` encoding: `0` = Key (the only variant in the current bag model).
+/// New variants extend the kind space.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// `out_kind` and `out_id` may be null; non-null pointers must be valid
+/// writable locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// // Player at (0,0); key at (0,1); finish at (0,2).
+/// let json = CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+///
+/// // Standing on S → no pickup.
+/// let mut k: u32 = 99;
+/// let mut id: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+/// assert_eq!(ok, 0);
+///
+/// // Step onto the K cell, then pick it up.
+/// maze_c_maze_game_move_player(ptr, 4); // Right
+/// let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(k, 0); // Key
+///
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_pickup(
+    ptr: *mut MazeGameC,
+    out_kind: *mut u32,
+    out_id: *mut u32,
+) -> u8 {
+    let game = unsafe { &mut (*ptr).game };
+    match game.pickup() {
+        Some(maze::BagItem::Key { id }) => {
+            unsafe {
+                if !out_kind.is_null() {
+                    *out_kind = 0; // Key
+                }
+                if !out_id.is_null() {
+                    *out_id = id;
+                }
+            }
+            1
+        }
+        None => 0,
+    }
+}
+
+/// Returns the number of items currently in the player's bag.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_bag_count(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_bag_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.bag().len() as i32
+}
+
+/// Retrieves a single bag item by index.
+///
+/// Writes the item's kind code and id into `*out_kind` / `*out_id`. Returns
+/// `1` on success, `0` if `index` is out of range.
+///
+/// `kind` encoding: `0` = Key.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// `out_kind` and `out_id` may be null; non-null pointers must be valid
+/// writable locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right onto K
+/// let mut k: u32 = 99;
+/// let mut id: u32 = 99;
+/// unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+///
+/// let mut k2: u32 = 99;
+/// let mut id2: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, 0, &mut k2, &mut id2) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(k2, 0); // Key
+/// assert_eq!(id2, id);
+///
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_bag_item(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_kind: *mut u32,
+    out_id: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let bag = game.bag();
+    if index < 0 || index as usize >= bag.len() {
+        return 0;
+    }
+    let maze::BagItem::Key { id } = bag[index as usize];
+    unsafe {
+        if !out_kind.is_null() {
+            *out_kind = 0; // Key
+        }
+        if !out_id.is_null() {
+            *out_id = id;
+        }
+    }
+    1
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // MazeGameC — visited cells
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -3128,6 +3275,80 @@ mod tests {
         let json = simple_game_json();
         let ptr = new_game(&json);
         assert_eq!(maze_c_maze_game_lose_reason(ptr), 0); // None
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — bag / pickup ──────────────────────────────────────────────
+
+    fn key_game_json() -> CString {
+        // 1 row, 3 cols: S at (0,0), K at (0,1), F at (0,2)
+        CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap()
+    }
+
+    #[test]
+    fn game_initial_bag_is_empty() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_bag_count(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_pickup_on_non_key_cell_returns_zero() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut k: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        assert_eq!(ok, 0);
+        assert_eq!(maze_c_maze_game_bag_count(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_pickup_on_key_cell_succeeds_and_grows_bag() {
+        let json = key_game_json();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // Right → key cell
+        let mut k: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!(k, 0); // Key
+        assert_eq!(maze_c_maze_game_bag_count(ptr), 1);
+        // Second pickup at same cell returns 0 (cell now cleared).
+        let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        assert_eq!(ok, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_bag_item_returns_picked_item() {
+        let json = key_game_json();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4);
+        let mut pk_k: u32 = 99;
+        let mut pk_id: u32 = 99;
+        unsafe { maze_c_maze_game_pickup(ptr, &mut pk_k, &mut pk_id) };
+        let mut k: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, 0, &mut k, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!(k, pk_k);
+        assert_eq!(id, pk_id);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_bag_item_out_of_range_returns_zero() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut k: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, 0, &mut k, &mut id) };
+        assert_eq!(ok, 0); // empty bag → 0 out of range
+        let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, -1, &mut k, &mut id) };
+        assert_eq!(ok, 0); // negative index → 0
         maze_c_free_maze_game(ptr);
     }
 

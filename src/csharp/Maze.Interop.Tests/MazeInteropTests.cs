@@ -1307,6 +1307,82 @@ namespace Maze.Interop.Tests
             Assert.Equal((int)MazeLoseReason.None, reason);
         }
 
+        // 1 row, 3 cols: S[0,0]  K[0,1]  F[0,2]
+        private const string KeyGameJson = """{"grid":[["S","K","F"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameBagCount"/> returns 0 for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameBagCount_ShouldReturn0_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
+            int count = interop.MazeGameBagCount(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, count);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGamePickup"/> returns false when the player's cell holds no collectible
+        /// </summary>
+        [Fact]
+        public void MazeGamePickup_ShouldReturnFalse_OnNonKeyCell()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
+            bool ok = interop.MazeGamePickup(gamePtr, out MazeBagItem _);
+            FreeMazeGame(gamePtr);
+            Assert.False(ok);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGamePickup"/> succeeds after walking onto a key cell
+        /// </summary>
+        [Fact]
+        public void MazeGamePickup_ShouldSucceed_OnKeyCell()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → key cell
+            bool ok = interop.MazeGamePickup(gamePtr, out MazeBagItem item);
+            int count = interop.MazeGameBagCount(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.True(ok);
+            Assert.Equal(MazeBagItemKind.Key, item.Kind);
+            Assert.Equal(1, count);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetBagItem"/> returns false for an empty bag
+        /// </summary>
+        [Fact]
+        public void MazeGameGetBagItem_ShouldReturnFalse_ForEmptyBag()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
+            bool ok = interop.MazeGameGetBagItem(gamePtr, 0, out MazeBagItem _);
+            FreeMazeGame(gamePtr);
+            Assert.False(ok);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetBagItem"/> returns the picked item after pickup
+        /// </summary>
+        [Fact]
+        public void MazeGameGetBagItem_ShouldReturnPickedItem()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
+            interop.MazeGameMovePlayer(gamePtr, 4);
+            interop.MazeGamePickup(gamePtr, out MazeBagItem picked);
+            bool ok = interop.MazeGameGetBagItem(gamePtr, 0, out MazeBagItem item);
+            FreeMazeGame(gamePtr);
+            Assert.True(ok);
+            Assert.Equal(picked.Kind, item.Kind);
+            Assert.Equal(picked.Id, item.Id);
+        }
+
         /// <summary>
         /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameVisitedCellCount"/> returns 1 (start cell) before any moves
         /// </summary>

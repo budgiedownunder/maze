@@ -28,6 +28,14 @@ int32_t maze_c_maze_game_is_complete(MazeGameC* ptr);   // 0 or 1
 int32_t maze_c_maze_game_is_lost(MazeGameC* ptr);       // 0 or 1
 int32_t maze_c_maze_game_lose_reason(MazeGameC* ptr);   // see LoseReason encoding
 
+// Bag / pickup (valid pointer assumed; out parameters may be null)
+uint8_t maze_c_maze_game_pickup(MazeGameC* ptr, uint32_t* kind_out, uint32_t* id_out);
+                                                        // 1 = picked up, 0 = nothing there
+int32_t maze_c_maze_game_bag_count(MazeGameC* ptr);
+uint8_t maze_c_maze_game_get_bag_item(MazeGameC* ptr, int32_t index,
+                                      uint32_t* kind_out, uint32_t* id_out);
+                                                        // 1 = success, 0 = out-of-range
+
 // Visited cells (valid pointer assumed)
 int32_t maze_c_maze_game_visited_cell_count(MazeGameC* ptr);
 uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
@@ -64,6 +72,12 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 |:-----:|:-------|
 | 0 | None (the game is not lost) |
 | 1 | Stranded (the player can no longer hold enough keys to open every closed door remaining on a route to the finish) |
+
+**BagItemKind encoding** (`kind_out` of `pickup` / `get_bag_item`):
+
+| Value | Kind |
+|:-----:|:-----|
+| 0 | Key |
 
 **Memory ownership:** The caller must call `maze_c_free_maze_game` when done. Passing `null` to `free` is safe and has no effect.
 

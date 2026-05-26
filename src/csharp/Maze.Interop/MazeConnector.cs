@@ -327,6 +327,28 @@ namespace Maze.Interop
         /// <returns>0=None 1=Stranded</returns>
         public int MazeGameLoseReason(UIntPtr gamePtr);
         /// <summary>
+        /// Attempts to pick up a collectible at the player's current cell.
+        /// Adds the item to the bag and clears the cell on success.
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="item">Receives the picked item on success</param>
+        /// <returns>True if an item was picked up; false if the player's cell holds no collectible</returns>
+        public bool MazeGamePickup(UIntPtr gamePtr, out MazeBagItem item);
+        /// <summary>
+        /// Returns the number of items currently in the player's bag
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Bag size</returns>
+        public int MazeGameBagCount(UIntPtr gamePtr);
+        /// <summary>
+        /// Retrieves a single bag item by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the bag</param>
+        /// <param name="item">Receives the bag item on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetBagItem(UIntPtr gamePtr, int index, out MazeBagItem item);
+        /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)
         /// </summary>
         /// <param name="gamePtr">Pointer to game session</param>

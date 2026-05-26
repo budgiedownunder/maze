@@ -45,6 +45,18 @@ namespace Maze.Api
         Stranded = 1
     }
 
+    /// <summary>Kind of item carried in the player's bag. Mirrors the Rust <c>maze::BagItem</c> tagged enum.</summary>
+    public enum BagItemKind
+    {
+        /// <summary>A key that can open one door.</summary>
+        Key = 0
+    }
+
+    /// <summary>One item in the player's bag — see <see cref="MazeGame.Bag"/> and <see cref="MazeGame.Pickup"/>.</summary>
+    /// <param name="Kind">The kind of item.</param>
+    /// <param name="Id">Stable identifier for the item (e.g. derived from the key's origin cell).</param>
+    public readonly record struct BagItem(BagItemKind Kind, uint Id);
+
     /// <summary>A cell visited by the player, identified by its zero-based row and column.</summary>
     public record MazeGameVisitedCell(int Row, int Col);
 
@@ -146,6 +158,34 @@ namespace Maze.Api
                         cells.Add(new MazeGameVisitedCell(row, col));
                 }
                 return cells;
+            }
+        }
+
+        /// <summary>
+        /// Attempts to pick up a collectible at the player's current cell.
+        /// On success the item is added to <see cref="Bag"/> and the cell is cleared.
+        /// </summary>
+        /// <returns>The collected item, or <c>null</c> if the player's cell holds no collectible.</returns>
+        public BagItem? Pickup()
+        {
+            if (Interop.MazeGamePickup(_gamePtr, out var item))
+                return new BagItem((BagItemKind)item.Kind, item.Id);
+            return null;
+        }
+
+        /// <summary>All items currently in the player's bag, in pickup order.</summary>
+        public IReadOnlyList<BagItem> Bag
+        {
+            get
+            {
+                int count = Interop.MazeGameBagCount(_gamePtr);
+                var items = new List<BagItem>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    if (Interop.MazeGameGetBagItem(_gamePtr, i, out var item))
+                        items.Add(new BagItem((BagItemKind)item.Kind, item.Id));
+                }
+                return items;
             }
         }
     }

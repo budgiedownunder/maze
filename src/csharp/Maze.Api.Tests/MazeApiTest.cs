@@ -1314,6 +1314,57 @@ namespace Maze.Api.Tests
             Assert.Equal(6, (int)MazeGameMoveResult.Stranded);
         }
 
+        // 1 row, 3 cols: S[0,0]  K[0,1]  F[0,2]
+        private const string KeyGameJson = """{"grid":[["S","K","F"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Bag"/> is empty for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameBag_ShouldBeEmpty_Initially()
+        {
+            using MazeGame game = MazeGame.Create(KeyGameJson);
+            Assert.Empty(game.Bag);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Pickup"/> returns null when the player's cell holds no collectible
+        /// </summary>
+        [Fact]
+        public void MazeGamePickup_ShouldReturnNull_OnNonKeyCell()
+        {
+            using MazeGame game = MazeGame.Create(KeyGameJson);
+            Assert.Null(game.Pickup());
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Pickup"/> collects a key and grows <see cref="MazeGame.Bag"/>
+        /// </summary>
+        [Fact]
+        public void MazeGamePickup_ShouldCollectKey_AndGrowBag()
+        {
+            using MazeGame game = MazeGame.Create(KeyGameJson);
+            game.MovePlayer(MazeGameDirection.Right); // onto K
+            BagItem? picked = game.Pickup();
+            Assert.NotNull(picked);
+            Assert.Equal(BagItemKind.Key, picked!.Value.Kind);
+            Assert.Single(game.Bag);
+            Assert.Equal(picked.Value, game.Bag[0]);
+        }
+
+        /// <summary>
+        /// Confirms that calling <see cref="MazeGame.Pickup"/> a second time at the same cell returns null
+        /// </summary>
+        [Fact]
+        public void MazeGamePickup_ShouldReturnNull_OnSecondCallAtSameCell()
+        {
+            using MazeGame game = MazeGame.Create(KeyGameJson);
+            game.MovePlayer(MazeGameDirection.Right);
+            game.Pickup();
+            Assert.Null(game.Pickup());
+            Assert.Single(game.Bag);
+        }
+
         /// <summary>
         /// Confirms that <see cref="MazeGame.VisitedCells"/> contains only the start cell before any moves
         /// </summary>

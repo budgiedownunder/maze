@@ -1170,6 +1170,96 @@ pub extern "C" fn maze_game_wasm_lose_reason(maze_game_wasm: *mut MazeGameWasm) 
     }
 }
 
+/// Attempts to pick up a collectible at the player's current cell.
+///
+/// Writes the picked item's kind / id into `*out_kind` / `*out_id` on success.
+/// `kind` encoding: `0` = Key (the only variant in the current bag model).
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or when the player's current
+/// cell holds no collectible.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_pickup(
+    maze_game_wasm: *mut MazeGameWasm,
+    out_kind: *mut u32,
+    out_id: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &mut (*maze_game_wasm).game };
+    match game.pickup() {
+        Some(maze::BagItem::Key { id }) => {
+            unsafe {
+                if !out_kind.is_null() {
+                    *out_kind = 0; // Key
+                }
+                if !out_id.is_null() {
+                    *out_id = id;
+                }
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+/// Returns the number of items currently in the player's bag.
+///
+/// # Returns
+///
+/// The bag size, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_bag_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.bag().len() as i32
+}
+
+/// Retrieves a single bag item by `index`.
+///
+/// Writes the item's kind code and id into `*out_kind` / `*out_id` on success.
+/// `kind` encoding: `0` = Key.
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_bag_item(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_kind: *mut u32,
+    out_id: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let bag = game.bag();
+    if index < 0 || index as usize >= bag.len() {
+        return -1;
+    }
+    let maze::BagItem::Key { id } = bag[index as usize];
+    unsafe {
+        if !out_kind.is_null() {
+            *out_kind = 0; // Key
+        }
+        if !out_id.is_null() {
+            *out_id = id;
+        }
+    }
+    0
+}
+
 /// Returns the number of cells in the visited-cells list.
 ///
 /// # Returns

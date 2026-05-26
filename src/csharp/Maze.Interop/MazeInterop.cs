@@ -145,6 +145,25 @@ namespace Maze.Interop
             Stranded = 1,
         }
         /// <summary>
+        /// Kind of item carried in the player's bag. Mirrors the Rust
+        /// `maze::BagItem` tagged enum. New item kinds extend the integer space.
+        /// </summary>
+        public enum MazeBagItemKind : uint
+        {
+            /// <summary>A key that can open one door</summary>
+            Key = 0,
+        }
+        /// <summary>
+        /// One item in the player's bag.
+        /// </summary>
+        public struct MazeBagItem
+        {
+            /// <summary>The kind of item</summary>
+            public MazeBagItemKind Kind;
+            /// <summary>Stable identifier for the item (e.g. derived from the key's origin cell)</summary>
+            public uint Id;
+        }
+        /// <summary>
         /// Private constructor (singleton pattern)
         /// </summary>
         /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
@@ -770,6 +789,37 @@ namespace Maze.Interop
         public int MazeGameLoseReason(UIntPtr gamePtr)
         {
             return connector.MazeGameLoseReason(gamePtr);
+        }
+        /// <summary>
+        /// Attempts to pick up a collectible at the player's current cell.
+        /// Adds the item to the bag and clears the cell on success.
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="item">Receives the picked item on success</param>
+        /// <returns>True if an item was picked up; false if the player's cell holds no collectible</returns>
+        public bool MazeGamePickup(UIntPtr gamePtr, out MazeBagItem item)
+        {
+            return connector.MazeGamePickup(gamePtr, out item);
+        }
+        /// <summary>
+        /// Returns the number of items currently in the player's bag
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Bag size</returns>
+        public int MazeGameBagCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameBagCount(gamePtr);
+        }
+        /// <summary>
+        /// Retrieves a single bag item by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the bag</param>
+        /// <param name="item">Receives the bag item on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetBagItem(UIntPtr gamePtr, int index, out MazeBagItem item)
+        {
+            return connector.MazeGameGetBagItem(gamePtr, index, out item);
         }
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)
