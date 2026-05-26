@@ -1383,6 +1383,112 @@ namespace Maze.Interop.Tests
             Assert.Equal(picked.Id, item.Id);
         }
 
+        // 1 row, 4 cols: S[0,0] K[0,1] D[0,2] F[0,3]
+        private const string DoorGameJson = """{"grid":[["S","K","D","F"]]}""";
+        // Mirrors the maze-crate strand fixture: real door on the top row, decoy door on the side branch.
+        private const string DecoyStrandGameJson = """{"grid":[["S","K","D","F"],["W","D","W","W"],["W"," ","W","W"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameDoorCount"/> returns the number of door cells
+        /// </summary>
+        [Fact]
+        public void MazeGameDoorCount_ShouldReturnNumberOfDoorCells()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(DoorGameJson);
+            int count = interop.MazeGameDoorCount(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(1, count);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetDoor"/> returns Locked for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameGetDoor_ShouldReturnLocked_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(DoorGameJson);
+            bool ok = interop.MazeGameGetDoor(gamePtr, 0, out MazeDoor door);
+            FreeMazeGame(gamePtr);
+            Assert.True(ok);
+            Assert.Equal(0u, door.Row);
+            Assert.Equal(2u, door.Column);
+            Assert.Equal(MazeDoorState.Locked, door.State);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameTickEventCount"/> returns 0 before any tick
+        /// </summary>
+        [Fact]
+        public void MazeGameTickEventCount_ShouldReturn0_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int count = interop.MazeGameTickEventCount(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, count);
+        }
+
+        /// <summary>
+        /// Confirms the S→K→D→F happy path: pickup, step into door (StartedUnlocking), tick (DoorOpened event),
+        /// door state transitions to Open, final step Completes.
+        /// </summary>
+        [Fact]
+        public void MazeGameTick_ShouldEmitDoorOpened_AndFlipDoorToOpen_AfterUnlocking()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(DoorGameJson);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → K
+            interop.MazeGamePickup(gamePtr, out _);
+            int unlockResult = interop.MazeGameMovePlayer(gamePtr, 4); // into D
+            Assert.Equal(5, unlockResult); // StartedUnlocking
+
+            int eventCount = interop.MazeGameTick(gamePtr, 1000f);
+            Assert.Equal(1, eventCount);
+            Assert.Equal(1, interop.MazeGameTickEventCount(gamePtr));
+
+            bool gotEvent = interop.MazeGameGetTickEvent(gamePtr, 0, out MazeGameEvent evt);
+            Assert.True(gotEvent);
+            Assert.Equal(MazeGameEventKind.DoorOpened, evt.Kind);
+            Assert.Equal(0u, evt.Row);
+            Assert.Equal(2u, evt.Column);
+
+            interop.MazeGameGetDoor(gamePtr, 0, out MazeDoor door);
+            Assert.Equal(MazeDoorState.Open, door.State);
+
+            // StartedUnlocking did not move the player — they're still on K.
+            // Step through the open door, then onto F.
+            int throughDoor = interop.MazeGameMovePlayer(gamePtr, 4);
+            int completeResult = interop.MazeGameMovePlayer(gamePtr, 4);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(1, throughDoor); // Moved
+            Assert.Equal(3, completeResult); // Complete
+        }
+
+        /// <summary>
+        /// Confirms the strand round-trip end-to-end: detouring into a decoy door with the only key burns it,
+        /// walking through the decoy strands the player, MoveResult is Stranded, IsLost is true,
+        /// and LoseReason is Stranded. Validates the lose-state plumbing through a real door traversal.
+        /// </summary>
+        [Fact]
+        public void MazeGame_DecoyDoorWalkThrough_ShouldStrandAndFlipLoseState()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(DecoyStrandGameJson);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → K
+            interop.MazeGamePickup(gamePtr, out _);
+            interop.MazeGameMovePlayer(gamePtr, 2); // Down → StartedUnlocking decoy
+            interop.MazeGameTick(gamePtr, 1000f);
+            int result = interop.MazeGameMovePlayer(gamePtr, 2); // Walk through decoy → Stranded
+            int isLost = interop.MazeGameIsLost(gamePtr);
+            int reason = interop.MazeGameLoseReason(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(6, result); // Stranded
+            Assert.Equal(1, isLost);
+            Assert.Equal((int)MazeLoseReason.Stranded, reason);
+        }
+
         /// <summary>
         /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameVisitedCellCount"/> returns 1 (start cell) before any moves
         /// </summary>

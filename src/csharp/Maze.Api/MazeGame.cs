@@ -57,6 +57,36 @@ namespace Maze.Api
     /// <param name="Id">Stable identifier for the item (e.g. derived from the key's origin cell).</param>
     public readonly record struct BagItem(BagItemKind Kind, uint Id);
 
+    /// <summary>Lifecycle state of a door cell. Mirrors the Rust <c>maze::DoorState</c> enum.</summary>
+    public enum DoorState
+    {
+        /// <summary>Closed and locked; requires a key to open.</summary>
+        Locked = 0,
+        /// <summary>Currently opening; will transition to <see cref="Open"/> on the next sufficient tick.</summary>
+        Opening = 1,
+        /// <summary>Fully open and permanently passable.</summary>
+        Open = 2
+    }
+
+    /// <summary>One door cell along with its current state — see <see cref="MazeGame.Doors"/>.</summary>
+    /// <param name="Row">Row of the door cell.</param>
+    /// <param name="Column">Column of the door cell.</param>
+    /// <param name="State">Current state of the door.</param>
+    public readonly record struct DoorInfo(uint Row, uint Column, DoorState State);
+
+    /// <summary>Kind of time-based game event emitted by <see cref="MazeGame.Tick"/>.</summary>
+    public enum GameEventKind
+    {
+        /// <summary>A door finished opening — its <see cref="DoorState"/> is now <see cref="DoorState.Open"/>.</summary>
+        DoorOpened = 0
+    }
+
+    /// <summary>One time-based game event emitted by <see cref="MazeGame.Tick"/>.</summary>
+    /// <param name="Kind">The kind of event.</param>
+    /// <param name="Row">Row of the cell the event applies to.</param>
+    /// <param name="Column">Column of the cell the event applies to.</param>
+    public readonly record struct GameEvent(GameEventKind Kind, uint Row, uint Column);
+
     /// <summary>A cell visited by the player, identified by its zero-based row and column.</summary>
     public record MazeGameVisitedCell(int Row, int Col);
 
@@ -187,6 +217,40 @@ namespace Maze.Api
                 }
                 return items;
             }
+        }
+
+        /// <summary>All door cells along with their current state, sorted by (row, column).</summary>
+        public IReadOnlyList<DoorInfo> Doors
+        {
+            get
+            {
+                int count = Interop.MazeGameDoorCount(_gamePtr);
+                var doors = new List<DoorInfo>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    if (Interop.MazeGameGetDoor(_gamePtr, i, out var d))
+                        doors.Add(new DoorInfo(d.Row, d.Column, (DoorState)d.State));
+                }
+                return doors;
+            }
+        }
+
+        /// <summary>
+        /// Advances time-based game state by <paramref name="dtMs"/> milliseconds and returns the events
+        /// produced by this tick (e.g. doors that finished opening).
+        /// </summary>
+        /// <param name="dtMs">Elapsed time in milliseconds.</param>
+        /// <returns>The events produced by this tick. Empty when nothing time-based is in flight.</returns>
+        public GameEvent[] Tick(double dtMs)
+        {
+            int count = Interop.MazeGameTick(_gamePtr, (float)dtMs);
+            var events = new GameEvent[count];
+            for (int i = 0; i < count; i++)
+            {
+                if (Interop.MazeGameGetTickEvent(_gamePtr, i, out var e))
+                    events[i] = new GameEvent((GameEventKind)e.Kind, e.Row, e.Column);
+            }
+            return events;
         }
     }
 }

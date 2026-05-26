@@ -349,6 +349,43 @@ namespace Maze.Interop
         /// <returns>True if the index was valid; false if out of range</returns>
         public bool MazeGameGetBagItem(UIntPtr gamePtr, int index, out MazeBagItem item);
         /// <summary>
+        /// Returns the number of door cells in the maze, regardless of state
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Door count</returns>
+        public int MazeGameDoorCount(UIntPtr gamePtr);
+        /// <summary>
+        /// Retrieves a single door cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the door list</param>
+        /// <param name="door">Receives the door cell + state on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetDoor(UIntPtr gamePtr, int index, out MazeDoor door);
+        /// <summary>
+        /// Advances time-based game state by <paramref name="dtMs"/> milliseconds,
+        /// buffering the resulting events on the game session
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="dtMs">Elapsed time in milliseconds</param>
+        /// <returns>Number of events produced by this tick</returns>
+        public int MazeGameTick(UIntPtr gamePtr, float dtMs);
+        /// <summary>
+        /// Returns the number of events currently buffered from the most recent
+        /// <see cref="MazeGameTick(UIntPtr, float)">MazeGameTick()</see> call
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Tick event count</returns>
+        public int MazeGameTickEventCount(UIntPtr gamePtr);
+        /// <summary>
+        /// Retrieves a single tick event from the buffer by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the tick event buffer</param>
+        /// <param name="evt">Receives the tick event on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetTickEvent(UIntPtr gamePtr, int index, out MazeGameEvent evt);
+        /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)
         /// </summary>
         /// <param name="gamePtr">Pointer to game session</param>

@@ -164,6 +164,51 @@ namespace Maze.Interop
             public uint Id;
         }
         /// <summary>
+        /// Lifecycle state of a door cell. Mirrors the Rust `maze::DoorState` enum.
+        /// </summary>
+        public enum MazeDoorState : uint
+        {
+            /// <summary>Closed and locked; requires a key to open</summary>
+            Locked = 0,
+            /// <summary>Currently opening; will transition to <see cref="Open"/> on the next sufficient tick</summary>
+            Opening = 1,
+            /// <summary>Fully open and permanently passable</summary>
+            Open = 2,
+        }
+        /// <summary>
+        /// One door cell along with its current state.
+        /// </summary>
+        public struct MazeDoor
+        {
+            /// <summary>Row of the door cell</summary>
+            public uint Row;
+            /// <summary>Column of the door cell</summary>
+            public uint Column;
+            /// <summary>Current state of the door</summary>
+            public MazeDoorState State;
+        }
+        /// <summary>
+        /// Kind of event produced by <see cref="MazeInterop.MazeGameTick(UIntPtr, float)">MazeGameTick()</see>.
+        /// Mirrors the Rust `maze::GameEvent` tagged enum.
+        /// </summary>
+        public enum MazeGameEventKind : uint
+        {
+            /// <summary>A door finished opening — its <see cref="MazeDoorState"/> is now <see cref="MazeDoorState.Open"/></summary>
+            DoorOpened = 0,
+        }
+        /// <summary>
+        /// One time-based game event emitted by a tick.
+        /// </summary>
+        public struct MazeGameEvent
+        {
+            /// <summary>The kind of event</summary>
+            public MazeGameEventKind Kind;
+            /// <summary>Row of the cell the event applies to</summary>
+            public uint Row;
+            /// <summary>Column of the cell the event applies to</summary>
+            public uint Column;
+        }
+        /// <summary>
         /// Private constructor (singleton pattern)
         /// </summary>
         /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
@@ -820,6 +865,56 @@ namespace Maze.Interop
         public bool MazeGameGetBagItem(UIntPtr gamePtr, int index, out MazeBagItem item)
         {
             return connector.MazeGameGetBagItem(gamePtr, index, out item);
+        }
+        /// <summary>
+        /// Returns the number of door cells in the maze, regardless of state
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Door count</returns>
+        public int MazeGameDoorCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameDoorCount(gamePtr);
+        }
+        /// <summary>
+        /// Retrieves a single door cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the door list</param>
+        /// <param name="door">Receives the door cell + state on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetDoor(UIntPtr gamePtr, int index, out MazeDoor door)
+        {
+            return connector.MazeGameGetDoor(gamePtr, index, out door);
+        }
+        /// <summary>
+        /// Advances time-based game state by <paramref name="dtMs"/> milliseconds
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="dtMs">Elapsed time in milliseconds</param>
+        /// <returns>Number of events produced by this tick</returns>
+        public int MazeGameTick(UIntPtr gamePtr, float dtMs)
+        {
+            return connector.MazeGameTick(gamePtr, dtMs);
+        }
+        /// <summary>
+        /// Returns the number of events currently buffered from the most recent tick
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Tick event count</returns>
+        public int MazeGameTickEventCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameTickEventCount(gamePtr);
+        }
+        /// <summary>
+        /// Retrieves a single tick event from the buffer by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the tick event buffer</param>
+        /// <param name="evt">Receives the tick event on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetTickEvent(UIntPtr gamePtr, int index, out MazeGameEvent evt)
+        {
+            return connector.MazeGameGetTickEvent(gamePtr, index, out evt);
         }
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)

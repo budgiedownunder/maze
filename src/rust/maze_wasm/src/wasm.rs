@@ -1260,6 +1260,145 @@ pub extern "C" fn maze_game_wasm_get_bag_item(
     0
 }
 
+/// Returns the number of door cells (`'D'`) in the maze, regardless of state.
+///
+/// # Returns
+///
+/// The door count, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_door_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.doors().len() as i32
+}
+
+/// Retrieves a single door cell by `index`.
+///
+/// Writes the door's row, column, and current state code into the out
+/// parameters. State encoding: `0` = Locked, `1` = Opening, `2` = Open.
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_door(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_state: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let doors = game.doors();
+    if index < 0 || index as usize >= doors.len() {
+        return -1;
+    }
+    let ((r, c), state) = doors[index as usize];
+    let state_code: u32 = match state {
+        maze::DoorState::Locked => 0,
+        maze::DoorState::Opening { .. } => 1,
+        maze::DoorState::Open => 2,
+    };
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_state.is_null() {
+            *out_state = state_code;
+        }
+    }
+    0
+}
+
+/// Advances time-based game state by `dt_ms` milliseconds, buffering the
+/// resulting events on the game session. Subsequent calls to
+/// [`maze_game_wasm_tick_event_count`] / [`maze_game_wasm_get_tick_event`]
+/// read from the same buffer until the next `tick` overwrites it.
+///
+/// # Returns
+///
+/// The number of events produced, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_tick(maze_game_wasm: *mut MazeGameWasm, dt_ms: f32) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let g = unsafe { &mut *maze_game_wasm };
+    g.tick_events = g.game.tick(dt_ms);
+    g.tick_events.len() as i32
+}
+
+/// Returns the number of events currently buffered from the most recent
+/// [`maze_game_wasm_tick`] call.
+///
+/// # Returns
+///
+/// The buffer size, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_tick_event_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let g = unsafe { &*maze_game_wasm };
+    g.tick_events.len() as i32
+}
+
+/// Retrieves a single tick event from the buffer by `index`.
+///
+/// Writes the event's kind code and cell coordinates into the out
+/// parameters. Kind encoding: `0` = DoorOpened.
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_tick_event(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_kind: *mut u32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let g = unsafe { &*maze_game_wasm };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return -1;
+    }
+    let maze::GameEvent::DoorOpened { cell: (r, c) } = g.tick_events[index as usize];
+    unsafe {
+        if !out_kind.is_null() {
+            *out_kind = 0; // DoorOpened
+        }
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+    }
+    0
+}
+
 /// Returns the number of cells in the visited-cells list.
 ///
 /// # Returns

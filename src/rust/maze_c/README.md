@@ -36,6 +36,18 @@ uint8_t maze_c_maze_game_get_bag_item(MazeGameC* ptr, int32_t index,
                                       uint32_t* kind_out, uint32_t* id_out);
                                                         // 1 = success, 0 = out-of-range
 
+// Doors / tick / events (valid pointer assumed; out parameters may be null)
+int32_t maze_c_maze_game_door_count(MazeGameC* ptr);
+uint8_t maze_c_maze_game_get_door(MazeGameC* ptr, int32_t index,
+                                  uint32_t* row_out, uint32_t* col_out, uint32_t* state_out);
+                                                        // 1 = success, 0 = out-of-range
+int32_t maze_c_maze_game_tick(MazeGameC* ptr, float dt_ms);
+                                                        // returns event count; buffers events on the session
+int32_t maze_c_maze_game_tick_event_count(MazeGameC* ptr);
+uint8_t maze_c_maze_game_get_tick_event(MazeGameC* ptr, int32_t index,
+                                        uint32_t* kind_out, uint32_t* row_out, uint32_t* col_out);
+                                                        // 1 = success, 0 = out-of-range
+
 // Visited cells (valid pointer assumed)
 int32_t maze_c_maze_game_visited_cell_count(MazeGameC* ptr);
 uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
@@ -78,6 +90,20 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 | Value | Kind |
 |:-----:|:-----|
 | 0 | Key |
+
+**DoorState encoding** (`state_out` of `get_door`):
+
+| Value | State |
+|:-----:|:------|
+| 0 | Locked |
+| 1 | Opening |
+| 2 | Open (permanent, passable) |
+
+**GameEvent kind encoding** (`kind_out` of `get_tick_event`):
+
+| Value | Kind |
+|:-----:|:-----|
+| 0 | DoorOpened (the door at `(row_out, col_out)` finished opening) |
 
 **Memory ownership:** The caller must call `maze_c_free_maze_game` when done. Passing `null` to `free` is safe and has no effect.
 

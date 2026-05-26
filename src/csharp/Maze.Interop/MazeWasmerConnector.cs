@@ -957,6 +957,11 @@ hasResult)
                 { "maze_game_wasm_pickup",           () => ref this.mazeGamePickup },
                 { "maze_game_wasm_bag_count",        () => ref this.mazeGameBagCount },
                 { "maze_game_wasm_get_bag_item",     () => ref this.mazeGameGetBagItem },
+                { "maze_game_wasm_door_count",       () => ref this.mazeGameDoorCount },
+                { "maze_game_wasm_get_door",         () => ref this.mazeGameGetDoor },
+                { "maze_game_wasm_tick",             () => ref this.mazeGameTick },
+                { "maze_game_wasm_tick_event_count", () => ref this.mazeGameTickEventCount },
+                { "maze_game_wasm_get_tick_event",   () => ref this.mazeGameGetTickEvent },
                 { "maze_game_wasm_visited_cell_count", () => ref this.mazeGameVisitedCellCount },
                 { "maze_game_wasm_get_visited_cell", () => ref this.mazeGameGetVisitedCell }
             };

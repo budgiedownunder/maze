@@ -1,5 +1,5 @@
 use data_model::{Maze, MazeDefinition};
-use maze::MazeGame;
+use maze::{GameEvent, MazeGame};
 #[cfg(any(feature = "wasm-bindgen", feature = "wasm-lite"))]
 use maze::GenerationAlgorithm;
 #[cfg(feature = "wasm-bindgen")]
@@ -28,12 +28,14 @@ pub struct MazeWasm {
 pub struct MazeGameWasm {
     #[wasm_bindgen(skip)]
     pub game: MazeGame,
+    #[wasm_bindgen(skip)]
+    pub tick_events: Vec<GameEvent>,
 }
 
 #[cfg(not(feature = "wasm-bindgen"))]
-#[repr(C)]
 pub struct MazeGameWasm {
     pub game: MazeGame,
+    pub tick_events: Vec<GameEvent>,
 }
 
 /// Identifies the type of a maze cell.
@@ -183,6 +185,9 @@ pub fn new_maze() -> Maze {
 /// `Ok(MazeGameWasm)` on success, or `Err(String)` if the JSON is invalid or has no start cell.
 ///
 pub fn new_maze_game(json: &str) -> Result<MazeGameWasm, String> {
-    MazeGame::from_json(json).map(|game| MazeGameWasm { game })
+    MazeGame::from_json(json).map(|game| MazeGameWasm {
+        game,
+        tick_events: Vec::new(),
+    })
 }
 

@@ -98,6 +98,9 @@ pub struct MazeCGeneratorOptions {
 /// ```
 pub struct MazeGameC {
     game: maze::MazeGame,
+    /// Tick events buffered between consecutive `maze_c_maze_game_tick` calls.
+    /// `tick` overwrites this; `get_tick_event` reads from it by index.
+    tick_events: Vec<maze::GameEvent>,
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1871,7 +1874,7 @@ pub unsafe extern "C" fn maze_c_new_maze_game(json: *const c_char) -> *mut MazeG
     };    
     match maze::MazeGame::from_json(json_str) {
         Ok(game) => {
-            let boxed = Box::new(MazeGameC { game });
+            let boxed = Box::new(MazeGameC { game, tick_events: Vec::new() });
             increment_num_objects_allocated();
             Box::into_raw(boxed)
         }
@@ -2242,6 +2245,216 @@ pub unsafe extern "C" fn maze_c_maze_game_get_bag_item(
         }
         if !out_id.is_null() {
             *out_id = id;
+        }
+    }
+    1
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — doors / tick / events
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Returns the number of door cells (`'D'`) in the maze, regardless of state.
+///
+/// The count is fixed for the lifetime of the game session (opening a door
+/// changes its [`maze::DoorState`] but does not remove it from the list).
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_door_count(ptr), 1);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_door_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.doors().len() as i32
+}
+
+/// Retrieves a single door cell by index.
+///
+/// Writes the door's row, column, and current state code into the out
+/// parameters. State encoding mirrors [`maze::DoorState`]:
+/// `0` = Locked, `1` = Opening, `2` = Open.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// let mut row: u32 = 99;
+/// let mut col: u32 = 99;
+/// let mut state: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_get_door(ptr, 0, &mut row, &mut col, &mut state) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(row, 0);
+/// assert_eq!(col, 2);
+/// assert_eq!(state, 0); // Locked
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_door(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_state: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let doors = game.doors();
+    if index < 0 || index as usize >= doors.len() {
+        return 0;
+    }
+    let ((r, c), state) = doors[index as usize];
+    let state_code: u32 = match state {
+        maze::DoorState::Locked => 0,
+        maze::DoorState::Opening { .. } => 1,
+        maze::DoorState::Open => 2,
+    };
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_state.is_null() {
+            *out_state = state_code;
+        }
+    }
+    1
+}
+
+/// Advances time-based game state by `dt_ms` milliseconds and buffers the
+/// resulting events on the game session. Returns the number of events
+/// produced. Subsequent calls to [`maze_c_maze_game_tick_event_count`] /
+/// [`maze_c_maze_game_get_tick_event`] read from the same buffer until the
+/// next call to `tick` overwrites it.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right → key
+/// let mut k: u32 = 0;
+/// let mut id: u32 = 0;
+/// unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right into door → StartedUnlocking
+/// let count = maze_c_maze_game_tick(ptr, 1000.0);
+/// assert_eq!(count, 1); // one DoorOpened event
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_tick(ptr: *mut MazeGameC, dt_ms: f32) -> i32 {
+    let g = unsafe { &mut *ptr };
+    g.tick_events = g.game.tick(dt_ms);
+    g.tick_events.len() as i32
+}
+
+/// Returns the number of events currently buffered from the most recent
+/// [`maze_c_maze_game_tick`] call. Zero before the first tick.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_tick_event_count(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_tick_event_count(ptr: *mut MazeGameC) -> i32 {
+    let g = unsafe { &(*ptr) };
+    g.tick_events.len() as i32
+}
+
+/// Retrieves a single tick event from the buffer by index.
+///
+/// Writes the event's kind code and cell coordinates into the out parameters.
+/// Kind encoding (mirrors [`maze::GameEvent`]): `0` = DoorOpened. New
+/// variants extend the integer space.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // onto key
+/// let mut k: u32 = 0;
+/// let mut id: u32 = 0;
+/// unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+/// maze_c_maze_game_move_player(ptr, 4); // into door → StartedUnlocking
+/// maze_c_maze_game_tick(ptr, 1000.0);
+/// let mut kind: u32 = 99;
+/// let mut row: u32 = 99;
+/// let mut col: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, &mut row, &mut col) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(kind, 0); // DoorOpened
+/// assert_eq!((row, col), (0, 2));
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_tick_event(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_kind: *mut u32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+) -> u8 {
+    let g = unsafe { &(*ptr) };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return 0;
+    }
+    let maze::GameEvent::DoorOpened { cell: (r, c) } = g.tick_events[index as usize];
+    unsafe {
+        if !out_kind.is_null() {
+            *out_kind = 0; // DoorOpened
+        }
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
         }
     }
     1
@@ -3349,6 +3562,123 @@ mod tests {
         assert_eq!(ok, 0); // empty bag → 0 out of range
         let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, -1, &mut k, &mut id) };
         assert_eq!(ok, 0); // negative index → 0
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — doors / tick / events ─────────────────────────────────────
+
+    fn door_game_json() -> CString {
+        // 1 row, 4 cols: S at (0,0), K at (0,1), D at (0,2), F at (0,3)
+        CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap()
+    }
+
+    #[test]
+    fn game_initial_door_count_for_door_grid() {
+        let json = door_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_door_count(ptr), 1);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_door_returns_locked_initially() {
+        let json = door_game_json();
+        let ptr = new_game(&json);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut state: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_door(ptr, 0, &mut row, &mut col, &mut state) };
+        assert_eq!(ok, 1);
+        assert_eq!(row, 0);
+        assert_eq!(col, 2);
+        assert_eq!(state, 0); // Locked
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_tick_emits_door_opened_after_unlocking() {
+        let json = door_game_json();
+        let ptr = new_game(&json);
+        // Pickup key.
+        maze_c_maze_game_move_player(ptr, 4); // Right → K
+        let mut k: u32 = 0;
+        let mut id: u32 = 0;
+        unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        // Step into D → StartedUnlocking (5)
+        let result = maze_c_maze_game_move_player(ptr, 4);
+        assert_eq!(result, 5);
+        // Tick a full second → DoorOpened event, count = 1.
+        let count = maze_c_maze_game_tick(ptr, 1000.0);
+        assert_eq!(count, 1);
+        assert_eq!(maze_c_maze_game_tick_event_count(ptr), 1);
+        // Read the event back.
+        let mut kind: u32 = 99;
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, &mut row, &mut col) };
+        assert_eq!(ok, 1);
+        assert_eq!(kind, 0); // DoorOpened
+        assert_eq!((row, col), (0, 2));
+        // Door is now Open (state code 2).
+        let mut drow: u32 = 0;
+        let mut dcol: u32 = 0;
+        let mut state: u32 = 99;
+        unsafe { maze_c_maze_game_get_door(ptr, 0, &mut drow, &mut dcol, &mut state) };
+        assert_eq!(state, 2);
+        // StartedUnlocking did not move the player — still on K cell (0,1).
+        // Step right onto the now-open door (0,2), then right again to F (0,3).
+        let result = maze_c_maze_game_move_player(ptr, 4);
+        assert_eq!(result, 1); // Moved through open door
+        let result = maze_c_maze_game_move_player(ptr, 4);
+        assert_eq!(result, 3); // Complete
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_tick_event_count_is_zero_before_first_tick() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_tick_event_count(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_tick_event_out_of_range_returns_zero() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut k: u32 = 99;
+        let mut r: u32 = 99;
+        let mut c: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut k, &mut r, &mut c) };
+        assert_eq!(ok, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_decoy_door_walk_through_sets_stranded_lose_state() {
+        // Mirrors the maze-crate test
+        // `decoy_door_with_only_one_key_strands_on_walk_through`. One key,
+        // one real door, one decoy door — detouring through the decoy
+        // burns the only key, and walking through it strands the player.
+        #[rustfmt::skip]
+        let json = CString::new(
+            r#"{"grid":[["S","K","D","F"],["W","D","W","W"],["W"," ","W","W"]]}"#
+        ).unwrap();
+        let ptr = new_game(&json);
+        // Grab the key at (0,1).
+        maze_c_maze_game_move_player(ptr, 4); // Right
+        let mut k: u32 = 0;
+        let mut id: u32 = 0;
+        unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        // Step into the decoy door at (1,1).
+        maze_c_maze_game_move_player(ptr, 2); // Down → StartedUnlocking
+        // Tick long enough to open it.
+        maze_c_maze_game_tick(ptr, 1000.0);
+        // Walk through the decoy — this is the strand trigger.
+        let result = maze_c_maze_game_move_player(ptr, 2);
+        assert_eq!(result, 6); // Stranded
+        assert_eq!(maze_c_maze_game_is_lost(ptr), 1);
+        assert_eq!(maze_c_maze_game_lose_reason(ptr), 1); // Stranded
         maze_c_free_maze_game(ptr);
     }
 

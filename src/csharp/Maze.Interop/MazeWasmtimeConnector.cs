@@ -321,6 +321,11 @@ namespace Maze.Interop
             mazeGamePickup = ResolveFunction("maze_game_wasm_pickup");
             mazeGameBagCount = ResolveFunction("maze_game_wasm_bag_count");
             mazeGameGetBagItem = ResolveFunction("maze_game_wasm_get_bag_item");
+            mazeGameDoorCount = ResolveFunction("maze_game_wasm_door_count");
+            mazeGameGetDoor = ResolveFunction("maze_game_wasm_get_door");
+            mazeGameTick = ResolveFunction("maze_game_wasm_tick");
+            mazeGameTickEventCount = ResolveFunction("maze_game_wasm_tick_event_count");
+            mazeGameGetTickEvent = ResolveFunction("maze_game_wasm_get_tick_event");
             mazeGameVisitedCellCount = ResolveFunction("maze_game_wasm_visited_cell_count");
             mazeGameGetVisitedCell = ResolveFunction("maze_game_wasm_get_visited_cell");
         }

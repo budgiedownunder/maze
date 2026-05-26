@@ -1365,6 +1365,76 @@ namespace Maze.Api.Tests
             Assert.Single(game.Bag);
         }
 
+        // 1 row, 4 cols: S[0,0] K[0,1] D[0,2] F[0,3]
+        private const string DoorGameJson = """{"grid":[["S","K","D","F"]]}""";
+        // Mirrors the maze-crate strand fixture: real door on the top row, decoy door on the side branch.
+        private const string DecoyStrandGameJson = """{"grid":[["S","K","D","F"],["W","D","W","W"],["W"," ","W","W"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Doors"/> lists each door cell with its current state
+        /// </summary>
+        [Fact]
+        public void MazeGameDoors_ShouldReportLockedDoor_Initially()
+        {
+            using MazeGame game = MazeGame.Create(DoorGameJson);
+            var doors = game.Doors;
+            Assert.Single(doors);
+            Assert.Equal(new DoorInfo(0, 2, DoorState.Locked), doors[0]);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Tick"/> returns an empty array when nothing is in flight
+        /// </summary>
+        [Fact]
+        public void MazeGameTick_ShouldReturnEmpty_WhenNoDoorIsOpening()
+        {
+            using MazeGame game = MazeGame.Create(DoorGameJson);
+            Assert.Empty(game.Tick(1000.0));
+        }
+
+        /// <summary>
+        /// Confirms the S→K→D→F happy path end-to-end via the high-level <see cref="MazeGame"/> API:
+        /// step onto key, pickup, step into door (StartedUnlocking), Tick(1000ms) → DoorOpened event +
+        /// door state flips to Open, final step Completes.
+        /// </summary>
+        [Fact]
+        public void MazeGame_KeyDoorHappyPath_TickEmitsDoorOpened_AndCompletes()
+        {
+            using MazeGame game = MazeGame.Create(DoorGameJson);
+            game.MovePlayer(MazeGameDirection.Right); // onto K
+            game.Pickup();
+            Assert.Equal(MazeGameMoveResult.StartedUnlocking, game.MovePlayer(MazeGameDirection.Right));
+
+            GameEvent[] events = game.Tick(1000.0);
+            Assert.Single(events);
+            Assert.Equal(new GameEvent(GameEventKind.DoorOpened, 0, 2), events[0]);
+            Assert.Equal(DoorState.Open, game.Doors[0].State);
+
+            // StartedUnlocking did not move the player — step through the open door, then onto F.
+            Assert.Equal(MazeGameMoveResult.Moved, game.MovePlayer(MazeGameDirection.Right));
+            Assert.Equal(MazeGameMoveResult.Complete, game.MovePlayer(MazeGameDirection.Right));
+            Assert.True(game.IsComplete);
+        }
+
+        /// <summary>
+        /// Confirms the strand round-trip end-to-end via the high-level <see cref="MazeGame"/> API:
+        /// detouring into a decoy door with the only key burns it; walking through the decoy strands the player,
+        /// flipping <see cref="MazeGame.IsLost"/> to true and <see cref="MazeGame.LoseReason"/> to
+        /// <see cref="LoseReason.Stranded"/>. Validates the lose-state plumbing through a real door traversal.
+        /// </summary>
+        [Fact]
+        public void MazeGame_DecoyDoorWalkThrough_FlipsIsLostAndLoseReason()
+        {
+            using MazeGame game = MazeGame.Create(DecoyStrandGameJson);
+            game.MovePlayer(MazeGameDirection.Right); // onto K
+            game.Pickup();
+            game.MovePlayer(MazeGameDirection.Down);  // StartedUnlocking decoy
+            game.Tick(1000.0);
+            Assert.Equal(MazeGameMoveResult.Stranded, game.MovePlayer(MazeGameDirection.Down));
+            Assert.True(game.IsLost);
+            Assert.Equal(LoseReason.Stranded, game.LoseReason);
+        }
+
         /// <summary>
         /// Confirms that <see cref="MazeGame.VisitedCells"/> contains only the start cell before any moves
         /// </summary>

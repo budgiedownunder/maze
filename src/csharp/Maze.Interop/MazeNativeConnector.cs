@@ -69,6 +69,11 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_pickup(IntPtr ptr, out uint kindOut, out uint idOut);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_bag_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_bag_item(IntPtr ptr, int index, out uint kindOut, out uint idOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_door_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_door(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint stateOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_tick(IntPtr ptr, float dtMs);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_tick_event_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_tick_event(IntPtr ptr, int index, out uint kindOut, out uint rowOut, out uint colOut);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_visited_cell_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_visited_cell(IntPtr ptr, int index, out int rowOut, out int colOut);
 
@@ -387,6 +392,35 @@ namespace Maze.Interop
         {
             byte result = maze_c_maze_game_get_bag_item((IntPtr)(ulong)gamePtr, index, out uint kind, out uint id);
             item = new MazeInterop.MazeBagItem { Kind = (MazeInterop.MazeBagItemKind)kind, Id = id };
+            return result != 0;
+        }
+
+        public int MazeGameDoorCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_door_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetDoor(UIntPtr gamePtr, int index, out MazeInterop.MazeDoor door)
+        {
+            byte result = maze_c_maze_game_get_door((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out uint state);
+            door = new MazeInterop.MazeDoor { Row = row, Column = col, State = (MazeInterop.MazeDoorState)state };
+            return result != 0;
+        }
+
+        public int MazeGameTick(UIntPtr gamePtr, float dtMs)
+        {
+            return maze_c_maze_game_tick((IntPtr)(ulong)gamePtr, dtMs);
+        }
+
+        public int MazeGameTickEventCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_tick_event_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetTickEvent(UIntPtr gamePtr, int index, out MazeInterop.MazeGameEvent evt)
+        {
+            byte result = maze_c_maze_game_get_tick_event((IntPtr)(ulong)gamePtr, index, out uint kind, out uint row, out uint col);
+            evt = new MazeInterop.MazeGameEvent { Kind = (MazeInterop.MazeGameEventKind)kind, Row = row, Column = col };
             return result != 0;
         }
 

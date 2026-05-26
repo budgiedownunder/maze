@@ -123,6 +123,15 @@ i32           maze_game_wasm_pickup(MazeGameWasm* maze_game_wasm,
 i32           maze_game_wasm_bag_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_bag_item(MazeGameWasm* maze_game_wasm, i32 index,
                                           u32* kind_out, u32* id_out);        // 0=ok, -1=error
+i32           maze_game_wasm_door_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_door(MazeGameWasm* maze_game_wasm, i32 index,
+                                      u32* row_out, u32* col_out, u32* state_out);
+                                                                              // state: 0=Locked, 1=Opening, 2=Open
+i32           maze_game_wasm_tick(MazeGameWasm* maze_game_wasm, f32 dt_ms);   // returns event count; buffers on session
+i32           maze_game_wasm_tick_event_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_tick_event(MazeGameWasm* maze_game_wasm, i32 index,
+                                            u32* kind_out, u32* row_out, u32* col_out);
+                                                                              // kind: 0=DoorOpened
 i32           maze_game_wasm_visited_cell_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_visited_cell(MazeGameWasm* maze_game_wasm, i32 index,
                                               i32* row_out, i32* col_out);   // 0=ok, -1=error
