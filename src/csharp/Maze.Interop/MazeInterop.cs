@@ -130,6 +130,21 @@ namespace Maze.Interop
             Door = 5,
         }
         /// <summary>
+        /// Reason a game ended in a loss. Mirrors the Rust `maze::LoseReason` enum.
+        /// </summary>
+        public enum MazeLoseReason
+        {
+            /// <summary>
+            /// The game is not lost
+            /// </summary>
+            None = 0,
+            /// <summary>
+            /// The player can no longer hold enough keys to open every closed
+            /// door remaining on a route from their current cell to the finish
+            /// </summary>
+            Stranded = 1,
+        }
+        /// <summary>
         /// Private constructor (singleton pattern)
         /// </summary>
         /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
@@ -697,7 +712,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="gamePtr">Pointer to game session</param>
         /// <param name="dir">Direction: 0=None 1=Up 2=Down 3=Left 4=Right</param>
-        /// <returns>0=None 1=Moved 2=Blocked 3=Complete</returns>
+        /// <returns>0=None 1=Moved 2=Blocked 3=Complete 4=BlockedByLockedDoor 5=StartedUnlocking 6=Stranded</returns>
         public int MazeGameMovePlayer(UIntPtr gamePtr, int dir)
         {
             return connector.MazeGameMovePlayer(gamePtr, dir);
@@ -737,6 +752,24 @@ namespace Maze.Interop
         public int MazeGameIsComplete(UIntPtr gamePtr)
         {
             return connector.MazeGameIsComplete(gamePtr);
+        }
+        /// <summary>
+        /// Returns whether the game is in a lost state
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>1 if lost, 0 otherwise</returns>
+        public int MazeGameIsLost(UIntPtr gamePtr)
+        {
+            return connector.MazeGameIsLost(gamePtr);
+        }
+        /// <summary>
+        /// Returns the lose-reason code for the game session
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>0=None 1=Stranded</returns>
+        public int MazeGameLoseReason(UIntPtr gamePtr)
+        {
+            return connector.MazeGameLoseReason(gamePtr);
         }
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)

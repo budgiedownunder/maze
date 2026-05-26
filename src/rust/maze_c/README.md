@@ -25,6 +25,8 @@ int32_t maze_c_maze_game_player_row(MazeGameC* ptr);
 int32_t maze_c_maze_game_player_col(MazeGameC* ptr);
 int32_t maze_c_maze_game_player_direction(MazeGameC* ptr);
 int32_t maze_c_maze_game_is_complete(MazeGameC* ptr);   // 0 or 1
+int32_t maze_c_maze_game_is_lost(MazeGameC* ptr);       // 0 or 1
+int32_t maze_c_maze_game_lose_reason(MazeGameC* ptr);   // see LoseReason encoding
 
 // Visited cells (valid pointer assumed)
 int32_t maze_c_maze_game_visited_cell_count(MazeGameC* ptr);
@@ -55,6 +57,13 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 | 5 | StartedUnlocking |
 | 6 | Stranded |
 | -1 | Unknown direction value |
+
+**LoseReason encoding** (return of `lose_reason`):
+
+| Value | Reason |
+|:-----:|:-------|
+| 0 | None (the game is not lost) |
+| 1 | Stranded (the player can no longer hold enough keys to open every closed door remaining on a route to the finish) |
 
 **Memory ownership:** The caller must call `maze_c_free_maze_game` when done. Passing `null` to `free` is safe and has no effect.
 

@@ -952,6 +952,8 @@ hasResult)
                 { "maze_game_wasm_player_col",       () => ref this.mazeGamePlayerCol },
                 { "maze_game_wasm_player_direction", () => ref this.mazeGamePlayerDirection },
                 { "maze_game_wasm_is_complete",      () => ref this.mazeGameIsComplete },
+                { "maze_game_wasm_is_lost",          () => ref this.mazeGameIsLost },
+                { "maze_game_wasm_lose_reason",      () => ref this.mazeGameLoseReason },
                 { "maze_game_wasm_visited_cell_count", () => ref this.mazeGameVisitedCellCount },
                 { "maze_game_wasm_get_visited_cell", () => ref this.mazeGameGetVisitedCell }
             };

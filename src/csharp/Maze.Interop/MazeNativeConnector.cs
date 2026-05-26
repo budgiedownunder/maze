@@ -64,6 +64,8 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_player_col(IntPtr ptr);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_player_direction(IntPtr ptr);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_is_complete(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_is_lost(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_lose_reason(IntPtr ptr);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_visited_cell_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_visited_cell(IntPtr ptr, int index, out int rowOut, out int colOut);
 
@@ -354,6 +356,16 @@ namespace Maze.Interop
         public int MazeGameIsComplete(UIntPtr gamePtr)
         {
             return maze_c_maze_game_is_complete((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGameIsLost(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_is_lost((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGameLoseReason(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_lose_reason((IntPtr)(ulong)gamePtr);
         }
 
         public int MazeGameVisitedCellCount(UIntPtr gamePtr)

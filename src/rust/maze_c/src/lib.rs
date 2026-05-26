@@ -2049,6 +2049,57 @@ pub extern "C" fn maze_c_maze_game_is_complete(ptr: *mut MazeGameC) -> i32 {
     if game.is_complete() { 1 } else { 0 }
 }
 
+/// Returns `1` if the game is in a lost state, `0` otherwise.
+///
+/// The companion [`maze_c_maze_game_lose_reason`] returns the reason code when
+/// this returns `1`.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_is_lost(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_is_lost(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    if game.is_lost() { 1 } else { 0 }
+}
+
+/// Returns the lose-reason code for the game session.
+///
+/// Encoding: `0` = None (the game is not lost), `1` = Stranded (the player
+/// can no longer hold enough keys to open every closed door remaining on a
+/// route to the finish). Mirrors the [`maze::LoseReason`] enum; new variants
+/// extend the integer space.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_lose_reason(ptr), 0); // None
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_lose_reason(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    match game.lose_reason() {
+        None => 0,
+        Some(maze::LoseReason::Stranded) => 1,
+    }
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // MazeGameC — visited cells
 // ──────────────────────────────────────────────────────────────────────────────
@@ -3061,6 +3112,22 @@ mod tests {
         let json = simple_game_json();
         let ptr = new_game(&json);
         assert_eq!(maze_c_maze_game_is_complete(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_initial_is_not_lost() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_is_lost(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_initial_lose_reason_is_none() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_lose_reason(ptr), 0); // None
         maze_c_free_maze_game(ptr);
     }
 

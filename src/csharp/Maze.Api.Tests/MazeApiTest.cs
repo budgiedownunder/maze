@@ -1283,6 +1283,38 @@ namespace Maze.Api.Tests
         }
 
         /// <summary>
+        /// Confirms that <see cref="MazeGame.IsLost"/> is false for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameIsLost_ShouldBeFalse_Initially()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.False(game.IsLost);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.LoseReason"/> is <see cref="LoseReason.None"/> for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameLoseReason_ShouldBeNone_Initially()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.Equal(LoseReason.None, game.LoseReason);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGameMoveResult"/> has the extended values for the locked-door / strand flow.
+        /// Mirrors the Rust <c>MoveResult</c> integer codes that <c>maze_c</c> / <c>maze_wasm</c> emit.
+        /// </summary>
+        [Fact]
+        public void MazeGameMoveResult_ShouldExtendForLockedDoorAndStranded()
+        {
+            Assert.Equal(4, (int)MazeGameMoveResult.BlockedByLockedDoor);
+            Assert.Equal(5, (int)MazeGameMoveResult.StartedUnlocking);
+            Assert.Equal(6, (int)MazeGameMoveResult.Stranded);
+        }
+
+        /// <summary>
         /// Confirms that <see cref="MazeGame.VisitedCells"/> contains only the start cell before any moves
         /// </summary>
         [Fact]

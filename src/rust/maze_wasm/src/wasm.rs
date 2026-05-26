@@ -1127,6 +1127,49 @@ pub extern "C" fn maze_game_wasm_is_complete(maze_game_wasm: *mut MazeGameWasm) 
     if game.is_complete() { 1 } else { 0 }
 }
 
+/// Returns whether the game is in a lost state.
+///
+/// The companion [`maze_game_wasm_lose_reason`] returns the reason code when
+/// this returns `1`.
+///
+/// # Returns
+///
+/// `1` if lost, `0` if not, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_is_lost(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    if game.is_lost() { 1 } else { 0 }
+}
+
+/// Returns the lose-reason code for the game session.
+///
+/// Encoding: `0` = None (the game is not lost), `1` = Stranded (the player
+/// can no longer hold enough keys to open every closed door remaining on a
+/// route to the finish). Mirrors the [`maze::LoseReason`] enum; new variants
+/// extend the integer space.
+///
+/// # Returns
+///
+/// `0`=None, `1`=Stranded, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_lose_reason(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    match game.lose_reason() {
+        None => 0,
+        Some(maze::LoseReason::Stranded) => 1,
+    }
+}
+
 /// Returns the number of cells in the visited-cells list.
 ///
 /// # Returns

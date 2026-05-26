@@ -27,7 +27,22 @@ namespace Maze.Api
         /// <summary>The move was blocked by a wall or grid boundary.</summary>
         Blocked = 2,
         /// <summary>The player reached the finish cell — the game is complete.</summary>
-        Complete = 3
+        Complete = 3,
+        /// <summary>The move was blocked by a locked door and the player has no key.</summary>
+        BlockedByLockedDoor = 4,
+        /// <summary>The player held against a locked door with a key in their bag; a key was consumed and the door began opening.</summary>
+        StartedUnlocking = 5,
+        /// <summary>The player moved through an open door and can no longer hold enough keys to open every remaining closed door on a route to the finish — the game is now lost.</summary>
+        Stranded = 6
+    }
+
+    /// <summary>Why a game ended in a loss. Mirrors the Rust <c>maze::LoseReason</c> enum.</summary>
+    public enum LoseReason
+    {
+        /// <summary>The game is not lost.</summary>
+        None = 0,
+        /// <summary>The player can no longer hold enough keys to open every closed door remaining on a route from their current cell to the finish.</summary>
+        Stranded = 1
     }
 
     /// <summary>A cell visited by the player, identified by its zero-based row and column.</summary>
@@ -111,6 +126,12 @@ namespace Maze.Api
 
         /// <summary>Whether the player has reached the finish cell.</summary>
         public bool IsComplete => Interop.MazeGameIsComplete(_gamePtr) != 0;
+
+        /// <summary>Whether the game is in a lost state. See <see cref="LoseReason"/> for the cause.</summary>
+        public bool IsLost => Interop.MazeGameIsLost(_gamePtr) != 0;
+
+        /// <summary>Why the game is lost, or <see cref="Api.LoseReason.None"/> if the game is not lost.</summary>
+        public LoseReason LoseReason => (LoseReason)Interop.MazeGameLoseReason(_gamePtr);
 
         /// <summary>All cells visited by the player (including the start cell), in visit order.</summary>
         public IReadOnlyList<MazeGameVisitedCell> VisitedCells

@@ -316,6 +316,8 @@ namespace Maze.Interop
             mazeGamePlayerCol = ResolveFunction("maze_game_wasm_player_col");
             mazeGamePlayerDirection = ResolveFunction("maze_game_wasm_player_direction");
             mazeGameIsComplete = ResolveFunction("maze_game_wasm_is_complete");
+            mazeGameIsLost = ResolveFunction("maze_game_wasm_is_lost");
+            mazeGameLoseReason = ResolveFunction("maze_game_wasm_lose_reason");
             mazeGameVisitedCellCount = ResolveFunction("maze_game_wasm_visited_cell_count");
             mazeGameGetVisitedCell = ResolveFunction("maze_game_wasm_get_visited_cell");
         }

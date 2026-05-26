@@ -119,6 +119,8 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? mazeGamePlayerCol;
         protected IWebAssemblyFunction? mazeGamePlayerDirection;
         protected IWebAssemblyFunction? mazeGameIsComplete;
+        protected IWebAssemblyFunction? mazeGameIsLost;
+        protected IWebAssemblyFunction? mazeGameLoseReason;
         protected IWebAssemblyFunction? mazeGameVisitedCellCount;
         protected IWebAssemblyFunction? mazeGameGetVisitedCell;
         /// <summary>
@@ -713,7 +715,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="gamePtr">Pointer to game session</param>
         /// <param name="dir">Direction: 0=None 1=Up 2=Down 3=Left 4=Right</param>
-        /// <returns>0=None 1=Moved 2=Blocked 3=Complete</returns>
+        /// <returns>0=None 1=Moved 2=Blocked 3=Complete 4=BlockedByLockedDoor 5=StartedUnlocking 6=Stranded</returns>
         public int MazeGameMovePlayer(UIntPtr gamePtr, int dir)
         {
             return (int)(mazeGameMovePlayer?.Invoke((long)(uint)gamePtr, dir) ?? 0);
@@ -753,6 +755,24 @@ namespace Maze.Interop
         public int MazeGameIsComplete(UIntPtr gamePtr)
         {
             return (int)(mazeGameIsComplete?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Returns whether the game is in a lost state
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>1 if lost, 0 otherwise</returns>
+        public int MazeGameIsLost(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameIsLost?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Returns the lose-reason code for the game session
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>0=None 1=Stranded</returns>
+        public int MazeGameLoseReason(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameLoseReason?.Invoke((long)(uint)gamePtr) ?? 0);
         }
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)

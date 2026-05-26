@@ -1282,6 +1282,32 @@ namespace Maze.Interop.Tests
         }
 
         /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameIsLost"/> returns 0 for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameIsLost_ShouldReturn0_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int lost = interop.MazeGameIsLost(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, lost);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameLoseReason"/> returns 0 (None) for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameLoseReason_ShouldReturnNone_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int reason = interop.MazeGameLoseReason(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal((int)MazeLoseReason.None, reason);
+        }
+
+        /// <summary>
         /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameVisitedCellCount"/> returns 1 (start cell) before any moves
         /// </summary>
         [Fact]
