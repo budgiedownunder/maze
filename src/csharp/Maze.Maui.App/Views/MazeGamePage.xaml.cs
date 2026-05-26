@@ -7,15 +7,19 @@ namespace Maze.Maui.App.Views
     /// <summary>
     /// Interactive 2D maze game page. The player navigates the maze using arrow keys (Windows)
     /// or D-pad buttons (Android/iOS). Holding a key or D-pad button moves continuously at a
-    /// controlled rate; each press also moves one step immediately.
+    /// controlled rate; each press also moves one step immediately. Pressing E (or tapping the
+    /// Pickup button) collects the key under the player.
     /// </summary>
     public partial class MazeGamePage : ContentPage
     {
         private const int MoveIntervalMs = 120;
+        private const int TickIntervalMs = 16; // ~60Hz; drives door-opening animation
 
         private readonly MazeGameViewModel _viewModel;
         private bool _gameStarted = false;
         private IDispatcherTimer? _dpadTimer;
+        private IDispatcherTimer? _tickTimer;
+        private long _lastTickMs = 0;
         private MazeGameDirection _dpadDirection = MazeGameDirection.None;
         private long _lastMoveTickMs = 0;
         private MazeGameDirection _lastMoveDirection = MazeGameDirection.None;
@@ -38,9 +42,11 @@ namespace Maze.Maui.App.Views
             GameGrid.KeyDown += OnGameGridKeyDown;
             GameGrid.CellTapped += OnGameGridCellTapped;
             GameGrid.CellDoubleTapped += OnGameGridCellTapped;
+            _viewModel.TickStartRequested += OnTickStartRequested;
             if (_gameStarted) return;
             _gameStarted = true;
             DpadGrid.IsVisible = false;
+            BagStack.IsVisible = false;
             SetBusyIndicators(true);
             Dispatcher.Dispatch(async () =>
             {
@@ -53,6 +59,7 @@ namespace Maze.Maui.App.Views
                 {
                     SetBusyIndicators(false);
                     DpadGrid.IsVisible = DeviceInfo.Platform != DevicePlatform.WinUI;
+                    BagStack.IsVisible = true;
                 }
             });
         }
@@ -70,9 +77,11 @@ namespace Maze.Maui.App.Views
             base.OnNavigatedFrom(args);
             if (_viewModel.IsShowingResultPopup) return;
             StopDpad();
+            StopTickTimer();
             GameGrid.KeyDown -= OnGameGridKeyDown;
             GameGrid.CellTapped -= OnGameGridCellTapped;
             GameGrid.CellDoubleTapped -= OnGameGridCellTapped;
+            _viewModel.TickStartRequested -= OnTickStartRequested;
         }
 
         /// <inheritdoc/>
@@ -83,6 +92,7 @@ namespace Maze.Maui.App.Views
             if (_viewModel.IsShowingResultPopup) return;
             _gameStarted = false;
             DpadGrid.IsVisible = false;
+            BagStack.IsVisible = false;
             _viewModel.Cleanup();
         }
 
@@ -113,6 +123,12 @@ namespace Maze.Maui.App.Views
 
         private void OnGameGridKeyDown(object? sender, MazeGridKeyDownEventArgs e)
         {
+            if (e.Key == Controls.Keyboard.Key.E)
+            {
+                if (_viewModel.PickupCommand.CanExecute(null))
+                    _viewModel.PickupCommand.Execute(null);
+                return;
+            }
             MazeGameDirection dir = e.Key switch
             {
                 Controls.Keyboard.Key.Up => MazeGameDirection.Up,
@@ -149,6 +165,42 @@ namespace Maze.Maui.App.Views
             var timer = Dispatcher.CreateTimer();
             timer.Interval = TimeSpan.FromMilliseconds(MoveIntervalMs);
             timer.Tick += (_, _) => Move(_dpadDirection);
+            return timer;
+        }
+
+        /// <summary>
+        /// Starts the ~60Hz tick timer that drives door-opening animation.
+        /// Hooked to <see cref="MazeGameViewModel.TickStartRequested"/>; the
+        /// view-model's <see cref="MazeGameViewModel.Tick(double)"/> returns
+        /// <c>false</c> once no door is still opening, which stops the timer.
+        /// </summary>
+        private void OnTickStartRequested()
+        {
+            _tickTimer ??= CreateTickTimer();
+            if (!_tickTimer.IsRunning)
+            {
+                _lastTickMs = Environment.TickCount64;
+                _tickTimer.Start();
+            }
+        }
+
+        private void StopTickTimer()
+        {
+            _tickTimer?.Stop();
+        }
+
+        private IDispatcherTimer CreateTickTimer()
+        {
+            var timer = Dispatcher.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(TickIntervalMs);
+            timer.Tick += (_, _) =>
+            {
+                long now = Environment.TickCount64;
+                double dt = Math.Clamp(now - _lastTickMs, 1, 100);
+                _lastTickMs = now;
+                if (!_viewModel.Tick(dt))
+                    timer.Stop();
+            };
             return timer;
         }
 

@@ -26,5 +26,12 @@ namespace Maze.Maui.App.Services
 
         /// <summary>Switches the player sprite at the given cell to the celebration pose.</summary>
         void SetPlayerCelebrate(int row, int col);
+
+        /// <summary>Marks the key at the given cell as collected — the icon disappears in game mode.</summary>
+        void MarkKeyCollected(int row, int col);
+
+        /// <summary>Updates the runtime visual for the door at the given cell.
+        /// <c>Locked</c> renders normally; <c>Opening</c> dims the icon; <c>Open</c> hides it.</summary>
+        void SetDoorRuntimeState(int row, int col, DoorState state);
     }
 }

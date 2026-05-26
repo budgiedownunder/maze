@@ -155,5 +155,124 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             Assert.False(vm.IsShowingResultPopup);
         }
+
+        // ---- Pickup / Bag / Tick / Stranded flow (game session injected) ---
+        //
+        // Tests in this section drive a stub MazeGame injected via the
+        // MazeGameViewModel.GameFactory test seam. The stub is the one in
+        // Stubs/MazeGame.cs — settable properties + one-shot NextX hooks.
+        // Each test sets up MazeItem + a stub MazeGame, calls StartGame to
+        // install the session, then exercises the view-model surface.
+
+        private static MazeItem ItemWithDefinition() =>
+            new MazeItem { Name = "Test", Definition = new Maze.Api.Maze(3, 3) };
+
+        private static MazeGame InstallGame(MazeGameViewModel vm, IMazeGridView grid, MazeItem item)
+        {
+            vm.MazeItem = item;
+            MazeGame stub = MazeGame.CreateForTests();
+            MazeGameViewModel.GameFactory = _ => stub;
+            try
+            {
+                vm.StartGame(grid);
+            }
+            finally
+            {
+                MazeGameViewModel.GameFactory = null;
+            }
+            return stub;
+        }
+
+        [Fact]
+        public void Pickup_OnUncollectedKey_AddsToBagAndMarksGridCollected()
+        {
+            var (vm, _, grid) = BuildVm();
+            var item = ItemWithDefinition();
+            MazeGame stub = InstallGame(vm, grid.Object, item);
+
+            // Place the player on a key cell (0,1) with a single uncollected key.
+            stub.PlayerRow = 0;
+            stub.PlayerCol = 1;
+            stub.Keys = new List<KeyInfo> { new KeyInfo(0, 1, 42) };
+            stub.NextPickupItem = new BagItem(BagItemKind.Key, 42);
+
+            // PickupCommand.Execute bypasses CanExecute, which is fine for a unit
+            // test — we're verifying the orchestration that runs once Pickup() is
+            // invoked, independent of how the page enables the button.
+            vm.PickupCommand.Execute(null);
+
+            Assert.Single(vm.Bag);
+            Assert.Equal(new BagItem(BagItemKind.Key, 42), vm.Bag[0]);
+            grid.Verify(g => g.MarkKeyCollected(0, 1), Times.Once);
+        }
+
+        [Fact]
+        public void Move_ResultStartedUnlocking_RaisesTickStartRequestedAndMarksDoorOpening()
+        {
+            var (vm, _, grid) = BuildVm();
+            var item = ItemWithDefinition();
+            MazeGame stub = InstallGame(vm, grid.Object, item);
+            stub.PlayerRow = 0;
+            stub.PlayerCol = 1;
+            stub.NextMoveResult = MazeGameMoveResult.StartedUnlocking;
+            bool tickRequested = false;
+            vm.TickStartRequested += () => tickRequested = true;
+
+            vm.Move(MazeGameDirection.Right);
+
+            Assert.True(tickRequested);
+            // Door is one cell to the right of the player (0,1) → (0,2).
+            grid.Verify(g => g.SetDoorRuntimeState(0, 2, DoorState.Opening), Times.Once);
+        }
+
+        [Fact]
+        public void Tick_EmitsDoorOpenedEvent_FlipsDoorToOpenOnGrid_ReturnsFalse_WhenNoneOpening()
+        {
+            var (vm, _, grid) = BuildVm();
+            var item = ItemWithDefinition();
+            MazeGame stub = InstallGame(vm, grid.Object, item);
+            stub.Doors = new List<DoorInfo> { new DoorInfo(0, 2, DoorState.Opening) };
+            stub.NextTickEvents = new[] { new GameEvent(GameEventKind.DoorOpened, 0, 2) };
+
+            bool keepTicking = vm.Tick(1000.0);
+
+            grid.Verify(g => g.SetDoorRuntimeState(0, 2, DoorState.Open), Times.Once);
+            Assert.False(keepTicking); // door went Open → no more Opening doors
+        }
+
+        [Fact]
+        public void Move_ResultStranded_FlipsIsLostAndShowsStrandedPopup()
+        {
+            var (vm, dialog, grid) = BuildVm();
+            var item = ItemWithDefinition();
+            MazeGame stub = InstallGame(vm, grid.Object, item);
+            // Move's pre-guard reads stub.IsLost — leave it false here; production
+            // flips vm.IsLost on the Stranded result, reading LoseReason from the stub.
+            stub.NextMoveResult = MazeGameMoveResult.Stranded;
+            stub.LoseReason = LoseReason.Stranded;
+
+            vm.Move(MazeGameDirection.Down);
+
+            Assert.True(vm.IsLost);
+            Assert.Equal(LoseReason.Stranded, vm.LoseReason);
+            dialog.Verify(d => d.ShowGameResult("You're stranded!!"), Times.Once);
+        }
+
+        [Fact]
+        public void Move_AfterIsLost_DoesNothing()
+        {
+            var (vm, dialog, grid) = BuildVm();
+            var item = ItemWithDefinition();
+            MazeGame stub = InstallGame(vm, grid.Object, item);
+            // Pre-existing lost state on the underlying game session is what the
+            // guard checks — verifies subsequent moves are no-ops.
+            stub.IsLost = true;
+            stub.LoseReason = LoseReason.Stranded;
+
+            vm.Move(MazeGameDirection.Right);
+
+            grid.Verify(g => g.SetVisitedDotAt(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+            dialog.Verify(d => d.ShowGameResult(It.IsAny<string>()), Times.Never);
+        }
     }
 }
