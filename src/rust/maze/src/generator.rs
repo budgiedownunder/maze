@@ -495,6 +495,62 @@ fn find_key_cell(
 /// segment before the door, available to hold the door's key.
 const MAX_DOOR_OFFSET: usize = 3;
 
+/// Returns every off-spine cell that lies on the unique path between a real
+/// `'K'` and the spine — the **key tributaries**. A decoy door placed on any
+/// of these cells would seal the key (and the spine door it unlocks) behind
+/// an unopenable barrier, since the player has no other keys at maze start.
+///
+/// Walks from each `'K'` outward via BFS, recording a parent pointer at each
+/// step, and stops at the first spine cell encountered. The maze is a
+/// perfect maze (a spanning tree), so the K→spine path is unique; tracing
+/// parent pointers back from that spine cell to the K yields exactly the
+/// cells the player must cross. Spine cells themselves are excluded from
+/// the returned set — they're already off-limits to decoy placement by the
+/// off-spine filter — but the K cell itself is included for symmetry
+/// (it's already `'K'`, so the `' '`-only filter excludes it anyway).
+fn key_tributary_cells(
+    grid: &[Vec<char>],
+    spine: &std::collections::HashSet<(usize, usize)>,
+) -> std::collections::HashSet<(usize, usize)> {
+    use std::collections::{HashMap, HashSet, VecDeque};
+    let mut tributary: HashSet<(usize, usize)> = HashSet::new();
+    let rows = grid.len();
+    let cols = if rows > 0 { grid[0].len() } else { 0 };
+    for r in 0..rows {
+        for c in 0..cols {
+            if grid[r][c] != 'K' || spine.contains(&(r, c)) {
+                continue;
+            }
+            let mut parent: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
+            let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
+            parent.insert((r, c), (r, c)); // self-parent sentinel
+            queue.push_back((r, c));
+            while let Some(cell) = queue.pop_front() {
+                if spine.contains(&cell) {
+                    // Walk parent pointers from this spine cell back to K,
+                    // marking each non-spine cell along the way.
+                    let mut cur = cell;
+                    while parent[&cur] != cur {
+                        if !spine.contains(&cur) {
+                            tributary.insert(cur);
+                        }
+                        cur = parent[&cur];
+                    }
+                    tributary.insert((r, c));
+                    break;
+                }
+                for n in passable_neighbours(grid, cell.0, cell.1) {
+                    if let std::collections::hash_map::Entry::Vacant(e) = parent.entry(n) {
+                        e.insert(cell);
+                        queue.push_back(n);
+                    }
+                }
+            }
+        }
+    }
+    tributary
+}
+
 /// Selects up to `requested` (clamped to [`MAX_AUTO_DOORS`]) interior spine cells
 /// to host doors, **evenly spread along the spine with a small random jitter**:
 /// for `n` doors, target slot centres are placed at `i·span/(n+1)` for
@@ -627,7 +683,10 @@ fn place_keys_and_doors(
 /// compared to the spine doors (which sit a few cells past their junction).
 /// Candidates adjacent to an existing `'K'` are skipped so the decoy isn't
 /// telegraphed; candidates adjacent to an already-placed `'D'` are also
-/// skipped to avoid door clumping.
+/// skipped to avoid door clumping. Critically, **key-tributary cells**
+/// (off-spine cells on the unique path between a real `'K'` and the spine)
+/// are excluded — a decoy on such a cell would seal the key (and the spine
+/// door it unlocks) behind an unopenable barrier.
 ///
 /// Spare keys then go on the remaining off-spine `' '` cells, skipping any
 /// cell adjacent to a `'D'` — so the spare key doesn't accidentally identify
@@ -635,9 +694,9 @@ fn place_keys_and_doors(
 ///
 /// Both counts are clamped to the cells the candidate filters yield;
 /// `requested_doors` is additionally clamped to [`MAX_AUTO_DOORS`]. Solvability
-/// is preserved by construction (decoys never sit on the spine; spare keys
-/// only loosen the player's key budget), so the caller does **not** re-run
-/// `solve()`.
+/// is preserved by construction (decoys never sit on the spine or on a
+/// key tributary; spare keys only loosen the player's key budget), so
+/// the caller does **not** re-run `solve()`.
 fn place_spare_keys_and_doors(
     grid: &mut [Vec<char>],
     spine: &[MazePoint],
@@ -674,12 +733,18 @@ fn place_spare_keys_and_doors(
     if requested_doors > 0 {
         let door_cap = requested_doors.min(MAX_AUTO_DOORS);
         let off_spine = collect_off_spine_empty(grid);
+        // Cells on the unique path from each real K to the spine are
+        // off-limits — a decoy here would seal the key.
+        let tributary = key_tributary_cells(grid, &spine_set);
 
         // Partition by open-degree: corridor cells preferred over leaves;
         // junction cells (degree ≥ 3) excluded.
         let mut corridors: Vec<(usize, usize)> = Vec::new();
         let mut leaves: Vec<(usize, usize)> = Vec::new();
         for cell in off_spine {
+            if tributary.contains(&cell) {
+                continue;
+            }
             match open_degree(grid, cell.0, cell.1) {
                 2 => corridors.push(cell),
                 1 => leaves.push(cell),
@@ -1351,6 +1416,166 @@ mod tests {
                          spare placement should have skipped this candidate"
                     );
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn repro_spare_doors_can_seal_off_real_keys() {
+        // Tests that `solve()` does not fail because a decoy door is placed 
+        // on an off-spine branch that contains a real key — sealing the key
+        // (and hence the spine door it unlocks) behind an unopenable
+        // decoy.
+        let mut failures: Vec<u64> = Vec::new();
+        for seed in 0u64..200 {
+            let gen = make_with_doors_and_spares(15, 15, seed, 3, Some(3), None);
+            let maze = match gen.generate() {
+                Ok(m) => m,
+                Err(_) => continue, // a generation-time error is a separate failure mode
+            };
+            if (Solver { maze: &maze }).solve().is_err() {
+                failures.push(seed);
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "{} of 200 seeds produced an unsolvable maze: {failures:?}",
+            failures.len()
+        );
+    }
+
+    #[test]
+    fn repro_spare_doors_with_spare_keys_does_not_seal_off_real_keys() {
+        // Sibling to the above — same scenario but with spare_keys=2
+        // mixed in. Spare keys land in stage B (after decoys) and can sit
+        // anywhere off-spine; the decoy-tributary exclusion still has to
+        // hold even when there are spare keys in the maze.
+        let mut failures: Vec<u64> = Vec::new();
+        for seed in 0u64..200 {
+            let gen = make_with_doors_and_spares(15, 15, seed, 3, Some(3), Some(2));
+            let maze = match gen.generate() {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            if (Solver { maze: &maze }).solve().is_err() {
+                failures.push(seed);
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "{} of 200 seeds produced an unsolvable maze: {failures:?}",
+            failures.len()
+        );
+    }
+
+    #[test]
+    fn solvability_sweep_across_spare_configs() {
+        // Broader cover for the spare-keys + decoy-doors path tests
+        // and asserts every generated maze is solvable.
+        //
+        // Smaller grids run with more seeds (cheap; surface lots of
+        // topology shapes); larger grids run with fewer seeds but each
+        // generation exercises far more branches and tributaries, so
+        // they're better at flushing rare placement edge cases. Configs
+        // exercise:
+        //   - several grid sizes from 10×10 up to 50×50
+        //   - decoys with NO real doors (pure-bait mazes)
+        //   - spare keys with NO decoys (player gets a safety budget)
+        //   - the K+D = 16 cap (boundary case)
+        //   - heavy decoys + heavy spare-keys mix (just under the cap)
+        //   - large mazes with the feature count near the cap, since
+        //     bigger topology + more features = more placement
+        //     permutations the tributary check has to be right for
+        // Per-config failure lists are reported separately so a future
+        // regression at one config is obvious.
+        struct Cfg {
+            rows: usize,
+            cols: usize,
+            doors: usize,
+            spare_doors: Option<usize>,
+            spare_keys: Option<usize>,
+            seeds: u64,
+        }
+        let cfgs = [
+            Cfg { rows: 10, cols: 10, doors: 2, spare_doors: Some(2), spare_keys: Some(2), seeds: 100 },
+            Cfg { rows: 15, cols: 15, doors: 3, spare_doors: Some(3), spare_keys: Some(2), seeds: 100 },
+            Cfg { rows: 21, cols: 21, doors: 4, spare_doors: Some(2), spare_keys: Some(4), seeds: 100 },
+            Cfg { rows: 15, cols: 15, doors: 0, spare_doors: Some(3), spare_keys: Some(3), seeds: 100 },
+            Cfg { rows: 10, cols: 10, doors: 2, spare_doors: Some(0), spare_keys: Some(4), seeds: 100 },
+            Cfg { rows: 15, cols: 15, doors: 8, spare_doors: Some(0), spare_keys: Some(0), seeds: 100 },
+            Cfg { rows: 15, cols: 15, doors: 1, spare_doors: Some(6), spare_keys: Some(8), seeds: 100 },
+            // Larger grids — richer topology means more candidate branches
+            // and tributaries, so more chances for a placement edge case.
+            // Fewer seeds per config to keep total runtime bounded.
+            Cfg { rows: 30, cols: 30, doors: 3, spare_doors: Some(3), spare_keys: Some(2), seeds: 50 },
+            Cfg { rows: 30, cols: 30, doors: 4, spare_doors: Some(4), spare_keys: Some(4), seeds: 50 },
+            Cfg { rows: 40, cols: 40, doors: 4, spare_doors: Some(4), spare_keys: Some(0), seeds: 25 },
+            Cfg { rows: 50, cols: 50, doors: 4, spare_doors: Some(4), spare_keys: Some(4), seeds: 25 },
+        ];
+        let mut total_failures: usize = 0;
+        let mut per_cfg_report: Vec<String> = Vec::new();
+        for cfg in &cfgs {
+            let mut failures: Vec<u64> = Vec::new();
+            for seed in 0u64..cfg.seeds {
+                let gen = make_with_doors_and_spares(
+                    cfg.rows, cfg.cols, seed, cfg.doors, cfg.spare_doors, cfg.spare_keys,
+                );
+                let maze = match gen.generate() {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                if (Solver { maze: &maze }).solve().is_err() {
+                    failures.push(seed);
+                }
+            }
+            if !failures.is_empty() {
+                total_failures += failures.len();
+                per_cfg_report.push(format!(
+                    "({}x{}, doors={}, spare_doors={:?}, spare_keys={:?}): {} fails — {failures:?}",
+                    cfg.rows, cfg.cols, cfg.doors, cfg.spare_doors, cfg.spare_keys, failures.len(),
+                ));
+            }
+        }
+        assert_eq!(
+            total_failures, 0,
+            "{} unsolvable generations across the sweep:\n  {}",
+            total_failures,
+            per_cfg_report.join("\n  ")
+        );
+    }
+
+    #[test]
+    fn generated_maze_never_exceeds_total_key_door_cap() {
+        // Structural invariant: regardless of (door_count, spare_doors,
+        // spare_keys) — provided the request itself passes the up-front
+        // total-features check — the generated maze must contain at most
+        // `MAX_TOTAL_FEATURES` (= 16) total K+D cells. Above 16 the
+        // key-aware solver falls back to lock-blind Lee, which would
+        // misrepresent strand reachability and let unsolvable mazes
+        // through; the cap is the keystone of the gameplay invariant.
+        let cfgs = [
+            (15, 15, 3, Some(3), Some(2)),  // 6+3+2=11
+            (21, 21, 4, Some(2), Some(4)),  // 8+2+4=14
+            (15, 15, 8, Some(0), Some(0)),  // 16+0+0=16 (boundary)
+            (15, 15, 1, Some(6), Some(8)),  // 2+6+8=16 (boundary)
+        ];
+        for (rows, cols, doors, sd, sk) in cfgs {
+            for seed in 0u64..40 {
+                let gen = make_with_doors_and_spares(rows, cols, seed, doors, sd, sk);
+                let maze = match gen.generate() {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                let grid = &maze.definition.grid;
+                let k_count = count_char(grid, 'K');
+                let d_count = count_char(grid, 'D');
+                assert!(
+                    k_count + d_count <= crate::MAX_TOTAL_FEATURES,
+                    "({rows}x{cols}, doors={doors}, sd={sd:?}, sk={sk:?}, seed={seed}): \
+                     K={k_count} + D={d_count} = {} exceeds cap ({})",
+                    k_count + d_count,
+                    crate::MAX_TOTAL_FEATURES,
+                );
             }
         }
     }
