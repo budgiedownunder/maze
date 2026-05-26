@@ -28,6 +28,14 @@ namespace Maze.Maui.App.Views
         private static readonly string[] WallTypeLabels = { "Brick", "Dressed Stone", "Wood", "Cobblestone" };
         private static readonly string[] WallTypeValues = { "brick", "dressed_stone", "wood", "cobblestone" };
 
+        // Display labels for the Door style picker. Same index pairing.
+        private static readonly string[] DoorStyleLabels = { "Swing", "Slide", "Portcullis", "Dissolve" };
+        private static readonly string[] DoorStyleValues = { "swing", "slide", "portcullis", "dissolve" };
+
+        // Display labels for the Key holder picker. Same index pairing.
+        private static readonly string[] KeyHolderLabels = { "Pedestal", "Chest", "Floating Key" };
+        private static readonly string[] KeyHolderValues = { "pedestal", "chest", "floating_key" };
+
         /// <summary>
         /// Constructor. Pre-fills the form from the previously-saved settings.
         /// </summary>
@@ -44,11 +52,15 @@ namespace Maze.Maui.App.Views
             // Populate pickers.
             foreach (var label in SkyTypeLabels) SkyPicker.Items.Add(label);
             foreach (var label in WallTypeLabels) WallTexturePicker.Items.Add(label);
+            foreach (var label in DoorStyleLabels) DoorStylePicker.Items.Add(label);
+            foreach (var label in KeyHolderLabels) KeyHolderPicker.Items.Add(label);
 
             // Pre-fill from saved settings.
             var settings = Play3dCustomLaunchSettingsStore.Load();
             SkyPicker.SelectedIndex = IndexOf(SkyTypeValues, settings.SkyType);
             WallTexturePicker.SelectedIndex = IndexOf(WallTypeValues, settings.WallType);
+            DoorStylePicker.SelectedIndex = IndexOf(DoorStyleValues, settings.DoorStyle);
+            KeyHolderPicker.SelectedIndex = IndexOf(KeyHolderValues, settings.KeyHolder);
             QuadrantWallTypesCheck.IsChecked = settings.WallMaterialVariation;
             WallTintCheck.IsChecked = settings.WallTint;
             DeadEndObjectsCheck.IsChecked = settings.DeadEndObjects;
@@ -134,11 +146,15 @@ namespace Maze.Maui.App.Views
 
             var sky = SkyPicker.SelectedIndex >= 0 ? SkyTypeValues[SkyPicker.SelectedIndex] : "night";
             var wall = WallTexturePicker.SelectedIndex >= 0 ? WallTypeValues[WallTexturePicker.SelectedIndex] : "brick";
+            var doorStyle = DoorStylePicker.SelectedIndex >= 0 ? DoorStyleValues[DoorStylePicker.SelectedIndex] : "swing";
+            var keyHolder = KeyHolderPicker.SelectedIndex >= 0 ? KeyHolderValues[KeyHolderPicker.SelectedIndex] : "pedestal";
 
             var settings = new Play3dCustomLaunchSettings
             {
                 SkyType = sky,
                 WallType = wall,
+                DoorStyle = doorStyle,
+                KeyHolder = keyHolder,
                 WallTint = WallTintCheck.IsChecked,
                 WallMaterialVariation = QuadrantWallTypesCheck.IsChecked,
                 DeadEndObjects = DeadEndObjectsCheck.IsChecked,

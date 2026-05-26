@@ -89,6 +89,18 @@
                 <Label x:Name="WallTintLabel" Text="Varied wall tints" VerticalOptions="Center"/>
             </HorizontalStackLayout>
 
+            <!-- Door style -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="Door style"/>
+                <Picker x:Name="DoorStylePicker"/>
+            </VerticalStackLayout>
+
+            <!-- Key holder -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="Key holder"/>
+                <Picker x:Name="KeyHolderPicker"/>
+            </VerticalStackLayout>
+
             <!-- Dead-end objects -->
             <HorizontalStackLayout Spacing="8">
                 <CheckBox x:Name="DeadEndObjectsCheck"/>
