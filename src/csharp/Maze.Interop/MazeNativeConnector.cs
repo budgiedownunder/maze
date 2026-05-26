@@ -74,6 +74,8 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_tick(IntPtr ptr, float dtMs);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_tick_event_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_tick_event(IntPtr ptr, int index, out uint kindOut, out uint rowOut, out uint colOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_key_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_key(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint idOut);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_visited_cell_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_visited_cell(IntPtr ptr, int index, out int rowOut, out int colOut);
 
@@ -421,6 +423,18 @@ namespace Maze.Interop
         {
             byte result = maze_c_maze_game_get_tick_event((IntPtr)(ulong)gamePtr, index, out uint kind, out uint row, out uint col);
             evt = new MazeInterop.MazeGameEvent { Kind = (MazeInterop.MazeGameEventKind)kind, Row = row, Column = col };
+            return result != 0;
+        }
+
+        public int MazeGameKeyCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_key_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetKey(UIntPtr gamePtr, int index, out MazeInterop.MazeKey key)
+        {
+            byte result = maze_c_maze_game_get_key((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out uint id);
+            key = new MazeInterop.MazeKey { Row = row, Column = col, Id = id };
             return result != 0;
         }
 

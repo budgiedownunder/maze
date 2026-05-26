@@ -962,6 +962,8 @@ hasResult)
                 { "maze_game_wasm_tick",             () => ref this.mazeGameTick },
                 { "maze_game_wasm_tick_event_count", () => ref this.mazeGameTickEventCount },
                 { "maze_game_wasm_get_tick_event",   () => ref this.mazeGameGetTickEvent },
+                { "maze_game_wasm_key_count",        () => ref this.mazeGameKeyCount },
+                { "maze_game_wasm_get_key",          () => ref this.mazeGameGetKey },
                 { "maze_game_wasm_visited_cell_count", () => ref this.mazeGameVisitedCellCount },
                 { "maze_game_wasm_get_visited_cell", () => ref this.mazeGameGetVisitedCell }
             };

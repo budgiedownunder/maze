@@ -1489,6 +1489,74 @@ namespace Maze.Interop.Tests
             Assert.Equal((int)MazeLoseReason.Stranded, reason);
         }
 
+        // 1 row, 4 cols: S K K F — two uncollected keys
+        private const string TwoKeyGameJson = """{"grid":[["S","K","K","F"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameKeyCount"/> reports both uncollected keys
+        /// </summary>
+        [Fact]
+        public void MazeGameKeyCount_ShouldReturnNumberOfUncollectedKeys()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(TwoKeyGameJson);
+            int count = interop.MazeGameKeyCount(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(2, count);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetKey"/> returns each key cell with a distinct id
+        /// </summary>
+        [Fact]
+        public void MazeGameGetKey_ShouldReturnDistinctKeys()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(TwoKeyGameJson);
+            bool ok1 = interop.MazeGameGetKey(gamePtr, 0, out MazeKey k1);
+            bool ok2 = interop.MazeGameGetKey(gamePtr, 1, out MazeKey k2);
+            FreeMazeGame(gamePtr);
+            Assert.True(ok1);
+            Assert.True(ok2);
+            Assert.Equal((0u, 1u), (k1.Row, k1.Column));
+            Assert.Equal((0u, 2u), (k2.Row, k2.Column));
+            Assert.NotEqual(k1.Id, k2.Id);
+        }
+
+        /// <summary>
+        /// Confirms that pickup removes a key from the uncollected list while the remaining key's id is preserved
+        /// </summary>
+        [Fact]
+        public void MazeGameGetKey_ShouldShrink_AfterPickup()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(TwoKeyGameJson);
+            interop.MazeGameGetKey(gamePtr, 1, out MazeKey k2Before);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → first K
+            interop.MazeGamePickup(gamePtr, out MazeBagItem picked);
+            int countAfter = interop.MazeGameKeyCount(gamePtr);
+            bool ok = interop.MazeGameGetKey(gamePtr, 0, out MazeKey remaining);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(1, countAfter);
+            Assert.True(ok);
+            Assert.Equal((0u, 2u), (remaining.Row, remaining.Column));
+            Assert.Equal(k2Before.Id, remaining.Id); // surviving key keeps its id
+            Assert.NotEqual(picked.Id, remaining.Id); // collected and remaining ids are distinct
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetKey"/> returns false for an empty key list
+        /// </summary>
+        [Fact]
+        public void MazeGameGetKey_ShouldReturnFalse_WhenNoKeys()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            bool ok = interop.MazeGameGetKey(gamePtr, 0, out MazeKey _);
+            FreeMazeGame(gamePtr);
+            Assert.False(ok);
+        }
+
         /// <summary>
         /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameVisitedCellCount"/> returns 1 (start cell) before any moves
         /// </summary>

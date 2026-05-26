@@ -48,6 +48,12 @@ uint8_t maze_c_maze_game_get_tick_event(MazeGameC* ptr, int32_t index,
                                         uint32_t* kind_out, uint32_t* row_out, uint32_t* col_out);
                                                         // 1 = success, 0 = out-of-range
 
+// Keys (uncollected; valid pointer assumed; out parameters may be null)
+int32_t maze_c_maze_game_key_count(MazeGameC* ptr);
+uint8_t maze_c_maze_game_get_key(MazeGameC* ptr, int32_t index,
+                                 uint32_t* row_out, uint32_t* col_out, uint32_t* id_out);
+                                                        // 1 = success, 0 = out-of-range
+
 // Visited cells (valid pointer assumed)
 int32_t maze_c_maze_game_visited_cell_count(MazeGameC* ptr);
 uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,

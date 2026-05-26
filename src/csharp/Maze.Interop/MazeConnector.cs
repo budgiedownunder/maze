@@ -386,6 +386,21 @@ namespace Maze.Interop
         /// <returns>True if the index was valid; false if out of range</returns>
         public bool MazeGameGetTickEvent(UIntPtr gamePtr, int index, out MazeGameEvent evt);
         /// <summary>
+        /// Returns the number of uncollected key cells in the maze. The count shrinks
+        /// as the player picks keys up (collected keys move into the bag).
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected key count</returns>
+        public int MazeGameKeyCount(UIntPtr gamePtr);
+        /// <summary>
+        /// Retrieves a single uncollected key cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the uncollected-keys list</param>
+        /// <param name="key">Receives the key cell + stable id on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetKey(UIntPtr gamePtr, int index, out MazeKey key);
+        /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)
         /// </summary>
         /// <param name="gamePtr">Pointer to game session</param>

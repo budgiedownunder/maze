@@ -1460,6 +1460,52 @@ namespace Maze.Api.Tests
             game.MovePlayer(MazeGameDirection.Right); // [0,2] = F
             Assert.Equal(3, game.VisitedCells.Count);
         }
+
+        // 1 row, 4 cols: S K K F — two uncollected keys
+        private const string TwoKeyGameJson = """{"grid":[["S","K","K","F"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Keys"/> reports both uncollected keys with distinct ids
+        /// </summary>
+        [Fact]
+        public void MazeGameKeys_ShouldReportBothKeys_Initially()
+        {
+            using MazeGame game = MazeGame.Create(TwoKeyGameJson);
+            var keys = game.Keys;
+            Assert.Equal(2, keys.Count);
+            Assert.Equal((0u, 1u), (keys[0].Row, keys[0].Column));
+            Assert.Equal((0u, 2u), (keys[1].Row, keys[1].Column));
+            Assert.NotEqual(keys[0].Id, keys[1].Id);
+        }
+
+        /// <summary>
+        /// Confirms that pickup removes the collected key from <see cref="MazeGame.Keys"/> while preserving
+        /// the remaining key's stable id
+        /// </summary>
+        [Fact]
+        public void MazeGameKeys_ShouldShrink_AfterPickup_PreservingRemainingId()
+        {
+            using MazeGame game = MazeGame.Create(TwoKeyGameJson);
+            uint secondKeyIdBefore = game.Keys[1].Id;
+            game.MovePlayer(MazeGameDirection.Right); // onto first K
+            BagItem? picked = game.Pickup();
+            var keys = game.Keys;
+            Assert.NotNull(picked);
+            Assert.Single(keys);
+            Assert.Equal((0u, 2u), (keys[0].Row, keys[0].Column));
+            Assert.Equal(secondKeyIdBefore, keys[0].Id);
+            Assert.NotEqual(picked.Value.Id, keys[0].Id);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Keys"/> is empty for a maze with no key cells
+        /// </summary>
+        [Fact]
+        public void MazeGameKeys_ShouldBeEmpty_WhenNoKeys()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.Empty(game.Keys);
+        }
     }
     /// <summary>
     ///  This class defines the [Wasmtime](https://docs.wasmtime.dev/) text fixture used by the [Maze.Api.Tests.MazeApiWasmtimeTest_Static](xref:Maze.Api.Tests.MazeApiWasmtimeTest_Static) and

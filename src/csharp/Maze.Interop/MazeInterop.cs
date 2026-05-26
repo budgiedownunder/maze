@@ -209,6 +209,18 @@ namespace Maze.Interop
             public uint Column;
         }
         /// <summary>
+        /// One uncollected key cell along with its stable id.
+        /// </summary>
+        public struct MazeKey
+        {
+            /// <summary>Row of the key cell</summary>
+            public uint Row;
+            /// <summary>Column of the key cell</summary>
+            public uint Column;
+            /// <summary>Stable identifier derived from the key's origin cell</summary>
+            public uint Id;
+        }
+        /// <summary>
         /// Private constructor (singleton pattern)
         /// </summary>
         /// <param name="wasmPathOrName">WebAssembly path or name. WebAssembly is loaded from this location if `wasmBytes` is `null`.</param>
@@ -915,6 +927,26 @@ namespace Maze.Interop
         public bool MazeGameGetTickEvent(UIntPtr gamePtr, int index, out MazeGameEvent evt)
         {
             return connector.MazeGameGetTickEvent(gamePtr, index, out evt);
+        }
+        /// <summary>
+        /// Returns the number of uncollected key cells in the maze
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected key count</returns>
+        public int MazeGameKeyCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameKeyCount(gamePtr);
+        }
+        /// <summary>
+        /// Retrieves a single uncollected key cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the uncollected-keys list</param>
+        /// <param name="key">Receives the key cell + stable id on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetKey(UIntPtr gamePtr, int index, out MazeKey key)
+        {
+            return connector.MazeGameGetKey(gamePtr, index, out key);
         }
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)

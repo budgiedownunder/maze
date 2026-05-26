@@ -1399,6 +1399,65 @@ pub extern "C" fn maze_game_wasm_get_tick_event(
     0
 }
 
+/// Returns the number of uncollected key cells in the maze.
+///
+/// The count shrinks as the player picks keys up — collected keys move
+/// into the bag.
+///
+/// # Returns
+///
+/// The key count, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_key_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.keys().len() as i32
+}
+
+/// Retrieves a single uncollected key cell by `index`.
+///
+/// Writes the key's row, column, and stable id into the out parameters.
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_key(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let keys = game.keys();
+    if index < 0 || index as usize >= keys.len() {
+        return -1;
+    }
+    let ((r, c), id) = keys[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = id;
+        }
+    }
+    0
+}
+
 /// Returns the number of cells in the visited-cells list.
 ///
 /// # Returns

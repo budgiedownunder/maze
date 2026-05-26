@@ -2461,6 +2461,91 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — keys (uncollected, sorted by (row, col))
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Returns the number of uncollected key cells in the maze.
+///
+/// The count shrinks as the player picks keys up (collected keys disappear
+/// from this list — they move into the bag).
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","K","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_key_count(ptr), 2);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_key_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.keys().len() as i32
+}
+
+/// Retrieves a single uncollected key cell by index.
+///
+/// Writes the key's row, column, and stable id into the out parameters.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// let mut row: u32 = 99;
+/// let mut col: u32 = 99;
+/// let mut id: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_get_key(ptr, 0, &mut row, &mut col, &mut id) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(row, 0);
+/// assert_eq!(col, 1);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_key(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let keys = game.keys();
+    if index < 0 || index as usize >= keys.len() {
+        return 0;
+    }
+    let ((r, c), id) = keys[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = id;
+        }
+    }
+    1
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // MazeGameC — visited cells
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -3651,6 +3736,78 @@ mod tests {
         let mut c: u32 = 99;
         let ok = unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut k, &mut r, &mut c) };
         assert_eq!(ok, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — keys ──────────────────────────────────────────────────────
+
+    fn two_key_game_json() -> CString {
+        // 1 row, 4 cols: S K K F
+        CString::new(r#"{"grid":[["S","K","K","F"]]}"#).unwrap()
+    }
+
+    #[test]
+    fn game_key_count_reports_uncollected_keys() {
+        let json = two_key_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_key_count(ptr), 2);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_key_returns_first_key_cell() {
+        let json = two_key_game_json();
+        let ptr = new_game(&json);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_key(ptr, 0, &mut row, &mut col, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!(row, 0);
+        assert_eq!(col, 1);
+        // Verify we can read the second key as well, with a distinct id.
+        let mut row2: u32 = 99;
+        let mut col2: u32 = 99;
+        let mut id2: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_key(ptr, 1, &mut row2, &mut col2, &mut id2) };
+        assert_eq!(ok, 1);
+        assert_eq!(row2, 0);
+        assert_eq!(col2, 2);
+        assert_ne!(id, id2);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_key_collection_removes_key_from_list() {
+        let json = two_key_game_json();
+        let ptr = new_game(&json);
+        // Step right onto the first key and pick it up.
+        maze_c_maze_game_move_player(ptr, 4);
+        let mut k: u32 = 0;
+        let mut id: u32 = 0;
+        unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        // Only one key remains.
+        assert_eq!(maze_c_maze_game_key_count(ptr), 1);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut rem_id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_key(ptr, 0, &mut row, &mut col, &mut rem_id) };
+        assert_eq!(ok, 1);
+        // The remaining key is the second cell (0,2) — and its id is preserved.
+        assert_eq!((row, col), (0, 2));
+        assert_ne!(rem_id, id);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_key_out_of_range_returns_zero() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_key(ptr, 0, &mut row, &mut col, &mut id) };
+        assert_eq!(ok, 0); // no keys → out of range
         maze_c_free_maze_game(ptr);
     }
 

@@ -129,6 +129,8 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? mazeGameTick;
         protected IWebAssemblyFunction? mazeGameTickEventCount;
         protected IWebAssemblyFunction? mazeGameGetTickEvent;
+        protected IWebAssemblyFunction? mazeGameKeyCount;
+        protected IWebAssemblyFunction? mazeGameGetKey;
         protected IWebAssemblyFunction? mazeGameVisitedCellCount;
         protected IWebAssemblyFunction? mazeGameGetVisitedCell;
         /// <summary>
@@ -908,6 +910,40 @@ namespace Maze.Interop
             FreeSizedMemory(kindOutPtr);
             FreeSizedMemory(rowOutPtr);
             FreeSizedMemory(colOutPtr);
+            return result == 0;
+        }
+        /// <summary>
+        /// Returns the number of uncollected key cells in the maze
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected key count</returns>
+        public int MazeGameKeyCount(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameKeyCount?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Retrieves a single uncollected key cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the uncollected-keys list</param>
+        /// <param name="key">Receives the key cell + stable id on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetKey(UIntPtr gamePtr, int index, out MazeInterop.MazeKey key)
+        {
+            UInt32 rowOutPtr = AllocateSizedMemory(4);
+            UInt32 colOutPtr = AllocateSizedMemory(4);
+            UInt32 idOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGameGetKey?.Invoke(
+                (long)(uint)gamePtr, index,
+                (long)(uint)(rowOutPtr + 4),
+                (long)(uint)(colOutPtr + 4),
+                (long)(uint)(idOutPtr + 4)) ?? -1);
+            key.Row = memory.ReadUInt32(rowOutPtr + 4);
+            key.Column = memory.ReadUInt32(colOutPtr + 4);
+            key.Id = memory.ReadUInt32(idOutPtr + 4);
+            FreeSizedMemory(rowOutPtr);
+            FreeSizedMemory(colOutPtr);
+            FreeSizedMemory(idOutPtr);
             return result == 0;
         }
         /// <summary>

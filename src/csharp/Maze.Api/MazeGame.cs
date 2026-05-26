@@ -87,6 +87,12 @@ namespace Maze.Api
     /// <param name="Column">Column of the cell the event applies to.</param>
     public readonly record struct GameEvent(GameEventKind Kind, uint Row, uint Column);
 
+    /// <summary>One uncollected key cell along with its stable id — see <see cref="MazeGame.Keys"/>.</summary>
+    /// <param name="Row">Row of the key cell.</param>
+    /// <param name="Column">Column of the key cell.</param>
+    /// <param name="Id">Stable identifier derived from the key's origin cell.</param>
+    public readonly record struct KeyInfo(uint Row, uint Column, uint Id);
+
     /// <summary>A cell visited by the player, identified by its zero-based row and column.</summary>
     public record MazeGameVisitedCell(int Row, int Col);
 
@@ -251,6 +257,23 @@ namespace Maze.Api
                     events[i] = new GameEvent((GameEventKind)e.Kind, e.Row, e.Column);
             }
             return events;
+        }
+
+        /// <summary>All uncollected key cells along with their stable ids, sorted by (row, column).
+        /// Shrinks as the player picks keys up — collected keys move into <see cref="Bag"/>.</summary>
+        public IReadOnlyList<KeyInfo> Keys
+        {
+            get
+            {
+                int count = Interop.MazeGameKeyCount(_gamePtr);
+                var keys = new List<KeyInfo>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    if (Interop.MazeGameGetKey(_gamePtr, i, out var k))
+                        keys.Add(new KeyInfo(k.Row, k.Column, k.Id));
+                }
+                return keys;
+            }
         }
     }
 }
