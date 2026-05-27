@@ -14,7 +14,7 @@ namespace Maze.Maui.App.Views
     /// Lets the user customise the per-launch settings (sky, wall texture,
     /// landmark toggles, time limit) for a 3D play of a user-edited maze.
     /// Returns the chosen <see cref="Play3dCustomLaunchSettings"/> on Play,
-    /// or <c>null</c> on Cancel. Pre-fills from <see cref="Play3dCustomLaunchSettings.Load"/>
+    /// or <c>null</c> on Cancel. Pre-fills from <see cref="Play3dCustomLaunchSettingsStore.Load"/>
     /// so the user's previous choices are remembered.
     /// </summary>
     public partial class Play3dCustomLaunchPopup : Popup
@@ -184,7 +184,7 @@ namespace Maze.Maui.App.Views
         /// Handles the Play button click. Validates the time limit (must be
         /// &gt; 0) and on success closes the popup with the chosen settings,
         /// having also persisted them via
-        /// <see cref="Play3dCustomLaunchSettings.Save"/>.
+        /// <see cref="Play3dCustomLaunchSettingsStore.Save"/>.
         /// </summary>
         private async void OnPlayClicked(object sender, EventArgs e)
         {
