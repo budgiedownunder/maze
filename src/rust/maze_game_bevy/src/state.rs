@@ -203,7 +203,7 @@ impl SkyType {
 }
 
 /// Wall texture kinds for the per-cell tinted path. Each variant maps
-/// to one of the `WALL_MATERIAL_*` indices in [`crate::world::walls`].
+/// to one of the `WALL_MATERIAL_*` indices in `crate::world::walls`.
 /// Default is `Brick` so a missing or unrecognised wire value preserves
 /// the pre-Step-14 hard-coded look.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -240,7 +240,7 @@ impl WallType {
     }
 
     /// Returns the matching `WALL_MATERIAL_*` index used by
-    /// [`crate::world::walls`]. Single source of truth so no call site
+    /// `crate::world::walls`. Single source of truth so no call site
     /// hard-codes the integer mapping.
     pub fn to_kind_index(self) -> usize {
         match self {

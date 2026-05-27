@@ -57,7 +57,7 @@ pub struct GeneratorOptions {
     /// spare budget is exhausted) strands them. Doors are preferred at corridor
     /// cells (open-degree 2) so they look like they actually gate something;
     /// candidates adjacent to an existing `'K'` are skipped so a decoy isn't
-    /// telegraphed by an obvious nearby key. Clamped to [`MAX_AUTO_DOORS`] and
+    /// telegraphed by an obvious nearby key. Clamped to [`crate::MAX_AUTO_DOORS`] and
     /// to the available off-spine cells. `None` or `Some(0)` (the default)
     /// places no decoys; the maze is unchanged from the `door_count`-only
     /// result. Placement does **not** re-validate the maze with `solve()` —
@@ -379,7 +379,7 @@ fn carve(
 /// `keys + doors = 2 * doors ≤ 16` — the key-aware solver's `MAX_TOTAL_FEATURES`
 /// bound — so the placement-validation solve stays in true key-aware mode rather
 /// than falling back to the lock-blind solve.
-const MAX_AUTO_DOORS: usize = 8;
+pub const MAX_AUTO_DOORS: usize = 8;
 
 /// Count of non-wall 4-neighbours of `(r, c)`.
 fn open_degree(grid: &[Vec<char>], r: usize, c: usize) -> usize {

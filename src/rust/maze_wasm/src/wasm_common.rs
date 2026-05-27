@@ -40,7 +40,7 @@ pub struct MazeGameWasm {
 
 /// Identifies the type of a maze cell.
 ///
-/// Returned by [`MazeWasm::get_cell_type`].
+/// Returned by `maze_wasm_get_cell_type`.
 #[cfg(feature = "wasm-bindgen")]
 #[wasm_bindgen]
 pub enum MazeCellTypeWasm {

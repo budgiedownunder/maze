@@ -9,7 +9,7 @@ pub mod validation;
 
 // Re-export traits and structs
 pub use error::Error;
-pub use file_store::{FileStore, FileStoreConfig};
+pub use file_store::{FileStore, FileStoreConfig, MAX_MAZE_CELLS};
 #[cfg(feature = "sql-store")]
 pub use sql_store::{SqlStore, SqlStoreConfig};
 pub use store::EmailAuditLog;

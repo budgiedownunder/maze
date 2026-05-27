@@ -1636,14 +1636,14 @@ impl UserStore for SqlStore {
     }
 
     /// Locates a user by an email address regardless of verification state.
-    /// Same SQL shape as [`find_user_by_verified_email`] minus the
+    /// Same SQL shape as [`Self::find_user_by_verified_email`] minus the
     /// `ue.verified <> 0` filter. The `user_emails.email` UNIQUE constraint
     /// guarantees at most one match in healthy state; the multi-row guard
     /// is here for parity and to fail loudly if a future migration ever
     /// weakens that constraint.
     ///
     /// See the trait doc-comment for usage rules — auth code must use
-    /// [`find_user_by_verified_email`] instead.
+    /// [`Self::find_user_by_verified_email`] instead.
     async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, Error> {
         let mut rows = sqlx::query(&q(
             self.kind,
@@ -2551,7 +2551,7 @@ async fn fetch_user_email_row(
 #[async_trait]
 impl MazeStore for SqlStore {
     /// Returns the cell-count ceiling enforced by this SQL store on
-    /// create/update — see [`MAX_MAZE_CELLS`].
+    /// create/update — see [`crate::MAX_MAZE_CELLS`].
     ///
     /// # Examples
     ///

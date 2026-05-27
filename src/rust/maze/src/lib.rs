@@ -18,7 +18,7 @@ pub use game::{BagItem, Direction, DoorState, GameEvent, LoseReason, MazeGame, M
 #[cfg(feature = "generation")]
 pub use generation_algorithm::GenerationAlgorithm;
 #[cfg(feature = "generation")]
-pub use generator::{Generator, GeneratorOptions};
+pub use generator::{Generator, GeneratorOptions, MAX_AUTO_DOORS};
 pub use maze::{MazePrinter, MazeSolver};
 pub use maze_path::MazePath;
 pub use maze_path_direction::MazePathDirection;

@@ -2057,7 +2057,7 @@ fn generate_now_millis() -> chrono::DateTime<chrono::Utc> {
 #[async_trait]
 impl MazeStore for FileStore {
     /// Returns the cell-count ceiling enforced by this file store on
-    /// create/update — see [`MAX_MAZE_CELLS`].
+    /// create/update — see [`crate::MAX_MAZE_CELLS`].
     ///
     /// # Examples
     ///
@@ -2721,7 +2721,7 @@ impl TokenStore for FileStore {
         Ok(token)
     }
 
-    /// Removes every outstanding [`TokenPurpose::EmailVerification`]
+    /// Removes every outstanding [`data_model::TokenPurpose::EmailVerification`]
     /// token belonging to `user_id` whose `target_email` matches the
     /// supplied address (case-insensitive). Used by the verification
     /// re-send handler so re-issuing supersedes prior tokens.
