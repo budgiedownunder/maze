@@ -16,6 +16,8 @@ pub struct MazeDefinition {
     // - `' '`:  Represents an empty cell.
     // - `'K'`:  Represents a cell holding a key (multiple allowed).
     // - `'D'`:  Represents a door (multiple allowed).
+    // - `'E'`:  Represents an enemy spawn cell (multiple allowed).
+    // - `'H'`:  Represents a health-pickup cell (multiple allowed).
     pub grid: Vec<Vec<char>>,
 }
 
@@ -44,7 +46,7 @@ impl<'de> Deserialize<'de> for MazeDefinition {
                 if !Self::is_valid_char(*ch) {
                     return Err(serde::de::Error::invalid_value(
                         serde::de::Unexpected::Char(*ch),
-                        &"valid characters are 'S', 'F', 'W', 'K', 'D' or ' '",
+                        &"valid characters are 'S', 'F', 'W', 'K', 'D', 'E', 'H' or ' '",
                     ));
                 }
             }
@@ -202,7 +204,7 @@ impl MazeDefinition {
     /// println!("Character 'S' is valid => {}", s_is_valid);
     /// ```
     pub fn is_valid_char(ch: char) -> bool {
-        matches!(ch, 'S' | 'F' | 'W' | 'K' | 'D' | ' ')
+        matches!(ch, 'S' | 'F' | 'W' | 'K' | 'D' | 'E' | 'H' | ' ')
     }
     /// Verifies whether the definition instance is empty, returning an error if it is
     ///
@@ -235,6 +237,8 @@ impl MazeDefinition {
     /// - `' '`:  Represents an empty cell.
     /// - `'K'`:  Represents a cell holding a key (multiple allowed).
     /// - `'D'`:  Represents a door (multiple allowed).
+    /// - `'E'`:  Represents an enemy spawn cell (multiple allowed).
+    /// - `'H'`:  Represents a health-pickup cell (multiple allowed).
     ///
     /// # Arguments
     ///
@@ -290,10 +294,12 @@ impl MazeDefinition {
                     .iter()
                     .map(|value| match value {
                         'W' => MazeCellState::Wall,
-                        // `K` (key) and `D` (door) are passable terrain at the
-                        // cell-state level; key/door game semantics live in the `maze`
-                        // crate. The solver therefore treats doors as openable.
-                        'S' | 'F' | ' ' | 'K' | 'D' => MazeCellState::Empty,
+                        // `K` (key), `D` (door), `E` (enemy spawn) and `H` (health
+                        // pickup) are passable terrain at the cell-state level;
+                        // their gameplay semantics live in the `maze` crate. The
+                        // solver therefore treats doors as openable and is enemy-
+                        // blind.
+                        'S' | 'F' | ' ' | 'K' | 'D' | 'E' | 'H' => MazeCellState::Empty,
                         _ => panic!(
                             "internal error - grid contains unsupported cell character: {value}"
                         ),
@@ -356,6 +362,8 @@ impl MazeDefinition {
                         'W' => '\u{2588}',
                         'K' => 'K',
                         'D' => 'D',
+                        'E' => 'E',
+                        'H' => 'H',
                         ' ' => '\u{2591}',
                         _ => '-',
                     })
@@ -827,9 +835,11 @@ mod tests {
     }
 
     #[test]
-    fn is_valid_char_accepts_keys_and_doors() {
+    fn is_valid_char_accepts_keys_doors_enemies_health() {
         assert!(MazeDefinition::is_valid_char('K'));
         assert!(MazeDefinition::is_valid_char('D'));
+        assert!(MazeDefinition::is_valid_char('E'));
+        assert!(MazeDefinition::is_valid_char('H'));
     }
 
     #[test]
@@ -846,11 +856,33 @@ mod tests {
     }
 
     #[test]
+    fn can_create_new_from_vector_with_multiple_enemies_and_health() {
+        #[rustfmt::skip]
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', 'E', 'H', ' '],
+            vec!['E', 'H', ' ', 'F']
+        ];
+        let definition = MazeDefinition::from_vec(grid.clone());
+        assert_eq!(definition.row_count(), 2);
+        assert_eq!(definition.col_count(), 4);
+        assert_eq!(definition.grid, grid);
+    }
+
+    #[test]
     fn can_deserialize_with_keys_and_doors() {
         let s = r#"{"grid":[["S","K","D"," "],["K","D"," ","F"]]}"#;
         let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
         let grid: Vec<Vec<char>> =
             vec![vec!['S', 'K', 'D', ' '], vec!['K', 'D', ' ', 'F']];
+        assert_eq!(d.grid, grid);
+    }
+
+    #[test]
+    fn can_deserialize_with_enemies_and_health() {
+        let s = r#"{"grid":[["S","E","H"," "],["E","H"," ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        let grid: Vec<Vec<char>> =
+            vec![vec!['S', 'E', 'H', ' '], vec!['E', 'H', ' ', 'F']];
         assert_eq!(d.grid, grid);
     }
 
@@ -1136,7 +1168,7 @@ mod tests {
 
     #[test]
     #[should_panic(
-        expected = "invalid value: character `X`, expected valid characters are 'S', 'F', 'W', 'K', 'D' or ' '"
+        expected = "invalid value: character `X`, expected valid characters are 'S', 'F', 'W', 'K', 'D', 'E', 'H' or ' '"
     )]
     fn cannot_deserialize_bad_json_invalid_char_1() {
         let s = r#"{"grid":[["S","X"," "],["F"," ","W"]]}"#;
