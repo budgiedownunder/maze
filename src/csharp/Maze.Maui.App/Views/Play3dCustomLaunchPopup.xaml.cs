@@ -20,9 +20,11 @@ namespace Maze.Maui.App.Views
     public partial class Play3dCustomLaunchPopup : Popup
     {
         // Display labels for the Sky picker. Index matches SkyTypeValues so
-        // SelectedIndex maps to a wire value.
-        private static readonly string[] SkyTypeLabels = { "Night", "Sunrise", "Day", "Sunset" };
-        private static readonly string[] SkyTypeValues = { "night", "sunrise", "day", "sunset" };
+        // SelectedIndex maps to a wire value. `Dungeon` + `Chamber` are the
+        // two enclosed-roof variants (dark-rock ceiling / wall-material ceiling); 
+        // same set the React modal exposes.
+        private static readonly string[] SkyTypeLabels = { "Night", "Sunrise", "Day", "Sunset", "Dungeon", "Chamber" };
+        private static readonly string[] SkyTypeValues = { "night", "sunrise", "day", "sunset", "dungeon", "chamber" };
 
         // Display labels for the Wall texture picker. Same index pairing.
         private static readonly string[] WallTypeLabels = { "Brick", "Dressed Stone", "Wood", "Cobblestone" };

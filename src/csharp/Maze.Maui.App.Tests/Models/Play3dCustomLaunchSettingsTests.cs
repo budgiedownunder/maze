@@ -85,5 +85,20 @@ namespace Maze.Maui.App.Tests.Models
         {
             Assert.Equal(expected, Play3dCustomLaunchSettings.IsValidKeyHolder(s));
         }
+
+        [Theory]
+        [InlineData("night", true)]
+        [InlineData("sunrise", true)]
+        [InlineData("day", true)]
+        [InlineData("sunset", true)]
+        [InlineData("dungeon", true)]   // 5E roofed dark-rock sky
+        [InlineData("chamber", true)]   // 5E roofed wall-material sky
+        [InlineData("midnight", false)] // never on the wire
+        [InlineData("", false)]
+        [InlineData("Night", false)]    // case-sensitive
+        public void IsValidSkyType_AcceptsCurrentWireVariantsOnly(string s, bool expected)
+        {
+            Assert.Equal(expected, Play3dCustomLaunchSettings.IsValidSkyType(s));
+        }
     }
 }

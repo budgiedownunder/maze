@@ -87,7 +87,7 @@ namespace Maze.Maui.App.Models
         /// the default on a stale stored value.
         /// </summary>
         public static bool IsValidSkyType(string s) =>
-            s is "night" or "sunrise" or "day" or "sunset";
+            s is "night" or "sunrise" or "day" or "sunset" or "dungeon" or "chamber";
 
         /// <summary>
         /// Returns <c>true</c> when <paramref name="s"/> is a recognised
