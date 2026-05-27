@@ -174,14 +174,16 @@ fn to_js_key_obj(row: usize, col: usize, id: u32) -> Object {
 }
 
 /// Converts a tick event to a JavaScript object (e.g. `{ type: "doorOpened", row, col }`).
+///
+/// Variants without a JS surface here are filtered out by `tick` before this
+/// function is called; the empty result for other variants exists only to
+/// keep the function total and would never be returned in practice.
 fn to_js_game_event_obj(event: &maze::GameEvent) -> Object {
     let obj = Object::new();
-    match event {
-        maze::GameEvent::DoorOpened { cell: (row, col) } => {
-            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("doorOpened")).unwrap();
-            Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
-            Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
-        }
+    if let maze::GameEvent::DoorOpened { cell: (row, col) } = event {
+        Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("doorOpened")).unwrap();
+        Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
+        Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
     }
     obj
 }
@@ -195,6 +197,7 @@ fn move_result_to_wasm(result: maze::MoveResult) -> MoveResultWasm {
         maze::MoveResult::BlockedByLockedDoor => MoveResultWasm::BlockedByLockedDoor,
         maze::MoveResult::StartedUnlocking    => MoveResultWasm::StartedUnlocking,
         maze::MoveResult::Stranded            => MoveResultWasm::Stranded,
+        maze::MoveResult::Killed              => MoveResultWasm::Killed,
     }
 }
 
@@ -447,6 +450,7 @@ impl MazeGameWasm {
     pub fn lose_reason(&self) -> JsValue {
         match self.game.lose_reason() {
             Some(maze::LoseReason::Stranded) => JsValue::from_str("stranded"),
+            Some(maze::LoseReason::Killed) => JsValue::from_str("killed"),
             None => JsValue::NULL,
         }
     }
@@ -549,6 +553,12 @@ impl MazeGameWasm {
     pub fn tick(&mut self, dt_ms: f32) -> Array {
         let result = Array::new();
         for event in self.game.tick(dt_ms) {
+            // Surface only event variants the JS contract knows how to
+            // consume. Other variants stay internal to the Rust runtime;
+            // JS shapes for them land alongside the consumers that need them.
+            if !matches!(event, maze::GameEvent::DoorOpened { .. }) {
+                continue;
+            }
             result.push(&to_js_game_event_obj(&event));
         }
         result

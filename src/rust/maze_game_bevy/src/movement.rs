@@ -169,6 +169,12 @@ pub(crate) fn movement_system(
                 MoveResult::StartedUnlocking => {}
                 // Locked door with no key, or a door still opening: no move.
                 MoveResult::BlockedByLockedDoor => {}
+                // Stepped into an enemy with HP=1 and was killed — the
+                // player's HP layer will surface this once it lands; for now
+                // the Bevy renderer treats it like Blocked (no move) and
+                // leaves `game.is_lost()` / `game.lose_reason()` to drive
+                // any future death overlay.
+                MoveResult::Killed => {}
                 // Wall / boundary, or `Direction::None`: no move.
                 MoveResult::Blocked | MoveResult::None => {}
             }

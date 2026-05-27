@@ -14,7 +14,10 @@ mod solver;
 
 // Re-export traits and structs
 pub use error::Error;
-pub use game::{BagItem, Direction, DoorState, GameEvent, LoseReason, MazeGame, MoveResult};
+pub use game::{
+    BagItem, Direction, DoorState, Enemy, GameEvent, LoseReason, MazeGame, MazeGameOptions,
+    MoveResult,
+};
 #[cfg(feature = "generation")]
 pub use generation_algorithm::GenerationAlgorithm;
 #[cfg(feature = "generation")]

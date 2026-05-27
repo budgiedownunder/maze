@@ -69,6 +69,10 @@ pub enum MoveResult {
     /// returns `Some(LoseReason::Stranded)` and [`MazeGame::is_lost`]
     /// returns `true`.
     Stranded,
+    /// The player was killed by an enemy collision and has no remaining HP.
+    /// The game transitions to lost with [`LoseReason::Killed`] and
+    /// [`MazeGame::is_lost`] returns `true`.
+    Killed,
 }
 
 /// Why a game ended in a loss.
@@ -95,6 +99,12 @@ pub enum LoseReason {
     /// to the finish. Set when the player walks through an open door and the
     /// inequality `closed_doors_to_finish > available_keys` is true.
     Stranded,
+    /// The player was killed by an enemy collision. Set when an enemy and the
+    /// player share a cell and the player's HP drops to zero — either via a
+    /// player [`MoveResult::Killed`] or an enemy-tick collision that leaves
+    /// the player at 0 HP (in which case the player's next move returns
+    /// [`MoveResult::Killed`]).
+    Killed,
 }
 
 /// The lifecycle state of a door (`'D'`) cell.
@@ -163,24 +173,168 @@ pub enum GameEvent {
         /// The door cell that opened.
         cell: (usize, usize),
     },
+    /// An enemy advanced one cell. `row` / `col` is the enemy's new position.
+    EnemyMoved {
+        /// Stable id of the enemy that moved (assigned at construction in
+        /// row-major scan order of the `'E'` cells).
+        id: u32,
+        /// New row of the enemy.
+        row: usize,
+        /// New column of the enemy.
+        col: usize,
+    },
+    /// The player took damage from a same-cell enemy collision (either the
+    /// player moved into an enemy or an enemy moved onto the player). `hp_after`
+    /// is the player's HP after the damage is applied.
+    PlayerDamaged {
+        /// Player HP after the damage is applied.
+        hp_after: u32,
+    },
+    /// The player picked up a health-recharge cell. `hp_after` is the player's
+    /// HP after the heal is applied (capped at `max_hp`).
+    PlayerHealed {
+        /// Player HP after the heal is applied.
+        hp_after: u32,
+    },
+}
+
+/// An enemy entity tracked by [`MazeGame`].
+///
+/// Seeded from each `'E'` cell at construction; advances toward the player on
+/// the cadence given by `move_period_ms` via [`MazeGame::tick`].
+///
+/// Movement is modelled with a door-style in-progress state so 3D renderers
+/// can interpolate the visual smoothly: `(row, col)` is the **current**
+/// game-state cell (collisions are checked against this), `(target_row,
+/// target_col)` is the **next** cell the enemy is moving toward, and
+/// [`Enemy::move_progress`] reports the fraction of the way there. When
+/// `accum_ms` reaches `move_period_ms`, `(row, col)` is committed to
+/// `(target_row, target_col)`, a [`GameEvent::EnemyMoved`] event fires, and
+/// the next target is planned. A 2D renderer can ignore the target /
+/// progress fields entirely and snap to `(row, col)` on each commit event.
+///
+/// # Examples
+///
+/// ```
+/// use maze::MazeGame;
+/// let json = r#"{"grid":[["S","E","F"]]}"#;
+/// let game = MazeGame::from_json(json).unwrap();
+/// let enemies = game.enemies();
+/// assert_eq!(enemies.len(), 1);
+/// assert_eq!((enemies[0].row, enemies[0].col), (0, 1));
+/// assert_eq!(enemies[0].id, 0);
+/// // Initial target is planned toward the player's start cell.
+/// assert_eq!((enemies[0].target_row, enemies[0].target_col), (0, 0));
+/// assert_eq!(enemies[0].move_progress(), 0.0);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Enemy {
+    /// Stable identifier assigned at construction in row-major scan order of
+    /// the `'E'` cells. Used to correlate [`GameEvent::EnemyMoved`] events with
+    /// the entries returned by [`MazeGame::enemies`].
+    pub id: u32,
+    /// Current game-state row. Updated on the commit at the end of each move
+    /// period. Collisions are checked against this cell.
+    pub row: usize,
+    /// Current game-state column. Updated on the commit at the end of each
+    /// move period. Collisions are checked against this cell.
+    pub col: usize,
+    /// Row of the cell the enemy is moving toward. Equals `row` when the enemy
+    /// is resting (no valid greedy move). 3D renderers interpolate the visual
+    /// from `(row, col)` toward `(target_row, target_col)` using
+    /// [`Self::move_progress`] each frame.
+    pub target_row: usize,
+    /// Column of the cell the enemy is moving toward. Equals `col` when the
+    /// enemy is resting (no valid greedy move).
+    pub target_col: usize,
+    /// How often the enemy advances one cell, in milliseconds of accumulated
+    /// `dt_ms` from [`MazeGame::tick`].
+    pub move_period_ms: f32,
+    /// Accumulated `dt_ms` since the enemy's last commit. Drained by
+    /// `move_period_ms` each time the enemy advances.
+    pub accum_ms: f32,
+    /// HP inflicted on the player per same-cell collision.
+    pub damage: u32,
+}
+
+impl Enemy {
+    /// Fraction of the way from `(row, col)` to `(target_row, target_col)`,
+    /// clamped to `0.0..=1.0`. 3D renderers call this each frame to
+    /// interpolate the enemy's visual position smoothly between cells.
+    ///
+    /// Returns `0.0` for a resting enemy (target == current) or one whose
+    /// `move_period_ms` is non-positive (degenerate config).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::MazeGame;
+    /// let json = r#"{"grid":[["S","E","F"]]}"#;
+    /// let mut game = MazeGame::from_json(json).unwrap();
+    /// assert_eq!(game.enemies()[0].move_progress(), 0.0);
+    /// game.tick(750.0); // half of the default 1500 ms move period
+    /// assert!((game.enemies()[0].move_progress() - 0.5).abs() < 1e-3);
+    /// ```
+    pub fn move_progress(&self) -> f32 {
+        if self.move_period_ms <= 0.0 {
+            return 0.0;
+        }
+        if (self.row, self.col) == (self.target_row, self.target_col) {
+            return 0.0;
+        }
+        (self.accum_ms / self.move_period_ms).clamp(0.0, 1.0)
+    }
+}
+
+/// Construction-time tuning knobs for [`MazeGame`].
+///
+/// All fields are `Option` so callers only override the values they care about;
+/// `None` falls back to the per-game defaults documented on each field. Pass to
+/// [`MazeGame::from_json_with_options`].
+///
+/// # Examples
+///
+/// ```
+/// use maze::{MazeGame, MazeGameOptions};
+/// let json = r#"{"grid":[["S","E","F"]]}"#;
+/// let opts = MazeGameOptions {
+///     enemy_move_period_ms: Some(2000.0),
+///     enemy_damage: Some(2),
+/// };
+/// let game = MazeGame::from_json_with_options(json, opts).unwrap();
+/// let enemies = game.enemies();
+/// assert_eq!(enemies[0].move_period_ms, 2000.0);
+/// assert_eq!(enemies[0].damage, 2);
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct MazeGameOptions {
+    /// Per-game default enemy move period in milliseconds. `None` → `1500.0`.
+    pub enemy_move_period_ms: Option<f32>,
+    /// Per-game default enemy damage per collision. `None` → `1`.
+    pub enemy_damage: Option<u32>,
 }
 
 /// A running maze game session.
 ///
 /// Holds the grid, player position, facing direction, completion state, the set
-/// of visited cells in visit order, the player's bag, per-cell door state, and
-/// the lose state (set when the player runs out of time or strands themselves).
-/// Create with [`MazeGame::from_json`].
+/// of visited cells in visit order, the player's bag, per-cell door state, the
+/// active enemies, and the lose state (set when the player runs out of time,
+/// strands themselves, or is killed by an enemy collision).
+/// Create with [`MazeGame::from_json`] (defaults) or
+/// [`MazeGame::from_json_with_options`] (tunable enemy cadence + damage).
 ///
 /// Cell rules applied during [`MazeGame::move_player`]:
-/// - `' '`, `'S'`, or `'K'` → [`MoveResult::Moved`] (a key is not collected by
-///   moving onto it — use [`MazeGame::pickup`])
+/// - `' '`, `'S'`, `'K'`, or `'E'` → [`MoveResult::Moved`] (a key is not
+///   collected by moving onto it — use [`MazeGame::pickup`]; entering an `'E'`
+///   cell triggers the same-cell collision check)
 /// - `'F'` → [`MoveResult::Complete`]
 /// - `'D'` (door) → [`MoveResult::Moved`] when already open (or
 ///   [`MoveResult::Stranded`] when walking through leaves the player with
 ///   fewer reachable keys than closed doors remaining on any route to the
 ///   finish), else [`MoveResult::StartedUnlocking`] (a key is held) or
 ///   [`MoveResult::BlockedByLockedDoor`]
+/// - `'H'` → [`MoveResult::Moved`] (auto-pickup applies HP arithmetic in a
+///   later layer; the cell-rules surface here is the same as a plain passage)
 /// - `'W'` or out-of-bounds → [`MoveResult::Blocked`]
 ///
 /// Doors open over time — see [`MazeGame::tick`]. The lose state is queried via
@@ -223,7 +377,29 @@ pub struct MazeGame {
     /// state. Mutually exclusive with [`Self::complete`] in practice — the game
     /// is either won, lost, or in progress.
     lose_reason: Option<LoseReason>,
+    /// Active enemies, one per `'E'` cell at construction. Tracked in a `Vec`
+    /// so iteration order (and thus event emission order) is deterministic by
+    /// enemy id.
+    enemies: Vec<Enemy>,
+    /// Per-game default enemy move period in milliseconds. Used when seeding
+    /// each `Enemy` at construction; retained on the game so future dynamic
+    /// enemy spawns (e.g. respawn after defeat) inherit the same default.
+    #[allow(dead_code)]
+    default_enemy_move_period_ms: f32,
+    /// Per-game default enemy damage per collision. Used when seeding each
+    /// `Enemy` at construction; retained on the game so future dynamic enemy
+    /// spawns inherit the same default.
+    #[allow(dead_code)]
+    default_enemy_damage: u32,
 }
+
+/// Default enemy move period in milliseconds when no override is supplied via
+/// [`MazeGameOptions`].
+const DEFAULT_ENEMY_MOVE_PERIOD_MS: f32 = 1500.0;
+
+/// Default enemy damage per collision when no override is supplied via
+/// [`MazeGameOptions`].
+const DEFAULT_ENEMY_DAMAGE: u32 = 1;
 
 /// Real-time duration a door takes to open once unlocking begins, in milliseconds.
 const DOOR_OPEN_MS: f32 = 1000.0;
@@ -247,6 +423,33 @@ impl MazeGame {
     /// assert_eq!(game.player_col(), 0);
     /// ```
     pub fn from_json(json: &str) -> Result<Self, String> {
+        Self::from_json_with_options(json, MazeGameOptions::default())
+    }
+
+    /// Creates a game session from a `MazeDefinition` JSON string with explicit
+    /// per-game tuning knobs (see [`MazeGameOptions`]). Equivalent to
+    /// [`Self::from_json`] when `options` is `MazeGameOptions::default()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the JSON is invalid or the maze has no start cell.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, MazeGameOptions};
+    /// let json = r#"{"grid":[["S","E","F"]]}"#;
+    /// let opts = MazeGameOptions {
+    ///     enemy_move_period_ms: Some(500.0),
+    ///     enemy_damage: Some(2),
+    /// };
+    /// let game = MazeGame::from_json_with_options(json, opts).unwrap();
+    /// let enemies = game.enemies();
+    /// assert_eq!(enemies.len(), 1);
+    /// assert_eq!(enemies[0].move_period_ms, 500.0);
+    /// assert_eq!(enemies[0].damage, 2);
+    /// ```
+    pub fn from_json_with_options(json: &str, options: MazeGameOptions) -> Result<Self, String> {
         let definition: MazeDefinition =
             serde_json::from_str(json).map_err(|e| format!("invalid maze JSON: {e}"))?;
 
@@ -259,8 +462,14 @@ impl MazeGame {
 
         let visited = vec![(start.row, start.col)];
 
+        let default_enemy_move_period_ms = options
+            .enemy_move_period_ms
+            .unwrap_or(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        let default_enemy_damage = options.enemy_damage.unwrap_or(DEFAULT_ENEMY_DAMAGE);
+
         let mut doors = HashMap::new();
         let mut key_ids = HashMap::new();
+        let mut enemy_cells: Vec<(usize, usize)> = Vec::new();
         let mut next_key_id: u32 = 0;
         for (r, row) in definition.grid.iter().enumerate() {
             for (c, &ch) in row.iter().enumerate() {
@@ -272,10 +481,46 @@ impl MazeGame {
                         key_ids.insert((r, c), next_key_id);
                         next_key_id += 1;
                     }
+                    'E' => {
+                        enemy_cells.push((r, c));
+                    }
                     _ => {}
                 }
             }
         }
+
+        // Plan each enemy's initial target so 3D renderers can animate from
+        // t=0 (no dead first period) and 2D renderers can ignore the target
+        // entirely. The initial target is computed using the player's start
+        // cell as a stand-in — if the player has moved by the time the first
+        // tick fires, the enemy still commits to this initial target before
+        // re-planning, which is acceptable (real-world AI reaction time is
+        // similarly bounded by one tick period).
+        let player_start = (start.row, start.col);
+        let enemies: Vec<Enemy> = enemy_cells
+            .into_iter()
+            .enumerate()
+            .map(|(idx, (r, c))| {
+                let (target_row, target_col) = greedy_next_cell(
+                    &definition.grid,
+                    (r, c),
+                    player_start,
+                    rows,
+                    cols,
+                )
+                .unwrap_or((r, c));
+                Enemy {
+                    id: idx as u32,
+                    row: r,
+                    col: c,
+                    target_row,
+                    target_col,
+                    move_period_ms: default_enemy_move_period_ms,
+                    accum_ms: 0.0,
+                    damage: default_enemy_damage,
+                }
+            })
+            .collect();
 
         // Cache the finish cell once — the strand check needs it on every
         // door walk-through and we don't want to grid-scan each time.
@@ -300,6 +545,9 @@ impl MazeGame {
             finish,
             lost: false,
             lose_reason: None,
+            enemies,
+            default_enemy_move_period_ms,
+            default_enemy_damage,
         })
     }
 
@@ -412,7 +660,7 @@ impl MazeGame {
                 Some(DoorState::Opening { .. }) => MoveResult::BlockedByLockedDoor,
                 None => MoveResult::Blocked,
             },
-            ' ' | 'S' | 'K' => {
+            ' ' | 'S' | 'K' | 'E' | 'H' => {
                 self.player_row = new_row;
                 self.player_col = new_col;
                 self.visited.push((new_row, new_col));
@@ -503,9 +751,11 @@ impl MazeGame {
     /// Returns the maze grid as a 2-D slice of characters.
     ///
     /// Each character is one of `'S'` (start), `'F'` (finish), `'W'` (wall),
-    /// `'K'` (key), `'D'` (door), or `' '` (open). A collected key's cell becomes
-    /// `' '`; door cells keep their `'D'` character — their open/closed state is
-    /// tracked separately (see [`MazeGame::doors`]).
+    /// `'K'` (key), `'D'` (door), `'E'` (enemy spawn), `'H'` (health pickup),
+    /// or `' '` (open). A collected key's cell becomes `' '`; door cells keep
+    /// their `'D'` character — their open/closed state is tracked separately
+    /// (see [`MazeGame::doors`]). Enemy spawn cells stay `'E'` even as the
+    /// enemy moves — runtime enemy positions live in [`MazeGame::enemies`].
     ///
     /// # Examples
     ///
@@ -521,12 +771,15 @@ impl MazeGame {
     }
 
     /// Advances time-based game state by `dt_ms` milliseconds, returning the
-    /// events that occurred (sorted by cell).
+    /// events that occurred.
     ///
-    /// Currently this drives door opening: each door in [`DoorState::Opening`]
-    /// has its progress advanced, and a door that completes transitions to
-    /// [`DoorState::Open`] (permanently passable) and emits
-    /// [`GameEvent::DoorOpened`].
+    /// Thin orchestrator: delegates to one private sub-tick function per
+    /// tickable entity type and concatenates their events in execution order.
+    /// Enemies advance first (each enemy that moves emits
+    /// [`GameEvent::EnemyMoved`], and a same-cell collision with the player
+    /// emits [`GameEvent::PlayerDamaged`]), then doors (each door that
+    /// completes opening transitions to [`DoorState::Open`] and emits
+    /// [`GameEvent::DoorOpened`]).
     ///
     /// # Examples
     ///
@@ -540,6 +793,79 @@ impl MazeGame {
     /// assert_eq!(game.tick(1000.0), vec![GameEvent::DoorOpened { cell: (0, 2) }]);
     /// ```
     pub fn tick(&mut self, dt_ms: f32) -> Vec<GameEvent> {
+        let mut events = self.tick_enemies(dt_ms);
+        events.extend(self.tick_doors(dt_ms));
+        events
+    }
+
+    /// Advances enemy state by `dt_ms` milliseconds, following a door-style
+    /// commit-then-plan loop per enemy in id order:
+    ///
+    /// 1. Accumulate `dt_ms` into the enemy's `accum_ms`.
+    /// 2. While `accum_ms >= move_period_ms`, drain one period and commit the
+    ///    enemy's planned move: `(row, col)` becomes `(target_row, target_col)`,
+    ///    push [`GameEvent::EnemyMoved`] (skipped for a resting commit where
+    ///    target equals current), and — if the new cell equals the player's
+    ///    cell — push [`GameEvent::PlayerDamaged`]. Then plan the next target
+    ///    via [`greedy_next_cell`]; if no valid step exists, target stays at
+    ///    the current cell (the enemy rests for the next period).
+    ///
+    /// Between commits, [`Enemy::move_progress`] reports the fraction of the
+    /// way from `(row, col)` to `(target_row, target_col)` — 3D renderers use
+    /// this each frame to interpolate the visual smoothly. HP arithmetic is
+    /// layered on top of the placeholder `hp_after: 0` written here.
+    ///
+    /// Returns events in execution order (deterministic because `enemies` is
+    /// iterated as a `Vec` in id order).
+    fn tick_enemies(&mut self, dt_ms: f32) -> Vec<GameEvent> {
+        let mut events = Vec::new();
+        let player_cell = (self.player_row, self.player_col);
+        // Index-based iteration so the greedy-next planner can borrow
+        // `&self.grid` without aliasing the `&mut self.enemies[i]` handle.
+        for i in 0..self.enemies.len() {
+            self.enemies[i].accum_ms += dt_ms;
+            while self.enemies[i].accum_ms >= self.enemies[i].move_period_ms {
+                self.enemies[i].accum_ms -= self.enemies[i].move_period_ms;
+
+                let (target_row, target_col) = (
+                    self.enemies[i].target_row,
+                    self.enemies[i].target_col,
+                );
+                let (cur_row, cur_col) = (self.enemies[i].row, self.enemies[i].col);
+
+                // Commit the planned move (no event for a resting commit).
+                if (cur_row, cur_col) != (target_row, target_col) {
+                    self.enemies[i].row = target_row;
+                    self.enemies[i].col = target_col;
+                    events.push(GameEvent::EnemyMoved {
+                        id: self.enemies[i].id,
+                        row: target_row,
+                        col: target_col,
+                    });
+                    if (target_row, target_col) == player_cell {
+                        events.push(GameEvent::PlayerDamaged { hp_after: 0 });
+                    }
+                }
+
+                // Plan the next target from the newly committed cell.
+                let from = (self.enemies[i].row, self.enemies[i].col);
+                let (next_row, next_col) =
+                    greedy_next_cell(&self.grid, from, player_cell, self.rows, self.cols)
+                        .unwrap_or(from);
+                self.enemies[i].target_row = next_row;
+                self.enemies[i].target_col = next_col;
+            }
+        }
+        events
+    }
+
+    /// Advances door state by `dt_ms` milliseconds. Each door in
+    /// [`DoorState::Opening`] has its progress advanced; a door that completes
+    /// transitions to [`DoorState::Open`] (permanently passable) and emits
+    /// [`GameEvent::DoorOpened`]. Events are sorted by cell to give a
+    /// deterministic ordering (the `doors` collection is a `HashMap`, whose
+    /// iteration order isn't stable).
+    fn tick_doors(&mut self, dt_ms: f32) -> Vec<GameEvent> {
         let mut events = Vec::new();
         for (cell, phase) in self.doors.iter_mut() {
             if let DoorState::Opening { progress } = phase {
@@ -552,6 +878,7 @@ impl MazeGame {
         }
         events.sort_by_key(|event| match event {
             GameEvent::DoorOpened { cell } => *cell,
+            _ => (0, 0),
         });
         events
     }
@@ -575,6 +902,30 @@ impl MazeGame {
             .collect();
         doors.sort_by_key(|&(cell, _)| cell);
         doors
+    }
+
+    /// Returns the active enemies, ordered by stable id.
+    ///
+    /// Each [`Enemy`] carries its current position, its per-game
+    /// `move_period_ms`, the `accum_ms` accumulator drained by
+    /// [`MazeGame::tick`], and the `damage` it inflicts per same-cell
+    /// collision. Enemies are seeded one per `'E'` cell at construction.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::MazeGame;
+    /// let json = r#"{"grid":[["S","E","F"]]}"#;
+    /// let game = MazeGame::from_json(json).unwrap();
+    /// let enemies = game.enemies();
+    /// assert_eq!(enemies.len(), 1);
+    /// assert_eq!(enemies[0].id, 0);
+    /// assert_eq!((enemies[0].row, enemies[0].col), (0, 1));
+    /// assert_eq!(enemies[0].move_period_ms, 1500.0);
+    /// assert_eq!(enemies[0].damage, 1);
+    /// ```
+    pub fn enemies(&self) -> Vec<Enemy> {
+        self.enemies.clone()
     }
 
     /// Returns the cells still holding an uncollected key (`'K'`) and the key's
@@ -906,6 +1257,49 @@ fn passable_neighbours(
         out.push((r, c + 1));
     }
     out
+}
+
+/// Picks the passable neighbour of `from` that minimises Manhattan distance to
+/// `target`, with a deterministic tie-break order N > E > S > W.
+///
+/// Returns `None` when no passable neighbour exists (the entity stays put).
+/// A cell is passable if it's in bounds and not `'W'`; every other character
+/// (`' '`, `'S'`, `'F'`, `'K'`, `'D'`, `'E'`, `'H'`) is treated as walkable —
+/// this is the AI passability rule and is intentionally lock-blind (the
+/// strand/key-aware solver lives elsewhere).
+///
+/// Used by [`MazeGame::tick`] to advance enemies one cell per move period.
+fn greedy_next_cell(
+    grid: &[Vec<char>],
+    from: (usize, usize),
+    target: (usize, usize),
+    rows: usize,
+    cols: usize,
+) -> Option<(usize, usize)> {
+    let (r, c) = from;
+    let candidates: [Option<(usize, usize)>; 4] = [
+        if r > 0 { Some((r - 1, c)) } else { None },
+        if c + 1 < cols { Some((r, c + 1)) } else { None },
+        if r + 1 < rows { Some((r + 1, c)) } else { None },
+        if c > 0 { Some((r, c - 1)) } else { None },
+    ];
+    let mut best: Option<((usize, usize), usize)> = None;
+    for cand in candidates.into_iter().flatten() {
+        if grid[cand.0][cand.1] == 'W' {
+            continue;
+        }
+        let dist = manhattan_distance(cand, target);
+        match best {
+            Some((_, best_dist)) if dist >= best_dist => {}
+            _ => best = Some((cand, dist)),
+        }
+    }
+    best.map(|(cell, _)| cell)
+}
+
+/// Manhattan distance between two grid cells.
+fn manhattan_distance(a: (usize, usize), b: (usize, usize)) -> usize {
+    a.0.abs_diff(b.0) + a.1.abs_diff(b.1)
 }
 
 #[cfg(test)]
@@ -1946,5 +2340,323 @@ mod tests {
         assert_eq!(game.move_player(Direction::Down), MoveResult::Stranded);
         assert!(game.is_lost());
         assert_eq!(game.lose_reason(), Some(LoseReason::Stranded));
+    }
+
+    // ── enemies ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn from_json_with_default_options_seeds_enemy_period_and_damage() {
+        let json = r#"{"grid":[["S","E","F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies.len(), 1);
+        assert_eq!(enemies[0].move_period_ms, DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(enemies[0].damage, DEFAULT_ENEMY_DAMAGE);
+        assert_eq!(enemies[0].accum_ms, 0.0);
+        // Initial target planned toward the player's start cell (0, 0).
+        assert_eq!((enemies[0].target_row, enemies[0].target_col), (0, 0));
+        assert_eq!(enemies[0].move_progress(), 0.0);
+    }
+
+    #[test]
+    fn enemy_with_no_valid_greedy_move_rests_at_spawn() {
+        // Enemy fully walled in on the bottom row — no passable neighbour.
+        // Initial target must equal current cell; resting is reported via
+        // both target equality and `move_progress() == 0.0`.
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S"," ","W"],
+            [" ","W","W"],
+            ["W","W","E"],
+            ["F","W","W"]
+        ]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies.len(), 1);
+        assert_eq!((enemies[0].row, enemies[0].col), (2, 2));
+        assert_eq!((enemies[0].target_row, enemies[0].target_col), (2, 2));
+        assert_eq!(enemies[0].move_progress(), 0.0);
+    }
+
+    #[test]
+    fn move_progress_scales_with_accumulator_between_commits() {
+        let json = r#"{"grid":[["S"," ","E","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        // Half a period — enemy still resting on its spawn cell but visually
+        // half-way to the target.
+        game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS / 2.0);
+        let enemies = game.enemies();
+        assert_eq!((enemies[0].row, enemies[0].col), (0, 2));
+        assert_eq!((enemies[0].target_row, enemies[0].target_col), (0, 1));
+        assert!((enemies[0].move_progress() - 0.5).abs() < 1e-3);
+        // Another quarter period — should be 75% of the way.
+        game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS / 4.0);
+        let enemies = game.enemies();
+        assert!((enemies[0].move_progress() - 0.75).abs() < 1e-3);
+    }
+
+    #[test]
+    fn from_json_with_options_overrides_enemy_period_and_damage() {
+        let json = r#"{"grid":[["S","E","F"]]}"#;
+        let opts = MazeGameOptions {
+            enemy_move_period_ms: Some(500.0),
+            enemy_damage: Some(2),
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies.len(), 1);
+        assert_eq!(enemies[0].move_period_ms, 500.0);
+        assert_eq!(enemies[0].damage, 2);
+    }
+
+    #[test]
+    fn enemies_collection_sorted_by_id_in_row_major_scan_order() {
+        // Three 'E' cells laid out across two rows; ids must be assigned in
+        // row-major scan order: (0,1)=0, (0,3)=1, (1,2)=2.
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S","E"," ","E"],
+            [" "," ","E"," "],
+            [" "," "," ","F"]
+        ]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies.len(), 3);
+        assert_eq!(enemies[0].id, 0);
+        assert_eq!((enemies[0].row, enemies[0].col), (0, 1));
+        assert_eq!(enemies[1].id, 1);
+        assert_eq!((enemies[1].row, enemies[1].col), (0, 3));
+        assert_eq!(enemies[2].id, 2);
+        assert_eq!((enemies[2].row, enemies[2].col), (1, 2));
+    }
+
+    #[test]
+    fn tick_advances_enemy_one_step_toward_player_at_move_period() {
+        // Player at S=(0,0); enemy at (0,2). Greedy step is West to (0,1).
+        let json = r#"{"grid":[["S"," ","E"," ","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(
+            events,
+            vec![GameEvent::EnemyMoved {
+                id: 0,
+                row: 0,
+                col: 1,
+            }]
+        );
+        let enemies = game.enemies();
+        assert_eq!((enemies[0].row, enemies[0].col), (0, 1));
+        // Accumulator drained exactly one period.
+        assert_eq!(enemies[0].accum_ms, 0.0);
+    }
+
+    #[test]
+    fn enemy_ai_tie_break_prefers_north_then_east_south_west() {
+        // Enemy at (1,1); player at (1,1)? No — player at S=(0,0).
+        // Manhattan distances from (1,1)'s neighbours to (0,0):
+        //   N=(0,1) → 1, E=(1,2) → 3, S=(2,1) → 3, W=(1,0) → 1
+        // N and W tie at 1; tie-break must pick N.
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S"," "," "],
+            [" ","E"," "],
+            [" "," ","F"]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(
+            events,
+            vec![GameEvent::EnemyMoved {
+                id: 0,
+                row: 0,
+                col: 1,
+            }]
+        );
+    }
+
+    #[test]
+    fn enemy_does_not_move_onto_wall() {
+        // Enemy at (0,1) with W to the W at (0,0)? Actually we need a setup
+        // where the greedy choice is blocked by a wall. Enemy at (1,1);
+        // player at (0,0). Greedy step prefers N to (0,1) — make (0,1) W.
+        // Next-best is W to (1,0); make that valid.
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S","W","F"],
+            [" ","E"," "],
+            [" "," "," "]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        // N is W (blocked); next equal-best by tie-break is W at (1,0).
+        assert_eq!(
+            events,
+            vec![GameEvent::EnemyMoved {
+                id: 0,
+                row: 1,
+                col: 0,
+            }]
+        );
+    }
+
+    #[test]
+    fn multiple_enemies_can_share_a_cell() {
+        // Two enemies at (0,2) and (0,3); player at (0,0). Both step west.
+        // After one tick: id 0 → (0,1), id 1 → (0,2). Both moves emit
+        // EnemyMoved events in id order.
+        let json = r#"{"grid":[["S"," ","E","E","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(
+            events,
+            vec![
+                GameEvent::EnemyMoved {
+                    id: 0,
+                    row: 0,
+                    col: 1,
+                },
+                GameEvent::EnemyMoved {
+                    id: 1,
+                    row: 0,
+                    col: 2,
+                },
+            ]
+        );
+        // Second tick: id 0 would step onto (0,0)=S (which is passable for
+        // AI — fires the placeholder PlayerDamaged); id 1 → (0,1) where
+        // id 0 just was. Enemies are allowed to pile up.
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(
+            events,
+            vec![
+                GameEvent::EnemyMoved {
+                    id: 0,
+                    row: 0,
+                    col: 0,
+                },
+                GameEvent::PlayerDamaged { hp_after: 0 },
+                GameEvent::EnemyMoved {
+                    id: 1,
+                    row: 0,
+                    col: 1,
+                },
+            ]
+        );
+        let enemies = game.enemies();
+        assert_eq!((enemies[0].row, enemies[0].col), (0, 0));
+        assert_eq!((enemies[1].row, enemies[1].col), (0, 1));
+    }
+
+    #[test]
+    fn enemy_step_onto_player_emits_player_damaged_placeholder() {
+        // Enemy at (0,1); player at (0,0). One tick → enemy steps onto S,
+        // emits EnemyMoved then PlayerDamaged with the placeholder
+        // hp_after: 0 (HP arithmetic lives in the next layer).
+        let json = r#"{"grid":[["S","E"," ","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(
+            events,
+            vec![
+                GameEvent::EnemyMoved {
+                    id: 0,
+                    row: 0,
+                    col: 0,
+                },
+                GameEvent::PlayerDamaged { hp_after: 0 },
+            ]
+        );
+    }
+
+    #[test]
+    fn tick_zero_dt_is_a_noop() {
+        let json = r#"{"grid":[["S"," ","E","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        let events = game.tick(0.0);
+        assert!(events.is_empty());
+        let enemies = game.enemies();
+        assert_eq!((enemies[0].row, enemies[0].col), (0, 2));
+        assert_eq!(enemies[0].accum_ms, 0.0);
+    }
+
+    #[test]
+    fn tick_with_double_period_produces_two_moves_per_enemy() {
+        // Enemy at (0,3); player at (0,0). 2 * move_period accumulated in
+        // one tick call → two moves drain the accumulator, two EnemyMoved
+        // events emitted.
+        let json = r#"{"grid":[["S"," "," ","E","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS * 2.0);
+        assert_eq!(
+            events,
+            vec![
+                GameEvent::EnemyMoved {
+                    id: 0,
+                    row: 0,
+                    col: 2,
+                },
+                GameEvent::EnemyMoved {
+                    id: 0,
+                    row: 0,
+                    col: 1,
+                },
+            ]
+        );
+        let enemies = game.enemies();
+        assert_eq!((enemies[0].row, enemies[0].col), (0, 1));
+        assert_eq!(enemies[0].accum_ms, 0.0);
+    }
+
+    #[test]
+    fn move_player_onto_enemy_cell_returns_moved() {
+        // 'E' is passable terrain for the player; the same-cell collision
+        // event itself fires from enemy-tick movement. Player-into-enemy
+        // damage arithmetic lands in the HP layer.
+        let json = r#"{"grid":[["S","E","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
+        assert_eq!(game.player_col(), 1);
+    }
+
+    #[test]
+    fn move_player_onto_health_pickup_cell_returns_moved() {
+        // 'H' is passable terrain for the player; auto-pickup heal
+        // arithmetic lands in the HP layer.
+        let json = r#"{"grid":[["S","H","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
+        assert_eq!(game.player_col(), 1);
+    }
+
+    #[test]
+    fn tick_orchestrator_emits_enemy_events_then_door_events() {
+        // Player picks up K at (0,1), advances to (0,2), then holds against
+        // door D at (0,3) (StartedUnlocking). Enemy at (0,4) is two cells
+        // east of D. One tick later the enemy steps W onto the (Opening)
+        // door cell and the door completes opening — orchestrator must
+        // emit the enemy event first, then the door event.
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S","K"," ","D","E"],
+            [" "," "," "," ","F"]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // (0,1) K
+        game.pickup();
+        game.move_player(Direction::Right); // (0,2)
+        let r = game.move_player(Direction::Right); // (0,3) StartedUnlocking
+        assert_eq!(r, MoveResult::StartedUnlocking);
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(
+            events,
+            vec![
+                GameEvent::EnemyMoved {
+                    id: 0,
+                    row: 0,
+                    col: 3,
+                },
+                GameEvent::DoorOpened { cell: (0, 3) },
+            ]
+        );
     }
 }

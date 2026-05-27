@@ -1959,6 +1959,7 @@ pub extern "C" fn maze_c_maze_game_move_player(ptr: *mut MazeGameC, dir: i32) ->
         maze::MoveResult::BlockedByLockedDoor => 4,
         maze::MoveResult::StartedUnlocking => 5,
         maze::MoveResult::Stranded => 6,
+        maze::MoveResult::Killed => 7,
     }
 }
 
@@ -2100,6 +2101,7 @@ pub extern "C" fn maze_c_maze_game_lose_reason(ptr: *mut MazeGameC) -> i32 {
     match game.lose_reason() {
         None => 0,
         Some(maze::LoseReason::Stranded) => 1,
+        Some(maze::LoseReason::Killed) => 2,
     }
 }
 
@@ -2370,7 +2372,15 @@ pub unsafe extern "C" fn maze_c_maze_game_get_door(
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_tick(ptr: *mut MazeGameC, dt_ms: f32) -> i32 {
     let g = unsafe { &mut *ptr };
-    g.tick_events = g.game.tick(dt_ms);
+    // Buffer only event variants the C tick-event getter knows how to
+    // marshal. Other variants stay internal to the Rust runtime; FFI
+    // surfaces for them land alongside the consumers that need them.
+    g.tick_events = g
+        .game
+        .tick(dt_ms)
+        .into_iter()
+        .filter(|e| matches!(e, maze::GameEvent::DoorOpened { .. }))
+        .collect();
     g.tick_events.len() as i32
 }
 
@@ -2445,7 +2455,11 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event(
     if index < 0 || index as usize >= g.tick_events.len() {
         return 0;
     }
-    let maze::GameEvent::DoorOpened { cell: (r, c) } = g.tick_events[index as usize];
+    let maze::GameEvent::DoorOpened { cell: (r, c) } = g.tick_events[index as usize] else {
+        // The tick buffer is pre-filtered to DoorOpened only — see
+        // `maze_c_maze_game_tick`. Any other variant here would be a bug.
+        return 0;
+    };
     unsafe {
         if !out_kind.is_null() {
             *out_kind = 0; // DoorOpened

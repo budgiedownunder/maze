@@ -368,7 +368,11 @@ pub(crate) fn door_tick_system(
     }
     let dt_ms = time.delta_secs() * 1000.0;
     for event in state.game.tick(dt_ms) {
-        let GameEvent::DoorOpened { cell } = event;
+        // Other tick events (enemy moves, player damage / heal) are handled
+        // by their own systems alongside the rigs that consume them.
+        let GameEvent::DoorOpened { cell } = event else {
+            continue;
+        };
         for mut marker in &mut markers {
             if marker.cell == cell {
                 marker.opened = true;
