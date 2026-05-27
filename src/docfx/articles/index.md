@@ -32,4 +32,5 @@ The following components are present:
 |              |                                                                                |
 | `Web`        | [`Maze REST API`](../api/web/maze_rest/view_content.md)                        | RESTful Web API for managing and solving mazes 
 |              |                                                                                |
-| `WebAssembly`| [`maze_wasm`](../api/wasm/maze_wasm/view_content.md)                           | WebAssembly API for defining and solving mazes 
+| `WebAssembly`| [`maze_game_bevy_wasm`](../api/wasm/maze_game_bevy_wasm/view_content.md)       | WebAssembly API for 3D maze game engine
+|              | [`maze_wasm`](../api/wasm/maze_wasm/view_content.md)                           | WebAssembly API for defining and solving mazes 

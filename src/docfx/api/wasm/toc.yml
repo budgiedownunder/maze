@@ -1,4 +1,6 @@
 - name: All APIs
   href: index.md
+- name: maze_game_bevy_wasm
+  href: maze_game_bevy_wasm/view_content.md
 - name: maze_wasm
   href: maze_wasm/view_content.md
