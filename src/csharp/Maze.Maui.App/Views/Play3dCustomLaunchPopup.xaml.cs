@@ -72,9 +72,60 @@ namespace Maze.Maui.App.Views
             // wall tint based on the quadrant-variation checkbox.
             UpdateWallControlsEnabled();
 
+            // Cap the popup body's maximum height to (almost) the
+            // host window height. Combined with the Grid's middle * row,
+            // this lets the inner ScrollView shrink while keeping
+            // the pinned title + Cancel/Play row visible on a short
+            // window. On a tall window the cap is well above the
+            // natural content height, so the Border stays
+            // content-sized — popup doesn't inflate. Re-applied on
+            // window resize; unsubscribed when the popup closes.
+            Loaded += OnPopupLoaded;
+            Closed += OnPopupClosed;
+
 #if WINDOWS
             Loaded += OnLoadedWindows;
 #endif
+        }
+
+        // Margin between the host window height and the popup Border
+        // max height — leaves room for the OS title bar + popup chrome
+        // + a few px of breathing space so the popup never sits flush
+        // against the window edge. Conservative on the high side so
+        // the pinned button row never clips on any platform.
+        private const double PopupVerticalMarginPx = 80;
+        // Floor for the popup Border height — well below any plausible
+        // popup with title + a couple of form rows + buttons so the
+        // popup never collapses to unusable on extreme small windows.
+        private const double MinPopupHeightPx = 240;
+
+        private Microsoft.Maui.Controls.Window? _trackedWindow;
+
+        private void OnPopupLoaded(object? sender, EventArgs e)
+        {
+            UpdateRootBorderMaxHeight();
+            _trackedWindow = (Application.Current?.Windows.Count > 0 ? Application.Current.Windows[0] : null);
+            if (_trackedWindow is { } w)
+                w.SizeChanged += OnWindowSizeChanged;
+        }
+
+        private void OnPopupClosed(object? sender, EventArgs e)
+        {
+            if (_trackedWindow is { } w)
+            {
+                w.SizeChanged -= OnWindowSizeChanged;
+                _trackedWindow = null;
+            }
+        }
+
+        private void OnWindowSizeChanged(object? sender, EventArgs e) => UpdateRootBorderMaxHeight();
+
+        private void UpdateRootBorderMaxHeight()
+        {
+            var window = (Application.Current?.Windows.Count > 0 ? Application.Current.Windows[0] : null);
+            if (window is null) return;
+            double available = Math.Max(MinPopupHeightPx, window.Height - PopupVerticalMarginPx);
+            RootBorder.MaximumHeightRequest = available;
         }
 
 #if WINDOWS
