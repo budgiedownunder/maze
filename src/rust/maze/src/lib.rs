@@ -16,7 +16,7 @@ mod solver;
 pub use error::Error;
 pub use game::{
     BagItem, Direction, DoorState, Enemy, GameEvent, LoseReason, MazeGame, MazeGameOptions,
-    MoveResult,
+    MoveResult, PlayerNotHealedReason,
 };
 #[cfg(feature = "generation")]
 pub use generation_algorithm::GenerationAlgorithm;

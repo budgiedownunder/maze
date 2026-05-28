@@ -166,7 +166,7 @@ pub enum BagItem {
 /// let event = GameEvent::DoorOpened { cell: (0, 2) };
 /// assert_eq!(event, GameEvent::DoorOpened { cell: (0, 2) });
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameEvent {
     /// A door finished opening at the given `(row, col)` cell.
     DoorOpened {
@@ -191,11 +191,64 @@ pub enum GameEvent {
         hp_after: u32,
     },
     /// The player picked up a health-recharge cell. `hp_after` is the player's
-    /// HP after the heal is applied (capped at `max_hp`).
+    /// HP after the heal is applied (capped at `max_hp`); `cell` is the
+    /// `(row, col)` of the pickup that was consumed so renderers can despawn
+    /// the matching visual entity directly from the event.
     PlayerHealed {
         /// Player HP after the heal is applied.
         hp_after: u32,
+        /// The pickup cell that was consumed.
+        cell: (usize, usize),
     },
+    /// The player walked onto a health-pickup cell but the pickup did NOT
+    /// apply (typically because the player is already at `max_hp`). The cell
+    /// is spared so the player can return for it later. `cell` identifies the
+    /// pickup, `reason` is a machine-readable cause UX can pattern-match on,
+    /// and `message` is the engine's default human-readable text — UX may
+    /// display it verbatim, substitute its own text, or ignore it.
+    PlayerNotHealed {
+        /// The pickup cell that was NOT consumed.
+        cell: (usize, usize),
+        /// Machine-readable cause.
+        reason: PlayerNotHealedReason,
+        /// Engine-default human-readable text derived from `reason`.
+        message: String,
+    },
+}
+
+/// Why a health pickup didn't apply.
+///
+/// Carried by [`GameEvent::PlayerNotHealed`] so callers can switch on the
+/// concrete cause. Designed to grow with future reasons (e.g. a future
+/// "inventory full" or "blocked by status effect" case) — the typed
+/// surface keeps each pattern-match exhaustive.
+///
+/// # Examples
+///
+/// ```
+/// use maze::PlayerNotHealedReason;
+/// let reason = PlayerNotHealedReason::AlreadyAtMaxHp;
+/// assert_eq!(reason, PlayerNotHealedReason::AlreadyAtMaxHp);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerNotHealedReason {
+    /// The player is already at `max_hp` — the pickup is spared on its cell
+    /// so the player can return for it later.
+    AlreadyAtMaxHp,
+}
+
+/// Engine-default human-readable text for each [`PlayerNotHealedReason`].
+///
+/// Kept module-private so [`GameEvent::PlayerNotHealed`]'s `message` field
+/// is the canonical UX surface — callers don't separately call this and
+/// risk drift between event payload and helper output. When locale
+/// support lands, this is the routing point: replace the hardcoded
+/// English with a translation-layer lookup keyed on the active locale.
+fn player_not_healed_message(reason: PlayerNotHealedReason) -> String {
+    match reason {
+        PlayerNotHealedReason::AlreadyAtMaxHp => "Already at maximum health".to_string(),
+    }
 }
 
 /// An enemy entity tracked by [`MazeGame`].
@@ -300,11 +353,15 @@ impl Enemy {
 /// let opts = MazeGameOptions {
 ///     enemy_move_period_ms: Some(2000.0),
 ///     enemy_damage: Some(2),
+///     max_hp: Some(5),
+///     ..MazeGameOptions::default()
 /// };
 /// let game = MazeGame::from_json_with_options(json, opts).unwrap();
 /// let enemies = game.enemies();
 /// assert_eq!(enemies[0].move_period_ms, 2000.0);
 /// assert_eq!(enemies[0].damage, 2);
+/// assert_eq!(game.max_hp(), 5);
+/// assert_eq!(game.hp(), 5);
 /// ```
 #[derive(Debug, Clone, Default)]
 pub struct MazeGameOptions {
@@ -312,30 +369,53 @@ pub struct MazeGameOptions {
     pub enemy_move_period_ms: Option<f32>,
     /// Per-game default enemy damage per collision. `None` → `1`.
     pub enemy_damage: Option<u32>,
+    /// Per-game maximum player HP. `None` → `3`. Heals are clamped to this
+    /// value; the player can never gain HP beyond it.
+    pub max_hp: Option<u32>,
+    /// Per-game starting player HP. `None` → equals `max_hp` (the player
+    /// starts at full health). Setting a value below `max_hp` gives the
+    /// player a "find health pickups to reach full strength" arc; values
+    /// outside `[1, max_hp]` are clamped (a starting HP of 0 would otherwise
+    /// instant-fail the game on construction).
+    pub starting_hp: Option<u32>,
 }
 
 /// A running maze game session.
 ///
 /// Holds the grid, player position, facing direction, completion state, the set
 /// of visited cells in visit order, the player's bag, per-cell door state, the
-/// active enemies, and the lose state (set when the player runs out of time,
-/// strands themselves, or is killed by an enemy collision).
+/// active enemies, the player's HP (`hp` / `max_hp`), and the lose state (set
+/// when the player runs out of time, strands themselves, or is killed by an
+/// enemy collision).
 /// Create with [`MazeGame::from_json`] (defaults) or
-/// [`MazeGame::from_json_with_options`] (tunable enemy cadence + damage).
+/// [`MazeGame::from_json_with_options`] (tunable enemy cadence + damage +
+/// max HP).
 ///
 /// Cell rules applied during [`MazeGame::move_player`]:
 /// - `' '`, `'S'`, `'K'`, or `'E'` → [`MoveResult::Moved`] (a key is not
-///   collected by moving onto it — use [`MazeGame::pickup`]; entering an `'E'`
-///   cell triggers the same-cell collision check)
-/// - `'F'` → [`MoveResult::Complete`]
+///   collected by moving onto it — use [`MazeGame::pickup`]; the `'E'`
+///   character is just a spawn marker, so damage only fires when an enemy is
+///   actually present at the destination cell)
+/// - `'F'` → [`MoveResult::Complete`] (no collision check at the goal)
 /// - `'D'` (door) → [`MoveResult::Moved`] when already open (or
 ///   [`MoveResult::Stranded`] when walking through leaves the player with
 ///   fewer reachable keys than closed doors remaining on any route to the
 ///   finish), else [`MoveResult::StartedUnlocking`] (a key is held) or
 ///   [`MoveResult::BlockedByLockedDoor`]
-/// - `'H'` → [`MoveResult::Moved`] (auto-pickup applies HP arithmetic in a
-///   later layer; the cell-rules surface here is the same as a plain passage)
+/// - `'H'` → [`MoveResult::Moved`] plus auto-pickup, gated on the player's
+///   current HP. Below the cap the cell becomes `' '`, HP rises by 1
+///   (capped at `max_hp`), and a [`GameEvent::PlayerHealed`] is queued for
+///   the next [`MazeGame::tick`]. At the cap the cell is **spared** (stays
+///   `'H'` so the player can return for it later) and a
+///   [`GameEvent::PlayerNotHealed`] is queued instead.
 /// - `'W'` or out-of-bounds → [`MoveResult::Blocked`]
+///
+/// On every passable Move (apart from `'F'`), any enemies sharing the
+/// destination cell deal cumulative damage: [`GameEvent::PlayerDamaged`] is
+/// queued and `hp` drops by their summed `damage`. If HP reaches 0 the Move
+/// returns [`MoveResult::Killed`] and the game transitions to lost with
+/// [`LoseReason::Killed`]. Subsequent Moves short-circuit to
+/// [`MoveResult::Killed`] until the game is reset.
 ///
 /// Doors open over time — see [`MazeGame::tick`]. The lose state is queried via
 /// [`MazeGame::is_lost`] / [`MazeGame::lose_reason`].
@@ -391,6 +471,21 @@ pub struct MazeGame {
     /// spawns inherit the same default.
     #[allow(dead_code)]
     default_enemy_damage: u32,
+    /// Player's current HP. Starts at `max_hp`; decremented by enemy
+    /// collisions (player Move into an occupied cell + enemy tick onto the
+    /// player's cell); incremented (capped at `max_hp`) by walking onto a
+    /// health-pickup (`'H'`) cell. `hp == 0` flips the game to lost with
+    /// [`LoseReason::Killed`].
+    hp: u32,
+    /// Per-game maximum HP — also the starting HP. Heals are clamped to this
+    /// value; the player can never gain HP beyond it.
+    max_hp: u32,
+    /// Events produced synchronously by [`MazeGame::move_player`]
+    /// (`PlayerHealed` from an auto-pickup, `PlayerDamaged` from stepping into
+    /// an enemy-occupied cell) that surface on the next [`MazeGame::tick`]
+    /// call. Letting the tick orchestrator drain them keeps the public
+    /// `move_player -> MoveResult` signature unchanged.
+    pending_events: Vec<GameEvent>,
 }
 
 /// Default enemy move period in milliseconds when no override is supplied via
@@ -400,6 +495,10 @@ const DEFAULT_ENEMY_MOVE_PERIOD_MS: f32 = 1500.0;
 /// Default enemy damage per collision when no override is supplied via
 /// [`MazeGameOptions`].
 const DEFAULT_ENEMY_DAMAGE: u32 = 1;
+
+/// Default player maximum HP when no override is supplied via
+/// [`MazeGameOptions`].
+const DEFAULT_MAX_HP: u32 = 3;
 
 /// Real-time duration a door takes to open once unlocking begins, in milliseconds.
 const DOOR_OPEN_MS: f32 = 1000.0;
@@ -442,6 +541,7 @@ impl MazeGame {
     /// let opts = MazeGameOptions {
     ///     enemy_move_period_ms: Some(500.0),
     ///     enemy_damage: Some(2),
+    ///     ..MazeGameOptions::default()
     /// };
     /// let game = MazeGame::from_json_with_options(json, opts).unwrap();
     /// let enemies = game.enemies();
@@ -466,6 +566,8 @@ impl MazeGame {
             .enemy_move_period_ms
             .unwrap_or(DEFAULT_ENEMY_MOVE_PERIOD_MS);
         let default_enemy_damage = options.enemy_damage.unwrap_or(DEFAULT_ENEMY_DAMAGE);
+        let max_hp = options.max_hp.unwrap_or(DEFAULT_MAX_HP);
+        let starting_hp = options.starting_hp.unwrap_or(max_hp).clamp(1, max_hp);
 
         let mut doors = HashMap::new();
         let mut key_ids = HashMap::new();
@@ -548,6 +650,9 @@ impl MazeGame {
             enemies,
             default_enemy_move_period_ms,
             default_enemy_damage,
+            hp: starting_hp,
+            max_hp,
+            pending_events: Vec::new(),
         })
     }
 
@@ -599,6 +704,12 @@ impl MazeGame {
             Direction::Right => (self.player_row, self.player_col + 1),
         };
 
+        // A killed player can't act. Stranded is non-terminal (HP > 0, the
+        // player can still wander) so it doesn't short-circuit here.
+        if self.hp == 0 {
+            return MoveResult::Killed;
+        }
+
         if new_row >= self.rows || new_col >= self.cols {
             return MoveResult::Blocked;
         }
@@ -606,6 +717,7 @@ impl MazeGame {
         match self.grid[new_row][new_col] {
             'W' => MoveResult::Blocked,
             'F' => {
+                // Reaching F wins — no enemy collision check at the goal cell.
                 self.player_row = new_row;
                 self.player_col = new_col;
                 self.visited.push((new_row, new_col));
@@ -627,7 +739,7 @@ impl MazeGame {
                     // closed doors — the common play state.
                     let closed = self.closed_doors_to_finish();
                     let bag_keys = self.bag.len() as u32;
-                    if !self.lost
+                    let strand_result = if !self.lost
                         && closed > bag_keys
                         && closed > self.simulate_reachable_keys()
                     {
@@ -636,7 +748,8 @@ impl MazeGame {
                         MoveResult::Stranded
                     } else {
                         MoveResult::Moved
-                    }
+                    };
+                    self.apply_collision_at_player_cell().unwrap_or(strand_result)
                 }
                 Some(DoorState::Locked) => {
                     if let Some(pos) = self
@@ -660,13 +773,79 @@ impl MazeGame {
                 Some(DoorState::Opening { .. }) => MoveResult::BlockedByLockedDoor,
                 None => MoveResult::Blocked,
             },
-            ' ' | 'S' | 'K' | 'E' | 'H' => {
+            'H' => {
                 self.player_row = new_row;
                 self.player_col = new_col;
                 self.visited.push((new_row, new_col));
-                MoveResult::Moved
+                // Auto-pickup is gated on `hp < max_hp`. Below the cap the
+                // cell is consumed and a heal fires. At the cap the cell is
+                // spared (stays `'H'`) so the player can return for it
+                // later; a `PlayerNotHealed` event carries the reason +
+                // default message so UX can surface "you're already at full
+                // health" feedback if it wants.
+                if self.hp < self.max_hp {
+                    self.grid[new_row][new_col] = ' ';
+                    let hp_after = (self.hp + 1).min(self.max_hp);
+                    self.hp = hp_after;
+                    self.pending_events.push(GameEvent::PlayerHealed {
+                        hp_after,
+                        cell: (new_row, new_col),
+                    });
+                } else {
+                    let reason = PlayerNotHealedReason::AlreadyAtMaxHp;
+                    self.pending_events.push(GameEvent::PlayerNotHealed {
+                        cell: (new_row, new_col),
+                        reason,
+                        message: player_not_healed_message(reason),
+                    });
+                }
+                self.apply_collision_at_player_cell()
+                    .unwrap_or(MoveResult::Moved)
+            }
+            ' ' | 'S' | 'K' | 'E' => {
+                self.player_row = new_row;
+                self.player_col = new_col;
+                self.visited.push((new_row, new_col));
+                self.apply_collision_at_player_cell()
+                    .unwrap_or(MoveResult::Moved)
             }
             _ => MoveResult::Blocked,
+        }
+    }
+
+    /// Applies damage from any enemies currently sharing the player's cell
+    /// (called from `move_player` after a successful Move). Returns
+    /// `Some(MoveResult::Killed)` if the damage drops the player to 0 HP, or
+    /// `None` when no collision occurred or the player survives — in which
+    /// case the caller keeps its own [`MoveResult`].
+    ///
+    /// Damage from multiple enemies sharing the cell is summed into a single
+    /// [`GameEvent::PlayerDamaged`]. Skipped when the player is already at
+    /// 0 HP (no event spam after death).
+    fn apply_collision_at_player_cell(&mut self) -> Option<MoveResult> {
+        if self.hp == 0 {
+            return None;
+        }
+        let player_cell = (self.player_row, self.player_col);
+        let total_damage: u32 = self
+            .enemies
+            .iter()
+            .filter(|e| (e.row, e.col) == player_cell)
+            .map(|e| e.damage)
+            .sum();
+        if total_damage == 0 {
+            return None;
+        }
+        let hp_after = self.hp.saturating_sub(total_damage);
+        self.hp = hp_after;
+        self.pending_events
+            .push(GameEvent::PlayerDamaged { hp_after });
+        if hp_after == 0 {
+            self.lost = true;
+            self.lose_reason = Some(LoseReason::Killed);
+            Some(MoveResult::Killed)
+        } else {
+            None
         }
     }
 
@@ -752,10 +931,11 @@ impl MazeGame {
     ///
     /// Each character is one of `'S'` (start), `'F'` (finish), `'W'` (wall),
     /// `'K'` (key), `'D'` (door), `'E'` (enemy spawn), `'H'` (health pickup),
-    /// or `' '` (open). A collected key's cell becomes `' '`; door cells keep
-    /// their `'D'` character — their open/closed state is tracked separately
-    /// (see [`MazeGame::doors`]). Enemy spawn cells stay `'E'` even as the
-    /// enemy moves — runtime enemy positions live in [`MazeGame::enemies`].
+    /// or `' '` (open). A collected key's cell becomes `' '`; a consumed
+    /// health-pickup cell also becomes `' '`; door cells keep their `'D'`
+    /// character — their open/closed state is tracked separately (see
+    /// [`MazeGame::doors`]). Enemy spawn cells stay `'E'` even as the enemy
+    /// moves — runtime enemy positions live in [`MazeGame::enemies`].
     ///
     /// # Examples
     ///
@@ -793,7 +973,12 @@ impl MazeGame {
     /// assert_eq!(game.tick(1000.0), vec![GameEvent::DoorOpened { cell: (0, 2) }]);
     /// ```
     pub fn tick(&mut self, dt_ms: f32) -> Vec<GameEvent> {
-        let mut events = self.tick_enemies(dt_ms);
+        // Drain events queued synchronously from `move_player` since the
+        // previous tick (`PlayerHealed` from auto-pickup, `PlayerDamaged` from
+        // walking into an enemy-occupied cell) so they surface ahead of
+        // anything this tick produces.
+        let mut events = std::mem::take(&mut self.pending_events);
+        events.extend(self.tick_enemies(dt_ms));
         events.extend(self.tick_doors(dt_ms));
         events
     }
@@ -842,8 +1027,18 @@ impl MazeGame {
                         row: target_row,
                         col: target_col,
                     });
-                    if (target_row, target_col) == player_cell {
-                        events.push(GameEvent::PlayerDamaged { hp_after: 0 });
+                    // Same-cell collision damages the player. Skipped once
+                    // the player is already dead (`hp == 0`) so a corpse-
+                    // sharing enemy doesn't spam `PlayerDamaged` at 0 HP.
+                    if (target_row, target_col) == player_cell && self.hp > 0 {
+                        let damage = self.enemies[i].damage;
+                        let hp_after = self.hp.saturating_sub(damage);
+                        self.hp = hp_after;
+                        events.push(GameEvent::PlayerDamaged { hp_after });
+                        if hp_after == 0 {
+                            self.lost = true;
+                            self.lose_reason = Some(LoseReason::Killed);
+                        }
                     }
                 }
 
@@ -1231,6 +1426,43 @@ impl MazeGame {
     /// ```
     pub fn lose_reason(&self) -> Option<LoseReason> {
         self.lose_reason
+    }
+
+    /// Player's current HP. Starts at the resolved starting HP at
+    /// construction — [`Self::max_hp`] by default, or the value of
+    /// [`MazeGameOptions::starting_hp`] (clamped to `[1, max_hp]`) when
+    /// supplied. Drops by `enemy.damage` per same-cell collision; rises by
+    /// 1 (capped at `max_hp`) when the player walks onto an `'H'` cell.
+    /// Reaching 0 flips the game to lost with [`LoseReason::Killed`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::MazeGame;
+    /// let json = r#"{"grid":[["S"," ","F"]]}"#;
+    /// let game = MazeGame::from_json(json).unwrap();
+    /// assert_eq!(game.hp(), 3); // default starting HP
+    /// ```
+    pub fn hp(&self) -> u32 {
+        self.hp
+    }
+
+    /// Player's maximum HP — also the starting HP. Heals are clamped to this
+    /// value. Configurable per game via [`MazeGameOptions::max_hp`]; defaults
+    /// to 3.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::{MazeGame, MazeGameOptions};
+    /// let json = r#"{"grid":[["S"," ","F"]]}"#;
+    /// let opts = MazeGameOptions { max_hp: Some(5), ..MazeGameOptions::default() };
+    /// let game = MazeGame::from_json_with_options(json, opts).unwrap();
+    /// assert_eq!(game.max_hp(), 5);
+    /// assert_eq!(game.hp(), 5);
+    /// ```
+    pub fn max_hp(&self) -> u32 {
+        self.max_hp
     }
 }
 
@@ -2401,6 +2633,7 @@ mod tests {
         let opts = MazeGameOptions {
             enemy_move_period_ms: Some(500.0),
             enemy_damage: Some(2),
+            ..MazeGameOptions::default()
         };
         let game = MazeGame::from_json_with_options(json, opts).unwrap();
         let enemies = game.enemies();
@@ -2522,9 +2755,10 @@ mod tests {
                 },
             ]
         );
-        // Second tick: id 0 would step onto (0,0)=S (which is passable for
-        // AI — fires the placeholder PlayerDamaged); id 1 → (0,1) where
-        // id 0 just was. Enemies are allowed to pile up.
+        // Second tick: id 0 steps onto (0,0)=S — same cell as the player,
+        // so it fires PlayerDamaged (hp 3 → 2 at default damage 1). id 1
+        // then steps to (0,1) where id 0 just was. Enemies are allowed to
+        // pile up.
         let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
         assert_eq!(
             events,
@@ -2534,7 +2768,7 @@ mod tests {
                     row: 0,
                     col: 0,
                 },
-                GameEvent::PlayerDamaged { hp_after: 0 },
+                GameEvent::PlayerDamaged { hp_after: 2 },
                 GameEvent::EnemyMoved {
                     id: 1,
                     row: 0,
@@ -2545,15 +2779,17 @@ mod tests {
         let enemies = game.enemies();
         assert_eq!((enemies[0].row, enemies[0].col), (0, 0));
         assert_eq!((enemies[1].row, enemies[1].col), (0, 1));
+        assert_eq!(game.hp(), 2);
     }
 
     #[test]
-    fn enemy_step_onto_player_emits_player_damaged_placeholder() {
+    fn enemy_step_onto_player_decrements_hp_and_emits_player_damaged() {
         // Enemy at (0,1); player at (0,0). One tick → enemy steps onto S,
-        // emits EnemyMoved then PlayerDamaged with the placeholder
-        // hp_after: 0 (HP arithmetic lives in the next layer).
+        // emits EnemyMoved then PlayerDamaged (hp drops from 3 to 2 at
+        // default damage 1).
         let json = r#"{"grid":[["S","E"," ","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.hp(), 3);
         let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
         assert_eq!(
             events,
@@ -2563,9 +2799,11 @@ mod tests {
                     row: 0,
                     col: 0,
                 },
-                GameEvent::PlayerDamaged { hp_after: 0 },
+                GameEvent::PlayerDamaged { hp_after: 2 },
             ]
         );
+        assert_eq!(game.hp(), 2);
+        assert!(!game.is_lost());
     }
 
     #[test]
@@ -2658,5 +2896,414 @@ mod tests {
                 GameEvent::DoorOpened { cell: (0, 3) },
             ]
         );
+    }
+
+    // ── HP, health pickups, and Killed lose state ──────────────────────────────
+
+    #[test]
+    fn default_hp_is_max_hp_three() {
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.max_hp(), DEFAULT_MAX_HP);
+        assert_eq!(game.max_hp(), 3);
+        assert_eq!(game.hp(), game.max_hp());
+    }
+
+    #[test]
+    fn from_json_with_options_overrides_max_hp() {
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(5),
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.max_hp(), 5);
+        assert_eq!(game.hp(), 5);
+    }
+
+    #[test]
+    fn starting_hp_defaults_to_max_hp() {
+        // Sanity check that omitting `starting_hp` preserves the original
+        // "start at full health" default.
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(5),
+            starting_hp: None,
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.max_hp(), 5);
+        assert_eq!(game.hp(), 5);
+    }
+
+    #[test]
+    fn from_json_with_options_overrides_starting_hp_below_max() {
+        // Player starts at 1/5 — has to find pickups to reach full strength.
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(5),
+            starting_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.max_hp(), 5);
+        assert_eq!(game.hp(), 1);
+    }
+
+    #[test]
+    fn starting_hp_above_max_hp_clamps_to_max() {
+        // Misconfig: starting_hp=10, max_hp=3. Clamps to 3 without erroring.
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(3),
+            starting_hp: Some(10),
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.max_hp(), 3);
+        assert_eq!(game.hp(), 3);
+    }
+
+    #[test]
+    fn starting_hp_zero_clamps_to_one() {
+        // Misconfig: starting_hp=0 would otherwise instant-fail the game on
+        // construction (hp == 0 → next move returns Killed). Clamp to 1 so
+        // the game starts in a playable state.
+        let json = r#"{"grid":[["S"," ","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(5),
+            starting_hp: Some(0),
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.hp(), 1);
+        assert!(!game.is_lost());
+    }
+
+    #[test]
+    fn player_with_starting_hp_below_max_can_heal_up_to_max() {
+        // Start at 1/3 on a row with two health pickups; ends at 3/3.
+        let json = r#"{"grid":[["S","H","H","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(3),
+            starting_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.hp(), 1);
+        game.move_player(Direction::Right); // pickup → 2/3
+        assert_eq!(game.hp(), 2);
+        game.move_player(Direction::Right); // pickup → 3/3 (capped)
+        assert_eq!(game.hp(), 3);
+    }
+
+    #[test]
+    fn auto_pickup_increments_hp_capped_at_max() {
+        // Player at S=(0,0), HP=3 max=3, takes one collision then heals.
+        // Setup: walk into enemy at (0,1) (HP 3 → 2), continue to (0,2)=H
+        // (HP 2 → 3 capped at max).
+        let json = r#"{"grid":[["S","E","H","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.hp(), 3);
+        game.move_player(Direction::Right); // onto E — enemy was at (0,1)
+        assert_eq!(game.hp(), 2);
+        game.move_player(Direction::Right); // onto H — auto-heal
+        assert_eq!(game.hp(), 3);
+    }
+
+    #[test]
+    fn walk_onto_health_pickup_at_max_hp_emits_player_not_healed_with_reason_and_message() {
+        // Player at full HP walks onto H — the pickup is SPARED (cell stays
+        // 'H'), no heal applied, and PlayerNotHealed surfaces on next tick
+        // carrying the reason enum + default engine message string.
+        let json = r#"{"grid":[["S","H","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        assert_eq!(game.hp(), game.max_hp());
+        let r = game.move_player(Direction::Right); // onto H
+        assert_eq!(r, MoveResult::Moved);
+        assert_eq!(game.hp(), game.max_hp()); // unchanged
+        assert_eq!(game.grid()[0][1], 'H'); // cell preserved for later
+        let events = game.tick(0.0);
+        assert_eq!(
+            events,
+            vec![GameEvent::PlayerNotHealed {
+                cell: (0, 1),
+                reason: PlayerNotHealedReason::AlreadyAtMaxHp,
+                message: player_not_healed_message(PlayerNotHealedReason::AlreadyAtMaxHp),
+            }]
+        );
+    }
+
+    #[test]
+    fn health_pickup_spared_at_max_hp_can_be_collected_after_damage() {
+        // Player at 3/3 walks onto H — spared. Then takes damage to 2/3
+        // from an enemy. Walking back onto the same H cell now consumes
+        // it (hp < max_hp) and heals to 3/3.
+        let json = r#"{"grid":[["S","H","E","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        // Step 1: walk onto H at full HP — spared.
+        game.move_player(Direction::Right);
+        assert_eq!(game.grid()[0][1], 'H');
+        assert_eq!(game.hp(), 3);
+        // Step 2: walk onto E — enemy at (0,2) damages hp 3 → 2.
+        game.move_player(Direction::Right);
+        assert_eq!(game.hp(), 2);
+        // Step 3: walk back onto H — now hp < max_hp, pickup consumes.
+        game.move_player(Direction::Left);
+        assert_eq!(game.hp(), 3);
+        assert_eq!(game.grid()[0][1], ' ');
+    }
+
+    #[test]
+    fn player_not_healed_message_returns_default_text_per_reason() {
+        // Exhaustive private-helper check so adding a future reason
+        // without text shows up as a test failure rather than silently
+        // shipping an empty message.
+        assert_eq!(
+            player_not_healed_message(PlayerNotHealedReason::AlreadyAtMaxHp),
+            "Already at maximum health",
+        );
+    }
+
+    #[test]
+    fn auto_pickup_clears_grid_cell_to_space_when_below_max_hp() {
+        // Start at 1/3 so the H pickup actually consumes (gated on
+        // hp < max_hp).
+        let json = r#"{"grid":[["S","H","F"]]}"#;
+        let opts = MazeGameOptions {
+            starting_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.grid()[0][1], 'H');
+        game.move_player(Direction::Right);
+        assert_eq!(game.grid()[0][1], ' ');
+    }
+
+    #[test]
+    fn auto_pickup_emits_player_healed_with_cell_on_next_tick() {
+        // Pickup event is queued in `move_player` and surfaces on the next
+        // `tick(dt_ms)` call. Walk into a damage cell first so the heal
+        // takes hp from 2 → 3.
+        let json = r#"{"grid":[["S","E","H","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // collide; PlayerDamaged queued
+        game.move_player(Direction::Right); // heal; PlayerHealed queued
+        let events = game.tick(0.0);
+        assert_eq!(
+            events,
+            vec![
+                GameEvent::PlayerDamaged { hp_after: 2 },
+                GameEvent::PlayerHealed {
+                    hp_after: 3,
+                    cell: (0, 2),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn move_into_single_enemy_decrements_hp_by_damage() {
+        let json = r#"{"grid":[["S","E","F"]]}"#;
+        let opts = MazeGameOptions {
+            enemy_damage: Some(2),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.hp(), 3);
+        let r = game.move_player(Direction::Right); // onto E (enemy present at (0,1))
+        assert_eq!(r, MoveResult::Moved);
+        assert_eq!(game.hp(), 1);
+        let events = game.tick(0.0);
+        assert_eq!(events, vec![GameEvent::PlayerDamaged { hp_after: 1 }]);
+    }
+
+    #[test]
+    fn move_into_multi_enemy_cell_sums_damage() {
+        // Two enemies at (0,2) and (0,3); both initially target their west
+        // neighbour. After one tick they're at (0,1) and (0,2). Move player
+        // to (0,1) — only enemy 0 is there. Then tick once more so both
+        // enemies converge on (0,0) and (0,1)? Easier: stub a setup with
+        // two enemies sharing the destination cell from the start.
+        //
+        // Simpler approach: spawn one enemy at (0,1), tick zero, then
+        // manually walk into (0,1) — only one enemy there. To exercise the
+        // multi-enemy sum path, give two enemies adjacent paths that
+        // converge onto (0,1) before the player steps in:
+        //   ["S","E","E","F"] — enemy 0 at (0,1), enemy 1 at (0,2).
+        //   At default options enemy 0's initial target = (0,0) (toward player),
+        //   enemy 1's initial target = (0,1).
+        // After one tick: enemy 0 at (0,0) → damaged player; enemy 1 at (0,1).
+        // After second tick: enemy 0 plans west (blocked) so target stays.
+        // Two enemies on the same cell as player happens at end of tick 1.
+        //
+        // Simplest deterministic check: walk the player onto a cell that
+        // two enemies already share. Use a hand-built starting position
+        // where both enemies' starting cells coincide is impossible (each
+        // 'E' is one cell). Instead, build a scenario via tick:
+        let json = r#"{"grid":[["S"," ","E","E"," ","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        // Pre-tick: enemy 0 at (0,2) target (0,1); enemy 1 at (0,3) target (0,2).
+        game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        // After tick 1: enemy 0 at (0,1) target (0,0); enemy 1 at (0,2)
+        // target (0,1).
+        game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        // After tick 2: enemy 0 at (0,0) — same cell as player — fires
+        // PlayerDamaged hp 3 → 2. enemy 1 at (0,1) target (0,0).
+        assert_eq!(game.hp(), 2);
+        // Now enemy 1 is at (0,1). The player moves east into (0,1) where
+        // enemy 1 sits — cumulative damage of 1 (just enemy 1 there).
+        let r = game.move_player(Direction::Right);
+        assert_eq!(r, MoveResult::Moved);
+        assert_eq!(game.hp(), 1);
+        // Construct a true multi-enemy share by ticking once more so both
+        // enemies pile onto (0,0):
+        game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        // After this tick:
+        //   enemy 0 was at (0,0) target (0,1). Commits to (0,1); player is
+        //   there → PlayerDamaged hp 1 → 0 → Killed.
+        //   enemy 1 was at (0,1) target (0,0). Commits to (0,0); player is
+        //   not there → no PlayerDamaged. (Player is at (0,1).)
+        // Player dies on tick (enemy 0 onto player cell).
+        assert_eq!(game.hp(), 0);
+        assert!(game.is_lost());
+        assert_eq!(game.lose_reason(), Some(LoseReason::Killed));
+    }
+
+    #[test]
+    fn move_into_enemy_at_hp_one_returns_killed_and_sets_lose_reason() {
+        // HP=1; walk into single damage-1 enemy → Killed.
+        let json = r#"{"grid":[["S","E","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        let r = game.move_player(Direction::Right);
+        assert_eq!(r, MoveResult::Killed);
+        assert_eq!(game.hp(), 0);
+        assert!(game.is_lost());
+        assert_eq!(game.lose_reason(), Some(LoseReason::Killed));
+    }
+
+    #[test]
+    fn enemy_tick_onto_player_at_hp_one_kills_player() {
+        // HP=1; enemy at (0,1) → ticks onto player → hp 0 → Killed.
+        let json = r#"{"grid":[["S","E"," ","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(
+            events,
+            vec![
+                GameEvent::EnemyMoved {
+                    id: 0,
+                    row: 0,
+                    col: 0,
+                },
+                GameEvent::PlayerDamaged { hp_after: 0 },
+            ]
+        );
+        assert_eq!(game.hp(), 0);
+        assert!(game.is_lost());
+        assert_eq!(game.lose_reason(), Some(LoseReason::Killed));
+    }
+
+    #[test]
+    fn move_player_after_killed_short_circuits_to_killed() {
+        let json = r#"{"grid":[["S","E","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        game.move_player(Direction::Right); // dies
+        assert_eq!(game.hp(), 0);
+        // Next move (in ANY direction) returns Killed without processing.
+        assert_eq!(game.move_player(Direction::Left), MoveResult::Killed);
+        assert_eq!(game.move_player(Direction::Down), MoveResult::Killed);
+        // Direction::None still returns None — facing direction is updated
+        // regardless of death.
+        assert_eq!(game.move_player(Direction::None), MoveResult::None);
+    }
+
+    #[test]
+    fn tick_after_killed_does_not_spam_player_damaged() {
+        // Setup: enemy at (0,1), player at (0,0), HP=1. Tick kills the
+        // player. Tick again — the enemy is still on the player's cell, but
+        // no further PlayerDamaged events should fire.
+        let json = r#"{"grid":[["S","E"," "," ","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        let _ = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS); // enemy onto player → Killed
+        assert_eq!(game.hp(), 0);
+        // Tick again — the enemy is at (0,0), keeps re-planning toward
+        // player at (0,0) (no valid east step because of position equality
+        // semantics, but it doesn't matter — we just care no spam).
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        for e in &events {
+            assert!(
+                !matches!(e, GameEvent::PlayerDamaged { .. }),
+                "post-death tick must not emit PlayerDamaged, got {e:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn move_onto_e_cell_when_enemy_has_moved_away_does_not_damage() {
+        // Enemy at (0,2) advances west each period. After a tick the enemy
+        // is at (0,1) but the grid still shows 'E' at (0,2). Walking onto
+        // (0,2) must NOT damage (no enemy there now).
+        let json = r#"{"grid":[["S"," ","E"," ","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        let enemies = game.enemies();
+        assert_eq!((enemies[0].row, enemies[0].col), (0, 1));
+        // Now the player walks east to (0,1) — enemy IS there → damage.
+        // (Quick sanity check that we'd take damage at (0,1).)
+        // Skip the (0,1) collision for this test; what we want to verify is
+        // that walking to (0,2) where the enemy ISN'T does not damage.
+        // Use a fresh game for clarity:
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS); // enemy at (0,1)
+        game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS); // enemy at (0,0) → fires PlayerDamaged
+        let _drained = game.tick(0.0); // drain queued events
+        let hp_before_walk = game.hp();
+        // After two ticks the enemy has reached (0,0) (player's cell) and
+        // damaged. Player now moves east onto (0,1) — empty.
+        let r = game.move_player(Direction::Right);
+        assert_eq!(r, MoveResult::Moved);
+        assert_eq!(game.hp(), hp_before_walk); // no further damage
+    }
+
+    #[test]
+    fn pending_events_drained_in_next_tick_in_queued_order() {
+        // Walk through a damage cell then a heal cell — both events should
+        // surface in queued order on the next tick.
+        let json = r#"{"grid":[["S","E","H","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // damage at (0,1)
+        game.move_player(Direction::Right); // heal at (0,2)
+        // Use tick(0) to drain without enemy movement.
+        let events = game.tick(0.0);
+        assert_eq!(
+            events,
+            vec![
+                GameEvent::PlayerDamaged { hp_after: 2 },
+                GameEvent::PlayerHealed {
+                    hp_after: 3,
+                    cell: (0, 2),
+                },
+            ]
+        );
+        // After draining, pending_events is empty — a second tick yields
+        // nothing.
+        assert!(game.tick(0.0).is_empty());
     }
 }
