@@ -293,12 +293,12 @@ pub struct Enemy {
     /// move period. Collisions are checked against this cell.
     pub col: usize,
     /// Row of the cell the enemy is moving toward. Equals `row` when the enemy
-    /// is resting (no valid greedy move). 3D renderers interpolate the visual
+    /// is resting (no valid chase step). 3D renderers interpolate the visual
     /// from `(row, col)` toward `(target_row, target_col)` using
     /// [`Self::move_progress`] each frame.
     pub target_row: usize,
     /// Column of the cell the enemy is moving toward. Equals `col` when the
-    /// enemy is resting (no valid greedy move).
+    /// enemy is resting (no valid chase step).
     pub target_col: usize,
     /// How often the enemy advances one cell, in milliseconds of accumulated
     /// `dt_ms` from [`MazeGame::tick`].
@@ -603,7 +603,7 @@ impl MazeGame {
             .into_iter()
             .enumerate()
             .map(|(idx, (r, c))| {
-                let (target_row, target_col) = greedy_next_cell(
+                let (target_row, target_col) = chase_next_cell(
                     &definition.grid,
                     (r, c),
                     player_start,
@@ -992,7 +992,7 @@ impl MazeGame {
     ///    push [`GameEvent::EnemyMoved`] (skipped for a resting commit where
     ///    target equals current), and — if the new cell equals the player's
     ///    cell — push [`GameEvent::PlayerDamaged`]. Then plan the next target
-    ///    via [`greedy_next_cell`]; if no valid step exists, target stays at
+    ///    via [`chase_next_cell`]; if no valid step exists, target stays at
     ///    the current cell (the enemy rests for the next period).
     ///
     /// Between commits, [`Enemy::move_progress`] reports the fraction of the
@@ -1005,7 +1005,7 @@ impl MazeGame {
     fn tick_enemies(&mut self, dt_ms: f32) -> Vec<GameEvent> {
         let mut events = Vec::new();
         let player_cell = (self.player_row, self.player_col);
-        // Index-based iteration so the greedy-next planner can borrow
+        // Index-based iteration so the chase planner can borrow
         // `&self.grid` without aliasing the `&mut self.enemies[i]` handle.
         for i in 0..self.enemies.len() {
             self.enemies[i].accum_ms += dt_ms;
@@ -1045,7 +1045,7 @@ impl MazeGame {
                 // Plan the next target from the newly committed cell.
                 let from = (self.enemies[i].row, self.enemies[i].col);
                 let (next_row, next_col) =
-                    greedy_next_cell(&self.grid, from, player_cell, self.rows, self.cols)
+                    chase_next_cell(&self.grid, from, player_cell, self.rows, self.cols)
                         .unwrap_or(from);
                 self.enemies[i].target_row = next_row;
                 self.enemies[i].target_col = next_col;
@@ -1491,23 +1491,64 @@ fn passable_neighbours(
     out
 }
 
-/// Picks the passable neighbour of `from` that minimises Manhattan distance to
-/// `target`, with a deterministic tie-break order N > E > S > W.
+/// Picks the passable neighbour of `from` that sits on a shortest passable
+/// path to `target`, with a deterministic tie-break order N > E > S > W.
 ///
-/// Returns `None` when no passable neighbour exists (the entity stays put).
+/// Runs a wave-front BFS outward from `target` across passable cells, then
+/// scans `from`'s four neighbours in N/E/S/W order and picks the first one
+/// whose BFS distance to `target` is smallest. Because each cell is visited
+/// at most once, the BFS is bounded by `rows × cols` expansions.
+///
+/// Returns `None` when no neighbour of `from` is reachable from `target` —
+/// either every neighbour is a wall / out-of-bounds, or `from` lives in a
+/// pocket of the grid walled off from `target`. The caller treats this as
+/// "rest in place this tick".
+///
 /// A cell is passable if it's in bounds and not `'W'`; every other character
 /// (`' '`, `'S'`, `'F'`, `'K'`, `'D'`, `'E'`, `'H'`) is treated as walkable —
 /// this is the AI passability rule and is intentionally lock-blind (the
-/// strand/key-aware solver lives elsewhere).
+/// strand/key-aware solver lives elsewhere). Replacing the earlier Manhattan-
+/// distance greedy step with a true shortest-path search eliminates the
+/// failure mode where the Manhattan-closest neighbour leads down a corridor
+/// walled off from the target and the enemy oscillates against the wall.
 ///
 /// Used by [`MazeGame::tick`] to advance enemies one cell per move period.
-fn greedy_next_cell(
+fn chase_next_cell(
     grid: &[Vec<char>],
     from: (usize, usize),
     target: (usize, usize),
     rows: usize,
     cols: usize,
 ) -> Option<(usize, usize)> {
+    if target.0 >= rows || target.1 >= cols {
+        return None;
+    }
+
+    let mut distances: Vec<Option<usize>> = vec![None; rows * cols];
+    distances[target.0 * cols + target.1] = Some(0);
+    let mut queue: VecDeque<(usize, usize)> = VecDeque::with_capacity(8);
+    queue.push_back(target);
+    while let Some((r, c)) = queue.pop_front() {
+        let d = distances[r * cols + c].unwrap();
+        let neighbours: [Option<(usize, usize)>; 4] = [
+            if r > 0 { Some((r - 1, c)) } else { None },
+            if c + 1 < cols { Some((r, c + 1)) } else { None },
+            if r + 1 < rows { Some((r + 1, c)) } else { None },
+            if c > 0 { Some((r, c - 1)) } else { None },
+        ];
+        for nb in neighbours.into_iter().flatten() {
+            let nb_idx = nb.0 * cols + nb.1;
+            if distances[nb_idx].is_some() {
+                continue;
+            }
+            if grid[nb.0][nb.1] == 'W' {
+                continue;
+            }
+            distances[nb_idx] = Some(d + 1);
+            queue.push_back(nb);
+        }
+    }
+
     let (r, c) = from;
     let candidates: [Option<(usize, usize)>; 4] = [
         if r > 0 { Some((r - 1, c)) } else { None },
@@ -1520,18 +1561,15 @@ fn greedy_next_cell(
         if grid[cand.0][cand.1] == 'W' {
             continue;
         }
-        let dist = manhattan_distance(cand, target);
-        match best {
-            Some((_, best_dist)) if dist >= best_dist => {}
-            _ => best = Some((cand, dist)),
+        let nb_idx = cand.0 * cols + cand.1;
+        if let Some(d) = distances[nb_idx] {
+            match best {
+                Some((_, best_d)) if d >= best_d => {}
+                _ => best = Some((cand, d)),
+            }
         }
     }
     best.map(|(cell, _)| cell)
-}
-
-/// Manhattan distance between two grid cells.
-fn manhattan_distance(a: (usize, usize), b: (usize, usize)) -> usize {
-    a.0.abs_diff(b.0) + a.1.abs_diff(b.1)
 }
 
 #[cfg(test)]
@@ -2709,10 +2747,9 @@ mod tests {
 
     #[test]
     fn enemy_does_not_move_onto_wall() {
-        // Enemy at (0,1) with W to the W at (0,0)? Actually we need a setup
-        // where the greedy choice is blocked by a wall. Enemy at (1,1);
-        // player at (0,0). Greedy step prefers N to (0,1) — make (0,1) W.
-        // Next-best is W to (1,0); make that valid.
+        // Enemy at (1,1); player at (0,0). The single-cell-closest neighbour
+        // (N to (0,1)) is a wall, so the chase step falls through to the
+        // next-best passable neighbour by tie-break — W to (1,0).
         #[rustfmt::skip]
         let json = r#"{"grid":[
             ["S","W","F"],
@@ -2730,6 +2767,100 @@ mod tests {
                 col: 0,
             }]
         );
+    }
+
+    #[test]
+    fn enemy_ai_chases_via_open_corridor_not_walled_off_manhattan_shortcut() {
+        // Parallel-corridor divergence. Enemy at (3,1); player at S=(0,0).
+        // The wall in row 2 across cols 0..=2 cuts the enemy's quadrant off
+        // from the player's row, so the only path to (0,0) goes east through
+        // (3,2), up to (1,3), then west along row 0.
+        //
+        // Manhattan distances from (3,1)'s neighbours to (0,0):
+        //   N=(2,1) wall (blocked)
+        //   E=(3,2) → 5
+        //   S=(4,1) → 5
+        //   W=(3,0) → 3   ← Manhattan-greedy picks this, but it dead-ends in
+        //                   the walled-off (3,0)/(4,0)/(4,1) pocket, causing
+        //                   the enemy to oscillate against the wall.
+        //
+        // BFS sees that E=(3,2) is the only neighbour with a real path to
+        // (0,0) and steps east instead.
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S"," "," "," ","F"],
+            [" "," "," "," "," "],
+            ["W","W","W"," "," "],
+            [" ","E"," "," "," "],
+            [" "," "," "," "," "]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(
+            events,
+            vec![GameEvent::EnemyMoved {
+                id: 0,
+                row: 3,
+                col: 2,
+            }]
+        );
+    }
+
+    #[test]
+    fn enemy_ai_chases_around_u_shaped_wall_trap() {
+        // U-shape divergence. Enemy at (2,2); player at S=(0,0). Row 1 is
+        // walled across cols 0..=3 — the only path from row 0 down to row 2
+        // is through (1,4). Row 3 mirrors that: a U of walls round col 2.
+        //
+        // Manhattan distances from (2,2)'s neighbours to (0,0):
+        //   N=(1,2) wall
+        //   E=(2,3) → 5
+        //   S=(3,2) → 5
+        //   W=(2,1) → 3   ← Manhattan-greedy picks this, but going west
+        //                   walks the enemy into the (2,0)/(2,1) pocket
+        //                   that has no exit back up to row 0.
+        //
+        // BFS sees that the only route to (0,0) goes east via (2,3) → (2,4)
+        // → (1,4) → row 0, and steps east instead.
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S"," "," "," ","F"],
+            ["W","W","W","W"," "],
+            [" "," ","E"," "," "],
+            ["W","W"," ","W","W"],
+            [" "," "," "," "," "]
+        ]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        let events = game.tick(DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(
+            events,
+            vec![GameEvent::EnemyMoved {
+                id: 0,
+                row: 2,
+                col: 3,
+            }]
+        );
+    }
+
+    #[test]
+    fn enemy_ai_rests_when_walled_off_from_player() {
+        // Enemy in a pocket completely walled off from the player's start
+        // cell. BFS from the player can never reach any of the enemy's
+        // neighbours, so the chase step returns no candidate and the enemy
+        // rests at its spawn (target equals current cell).
+        #[rustfmt::skip]
+        let json = r#"{"grid":[
+            ["S"," ","W","E"," "],
+            [" "," ","W"," "," "],
+            [" "," ","W"," ","F"],
+            [" "," ","W"," "," "]
+        ]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies.len(), 1);
+        assert_eq!((enemies[0].row, enemies[0].col), (0, 3));
+        assert_eq!((enemies[0].target_row, enemies[0].target_col), (0, 3));
+        assert_eq!(enemies[0].move_progress(), 0.0);
     }
 
     #[test]
