@@ -168,6 +168,14 @@ pub struct GameConfig {
     /// (clamped to `[1, max_hp]` inside the maze crate). Default `3`
     /// (= `max_hp` → start at full health).
     pub starting_hp: u32,
+    /// Visual variant used for every enemy in the session. Default
+    /// `Goblin`. The AI and damage mechanics are identical across
+    /// variants — only the spawned rig differs.
+    pub enemy_type: EnemyType,
+    /// Visual variant used for every health pickup in the session.
+    /// Default `Heart`. The auto-pickup + heal mechanics are identical
+    /// across variants — only the spawned rig differs.
+    pub health_style: HealthStyle,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -339,6 +347,62 @@ impl KeyHolderStyle {
     }
 }
 
+/// Enemy visual variants. Both variants use the same AI / damage
+/// mechanics — only the spawned rig differs. Default `Goblin`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EnemyType {
+    #[default]
+    Goblin,
+    Ghost,
+}
+
+impl EnemyType {
+    /// Lowercase wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Goblin => "goblin",
+            Self::Ghost => "ghost",
+        }
+    }
+
+    /// Parses a wire string into an [`EnemyType`]. Unknown values fall
+    /// back to [`EnemyType::Goblin`].
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "ghost" => Self::Ghost,
+            _ => Self::Goblin,
+        }
+    }
+}
+
+/// Health-pickup visual variants. Both variants use the same auto-pickup
+/// + heal mechanics — only the spawned rig differs. Default `Heart`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HealthStyle {
+    #[default]
+    Heart,
+    Potion,
+}
+
+impl HealthStyle {
+    /// Lowercase wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Heart => "heart",
+            Self::Potion => "potion",
+        }
+    }
+
+    /// Parses a wire string into a [`HealthStyle`]. Unknown values fall
+    /// back to [`HealthStyle::Heart`].
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "potion" => Self::Potion,
+            _ => Self::Heart,
+        }
+    }
+}
+
 /// Toggle bag for the spatial-orientation landmark techniques. Each new
 /// landmark sub-step adds one field (default `true`). The host populates
 /// this from `[game.play3d.<difficulty>.landmarks]` in the server config.
@@ -406,6 +470,8 @@ impl Default for GameConfig {
             enemy_damage: 1,
             max_hp: 3,
             starting_hp: 3,
+            enemy_type: EnemyType::default(),
+            health_style: HealthStyle::default(),
         }
     }
 }

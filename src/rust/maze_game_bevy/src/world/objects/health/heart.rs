@@ -30,15 +30,6 @@ const HEART_BASE_Y: f32 = 0.9;
 /// Heart emissive — bright red so it reads instantly as health.
 const HEART_EMISSIVE: LinearRgba = LinearRgba::new(1.4, 0.15, 0.15, 1.0);
 
-/// Pulse animation: scale oscillates between (1 - amplitude) and
-/// (1 + amplitude) at the given frequency. Subtle enough to feel alive
-/// without being distracting.
-const PULSE_RATE: f32 = 2.0;
-const PULSE_AMPLITUDE: f32 = 0.08;
-/// Y-axis rotation rate of the floating heart, in radians per second.
-/// Slow enough that the player can read the heart from any angle while
-/// approaching, without feeling spinny.
-const SPIN_RATE: f32 = 1.0;
 
 pub(crate) struct HeartAssets {
     lobe_mesh: Option<Handle<Mesh>>,
@@ -110,18 +101,6 @@ pub(crate) fn spawn_heart(commands: &mut Commands, assets: &HeartAssets, r: usiz
     }
 }
 
-/// `Update` system that drives the heart's idle animation: a gentle
-/// scale pulse layered on top of a slow Y-axis spin so the floating
-/// heart reads from any angle as the player approaches it. Wired into
-/// the world via [`super::health_animation_system`].
-pub(crate) fn heart_pulse_system(
-    time: Res<Time>,
-    mut hearts: Query<&mut Transform, With<super::HealthMarker>>,
-) {
-    let scale = 1.0 + (time.elapsed_secs() * PULSE_RATE).sin() * PULSE_AMPLITUDE;
-    let yaw = time.elapsed_secs() * SPIN_RATE;
-    for mut t in hearts.iter_mut() {
-        t.scale = Vec3::splat(scale);
-        t.rotation = Quat::from_rotation_y(yaw);
-    }
-}
+// Idle animation (scale pulse + Y-spin) is driven uniformly across
+// every `HealthMarker` by `super::health_animation_system` — see
+// [`super`] module docs.

@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use maze_game_bevy::{DoorStyle, GameConfig, KeyHolderStyle, Landmarks, SkyType, WallType};
+use maze_game_bevy::{
+    DoorStyle, EnemyType, GameConfig, HealthStyle, KeyHolderStyle, Landmarks, SkyType, WallType,
+};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
@@ -82,6 +84,10 @@ struct StartConfig {
     max_hp: u32,
     #[serde(default = "default_starting_hp")]
     starting_hp: u32,
+    #[serde(default = "default_enemy_type")]
+    enemy_type: String,
+    #[serde(default = "default_health_style")]
+    health_style: String,
     #[serde(default)]
     maze_json: Option<String>,
 }
@@ -104,6 +110,14 @@ fn default_max_hp() -> u32 {
 
 fn default_starting_hp() -> u32 {
     3
+}
+
+fn default_enemy_type() -> String {
+    "goblin".to_string()
+}
+
+fn default_health_style() -> String {
+    "heart".to_string()
 }
 
 /// Shape of the nested `landmarks` object in the host JSON payload —
@@ -248,6 +262,8 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         enemy_damage: cfg.enemy_damage,
         max_hp: cfg.max_hp,
         starting_hp: cfg.starting_hp,
+        enemy_type: EnemyType::from_wire_str(&cfg.enemy_type),
+        health_style: HealthStyle::from_wire_str(&cfg.health_style),
     });
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());
     app.run();
@@ -289,6 +305,8 @@ mod tests {
         assert_eq!(cfg.enemy_damage, 1);
         assert_eq!(cfg.max_hp, 3);
         assert_eq!(cfg.starting_hp, 3);
+        assert_eq!(cfg.enemy_type, "goblin");
+        assert_eq!(cfg.health_style, "heart");
         assert!(cfg.difficulty.is_none());
         assert!(cfg.maze_json.is_some());
         // The single landmark override must take effect; the rest fall

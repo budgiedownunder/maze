@@ -9,7 +9,8 @@ mod tick;
 mod world;
 
 pub use state::{
-    DoorStyle, GameConfig, GameOutcome, GameResult, KeyHolderStyle, Landmarks, SkyType, WallType,
+    DoorStyle, EnemyType, GameConfig, GameOutcome, GameResult, HealthStyle, KeyHolderStyle,
+    Landmarks, SkyType, WallType,
 };
 pub use world::generate_maze_json;
 
@@ -27,7 +28,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
             self,
             dead_end::brazier_flicker_system,
             door::door_animation_system,
-            enemy::enemy_animation_system,
+            enemy::{enemy_animation_system, ghost::ghost_hem_wave_system},
             health::health_animation_system,
             key_holder::{key_holder_system, key_sparks_system},
         },
@@ -75,6 +76,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(FixedUpdate, game_tick_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, door_animation_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, enemy_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, ghost_hem_wave_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, health_animation_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, bag::bag_hud_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, hp::hp_hud_system.run_if(in_state(AppState::Playing)))
@@ -1045,5 +1047,68 @@ mod tests {
         let count = |target: char| grid.iter().flatten().filter(|&&c| c == target).count();
         assert_eq!(count('E'), 1, "exactly one enemy spawn");
         assert_eq!(count('H'), 1, "exactly one health pickup");
+    }
+
+    // ── EnemyType / HealthStyle wire round-trip + rig dispatch ────────────────
+
+    #[test]
+    fn enemy_type_wire_round_trip() {
+        for variant in [EnemyType::Goblin, EnemyType::Ghost] {
+            assert_eq!(EnemyType::from_wire_str(variant.as_wire_str()), variant);
+        }
+    }
+
+    #[test]
+    fn enemy_type_unknown_wire_string_falls_back_to_goblin() {
+        assert_eq!(EnemyType::from_wire_str(""), EnemyType::Goblin);
+        assert_eq!(EnemyType::from_wire_str("totally-unknown"), EnemyType::Goblin);
+    }
+
+    #[test]
+    fn health_style_wire_round_trip() {
+        for variant in [HealthStyle::Heart, HealthStyle::Potion] {
+            assert_eq!(HealthStyle::from_wire_str(variant.as_wire_str()), variant);
+        }
+    }
+
+    #[test]
+    fn health_style_unknown_wire_string_falls_back_to_heart() {
+        assert_eq!(HealthStyle::from_wire_str(""), HealthStyle::Heart);
+        assert_eq!(
+            HealthStyle::from_wire_str("totally-unknown"),
+            HealthStyle::Heart,
+        );
+    }
+
+    #[test]
+    fn playing_with_ghost_enemy_type_spawns_ghost_tag() {
+        // `GhostTag` is a zero-cost unit marker on the root entity of
+        // every ghost rig — present regardless of whether the
+        // asset-bearing child entities spawned, so headless tests (no
+        // mesh / material plugins) can distinguish the rig.
+        use crate::world::objects::enemy::ghost::GhostTag;
+        let goblin_tag_count = {
+            let mut g = make_playing_app();
+            g.world_mut().query::<&GhostTag>().iter(g.world()).count()
+        };
+        assert_eq!(
+            goblin_tag_count, 0,
+            "Goblin rig must not spawn any GhostTag entities",
+        );
+        let mut ghost_app = make_playing_app_with_config(GameConfig {
+            enemy_type: EnemyType::Ghost,
+            ..GameConfig::default()
+        });
+        let ghost_tag_count = ghost_app
+            .world_mut()
+            .query::<&GhostTag>()
+            .iter(ghost_app.world())
+            .count();
+        let grid = demo_grid();
+        let expected = grid.iter().flatten().filter(|&&c| c == 'E').count();
+        assert_eq!(
+            ghost_tag_count, expected,
+            "Ghost rig must spawn one GhostTag per 'E' cell",
+        );
     }
 }

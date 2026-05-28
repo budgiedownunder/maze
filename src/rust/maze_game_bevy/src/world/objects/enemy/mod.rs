@@ -9,9 +9,10 @@
 //! composes those into [`EnemyAssets`] and dispatches per-cell spawning to
 //! the right rig.
 
+pub(crate) mod ghost;
 pub(crate) mod goblin;
 
-use crate::state::GameState;
+use crate::state::{EnemyType, GameConfig, GameState};
 use crate::world::CELL_SIZE;
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -32,6 +33,7 @@ pub(crate) struct EnemyMarker {
 /// Composite enemy assets. One sub-struct per rig variant.
 pub(crate) struct EnemyAssets {
     pub(crate) goblin: goblin::GoblinAssets,
+    pub(crate) ghost: ghost::GhostAssets,
 }
 
 pub(crate) fn build_enemy_assets(
@@ -41,13 +43,16 @@ pub(crate) fn build_enemy_assets(
 ) -> EnemyAssets {
     EnemyAssets {
         goblin: goblin::build_goblin_assets(meshes, materials, images),
+        ghost: ghost::build_ghost_assets(meshes, materials),
     }
 }
 
-/// Spawns the per-cell enemy entity using the configured rig variant.
+/// Spawns the per-cell enemy entity using the rig variant selected by
+/// `enemy_type`.
 pub(crate) fn spawn_enemy_for_cell(
     commands: &mut Commands,
     assets: &EnemyAssets,
+    enemy_type: EnemyType,
     cell: char,
     r: usize,
     c: usize,
@@ -56,9 +61,10 @@ pub(crate) fn spawn_enemy_for_cell(
     if cell != 'E' {
         return;
     }
-    // Single rig variant today; extend with a `match` on the configured
-    // enemy type when additional rigs land.
-    goblin::spawn_goblin(commands, &assets.goblin, r, c, id);
+    match enemy_type {
+        EnemyType::Goblin => goblin::spawn_goblin(commands, &assets.goblin, r, c, id),
+        EnemyType::Ghost => ghost::spawn_ghost(commands, &assets.ghost, r, c, id),
+    }
 }
 
 /// `Update` system that lerps each `EnemyMarker`'s transform between the
@@ -68,6 +74,7 @@ pub(crate) fn spawn_enemy_for_cell(
 /// stay visually alive.
 pub(crate) fn enemy_animation_system(
     state: Res<GameState>,
+    config: Res<GameConfig>,
     time: Res<Time>,
     mut markers: Query<(&EnemyMarker, &mut Transform)>,
 ) {
@@ -79,7 +86,16 @@ pub(crate) fn enemy_animation_system(
     // by `MAX_ENEMY_COUNT` in the maze crate, so the O(n) build cost is
     // negligible vs the alternative of a nested per-marker scan.
     let lookup: HashMap<u32, &maze::Enemy> = enemies.iter().map(|e| (e.id, e)).collect();
-    let bob = (time.elapsed_secs() * goblin::BOB_RATE).sin() * goblin::BOB_AMPLITUDE;
+    let (base_y, bob) = match config.enemy_type {
+        EnemyType::Goblin => (
+            goblin::ENEMY_BASE_Y,
+            (time.elapsed_secs() * goblin::BOB_RATE).sin() * goblin::BOB_AMPLITUDE,
+        ),
+        EnemyType::Ghost => (
+            ghost::ENEMY_BASE_Y,
+            (time.elapsed_secs() * ghost::BOB_RATE).sin() * ghost::BOB_AMPLITUDE,
+        ),
+    };
     for (marker, mut t) in markers.iter_mut() {
         let Some(enemy) = lookup.get(&marker.id) else {
             continue;
@@ -89,7 +105,7 @@ pub(crate) fn enemy_animation_system(
         let interp = from.lerp(to, enemy.move_progress());
         t.translation.x = interp.x;
         t.translation.z = interp.z;
-        t.translation.y = goblin::ENEMY_BASE_Y + bob;
+        t.translation.y = base_y + bob;
         // Face the direction of travel — eyes (and teeth, when present)
         // are positioned on the rig's local +Z face, so rotating around Y
         // by the heading-angle aims them along the movement vector. A

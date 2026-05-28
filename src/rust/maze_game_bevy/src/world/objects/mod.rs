@@ -60,6 +60,6 @@ pub(crate) fn spawn_objects_for_cell(
         config,
     );
     key_holder::spawn_key_holder_for_cell(commands, &assets.key_holder, config.key_holder, cell, r, c);
-    enemy::spawn_enemy_for_cell(commands, &assets.enemy, cell, r, c, enemy_id);
-    health::spawn_health_for_cell(commands, &assets.health, cell, r, c);
+    enemy::spawn_enemy_for_cell(commands, &assets.enemy, config.enemy_type, cell, r, c, enemy_id);
+    health::spawn_health_for_cell(commands, &assets.health, config.health_style, cell, r, c);
 }
