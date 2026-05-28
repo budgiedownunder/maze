@@ -45,6 +45,7 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Sparse wall decorations** — ~1 in 10 wall panels gets a decorative emissive decoration (vent grate, faded poster, rune glyph, or glowing glass) projected on its inside face. Placement and kind are seeded from `(row, col, face, seed)` so the same maze always decorates the same walls. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_decorations`.
 - **Floor accents at junctions** — every 3- or 4-way junction cell (passable cell with more than two open neighbours, excluding start / finish) gets a single flat accent on its floor — moss, cracked tile, mosaic, or arcane sigil — picked by hashing `(row, col, seed)`. Reinforces "this is a decision point" memory. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] floor_accents`.
 - **Keys, doors & a bag** — `K` cells render a glowing gold key — a ringed bow, shaft, and teeth, each paired with a black inverted-hull outline so the parts read distinctly — floating, bobbing, and slowly spinning above a stone pedestal. Press `F` while standing on one to collect it into the **bag HUD** (a row of key icons along the bottom of the screen, which grows on pickup and shrinks when a key is spent). `D` cells are **doors** rendered in the surrounding cell's wall material, marked with a brass keyhole and eligible for the same sparse wall decorations as ordinary wall panels. A door cell is locked — impassable from every side — until you hold forward against it while carrying a key, which consumes the key and opens it over ~1 s, permanently. How a door *opens* depends on the cell's shape: a **straight corridor** (two open edges on opposing sides) gets a single leaf that **swings** on a hinge; any other topology (corner, T-junction, open area) seals **each** open edge with a leaf that **slides down into the floor**, since a swing would sweep awkwardly through the open space. The built-in demo maze places a key in a dead-end and a door guarding the finish, so the mechanic is playable from `cargo run` with no maze authoring.
+- **Enemies, HP & health pickups** — `E` cells spawn a moving enemy rig that bobs in place and chases the player along a wall-aware BFS shortest path at a fixed move period (default 1500 ms per cell, `N > E > S > W` tie-break on equal-distance choices). Two visual rigs are selectable via `GameConfig.enemy_type`: **Goblin** (default — green body with painted ear-to-ear mouth and per-side eyeballs) and **Ghost** (translucent floating figure with a hemisphere head, truncated-cone body, rippling sheet hem, and a glowing-red eyeball inside each arch-shaped eye). Same-cell collisions — whether the player walks onto an enemy's cell or an enemy steps onto the player's cell — fire `GameEvent::PlayerDamaged` and a brief red damage-flash overlay; the **HP HUD** (top-left, "LIFE" label + a row of red heart icons that dim as HP drops) is rebuilt on every change. Reaching 0 HP routes through the same lose path as a wall-clock timeout — movement freezes and the lose overlay appears. `H` cells spawn a floating health pickup with a gentle scale pulse + Y-spin idle, selectable via `GameConfig.health_style`: **Heart** (default — two upper sphere lobes + a flat-faced downward pyramid tip whose corners tuck flush into the lobes) and **Potion** (capped bottle with a glowing liquid). Auto-pickup on walk-over: when `hp < max_hp` the cell clears + a `PlayerHealed` event fires + HP increments; when `hp == max_hp` the cell stays + a `PlayerNotHealed` event surfaces an "already at full health" hint so the host can flash it.
 - **Back-edge camera viewpoint** — instead of standing at the dead-centre of each cell, the camera sits behind the cell centre in the direction opposite the player's facing. This brings perpendicular openings (corridors on the left or right of the current cell) into a glancing angle inside the Field of View (FOV) rather than leaving them at 90° off-axis, and keeps the wall directly ahead a comfortable distance away. Turning the camera in place orbits it to the back edge relative to the new facing, so the player always reads as standing at the "back" of their cell looking forward.
 - **Adaptive FOV** — the camera's vertical FOV is configured at 60° for the reference 16:9 viewport (≈91° horizontal at that aspect). On viewports narrower than the reference (phone portrait, tall windows), the vertical FOV grows so the horizontal FOV stays constant — a perpendicular opening that's visible on desktop is still visible on a phone in portrait. Capped at 100° vertical to prevent fisheye on extreme-portrait viewports.
 - Floor grid lines at cell boundaries for orientation feedback.
@@ -53,7 +54,7 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Minimap overlay** (top-right corner) — fixed viewport centred on the player; only explored cells and their immediate neighbours are revealed. The whole panel re-anchors to the window's top-right corner on resize.
 - **Win overlay** — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen.
 - Gold-leaf rain — on win, small gold leaf sprites spawn continuously across the full screen width and fall with gentle rotation and drift, celebrating completion.
-- **Lose overlay** — on not completing in time, movement stops and a "You Lose!" panel appears centred on screen.
+- **Lose overlay** — on not completing in time, or on reaching 0 HP from enemy collisions, movement stops and a "You Lose!" panel appears centred on screen.
 - Rain-Lightning — on lose, rain sprites spawn continuously across the full screen width and fall accompanied by periodic lightning flashes.
 
 ## Getting Started
@@ -93,9 +94,11 @@ The crate is organised into focused per-concern modules under `src/`:
 src/
 ├── lib.rs                  module decls + public re-exports + build_app
 ├── palette.rs              cross-module colour constants
-├── state.rs                shared state / config types (GameConfig, GameState, etc.)
+├── state.rs                shared state / config types (GameConfig, EnemyType, HealthStyle, GameState, etc.)
 ├── images.rs               generic Bevy Image factory (sampler-tuned)
-├── movement.rs             input + animation + pickup (F) + win-detection + quit
+├── movement.rs             input + animation + pickup (F) + quit
+├── tick.rs                 central game_tick_system + damage-flash overlay system
+├── outcome.rs              outcome_watcher_system (win / lose detection from MazeGame state)
 ├── world/                  3D scene construction
 │   ├── mod.rs              spawn_world orchestrator + grid helpers
 │   ├── textures/           shared procedural world textures
@@ -131,7 +134,7 @@ src/
 │   │       ├── mosaic.rs   concentric-mosaic texture + material
 │   │       └── sigil.rs    pentagram-sigil texture + material
 │   ├── objects/            3D physical objects placed in the world
-│   │   ├── mod.rs          ObjectAssets bundle + spawn_objects_for_cell (finish, dead-end, key holders)
+│   │   ├── mod.rs          ObjectAssets bundle + spawn_objects_for_cell (finish, dead-end, key holders, doors, enemies, health)
 │   │   ├── finish/         objects placed at the finish cell
 │   │   │   ├── mod.rs      FinishAssets bundle + spawn_finish_for_cell ('F' predicate)
 │   │   │   └── orb.rs      FinishOrb + orb mesh/material/light + orb_system
@@ -143,12 +146,20 @@ src/
 │   │   │   └── chest.rs    chest material + spawn helper
 │   │   ├── key_holder/     'K' cells: pedestal + glowing outlined floating key
 │   │   │   └── mod.rs      KeyMarker / FloatingKey + assets + spawn + key_holder_system
-│   │   └── door/           'D' cells: door leaves (a view of the door's lock state)
-│   │       ├── mod.rs      DoorMarker + topology dispatch + tick / animation systems
-│   │       ├── panel.rs    the wall-material door slab
-│   │       ├── keyhole.rs  brass lock plate + dark keyhole cutout
-│   │       ├── swing.rs    swinging-leaf rig (straight corridors)
-│   │       └── slide.rs    sliding-leaf rig (corners / junctions; retracts into floor)
+│   │   ├── door/           'D' cells: door leaves (a view of the door's lock state)
+│   │   │   ├── mod.rs      DoorMarker + topology dispatch + tick / animation systems
+│   │   │   ├── panel.rs    the wall-material door slab
+│   │   │   ├── keyhole.rs  brass lock plate + dark keyhole cutout
+│   │   │   ├── swing.rs    swinging-leaf rig (straight corridors)
+│   │   │   └── slide.rs    sliding-leaf rig (corners / junctions; retracts into floor)
+│   │   ├── enemy/          'E' cells: a moving rig that chases the player
+│   │   │   ├── mod.rs      EnemyMarker + EnemyAssets dispatcher (by GameConfig.enemy_type) + shared animation system
+│   │   │   ├── goblin.rs   default goblin rig: green body with painted mouth and per-side eyeballs
+│   │   │   └── ghost.rs    ghost rig: hemisphere head + truncated-cone body + rippling hem + arch eyes with glowing-red pupils
+│   │   └── health/         'H' cells: floating pickup with idle pulse + spin
+│   │       ├── mod.rs      HealthMarker + HealthAssets dispatcher (by GameConfig.health_style) + shared animation system
+│   │       ├── heart.rs    default heart rig: two upper sphere lobes + flat-faced downward pyramid tip flush with the lobes
+│   │       └── potion.rs   potion rig: capped bottle with a glowing liquid
 │   ├── sky/                sky / atmosphere modes
 │   │   ├── mod.rs          spawn_sky dispatcher + shared util fns (PRNG, sRGB byte conv)
 │   │   ├── dome.rs         inverted-sphere dome + camera-follow system
@@ -170,6 +181,7 @@ src/
 │   ├── minimap.rs          top-right minimap overlay
 │   ├── statusbar.rs        top-left mode label
 │   ├── clock.rs            top-centre countdown clock + lose-state trigger
+│   ├── hp.rs               top-left "LIFE" label + red-heart icon row, rebuilt on every HP change
 │   └── bag/                bottom-centre inventory HUD
 │       ├── mod.rs          BagHud + bag_hud_system (icon row, rebuilt on change)
 │       └── key.rs          procedural key-icon texture
@@ -177,17 +189,19 @@ src/
     ├── mod.rs              module declarations
     ├── title.rs            title-screen splash
     ├── win.rs              win panel + gold-leaf rain
-    ├── lose.rs             lose panel + rain + lightning
+    ├── lose.rs             lose panel + rain + lightning (timer expiry or HP = 0)
     └── pause.rs            paused overlay
 ```
 
 `spawn_world` is a thin orchestrator: it resolves the maze source into
 `GameState` + `GameClock`, spawns the camera and the sky, builds per-domain
 asset bundles (`walls`, `floor`, `decorations`, `objects`), runs a per-cell
-loop calling each domain's `spawn_*_for_cell` (including the door leaves, which
-are spawned alongside the loop because they borrow the cell's wall material),
-and finishes with the HUD (clock, status bar, minimap, bag) + paused-overlay
-spawns. The only items re-exported through `lib.rs` are `build_app`,
-`generate_maze_json`, and the public types `GameConfig`, `Landmarks`,
-`SkyType`, `WallType`, `GameOutcome`, `GameResult`. Everything else is
-`pub(crate)` or fully private.
+loop calling each domain's `spawn_*_for_cell` (including the door leaves,
+enemy rigs, and health-pickup rigs, which are spawned alongside the loop
+because they borrow either the cell's wall material or the per-config rig
+choice), and finishes with the HUD (clock, status bar, minimap, HP, bag) +
+paused-overlay spawns. The only items re-exported through `lib.rs` are
+`build_app`, `generate_maze_json`, and the public types `GameConfig`,
+`Landmarks`, `SkyType`, `WallType`, `EnemyType`, `HealthStyle`,
+`GameOutcome`, `GameResult`. Everything else is `pub(crate)` or fully
+private.
