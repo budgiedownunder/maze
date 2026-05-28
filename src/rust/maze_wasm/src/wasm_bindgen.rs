@@ -1774,6 +1774,8 @@ impl MazeWasm {
             door_count,
             spare_doors,
             spare_keys,
+            enemy_count: None,
+            health_count: None,
         };
 
         let maze = Generator { options }

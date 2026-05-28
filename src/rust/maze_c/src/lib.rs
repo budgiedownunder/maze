@@ -1774,6 +1774,8 @@ pub extern "C" fn maze_c_maze_generate(
         door_count: Some(opts.door_count as usize),
         spare_doors: Some(opts.spare_doors as usize),
         spare_keys: Some(opts.spare_keys as usize),
+        enemy_count: None,
+        health_count: None,
     };
 
     let generator = Generator {

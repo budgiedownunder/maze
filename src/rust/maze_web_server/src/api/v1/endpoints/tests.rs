@@ -3139,6 +3139,8 @@ mod test_definitions {
             door_count: None,
             spare_doors: None,
             spare_keys: None,
+            enemy_count: None,
+            health_count: None,
         }
     }
 

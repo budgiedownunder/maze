@@ -103,6 +103,8 @@ pub fn generate_maze_json(
         door_count: Some(door_count as usize),
         spare_doors: Some(spare_doors as usize),
         spare_keys: Some(spare_keys as usize),
+        enemy_count: None,
+        health_count: None,
     };
     let maze = Generator { options }
         .generate()

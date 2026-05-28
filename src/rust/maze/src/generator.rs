@@ -74,6 +74,25 @@ pub struct GeneratorOptions {
     /// cells. `None` or `Some(0)` (the default) places no spares.
     #[serde(default)]
     pub spare_keys: Option<usize>,
+    /// Number of **enemies** (`'E'` cells) to auto-place on passable cells of
+    /// the generated maze. Enemies sit on top of the carved layout *after*
+    /// keys/doors and spare keys/doors are placed, so the K/D layout is the
+    /// substrate. Each enemy lands on a cell that is currently `' '` (so
+    /// never on `S` / `F` / `K` / `D` / another enemy / a health pickup) and
+    /// at Manhattan distance > 1 from `S` (so the player has at least one
+    /// safe step away from start). Clamped to [`MAX_ENEMY_COUNT`] and to the
+    /// available eligible cells. `None` or `Some(0)` (the default) places
+    /// none.
+    #[serde(default)]
+    pub enemy_count: Option<usize>,
+    /// Number of **health pickups** (`'H'` cells) to auto-place on passable
+    /// cells of the generated maze. Same placement rules and exclusions as
+    /// [`Self::enemy_count`] — placed in a separate pass after enemies, so
+    /// the two never collide. Clamped to [`MAX_HEALTH_COUNT`] and to the
+    /// available eligible cells. `None` or `Some(0)` (the default) places
+    /// none.
+    #[serde(default)]
+    pub health_count: Option<usize>,
 }
 
 /// Generates a maze from a set of [`GeneratorOptions`].
@@ -98,6 +117,8 @@ pub struct GeneratorOptions {
 ///         door_count: None,
 ///         spare_doors: None,
 ///         spare_keys: None,
+///         enemy_count: None,
+///         health_count: None,
 ///     },
 /// };
 /// let maze = gen.generate().expect("generation should succeed");
@@ -172,6 +193,8 @@ impl Generator {
         let door_count = opts.door_count.unwrap_or(0);
         let spare_doors = opts.spare_doors.unwrap_or(0);
         let spare_keys = opts.spare_keys.unwrap_or(0);
+        let enemy_count = opts.enemy_count.unwrap_or(0).min(MAX_ENEMY_COUNT);
+        let health_count = opts.health_count.unwrap_or(0).min(MAX_HEALTH_COUNT);
 
         let total_features = 2 * door_count + spare_doors + spare_keys;
         if total_features > crate::MAX_TOTAL_FEATURES {
@@ -267,6 +290,13 @@ impl Generator {
                             &mut rng,
                         );
                     }
+                    // Sprinkle enemies and health pickups onto passable cells
+                    // that are clear of S/F/K/D/E/H and at least two steps
+                    // from the start. Solver-blind cells, so no
+                    // re-validation is needed. Enemies are placed first so
+                    // the health pass can't overlap them.
+                    place_random_overlay_cells(&mut working, &start, enemy_count, 'E', &mut rng);
+                    place_random_overlay_cells(&mut working, &start, health_count, 'H', &mut rng);
                     return Ok(Maze::new(MazeDefinition::from_vec(working)));
                 }
                 Ok(solution) => {
@@ -380,6 +410,17 @@ fn carve(
 /// bound — so the placement-validation solve stays in true key-aware mode rather
 /// than falling back to the lock-blind solve.
 pub const MAX_AUTO_DOORS: usize = 8;
+
+/// Maximum number of enemies (`'E'` cells) auto-placed at generation. Caps
+/// difficulty at a level that stays playable on small grids and keeps the
+/// tick-time per-enemy cost bounded for renderers that update the visual
+/// each frame.
+pub const MAX_ENEMY_COUNT: usize = 8;
+
+/// Maximum number of health pickups (`'H'` cells) auto-placed at generation.
+/// Mirrors [`MAX_ENEMY_COUNT`] so the two knobs feel symmetric to authors
+/// configuring a difficulty preset.
+pub const MAX_HEALTH_COUNT: usize = 8;
 
 /// Count of non-wall 4-neighbours of `(r, c)`.
 fn open_degree(grid: &[Vec<char>], r: usize, c: usize) -> usize {
@@ -791,6 +832,46 @@ fn place_spare_keys_and_doors(
     }
 }
 
+/// Places up to `count` cells of character `ch` onto currently-blank
+/// (`' '`) cells of `grid` chosen uniformly at random. The eligibility
+/// filter is:
+///
+/// - cell is currently `' '` (so never on `S` / `F` / `K` / `D` or on a
+///   previously-placed overlay cell of any character)
+/// - Manhattan distance from `start` is greater than 1 (so neither the
+///   start cell itself nor any of its four immediate neighbours is
+///   eligible — gives the player at least one safe step away from S
+///   before they encounter the overlay)
+///
+/// `count` is clamped silently to the size of the eligible set — a tiny
+/// maze with fewer eligible cells than requested just gets as many as
+/// fit. Repeated calls with different `ch` values stack non-overlappingly
+/// because each call re-reads the grid, so cells claimed by an earlier
+/// call are excluded from later passes.
+fn place_random_overlay_cells(
+    grid: &mut [Vec<char>],
+    start: &MazePoint,
+    count: usize,
+    ch: char,
+    rng: &mut StdRng,
+) {
+    if count == 0 {
+        return;
+    }
+    let mut eligible: Vec<(usize, usize)> = Vec::new();
+    for (r, row) in grid.iter().enumerate() {
+        for (c, &cur) in row.iter().enumerate() {
+            if cur == ' ' && (r.abs_diff(start.row) + c.abs_diff(start.col)) > 1 {
+                eligible.push((r, c));
+            }
+        }
+    }
+    eligible.shuffle(rng);
+    for cell in eligible.into_iter().take(count) {
+        grid[cell.0][cell.1] = ch;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -812,6 +893,8 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         }
     }
@@ -846,6 +929,8 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -867,6 +952,8 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -888,6 +975,8 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -1003,6 +1092,8 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         };
         let maze = gen.generate().expect("should succeed");
@@ -1029,6 +1120,8 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         };
         let maze = gen.generate().expect("should succeed");
@@ -1059,6 +1152,8 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -1080,6 +1175,8 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         };
         assert!(matches!(gen.generate(), Err(Error::Generate(_))));
@@ -1103,6 +1200,8 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         };
         let maze1 = make().generate().expect("should succeed");
@@ -1126,6 +1225,8 @@ mod tests {
                 door_count: None,
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         };
         let maze1 = make(1).generate().expect("should succeed");
@@ -1150,6 +1251,8 @@ mod tests {
                 door_count: Some(doors),
                 spare_doors: None,
                 spare_keys: None,
+                enemy_count: None,
+                health_count: None,
             },
         }
     }
@@ -1279,6 +1382,8 @@ mod tests {
                 door_count: Some(doors),
                 spare_doors,
                 spare_keys,
+                enemy_count: None,
+                health_count: None,
             },
         }
     }
@@ -1733,5 +1838,139 @@ mod tests {
         Solver { maze: &placed_maze }
             .solve()
             .expect("placed maze must be solvable");
+    }
+
+    // --- Auto-placement of enemies (`'E'`) and health pickups (`'H'`) ---
+
+    fn make_with_enemies_and_health(
+        rows: usize,
+        cols: usize,
+        seed: u64,
+        doors: usize,
+        enemy_count: Option<usize>,
+        health_count: Option<usize>,
+    ) -> Generator {
+        Generator {
+            options: GeneratorOptions {
+                row_count: rows,
+                col_count: cols,
+                algorithm: GenerationAlgorithm::RecursiveBacktracking,
+                start: None,
+                finish: None,
+                min_spine_length: None,
+                max_retries: None,
+                branch_from_finish: None,
+                seed: Some(seed),
+                door_count: Some(doors),
+                spare_doors: None,
+                spare_keys: None,
+                enemy_count,
+                health_count,
+            },
+        }
+    }
+
+    #[test]
+    fn auto_placement_seeds_enemies_and_health_at_random_passable_cells() {
+        let maze = make_with_enemies_and_health(15, 15, 7, 0, Some(2), Some(2))
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        assert_eq!(count_char(grid, 'E'), 2, "should place exactly 2 enemies");
+        assert_eq!(count_char(grid, 'H'), 2, "should place exactly 2 health pickups");
+        // No overlap with S/F/K/D — placement converts only `' '` cells.
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch == 'E' || ch == 'H' {
+                    // Manhattan distance from start (default start cell = (0, 0)).
+                    assert!(
+                        r + c > 1,
+                        "cell ({r}, {c}) should not be within 1 step of start"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn auto_placement_clamps_to_max_constants() {
+        let maze = make_with_enemies_and_health(21, 21, 11, 0, Some(100), Some(100))
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        assert!(
+            count_char(grid, 'E') <= MAX_ENEMY_COUNT,
+            "E count must be clamped to MAX_ENEMY_COUNT"
+        );
+        assert!(
+            count_char(grid, 'H') <= MAX_HEALTH_COUNT,
+            "H count must be clamped to MAX_HEALTH_COUNT"
+        );
+        // Saturates exactly when the eligible set is large (21x21 has plenty of room).
+        assert_eq!(count_char(grid, 'E'), MAX_ENEMY_COUNT);
+        assert_eq!(count_char(grid, 'H'), MAX_HEALTH_COUNT);
+    }
+
+    #[test]
+    fn auto_placement_clamps_to_available_eligible_cells() {
+        // Minimum grid (3x3) leaves only a handful of `' '` cells after S/F
+        // and the start-adjacency exclusion zone — fewer than the requested
+        // 8 enemies. Placement silently caps to what fits.
+        let maze = make_with_enemies_and_health(3, 3, 17, 0, Some(8), Some(8))
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        let e = count_char(grid, 'E');
+        let h = count_char(grid, 'H');
+        assert!(e <= MAX_ENEMY_COUNT);
+        assert!(h <= MAX_HEALTH_COUNT);
+        assert!(e + h <= 9, "3x3 grid has at most 9 cells total");
+    }
+
+    #[test]
+    fn auto_placement_avoids_cells_adjacent_to_start() {
+        // Request the maximum enemies — start-adjacency must still be honoured.
+        let maze = make_with_enemies_and_health(11, 11, 23, 0, Some(MAX_ENEMY_COUNT), None)
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        // Default start cell is (0, 0). Excluded cells: (0,0), (0,1), (1,0).
+        assert_ne!(grid[0][0], 'E');
+        assert_ne!(grid[0][1], 'E');
+        assert_ne!(grid[1][0], 'E');
+    }
+
+    #[test]
+    fn auto_placement_is_deterministic_for_same_seed() {
+        let a = make_with_enemies_and_health(15, 15, 99, 0, Some(4), Some(4))
+            .generate()
+            .expect("should succeed");
+        let b = make_with_enemies_and_health(15, 15, 99, 0, Some(4), Some(4))
+            .generate()
+            .expect("should succeed");
+        assert_eq!(a.definition.grid, b.definition.grid);
+    }
+
+    #[test]
+    fn auto_placement_with_doors_does_not_overwrite_keys_or_doors() {
+        // Generate with doors AND enemies/health together; no E or H may land
+        // on a K or D cell.
+        let maze = make_with_enemies_and_health(21, 21, 31, 4, Some(6), Some(6))
+            .generate()
+            .expect("should succeed");
+        let grid = &maze.definition.grid;
+        let doors = count_char(grid, 'D');
+        let keys = count_char(grid, 'K');
+        assert!(doors > 0, "test setup expects real doors placed");
+        assert_eq!(keys, doors, "every door has its own key");
+        // The placement function only converts `' '` cells, so any K or D in
+        // the final grid must still be a K or D (i.e. not stomped by an
+        // E/H).
+        assert!(count_char(grid, 'E') > 0);
+        assert!(count_char(grid, 'H') > 0);
+        // Solvability is unaffected by E/H (solver-blind cells).
+        Solver { maze: &maze }
+            .solve()
+            .expect("maze with E/H must still solve");
     }
 }
