@@ -141,6 +141,24 @@ wall_type = "brick"
 door_count = 2
 spare_doors = 0
 spare_keys = 0
+# Number of enemies the generator auto-places on this difficulty's maze.
+# Clamped to maze::MAX_ENEMY_COUNT (= 8) and to the available eligible cells.
+# Default 0 = no enemies.
+enemy_count = 1
+# Number of health pickups the generator auto-places. Clamped to
+# maze::MAX_HEALTH_COUNT (= 8). Default 0 = none.
+health_count = 2
+# Enemy rig kind to spawn at every 'E' cell. One of "goblin" | "ghost".
+# Default "goblin".
+enemy_type = "goblin"
+# Health-pickup rig kind to spawn at every 'H' cell. One of "heart" |
+# "potion". Default "heart".
+health_style = "heart"
+# How often each enemy advances one cell, in milliseconds of real-game time.
+# Lower = harder. Default 1500.
+enemy_move_period_ms = 1800
+# Player's HP cap and starting HP for this difficulty. Default 3.
+max_hp = 3
 
 [game.play3d.easy.landmarks]
 # Per-cell wall tint variation — each cell's walls pick one of six
@@ -181,6 +199,12 @@ wall_type = "brick"
 door_count = 3
 spare_doors = 2
 spare_keys = 1
+enemy_count = 3
+health_count = 3
+enemy_type = "goblin"
+health_style = "heart"
+enemy_move_period_ms = 1500
+max_hp = 3
 
 [game.play3d.tricky.landmarks]
 wall_tint = true
@@ -204,6 +228,12 @@ wall_type = "brick"
 door_count = 4
 spare_doors = 3
 spare_keys = 1
+enemy_count = 5
+health_count = 4
+enemy_type = "goblin"
+health_style = "heart"
+enemy_move_period_ms = 1200
+max_hp = 3
 
 [game.play3d.hard.landmarks]
 wall_tint = true

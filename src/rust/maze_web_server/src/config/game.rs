@@ -106,6 +106,35 @@ pub struct Play3dDifficultyConfig {
     /// a budget to burn on decoys before they risk stranding. Default 0.
     #[serde(default = "default_play3d_spare_keys")]
     pub spare_keys: u32,
+    /// Number of enemies (`'E'` cells) the generator auto-places on this
+    /// difficulty's maze. Clamped to `maze::MAX_ENEMY_COUNT` (= 8) and to
+    /// the available eligible cells. Default 0 = no enemies.
+    #[serde(default = "default_play3d_enemy_count")]
+    pub enemy_count: u32,
+    /// Number of health pickups (`'H'` cells) the generator auto-places
+    /// on this difficulty's maze. Clamped to `maze::MAX_HEALTH_COUNT`
+    /// (= 8) and to the available eligible cells. Default 0 = no
+    /// health pickups.
+    #[serde(default = "default_play3d_health_count")]
+    pub health_count: u32,
+    /// Enemy rig kind to spawn at every `'E'` cell. Same rig for every
+    /// enemy on a given difficulty (per-enemy variation is deferred to a
+    /// later plan). Default `goblin`.
+    #[serde(default = "default_enemy_type")]
+    pub enemy_type: EnemyTypeConfig,
+    /// Health-pickup rig kind to spawn at every `'H'` cell. Default
+    /// `heart`.
+    #[serde(default = "default_health_style")]
+    pub health_style: HealthStyleConfig,
+    /// How often each enemy advances one cell, in milliseconds of
+    /// real-game time. Lower = harder. Default 1500.
+    #[serde(default = "default_play3d_enemy_move_period_ms")]
+    pub enemy_move_period_ms: u32,
+    /// Player's HP cap for this difficulty. Starting HP is set to this
+    /// value (the Bevy `StartConfig` re-uses `max_hp` for `starting_hp`).
+    /// Default 3.
+    #[serde(default = "default_play3d_max_hp")]
+    pub max_hp: u32,
 }
 
 /// Atmospheric sky modes. Wire form (TOML / JSON) is lowercase
@@ -265,6 +294,68 @@ impl<'de> Deserialize<'de> for KeyHolderStyleConfig {
     }
 }
 
+/// Enemy rig kind for `'E'` cells in the 3D game. Wire form (TOML / JSON)
+/// is lowercase (`"goblin" | "ghost"`). Unknown values deserialise as
+/// `Goblin` — same forgiving policy as [`SkyTypeConfig`].
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum EnemyTypeConfig {
+    #[default]
+    Goblin,
+    Ghost,
+}
+
+impl EnemyTypeConfig {
+    /// Lowercase wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Goblin => "goblin",
+            Self::Ghost => "ghost",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for EnemyTypeConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "ghost" => Self::Ghost,
+            _ => Self::Goblin,
+        })
+    }
+}
+
+/// Health-pickup rig kind for `'H'` cells in the 3D game. Wire form
+/// (TOML / JSON) is lowercase (`"heart" | "potion"`). Unknown values
+/// deserialise as `Heart` — same forgiving policy as [`SkyTypeConfig`].
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum HealthStyleConfig {
+    #[default]
+    Heart,
+    Potion,
+}
+
+impl HealthStyleConfig {
+    /// Lowercase wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Heart => "heart",
+            Self::Potion => "potion",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for HealthStyleConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "potion" => Self::Potion,
+            _ => Self::Heart,
+        })
+    }
+}
+
 /// Per-difficulty landmark / spatial-orientation toggles. New techniques
 /// add their own field here (default `true`) as they land — the schema
 /// is intentionally a flat record of booleans (or simple values) so
@@ -340,6 +431,12 @@ impl Default for Play3dDifficultyConfig {
             door_count: default_play3d_door_count(),
             spare_doors: default_play3d_spare_doors(),
             spare_keys: default_play3d_spare_keys(),
+            enemy_count: default_play3d_enemy_count(),
+            health_count: default_play3d_health_count(),
+            enemy_type: default_enemy_type(),
+            health_style: default_health_style(),
+            enemy_move_period_ms: default_play3d_enemy_move_period_ms(),
+            max_hp: default_play3d_max_hp(),
         }
     }
 }
@@ -411,6 +508,12 @@ impl Default for Play3dConfig {
                 door_count: 2,
                 spare_doors: 0,
                 spare_keys: 0,
+                enemy_count: 1,
+                health_count: 2,
+                enemy_type: EnemyTypeConfig::Goblin,
+                health_style: HealthStyleConfig::Heart,
+                enemy_move_period_ms: 1800,
+                max_hp: 3,
             },
             tricky: Play3dDifficultyConfig {
                 rows: 15,
@@ -430,6 +533,12 @@ impl Default for Play3dConfig {
                 door_count: 3,
                 spare_doors: 2,
                 spare_keys: 1,
+                enemy_count: 3,
+                health_count: 3,
+                enemy_type: EnemyTypeConfig::Goblin,
+                health_style: HealthStyleConfig::Heart,
+                enemy_move_period_ms: 1500,
+                max_hp: 3,
             },
             hard: Play3dDifficultyConfig {
                 rows: 25,
@@ -449,6 +558,12 @@ impl Default for Play3dConfig {
                 door_count: 4,
                 spare_doors: 3,
                 spare_keys: 1,
+                enemy_count: 5,
+                health_count: 4,
+                enemy_type: EnemyTypeConfig::Goblin,
+                health_style: HealthStyleConfig::Heart,
+                enemy_move_period_ms: 1200,
+                max_hp: 3,
             },
         }
     }
@@ -493,6 +608,32 @@ fn default_play3d_spare_doors() -> u32 {
 }
 fn default_play3d_spare_keys() -> u32 {
     0
+}
+fn default_play3d_enemy_count() -> u32 {
+    0
+}
+fn default_play3d_health_count() -> u32 {
+    0
+}
+fn default_play3d_enemy_move_period_ms() -> u32 {
+    1500
+}
+fn default_play3d_max_hp() -> u32 {
+    3
+}
+
+/// Enemy rig kind defaults to goblin — the default rig the Bevy game ships
+/// with. Operators override per difficulty via
+/// `[game.play3d.<difficulty>] enemy_type = "ghost"`.
+fn default_enemy_type() -> EnemyTypeConfig {
+    EnemyTypeConfig::Goblin
+}
+
+/// Health-pickup rig kind defaults to heart — the default rig the Bevy
+/// game ships with. Operators override per difficulty via
+/// `[game.play3d.<difficulty>] health_style = "potion"`.
+fn default_health_style() -> HealthStyleConfig {
+    HealthStyleConfig::Heart
 }
 
 /// The minimap cell pixel size the game shipped with.
@@ -1137,5 +1278,78 @@ mod tests {
         // Omitted sub-sections fall back to Play3dDifficultyConfig::default().
         assert_eq!(cfg.play3d.tricky.rows, 8);
         assert_eq!(cfg.play3d.hard.timer_seconds, 120);
+    }
+
+    #[test]
+    fn unknown_enemy_type_falls_back_to_goblin() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            enemy_type = "dragon"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
+        assert_eq!(cfg.play3d.easy.enemy_type, EnemyTypeConfig::Goblin);
+    }
+
+    #[test]
+    fn unknown_health_style_falls_back_to_heart() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            health_style = "elixir"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
+        assert_eq!(cfg.play3d.easy.health_style, HealthStyleConfig::Heart);
+    }
+
+    #[test]
+    fn enemy_type_and_health_style_as_wire_str_matches_serde_form() {
+        assert_eq!(EnemyTypeConfig::Goblin.as_wire_str(), "goblin");
+        assert_eq!(EnemyTypeConfig::Ghost.as_wire_str(), "ghost");
+        assert_eq!(HealthStyleConfig::Heart.as_wire_str(), "heart");
+        assert_eq!(HealthStyleConfig::Potion.as_wire_str(), "potion");
+    }
+
+    #[test]
+    fn enemy_and_health_knobs_round_trip_from_toml() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            enemy_count = 4
+            health_count = 3
+            enemy_type = "ghost"
+            health_style = "potion"
+            enemy_move_period_ms = 900
+            max_hp = 5
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        let preset = &cfg.play3d.easy;
+        assert_eq!(preset.enemy_count, 4);
+        assert_eq!(preset.health_count, 3);
+        assert_eq!(preset.enemy_type, EnemyTypeConfig::Ghost);
+        assert_eq!(preset.health_style, HealthStyleConfig::Potion);
+        assert_eq!(preset.enemy_move_period_ms, 900);
+        assert_eq!(preset.max_hp, 5);
     }
 }

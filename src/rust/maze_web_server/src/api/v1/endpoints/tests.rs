@@ -5983,6 +5983,12 @@ mod test_definitions {
         assert_eq!(body.door_count, 2);
         assert_eq!(body.spare_doors, 0);
         assert_eq!(body.spare_keys, 0);
+        assert_eq!(body.enemy_count, 1);
+        assert_eq!(body.health_count, 2);
+        assert_eq!(body.enemy_type, "goblin");
+        assert_eq!(body.health_style, "heart");
+        assert_eq!(body.enemy_move_period_ms, 1800);
+        assert_eq!(body.max_hp, 3);
     }
 
     #[actix_web::test]
@@ -6003,6 +6009,12 @@ mod test_definitions {
         assert_eq!(body.door_count, 3);
         assert_eq!(body.spare_doors, 2);
         assert_eq!(body.spare_keys, 1);
+        assert_eq!(body.enemy_count, 3);
+        assert_eq!(body.health_count, 3);
+        assert_eq!(body.enemy_type, "goblin");
+        assert_eq!(body.health_style, "heart");
+        assert_eq!(body.enemy_move_period_ms, 1500);
+        assert_eq!(body.max_hp, 3);
 
         let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=hard", None, None);
         let resp = test::call_service(&app, req).await;
@@ -6017,6 +6029,12 @@ mod test_definitions {
         assert_eq!(body.door_count, 4);
         assert_eq!(body.spare_doors, 3);
         assert_eq!(body.spare_keys, 1);
+        assert_eq!(body.enemy_count, 5);
+        assert_eq!(body.health_count, 4);
+        assert_eq!(body.enemy_type, "goblin");
+        assert_eq!(body.health_style, "heart");
+        assert_eq!(body.enemy_move_period_ms, 1200);
+        assert_eq!(body.max_hp, 3);
     }
 
     #[actix_web::test]

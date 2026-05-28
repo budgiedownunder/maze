@@ -81,6 +81,12 @@ pub(crate) fn camera_fov_for_aspect(aspect: f32) -> f32 {
 /// generation failures surface up the call stack — and into the browser's
 /// `#loading` error overlay — *before* Bevy enters `AppState::Playing`, where
 /// the rest of the game systems would otherwise panic on missing resources.
+///
+/// The argument list mirrors the JS host's `StartConfig` fields one-for-one
+/// rather than introducing an intermediate parameter struct — the host already
+/// destructures the JSON payload into local variables and forwarding them
+/// positionally is the most direct mapping.
+#[allow(clippy::too_many_arguments)]
 pub fn generate_maze_json(
     rows: u32,
     cols: u32,
@@ -89,6 +95,8 @@ pub fn generate_maze_json(
     door_count: u32,
     spare_doors: u32,
     spare_keys: u32,
+    enemy_count: u32,
+    health_count: u32,
 ) -> Result<String, String> {
     let options = GeneratorOptions {
         row_count: rows as usize,
@@ -103,8 +111,8 @@ pub fn generate_maze_json(
         door_count: Some(door_count as usize),
         spare_doors: Some(spare_doors as usize),
         spare_keys: Some(spare_keys as usize),
-        enemy_count: None,
-        health_count: None,
+        enemy_count: Some(enemy_count as usize),
+        health_count: Some(health_count as usize),
     };
     let maze = Generator { options }
         .generate()

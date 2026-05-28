@@ -470,6 +470,24 @@ pub struct Play3dConfigResponse {
     /// Number of spare keys planted on off-spine branches — a budget the
     /// player can spend on decoys before they risk stranding. `0` = none.
     pub spare_keys: u32,
+    /// Number of enemies (`'E'` cells) the generator auto-places. Clamped
+    /// to `maze::MAX_ENEMY_COUNT` (= 8). `0` = no enemies.
+    pub enemy_count: u32,
+    /// Number of health pickups (`'H'` cells) the generator auto-places.
+    /// Clamped to `maze::MAX_HEALTH_COUNT` (= 8). `0` = no pickups.
+    pub health_count: u32,
+    /// Enemy rig kind to spawn at every `'E'` cell. One of `goblin`,
+    /// `ghost`. Safely degrades to `goblin` if unrecognised.
+    pub enemy_type: String,
+    /// Health-pickup rig kind to spawn at every `'H'` cell. One of
+    /// `heart`, `potion`. Safely degrades to `heart` if unrecognised.
+    pub health_style: String,
+    /// How often each enemy advances one cell, in milliseconds of
+    /// real-game time. Lower = harder.
+    pub enemy_move_period_ms: u32,
+    /// Player's HP cap for this difficulty. Starting HP is set to this
+    /// value.
+    pub max_hp: u32,
 }
 
 /// JSON shape of the per-difficulty landmark toggles in
@@ -543,6 +561,12 @@ pub async fn get_play3d_config(
         door_count: preset.door_count,
         spare_doors: preset.spare_doors,
         spare_keys: preset.spare_keys,
+        enemy_count: preset.enemy_count,
+        health_count: preset.health_count,
+        enemy_type: preset.enemy_type.as_wire_str().to_string(),
+        health_style: preset.health_style.as_wire_str().to_string(),
+        enemy_move_period_ms: preset.enemy_move_period_ms,
+        max_hp: preset.max_hp,
     }))
 }
 
