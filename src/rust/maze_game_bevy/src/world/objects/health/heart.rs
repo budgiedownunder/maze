@@ -1,10 +1,13 @@
 //! Heart health-pickup rig — a procedural red heart (two upper sphere
-//! lobes + a downward-pointing cone tip) that hovers above the cell with
-//! a gentle pulse animation. Matches the red-heart icon used by the 2D
-//! editor and 2D game so the visual reads consistently across surfaces.
+//! lobes + a downward-pointing pyramid tip) that hovers above the cell
+//! with a gentle pulse animation. Matches the red-heart icon used by the
+//! 2D editor and 2D game so the visual reads consistently across
+//! surfaces.
 
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::world::CELL_SIZE;
+use bevy::asset::RenderAssetUsages;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use std::f32::consts::FRAC_PI_2;
 
@@ -17,8 +20,21 @@ const LOBE_OFFSET_X: f32 = 0.13;
 /// Vertical lobe offset above the heart's centre (units).
 const LOBE_OFFSET_Y: f32 = 0.10;
 
-/// Downward-pointing cone — the heart's "tip" / point.
-const TIP_RADIUS: f32 = 0.26;
+/// Downward-pointing pyramid — the heart's "tip" / point. Built as a
+/// custom 4-sided pyramid mesh (rather than Bevy's circular `Cone`
+/// primitive) so its front and back faces are planar at Z =
+/// ±`TIP_HALF_DEPTH_Z`. `TIP_HALF_DEPTH_Z` is chosen so the four corners
+/// of the pyramid's top face land exactly on the lobe spheres' surfaces
+/// at the join Y — geometrically, for a corner at
+/// `(±TIP_HALF_WIDTH_X, top_y, ±TIP_HALF_DEPTH_Z)` to sit on a lobe
+/// centred at `(±LOBE_OFFSET_X, LOBE_OFFSET_Y, 0)` we need
+/// `TIP_HALF_DEPTH_Z = sqrt(LOBE_RADIUS² − (TIP_HALF_WIDTH_X −
+/// LOBE_OFFSET_X)² − (top_y − LOBE_OFFSET_Y)²)`, which evaluates to ≈ 0.10
+/// for the current geometry. This gives a flat-faced tip whose top edges
+/// tuck flush into the lobes rather than sticking out past their
+/// silhouette.
+const TIP_HALF_WIDTH_X: f32 = 0.26;
+const TIP_HALF_DEPTH_Z: f32 = 0.10;
 const TIP_HEIGHT: f32 = 0.45;
 /// Vertical offset of the tip's centre below the heart's centre (units).
 const TIP_OFFSET_Y: f32 = -0.20;
@@ -44,7 +60,7 @@ pub(crate) fn build_heart_assets(
     let lobe_mesh = meshes.as_mut().map(|m| m.add(Sphere::new(LOBE_RADIUS)));
     let tip_mesh = meshes
         .as_mut()
-        .map(|m| m.add(Cone { radius: TIP_RADIUS, height: TIP_HEIGHT }));
+        .map(|m| m.add(build_tip_pyramid_mesh(TIP_HALF_WIDTH_X, TIP_HALF_DEPTH_Z, TIP_HEIGHT)));
     let mat = materials.as_mut().map(|m| {
         m.add(StandardMaterial {
             base_color: EMISSIVE_ONLY_BASE,
@@ -89,8 +105,9 @@ pub(crate) fn spawn_heart(commands: &mut Commands, assets: &HeartAssets, r: usiz
                 MeshMaterial3d(mat.clone()),
                 Transform::from_xyz(LOBE_OFFSET_X, LOBE_OFFSET_Y, 0.0),
             ));
-            // Tip cone — Bevy's Cone primitive points along +Y by default,
-            // so rotate it 180° around X to point downward, and shift down.
+            // Tip pyramid — the custom mesh is built with its apex along
+            // +Y to mirror Bevy's `Cone` convention, so rotating it 180°
+            // around X flips the apex downward to form the heart's point.
             parent.spawn((
                 Mesh3d(tip),
                 MeshMaterial3d(mat),
@@ -104,3 +121,82 @@ pub(crate) fn spawn_heart(commands: &mut Commands, assets: &HeartAssets, r: usiz
 // Idle animation (scale pulse + Y-spin) is driven uniformly across
 // every `HealthMarker` by `super::health_animation_system` — see
 // [`super`] module docs.
+
+/// Builds a 4-sided pyramid mesh centred on its midpoint, with the apex
+/// at `y = +height/2` and a rectangular base at `y = -height/2` spanning
+/// `±half_width_x` along X and `±half_depth_z` along Z. Vertices are
+/// duplicated per face to give each face a flat shading normal. The
+/// asymmetric half-extents (X ≠ Z) are what give the heart its flat
+/// front/back profile.
+fn build_tip_pyramid_mesh(half_width_x: f32, half_depth_z: f32, height: f32) -> Mesh {
+    let half_h = height * 0.5;
+    let apex = [0.0_f32, half_h, 0.0];
+    let b_fl = [-half_width_x, -half_h, half_depth_z];
+    let b_fr = [half_width_x, -half_h, half_depth_z];
+    let b_br = [half_width_x, -half_h, -half_depth_z];
+    let b_bl = [-half_width_x, -half_h, -half_depth_z];
+
+    // Outward face normals derived from the cross product of two base→apex
+    // edges; factored to closed form to avoid recomputing per call.
+    let n_front = normalize3([0.0, half_depth_z, height]);
+    let n_back = normalize3([0.0, half_depth_z, -height]);
+    let n_right = normalize3([height, half_width_x, 0.0]);
+    let n_left = normalize3([-height, half_width_x, 0.0]);
+    let n_base = [0.0, -1.0, 0.0];
+
+    let positions: Vec<[f32; 3]> = vec![
+        b_fl, b_fr, apex, // front (+Z)
+        b_fr, b_br, apex, // right (+X)
+        b_br, b_bl, apex, // back (-Z)
+        b_bl, b_fl, apex, // left (-X)
+        b_fl, b_bl, b_br, b_fr, // base (-Y)
+    ];
+    let normals: Vec<[f32; 3]> = vec![
+        n_front, n_front, n_front, n_right, n_right, n_right, n_back, n_back, n_back, n_left,
+        n_left, n_left, n_base, n_base, n_base, n_base,
+    ];
+    let uvs: Vec<[f32; 2]> = vec![
+        [0.0, 1.0],
+        [1.0, 1.0],
+        [0.5, 0.0],
+        [0.0, 1.0],
+        [1.0, 1.0],
+        [0.5, 0.0],
+        [0.0, 1.0],
+        [1.0, 1.0],
+        [0.5, 0.0],
+        [0.0, 1.0],
+        [1.0, 1.0],
+        [0.5, 0.0],
+        [0.0, 0.0],
+        [0.0, 1.0],
+        [1.0, 1.0],
+        [1.0, 0.0],
+    ];
+    let indices: Vec<u32> = vec![
+        0, 1, 2, // front
+        3, 4, 5, // right
+        6, 7, 8, // back
+        9, 10, 11, // left
+        12, 13, 14, 12, 14, 15, // base (two triangles)
+    ];
+
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh
+}
+
+fn normalize3(v: [f32; 3]) -> [f32; 3] {
+    let mag = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    if mag > 0.0 {
+        [v[0] / mag, v[1] / mag, v[2] / mag]
+    } else {
+        [0.0, 1.0, 0.0]
+    }
+}
