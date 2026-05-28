@@ -21,9 +21,9 @@
 //! The motion rigs live in sibling files: [`swing`] (hinge), [`slide`] (drop
 //! into the floor), [`portcullis`] (rise into a framed gate), and [`dissolve`]
 //! (fade a per-leaf material). The slab is in [`panel`] and the lock in
-//! [`keyhole`]. The countdown advances deterministically in the `FixedUpdate`
-//! tick (`door_tick_system`); once open a leaf is pinned to its open pose
-//! permanently and never despawned.
+//! [`keyhole`]. The countdown advances deterministically in the central
+//! `FixedUpdate` tick driver (`crate::tick::game_tick_system`); once open a
+//! leaf is pinned to its open pose permanently and never despawned.
 
 pub(crate) mod dissolve;
 pub(crate) mod keyhole;
@@ -39,7 +39,7 @@ use crate::world::decorations::wall::{
 use crate::world::walls::{wall_kind_for_cell, WallAssets, PANEL_W};
 use crate::world::{CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
-use maze::{DoorState, GameEvent};
+use maze::DoorState;
 use panel::DOOR_THICKNESS;
 use std::f32::consts::{FRAC_PI_2, PI};
 
@@ -70,14 +70,26 @@ pub(crate) struct DoorMarker {
     /// slide / portcullis motions can offset from it (and swing / dissolve hold
     /// it).
     base_translation: Vec3,
-    /// Set once a [`GameEvent::DoorOpened`] has been applied — the door is then
+    /// Set once a `GameEvent::DoorOpened` has been applied — the door is then
     /// pinned to its fully-open pose permanently and never re-reads its state.
+    /// Mutated only via [`DoorMarker::mark_opened`] so the write path stays
+    /// explicit and discoverable from outside this module.
     opened: bool,
     /// For [`DoorMotion::Dissolve`] only: the leaf's own cloned, alpha-blended
     /// materials (panel + keyhole plate + keyhole) each paired with its base
     /// emissive, so the whole leaf fades together without touching the shared
     /// wall / keyhole materials. Empty for every other motion.
     dissolve_materials: Vec<(Handle<StandardMaterial>, LinearRgba)>,
+}
+
+impl DoorMarker {
+    /// Pins the leaf to its fully-open pose permanently. The only path
+    /// that flips a closed leaf to opened. Called from the central tick
+    /// driver (`crate::tick::game_tick_system`) when a
+    /// `GameEvent::DoorOpened` for this leaf's cell fires.
+    pub(crate) fn mark_opened(&mut self) {
+        self.opened = true;
+    }
 }
 
 pub(crate) struct DoorAssets {
@@ -353,33 +365,12 @@ fn smoothstep(t: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-/// `FixedUpdate`: advances the deterministic door countdown via
-/// [`maze::MazeGame::tick`] and applies the resulting events. A
-/// [`GameEvent::DoorOpened`] pins every leaf of the matching door to its open
-/// pose permanently (the `opened` flag), so it never re-reads its state or
-/// re-locks.
-pub(crate) fn door_tick_system(
-    time: Res<Time>,
-    mut state: ResMut<GameState>,
-    mut markers: Query<&mut DoorMarker>,
-) {
-    if state.paused || state.won || state.lost {
-        return;
-    }
-    let dt_ms = time.delta_secs() * 1000.0;
-    for event in state.game.tick(dt_ms) {
-        // Other tick events (enemy moves, player damage / heal) are handled
-        // by their own systems alongside the rigs that consume them.
-        let GameEvent::DoorOpened { cell } = event else {
-            continue;
-        };
-        for mut marker in &mut markers {
-            if marker.cell == cell {
-                marker.opened = true;
-            }
-        }
-    }
-}
+// Door open / close transitions are driven by the central tick system —
+// `crate::tick::game_tick_system` — which calls `MazeGame::tick` once per
+// `FixedUpdate` and dispatches `GameEvent::DoorOpened` to this module by
+// writing the matching `DoorMarker.opened`. Centralising the tick call
+// across all event-producing entities (doors, enemies, HP) avoids
+// double-stepping the maze.
 
 /// `Update`: drives each leaf from its door's [`DoorState`], dispatching on the
 /// leaf's [`DoorMotion`] — swing rotates, slide / portcullis translate, dissolve

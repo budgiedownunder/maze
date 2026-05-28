@@ -100,6 +100,10 @@ pub(crate) struct GameState {
     pub(crate) lost: bool,
     pub(crate) paused: bool,
     pub(crate) can_pickup: bool,
+    /// Remaining milliseconds for the red damage-flash overlay. `0.0` when
+    /// no flash is active. Set on `PlayerDamaged` event and decremented by
+    /// the damage-flash system; the overlay fades its alpha proportionally.
+    pub(crate) damage_flash_timer: f32,
 }
 
 #[derive(Resource)]
@@ -150,6 +154,20 @@ pub struct GameConfig {
     pub door_style: DoorStyle,
     /// Key-holder appearance for `'K'` cells. Default `Pedestal`.
     pub key_holder: KeyHolderStyle,
+    /// Move period for enemies (ms of accumulated `tick(dt_ms)` per cell
+    /// advance). Threaded into `MazeGameOptions::enemy_move_period_ms`.
+    /// Default `1500.0` (matches the maze crate's default).
+    pub enemy_move_period_ms: f32,
+    /// Damage each enemy deals on same-cell collision. Threaded into
+    /// `MazeGameOptions::enemy_damage`. Default `1`.
+    pub enemy_damage: u32,
+    /// Maximum player HP — also the heal cap. Threaded into
+    /// `MazeGameOptions::max_hp`. Default `3`.
+    pub max_hp: u32,
+    /// Starting player HP. Threaded into `MazeGameOptions::starting_hp`
+    /// (clamped to `[1, max_hp]` inside the maze crate). Default `3`
+    /// (= `max_hp` → start at full health).
+    pub starting_hp: u32,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
@@ -384,6 +402,10 @@ impl Default for GameConfig {
             wall_type: WallType::default(),
             door_style: DoorStyle::default(),
             key_holder: KeyHolderStyle::default(),
+            enemy_move_period_ms: 1500.0,
+            enemy_damage: 1,
+            max_hp: 3,
+            starting_hp: 3,
         }
     }
 }

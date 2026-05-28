@@ -2560,6 +2560,136 @@ pub unsafe extern "C" fn maze_c_maze_game_get_key(
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — HP, enemies, health pickups
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Returns the player's current HP.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_hp(ptr: *mut MazeGameC) -> u32 {
+    let game = unsafe { &(*ptr).game };
+    game.hp()
+}
+
+/// Returns the player's maximum HP.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_max_hp(ptr: *mut MazeGameC) -> u32 {
+    let game = unsafe { &(*ptr).game };
+    game.max_hp()
+}
+
+/// Returns the number of active enemies.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_enemy_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.enemies().len() as i32
+}
+
+/// Retrieves a single enemy's current cell + stable id by index.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_enemy(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let enemies = game.enemies();
+    if index < 0 || index as usize >= enemies.len() {
+        return 0;
+    }
+    let enemy = &enemies[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = enemy.row as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = enemy.col as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = enemy.id;
+        }
+    }
+    1
+}
+
+/// Returns the number of uncollected health-pickup cells (live `'H'`).
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_health_pickup_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    health_pickup_cells(game).len() as i32
+}
+
+/// Retrieves a single uncollected health-pickup cell by index. `out_id`
+/// is always written as `0` — pickups have no stable id, the cell
+/// coordinate is the natural key. The field is kept on the signature for
+/// shape parity with [`maze_c_maze_game_get_enemy`] /
+/// [`maze_c_maze_game_get_key`] so callers can use a single
+/// `(row, col, id)` row-getter pattern.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_health_pickup(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let pickups = health_pickup_cells(game);
+    if index < 0 || index as usize >= pickups.len() {
+        return 0;
+    }
+    let (r, c) = pickups[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = 0;
+        }
+    }
+    1
+}
+
+fn health_pickup_cells(game: &maze::MazeGame) -> Vec<(usize, usize)> {
+    game.grid()
+        .iter()
+        .enumerate()
+        .flat_map(|(r, row)| {
+            row.iter()
+                .enumerate()
+                .filter(|(_, &ch)| ch == 'H')
+                .map(move |(c, _)| (r, c))
+        })
+        .collect()
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // MazeGameC — visited cells
 // ──────────────────────────────────────────────────────────────────────────────
 

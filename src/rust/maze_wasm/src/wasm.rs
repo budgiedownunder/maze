@@ -1472,6 +1472,142 @@ pub extern "C" fn maze_game_wasm_get_key(
     0
 }
 
+/// Returns the player's current HP, or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_hp(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.hp() as i32
+}
+
+/// Returns the player's maximum HP, or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_max_hp(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.max_hp() as i32
+}
+
+/// Returns the number of active enemies, or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_enemy_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.enemies().len() as i32
+}
+
+/// Retrieves a single enemy's current cell + stable id by index. Writes
+/// the enemy's row / column / id into the out parameters. Returns `0` on
+/// success, `-1` on null pointer or out-of-range index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_enemy(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let enemies = game.enemies();
+    if index < 0 || index as usize >= enemies.len() {
+        return -1;
+    }
+    let enemy = &enemies[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = enemy.row as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = enemy.col as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = enemy.id;
+        }
+    }
+    0
+}
+
+/// Returns the number of uncollected health-pickup cells (live `'H'`),
+/// or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_health_pickup_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    count_health_pickups(game) as i32
+}
+
+/// Retrieves a single uncollected health-pickup cell by index. Writes the
+/// cell's row / column into the out parameters; `out_id` is always
+/// written as `0` — pickups have no stable id, the cell coordinate is
+/// the natural key. The field is kept on the signature for shape parity
+/// with [`maze_game_wasm_get_enemy`] / [`maze_game_wasm_get_key`] so
+/// callers can use a single `(row, col, id)` row-getter pattern.
+/// Returns `0` on success, `-1` on null pointer or out-of-range index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_health_pickup(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let pickups = health_pickup_cells(game);
+    if index < 0 || index as usize >= pickups.len() {
+        return -1;
+    }
+    let (r, c) = pickups[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = 0;
+        }
+    }
+    0
+}
+
+fn count_health_pickups(game: &maze::MazeGame) -> usize {
+    game.grid().iter().flatten().filter(|&&c| c == 'H').count()
+}
+
+fn health_pickup_cells(game: &maze::MazeGame) -> Vec<(usize, usize)> {
+    game.grid()
+        .iter()
+        .enumerate()
+        .flat_map(|(r, row)| {
+            row.iter()
+                .enumerate()
+                .filter(|(_, &ch)| ch == 'H')
+                .map(move |(c, _)| (r, c))
+        })
+        .collect()
+}
+
 /// Returns the number of cells in the visited-cells list.
 ///
 /// # Returns

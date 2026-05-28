@@ -1,9 +1,11 @@
 mod hud;
 mod images;
 mod movement;
+mod outcome;
 mod overlays;
 mod palette;
 mod state;
+mod tick;
 mod world;
 
 pub use state::{
@@ -14,15 +16,19 @@ pub use world::generate_maze_json;
 use bevy::prelude::*;
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
-    use crate::hud::{bag, clock, minimap, statusbar};
+    use crate::hud::{bag, clock, hp, minimap, statusbar};
     use crate::movement::{movement_system, pickup_prompt_system, pickup_system, quit_system};
+    use crate::outcome::outcome_watcher_system;
     use crate::overlays::{lose, pause, title, win};
     use crate::state::{AppState, PendingMazeJson, TitleTimer};
+    use crate::tick::{damage_flash_system, game_tick_system};
     use crate::world::{
         objects::{
             self,
             dead_end::brazier_flicker_system,
-            door::{door_animation_system, door_tick_system},
+            door::door_animation_system,
+            enemy::enemy_animation_system,
+            health::health_animation_system,
             key_holder::{key_holder_system, key_sparks_system},
         },
         sky, spawn_world,
@@ -44,6 +50,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(OnExit(AppState::TitleScreen), title::teardown_title)
         .add_systems(OnEnter(AppState::Playing), spawn_world)
         .add_systems(Update, movement_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, outcome_watcher_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::win_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::leaf_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, clock::tick_clock_system.run_if(in_state(AppState::Playing)))
@@ -61,12 +68,19 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, key_sparks_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pickup_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pickup_prompt_system.run_if(in_state(AppState::Playing)))
-        // The door countdown runs in `FixedUpdate` for deterministic, frame-rate
-        // independent opening; the hinge animation reads the resulting state in
-        // `Update` for smooth per-frame motion.
-        .add_systems(FixedUpdate, door_tick_system.run_if(in_state(AppState::Playing)))
+        // The single game-state tick driver runs in `FixedUpdate` for
+        // deterministic, frame-rate independent stepping (doors, enemies,
+        // HP arithmetic). Per-entity animation systems read the resulting
+        // state in `Update` for smooth per-frame motion.
+        .add_systems(FixedUpdate, game_tick_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, door_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, enemy_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, health_animation_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, bag::bag_hud_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, hp::hp_hud_system.run_if(in_state(AppState::Playing)))
+        // Damage flash runs through pause/lost so an in-flight flash from
+        // the last live tick finishes fading rather than freezing on screen.
+        .add_systems(Update, damage_flash_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pause::pause_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, sky::sky_dome_follow_camera.run_if(in_state(AppState::Playing)))
         .add_systems(Update, world::camera_fov_resize_system.run_if(in_state(AppState::Playing)))
@@ -87,7 +101,9 @@ mod tests {
         objects::{
             dead_end::{BrazierBowl, DeadEndObject},
             door::DoorMarker,
+            enemy::EnemyMarker,
             finish::orb::FinishOrb,
+            health::HealthMarker,
             key_holder::KeyMarker,
         },
         roof::RoofCell,
@@ -956,5 +972,78 @@ mod tests {
 
         assert_eq!(count_on, count_off);
         assert_eq!(count_on, expected_wall_panel_count(&demo_grid()));
+    }
+
+    // ── enemies, health pickups, HP HUD (Bevy parity with maze crate) ─────────
+
+    #[test]
+    fn enemy_marker_spawned_per_e_cell() {
+        let mut app = make_playing_app();
+        let grid = demo_grid();
+        let expected = grid.iter().flatten().filter(|&&c| c == 'E').count();
+        let count = app
+            .world_mut()
+            .query::<&EnemyMarker>()
+            .iter(app.world())
+            .count();
+        assert_eq!(count, expected);
+        assert!(count >= 1, "demo grid must contain at least one 'E' cell");
+    }
+
+    #[test]
+    fn enemy_marker_ids_align_with_row_major_scan() {
+        // EnemyMarker.id is assigned by the row-major counter in
+        // spawn_world; maze::Enemy.id is assigned by the same row-major
+        // scan inside MazeGame::from_json_with_options. The two must
+        // match so enemy_animation_system can correlate them.
+        let mut app = make_playing_app();
+        let mut marker_ids: Vec<u32> = app
+            .world_mut()
+            .query::<&EnemyMarker>()
+            .iter(app.world())
+            .map(|m| m.id)
+            .collect();
+        marker_ids.sort();
+        let game = app.world().resource::<GameState>().game.enemies();
+        let mut runtime_ids: Vec<u32> = game.iter().map(|e| e.id).collect();
+        runtime_ids.sort();
+        assert_eq!(marker_ids, runtime_ids);
+    }
+
+    #[test]
+    fn health_marker_spawned_per_h_cell() {
+        let mut app = make_playing_app();
+        let grid = demo_grid();
+        let expected = grid.iter().flatten().filter(|&&c| c == 'H').count();
+        let count = app
+            .world_mut()
+            .query::<&HealthMarker>()
+            .iter(app.world())
+            .count();
+        assert_eq!(count, expected);
+        assert!(count >= 1, "demo grid must contain at least one 'H' cell");
+    }
+
+    #[test]
+    fn hp_hud_spawns_max_hp_heart_icons() {
+        let mut app = make_playing_app();
+        let count = app
+            .world_mut()
+            .query::<&crate::hud::hp::HpHeartIcon>()
+            .iter(app.world())
+            .count() as u32;
+        let max_hp = app.world().resource::<GameState>().game.max_hp();
+        assert_eq!(count, max_hp);
+    }
+
+    #[test]
+    fn demo_grid_is_well_formed_with_enemy_and_health() {
+        // Extends `demo_grid_is_well_formed` for the new vocabulary —
+        // exactly one 'E' and one 'H' so the smoke-test exercises both
+        // rigs without confusing the player with a horde.
+        let grid = demo_grid();
+        let count = |target: char| grid.iter().flatten().filter(|&&c| c == target).count();
+        assert_eq!(count('E'), 1, "exactly one enemy spawn");
+        assert_eq!(count('H'), 1, "exactly one health pickup");
     }
 }

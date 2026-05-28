@@ -203,10 +203,11 @@ pub(crate) fn spawn_dead_end_object_for_cell(
     // broken pillar / chest, picked by hashing (row, col, seed). Skipped
     // for start / finish cells (the player stands on start, the finish
     // has the orb), for key / door cells (they own the dead-end with their
-    // holder / panel — a key is commonly placed in a dead-end), and when the
-    // per-difficulty toggle is off.
+    // holder / panel — a key is commonly placed in a dead-end), for enemy
+    // and health-pickup cells (the goblin / heart entity owns the cell's
+    // visual), and when the per-difficulty toggle is off.
     if !config.landmarks.dead_end_objects
-        || matches!(cell, 'S' | 'F' | 'K' | 'D')
+        || matches!(cell, 'S' | 'F' | 'K' | 'D' | 'E' | 'H')
         || !is_dead_end(grid, r, c)
     {
         return;

@@ -1,8 +1,4 @@
-use crate::overlays::{lose, win};
-use crate::state::{
-    dispatch_can_pickup, dispatch_game_result, Animation, GameClock, GameConfig, GameOutcome,
-    GameResult, GameState,
-};
+use crate::state::{dispatch_can_pickup, Animation, GameState};
 use crate::world::objects::key_holder::KeyMarker;
 use crate::world::{camera_pos_for, explore_cell_raw};
 use bevy::prelude::*;
@@ -16,12 +12,9 @@ const MAX_PITCH_DOWN: f32 = PI / 2.0; // 90° — straight down
 const MAX_PITCH_UP: f32 = PI * 45.0 / 180.0; // 45° — half-way up
 
 pub(crate) fn movement_system(
-    mut commands: Commands,
     time: Res<Time>,
     keys: Option<Res<ButtonInput<KeyCode>>>,
     mut state: ResMut<GameState>,
-    clock: Res<GameClock>,
-    config: Res<GameConfig>,
     mut camera: Query<&mut Transform, With<Camera3d>>,
 ) {
     // While paused, freeze movement, animation, and pitch entirely — the
@@ -42,41 +35,12 @@ pub(crate) fn movement_system(
         let anim = state.anim.take().unwrap();
         state.visual_pos = anim.target_pos;
         state.visual_yaw = anim.target_yaw;
-
-        // Check whether the player just arrived at the finish cell
-        let (r, c) = (state.game.player_row(), state.game.player_col());
-        if !state.won && state.grid[r][c] == 'F' {
-            state.won = true;
-            win::spawn_win_overlay(&mut commands);
-            dispatch_game_result(&GameResult {
-                outcome: GameOutcome::Win,
-                elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
-                difficulty: config.difficulty.clone(),
-                rows: state.grid.len() as u32,
-                cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,
-                seed: if config.rows > 0 { Some(config.seed) } else { None },
-                extras: std::collections::BTreeMap::new(),
-            });
-        } else if !state.lost && state.game.is_lost() {
-            // The just-completed move flipped the inner MazeGame to a lost
-            // state (walked through an open door no longer carrying enough
-            // keys to finish). Surface it visually here — once the camera
-            // has settled on the destination cell — so the player
-            // experiences the door-through first, then sees the message.
-            // Stranded is the only `MazeGame`-driven lose cause; the
-            // host-driven timeout path lives entirely in `tick_clock_system`.
-            state.lost = true;
-            lose::spawn_lose_overlay(&mut commands, "You're stranded!");
-            dispatch_game_result(&GameResult {
-                outcome: GameOutcome::Lose,
-                elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
-                difficulty: config.difficulty.clone(),
-                rows: state.grid.len() as u32,
-                cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,
-                seed: if config.rows > 0 { Some(config.seed) } else { None },
-                extras: std::collections::BTreeMap::new(),
-            });
-        }
+        // Win / lose detection lives in `crate::outcome::outcome_watcher_system`
+        // — it runs every frame (not just on anim completion) so an
+        // enemy-tick kill of a stationary player still surfaces the death
+        // overlay immediately. The watcher gates on `state.anim.is_none()`
+        // so move-triggered outcomes still wait for the camera to settle
+        // on the destination cell.
     } else if state.anim.is_some() {
         let pos = state.anim.as_ref().unwrap().current_pos();
         let yaw = state.anim.as_ref().unwrap().current_yaw();
@@ -169,11 +133,13 @@ pub(crate) fn movement_system(
                 MoveResult::StartedUnlocking => {}
                 // Locked door with no key, or a door still opening: no move.
                 MoveResult::BlockedByLockedDoor => {}
-                // Stepped into an enemy with HP=1 and was killed — the
-                // player's HP layer will surface this once it lands; for now
-                // the Bevy renderer treats it like Blocked (no move) and
-                // leaves `game.is_lost()` / `game.lose_reason()` to drive
-                // any future death overlay.
+                // The player's HP dropped to 0 from this move (either the
+                // destination cell held an enemy, or — if the player was
+                // already dying from a tick collision — the short-circuit
+                // path returned Killed without processing). The death
+                // overlay is spawned by the post-move `is_lost()` check
+                // below, which reads `lose_reason()` and chooses the right
+                // subtitle. No camera animation here — the player is dead.
                 MoveResult::Killed => {}
                 // Wall / boundary, or `Direction::None`: no move.
                 MoveResult::Blocked | MoveResult::None => {}
