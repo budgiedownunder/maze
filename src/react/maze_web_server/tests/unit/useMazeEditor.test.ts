@@ -428,6 +428,81 @@ describe('setDoor', () => {
 })
 
 // ──────────────────────────────────────────────────────────────
+// setEnemy / setHealth
+// ──────────────────────────────────────────────────────────────
+
+describe('setEnemy', () => {
+  it('sets a single selected cell to enemy', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.setEnemy())
+    expect(result.current.grid[1][1]).toBe('E')
+  })
+
+  it('sets all cells in selection rect to enemy (multiple allowed)', () => {
+    const result = setupHook(makeGrid(5, 5))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.activateCell(2, 2, true))
+    act(() => result.current.setEnemy())
+    for (let r = 1; r <= 2; r++) {
+      for (let c = 1; c <= 2; c++) {
+        expect(result.current.grid[r][c]).toBe('E')
+      }
+    }
+    expect(result.current.grid[0][0]).toBe(' ')
+  })
+
+  it('marks the maze as dirty', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(0, 0, false))
+    expect(result.current.isDirty).toBe(false)
+    act(() => result.current.setEnemy())
+    expect(result.current.isDirty).toBe(true)
+  })
+
+  it('does nothing when no cell is selected', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.setEnemy())
+    expect(result.current.isDirty).toBe(false)
+  })
+})
+
+describe('setHealth', () => {
+  it('sets a single selected cell to health', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.setHealth())
+    expect(result.current.grid[1][1]).toBe('H')
+  })
+
+  it('sets all cells in selection rect to health (multiple allowed)', () => {
+    const result = setupHook(makeGrid(5, 5))
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.activateCell(2, 2, true))
+    act(() => result.current.setHealth())
+    for (let r = 1; r <= 2; r++) {
+      for (let c = 1; c <= 2; c++) {
+        expect(result.current.grid[r][c]).toBe('H')
+      }
+    }
+    expect(result.current.grid[0][0]).toBe(' ')
+  })
+
+  it('marks the maze as dirty', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.activateCell(0, 0, false))
+    act(() => result.current.setHealth())
+    expect(result.current.isDirty).toBe(true)
+  })
+
+  it('does nothing when no cell is selected', () => {
+    const result = setupHook(makeGrid(3, 3))
+    act(() => result.current.setHealth())
+    expect(result.current.isDirty).toBe(false)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
 // clearCell
 // ──────────────────────────────────────────────────────────────
 
@@ -463,6 +538,24 @@ describe('clearCell', () => {
     act(() => result.current.activateCell(0, 0, false))
     act(() => result.current.clearCell())
     expect(result.current.isDirty).toBe(true)
+  })
+
+  it('clears an enemy cell to empty', () => {
+    const grid = makeGrid(3, 3)
+    grid[1][1] = 'E'
+    const result = setupHook(grid)
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.clearCell())
+    expect(result.current.grid[1][1]).toBe(' ')
+  })
+
+  it('clears a health cell to empty', () => {
+    const grid = makeGrid(3, 3)
+    grid[1][1] = 'H'
+    const result = setupHook(grid)
+    act(() => result.current.activateCell(1, 1, false))
+    act(() => result.current.clearCell())
+    expect(result.current.grid[1][1]).toBe(' ')
   })
 })
 
@@ -576,6 +669,22 @@ describe('selectionStatus', () => {
   it('isEmpty is false when selection contains a door', () => {
     const grid = makeGrid(3, 3)
     grid[0][0] = 'D'
+    const result = setupHook(grid)
+    act(() => result.current.activateCell(0, 0, false))
+    expect(result.current.selectionStatus.isEmpty).toBe(false)
+  })
+
+  it('isEmpty is false when selection contains an enemy', () => {
+    const grid = makeGrid(3, 3)
+    grid[0][0] = 'E'
+    const result = setupHook(grid)
+    act(() => result.current.activateCell(0, 0, false))
+    expect(result.current.selectionStatus.isEmpty).toBe(false)
+  })
+
+  it('isEmpty is false when selection contains a health pickup', () => {
+    const grid = makeGrid(3, 3)
+    grid[0][0] = 'H'
     const result = setupHook(grid)
     act(() => result.current.activateCell(0, 0, false))
     expect(result.current.selectionStatus.isEmpty).toBe(false)

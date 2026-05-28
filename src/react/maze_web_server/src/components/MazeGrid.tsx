@@ -31,6 +31,8 @@ function cellImage(cell: string): { src: string; alt: string } | null {
   if (cell === 'F') return { src: '/images/maze/finish_flag.png', alt: 'Finish' }
   if (cell === 'K') return { src: '/images/maze/key.svg', alt: 'Key' }
   if (cell === 'D') return { src: '/images/maze/door.svg', alt: 'Door' }
+  if (cell === 'E') return { src: '/images/maze/enemy.svg', alt: 'Enemy' }
+  if (cell === 'H') return { src: '/images/maze/health.svg', alt: 'Health' }
   return null
 }
 
@@ -433,7 +435,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const isWalker = walkInfo?.walkerKey === key
                   const walkedImgSrc = !isWalker ? walkInfo?.walkedMap.get(key) : undefined
                   const solutionImgSrc = solutionMap.get(key)
-                  const suppressFootstep = cell === 'S' || cell === 'F' || cell === 'K' || cell === 'D'
+                  const suppressFootstep = cell === 'S' || cell === 'F' || cell === 'K' || cell === 'D' || cell === 'E' || cell === 'H'
                   const isGamePlayer = game !== null && game !== undefined && playerRow === r && playerCol === c
                   let img = (isWalker || isGamePlayer) ? null : cellImage(cell)
                   let imgStyle: React.CSSProperties | undefined
