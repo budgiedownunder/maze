@@ -112,6 +112,7 @@ export const MazeGamePlayerMoveResult = {
   BlockedByLockedDoor: 4,
   StartedUnlocking:    5,
   Stranded:            6,
+  Killed:              7,
 } as const
 export type MazeGamePlayerMoveResult = typeof MazeGamePlayerMoveResult[keyof typeof MazeGamePlayerMoveResult]
 
@@ -119,6 +120,7 @@ export type MazeGamePlayerMoveResult = typeof MazeGamePlayerMoveResult[keyof typ
 // wasm_bindgen.rs. Consumers reference these constants, never the literals.
 export const MazeGameLoseReason = {
   Stranded: 'stranded',
+  Killed:   'killed',
 } as const
 export type MazeGameLoseReason = typeof MazeGameLoseReason[keyof typeof MazeGameLoseReason]
 
@@ -132,9 +134,21 @@ export const MazeDoorState = {
 export type MazeDoorState = typeof MazeDoorState[keyof typeof MazeDoorState]
 
 export const MazeGameEventType = {
-  DoorOpened: 'doorOpened',
+  DoorOpened:      'doorOpened',
+  EnemyMoved:      'enemyMoved',
+  PlayerDamaged:   'playerDamaged',
+  PlayerHealed:    'playerHealed',
+  PlayerNotHealed: 'playerNotHealed',
 } as const
 export type MazeGameEventType = typeof MazeGameEventType[keyof typeof MazeGameEventType]
+
+// String values match the `reason` field on `playerNotHealed` events emitted by
+// wasm_bindgen.rs (and Rust's `PlayerNotHealedReason`).
+export const MazePlayerNotHealedReason = {
+  AlreadyAtMaxHp: 'already_at_max_hp',
+} as const
+export type MazePlayerNotHealedReason =
+  typeof MazePlayerNotHealedReason[keyof typeof MazePlayerNotHealedReason]
 
 export const MazeBagItemType = {
   Key: 'key',
@@ -144,8 +158,15 @@ export type MazeBagItemType = typeof MazeBagItemType[keyof typeof MazeBagItemTyp
 // Object shapes returned by the MazeGameWasm accessors.
 export interface MazeDoor { row: number; col: number; state: MazeDoorState }
 export interface MazeKeyCell { row: number; col: number; id: number }
+export interface MazeEnemy { row: number; col: number; id: number }
+export interface MazeHealthPickup { row: number; col: number; id: number }
 export type MazeBagItem = { type: typeof MazeBagItemType.Key; id: number }
-export type MazeGameEvent = { type: typeof MazeGameEventType.DoorOpened; row: number; col: number }
+export type MazeGameEvent =
+  | { type: typeof MazeGameEventType.DoorOpened;      row: number; col: number }
+  | { type: typeof MazeGameEventType.EnemyMoved;      id:  number; row: number; col: number }
+  | { type: typeof MazeGameEventType.PlayerDamaged;   hpAfter: number }
+  | { type: typeof MazeGameEventType.PlayerHealed;    hpAfter: number; row: number; col: number }
+  | { type: typeof MazeGameEventType.PlayerNotHealed; row: number; col: number; reason: MazePlayerNotHealedReason; message: string }
 
 export type { MazeGameWasm }
 
@@ -184,6 +205,26 @@ export function getDoors(game: MazeGameWasm): MazeDoor[] {
 /** Returns the cells still holding an uncollected key. */
 export function getKeys(game: MazeGameWasm): MazeKeyCell[] {
   return game.keys() as unknown as MazeKeyCell[]
+}
+
+/** Returns the live enemies in stable enemy-id order. */
+export function getEnemies(game: MazeGameWasm): MazeEnemy[] {
+  return game.enemies() as unknown as MazeEnemy[]
+}
+
+/** Returns the uncollected health-pickup cells in row-major scan order. */
+export function getHealthPickups(game: MazeGameWasm): MazeHealthPickup[] {
+  return game.health_pickups() as unknown as MazeHealthPickup[]
+}
+
+/** Returns the player's current HP. */
+export function getHp(game: MazeGameWasm): number {
+  return game.hp()
+}
+
+/** Returns the player's maximum HP. */
+export function getMaxHp(game: MazeGameWasm): number {
+  return game.max_hp()
 }
 
 /** Returns the player's bag contents, in pickup order. */

@@ -993,6 +993,112 @@ function registerMazeGameTests() {
             expect(game.move_player(DirectionWasm.Right)).to.equal(MoveResultWasm.Complete);
             expect(game.is_complete()).to.equal(true);
         });
+
+        // MazeGame::hp() / max_hp()
+        it('should expect hp() and max_hp() to both return 3 on a fresh game', function () {
+            let game = makeGame('{"grid":[["S"," ","F"]]}');
+            expect(game.hp()).to.equal(3);
+            expect(game.max_hp()).to.equal(3);
+        });
+
+        // MazeGame::enemies() — empty array when grid has no enemy cells
+        it('should expect enemies() to return an empty array when no enemy cells exist', function () {
+            let game = makeGame('{"grid":[["S"," ","F"]]}');
+            expect(game.enemies()).to.deep.equal([]);
+        });
+
+        // MazeGame::enemies() — one entry per 'E' cell with id 0
+        it('should expect enemies() to return one entry with id 0 per E cell', function () {
+            let game = makeGame('{"grid":[["S","E","F"]]}');
+            expect(game.enemies()).to.deep.equal([{ row: 0, col: 1, id: 0 }]);
+        });
+
+        // MazeGame::enemies() — ids assigned in row-major scan order
+        it('should expect enemies() ids to follow row-major scan order across rows', function () {
+            let game = makeGame('{"grid":[["S"," ","E"],[" ","E"," "],["E"," ","F"]]}');
+            expect(game.enemies()).to.deep.equal([
+                { row: 0, col: 2, id: 0 },
+                { row: 1, col: 1, id: 1 },
+                { row: 2, col: 0, id: 2 },
+            ]);
+        });
+
+        // MazeGame::health_pickups() — empty array when grid has no 'H' cells
+        it('should expect health_pickups() to return an empty array when no H cells exist', function () {
+            let game = makeGame('{"grid":[["S"," ","F"]]}');
+            expect(game.health_pickups()).to.deep.equal([]);
+        });
+
+        // MazeGame::health_pickups() — one entry per 'H' cell with id 0
+        it('should expect health_pickups() to return one entry with id 0 per H cell', function () {
+            let game = makeGame('{"grid":[["S","H","F"]]}');
+            expect(game.health_pickups()).to.deep.equal([{ row: 0, col: 1, id: 0 }]);
+        });
+
+        // MazeGame::health_pickups() — ids assigned in row-major scan order
+        it('should expect health_pickups() ids to follow row-major scan order', function () {
+            let game = makeGame('{"grid":[["S"," ","H"],[" "," "," "],["H"," ","F"]]}');
+            expect(game.health_pickups()).to.deep.equal([
+                { row: 0, col: 2, id: 0 },
+                { row: 2, col: 0, id: 1 },
+            ]);
+        });
+
+        // Move into an enemy decrements hp by the per-enemy damage value
+        it('should expect move into an enemy to decrement hp by the enemy damage', function () {
+            let game = makeGame('{"grid":[["S","E","F"]]}');
+            expect(game.hp()).to.equal(3);
+            game.move_player(DirectionWasm.Right);
+            expect(game.hp()).to.equal(2);
+        });
+
+        // Move into an enemy queues PlayerDamaged; tick flushes it
+        it('should expect move into an enemy to queue a playerDamaged event flushed on the next tick', function () {
+            let game = makeGame('{"grid":[["S","E","F"]]}');
+            game.move_player(DirectionWasm.Right);
+            expect(game.tick(1)).to.deep.equal([{ type: 'playerDamaged', hpAfter: 2 }]);
+        });
+
+        // Final-hit collision returns Killed + flips is_lost + lose_reason
+        it('should expect move into the third enemy at hp 1 to return Killed and flip lose state to killed', function () {
+            let game = makeGame('{"grid":[["S","E","E","E","F"]]}');
+            expect(game.move_player(DirectionWasm.Right)).to.equal(MoveResultWasm.Moved);
+            expect(game.move_player(DirectionWasm.Right)).to.equal(MoveResultWasm.Moved);
+            expect(game.move_player(DirectionWasm.Right)).to.equal(MoveResultWasm.Killed);
+            expect(game.hp()).to.equal(0);
+            expect(game.is_lost()).to.equal(true);
+            expect(game.lose_reason()).to.equal('killed');
+        });
+
+        // Move onto 'H' below max HP auto-heals, clears the cell, fires playerHealed on next tick
+        it('should expect move onto H below max hp to auto-heal, clear the cell, and fire playerHealed', function () {
+            let game = makeGame('{"grid":[["S","E","H","F"]]}');
+            game.move_player(DirectionWasm.Right); // onto enemy, hp 3 → 2
+            game.move_player(DirectionWasm.Right); // onto H, hp 2 → 3, cell cleared
+            expect(game.hp()).to.equal(3);
+            expect(game.tick(1)).to.deep.equal([
+                { type: 'playerDamaged', hpAfter: 2 },
+                { type: 'playerHealed', hpAfter: 3, row: 0, col: 2 },
+            ]);
+            expect(game.health_pickups()).to.deep.equal([]);
+        });
+
+        // Move onto 'H' at max HP spares the cell, fires playerNotHealed with reason
+        it('should expect move onto H at max hp to spare the cell and fire playerNotHealed with reason', function () {
+            let game = makeGame('{"grid":[["S","H","F"]]}');
+            game.move_player(DirectionWasm.Right);
+            expect(game.hp()).to.equal(3);
+            expect(game.tick(1)).to.deep.equal([
+                {
+                    type: 'playerNotHealed',
+                    row: 0,
+                    col: 1,
+                    reason: 'already_at_max_hp',
+                    message: 'Already at maximum health',
+                },
+            ]);
+            expect(game.health_pickups()).to.deep.equal([{ row: 0, col: 1, id: 0 }]);
+        });
     });
 }
 

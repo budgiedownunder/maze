@@ -1049,6 +1049,94 @@ function testMazeGameTickExpectedOutput() {
     ];
 }
 
+// Test MazeGameWasm::hp() example
+function testMazeGameHp() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S"," ","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("hp() = ", game.hp());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameHpExpectedOutput() {
+    return [
+        "hp() =  3"
+    ];
+}
+
+// Test MazeGameWasm::max_hp() example
+function testMazeGameMaxHp() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S"," ","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("maxHp() = ", game.max_hp());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameMaxHpExpectedOutput() {
+    return [
+        "maxHp() =  3"
+    ];
+}
+
+// Test MazeGameWasm::enemies() example
+function testMazeGameEnemies() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","E","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("enemies() = ", game.enemies());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameEnemiesExpectedOutput() {
+    return [
+        "enemies() =  [ { row: 0, col: 1, id: 0 } ]"
+    ];
+}
+
+// Test MazeGameWasm::health_pickups() example
+function testMazeGameHealthPickups() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S","H","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("healthPickups() = ", game.health_pickups());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameHealthPickupsExpectedOutput() {
+    return [
+        "healthPickups() =  [ { row: 0, col: 1, id: 0 } ]"
+    ];
+}
+
 // Tests
 const tests = [
     { name: "MazeWasm:new() example", testFunction: testMazeNew, expectedOutput: testMazeNewExpectedOutput },
@@ -1088,6 +1176,10 @@ const tests = [
     { name: "MazeGameWasm:keys() example", testFunction: testMazeGameKeys, expectedOutput: testMazeGameKeysExpectedOutput },
     { name: "MazeGameWasm:bag() example", testFunction: testMazeGameBag, expectedOutput: testMazeGameBagExpectedOutput },
     { name: "MazeGameWasm:tick() example", testFunction: testMazeGameTick, expectedOutput: testMazeGameTickExpectedOutput },
+    { name: "MazeGameWasm:hp() example", testFunction: testMazeGameHp, expectedOutput: testMazeGameHpExpectedOutput },
+    { name: "MazeGameWasm:max_hp() example", testFunction: testMazeGameMaxHp, expectedOutput: testMazeGameMaxHpExpectedOutput },
+    { name: "MazeGameWasm:enemies() example", testFunction: testMazeGameEnemies, expectedOutput: testMazeGameEnemiesExpectedOutput },
+    { name: "MazeGameWasm:health_pickups() example", testFunction: testMazeGameHealthPickups, expectedOutput: testMazeGameHealthPickupsExpectedOutput },
 ];
 
 const errorTemplate = (test, i, expected, logRows) =>

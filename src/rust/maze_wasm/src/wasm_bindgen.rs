@@ -173,17 +173,67 @@ fn to_js_key_obj(row: usize, col: usize, id: u32) -> Object {
     obj
 }
 
-/// Converts a tick event to a JavaScript object (e.g. `{ type: "doorOpened", row, col }`).
-///
-/// Variants without a JS surface here are filtered out by `tick` before this
-/// function is called; the empty result for other variants exists only to
-/// keep the function total and would never be returned in practice.
+/// Converts an enemy's current state to a JavaScript object (`{ row, col, id }`).
+fn to_js_enemy_obj(row: usize, col: usize, id: u32) -> Object {
+    let obj = Object::new();
+    Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(row as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(col as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(id as f64)).unwrap();
+    obj
+}
+
+/// Converts an uncollected health-pickup cell to a JavaScript object
+/// (`{ row, col, id }`). The id is a row-major scan-order ordinal assigned at
+/// query time — it is unique within the returned snapshot but shifts once an
+/// `'H'` cell is consumed (the cell becomes `' '` and disappears from the
+/// scan). Renderers should key on `(row, col)` for stable React reconciliation;
+/// the id field is supplied for shape parity with [`to_js_key_obj`] and
+/// [`to_js_enemy_obj`].
+fn to_js_health_pickup_obj(row: usize, col: usize, id: u32) -> Object {
+    let obj = Object::new();
+    Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(row as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(col as f64)).unwrap();
+    Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(id as f64)).unwrap();
+    obj
+}
+
+/// Converts a tick event to a JavaScript object — one arm per
+/// [`maze::GameEvent`] variant. Each arm emits the JS object shape documented
+/// in the corresponding `MazeGameEventType` entry of `mazeWasm.ts`.
 fn to_js_game_event_obj(event: &maze::GameEvent) -> Object {
     let obj = Object::new();
-    if let maze::GameEvent::DoorOpened { cell: (row, col) } = event {
-        Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("doorOpened")).unwrap();
-        Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
-        Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
+    match event {
+        maze::GameEvent::DoorOpened { cell: (row, col) } => {
+            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("doorOpened")).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
+        }
+        maze::GameEvent::EnemyMoved { id, row, col } => {
+            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("enemyMoved")).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(*id as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
+        }
+        maze::GameEvent::PlayerDamaged { hp_after } => {
+            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("playerDamaged")).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("hpAfter"), &JsValue::from_f64(*hp_after as f64)).unwrap();
+        }
+        maze::GameEvent::PlayerHealed { hp_after, cell: (row, col) } => {
+            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("playerHealed")).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("hpAfter"), &JsValue::from_f64(*hp_after as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
+        }
+        maze::GameEvent::PlayerNotHealed { cell: (row, col), reason, message } => {
+            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("playerNotHealed")).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
+            let reason_str = match reason {
+                maze::PlayerNotHealedReason::AlreadyAtMaxHp => "already_at_max_hp",
+            };
+            Reflect::set(&obj, &JsValue::from_str("reason"), &JsValue::from_str(reason_str)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("message"), &JsValue::from_str(message)).unwrap();
+        }
     }
     obj
 }
@@ -390,10 +440,11 @@ impl MazeGameWasm {
         self.game.is_complete()
     }
 
-    /// Returns `true` if the game has ended in a loss — currently triggered
-    /// only when the player walks through an open door without enough keys
-    /// remaining to open every real door on the solution path. Pair with
-    /// [`MazeGameWasm::lose_reason`] for the cause.
+    /// Returns `true` if the game has ended in a loss — triggered when the
+    /// player walks through an open door without enough keys remaining to
+    /// open every real door on the solution path, or when same-cell enemy
+    /// collisions drain HP to zero. Pair with [`MazeGameWasm::lose_reason`]
+    /// for the cause.
     ///
     /// # Examples
     ///
@@ -422,8 +473,9 @@ impl MazeGameWasm {
     }
 
     /// Returns the lose reason — `"stranded"` if the player walked through a
-    /// door no longer holding enough keys to reach the finish, or `null`
-    /// while the game is still in progress or already won.
+    /// door no longer holding enough keys to reach the finish, `"killed"` if
+    /// same-cell enemy collisions drained HP to zero, or `null` while the
+    /// game is still in progress or already won.
     ///
     /// # Examples
     ///
@@ -553,12 +605,6 @@ impl MazeGameWasm {
     pub fn tick(&mut self, dt_ms: f32) -> Array {
         let result = Array::new();
         for event in self.game.tick(dt_ms) {
-            // Surface only event variants the JS contract knows how to
-            // consume. Other variants stay internal to the Rust runtime;
-            // JS shapes for them land alongside the consumers that need them.
-            if !matches!(event, maze::GameEvent::DoorOpened { .. }) {
-                continue;
-            }
             result.push(&to_js_game_event_obj(&event));
         }
         result
@@ -661,6 +707,148 @@ impl MazeGameWasm {
         let result = Array::new();
         for item in self.game.bag() {
             result.push(&to_js_bag_item_obj(item));
+        }
+        result
+    }
+
+    /// Returns the player's current HP.
+    ///
+    /// HP decreases on same-cell collisions with an enemy (the player moved
+    /// into an enemy or an enemy moved onto the player) and increases on
+    /// auto-pickup of an `'H'` cell, capped at [`MazeGameWasm::max_hp`]. When
+    /// HP reaches zero the next `move_player` returns
+    /// [`MoveResultWasm::Killed`] and [`MazeGameWasm::is_lost`] flips to
+    /// `true`.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         console.log("hp() = ", game.hp());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn hp(&self) -> u32 {
+        self.game.hp()
+    }
+
+    /// Returns the player's maximum HP — the upper bound for
+    /// [`MazeGameWasm::hp`]. Set at construction (default 3) and constant
+    /// for the lifetime of the game session.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         console.log("maxHp() = ", game.max_hp());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn max_hp(&self) -> u32 {
+        self.game.max_hp()
+    }
+
+    /// Returns the live enemies as a JavaScript `Array` of `{ row, col, id }`
+    /// objects, in stable enemy-id order. `id` is the row-major scan-order
+    /// ordinal assigned at construction and is preserved across moves so
+    /// renderers can correlate `enemyMoved` tick events with the same entry.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","E","F"]]}');
+    ///         console.log("enemies() = ", game.enemies());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn enemies(&self) -> Array {
+        let result = Array::new();
+        for enemy in self.game.enemies() {
+            result.push(&to_js_enemy_obj(enemy.row, enemy.col, enemy.id));
+        }
+        result
+    }
+
+    /// Returns the uncollected health-pickup cells as a JavaScript `Array` of
+    /// `{ row, col, id }` objects, in row-major scan order. `id` is the
+    /// ordinal within the returned snapshot — unique among the entries in
+    /// that call, but shifts after a pickup is consumed; renderers should
+    /// key on `(row, col)` for stable reconciliation.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S","H","F"]]}');
+    ///         console.log("healthPickups() = ", game.health_pickups());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn health_pickups(&self) -> Array {
+        let result = Array::new();
+        let mut id: u32 = 0;
+        for (r, row) in self.game.grid().iter().enumerate() {
+            for (c, &ch) in row.iter().enumerate() {
+                if ch == 'H' {
+                    result.push(&to_js_health_pickup_obj(r, c, id));
+                    id += 1;
+                }
+            }
         }
         result
     }
