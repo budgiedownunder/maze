@@ -109,6 +109,13 @@ const pickups = game.health_pickups(); // → [{ row, col, id }]  (uncollected '
 //   { type: 'playerHealed',   hpAfter, row, col }
 //   { type: 'playerNotHealed', row, col, reason, message }
 const events = game.tick(16);
+
+// Time in ms until the next tick will produce an event — for setTimeout-driven
+// host loops that sleep instead of polling at frame rate. Returns 0 when a
+// move_player call has queued events waiting to flush, the soonest pending
+// enemy commit or door-open completion otherwise, or null when the game is
+// idle (no enemy planning a step, no door opening, no pending events).
+const waitMs = game.time_until_next_event_ms();  // → number | null
 ```
 
 ### wasm-lite (C FFI)

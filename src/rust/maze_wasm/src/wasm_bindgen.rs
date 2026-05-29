@@ -852,6 +852,53 @@ impl MazeGameWasm {
         }
         result
     }
+
+    /// Returns the time in milliseconds until the next [`MazeGameWasm::tick`]
+    /// will produce an event, or `null` when the game is idle.
+    ///
+    /// Lets a host loop sleep with `setTimeout` instead of polling at frame
+    /// rate. The returned time corresponds to the next *committed* event
+    /// (an enemy arrives at its new cell, a door finishes opening) —
+    /// intra-cell enemy motion is never an event.
+    ///
+    /// - Returns `0` when events queued by prior [`MazeGameWasm::move_player`]
+    ///   calls (PlayerDamaged / PlayerHealed / PlayerNotHealed) are waiting
+    ///   to flush.
+    /// - Otherwise returns the soonest of each enemy's `move_period_ms -
+    ///   accum_ms` (only enemies with a planned step contribute) and each
+    ///   opening door's remaining progress in milliseconds.
+    /// - Returns `null` when no enemy is planning a step, no door is
+    ///   opening, and no events are pending — the host loop can sleep until
+    ///   external input (e.g. the player's next move) wakes it.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         console.log("timeUntilNextEventMs() = ", game.time_until_next_event_ms());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn time_until_next_event_ms(&self) -> JsValue {
+        match self.game.time_until_next_event_ms() {
+            Some(ms) => JsValue::from_f64(ms as f64),
+            None => JsValue::NULL,
+        }
+    }
 }
 
 #[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]

@@ -4,7 +4,7 @@ import { getMaze } from '../api/client'
 import { useToken } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useMazeGame, MazeGameDirection } from '../hooks/useMazeGame'
-import { getBag, getKeys } from '../wasm/mazeWasm'
+import { getBag, getKeys, getHp, getMaxHp, MazeGameLoseReason } from '../wasm/mazeWasm'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { MazeGrid } from '../components/MazeGrid'
@@ -35,7 +35,7 @@ export function MazeGamePage() {
   const gameCellSize = window.matchMedia('(pointer: coarse)').matches ? 60 : 32
 
   const definitionJson = maze ? JSON.stringify(maze.definition) : null
-  const [{ game, version, loading, error }, move, pickup] = useMazeGame(definitionJson)
+  const [{ game, version, loading, error, damageFlashKey }, move, pickup] = useMazeGame(definitionJson)
 
   // Bag contents and whether the player is standing on an uncollected key —
   // recomputed whenever the game advances (version bump).
@@ -48,8 +48,22 @@ export function MazeGamePage() {
     [game, version], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
+  // HP HUD state — re-read each version bump.
+  const hp = useMemo(
+    () => (game ? getHp(game) : 0),
+    [game, version], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const maxHp = useMemo(
+    () => (game ? getMaxHp(game) : 0),
+    [game, version], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
   const isComplete = game?.is_complete() ?? false
   const isLost = game?.is_lost() ?? false
+  const loseReason = game?.lose_reason() as string | null | undefined
+  const resultMessage = isLost
+    ? (loseReason === MazeGameLoseReason.Killed ? 'You died!' : "You're stranded!!")
+    : 'You win!'
   const [showResult, setShowResult] = useState(false)
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -114,6 +128,28 @@ export function MazeGamePage() {
 
         {maze && game && !loading && !loadError && !error && (
           <>
+            {maxHp > 0 && (
+              <div className="maze-hp-hud" aria-label="Health">
+                <span className="maze-hp-hud-label">HP:</span>
+                {Array.from({ length: maxHp }, (_, i) => (
+                  <img
+                    key={i}
+                    src="/images/maze/health.svg"
+                    alt={i < hp ? 'Health' : 'Lost health'}
+                    className={i < hp ? 'maze-hp-hud-heart' : 'maze-hp-hud-heart maze-hp-hud-heart--empty'}
+                  />
+                ))}
+              </div>
+            )}
+
+            {damageFlashKey > 0 && (
+              <div
+                key={damageFlashKey}
+                className="maze-damage-flash"
+                aria-hidden="true"
+              />
+            )}
+
             <MazeGrid
               grid={maze.definition.grid}
               solution={null}
@@ -159,7 +195,7 @@ export function MazeGamePage() {
 
             {showResult && (
               <GameResultPopup
-                message={isLost ? "You're stranded!!" : 'You win!'}
+                message={resultMessage}
                 tone={isLost ? 'fail' : 'success'}
                 onClose={() => setShowResult(false)}
               />

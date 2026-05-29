@@ -353,6 +353,7 @@ function makeGameObj(overrides: Partial<{
   visited_cells: () => Array<{ row: number; col: number }>
   keys: () => Array<{ row: number; col: number; id: number }>
   doors: () => Array<{ row: number; col: number; state: string }>
+  enemies: () => Array<{ row: number; col: number; id: number }>
 }> = {}) {
   return {
     player_row:       vi.fn().mockReturnValue(0),
@@ -362,6 +363,7 @@ function makeGameObj(overrides: Partial<{
     visited_cells:    vi.fn().mockReturnValue([]),
     keys:             vi.fn().mockReturnValue([]),
     doors:            vi.fn().mockReturnValue([]),
+    enemies:          vi.fn().mockReturnValue([]),
     free:             vi.fn(),
     ...overrides,
   }
@@ -445,6 +447,111 @@ describe('MazeGrid game mode', () => {
     const cell = container.querySelector('td[aria-label="Cell 1,1"]')!
     await userEvent.click(cell)
     expect(onCellClick).not.toHaveBeenCalled()
+  })
+
+  it('renders enemy overlay sprite at each live enemy cell', () => {
+    // Player at (0,0); enemy at (1,1)
+    const game = makeGameObj({
+      enemies: vi.fn().mockReturnValue([{ row: 1, col: 1, id: 0 }]),
+    })
+    renderGameGrid(game, 1)
+    const enemyImgs = screen.getAllByAltText('Enemy')
+    expect(enemyImgs.length).toBe(1)
+    expect(enemyImgs[0]).toHaveAttribute('src', '/images/maze/enemy.svg')
+  })
+
+  it('suppresses the static spawn-cell E character in game mode (live position drives rendering)', () => {
+    const gridWithStaticE = [
+      ['S', 'E'],
+      [' ', 'F'],
+    ]
+    const game = makeGameObj({
+      // Enemy has moved from spawn (0,1) to (1,0).
+      enemies: vi.fn().mockReturnValue([{ row: 1, col: 0, id: 0 }]),
+    })
+    render(
+      <MazeGrid
+        grid={gridWithStaticE}
+        solution={null}
+        activeCell={null}
+        anchorCell={null}
+        game={game as never}
+        version={1}
+      />,
+    )
+    const enemyImgs = screen.getAllByAltText('Enemy')
+    // Only one Enemy sprite — the live position. The spawn-cell E is suppressed.
+    expect(enemyImgs.length).toBe(1)
+    // The live enemy sprite is in cell (1,0) — confirm by walking up from
+    // the rendered img and asserting the surrounding <td>'s aria-label.
+    const enemyCell = enemyImgs[0].closest('td')
+    expect(enemyCell).toHaveAttribute('aria-label', 'Cell 2,1')
+  })
+
+  it('renders a half-opacity goblin behind the player when an enemy shares the cell', () => {
+    // Player and enemy both at (0,0). The player walker covers the full
+    // cell, so the enemy is rendered at half opacity *behind* the player
+    // sprite so the player can see what is attacking them. With a single
+    // attacker there is no count chip.
+    const game = makeGameObj({
+      enemies: vi.fn().mockReturnValue([{ row: 0, col: 0, id: 0 }]),
+    })
+    renderGameGrid(game, 1)
+    const enemyImg = screen.getByAltText('Enemy on player cell')
+    expect(enemyImg).toBeInTheDocument()
+    expect(enemyImg).toHaveAttribute('src', '/images/maze/enemy.svg')
+    expect(screen.getByAltText('Player')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/enemies attacking/i)).not.toBeInTheDocument()
+  })
+
+  it('shows a count chip + behind-the-player goblin when multiple enemies attack', () => {
+    const game = makeGameObj({
+      enemies: vi.fn().mockReturnValue([
+        { row: 0, col: 0, id: 0 },
+        { row: 0, col: 0, id: 1 },
+        { row: 0, col: 0, id: 2 },
+      ]),
+    })
+    renderGameGrid(game, 1)
+    // The enemy sprite behind the player has an alt text describing the count.
+    expect(screen.getByAltText('3 enemies on player cell')).toBeInTheDocument()
+    // The count chip surfaces the integer count separately for accessibility.
+    const chip = screen.getByLabelText('3 enemies attacking')
+    expect(chip).toBeInTheDocument()
+    expect(chip.textContent).toContain('3')
+  })
+
+  it('does not render any attack indicator when the player cell has no enemies', () => {
+    const game = makeGameObj({
+      enemies: vi.fn().mockReturnValue([{ row: 1, col: 1, id: 0 }]),
+    })
+    renderGameGrid(game, 1)
+    expect(screen.queryByAltText(/on player cell/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/enemies attacking/i)).not.toBeInTheDocument()
+  })
+
+  it('stack-count chip is rendered when multiple enemies share a non-player cell', () => {
+    // Player at (0,0); two enemies stacked at (1,1).
+    const game = makeGameObj({
+      enemies: vi.fn().mockReturnValue([
+        { row: 1, col: 1, id: 0 },
+        { row: 1, col: 1, id: 1 },
+      ]),
+    })
+    renderGameGrid(game, 1)
+    expect(screen.getByLabelText('2 enemies')).toBeInTheDocument()
+  })
+
+  it('does not render the visited dot at a cell currently holding an enemy', () => {
+    const game = makeGameObj({
+      player_row: vi.fn().mockReturnValue(1),
+      player_col: vi.fn().mockReturnValue(0),
+      enemies: vi.fn().mockReturnValue([{ row: 0, col: 1, id: 0 }]),
+      visited_cells: vi.fn().mockReturnValue([{ row: 0, col: 1 }]),
+    })
+    renderGameGrid(game, 1)
+    expect(screen.queryByAltText('')).not.toBeInTheDocument()
+    expect(screen.getByAltText('Enemy')).toBeInTheDocument()
   })
 })
 

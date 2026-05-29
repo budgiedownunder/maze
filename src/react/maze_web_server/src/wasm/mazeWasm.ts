@@ -227,6 +227,15 @@ export function getMaxHp(game: MazeGameWasm): number {
   return game.max_hp()
 }
 
+/**
+ * Returns the time in milliseconds until the next tick will produce an event,
+ * or null when the game is idle. Lets a setTimeout-driven host loop sleep
+ * instead of polling at frame rate. See the Rust doc-banner for the formula.
+ */
+export function getTimeUntilNextEvent(game: MazeGameWasm): number | null {
+  return game.time_until_next_event_ms() as unknown as number | null
+}
+
 /** Returns the player's bag contents, in pickup order. */
 export function getBag(game: MazeGameWasm): MazeBagItem[] {
   return game.bag() as unknown as MazeBagItem[]

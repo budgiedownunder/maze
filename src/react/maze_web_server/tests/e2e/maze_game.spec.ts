@@ -53,6 +53,37 @@ test.describe('MazeGamePage', () => {
     await expect(page.getByAltText('Player')).toBeVisible()
   })
 
+  test('walking into enemies decrements HP and HP=0 shows the You died popup', async ({ page }) => {
+    // EnemyGauntlet maze grid: ['S', 'E', 'E', 'E', 'F'] — three enemies in a
+    // row directly between start and finish. Each Move-right collides the
+    // player into another enemy; HP starts at 3 and drains to 0 on the third.
+    await page.goto('/play/maze-enemy-gauntlet')
+    await expect(page.getByAltText('Player')).toBeVisible()
+
+    const hpHud = page.getByLabel('Health')
+    await expect(hpHud).toBeVisible()
+    // HP starts at 3/3 — all three hearts filled (alt="Health"), zero dimmed.
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(0)
+
+    // Walk into the first enemy — HP goes 3 → 2 (one dimmed heart).
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(2)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(1)
+
+    // Second enemy — HP goes 2 → 1.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(1)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(2)
+
+    // Third enemy — HP drains to 0, the move returns Killed, and the result
+    // popup shows "You died!".
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByText('You died!')).toBeVisible()
+  })
+
   test('collecting a key opens a door and completes the maze', async ({ page }) => {
     // KeyDoor maze grid: ['S', 'K', 'D', 'F']
     await page.goto('/play/maze-keydoor')

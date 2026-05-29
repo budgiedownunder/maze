@@ -1088,6 +1088,47 @@
   height: 24px;
 }
 
+/* HP HUD — heart row above the grid, mirrors the bag styling so the two
+   game-side strips read as a pair. Empty hearts are dimmed to 25 % opacity
+   so the player can read remaining HP at a glance. */
+.maze-hp-hud {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  min-height: 28px;
+}
+.maze-hp-hud-label {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+.maze-hp-hud-heart {
+  width: 24px;
+  height: 24px;
+}
+.maze-hp-hud-heart--empty {
+  opacity: 0.25;
+  filter: grayscale(100%);
+}
+
+/* Damage flash — full-screen red tint that fades over ~300 ms whenever
+   a `playerDamaged` event fires. Triggered by remounting the element with
+   a fresh `key` (damageFlashKey on the hook state), so the CSS animation
+   restarts on every hit (including back-to-back hits). */
+.maze-damage-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  pointer-events: none;
+  background: rgba(255, 0, 0, 0.25);
+  animation: maze-damage-flash-fade 300ms ease-out forwards;
+}
+@keyframes maze-damage-flash-fade {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
 /* Keyboard shortcut hint bar — desktop only */
 .maze-shortcuts-hint {
   display: none;
@@ -1240,6 +1281,34 @@
 
 .maze-cell-solution-img {
   z-index: 1;
+}
+
+/* Enemy stack-count chip shared between the non-player and player-cell
+   cases. Small white-edged pill in the cell's top-right corner showing the
+   integer enemy count. The dark-green background matches the goblin sprite
+   itself — the chip is a count indicator, not a danger signal (the damage
+   flash overlay does the danger signalling separately). On the player cell
+   the chip pairs with the half-opacity goblin rendered behind the walker
+   so the player can tell what is on top of them, and how many. */
+.maze-cell-enemy-stack-count,
+.maze-cell-enemy-attack-count {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  z-index: 8;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+  background: #2a4d18; /* dark green, matching the goblin */
+  border-radius: 8px;
+  pointer-events: none;
+  user-select: none;
+  box-shadow: 0 0 0 1px #fff;
 }
 
 .maze-cell--active {

@@ -22,12 +22,16 @@ const { mockMove, mockPickup, mockUseMazeGame, mockGameInstance } = vi.hoisted((
     keys:             vi.fn().mockReturnValue([]),
     doors:            vi.fn().mockReturnValue([]),
     bag:              vi.fn().mockReturnValue([]),
+    hp:               vi.fn().mockReturnValue(3),
+    max_hp:           vi.fn().mockReturnValue(3),
+    enemies:          vi.fn().mockReturnValue([]),
+    health_pickups:   vi.fn().mockReturnValue([]),
     free:             vi.fn(),
   }
   const mockMove = vi.fn()
   const mockPickup = vi.fn()
   const mockUseMazeGame = vi.fn().mockReturnValue([
-    { game: mockGameInstance, version: 0, loading: false, error: null },
+    { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0 },
     mockMove,
     mockPickup,
   ])
@@ -82,8 +86,10 @@ beforeEach(() => {
   mockGameInstance.is_complete.mockReturnValue(false)
   mockGameInstance.is_lost.mockReturnValue(false)
   mockGameInstance.lose_reason.mockReturnValue(null)
+  mockGameInstance.hp.mockReturnValue(3)
+  mockGameInstance.max_hp.mockReturnValue(3)
   mockUseMazeGame.mockReturnValue([
-    { game: mockGameInstance, version: 0, loading: false, error: null },
+    { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0 },
     mockMove,
     mockPickup,
   ])
@@ -212,6 +218,62 @@ describe('MazeGamePage', () => {
     await waitFor(() => expect(screen.getByTestId('game-result-popup')).toBeInTheDocument())
     expect(screen.getByText("You're stranded!!")).toBeInTheDocument()
     expect(screen.getByTestId('game-result-popup')).toHaveAttribute('data-tone', 'fail')
+  })
+
+  it('GameResultPopup shows "You died!" message + fail tone when player is killed', async () => {
+    mockGameInstance.is_lost.mockReturnValue(true)
+    mockGameInstance.lose_reason.mockReturnValue('killed')
+    renderPage()
+    await waitFor(() => expect(screen.getByTestId('game-result-popup')).toBeInTheDocument())
+    expect(screen.getByText('You died!')).toBeInTheDocument()
+    expect(screen.getByTestId('game-result-popup')).toHaveAttribute('data-tone', 'fail')
+  })
+
+  it('HP HUD renders maxHp hearts with hp filled and the remainder dimmed', async () => {
+    mockGameInstance.hp.mockReturnValue(2)
+    mockGameInstance.max_hp.mockReturnValue(5)
+    renderPage()
+    await waitForLoad()
+    const hpHud = screen.getByLabelText('Health')
+    expect(hpHud).toBeInTheDocument()
+    const hearts = hpHud.querySelectorAll('img')
+    expect(hearts.length).toBe(5)
+    expect(hearts[0]).toHaveAttribute('alt', 'Health')
+    expect(hearts[1]).toHaveAttribute('alt', 'Health')
+    expect(hearts[2]).toHaveAttribute('alt', 'Lost health')
+    expect(hearts[3]).toHaveAttribute('alt', 'Lost health')
+    expect(hearts[4]).toHaveAttribute('alt', 'Lost health')
+    expect(hearts[0]).not.toHaveClass('maze-hp-hud-heart--empty')
+    expect(hearts[2]).toHaveClass('maze-hp-hud-heart--empty')
+  })
+
+  it('HP HUD is not rendered when maxHp is 0', async () => {
+    mockGameInstance.max_hp.mockReturnValue(0)
+    renderPage()
+    await waitForLoad()
+    expect(screen.queryByLabelText('Health')).not.toBeInTheDocument()
+  })
+
+  it('damage flash overlay is not rendered when damageFlashKey is 0', async () => {
+    mockUseMazeGame.mockReturnValue([
+      { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0 },
+      mockMove,
+      mockPickup,
+    ])
+    const { container } = renderPage()
+    await waitForLoad()
+    expect(container.querySelector('.maze-damage-flash')).toBeNull()
+  })
+
+  it('damage flash overlay is rendered when damageFlashKey > 0', async () => {
+    mockUseMazeGame.mockReturnValue([
+      { game: mockGameInstance, version: 1, loading: false, error: null, damageFlashKey: 1 },
+      mockMove,
+      mockPickup,
+    ])
+    const { container } = renderPage()
+    await waitForLoad()
+    expect(container.querySelector('.maze-damage-flash')).toBeInTheDocument()
   })
 
   it('keyboard ignored when game is lost', async () => {
