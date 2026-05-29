@@ -44,6 +44,12 @@
                 <ImageButton x:Name="SetDoorBtn" IsVisible="{Binding CanSetDoor}" Command="{Binding SetDoorCommand}" Source="door_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
+                <ImageButton x:Name="SetEnemyBtn" IsVisible="{Binding CanSetEnemy}" Command="{Binding SetEnemyCommand}" Source="enemy_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
+                <ImageButton x:Name="SetHealthBtn" IsVisible="{Binding CanSetHealth}" Command="{Binding SetHealthCommand}" Source="health_button.png"
+                             WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
+                             Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>
                 <ImageButton x:Name="ClearBtn" IsVisible="{Binding CanClear}" Command="{Binding ClearCommand}" Source="clear_button.png"
                              WidthRequest="32" HeightRequest="32" MaximumWidthRequest="32" MaximumHeightRequest="32" MinimumWidthRequest="32" MinimumHeightRequest="32"
                              Aspect="AspectFit" Padding="1" BackgroundColor="DarkGray" Margin="2"/>

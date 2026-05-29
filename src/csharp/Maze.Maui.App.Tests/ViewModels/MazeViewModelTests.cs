@@ -213,6 +213,32 @@ namespace Maze.Maui.App.Tests.ViewModels
             Assert.True(vm.IsDirty);
         }
 
+        [Fact]
+        public async Task SetEnemyCommand_RaisesSetEnemyRequestedAndMarksDirty()
+        {
+            var (vm, _, _, _) = BuildVm();
+            int raised = 0;
+            vm.SetEnemyRequested += (_, _) => raised++;
+
+            await vm.SetEnemyCommand.ExecuteAsync(null);
+
+            Assert.Equal(1, raised);
+            Assert.True(vm.IsDirty);
+        }
+
+        [Fact]
+        public async Task SetHealthCommand_RaisesSetHealthRequestedAndMarksDirty()
+        {
+            var (vm, _, _, _) = BuildVm();
+            int raised = 0;
+            vm.SetHealthRequested += (_, _) => raised++;
+
+            await vm.SetHealthCommand.ExecuteAsync(null);
+
+            Assert.Equal(1, raised);
+            Assert.True(vm.IsDirty);
+        }
+
         // ---- RefreshMaze ----------------------------------------------------
 
         [Fact]

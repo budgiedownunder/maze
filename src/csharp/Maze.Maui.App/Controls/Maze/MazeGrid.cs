@@ -156,6 +156,7 @@ namespace Maze.Maui.App
             int cellCount = 0;
             bool singleCell = false, containsStart = false, containsFinish = false, containsWall = false;
             bool containsKey = false, containsDoor = false;
+            bool containsEnemy = false, containsHealth = false;
             int numWalls = 0;
             if (currentSelection is not null)
             {
@@ -184,6 +185,12 @@ namespace Maze.Maui.App
                             case CellType.Door:
                                 containsDoor = true;
                                 break;
+                            case CellType.Enemy:
+                                containsEnemy = true;
+                                break;
+                            case CellType.Health:
+                                containsHealth = true;
+                                break;
                         }
                     }
                 }
@@ -196,6 +203,8 @@ namespace Maze.Maui.App
                 ContainsFinish = containsFinish,
                 ContainsKey = containsKey,
                 ContainsDoor = containsDoor,
+                ContainsEnemy = containsEnemy,
+                ContainsHealth = containsHealth,
                 IsAllWalls = containsWall && numWalls == cellCount
             };
         }
@@ -536,6 +545,8 @@ namespace Maze.Maui.App
                 case CellType.Empty:
                 case CellType.Key:
                 case CellType.Door:
+                case CellType.Enemy:
+                case CellType.Health:
                     SetSelectionContentToType(cellType);
                     break;
             }
@@ -631,6 +642,8 @@ namespace Maze.Maui.App
                         case CellType.Wall: maze.SetWallCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                         case CellType.Key: maze.SetKeyCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                         case CellType.Door: maze.SetDoorCells((uint)row, (uint)column, (uint)row, (uint)column); break;
+                        case CellType.Enemy: maze.SetEnemyCells((uint)row, (uint)column, (uint)row, (uint)column); break;
+                        case CellType.Health: maze.SetHealthCells((uint)row, (uint)column, (uint)row, (uint)column); break;
                     }
                 }
             }
@@ -1175,6 +1188,16 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool ContainsDoor { get; set; } = false;
         /// <summary>
+        /// Indicates whether the selection contains an enemy cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool ContainsEnemy { get; set; } = false;
+        /// <summary>
+        /// Indicates whether the selection contains a health cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool ContainsHealth { get; set; } = false;
+        /// <summary>
         /// Indicates whether the selection is a single cell
         /// </summary>
         /// <returns>Boolean</returns>
@@ -1195,13 +1218,13 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool IsFinish { get => IsSingleCell && ContainsFinish; }
         /// <summary>
-        /// Indicates whether the selection contains all empty cells. K and D
-        /// cells count as non-empty so that the Clear button enables on a
+        /// Indicates whether the selection contains all empty cells. K, D, E
+        /// and H cells count as non-empty so that the Clear button enables on a
         /// selection that contains them — mirrors the React editor's
         /// <c>selectionStatus.isEmpty</c> rule.
         /// </summary>
         /// <returns>Boolean</returns>
-        public bool IsEmpty { get => !ContainsWall && !ContainsStart && !ContainsFinish && !ContainsKey && !ContainsDoor; }
+        public bool IsEmpty { get => !ContainsWall && !ContainsStart && !ContainsFinish && !ContainsKey && !ContainsDoor && !ContainsEnemy && !ContainsHealth; }
         /// <summary>
         /// Constructor
         /// </summary>
@@ -1337,6 +1360,16 @@ namespace Maze.Maui.App
         /// <returns>Boolean</returns>
         public bool IsDoor { get => CellType == CellType.Door; }
         /// <summary>
+        /// Indicates whether the cell is an enemy cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool IsEnemy { get => CellType == CellType.Enemy; }
+        /// <summary>
+        /// Indicates whether the cell is a health cell
+        /// </summary>
+        /// <returns>Boolean</returns>
+        public bool IsHealth { get => CellType == CellType.Health; }
+        /// <summary>
         /// Indicates whether the cell is a start or finish cell
         /// </summary>
         /// <returns>Boolean</returns>
@@ -1356,6 +1389,8 @@ namespace Maze.Maui.App
                 case CellType.Wall:
                 case CellType.Key:
                 case CellType.Door:
+                case CellType.Enemy:
+                case CellType.Health:
                     Content = new Image
                     {
                         Source = GetImageName(true),
@@ -1389,6 +1424,10 @@ namespace Maze.Maui.App
                     return "key.png";
                 case CellType.Door:
                     return "door.png";
+                case CellType.Enemy:
+                    return "enemy.png";
+                case CellType.Health:
+                    return "health.png";
             }
             return "";
         }
@@ -1477,12 +1516,13 @@ namespace Maze.Maui.App
         /// <param name="pathDirection">Path direction</param>
         public void SetSolutionPath(PathDirection pathDirection)
         {
-            // Empty cells get a footstep image; Start/Finish/Key/Door keep
-            // their existing icon and just gain a green BackgroundColor that
-            // shows through the icon's transparent border. (Key/Door PNGs
+            // Empty cells get a footstep image; Start/Finish/Key/Door/Enemy/Health
+            // keep their existing icon and just gain a green BackgroundColor that
+            // shows through the icon's transparent border. (These icon PNGs
             // ship with transparent corners specifically so the highlight
-            // is visible here.)
-            if (IsEmpty || IsStartOrFinish || IsKey || IsDoor)
+            // is visible here.) Enemy and health cells are passable, so the
+            // solution path can cross them and they highlight like any passage.
+            if (IsEmpty || IsStartOrFinish || IsKey || IsDoor || IsEnemy || IsHealth)
             {
                 solutionPathDirection = pathDirection;
 
