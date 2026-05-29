@@ -162,6 +162,13 @@ impl Solver<'_> {
     /// backtrack (collect a key, return through a junction), the path can
     /// revisit a cell, so it is a *walk* rather than a strictly simple path.
     ///
+    /// Enemy (`'E'`) and health-pickup (`'H'`) cells are treated as plain
+    /// passages: both map to `MazeCellState::Empty`, so the route walks over
+    /// them as if they were empty floor. The solver does not model enemy
+    /// movement or damage, so a returned path proves only that the maze is
+    /// *navigable* — not that it is *survivable*. Keeping the player alive
+    /// past the enemies is the maze author's responsibility.
+    ///
     /// # Returns
     ///
     /// A `Result` containing either the solution if successful, or a `Error` if an error occurs
