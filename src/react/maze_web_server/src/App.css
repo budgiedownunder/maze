@@ -339,6 +339,32 @@
   overflow-y: auto;
 }
 
+/* Three-region modal layout: pinned title at the top, scrollable body
+   in the middle, pinned action buttons at the bottom. Used when the
+   form has too many controls to fit on a short viewport but the title
+   and submit/cancel buttons must stay visible (no scrolling them
+   off-screen). The middle region scrolls; the edges stay anchored. */
+.modal-with-scroll-body {
+  max-height: 90dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-with-scroll-body .modal-form {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.modal-scroll-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 /* Stacked label: text on top, input/select below, with a clear gap
    between them. Used by the Play 3D custom-launch modal's dropdowns
    and the time-limit number input — the default browser layout puts

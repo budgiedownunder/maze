@@ -175,7 +175,7 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Generate Maze" className="modal-overlay" style={{ zIndex: 1200, cursor: isLoading ? 'wait' : undefined }}>
-      <div className="modal modal-sm modal-scrollable">
+      <div className="modal modal-sm modal-with-scroll-body">
         <h2 className="modal-title">Generate Maze</h2>
         {/* noValidate keeps the in-modal JS validation as the source of truth —
             otherwise the `min`/`max` attributes on the number inputs below
@@ -184,67 +184,72 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
             The attributes are still useful: they cap each input's native
             spinner (so the user can't click past the bound). */}
         <form className="modal-form" noValidate onSubmit={handleSubmit}>
-          <label>
-            Rows
-            <input type="number" className="input" value={rows} min={3} autoFocus
-              onChange={e => { setRows(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Columns
-            <input type="number" className="input" value={cols} min={3}
-              onChange={e => { setCols(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Start Row
-            <input type="number" className="input" value={startRow} min={0}
-              onChange={e => { setStartRow(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Start Column
-            <input type="number" className="input" value={startCol} min={0}
-              onChange={e => { setStartCol(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Finish Row
-            <input type="number" className="input" value={finishRow} min={0}
-              onChange={e => { setFinishRow(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Finish Column
-            <input type="number" className="input" value={finishCol} min={0}
-              onChange={e => { setFinishCol(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Min Solution Length
-            <input type="number" className="input" value={minSpineLength} min={0}
-              onChange={e => { setMinSpineLength(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Doors
-            <input type="number" className="input" value={doorCount} min={0} max={MAX_DOOR_COUNT}
-              onChange={e => { setDoorCount(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Spare Doors
-            <input type="number" className="input" value={spareDoors} min={0} max={MAX_DOOR_COUNT}
-              onChange={e => { setSpareDoors(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Spare Keys
-            <input type="number" className="input" value={spareKeys} min={0} max={MAX_DOOR_COUNT}
-              onChange={e => { setSpareKeys(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Enemies
-            <input type="number" className="input" value={enemyCount} min={0} max={MAX_ENEMY_COUNT}
-              onChange={e => { setEnemyCount(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Health
-            <input type="number" className="input" value={healthCount} min={0} max={MAX_HEALTH_COUNT}
-              onChange={e => { setHealthCount(e.target.value); setValidationError(null) }} />
-          </label>
-          {displayError && <p role="alert" className="error-msg">{displayError}</p>}
+          {/* Scrollable middle region: only the form fields and validation
+              error scroll when the viewport is too short; the title above
+              and the action buttons below stay pinned. */}
+          <div className="modal-scroll-body">
+            <label>
+              Rows
+              <input type="number" className="input" value={rows} min={3} autoFocus
+                onChange={e => { setRows(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Columns
+              <input type="number" className="input" value={cols} min={3}
+                onChange={e => { setCols(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Start Row
+              <input type="number" className="input" value={startRow} min={0}
+                onChange={e => { setStartRow(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Start Column
+              <input type="number" className="input" value={startCol} min={0}
+                onChange={e => { setStartCol(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Finish Row
+              <input type="number" className="input" value={finishRow} min={0}
+                onChange={e => { setFinishRow(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Finish Column
+              <input type="number" className="input" value={finishCol} min={0}
+                onChange={e => { setFinishCol(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Min Solution Length
+              <input type="number" className="input" value={minSpineLength} min={0}
+                onChange={e => { setMinSpineLength(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Doors
+              <input type="number" className="input" value={doorCount} min={0} max={MAX_DOOR_COUNT}
+                onChange={e => { setDoorCount(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Spare Doors
+              <input type="number" className="input" value={spareDoors} min={0} max={MAX_DOOR_COUNT}
+                onChange={e => { setSpareDoors(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Spare Keys
+              <input type="number" className="input" value={spareKeys} min={0} max={MAX_DOOR_COUNT}
+                onChange={e => { setSpareKeys(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Enemies
+              <input type="number" className="input" value={enemyCount} min={0} max={MAX_ENEMY_COUNT}
+                onChange={e => { setEnemyCount(e.target.value); setValidationError(null) }} />
+            </label>
+            <label>
+              Health
+              <input type="number" className="input" value={healthCount} min={0} max={MAX_HEALTH_COUNT}
+                onChange={e => { setHealthCount(e.target.value); setValidationError(null) }} />
+            </label>
+            {displayError && <p role="alert" className="error-msg">{displayError}</p>}
+          </div>
           <div className="modal-actions-row">
             <button type="button" onClick={onCancel} className="btn-gray">Cancel</button>
             <button type="submit" className="btn-primary" disabled={isLoading}>Generate</button>
