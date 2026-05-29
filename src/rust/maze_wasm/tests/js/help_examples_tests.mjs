@@ -646,7 +646,12 @@ function testMazeGenerateSeeded() {
             undefined,
             undefined,
             undefined,
-            12345
+            12345,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined
         );
         console.log("Maze generate() with seed succeeded. Dimensions: ", maze.get_row_count(), "row(s) x ", maze.get_col_count(), " column(s)");
         let dimensionsMatch = maze.get_row_count() === 9 && maze.get_col_count() === 7;
