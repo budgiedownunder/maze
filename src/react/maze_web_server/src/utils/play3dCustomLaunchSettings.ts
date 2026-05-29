@@ -16,11 +16,19 @@ export type DoorStyle = (typeof DOOR_STYLES)[number]
 export const KEY_HOLDER_STYLES = ['pedestal', 'chest', 'floating_key'] as const
 export type KeyHolderStyle = (typeof KEY_HOLDER_STYLES)[number]
 
+export const ENEMY_TYPES = ['goblin', 'ghost'] as const
+export type EnemyType = (typeof ENEMY_TYPES)[number]
+
+export const HEALTH_STYLES = ['heart', 'potion'] as const
+export type HealthStyle = (typeof HEALTH_STYLES)[number]
+
 export interface Play3dCustomLaunchSettings {
   skyType: SkyType
   wallType: WallType
   doorStyle: DoorStyle
   keyHolder: KeyHolderStyle
+  enemyType: EnemyType
+  healthStyle: HealthStyle
   wallTint: boolean
   wallMaterialVariation: boolean
   deadEndObjects: boolean
@@ -36,6 +44,11 @@ export const PLAY3D_CUSTOM_LAUNCH_DEFAULTS: Play3dCustomLaunchSettings = {
   // stone pedestal — the look the 3D game shipped with.
   doorStyle: 'swing',
   keyHolder: 'pedestal',
+  // Enemy / health styles default to the same variants the Bevy crate's
+  // `EnemyType::default()` / `HealthStyle::default()` and the server's
+  // `EnemyTypeConfig::default()` / `HealthStyleConfig::default()` use.
+  enemyType: 'goblin',
+  healthStyle: 'heart',
   // Match the prior hard-coded "clean look" overrides for user-edited
   // mazes — `wall_tint` and `wall_material_variation` off so the user's
   // layout is the visual focus by default. The user can still flip
@@ -76,12 +89,22 @@ export function loadPlay3dCustomLaunchSettings(): Play3dCustomLaunchSettings {
     )
       ? (parsed.keyHolder as KeyHolderStyle)
       : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.keyHolder
+    const enemyType: EnemyType = (ENEMY_TYPES as readonly string[]).includes(parsed.enemyType ?? '')
+      ? (parsed.enemyType as EnemyType)
+      : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.enemyType
+    const healthStyle: HealthStyle = (HEALTH_STYLES as readonly string[]).includes(
+      parsed.healthStyle ?? '',
+    )
+      ? (parsed.healthStyle as HealthStyle)
+      : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.healthStyle
     const timer = Number(parsed.timerSeconds)
     return {
       skyType,
       wallType,
       doorStyle,
       keyHolder,
+      enemyType,
+      healthStyle,
       wallTint: parsed.wallTint ?? PLAY3D_CUSTOM_LAUNCH_DEFAULTS.wallTint,
       wallMaterialVariation:
         parsed.wallMaterialVariation ?? PLAY3D_CUSTOM_LAUNCH_DEFAULTS.wallMaterialVariation,

@@ -91,6 +91,8 @@ describe('Play3dCustomLaunchModal', () => {
       wallType: 'wood',
       doorStyle: 'dissolve',
       keyHolder: 'floating_key',
+      enemyType: 'ghost',
+      healthStyle: 'potion',
       wallTint: true,
       wallMaterialVariation: false,
       deadEndObjects: false,
@@ -104,11 +106,51 @@ describe('Play3dCustomLaunchModal', () => {
     expect((screen.getByLabelText(/wall texture/i) as HTMLSelectElement).value).toBe('wood')
     expect((screen.getByLabelText(/door style/i) as HTMLSelectElement).value).toBe('dissolve')
     expect((screen.getByLabelText(/key holder/i) as HTMLSelectElement).value).toBe('floating_key')
+    expect((screen.getByLabelText(/enemy type/i) as HTMLSelectElement).value).toBe('ghost')
+    expect((screen.getByLabelText(/health style/i) as HTMLSelectElement).value).toBe('potion')
     expect(screen.getByLabelText(/varied wall tints/i)).toBeChecked()
     expect(screen.getByLabelText(/dead-end objects/i)).not.toBeChecked()
     expect(screen.getByLabelText(/sparse wall decorations/i)).not.toBeChecked()
     expect(screen.getByLabelText(/floor junction markers/i)).toBeChecked()
     expect((screen.getByLabelText(/time limit/i) as HTMLInputElement).value).toBe('180')
+  })
+
+  it('renders enemy type options Title-Cased with lowercase wire values', () => {
+    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    const enemy = screen.getByLabelText(/enemy type/i) as HTMLSelectElement
+    const labels = Array.from(enemy.options).map(o => o.textContent)
+    const values = Array.from(enemy.options).map(o => o.value)
+    expect(labels).toEqual(['Goblin', 'Ghost'])
+    expect(values).toEqual(['goblin', 'ghost'])
+  })
+
+  it('renders health style options Title-Cased with lowercase wire values', () => {
+    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    const health = screen.getByLabelText(/health style/i) as HTMLSelectElement
+    const labels = Array.from(health.options).map(o => o.textContent)
+    const values = Array.from(health.options).map(o => o.value)
+    expect(labels).toEqual(['Heart', 'Potion'])
+    expect(values).toEqual(['heart', 'potion'])
+  })
+
+  it('defaults Enemy type and Health style to goblin / heart', () => {
+    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    expect((screen.getByLabelText(/enemy type/i) as HTMLSelectElement).value).toBe('goblin')
+    expect((screen.getByLabelText(/health style/i) as HTMLSelectElement).value).toBe('heart')
+  })
+
+  it('passes enemyType and healthStyle through onPlay on submit', async () => {
+    const onPlay = vi.fn()
+    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={onPlay} />)
+    const enemy = screen.getByLabelText(/enemy type/i) as HTMLSelectElement
+    await userEvent.selectOptions(enemy, 'ghost')
+    const health = screen.getByLabelText(/health style/i) as HTMLSelectElement
+    await userEvent.selectOptions(health, 'potion')
+    await userEvent.click(screen.getByRole('button', { name: /play/i }))
+    expect(onPlay).toHaveBeenCalledTimes(1)
+    const settings = onPlay.mock.calls[0][0] as Play3dCustomLaunchSettings
+    expect(settings.enemyType).toBe('ghost')
+    expect(settings.healthStyle).toBe('potion')
   })
 })
 
@@ -136,12 +178,24 @@ describe('loadPlay3dCustomLaunchSettings', () => {
     expect(loadPlay3dCustomLaunchSettings().timerSeconds).toBe(PLAY3D_CUSTOM_LAUNCH_DEFAULTS.timerSeconds)
   })
 
+  it('falls back to default enemyType when stored value is unknown', () => {
+    localStorage.setItem(PLAY3D_CUSTOM_LAUNCH_STORAGE_KEY, JSON.stringify({ enemyType: 'dragon' }))
+    expect(loadPlay3dCustomLaunchSettings().enemyType).toBe(PLAY3D_CUSTOM_LAUNCH_DEFAULTS.enemyType)
+  })
+
+  it('falls back to default healthStyle when stored value is unknown', () => {
+    localStorage.setItem(PLAY3D_CUSTOM_LAUNCH_STORAGE_KEY, JSON.stringify({ healthStyle: 'shield' }))
+    expect(loadPlay3dCustomLaunchSettings().healthStyle).toBe(PLAY3D_CUSTOM_LAUNCH_DEFAULTS.healthStyle)
+  })
+
   it('round-trips a save+load', () => {
     const settings: Play3dCustomLaunchSettings = {
       skyType: 'sunset',
       wallType: 'cobblestone',
       doorStyle: 'slide',
       keyHolder: 'chest',
+      enemyType: 'ghost',
+      healthStyle: 'potion',
       wallTint: true,
       wallMaterialVariation: true,
       deadEndObjects: true,

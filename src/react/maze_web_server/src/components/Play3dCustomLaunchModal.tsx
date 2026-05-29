@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import {
   DOOR_STYLES,
+  ENEMY_TYPES,
+  HEALTH_STYLES,
   KEY_HOLDER_STYLES,
   SKY_TYPES,
   WALL_TYPES,
   loadPlay3dCustomLaunchSettings,
   titleCaseWire,
   type DoorStyle,
+  type EnemyType,
+  type HealthStyle,
   type KeyHolderStyle,
   type Play3dCustomLaunchSettings,
   type SkyType,
@@ -25,6 +29,8 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
   const [wallType, setWallType] = useState<WallType>(initial.wallType)
   const [doorStyle, setDoorStyle] = useState<DoorStyle>(initial.doorStyle)
   const [keyHolder, setKeyHolder] = useState<KeyHolderStyle>(initial.keyHolder)
+  const [enemyType, setEnemyType] = useState<EnemyType>(initial.enemyType)
+  const [healthStyle, setHealthStyle] = useState<HealthStyle>(initial.healthStyle)
   const [wallTint, setWallTint] = useState(initial.wallTint)
   const [wallMaterialVariation, setWallMaterialVariation] = useState(initial.wallMaterialVariation)
   const [deadEndObjects, setDeadEndObjects] = useState(initial.deadEndObjects)
@@ -50,6 +56,8 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
       wallType,
       doorStyle,
       keyHolder,
+      enemyType,
+      healthStyle,
       wallTint,
       wallMaterialVariation,
       deadEndObjects,
@@ -142,6 +150,32 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
               >
                 {KEY_HOLDER_STYLES.map(k => (
                   <option key={k} value={k}>{titleCaseWire(k)}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="modal-stacked-input">
+              Enemy type
+              <select
+                className="input"
+                value={enemyType}
+                onChange={e => { setEnemyType(e.target.value as EnemyType); clearError() }}
+              >
+                {ENEMY_TYPES.map(et => (
+                  <option key={et} value={et}>{titleCaseWire(et)}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="modal-stacked-input">
+              Health style
+              <select
+                className="input"
+                value={healthStyle}
+                onChange={e => { setHealthStyle(e.target.value as HealthStyle); clearError() }}
+              >
+                {HEALTH_STYLES.map(hs => (
+                  <option key={hs} value={hs}>{titleCaseWire(hs)}</option>
                 ))}
               </select>
             </label>
