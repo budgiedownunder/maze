@@ -128,20 +128,6 @@ export function MazeGamePage() {
 
         {maze && game && !loading && !loadError && !error && (
           <>
-            {maxHp > 0 && (
-              <div className="maze-hp-hud" aria-label="Health">
-                <span className="maze-hp-hud-label">HP:</span>
-                {Array.from({ length: maxHp }, (_, i) => (
-                  <img
-                    key={i}
-                    src="/images/maze/health.svg"
-                    alt={i < hp ? 'Health' : 'Lost health'}
-                    className={i < hp ? 'maze-hp-hud-heart' : 'maze-hp-hud-heart maze-hp-hud-heart--empty'}
-                  />
-                ))}
-              </div>
-            )}
-
             {damageFlashKey > 0 && (
               <div
                 key={damageFlashKey}
@@ -160,11 +146,27 @@ export function MazeGamePage() {
               cellSize={gameCellSize}
             />
 
-            <div className="maze-bag" aria-label="Bag">
-              <span>Bag:</span>
-              {bag.length === 0
-                ? <span className="maze-bag-empty">empty</span>
-                : bag.map((_, i) => <img key={i} src="/images/maze/key.svg" alt="Key" />)}
+            <div className="maze-game-status">
+              {maxHp > 0 && (
+                <div className="maze-hp-hud" aria-label="Health">
+                  <span className="maze-hp-hud-label">LIFE</span>
+                  {Array.from({ length: maxHp }, (_, i) => (
+                    <img
+                      key={i}
+                      src="/images/maze/health.svg"
+                      alt={i < hp ? 'Health' : 'Lost health'}
+                      className={i < hp ? 'maze-hp-hud-heart' : 'maze-hp-hud-heart maze-hp-hud-heart--empty'}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <div className="maze-bag" aria-label="Bag">
+                <span>BAG</span>
+                {bag.length === 0
+                  ? <span className="maze-bag-empty">empty</span>
+                  : bag.map((_, i) => <img key={i} src="/images/maze/key.svg" alt="Key" />)}
+              </div>
             </div>
 
             <div className="game-dpad" aria-label="D-pad">

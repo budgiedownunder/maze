@@ -1073,7 +1073,6 @@
   gap: 6px;
   align-items: center;
   justify-content: center;
-  margin-top: 8px;
   min-height: 28px;
 }
 .maze-bag span {
@@ -1088,15 +1087,24 @@
   height: 24px;
 }
 
-/* HP HUD — heart row above the grid, mirrors the bag styling so the two
-   game-side strips read as a pair. Empty hearts are dimmed to 25 % opacity
-   so the player can read remaining HP at a glance. */
+/* LIFE + BAG group, sandwiched between the maze grid and the D-pad. The
+   tight inner gap keeps the two status rows visually paired while the
+   parent's normal flex gap surrounds the whole group, matching the 3D
+   game's status layout. */
+.maze-game-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+}
+
+/* Life heart row. Empty hearts are dimmed to 25 % opacity so the player
+   can read the remaining HP at a glance. */
 .maze-hp-hud {
   display: flex;
   gap: 6px;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
   min-height: 28px;
 }
 .maze-hp-hud-label {
