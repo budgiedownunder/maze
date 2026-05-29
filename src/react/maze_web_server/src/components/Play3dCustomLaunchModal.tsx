@@ -67,125 +67,130 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
       className="modal-overlay"
       style={{ zIndex: 1200 }}
     >
-      <div className="modal modal-sm modal-scrollable">
+      <div className="modal modal-sm modal-with-scroll-body">
         <h2 className="modal-title">Play 3D — {mazeName}</h2>
         <form className="modal-form" onSubmit={handleSubmit}>
-          <label className="modal-stacked-input">
-            Sky
-            <select
-              className="input"
-              value={skyType}
-              onChange={e => { setSkyType(e.target.value as SkyType); clearError() }}
-            >
-              {SKY_TYPES.map(s => (
-                <option key={s} value={s}>{titleCaseWire(s)}</option>
-              ))}
-            </select>
-          </label>
+          {/* Scrollable middle region: only the form controls and validation
+              error scroll when the viewport is too short; the title above
+              and the action buttons below stay pinned. */}
+          <div className="modal-scroll-body">
+            <label className="modal-stacked-input">
+              Sky
+              <select
+                className="input"
+                value={skyType}
+                onChange={e => { setSkyType(e.target.value as SkyType); clearError() }}
+              >
+                {SKY_TYPES.map(s => (
+                  <option key={s} value={s}>{titleCaseWire(s)}</option>
+                ))}
+              </select>
+            </label>
 
-          <label className="modal-checkbox">
-            <input
-              type="checkbox"
-              checked={wallMaterialVariation}
-              onChange={e => { setWallMaterialVariation(e.target.checked); clearError() }}
-            />
-            <span>Quadrant wall types</span>
-          </label>
+            <label className="modal-checkbox">
+              <input
+                type="checkbox"
+                checked={wallMaterialVariation}
+                onChange={e => { setWallMaterialVariation(e.target.checked); clearError() }}
+              />
+              <span>Quadrant wall types</span>
+            </label>
 
-          <label className="modal-stacked-input">
-            Wall texture
-            <select
-              className="input"
-              value={wallType}
-              disabled={wallMaterialVariation}
-              onChange={e => { setWallType(e.target.value as WallType); clearError() }}
-            >
-              {WALL_TYPES.map(w => (
-                <option key={w} value={w}>{titleCaseWire(w)}</option>
-              ))}
-            </select>
-          </label>
+            <label className="modal-stacked-input">
+              Wall texture
+              <select
+                className="input"
+                value={wallType}
+                disabled={wallMaterialVariation}
+                onChange={e => { setWallType(e.target.value as WallType); clearError() }}
+              >
+                {WALL_TYPES.map(w => (
+                  <option key={w} value={w}>{titleCaseWire(w)}</option>
+                ))}
+              </select>
+            </label>
 
-          <label className="modal-checkbox">
-            <input
-              type="checkbox"
-              checked={wallTint}
-              disabled={wallMaterialVariation}
-              onChange={e => { setWallTint(e.target.checked); clearError() }}
-            />
-            <span>Varied wall tints</span>
-          </label>
+            <label className="modal-checkbox">
+              <input
+                type="checkbox"
+                checked={wallTint}
+                disabled={wallMaterialVariation}
+                onChange={e => { setWallTint(e.target.checked); clearError() }}
+              />
+              <span>Varied wall tints</span>
+            </label>
 
-          <label className="modal-stacked-input">
-            Door style
-            <select
-              className="input"
-              value={doorStyle}
-              onChange={e => { setDoorStyle(e.target.value as DoorStyle); clearError() }}
-            >
-              {DOOR_STYLES.map(d => (
-                <option key={d} value={d}>{titleCaseWire(d)}</option>
-              ))}
-            </select>
-          </label>
+            <label className="modal-stacked-input">
+              Door style
+              <select
+                className="input"
+                value={doorStyle}
+                onChange={e => { setDoorStyle(e.target.value as DoorStyle); clearError() }}
+              >
+                {DOOR_STYLES.map(d => (
+                  <option key={d} value={d}>{titleCaseWire(d)}</option>
+                ))}
+              </select>
+            </label>
 
-          <label className="modal-stacked-input">
-            Key holder
-            <select
-              className="input"
-              value={keyHolder}
-              onChange={e => { setKeyHolder(e.target.value as KeyHolderStyle); clearError() }}
-            >
-              {KEY_HOLDER_STYLES.map(k => (
-                <option key={k} value={k}>{titleCaseWire(k)}</option>
-              ))}
-            </select>
-          </label>
+            <label className="modal-stacked-input">
+              Key holder
+              <select
+                className="input"
+                value={keyHolder}
+                onChange={e => { setKeyHolder(e.target.value as KeyHolderStyle); clearError() }}
+              >
+                {KEY_HOLDER_STYLES.map(k => (
+                  <option key={k} value={k}>{titleCaseWire(k)}</option>
+                ))}
+              </select>
+            </label>
 
-          <label className="modal-checkbox">
-            <input
-              type="checkbox"
-              checked={deadEndObjects}
-              onChange={e => { setDeadEndObjects(e.target.checked); clearError() }}
-            />
-            <span>Dead-end objects</span>
-          </label>
+            <label className="modal-checkbox">
+              <input
+                type="checkbox"
+                checked={deadEndObjects}
+                onChange={e => { setDeadEndObjects(e.target.checked); clearError() }}
+              />
+              <span>Dead-end objects</span>
+            </label>
 
-          <label className="modal-checkbox">
-            <input
-              type="checkbox"
-              checked={wallDecorations}
-              onChange={e => { setWallDecorations(e.target.checked); clearError() }}
-            />
-            <span>Sparse wall decorations</span>
-          </label>
+            <label className="modal-checkbox">
+              <input
+                type="checkbox"
+                checked={wallDecorations}
+                onChange={e => { setWallDecorations(e.target.checked); clearError() }}
+              />
+              <span>Sparse wall decorations</span>
+            </label>
 
-          <label className="modal-checkbox">
-            <input
-              type="checkbox"
-              checked={floorAccents}
-              onChange={e => { setFloorAccents(e.target.checked); clearError() }}
-            />
-            <span>Floor junction markers</span>
-          </label>
+            <label className="modal-checkbox">
+              <input
+                type="checkbox"
+                checked={floorAccents}
+                onChange={e => { setFloorAccents(e.target.checked); clearError() }}
+              />
+              <span>Floor junction markers</span>
+            </label>
 
-          <label className="modal-stacked-input">
-            Time limit (seconds)
-            <input
-              type="number"
-              className="input"
-              value={timerSeconds}
-              // No `min` attribute on purpose — we want our own inline
-              // error message (handled in handleSubmit), not the
-              // browser's validation tooltip, when the user submits a
-              // non-positive value.
-              onChange={e => { setTimerSeconds(e.target.value); clearError() }}
-            />
-          </label>
+            <label className="modal-stacked-input">
+              Time limit (seconds)
+              <input
+                type="number"
+                className="input"
+                value={timerSeconds}
+                // No `min` attribute on purpose — we want our own inline
+                // error message (handled in handleSubmit), not the
+                // browser's validation tooltip, when the user submits a
+                // non-positive value.
+                onChange={e => { setTimerSeconds(e.target.value); clearError() }}
+              />
+            </label>
 
-          {validationError && (
-            <p role="alert" className="error-msg">{validationError}</p>
-          )}
+            {validationError && (
+              <p role="alert" className="error-msg">{validationError}</p>
+            )}
+          </div>
 
           <div className="modal-actions-row">
             <button type="button" onClick={onCancel} className="btn-gray">Cancel</button>
