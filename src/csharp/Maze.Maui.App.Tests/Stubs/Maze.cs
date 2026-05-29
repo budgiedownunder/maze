@@ -38,6 +38,8 @@ namespace Maze.Api
             Wall = 3,
             Key = 4,
             Door = 5,
+            Enemy = 6,
+            Health = 7,
         }
 
         public CellType GetCellType(UInt32 row, UInt32 col) =>
@@ -48,6 +50,8 @@ namespace Maze.Api
         public void SetWallCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Wall);
         public void SetKeyCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Key);
         public void SetDoorCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Door);
+        public void SetEnemyCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Enemy);
+        public void SetHealthCells(UInt32 sr, UInt32 sc, UInt32 er, UInt32 ec) => SetRange(sr, sc, er, ec, CellType.Health);
 
         private void Set(UInt32 row, UInt32 col, CellType type)
         {

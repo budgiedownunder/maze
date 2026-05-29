@@ -242,6 +242,42 @@ pub extern "C" fn maze_wasm_set_door_cells(
     set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'D')
 }
 
+/// Sets cells to enemy spawns (`'E'`) in a `MazeWasm`. Mirrors
+/// [`maze_wasm_set_wall_cells`] for the `'E'` cell character.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+///
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_enemy_cells(
+    maze_wasm: *mut MazeWasm,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u32 {
+    set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'E')
+}
+
+/// Sets cells to health pickups (`'H'`) in a `MazeWasm`. Mirrors
+/// [`maze_wasm_set_wall_cells`] for the `'H'` cell character.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+///
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_health_cells(
+    maze_wasm: *mut MazeWasm,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u32 {
+    set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'H')
+}
+
 /// Sets cells values in a `MazeWasm` to empty
 ///
 /// # Returns

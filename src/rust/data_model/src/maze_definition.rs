@@ -655,7 +655,8 @@ impl MazeDefinition {
     ///
     /// * `from` - Starting point of cell region to modify
     /// * `to` - Ending point of cell region to modify
-    /// * `value` - Value to set. Must be either `'W'` (wall) or `' '` (empty).
+    /// * `value` - Value to set. Must be one of `'W'` (wall), `'K'` (key),
+    ///   `'D'` (door), `'E'` (enemy spawn), `'H'` (health pickup), or `' '` (empty).
     ///
     /// # Returns
     ///
@@ -686,7 +687,7 @@ impl MazeDefinition {
             return Err(Error::MazeValidation(format!("invalid 'to' point {to}")));
         }
         match value {
-            'W' | 'K' | 'D' | ' ' => {
+            'W' | 'K' | 'D' | 'E' | 'H' | ' ' => {
                 let top_row = from.row.min(to.row);
                 let bottom_row = from.row.max(to.row);
                 let left_col = from.col.min(to.col);
@@ -1552,6 +1553,24 @@ mod tests {
             .set_value(from.clone(), to.clone(), 'W')
             .expect("set_value() failed");
         assert_cell_value(&definition, from.clone(), to.clone(), 'W');
+    }
+
+    #[test]
+    fn can_set_value_enemy_and_health() {
+        let mut definition = MazeDefinition::new(5, 4);
+        let enemy_from = MazePoint { row: 1, col: 1 };
+        let enemy_to = MazePoint { row: 1, col: 1 };
+        definition
+            .set_value(enemy_from.clone(), enemy_to.clone(), 'E')
+            .expect("set_value('E') failed");
+        assert_cell_value(&definition, enemy_from.clone(), enemy_to.clone(), 'E');
+
+        let health_from = MazePoint { row: 2, col: 2 };
+        let health_to = MazePoint { row: 2, col: 2 };
+        definition
+            .set_value(health_from.clone(), health_to.clone(), 'H')
+            .expect("set_value('H') failed");
+        assert_cell_value(&definition, health_from.clone(), health_to.clone(), 'H');
     }
 
     #[test]

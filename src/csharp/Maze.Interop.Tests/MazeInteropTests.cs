@@ -749,6 +749,27 @@ namespace Maze.Interop.Tests
             Assert.Contains("\"F\"", json);
         }
         /// <summary>
+        /// Confirms that enemy and health cells round-trip through
+        /// <see cref="Maze.Interop.MazeInterop.MazeToJson"/> with the
+        /// expected `'E'` / `'H'` characters in the grid JSON.
+        /// </summary>
+        [Fact]
+        public void MazeSetEnemyAndHealthCells_RoundTripsThroughMazeToJson()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(1, 4);
+            interop.MazeSetStartCell(mazePtr, 0, 0);
+            interop.MazeSetEnemyCells(mazePtr, 0, 1, 0, 1);
+            interop.MazeSetHealthCells(mazePtr, 0, 2, 0, 2);
+            interop.MazeSetFinishCell(mazePtr, 0, 3);
+            string json = interop.MazeToJson(mazePtr);
+            FreeMaze(mazePtr);
+            Assert.Contains("\"S\"", json);
+            Assert.Contains("\"E\"", json);
+            Assert.Contains("\"H\"", json);
+            Assert.Contains("\"F\"", json);
+        }
+        /// <summary>
         /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeToJson"/> succeeds and produces the expected output
         /// </summary>
         [Fact]

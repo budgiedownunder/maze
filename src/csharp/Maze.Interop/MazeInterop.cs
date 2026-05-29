@@ -128,6 +128,14 @@ namespace Maze.Interop
             /// A cell containing a door that blocks passage until unlocked by a key
             /// </summary>
             Door = 5,
+            /// <summary>
+            /// A cell where an enemy spawns at gameplay time
+            /// </summary>
+            Enemy = 6,
+            /// <summary>
+            /// A cell containing a health pickup that restores HP when walked over
+            /// </summary>
+            Health = 7,
         }
         /// <summary>
         /// Reason a game ended in a loss. Mirrors the Rust `maze::LoseReason` enum.
@@ -529,6 +537,22 @@ namespace Maze.Interop
         public void MazeSetDoorCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             connector.MazeSetDoorCells(mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells in a maze to enemy spawns, or throws an
+        /// exception if the cells cannot be set.
+        /// </summary>
+        public void MazeSetEnemyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            connector.MazeSetEnemyCells(mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells in a maze to health pickups, or throws an
+        /// exception if the cells cannot be set.
+        /// </summary>
+        public void MazeSetHealthCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            connector.MazeSetHealthCells(mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
         /// Clears a range of wall cells within a maze, or will throw an exception

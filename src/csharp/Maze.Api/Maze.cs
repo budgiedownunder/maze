@@ -61,6 +61,14 @@ namespace Maze.Api
             /// A cell containing a door that blocks passage until unlocked by a key
             /// </summary>
             Door = 5,
+            /// <summary>
+            /// A cell where an enemy spawns at gameplay time
+            /// </summary>
+            Enemy = 6,
+            /// <summary>
+            /// A cell containing a health pickup that restores HP when walked over
+            /// </summary>
+            Health = 7,
         }
 
         /// <summary>
@@ -484,6 +492,30 @@ namespace Maze.Api
         public void SetDoorCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             Interop.MazeSetDoorCells(_mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells to enemy spawns within a maze, or will throw
+        /// an exception if the cells cannot be set.
+        /// </summary>
+        /// <param name="startRow">Target start row</param>
+        /// <param name="startCol">Target start column</param>
+        /// <param name="endRow">Target end row</param>
+        /// <param name="endCol">Target end column</param>
+        public void SetEnemyCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            Interop.MazeSetEnemyCells(_mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells to health pickups within a maze, or will throw
+        /// an exception if the cells cannot be set.
+        /// </summary>
+        /// <param name="startRow">Target start row</param>
+        /// <param name="startCol">Target start column</param>
+        /// <param name="endRow">Target end row</param>
+        /// <param name="endCol">Target end column</param>
+        public void SetHealthCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            Interop.MazeSetHealthCells(_mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
         /// Inserts rows into the maze, or will throw an exception if the rows cannot be inserted

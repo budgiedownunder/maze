@@ -85,6 +85,8 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? mazeSetWallCells;
         protected IWebAssemblyFunction? mazeSetKeyCells;
         protected IWebAssemblyFunction? mazeSetDoorCells;
+        protected IWebAssemblyFunction? mazeSetEnemyCells;
+        protected IWebAssemblyFunction? mazeSetHealthCells;
         protected IWebAssemblyFunction? mazeClearCells;
         protected IWebAssemblyFunction? mazeInsertRows;
         protected IWebAssemblyFunction? mazeDeleteRows;
@@ -303,6 +305,20 @@ namespace Maze.Interop
         public void MazeSetDoorCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             UInt32 errorPtr = (UInt32)(Int32)(mazeSetDoorCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>Sets a range of cells in a maze to enemy spawns</summary>
+        public void MazeSetEnemyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            UInt32 errorPtr = (UInt32)(Int32)(mazeSetEnemyCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>Sets a range of cells in a maze to health pickups</summary>
+        public void MazeSetHealthCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            UInt32 errorPtr = (UInt32)(Int32)(mazeSetHealthCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
             if (errorPtr != 0)
                 TidyAndThrowError(errorPtr);
         }

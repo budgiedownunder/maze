@@ -621,6 +621,55 @@ namespace Maze.Api.Tests
             }
         }
         /// <summary>
+        /// Confirms that <see cref="Maze.SetEnemyCells"/> succeeds and
+        /// <see cref="Maze.GetCellType"/> returns <see cref="Maze.CellType.Enemy"/>
+        /// for the affected cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetEnemyCells_SucceedsForValidCellRange()
+        {
+            using (Maze maze = new Maze(5, 10))
+            {
+                maze.SetEnemyCells(1, 1, 2, 3);
+                AssertRangeCellType(maze, 1, 1, 2, 3, Maze.CellType.Enemy);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.SetHealthCells"/> succeeds and
+        /// <see cref="Maze.GetCellType"/> returns <see cref="Maze.CellType.Health"/>
+        /// for the affected cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetHealthCells_SucceedsForValidCellRange()
+        {
+            using (Maze maze = new Maze(5, 10))
+            {
+                maze.SetHealthCells(0, 4, 1, 5);
+                AssertRangeCellType(maze, 0, 4, 1, 5, Maze.CellType.Health);
+            }
+        }
+        /// <summary>
+        /// Confirms that E and H cells round-trip through
+        /// <see cref="Maze.ToJson"/> with the expected `'E'` / `'H'`
+        /// characters in the grid JSON.
+        /// </summary>
+        [Fact]
+        public void MazeSetEnemyAndHealthCells_RoundTripsThroughToJson()
+        {
+            using (Maze maze = new Maze(1, 4))
+            {
+                maze.SetStartCell(0, 0);
+                maze.SetEnemyCells(0, 1, 0, 1);
+                maze.SetHealthCells(0, 2, 0, 2);
+                maze.SetFinishCell(0, 3);
+                string json = maze.ToJson();
+                Assert.Contains("\"S\"", json);
+                Assert.Contains("\"E\"", json);
+                Assert.Contains("\"H\"", json);
+                Assert.Contains("\"F\"", json);
+            }
+        }
+        /// <summary>
         /// Confirms that <see cref="Maze.ToJson"/> succeeds
         /// </summary>
         [Fact]
