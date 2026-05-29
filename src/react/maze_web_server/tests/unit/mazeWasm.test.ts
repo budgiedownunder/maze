@@ -95,6 +95,8 @@ const sampleOptions: GenerateOptions = {
   doorCount: 2,
   spareDoors: 1,
   spareKeys: 1,
+  enemyCount: 3,
+  healthCount: 2,
 }
 
 beforeEach(() => {
@@ -134,6 +136,8 @@ describe('generateMaze', () => {
       2,    // doorCount
       1,    // spareDoors
       1,    // spareKeys
+      3,    // enemyCount
+      2,    // healthCount
     )
   })
 

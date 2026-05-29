@@ -82,4 +82,6 @@ export interface GenerateOptions {
   doorCount: number    // number of real path doors (each with one key) to auto-place; 0 = none
   spareDoors: number   // number of decoy doors planted on off-spine branches; 0 = none
   spareKeys: number    // number of spare keys planted on off-spine branches; 0 = none
+  enemyCount: number   // number of enemy cells to auto-place at random passable cells; 0 = none
+  healthCount: number  // number of health-pickup cells to auto-place at random passable cells; 0 = none
 }

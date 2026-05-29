@@ -15,6 +15,8 @@ export interface GenerateOptions {
   doorCount: number    // number of real path doors (each with one key) to auto-place; 0 = none
   spareDoors: number   // number of decoy doors planted on off-spine branches; 0 = none
   spareKeys: number    // number of spare keys planted on off-spine branches; 0 = none
+  enemyCount: number   // number of enemy cells to auto-place at random passable cells; 0 = none
+  healthCount: number  // number of health-pickup cells to auto-place at random passable cells; 0 = none
 }
 
 let initialized = false
@@ -55,6 +57,8 @@ export async function generateMaze(options: GenerateOptions): Promise<MazeDefini
         options.doorCount,
         options.spareDoors,
         options.spareKeys,
+        options.enemyCount,
+        options.healthCount,
       )
     } catch (ex) { throw toError(ex) }
     const parsed = JSON.parse(maze.to_json()) as { definition: MazeDefinition }

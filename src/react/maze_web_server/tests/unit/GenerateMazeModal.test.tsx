@@ -48,7 +48,7 @@ beforeEach(() => {
 // ── Rendering & defaults ─────────────────────────────────────────
 
 describe('GenerateMazeModal rendering and defaults', () => {
-  it('renders all 8 labelled fields', () => {
+  it('renders every labelled field', () => {
     renderModal()
     expect(screen.getByLabelText('Rows')).toBeInTheDocument()
     expect(screen.getByLabelText('Columns')).toBeInTheDocument()
@@ -58,6 +58,10 @@ describe('GenerateMazeModal rendering and defaults', () => {
     expect(screen.getByLabelText('Finish Column')).toBeInTheDocument()
     expect(screen.getByLabelText('Min Solution Length')).toBeInTheDocument()
     expect(screen.getByLabelText('Doors')).toBeInTheDocument()
+    expect(screen.getByLabelText('Spare Doors')).toBeInTheDocument()
+    expect(screen.getByLabelText('Spare Keys')).toBeInTheDocument()
+    expect(screen.getByLabelText('Enemies')).toBeInTheDocument()
+    expect(screen.getByLabelText('Health')).toBeInTheDocument()
   })
 
   it('defaults Doors to 0 when the grid has no doors', () => {
@@ -90,9 +94,57 @@ describe('GenerateMazeModal rendering and defaults', () => {
       'Finish Column',
       'Min Solution Length',
       'Doors',
+      'Spare Doors',
+      'Spare Keys',
+      'Enemies',
+      'Health',
     ]) {
       expect(screen.getByLabelText(label)).toHaveAttribute('min', '0')
     }
+  })
+
+  it('caps the Enemies spinner at 0 and the maximum permitted count', () => {
+    renderModal()
+    const enemies = screen.getByLabelText('Enemies')
+    expect(enemies).toHaveAttribute('min', '0')
+    expect(enemies).toHaveAttribute('max', '8')
+  })
+
+  it('caps the Health spinner at 0 and the maximum permitted count', () => {
+    renderModal()
+    const health = screen.getByLabelText('Health')
+    expect(health).toHaveAttribute('min', '0')
+    expect(health).toHaveAttribute('max', '8')
+  })
+
+  it('defaults Enemies to 0 when the grid has no enemies', () => {
+    renderModal()
+    expect(screen.getByLabelText('Enemies')).toHaveValue(0)
+  })
+
+  it('defaults Health to 0 when the grid has no health pickups', () => {
+    renderModal()
+    expect(screen.getByLabelText('Health')).toHaveValue(0)
+  })
+
+  it('initializes Enemies from the number of enemies already in the grid', () => {
+    const gridWithEnemies: string[][] = [
+      ['S', 'E', ' '],
+      [' ', 'W', 'E'],
+      [' ', 'E', 'F'],
+    ]
+    renderModal({ grid: gridWithEnemies })
+    expect(screen.getByLabelText('Enemies')).toHaveValue(3)
+  })
+
+  it('initializes Health from the number of health pickups already in the grid', () => {
+    const gridWithHealth: string[][] = [
+      ['S', 'H', ' '],
+      [' ', 'W', 'H'],
+      [' ', ' ', 'F'],
+    ]
+    renderModal({ grid: gridWithHealth })
+    expect(screen.getByLabelText('Health')).toHaveValue(2)
   })
 
   it('disables native form validation so the in-modal error message still fires', () => {
@@ -246,10 +298,37 @@ describe('GenerateMazeModal validation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Spare Keys must be a whole number between 0 and 8.')
   })
 
+  it('shows error when Enemies exceeds the maximum', async () => {
+    await submitWith({ Enemies: '9' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Enemies must be a whole number between 0 and 8.')
+  })
+
+  it('shows error when Enemies is negative', async () => {
+    await submitWith({ Enemies: '-1' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Enemies must be a whole number between 0 and 8.')
+  })
+
+  it('shows error when Health exceeds the maximum', async () => {
+    await submitWith({ Health: '9' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Health must be a whole number between 0 and 8.')
+  })
+
+  it('shows error when Health is negative', async () => {
+    await submitWith({ Health: '-1' })
+    expect(screen.getByRole('alert')).toHaveTextContent('Health must be a whole number between 0 and 8.')
+  })
+
   it('passes spare doors + spare keys through on a valid submit', async () => {
     await submitWith({ 'Spare Doors': '2', 'Spare Keys': '1' })
     expect(mockOnGenerate).toHaveBeenCalledWith(
       expect.objectContaining({ spareDoors: 2, spareKeys: 1 }),
+    )
+  })
+
+  it('passes enemy + health counts through on a valid submit', async () => {
+    await submitWith({ Enemies: '3', Health: '2' })
+    expect(mockOnGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ enemyCount: 3, healthCount: 2 }),
     )
   })
 
@@ -334,6 +413,8 @@ describe('GenerateMazeModal happy path', () => {
       doorCount: 0,
       spareDoors: 0,
       spareKeys: 0,
+      enemyCount: 0,
+      healthCount: 0,
     })
   })
 

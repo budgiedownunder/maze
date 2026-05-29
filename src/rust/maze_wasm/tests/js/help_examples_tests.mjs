@@ -607,6 +607,10 @@ function testMazeGenerate() {
             undefined,
             undefined,
             undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
             undefined
         );
         let json = maze.to_json();

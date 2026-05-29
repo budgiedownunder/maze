@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import type { GenerateOptions } from '../types/api'
-import { exceedsGenerateFeatureCap, exceedsMazeCellCap, MAX_DOOR_COUNT, MAX_TOTAL_FEATURES } from '../utils/validation'
+import {
+  exceedsGenerateFeatureCap, exceedsMazeCellCap,
+  MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TOTAL_FEATURES,
+} from '../utils/validation'
 
 interface Props {
   grid: string[][]
@@ -24,12 +27,14 @@ function defaultsFromGrid(grid: string[][]) {
   const cols = grid[0]?.length || 5
   const start = findCell(grid, 'S')
   const finish = findCell(grid, 'F')
-  // Seed the Doors field with the number of doors already in the maze (so
-  // regenerating preserves the author's door count), falling back to 0.
+  // Seed the Doors / Enemies / Health fields with the counts already in the maze
+  // (so regenerating preserves the author's content), falling back to 0.
   // Spare Doors and Spare Keys default to 0 — the grid alone can't tell us
   // which `'D'` cells were decoys vs real path doors, so the safe default is
   // "no extras" and let the author opt in.
   const doors = grid.reduce((n, row) => n + row.filter(c => c === 'D').length, 0)
+  const enemies = grid.reduce((n, row) => n + row.filter(c => c === 'E').length, 0)
+  const healths = grid.reduce((n, row) => n + row.filter(c => c === 'H').length, 0)
   return {
     rows: String(rows),
     cols: String(cols),
@@ -41,6 +46,8 @@ function defaultsFromGrid(grid: string[][]) {
     doorCount: String(doors),
     spareDoors: '0',
     spareKeys: '0',
+    enemyCount: String(enemies),
+    healthCount: String(healths),
   }
 }
 
@@ -59,6 +66,8 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
   const [doorCount, setDoorCount] = useState(defaults.doorCount)
   const [spareDoors, setSpareDoors] = useState(defaults.spareDoors)
   const [spareKeys, setSpareKeys] = useState(defaults.spareKeys)
+  const [enemyCount, setEnemyCount] = useState(defaults.enemyCount)
+  const [healthCount, setHealthCount] = useState(defaults.healthCount)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   function handleSubmit(e: React.FormEvent) {
@@ -73,6 +82,8 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
     const doors = parseInt(doorCount, 10)
     const sdoors = parseInt(spareDoors, 10)
     const skeys = parseInt(spareKeys, 10)
+    const enemies = parseInt(enemyCount, 10)
+    const healths = parseInt(healthCount, 10)
 
     if (!Number.isInteger(r) || r < 3) {
       setValidationError('Rows must be a whole number of 3 or more.')
@@ -122,6 +133,14 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
       setValidationError(`Spare Keys must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
       return
     }
+    if (!Number.isInteger(enemies) || enemies < 0 || enemies > MAX_ENEMY_COUNT) {
+      setValidationError(`Enemies must be a whole number between 0 and ${MAX_ENEMY_COUNT}.`)
+      return
+    }
+    if (!Number.isInteger(healths) || healths < 0 || healths > MAX_HEALTH_COUNT) {
+      setValidationError(`Health must be a whole number between 0 and ${MAX_HEALTH_COUNT}.`)
+      return
+    }
     // Cross-field budget: each real door contributes one 'K' and one 'D' to
     // the generated grid, so the formula counts doors twice. The cap mirrors
     // the key-aware solver's MAX_TOTAL_FEATURES so a generated maze always
@@ -147,6 +166,8 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
       doorCount: doors,
       spareDoors: sdoors,
       spareKeys: skeys,
+      enemyCount: enemies,
+      healthCount: healths,
     })
   }
 
@@ -212,6 +233,16 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
             Spare Keys
             <input type="number" className="input" value={spareKeys} min={0} max={MAX_DOOR_COUNT}
               onChange={e => { setSpareKeys(e.target.value); setValidationError(null) }} />
+          </label>
+          <label>
+            Enemies
+            <input type="number" className="input" value={enemyCount} min={0} max={MAX_ENEMY_COUNT}
+              onChange={e => { setEnemyCount(e.target.value); setValidationError(null) }} />
+          </label>
+          <label>
+            Health
+            <input type="number" className="input" value={healthCount} min={0} max={MAX_HEALTH_COUNT}
+              onChange={e => { setHealthCount(e.target.value); setValidationError(null) }} />
           </label>
           {displayError && <p role="alert" className="error-msg">{displayError}</p>}
           <div className="modal-actions-row">

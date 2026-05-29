@@ -44,6 +44,8 @@ const GENERATE_OPTIONS: GenerateOptions = {
   doorCount: 0,
   spareDoors: 0,
   spareKeys: 0,
+  enemyCount: 0,
+  healthCount: 0,
 }
 
 // Trivially solvable 1×3 grid: S at (0,0), open at (0,1), F at (0,2).

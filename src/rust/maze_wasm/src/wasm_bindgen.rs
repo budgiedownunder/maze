@@ -1657,6 +1657,8 @@ impl MazeWasm {
     /// * `door_count` - Number of doors (each with one key) to auto-place (undefined = default 0)
     /// * `spare_doors` - Number of decoy doors planted on off-spine branches after solvability check (undefined = default 0)
     /// * `spare_keys` - Number of spare keys planted on off-spine branches after solvability check (undefined = default 0)
+    /// * `enemy_count` - Number of enemy cells to auto-place at random passable cells (undefined = default 0)
+    /// * `health_count` - Number of health-pickup cells to auto-place at random passable cells (undefined = default 0)
     ///
     /// # Returns
     ///
@@ -1682,6 +1684,8 @@ impl MazeWasm {
     ///             7,
     ///             5,
     ///             GenerationAlgorithmWasm.RecursiveBacktracking,
+    ///             undefined,
+    ///             undefined,
     ///             undefined,
     ///             undefined,
     ///             undefined,
@@ -1721,6 +1725,8 @@ impl MazeWasm {
         door_count: JsValue,
         spare_doors: JsValue,
         spare_keys: JsValue,
+        enemy_count: JsValue,
+        health_count: JsValue,
     ) -> Result<(), JsValue> {
         let row_count = Self::arg_to_usize("row_count", row_count)?;
         let col_count = Self::arg_to_usize("col_count", col_count)?;
@@ -1760,6 +1766,8 @@ impl MazeWasm {
         let door_count = Self::opt_arg_to_usize("door_count", door_count)?;
         let spare_doors = Self::opt_arg_to_usize("spare_doors", spare_doors)?;
         let spare_keys = Self::opt_arg_to_usize("spare_keys", spare_keys)?;
+        let enemy_count = Self::opt_arg_to_usize("enemy_count", enemy_count)?;
+        let health_count = Self::opt_arg_to_usize("health_count", health_count)?;
 
         let options = GeneratorOptions {
             row_count,
@@ -1774,8 +1782,8 @@ impl MazeWasm {
             door_count,
             spare_doors,
             spare_keys,
-            enemy_count: None,
-            health_count: None,
+            enemy_count,
+            health_count,
         };
 
         let maze = Generator { options }
