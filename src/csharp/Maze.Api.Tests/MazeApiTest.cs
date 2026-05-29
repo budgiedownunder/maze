@@ -1097,6 +1097,28 @@ namespace Maze.Api.Tests
         }
 
         /// <summary>
+        /// Pins <see cref="Maze.MaxEnemyCount"/> to 8 so the React-side
+        /// <c>MAX_ENEMY_COUNT</c> constant and the Rust-side
+        /// <c>maze::MAX_ENEMY_COUNT</c> stay in sync.
+        /// </summary>
+        [Fact]
+        public void MaxEnemyCount_IsEight()
+        {
+            Assert.Equal(8u, Maze.MaxEnemyCount);
+        }
+
+        /// <summary>
+        /// Pins <see cref="Maze.MaxHealthCount"/> to 8 so the React-side
+        /// <c>MAX_HEALTH_COUNT</c> constant and the Rust-side
+        /// <c>maze::MAX_HEALTH_COUNT</c> stay in sync.
+        /// </summary>
+        [Fact]
+        public void MaxHealthCount_IsEight()
+        {
+            Assert.Equal(8u, Maze.MaxHealthCount);
+        }
+
+        /// <summary>
         /// Confirms the budget formula <c>2 * doorCount + spareDoors + spareKeys</c>:
         /// at-cap is accepted, just-over is rejected.
         /// </summary>
@@ -1138,6 +1160,29 @@ namespace Maze.Api.Tests
             int kCount = json.Split('K').Length - 1;
             Assert.Equal(5, dCount); // 3 real + 2 spare doors
             Assert.Equal(4, kCount); // 3 real + 1 spare key
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> threads <c>EnemyCount</c>
+        /// and <c>HealthCount</c> through to the Rust generator by checking the
+        /// produced grid's `'E'` and `'H'` cell counts.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithEnemiesAndHealth_PlacesThemInTheProducedGrid()
+        {
+            using Maze maze = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 15,
+                ColCount = 15,
+                Seed = 123,
+                EnemyCount = 3,
+                HealthCount = 2,
+            });
+            string json = maze.ToJson();
+            int eCount = json.Split('E').Length - 1;
+            int hCount = json.Split('H').Length - 1;
+            Assert.Equal(3, eCount);
+            Assert.Equal(2, hCount);
         }
 
         /// <summary>

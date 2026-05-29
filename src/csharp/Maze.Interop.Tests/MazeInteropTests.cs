@@ -1092,6 +1092,35 @@ namespace Maze.Interop.Tests
         }
 
         /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetEnemyCount"/>
+        /// and <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetHealthCount"/>
+        /// produce a grid containing the requested `'E'` / `'H'` cell counts.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithEnemiesAndHealth_PlacesThemInTheProducedGrid()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(15, 15, MazeGenerationAlgorithm.RecursiveBacktracking, 123);
+            try
+            {
+                interop.GeneratorOptionsSetEnemyCount(optionsPtr, 3);
+                interop.GeneratorOptionsSetHealthCount(optionsPtr, 2);
+                interop.MazeGenerate(mazePtr, optionsPtr);
+                string json = interop.MazeToJson(mazePtr);
+                int eCount = json.Split('E').Length - 1;
+                int hCount = json.Split('H').Length - 1;
+                Assert.Equal(3, eCount);
+                Assert.Equal(2, hCount);
+            }
+            finally
+            {
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
+            }
+        }
+
+        /// <summary>
         /// Confirms that the generator's key + door cap (mirrored at the
         /// <c>Maze.MaxTotalFeatures</c> layer) surfaces as a thrown exception
         /// when the request would exceed it.

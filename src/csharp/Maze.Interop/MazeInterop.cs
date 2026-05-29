@@ -749,6 +749,25 @@ namespace Maze.Interop
             connector.GeneratorOptionsSetSpareKeys(optionsPtr, value);
         }
         /// <summary>
+        /// Sets the enemy_count on a <c>GeneratorOptions</c> (0 = none, the
+        /// default). Enemies auto-placed at random passable cells, clamped by
+        /// the generator to its enemy ceiling and the eligible-cell count.
+        /// </summary>
+        public void GeneratorOptionsSetEnemyCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetEnemyCount(optionsPtr, value);
+        }
+        /// <summary>
+        /// Sets the health_count on a <c>GeneratorOptions</c> (0 = none, the
+        /// default). Health pickups auto-placed at random passable cells,
+        /// clamped by the generator to its health ceiling and the eligible-cell
+        /// count.
+        /// </summary>
+        public void GeneratorOptionsSetHealthCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetHealthCount(optionsPtr, value);
+        }
+        /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails
         /// </summary>
         /// <param name="mazePtr">Pointer to maze</param>

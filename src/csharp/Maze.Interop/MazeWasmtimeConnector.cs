@@ -307,6 +307,8 @@ namespace Maze.Interop
             generatorOptionsSetDoorCount = ResolveFunction("generator_options_set_door_count");
             generatorOptionsSetSpareDoors = ResolveFunction("generator_options_set_spare_doors");
             generatorOptionsSetSpareKeys = ResolveFunction("generator_options_set_spare_keys");
+            generatorOptionsSetEnemyCount = ResolveFunction("generator_options_set_enemy_count");
+            generatorOptionsSetHealthCount = ResolveFunction("generator_options_set_health_count");
             mazeGenerate = ResolveFunction("maze_wasm_generate");
             freeGeneratorOptions = ResolveFunction("free_generator_options_wasm");
             newMazeGame = ResolveFunction("new_maze_game_wasm");

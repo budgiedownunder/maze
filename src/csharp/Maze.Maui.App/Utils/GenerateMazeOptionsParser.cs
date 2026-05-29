@@ -21,6 +21,8 @@ namespace Maze.Maui.App.Utils;
 /// <param name="DoorCount">Number of real path doors to auto-place (0 = none).</param>
 /// <param name="SpareDoors">Number of decoy doors to plant on off-spine branches (0 = none).</param>
 /// <param name="SpareKeys">Number of spare keys to plant on off-spine branches (0 = none).</param>
+/// <param name="EnemyCount">Number of enemies to auto-place at random passable cells (0 = none).</param>
+/// <param name="HealthCount">Number of health pickups to auto-place at random passable cells (0 = none).</param>
 internal sealed record ParsedGenerateOptions(
     uint Rows,
     uint Cols,
@@ -31,7 +33,9 @@ internal sealed record ParsedGenerateOptions(
     uint MinSolutionLength,
     uint DoorCount,
     uint SpareDoors,
-    uint SpareKeys);
+    uint SpareKeys,
+    uint EnemyCount,
+    uint HealthCount);
 
 /// <summary>
 /// Parses the string inputs from <see cref="Views.GenerateMazePopup"/>
@@ -59,6 +63,8 @@ internal static class GenerateMazeOptionsParser
     /// <param name="doorCountText">Doors entry text (number of real path doors; 0 = none).</param>
     /// <param name="spareDoorsText">Spare Doors entry text (number of decoy doors; 0 = none).</param>
     /// <param name="spareKeysText">Spare Keys entry text (number of spare keys; 0 = none).</param>
+    /// <param name="enemyCountText">Enemies entry text (number of enemies to auto-place; 0 = none).</param>
+    /// <param name="healthCountText">Health entry text (number of health pickups to auto-place; 0 = none).</param>
     /// <param name="maxMazeCells">Server-reported cell-count cap, or <c>null</c> if no cap.</param>
     /// <param name="parsed">The parsed options on success; <c>null</c> on failure.</param>
     /// <param name="error">An error message on failure; empty string on success.</param>
@@ -73,6 +79,8 @@ internal static class GenerateMazeOptionsParser
         string? doorCountText,
         string? spareDoorsText,
         string? spareKeysText,
+        string? enemyCountText,
+        string? healthCountText,
         int? maxMazeCells,
         out ParsedGenerateOptions? parsed,
         out string error)
@@ -114,9 +122,15 @@ internal static class GenerateMazeOptionsParser
         { error = "Min Solution Length must be a whole number of 1 or more."; return false; }
 
         // Key/door fields default to 0 when the entry text is null/empty (matches React's defaultsFromGrid).
-        if (!TryParseFeatureField(doorCountText, "Doors", out uint doorCount, out error)) return false;
-        if (!TryParseFeatureField(spareDoorsText, "Spare Doors", out uint spareDoors, out error)) return false;
-        if (!TryParseFeatureField(spareKeysText, "Spare Keys", out uint spareKeys, out error)) return false;
+        if (!TryParseFeatureField(doorCountText, "Doors", ApiMaze.MaxDoorCount, out uint doorCount, out error)) return false;
+        if (!TryParseFeatureField(spareDoorsText, "Spare Doors", ApiMaze.MaxDoorCount, out uint spareDoors, out error)) return false;
+        if (!TryParseFeatureField(spareKeysText, "Spare Keys", ApiMaze.MaxDoorCount, out uint spareKeys, out error)) return false;
+
+        // Enemies / Health default to 0 like the key/door fields and are bounded by their own caps.
+        // They don't participate in the combined key+door feature cap — they map to empty passages
+        // for the solver, so they don't affect the key-aware solve's feature budget.
+        if (!TryParseFeatureField(enemyCountText, "Enemies", ApiMaze.MaxEnemyCount, out uint enemyCount, out error)) return false;
+        if (!TryParseFeatureField(healthCountText, "Health", ApiMaze.MaxHealthCount, out uint healthCount, out error)) return false;
 
         // Combined key+door cap. Each real door contributes one key AND one door to the
         // grid, so the formula counts doors twice. Mirrors React's
@@ -141,17 +155,19 @@ internal static class GenerateMazeOptionsParser
             MinSolutionLength: minSolutionLength,
             DoorCount: doorCount,
             SpareDoors: spareDoors,
-            SpareKeys: spareKeys);
+            SpareKeys: spareKeys,
+            EnemyCount: enemyCount,
+            HealthCount: healthCount);
         return true;
     }
 
     /// <summary>
-    /// Parses one of the three key/door number fields against the shared
-    /// <see cref="ApiMaze.MaxDoorCount"/> per-field bound. A null/empty entry
-    /// is treated as 0 (the React modal seeds spare fields to "0" by
-    /// default, but the user can also clear them).
+    /// Parses one of the generator count fields against its per-field
+    /// <paramref name="maxValue"/> bound. A null/empty entry is treated as 0
+    /// (the React modal seeds these fields to "0" by default, but the user
+    /// can also clear them).
     /// </summary>
-    private static bool TryParseFeatureField(string? text, string fieldName, out uint value, out string error)
+    private static bool TryParseFeatureField(string? text, string fieldName, uint maxValue, out uint value, out string error)
     {
         string trimmed = text?.Trim() ?? string.Empty;
         if (trimmed.Length == 0)
@@ -160,9 +176,9 @@ internal static class GenerateMazeOptionsParser
             error = string.Empty;
             return true;
         }
-        if (!uint.TryParse(trimmed, out value) || value > ApiMaze.MaxDoorCount)
+        if (!uint.TryParse(trimmed, out value) || value > maxValue)
         {
-            error = $"{fieldName} must be a whole number between 0 and {ApiMaze.MaxDoorCount}.";
+            error = $"{fieldName} must be a whole number between 0 and {maxValue}.";
             return false;
         }
         error = string.Empty;

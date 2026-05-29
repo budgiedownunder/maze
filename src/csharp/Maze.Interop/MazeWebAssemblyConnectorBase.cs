@@ -110,6 +110,8 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? generatorOptionsSetDoorCount;
         protected IWebAssemblyFunction? generatorOptionsSetSpareDoors;
         protected IWebAssemblyFunction? generatorOptionsSetSpareKeys;
+        protected IWebAssemblyFunction? generatorOptionsSetEnemyCount;
+        protected IWebAssemblyFunction? generatorOptionsSetHealthCount;
         protected IWebAssemblyFunction? mazeGenerate;
         protected IWebAssemblyFunction? freeGeneratorOptions;
         protected IWebAssemblyFunction? newMazeGame;
@@ -627,6 +629,20 @@ namespace Maze.Interop
         public void GeneratorOptionsSetSpareKeys(UIntPtr optionsPtr, UInt32 value)
         {
             generatorOptionsSetSpareKeys?.Invoke((long)(uint)optionsPtr, value);
+        }
+        /// <summary>Sets the enemy_count on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of enemies to auto-place at random passable cells (0 = none)</param>
+        public void GeneratorOptionsSetEnemyCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetEnemyCount?.Invoke((long)(uint)optionsPtr, value);
+        }
+        /// <summary>Sets the health_count on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of health pickups to auto-place at random passable cells (0 = none)</param>
+        public void GeneratorOptionsSetHealthCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetHealthCount?.Invoke((long)(uint)optionsPtr, value);
         }
         /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails

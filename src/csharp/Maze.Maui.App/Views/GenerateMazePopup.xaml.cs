@@ -63,12 +63,15 @@ namespace Maze.Maui.App.Views
         /// <param name="doorCount">Default number of real path doors to auto-place (0 = none)</param>
         /// <param name="spareDoors">Default number of decoy doors to plant (0 = none)</param>
         /// <param name="spareKeys">Default number of spare keys to plant (0 = none)</param>
+        /// <param name="enemyCount">Default number of enemies to auto-place (0 = none)</param>
+        /// <param name="healthCount">Default number of health pickups to auto-place (0 = none)</param>
         /// <param name="maxMazeCells">Server-reported cell-count cap (<c>AppFeatures.MaxMazeCells</c>); <c>null</c> means no cap</param>
         /// <param name="generationError">Optional error message from a previous generation attempt, displayed inline</param>
         public GenerateMazePopup(uint rows, uint cols,
             uint startRow, uint startCol, uint finishRow, uint finishCol,
             uint minSolutionLength,
             uint doorCount = 0, uint spareDoors = 0, uint spareKeys = 0,
+            uint enemyCount = 0, uint healthCount = 0,
             int? maxMazeCells = null, string? generationError = null)
         {
             InitializeComponent();
@@ -88,6 +91,9 @@ namespace Maze.Maui.App.Views
             DoorCountEntry.Text = doorCount.ToString();
             SpareDoorsEntry.Text = spareDoors.ToString();
             SpareKeysEntry.Text = spareKeys.ToString();
+
+            EnemyCountEntry.Text = enemyCount.ToString();
+            HealthCountEntry.Text = healthCount.ToString();
 
             if (generationError is not null)
             {
@@ -235,6 +241,8 @@ namespace Maze.Maui.App.Views
                 doorCountText: DoorCountEntry.Text,
                 spareDoorsText: SpareDoorsEntry.Text,
                 spareKeysText: SpareKeysEntry.Text,
+                enemyCountText: EnemyCountEntry.Text,
+                healthCountText: HealthCountEntry.Text,
                 maxMazeCells: _maxMazeCells,
                 out var parsed,
                 out error))
@@ -255,6 +263,8 @@ namespace Maze.Maui.App.Views
                 DoorCount = parsed.DoorCount,
                 SpareDoors = parsed.SpareDoors,
                 SpareKeys = parsed.SpareKeys,
+                EnemyCount = parsed.EnemyCount,
+                HealthCount = parsed.HealthCount,
             };
             return true;
         }

@@ -137,6 +137,18 @@ namespace Maze.Api
             /// When null, defaults to 0.
             /// </summary>
             public UInt32? SpareKeys { get; set; }
+            /// <summary>
+            /// Number of enemies to auto-place at random passable cells. When
+            /// null, defaults to 0. Clamped by the generator to
+            /// <see cref="MaxEnemyCount"/> and to the eligible-cell count.
+            /// </summary>
+            public UInt32? EnemyCount { get; set; }
+            /// <summary>
+            /// Number of health pickups to auto-place at random passable cells.
+            /// When null, defaults to 0. Clamped by the generator to
+            /// <see cref="MaxHealthCount"/> and to the eligible-cell count.
+            /// </summary>
+            public UInt32? HealthCount { get; set; }
         }
         /// <summary>
         /// Maximum combined count of key and door cells any maze may carry.
@@ -153,6 +165,20 @@ namespace Maze.Api
         /// rule in <see cref="ExceedsGenerateFeatureCap"/> never has to handle silly inputs.
         /// </summary>
         public const UInt32 MaxDoorCount = 8;
+        /// <summary>
+        /// Maximum value accepted by <see cref="GenerationOptions.EnemyCount"/>.
+        /// Mirrors <c>maze::MAX_ENEMY_COUNT</c> on the Rust side; the generator
+        /// clamps requests to this internally and per-field UI validation
+        /// rejects above-cap requests up front.
+        /// </summary>
+        public const UInt32 MaxEnemyCount = 8;
+        /// <summary>
+        /// Maximum value accepted by <see cref="GenerationOptions.HealthCount"/>.
+        /// Mirrors <c>maze::MAX_HEALTH_COUNT</c> on the Rust side; the generator
+        /// clamps requests to this internally and per-field UI validation
+        /// rejects above-cap requests up front.
+        /// </summary>
+        public const UInt32 MaxHealthCount = 8;
         /// <summary>
         /// Returns <c>true</c> when a Generate request's planned key + door cell
         /// count would exceed <see cref="MaxTotalFeatures"/>. Each real door
@@ -248,6 +274,10 @@ namespace Maze.Api
                         Interop.GeneratorOptionsSetSpareDoors(optionsPtr, options.SpareDoors.Value);
                     if (options.SpareKeys.HasValue)
                         Interop.GeneratorOptionsSetSpareKeys(optionsPtr, options.SpareKeys.Value);
+                    if (options.EnemyCount.HasValue)
+                        Interop.GeneratorOptionsSetEnemyCount(optionsPtr, options.EnemyCount.Value);
+                    if (options.HealthCount.HasValue)
+                        Interop.GeneratorOptionsSetHealthCount(optionsPtr, options.HealthCount.Value);
                     Interop.MazeGenerate(maze._mazePtr, optionsPtr);
                 }
                 finally

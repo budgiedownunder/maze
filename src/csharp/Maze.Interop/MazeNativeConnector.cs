@@ -56,6 +56,8 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_door_count(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_spare_doors(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_spare_keys(IntPtr ptr, UInt32 value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_enemy_count(IntPtr ptr, UInt32 value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_health_count(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern byte maze_c_maze_generate(IntPtr mazePtr, IntPtr optsPtr);
         [DllImport("__Internal")] private static extern IntPtr maze_c_new_maze_game([MarshalAs(UnmanagedType.LPUTF8Str)] string json);
         [DllImport("__Internal")] private static extern void   maze_c_free_maze_game(IntPtr ptr);
@@ -318,6 +320,16 @@ namespace Maze.Interop
         public void GeneratorOptionsSetSpareKeys(UIntPtr optionsPtr, UInt32 value)
         {
             maze_c_generator_options_set_spare_keys((IntPtr)(ulong)optionsPtr, value);
+        }
+
+        public void GeneratorOptionsSetEnemyCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_enemy_count((IntPtr)(ulong)optionsPtr, value);
+        }
+
+        public void GeneratorOptionsSetHealthCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_health_count((IntPtr)(ulong)optionsPtr, value);
         }
 
         public void MazeGenerate(UIntPtr mazePtr, UIntPtr optionsPtr)

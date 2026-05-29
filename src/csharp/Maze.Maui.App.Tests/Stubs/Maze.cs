@@ -63,6 +63,8 @@ namespace Maze.Api
 
         public const UInt32 MaxTotalFeatures = 16;
         public const UInt32 MaxDoorCount = 8;
+        public const UInt32 MaxEnemyCount = 8;
+        public const UInt32 MaxHealthCount = 8;
         public static bool ExceedsGenerateFeatureCap(UInt32 doorCount, UInt32 spareDoors, UInt32 spareKeys)
             => 2 * doorCount + spareDoors + spareKeys > MaxTotalFeatures;
 

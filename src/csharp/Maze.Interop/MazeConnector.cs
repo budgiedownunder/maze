@@ -260,6 +260,14 @@ namespace Maze.Interop
         /// <param name="optionsPtr">Pointer to the generator options</param>
         /// <param name="value">Number of spare keys to place</param>
         public void GeneratorOptionsSetSpareKeys(UIntPtr optionsPtr, UInt32 value);
+        /// <summary>Sets the number of enemies to auto-place at random passable cells (0 = none, the default)</summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of enemies to place</param>
+        public void GeneratorOptionsSetEnemyCount(UIntPtr optionsPtr, UInt32 value);
+        /// <summary>Sets the number of health pickups to auto-place at random passable cells (0 = none, the default)</summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of health pickups to place</param>
+        public void GeneratorOptionsSetHealthCount(UIntPtr optionsPtr, UInt32 value);
         /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails
         /// </summary>

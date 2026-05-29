@@ -44,6 +44,7 @@ pub struct MazeC {
 /// - `max_retries`: `0` = use default (100)
 /// - `branch_from_finish`: `0` = false (default), `1` = true
 /// - `door_count` / `spare_doors` / `spare_keys`: `0` = none (default)
+/// - `enemy_count` / `health_count`: `0` = none (default)
 ///
 /// # Examples
 ///
@@ -73,6 +74,8 @@ pub struct MazeCGeneratorOptions {
     pub door_count: u32,
     pub spare_doors: u32,
     pub spare_keys: u32,
+    pub enemy_count: u32,
+    pub health_count: u32,
 }
 
 /// Opaque game session handle, exposed to C# via P/Invoke.
@@ -1439,6 +1442,8 @@ pub extern "C" fn maze_c_new_generator_options(
         door_count: 0,
         spare_doors: 0,
         spare_keys: 0,
+        enemy_count: 0,
+        health_count: 0,
     });
     increment_num_objects_allocated();
     Box::into_raw(opts)
@@ -1687,6 +1692,63 @@ pub extern "C" fn maze_c_generator_options_set_spare_keys(
     opts.spare_keys = value;
 }
 
+/// Sets the number of enemies to auto-place at random passable cells.
+///
+/// `0` (the default) places none. The generator clamps the request to
+/// `maze::MAX_ENEMY_COUNT` and to the number of eligible cells. Enemies
+/// never spawn on the start, finish, the cells immediately around the
+/// start, or any key / door / enemy / health cell.
+///
+/// # Examples
+///
+/// Create generator options and set the enemy count to 3.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_enemy_count(opts, 3);
+/// assert_eq!(unsafe { (*opts).enemy_count }, 3);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_enemy_count(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.enemy_count = value;
+}
+
+/// Sets the number of health pickups to auto-place at random passable cells.
+///
+/// `0` (the default) places none. The generator clamps the request to
+/// `maze::MAX_HEALTH_COUNT` and to the number of eligible cells, using the
+/// same eligibility rules as enemy placement.
+///
+/// # Examples
+///
+/// Create generator options and set the health-pickup count to 2.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_health_count(opts, 2);
+/// assert_eq!(unsafe { (*opts).health_count }, 2);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_health_count(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.health_count = value;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Maze generation
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1774,8 +1836,8 @@ pub extern "C" fn maze_c_maze_generate(
         door_count: Some(opts.door_count as usize),
         spare_doors: Some(opts.spare_doors as usize),
         spare_keys: Some(opts.spare_keys as usize),
-        enemy_count: None,
-        health_count: None,
+        enemy_count: Some(opts.enemy_count as usize),
+        health_count: Some(opts.health_count as usize),
     };
 
     let generator = Generator {
@@ -3512,6 +3574,32 @@ mod tests {
         unsafe {
             maze_c_free_maze_solution(sol);
         }
+        maze_c_free_generator_options(opts);
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn generate_maze_places_enemies_and_health() {
+        let ptr = new_maze();
+        let opts = maze_c_new_generator_options(15, 15, 0, 123);
+        maze_c_generator_options_set_enemy_count(opts, 3);
+        maze_c_generator_options_set_health_count(opts, 2);
+        let ok = maze_c_maze_generate(ptr, opts);
+        assert_eq!(ok, 1, "generate failed: {:?}", last_error_str());
+        let mw = unsafe { &*ptr };
+        let mut enemies = 0;
+        let mut health = 0;
+        for row in &mw.maze.definition.grid {
+            for &ch in row {
+                match ch {
+                    'E' => enemies += 1,
+                    'H' => health += 1,
+                    _ => {}
+                }
+            }
+        }
+        assert_eq!(enemies, 3, "expected 3 enemy cells");
+        assert_eq!(health, 2, "expected 2 health cells");
         maze_c_free_generator_options(opts);
         unsafe { maze_c_free_maze(ptr) };
     }

@@ -515,11 +515,15 @@ namespace Maze.Maui.App.Views
                 // is "no extras" and let the author opt in.
                 uint doorCount = current.IsEmpty ? 0 : MazeCellCounter.CountCellsOfType(current, Maze.CellType.Door);
                 uint spareDoors = 0, spareKeys = 0;
+                // Enemies / Health default to 0 — regenerating from an existing
+                // maze doesn't preserve their count (the safe default is "none",
+                // and the author opts in each time).
+                uint enemyCount = 0, healthCount = 0;
                 string? generationError = null;
 
                 while (true)
                 {
-                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, doorCount, spareDoors, spareKeys, _appFeaturesService.Features.MaxMazeCells, generationError);
+                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, doorCount, spareDoors, spareKeys, enemyCount, healthCount, _appFeaturesService.Features.MaxMazeCells, generationError);
                     IPopupResult<Maze.GenerationOptions?> result = await this.ShowPopupAsync<Maze.GenerationOptions?>(popup);
 
                     if (result.WasDismissedByTappingOutsideOfPopup || result.Result is not Maze.GenerationOptions popupOptions)
@@ -538,6 +542,8 @@ namespace Maze.Maui.App.Views
                         DoorCount = popupOptions.DoorCount,
                         SpareDoors = popupOptions.SpareDoors,
                         SpareKeys = popupOptions.SpareKeys,
+                        EnemyCount = popupOptions.EnemyCount,
+                        HealthCount = popupOptions.HealthCount,
                     };
 
                     bool generationSucceeded = false;
@@ -568,6 +574,8 @@ namespace Maze.Maui.App.Views
                         doorCount = popupOptions.DoorCount ?? doorCount;
                         spareDoors = popupOptions.SpareDoors ?? spareDoors;
                         spareKeys = popupOptions.SpareKeys ?? spareKeys;
+                        enemyCount = popupOptions.EnemyCount ?? enemyCount;
+                        healthCount = popupOptions.HealthCount ?? healthCount;
                     }
                     finally
                     {

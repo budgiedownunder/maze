@@ -761,6 +761,7 @@ fn ptr_to_string(ptr: *const u8) -> String {
 /// - max_retries:          `0`        = use default (100)
 /// - branch_from_finish:   `0` = false (default), `1` = true
 /// - door_count / spare_doors / spare_keys: `0` = none (default)
+/// - enemy_count / health_count: `0` = none (default)
 #[cfg(feature = "wasm-lite")]
 #[repr(C)]
 pub struct GeneratorOptionsWasm {
@@ -778,6 +779,8 @@ pub struct GeneratorOptionsWasm {
     pub door_count:         u32,
     pub spare_doors:        u32,
     pub spare_keys:         u32,
+    pub enemy_count:        u32,
+    pub health_count:       u32,
 }
 /// Creates a new `GeneratorOptionsWasm` with the given required fields and default optional fields.
 ///
@@ -807,6 +810,8 @@ pub extern "C" fn new_generator_options_wasm(
         door_count:         0,
         spare_doors:        0,
         spare_keys:         0,
+        enemy_count:        0,
+        health_count:       0,
     });
     increment_num_objects_allocated();
     Box::into_raw(opts)
@@ -880,6 +885,26 @@ pub extern "C" fn generator_options_set_spare_keys(ptr: *mut GeneratorOptionsWas
     let opts = unsafe { &mut *ptr };
     opts.spare_keys = value;
 }
+/// Sets the number of enemies to auto-place at random passable cells
+/// (`0` = none, the default). Clamped by the generator to
+/// `maze::MAX_ENEMY_COUNT` and to the number of eligible cells.
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_enemy_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.enemy_count = value;
+}
+/// Sets the number of health pickups to auto-place at random passable cells
+/// (`0` = none, the default). Clamped by the generator to
+/// `maze::MAX_HEALTH_COUNT` and to the number of eligible cells.
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_health_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.health_count = value;
+}
 /// Generates a maze, populating the given `MazeWasm`.
 ///
 /// # Returns
@@ -922,8 +947,8 @@ pub extern "C" fn maze_wasm_generate(
         door_count: Some(opts.door_count as usize),
         spare_doors: Some(opts.spare_doors as usize),
         spare_keys: Some(opts.spare_keys as usize),
-        enemy_count: None,
-        health_count: None,
+        enemy_count: Some(opts.enemy_count as usize),
+        health_count: Some(opts.health_count as usize),
     };
 
     let generator = Generator { options: generator_options };

@@ -943,6 +943,8 @@ hasResult)
                 { "generator_options_set_door_count", () => ref this.generatorOptionsSetDoorCount },
                 { "generator_options_set_spare_doors", () => ref this.generatorOptionsSetSpareDoors },
                 { "generator_options_set_spare_keys", () => ref this.generatorOptionsSetSpareKeys },
+                { "generator_options_set_enemy_count", () => ref this.generatorOptionsSetEnemyCount },
+                { "generator_options_set_health_count", () => ref this.generatorOptionsSetHealthCount },
                 { "maze_wasm_generate", () => ref this.mazeGenerate },
                 { "free_generator_options_wasm", () => ref this.freeGeneratorOptions },
                 { "new_maze_game_wasm",              () => ref this.newMazeGame },
