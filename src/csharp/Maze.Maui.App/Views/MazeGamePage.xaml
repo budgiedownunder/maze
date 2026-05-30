@@ -12,7 +12,7 @@ x:DataType="viewmodel:MazeGameViewModel"
          the very bottom (hidden on Windows). Mirrors React: the bag
          strip sits directly under the grid above the dpad, with
          centred text and no background tint. -->
-    <Grid RowDefinitions="*,Auto,Auto">
+    <Grid RowDefinitions="*,Auto,Auto,Auto">
 
         <!-- Maze area -->
         <Grid Grid.Row="0">
@@ -122,6 +122,20 @@ x:DataType="viewmodel:MazeGameViewModel"
                     Padding="8"
                     Command="{Binding PickupCommand}"/>
         </Grid>
+
+        <!-- Keyboard legend, shown on desktop only (code-behind). Mirrors the
+             React 2D game's shortcuts hint. -->
+        <Label x:Name="ShortcutsHint"
+               Grid.Row="3"
+               IsVisible="False"
+               VerticalOptions="End"
+               HorizontalOptions="Fill"
+               Padding="10,6"
+               FontFamily="Courier New"
+               FontSize="12"
+               LineBreakMode="WordWrap"
+               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+               Text="[&#8593;/W] Up    [&#8595;/S] Down    [&#8592;/A] Left    [&#8594;/D] Right    [E] Pick up" />
 
     </Grid>
 

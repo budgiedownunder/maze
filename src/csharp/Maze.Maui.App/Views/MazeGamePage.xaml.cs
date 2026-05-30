@@ -1,6 +1,7 @@
 using Maze.Api;
 using Maze.Maui.App.ViewModels;
 using Maze.Maui.Controls.Pointer;
+using Maze.Maui.Services;
 
 namespace Maze.Maui.App.Views
 {
@@ -16,6 +17,7 @@ namespace Maze.Maui.App.Views
         private const int TickIntervalMs = 16; // ~60Hz; drives door-opening animation
 
         private readonly MazeGameViewModel _viewModel;
+        private readonly IDeviceTypeService _deviceTypeService;
         private bool _gameStarted = false;
         private IDispatcherTimer? _dpadTimer;
         private IDispatcherTimer? _tickTimer;
@@ -28,10 +30,12 @@ namespace Maze.Maui.App.Views
         /// Constructor
         /// </summary>
         /// <param name="viewModel">Injected game view model</param>
-        public MazeGamePage(MazeGameViewModel viewModel)
+        /// <param name="deviceTypeService">Injected device type service (drives the desktop-only keyboard legend)</param>
+        public MazeGamePage(MazeGameViewModel viewModel, IDeviceTypeService deviceTypeService)
         {
             InitializeComponent();
             _viewModel = viewModel;
+            _deviceTypeService = deviceTypeService;
             BindingContext = viewModel;
         }
 
@@ -60,6 +64,9 @@ namespace Maze.Maui.App.Views
                 {
                     SetBusyIndicators(false);
                     DpadGrid.IsVisible = DeviceInfo.Platform != DevicePlatform.WinUI;
+                    // The keyboard legend is only useful where a physical keyboard
+                    // drives the game, so it shows on non-touch (desktop) devices.
+                    ShortcutsHint.IsVisible = !_deviceTypeService.IsTouchOnlyDevice();
                     BagStack.IsVisible = true;
                 }
             });
