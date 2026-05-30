@@ -84,6 +84,25 @@ test.describe('MazeGamePage', () => {
     await expect(page.getByText('You died!')).toBeVisible()
   })
 
+  test('Play Again on the result popup restarts the maze', async ({ page }) => {
+    // Die on the gauntlet, then Play Again restarts: the popup closes and HP is
+    // back to full (3/3) on a fresh game from the same definition.
+    await page.goto('/play/maze-enemy-gauntlet')
+    await expect(page.getByAltText('Player')).toBeVisible()
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.press('ArrowRight')
+      await page.waitForTimeout(150)
+    }
+    await expect(page.getByText('You died!')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Play Again' }).click()
+
+    await expect(page.getByText('You died!')).toBeHidden()
+    const hpHud = page.getByLabel('Health')
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(0)
+  })
+
   test('enemies keep advancing on their move period while the player presses keys (tick loop not reset by moves)', async ({ page }) => {
     // EnemyGauntlet grid ['S','E','E','E','F']: the player starts at column 0
     // with an enemy on the adjacent cell. Pressing ArrowLeft is blocked at the

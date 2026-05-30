@@ -3,15 +3,16 @@ import { useEffect, useRef } from 'react'
 interface Props {
   message: string
   /**
-   * Visual tone. `'success'` (default) shows the celebration GIF. `'fail'`
-   * skips the celebration and uses a muted-red heading so the popup reads as
-   * a loss without a separate "sad" asset.
+   * Visual tone. `'success'` shows the celebration GIF; `'fail'` shows the
+   * game-over (skull) image with a muted-red heading.
    */
   tone?: 'success' | 'fail'
   onClose: () => void
+  /** When provided, a "Play Again" button restarts the current maze. */
+  onPlayAgain?: () => void
 }
 
-export function GameResultPopup({ message, tone = 'success', onClose }: Props) {
+export function GameResultPopup({ message, tone = 'success', onClose, onPlayAgain }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -28,9 +29,12 @@ export function GameResultPopup({ message, tone = 'success', onClose }: Props) {
       onCancel={handleCancel}
       style={{ borderRadius: 12, padding: 24, border: 'none', textAlign: 'center', maxWidth: 360 }}
     >
-      {tone === 'success' && (
-        <img src="/images/maze/celebrate.gif" alt="Celebration" width={200} height={200} />
-      )}
+      <img
+        src={tone === 'fail' ? '/images/maze/game_over.png' : '/images/maze/celebrate.gif'}
+        alt={tone === 'fail' ? 'Game over' : 'Celebration'}
+        width={200}
+        height={200}
+      />
       <p
         style={{
           fontSize: tone === 'fail' ? 24 : 16,
@@ -41,7 +45,12 @@ export function GameResultPopup({ message, tone = 'success', onClose }: Props) {
       >
         {message}
       </p>
-      <button type="button" onClick={onClose} className="btn-gray" style={{ width: '100%' }}>Close</button>
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <button type="button" onClick={onClose} className="btn-gray" style={{ flex: 1 }}>Close</button>
+        {onPlayAgain && (
+          <button type="button" onClick={onPlayAgain} className="btn-primary" style={{ flex: 1 }}>Play Again</button>
+        )}
+      </div>
     </dialog>
   )
 }

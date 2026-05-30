@@ -53,10 +53,11 @@ namespace Maze.Maui.App.Services
         /// </summary>
         /// <param name="message">Message</param>
         /// <returns>A task that completes when the popup is dismissed</returns>
-        public async Task ShowGameResult(string message)
+        public async Task<bool> ShowGameResult(string message, bool won)
         {
-            var popup = new Views.GameResultPopup(message);
-            await Shell.Current.CurrentPage.ShowPopupAsync(popup);
+            var popup = new Views.GameResultPopup(message, won);
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<bool>(popup);
+            return result.Result;
         }
 
         /// <summary>

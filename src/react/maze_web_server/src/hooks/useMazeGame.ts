@@ -23,6 +23,7 @@ export interface MazeGameHookState {
 
 type LoadResult = {
   key: string
+  nonce: number
   game: MazeGameWasm | null
   error: string | null
   version: number
@@ -31,8 +32,12 @@ type LoadResult = {
 
 export function useMazeGame(
   definitionJson: string | null
-): [MazeGameHookState, (dir: MazeGameDirection) => void, () => void] {
+): [MazeGameHookState, (dir: MazeGameDirection) => void, () => void, () => void] {
   const [loadResult, setLoadResult] = useState<LoadResult | null>(null)
+  // Bumped by restart() to force the effect to free and recreate the game from
+  // the same definition. Part of the match key so the old (freed) game is never
+  // read during the recreate window.
+  const [restartNonce, setRestartNonce] = useState(0)
   const gameRef = useRef<MazeGameWasm | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTickAtRef = useRef<number>(0)
@@ -41,11 +46,12 @@ export function useMazeGame(
   const MOVE_INTERVAL_MS = 120
 
   // Render-time derivation: only honor loadResult while it matches the current
-  // definitionJson. When definitionJson changes, the prior result is stale
-  // until the effect produces a new one — render as loading in the meantime.
-  // Computing this here (instead of resetting state synchronously inside the
-  // effect) is what keeps the effect free of set-state-in-effect violations.
-  const matches = loadResult !== null && loadResult.key === definitionJson
+  // definitionJson AND restart generation. When either changes, the prior result
+  // is stale until the effect produces a new one — render as loading in the
+  // meantime. Computing this here (instead of resetting state synchronously
+  // inside the effect) is what keeps the effect free of set-state-in-effect
+  // violations.
+  const matches = loadResult !== null && loadResult.key === definitionJson && loadResult.nonce === restartNonce
   const game = matches ? loadResult!.game : null
   const error = matches ? loadResult!.error : null
   const version = matches ? loadResult!.version : 0
@@ -102,23 +108,24 @@ export function useMazeGame(
     if (!definitionJson) return
     let cancelled = false
     const key = definitionJson
+    const nonce = restartNonce
     createMazeGame(definitionJson).then(newGame => {
       if (cancelled) { freeMazeGame(newGame); return }
       gameRef.current = newGame
       lastTickAtRef.current = performance.now()
-      setLoadResult({ key, game: newGame, error: null, version: 0, damageFlashKey: 0 })
+      setLoadResult({ key, nonce, game: newGame, error: null, version: 0, damageFlashKey: 0 })
       // A fresh game with enemies or opening doors already has a non-null
       // time-to-next-event — schedule the first wake.
       scheduleWake()
     }).catch((err: Error) => {
-      if (!cancelled) setLoadResult({ key, game: null, error: err.message, version: 0, damageFlashKey: 0 })
+      if (!cancelled) setLoadResult({ key, nonce, game: null, error: err.message, version: 0, damageFlashKey: 0 })
     })
     return () => {
       cancelled = true
       stopTickLoop()
       if (gameRef.current) { freeMazeGame(gameRef.current); gameRef.current = null }
     }
-  }, [definitionJson, scheduleWake, stopTickLoop])
+  }, [definitionJson, restartNonce, scheduleWake, stopTickLoop])
 
   const move = useCallback((dir: MazeGameDirection) => {
     if (!gameRef.current) return
@@ -152,5 +159,13 @@ export function useMazeGame(
     }
   }, [])
 
-  return [{ game, version, loading, error, damageFlashKey }, move, pickup]
+  // Restart the current maze from the beginning. Bumping the nonce re-runs the
+  // load effect, which frees the existing game and recreates it from the same
+  // definition; the nonce in the match key keeps the freed game from rendering
+  // during the recreate window.
+  const restart = useCallback(() => {
+    setRestartNonce(n => n + 1)
+  }, [])
+
+  return [{ game, version, loading, error, damageFlashKey }, move, pickup, restart]
 }

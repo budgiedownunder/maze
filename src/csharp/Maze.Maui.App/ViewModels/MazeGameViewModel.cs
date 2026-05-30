@@ -238,18 +238,18 @@ namespace Maze.Maui.App.ViewModels
             {
                 IsLost = true;
                 LoseReason = _game.LoseReason;
-                await ShowResultPopup("You died!");
+                await ShowResultPopup("You died!", won: false);
             }
             else if (result == MazeGameMoveResult.Stranded)
             {
                 IsLost = true;
                 LoseReason = _game.LoseReason;
-                await ShowResultPopup("You're stranded!!");
+                await ShowResultPopup("You're stranded!!", won: false);
             }
             else if (result == MazeGameMoveResult.Complete)
             {
                 _gameGrid.SetPlayerCelebrate(_game.PlayerRow, _game.PlayerCol);
-                await ShowResultPopup("You win!");
+                await ShowResultPopup("You win!", won: true);
             }
         }
 
@@ -291,7 +291,7 @@ namespace Maze.Maui.App.ViewModels
             {
                 IsLost = true;
                 LoseReason = _game.LoseReason;
-                _ = ShowResultPopup("You died!");
+                _ = ShowResultPopup("You died!", won: false);
                 return false;
             }
             // Keep ticking while enemies exist (fixed-cadence movement) or a door is
@@ -345,17 +345,22 @@ namespace Maze.Maui.App.ViewModels
             CanPickup = false;
         }
 
-        private async Task ShowResultPopup(string message)
+        private async Task ShowResultPopup(string message, bool won)
         {
             IsShowingResultPopup = true;
+            bool playAgain;
             try
             {
-                await _dialogService.ShowGameResult(message);
+                playAgain = await _dialogService.ShowGameResult(message, won);
             }
             finally
             {
                 IsShowingResultPopup = false;
             }
+            // Play Again restarts the current maze from the beginning, reusing the
+            // same grid view the session was started with.
+            if (playAgain && _gameGrid is not null)
+                StartGame(_gameGrid);
         }
 
         private void RefreshPickupAvailability()

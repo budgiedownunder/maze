@@ -35,7 +35,7 @@ export function MazeGamePage() {
   const gameCellSize = window.matchMedia('(pointer: coarse)').matches ? 60 : 32
 
   const definitionJson = maze ? JSON.stringify(maze.definition) : null
-  const [{ game, version, loading, error, damageFlashKey }, move, pickup] = useMazeGame(definitionJson)
+  const [{ game, version, loading, error, damageFlashKey }, move, pickup, restart] = useMazeGame(definitionJson)
 
   // Bag contents and whether the player is standing on an uncollected key —
   // recomputed whenever the game advances (version bump).
@@ -200,6 +200,7 @@ export function MazeGamePage() {
                 message={resultMessage}
                 tone={isLost ? 'fail' : 'success'}
                 onClose={() => setShowResult(false)}
+                onPlayAgain={() => { setShowResult(false); restart() }}
               />
             )}
           </>

@@ -255,7 +255,7 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             Assert.True(vm.IsLost);
             Assert.Equal(LoseReason.Stranded, vm.LoseReason);
-            dialog.Verify(d => d.ShowGameResult("You're stranded!!"), Times.Once);
+            dialog.Verify(d => d.ShowGameResult("You're stranded!!", false), Times.Once);
         }
 
         [Fact]
@@ -272,7 +272,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             vm.Move(MazeGameDirection.Right);
 
             grid.Verify(g => g.SetVisitedDotAt(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
-            dialog.Verify(d => d.ShowGameResult(It.IsAny<string>()), Times.Never);
+            dialog.Verify(d => d.ShowGameResult(It.IsAny<string>(), It.IsAny<bool>()), Times.Never);
         }
 
         // ---- Enemies / HP -------------------------------------------------
@@ -375,7 +375,33 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             Assert.True(vm.IsLost);
             Assert.Equal(LoseReason.Killed, vm.LoseReason);
-            dialog.Verify(d => d.ShowGameResult("You died!"), Times.Once);
+            dialog.Verify(d => d.ShowGameResult("You died!", false), Times.Once);
+        }
+
+        [Fact]
+        public void ResultPopup_PlayAgain_RestartsTheGame()
+        {
+            var (vm, dialog, grid) = BuildVm();
+            // The result popup resolves to true → the player chose Play Again.
+            dialog.Setup(d => d.ShowGameResult(It.IsAny<string>(), It.IsAny<bool>())).ReturnsAsync(true);
+            vm.MazeItem = ItemWithDefinition();
+            MazeGame stub = MazeGame.CreateForTests();
+            stub.Hp = 1;
+            stub.MaxHp = 3;
+            MazeGameViewModel.GameFactory = _ => stub;
+            try
+            {
+                vm.StartGame(grid.Object);                 // BeginGameRuntime #1
+                stub.NextMoveResult = MazeGameMoveResult.Killed;
+                stub.LoseReason = LoseReason.Killed;
+                vm.Move(MazeGameDirection.Right);          // death → Play Again → StartGame restart → BeginGameRuntime #2
+            }
+            finally
+            {
+                MazeGameViewModel.GameFactory = null;
+            }
+
+            grid.Verify(g => g.BeginGameRuntime(), Times.Exactly(2));
         }
     }
 }
