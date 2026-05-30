@@ -83,16 +83,14 @@ export function useMazeGame(
     if (g.is_complete() || g.is_lost()) return
     const wakeIn = getTimeUntilNextEvent(g)
     if (wakeIn === null) return
-    const delay = Math.max(0, wakeIn)
+    const elapsedSinceTick = performance.now() - lastTickAtRef.current
+    const delay = Math.max(0, wakeIn - elapsedSinceTick)
     timerRef.current = setTimeout(() => {
       timerRef.current = null
       const g2 = gameRef.current
       if (!g2) return
       const now = performance.now()
-      // First tick uses the scheduled delay as dt; subsequent ticks use the
-      // real wall-clock elapsed time since the previous tick (so a missed
-      // frame still advances enemy accum correctly).
-      const dtMs = lastTickAtRef.current === 0 ? delay : now - lastTickAtRef.current
+      const dtMs = now - lastTickAtRef.current
       lastTickAtRef.current = now
       const events = tickGame(g2, dtMs)
       applyEvents(events)
@@ -107,7 +105,7 @@ export function useMazeGame(
     createMazeGame(definitionJson).then(newGame => {
       if (cancelled) { freeMazeGame(newGame); return }
       gameRef.current = newGame
-      lastTickAtRef.current = 0
+      lastTickAtRef.current = performance.now()
       setLoadResult({ key, game: newGame, error: null, version: 0, damageFlashKey: 0 })
       // A fresh game with enemies or opening doors already has a non-null
       // time-to-next-event — schedule the first wake.

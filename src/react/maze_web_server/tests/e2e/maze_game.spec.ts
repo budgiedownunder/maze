@@ -84,6 +84,31 @@ test.describe('MazeGamePage', () => {
     await expect(page.getByText('You died!')).toBeVisible()
   })
 
+  test('enemies keep advancing on their move period while the player presses keys (tick loop not reset by moves)', async ({ page }) => {
+    // EnemyGauntlet grid ['S','E','E','E','F']: the player starts at column 0
+    // with an enemy on the adjacent cell. Pressing ArrowLeft is blocked at the
+    // left edge, so the player never leaves the start cell — but every keypress
+    // still fires move() -> scheduleWake(). The adjacent enemy must still commit
+    // onto the player on its move period (~1500ms) and deal damage. Before the
+    // tick-loop fix, each move reset the enemy countdown, so a player holding a
+    // key froze the enemies and was never hit.
+    await page.goto('/play/maze-enemy-gauntlet')
+    await expect(page.getByAltText('Player')).toBeVisible()
+
+    const hpHud = page.getByLabel('Health')
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+
+    // Simulate a held key: repeated blocked moves, faster than one enemy period.
+    const deadline = Date.now() + 5000
+    let damaged = false
+    while (Date.now() < deadline) {
+      await page.keyboard.press('ArrowLeft')
+      await page.waitForTimeout(130)
+      if (await hpHud.getByAltText('Lost health', { exact: true }).count() > 0) { damaged = true; break }
+    }
+    expect(damaged).toBe(true)
+  })
+
   test('collecting a key opens a door and completes the maze', async ({ page }) => {
     // KeyDoor maze grid: ['S', 'K', 'D', 'F']
     await page.goto('/play/maze-keydoor')
