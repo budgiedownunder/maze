@@ -24,7 +24,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="0" />
                 <RowDefinition Height="*" />
-               <!--<RowDefinition Height="Auto" />-->
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <!-- Top toolbar buttons -->
@@ -112,6 +112,19 @@
                         Clicked="OnTestBtnClicked"
                         HorizontalOptions="Fill" />-->
             </StackLayout>
+
+            <!-- Keyboard-shortcut key, shown on desktop while a cell is active. Mirrors the React editor's shortcuts hint. -->
+            <Label x:Name="ShortcutsHint"
+                   Grid.Row="2"
+                   IsVisible="False"
+                   VerticalOptions="End"
+                   HorizontalOptions="Fill"
+                   Padding="10,6"
+                   FontFamily="Courier New"
+                   FontSize="12"
+                   LineBreakMode="WordWrap"
+                   TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+                   Text="[W] Wall    [S] Start    [F] Finish    [K] Key    [D] Door    [E] Enemy    [H] Health    [DEL] Clear    [&#8592;&#8593;&#8594;&#8595;] Move    [Shift] Range" />
 
             <Border IsVisible="{Binding IsBusy}"
                     BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#303030}"

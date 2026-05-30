@@ -826,6 +826,7 @@ namespace Maze.Maui.App.Views
             bool haveSelection = MazeGrid.HasActiveCell;
             bool showTopRowLayout = showSelectRangeButtons || haveSelection || _isWalking || IsSolutionDisplayed || IsInitialized;
             ShowMainGridRow(0, showTopRowLayout);
+            ShortcutsHint.IsVisible = haveSelection && !IsTouchOnlyDevice && !_isWalking;
             if (showTopRowLayout)
             {
                 ShowCellEditButtons();
