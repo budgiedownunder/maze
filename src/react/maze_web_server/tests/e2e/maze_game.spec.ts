@@ -109,6 +109,33 @@ test.describe('MazeGamePage', () => {
     expect(damaged).toBe(true)
   })
 
+  test('walking onto a health pickup below max HP heals and removes the in-grid symbol', async ({ page }) => {
+    // EnemyHealth grid ['S','E','H','F']: collide with the enemy to drop to 2/3,
+    // then walk onto the health pickup to heal back to 3/3. The consumed pickup's
+    // in-grid symbol must disappear — it is rendered from the runtime's live
+    // health-pickup list, not the static grid char (which never changes).
+    await page.goto('/play/maze-enemy-health')
+    await expect(page.getByAltText('Player')).toBeVisible()
+
+    const grid = page.locator('.maze-grid-container')
+    const hpHud = page.getByLabel('Health')
+
+    // The pickup symbol shows in the grid and HP starts full (3/3).
+    await expect(grid.getByAltText('Health')).toBeVisible()
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+
+    // Step onto the enemy: HP 3 → 2.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(1)
+
+    // Step onto the health pickup: HP 2 → 3 and the in-grid symbol is consumed.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(0)
+    await expect(grid.getByAltText('Health')).toHaveCount(0)
+  })
+
   test('collecting a key opens a door and completes the maze', async ({ page }) => {
     // KeyDoor maze grid: ['S', 'K', 'D', 'F']
     await page.goto('/play/maze-keydoor')

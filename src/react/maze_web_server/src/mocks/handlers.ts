@@ -87,6 +87,19 @@ export const mockMazeEnemyGauntlet: Maze = {
   },
 }
 
+// An enemy followed by a health pickup: collide with the enemy to drop below
+// max HP, then walk onto the pickup to heal and consume it. Used to assert that
+// a consumed pickup's in-grid symbol disappears.
+export const mockMazeEnemyHealth: Maze = {
+  id: 'maze-enemy-health',
+  name: 'EnemyHealth',
+  definition: {
+    grid: [
+      ['S', 'E', 'H', 'F'],
+    ],
+  },
+}
+
 export let mockMazes: Maze[] = [mockMazeAlpha, mockMazeBeta]
 
 export function resetMockMazes(): void {
@@ -281,6 +294,7 @@ export const handlers = [
     const maze = mockMazes.find(m => m.id === params.id)
       ?? (params.id === mockMazeKeyDoor.id ? mockMazeKeyDoor : undefined)
       ?? (params.id === mockMazeEnemyGauntlet.id ? mockMazeEnemyGauntlet : undefined)
+      ?? (params.id === mockMazeEnemyHealth.id ? mockMazeEnemyHealth : undefined)
     if (!maze) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json(maze)
   }),

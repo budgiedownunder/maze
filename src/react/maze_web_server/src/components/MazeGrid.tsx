@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, u
 import type { CellPoint } from '../hooks/useMazeEditor'
 import type { WalkState } from '../hooks/useWalkAnimation'
 import type { MazeGameWasm } from 'maze_wasm'
-import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies } from '../wasm/mazeWasm'
+import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies, getHealthPickups } from '../wasm/mazeWasm'
 
 export const CELL_SIZE = 32
 export const HEADER_SIZE = 24
@@ -154,6 +154,15 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       const map = new Map<string, string>()
       for (const d of getDoors(game)) map.set(`${d.row},${d.col}`, d.state)
       return map
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Live (uncollected) health-pickup cells. Walking onto an `'H'` cell
+    // auto-consumes it in the runtime, but the static grid char never changes,
+    // so in game mode the symbol is rendered only while the cell is still in
+    // the runtime's health-pickup list; once consumed it disappears.
+    const healthCells = useMemo(() => {
+      if (!game) return null
+      return new Set(getHealthPickups(game).map(h => `${h.row},${h.col}`))
     }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Live enemy positions, counted per cell. The static grid char `'E'` is
@@ -456,7 +465,8 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   let img = (isWalker || isGamePlayer) ? null : cellImage(cell)
                   let imgStyle: React.CSSProperties | undefined
                   // Game mode: a collected key disappears, an open door disappears, and
-                  // a door that is opening is dimmed. Editor mode renders K/D as-is.
+                  // a door that is opening is dimmed. A consumed health pickup
+                  // disappears. Editor mode renders K/D/H as-is.
                   // The spawn-cell `'E'` character is suppressed in game mode — the live
                   // enemy is rendered as an overlay sprite below based on getEnemies(),
                   // not from the static grid char.
@@ -469,6 +479,8 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                       else if (st === MazeDoorState.Opening) imgStyle = { opacity: 0.5 }
                     } else if (cell === 'E') {
                       img = null
+                    } else if (cell === 'H') {
+                      if (!healthCells?.has(key)) img = null
                     }
                   }
                   const enemyCount = game !== null && game !== undefined ? (enemyCountByCell?.get(key) ?? 0) : 0

@@ -354,6 +354,7 @@ function makeGameObj(overrides: Partial<{
   keys: () => Array<{ row: number; col: number; id: number }>
   doors: () => Array<{ row: number; col: number; state: string }>
   enemies: () => Array<{ row: number; col: number; id: number }>
+  health_pickups: () => Array<{ row: number; col: number; id: number }>
 }> = {}) {
   return {
     player_row:       vi.fn().mockReturnValue(0),
@@ -364,6 +365,7 @@ function makeGameObj(overrides: Partial<{
     keys:             vi.fn().mockReturnValue([]),
     doors:            vi.fn().mockReturnValue([]),
     enemies:          vi.fn().mockReturnValue([]),
+    health_pickups:   vi.fn().mockReturnValue([]),
     free:             vi.fn(),
     ...overrides,
   }
