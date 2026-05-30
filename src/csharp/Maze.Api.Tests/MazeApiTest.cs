@@ -1501,7 +1501,7 @@ namespace Maze.Api.Tests
 
             GameEvent[] events = game.Tick(1000.0);
             Assert.Single(events);
-            Assert.Equal(new GameEvent(GameEventKind.DoorOpened, 0, 2), events[0]);
+            Assert.Equal(new GameEvent(GameEventKind.DoorOpened, 0, 2, 0), events[0]);
             Assert.Equal(DoorState.Open, game.Doors[0].State);
 
             // StartedUnlocking did not move the player — step through the open door, then onto F.
@@ -1527,6 +1527,87 @@ namespace Maze.Api.Tests
             Assert.Equal(MazeGameMoveResult.Stranded, game.MovePlayer(MazeGameDirection.Down));
             Assert.True(game.IsLost);
             Assert.Equal(LoseReason.Stranded, game.LoseReason);
+        }
+
+        /// <summary>
+        /// Confirms HP / max-HP defaults, enemy + health-pickup enumeration, and that walking
+        /// onto a pickup below max HP heals and removes it from <see cref="MazeGame.HealthPickups"/>.
+        /// </summary>
+        [Fact]
+        public void MazeGame_HpEnemiesAndHealthPickups_SurfaceThroughTheApi()
+        {
+            // ['S','E','H','F']: one enemy at (0,1), one health pickup at (0,2).
+            using MazeGame game = MazeGame.Create("""{"grid":[["S","E","H","F"]]}""");
+            Assert.Equal(3u, game.Hp);
+            Assert.Equal(3u, game.MaxHp);
+
+            Assert.Single(game.Enemies);
+            Assert.Equal(new EnemyInfo(0, 1, 0), game.Enemies[0]);
+            Assert.Single(game.HealthPickups);
+            Assert.Equal(new HealthPickupInfo(0, 2), game.HealthPickups[0]);
+
+            // Step onto the enemy → 1 damage (HP 3 → 2).
+            game.MovePlayer(MazeGameDirection.Right);
+            game.Tick(0.0); // flush the queued PlayerDamaged
+            Assert.Equal(2u, game.Hp);
+
+            // Step onto the pickup below max HP → heal (HP 2 → 3) and the pickup is consumed.
+            game.MovePlayer(MazeGameDirection.Right);
+            game.Tick(0.0);
+            Assert.Equal(3u, game.Hp);
+            Assert.Empty(game.HealthPickups);
+        }
+
+        /// <summary>
+        /// Confirms a tick advances the enemy and surfaces <see cref="GameEventKind.EnemyMoved"/>
+        /// (payload = enemy id) and <see cref="GameEventKind.PlayerDamaged"/> (payload = HP after).
+        /// </summary>
+        [Fact]
+        public void MazeGame_Tick_SurfacesEnemyMovedAndPlayerDamagedWithPayloads()
+        {
+            // Enemy at (0,1) chasing the player at (0,0). One move period: enemy
+            // steps onto the player → EnemyMoved then PlayerDamaged.
+            using MazeGame game = MazeGame.Create("""{"grid":[["S","E","F"]]}""");
+            GameEvent[] events = game.Tick(1500.0);
+            Assert.Equal(2, events.Length);
+            Assert.Equal(new GameEvent(GameEventKind.EnemyMoved, 0, 0, 0), events[0]);
+            Assert.Equal(GameEventKind.PlayerDamaged, events[1].Kind);
+            Assert.Equal(2u, events[1].Payload); // HP after the hit
+            Assert.Equal(2u, game.Hp);
+        }
+
+        /// <summary>
+        /// Confirms a walk-over health pickup at full HP surfaces <see cref="GameEventKind.PlayerNotHealed"/>
+        /// and spares the pickup.
+        /// </summary>
+        [Fact]
+        public void MazeGame_Tick_SurfacesPlayerNotHealedAtMaxHp()
+        {
+            using MazeGame game = MazeGame.Create("""{"grid":[["S","H","F"]]}""");
+            game.MovePlayer(MazeGameDirection.Right); // onto 'H' at full HP
+            GameEvent[] events = game.Tick(0.0);
+            Assert.Single(events);
+            Assert.Equal(GameEventKind.PlayerNotHealed, events[0].Kind);
+            Assert.Equal((uint)0, events[0].Payload); // reason: already at max HP
+            Assert.Single(game.HealthPickups); // spared
+        }
+
+        /// <summary>
+        /// Confirms the Killed round-trip: draining HP to zero by walking into enemies returns
+        /// <see cref="MazeGameMoveResult.Killed"/> and flips <see cref="MazeGame.LoseReason"/> to
+        /// <see cref="LoseReason.Killed"/>.
+        /// </summary>
+        [Fact]
+        public void MazeGame_WalkingIntoEnemiesUntilZeroHp_ReturnsKilledAndFlipsLoseReason()
+        {
+            // ['S','E','E','E','F']: three successive collisions drain HP 3 → 0.
+            using MazeGame game = MazeGame.Create("""{"grid":[["S","E","E","E","F"]]}""");
+            Assert.Equal(MazeGameMoveResult.Moved, game.MovePlayer(MazeGameDirection.Right)); // HP 3 → 2
+            Assert.Equal(MazeGameMoveResult.Moved, game.MovePlayer(MazeGameDirection.Right)); // HP 2 → 1
+            Assert.Equal(MazeGameMoveResult.Killed, game.MovePlayer(MazeGameDirection.Right)); // HP 1 → 0
+            Assert.True(game.IsLost);
+            Assert.Equal(LoseReason.Killed, game.LoseReason);
+            Assert.Equal(0u, game.Hp);
         }
 
         /// <summary>

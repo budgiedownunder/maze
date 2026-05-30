@@ -47,6 +47,25 @@ int32_t maze_c_maze_game_tick_event_count(MazeGameC* ptr);
 uint8_t maze_c_maze_game_get_tick_event(MazeGameC* ptr, int32_t index,
                                         uint32_t* kind_out, uint32_t* row_out, uint32_t* col_out);
                                                         // 1 = success, 0 = out-of-range
+uint8_t maze_c_maze_game_get_tick_event_payload(MazeGameC* ptr, int32_t index,
+                                                uint32_t* payload_out);
+                                                        // enemy id / hp_after / reason code; 0 for DoorOpened
+uint8_t maze_c_maze_game_get_tick_event_string_payload(MazeGameC* ptr, int32_t index,
+                                                       uint8_t* buf_out, uint32_t* len_out);
+                                                        // PlayerNotHealed message; two-call protocol
+                                                        // (buf_out=null reads len_out, then re-call to copy)
+
+// HP / enemies / health pickups (valid pointer assumed; out parameters may be null)
+uint32_t maze_c_maze_game_hp(MazeGameC* ptr);
+uint32_t maze_c_maze_game_max_hp(MazeGameC* ptr);
+int32_t maze_c_maze_game_enemy_count(MazeGameC* ptr);
+uint8_t maze_c_maze_game_get_enemy(MazeGameC* ptr, int32_t index,
+                                   uint32_t* row_out, uint32_t* col_out, uint32_t* id_out);
+                                                        // 1 = success, 0 = out-of-range
+int32_t maze_c_maze_game_health_pickup_count(MazeGameC* ptr);
+uint8_t maze_c_maze_game_get_health_pickup(MazeGameC* ptr, int32_t index,
+                                           uint32_t* row_out, uint32_t* col_out, uint32_t* id_out);
+                                                        // id_out always 0; 1 = success, 0 = out-of-range
 
 // Keys (uncollected; valid pointer assumed; out parameters may be null)
 int32_t maze_c_maze_game_key_count(MazeGameC* ptr);
@@ -82,6 +101,7 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 | 4 | BlockedByLockedDoor |
 | 5 | StartedUnlocking |
 | 6 | Stranded |
+| 7 | Killed (HP reached zero from an enemy collision) |
 | -1 | Unknown direction value |
 
 **LoseReason encoding** (return of `lose_reason`):
@@ -90,6 +110,7 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 |:-----:|:-------|
 | 0 | None (the game is not lost) |
 | 1 | Stranded (the player can no longer hold enough keys to open every closed door remaining on a route to the finish) |
+| 2 | Killed (the player's HP reached zero from enemy collisions) |
 
 **BagItemKind encoding** (`kind_out` of `pickup` / `get_bag_item`):
 
@@ -107,9 +128,13 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 
 **GameEvent kind encoding** (`kind_out` of `get_tick_event`):
 
-| Value | Kind |
-|:-----:|:-----|
-| 0 | DoorOpened (the door at `(row_out, col_out)` finished opening) |
+| Value | Kind | `(row_out, col_out)` | Payload (`get_tick_event_payload`) |
+|:-----:|:-----|:---------------------|:-----------------------------------|
+| 0 | DoorOpened | the door cell that opened | `0` |
+| 1 | EnemyMoved | the enemy's new cell | enemy id |
+| 2 | PlayerDamaged | `(0, 0)` (unused) | HP after the hit |
+| 3 | PlayerHealed | the consumed pickup cell | HP after the heal |
+| 4 | PlayerNotHealed | the spared pickup cell | reason code (`0` = already at max HP); message via `get_tick_event_string_payload` |
 
 **Memory ownership:** The caller must call `maze_c_free_maze_game` when done. Passing `null` to `free` is safe and has no effect.
 

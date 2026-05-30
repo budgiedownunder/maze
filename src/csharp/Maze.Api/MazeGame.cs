@@ -33,7 +33,9 @@ namespace Maze.Api
         /// <summary>The player held against a locked door with a key in their bag; a key was consumed and the door began opening.</summary>
         StartedUnlocking = 5,
         /// <summary>The player moved through an open door and can no longer hold enough keys to open every remaining closed door on a route to the finish — the game is now lost.</summary>
-        Stranded = 6
+        Stranded = 6,
+        /// <summary>The player's HP reached zero from an enemy collision — the game is now lost.</summary>
+        Killed = 7
     }
 
     /// <summary>Why a game ended in a loss. Mirrors the Rust <c>maze::LoseReason</c> enum.</summary>
@@ -42,7 +44,9 @@ namespace Maze.Api
         /// <summary>The game is not lost.</summary>
         None = 0,
         /// <summary>The player can no longer hold enough keys to open every closed door remaining on a route from their current cell to the finish.</summary>
-        Stranded = 1
+        Stranded = 1,
+        /// <summary>The player's HP reached zero from enemy collisions.</summary>
+        Killed = 2
     }
 
     /// <summary>Kind of item carried in the player's bag. Mirrors the Rust <c>maze::BagItem</c> tagged enum.</summary>
@@ -77,21 +81,41 @@ namespace Maze.Api
     /// <summary>Kind of time-based game event emitted by <see cref="MazeGame.Tick"/>.</summary>
     public enum GameEventKind
     {
-        /// <summary>A door finished opening — its <see cref="DoorState"/> is now <see cref="DoorState.Open"/>.</summary>
-        DoorOpened = 0
+        /// <summary>A door finished opening — its <see cref="DoorState"/> is now <see cref="DoorState.Open"/>. <see cref="GameEvent.Row"/> / <see cref="GameEvent.Column"/> is the door cell.</summary>
+        DoorOpened = 0,
+        /// <summary>An enemy advanced one cell. <see cref="GameEvent.Row"/> / <see cref="GameEvent.Column"/> is its new cell; <see cref="GameEvent.Payload"/> is the enemy id.</summary>
+        EnemyMoved = 1,
+        /// <summary>The player took same-cell collision damage. <see cref="GameEvent.Payload"/> is the player's HP after the hit; the cell fields are unused.</summary>
+        PlayerDamaged = 2,
+        /// <summary>The player consumed a health pickup. <see cref="GameEvent.Row"/> / <see cref="GameEvent.Column"/> is the consumed cell; <see cref="GameEvent.Payload"/> is the player's HP after the heal.</summary>
+        PlayerHealed = 3,
+        /// <summary>The player walked onto a health pickup that did not apply (already at max HP). The cell is spared; <see cref="GameEvent.Payload"/> is the reason code (0 = already at max HP).</summary>
+        PlayerNotHealed = 4
     }
 
     /// <summary>One time-based game event emitted by <see cref="MazeGame.Tick"/>.</summary>
     /// <param name="Kind">The kind of event.</param>
-    /// <param name="Row">Row of the cell the event applies to.</param>
-    /// <param name="Column">Column of the cell the event applies to.</param>
-    public readonly record struct GameEvent(GameEventKind Kind, uint Row, uint Column);
+    /// <param name="Row">Row of the cell the event applies to (unused for <see cref="GameEventKind.PlayerDamaged"/>).</param>
+    /// <param name="Column">Column of the cell the event applies to (unused for <see cref="GameEventKind.PlayerDamaged"/>).</param>
+    /// <param name="Payload">Event-specific scalar: enemy id (<see cref="GameEventKind.EnemyMoved"/>), HP-after (<see cref="GameEventKind.PlayerDamaged"/> / <see cref="GameEventKind.PlayerHealed"/>), reason code (<see cref="GameEventKind.PlayerNotHealed"/>), or 0 (<see cref="GameEventKind.DoorOpened"/>).</param>
+    public readonly record struct GameEvent(GameEventKind Kind, uint Row, uint Column, uint Payload);
 
     /// <summary>One uncollected key cell along with its stable id — see <see cref="MazeGame.Keys"/>.</summary>
     /// <param name="Row">Row of the key cell.</param>
     /// <param name="Column">Column of the key cell.</param>
     /// <param name="Id">Stable identifier derived from the key's origin cell.</param>
     public readonly record struct KeyInfo(uint Row, uint Column, uint Id);
+
+    /// <summary>One enemy's current cell along with its stable id — see <see cref="MazeGame.Enemies"/>.</summary>
+    /// <param name="Row">Current row of the enemy.</param>
+    /// <param name="Column">Current column of the enemy.</param>
+    /// <param name="Id">Stable identifier assigned at construction in row-major scan order of the <c>'E'</c> cells.</param>
+    public readonly record struct EnemyInfo(uint Row, uint Column, uint Id);
+
+    /// <summary>One uncollected health-pickup cell — see <see cref="MazeGame.HealthPickups"/>. The cell coordinate is the natural key (pickups have no stable id).</summary>
+    /// <param name="Row">Row of the health-pickup cell.</param>
+    /// <param name="Column">Column of the health-pickup cell.</param>
+    public readonly record struct HealthPickupInfo(uint Row, uint Column);
 
     /// <summary>A cell visited by the player, identified by its zero-based row and column.</summary>
     public record MazeGameVisitedCell(int Row, int Col);
@@ -254,7 +278,7 @@ namespace Maze.Api
             for (int i = 0; i < count; i++)
             {
                 if (Interop.MazeGameGetTickEvent(_gamePtr, i, out var e))
-                    events[i] = new GameEvent((GameEventKind)e.Kind, e.Row, e.Column);
+                    events[i] = new GameEvent((GameEventKind)e.Kind, e.Row, e.Column, e.Payload);
             }
             return events;
         }
@@ -273,6 +297,45 @@ namespace Maze.Api
                         keys.Add(new KeyInfo(k.Row, k.Column, k.Id));
                 }
                 return keys;
+            }
+        }
+
+        /// <summary>The player's current HP.</summary>
+        public uint Hp => Interop.MazeGameHp(_gamePtr);
+
+        /// <summary>The player's maximum HP.</summary>
+        public uint MaxHp => Interop.MazeGameMaxHp(_gamePtr);
+
+        /// <summary>All active enemies along with their current cells and stable ids.</summary>
+        public IReadOnlyList<EnemyInfo> Enemies
+        {
+            get
+            {
+                int count = Interop.MazeGameEnemyCount(_gamePtr);
+                var enemies = new List<EnemyInfo>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    if (Interop.MazeGameGetEnemy(_gamePtr, i, out var e))
+                        enemies.Add(new EnemyInfo(e.Row, e.Column, e.Id));
+                }
+                return enemies;
+            }
+        }
+
+        /// <summary>All uncollected health-pickup cells, sorted by (row, column).
+        /// Shrinks as the player walks over pickups below max HP.</summary>
+        public IReadOnlyList<HealthPickupInfo> HealthPickups
+        {
+            get
+            {
+                int count = Interop.MazeGameHealthPickupCount(_gamePtr);
+                var pickups = new List<HealthPickupInfo>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    if (Interop.MazeGameGetHealthPickup(_gamePtr, i, out var p))
+                        pickups.Add(new HealthPickupInfo(p.Row, p.Column));
+                }
+                return pickups;
             }
         }
     }

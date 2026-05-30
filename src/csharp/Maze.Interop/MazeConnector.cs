@@ -422,6 +422,34 @@ namespace Maze.Interop
         /// <param name="key">Receives the key cell + stable id on success</param>
         /// <returns>True if the index was valid; false if out of range</returns>
         public bool MazeGameGetKey(UIntPtr gamePtr, int index, out MazeKey key);
+        /// <summary>Returns the player's current HP</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Current HP</returns>
+        public uint MazeGameHp(UIntPtr gamePtr);
+        /// <summary>Returns the player's maximum HP</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Maximum HP</returns>
+        public uint MazeGameMaxHp(UIntPtr gamePtr);
+        /// <summary>Returns the number of active enemies</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Enemy count</returns>
+        public int MazeGameEnemyCount(UIntPtr gamePtr);
+        /// <summary>Retrieves a single enemy's current cell + stable id by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the enemy list</param>
+        /// <param name="enemy">Receives the enemy cell + id on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetEnemy(UIntPtr gamePtr, int index, out MazeEnemy enemy);
+        /// <summary>Returns the number of uncollected health-pickup cells</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected health-pickup count</returns>
+        public int MazeGameHealthPickupCount(UIntPtr gamePtr);
+        /// <summary>Retrieves a single uncollected health-pickup cell by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the health-pickup list</param>
+        /// <param name="pickup">Receives the pickup cell on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetHealthPickup(UIntPtr gamePtr, int index, out MazeHealthPickup pickup);
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)
         /// </summary>

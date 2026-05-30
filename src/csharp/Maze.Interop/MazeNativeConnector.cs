@@ -78,8 +78,15 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_tick(IntPtr ptr, float dtMs);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_tick_event_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_tick_event(IntPtr ptr, int index, out uint kindOut, out uint rowOut, out uint colOut);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_tick_event_payload(IntPtr ptr, int index, out uint payloadOut);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_key_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_key(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint idOut);
+        [DllImport("__Internal")] private static extern uint   maze_c_maze_game_hp(IntPtr ptr);
+        [DllImport("__Internal")] private static extern uint   maze_c_maze_game_max_hp(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_enemy_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_enemy(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint idOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_health_pickup_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_health_pickup(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint idOut);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_visited_cell_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_visited_cell(IntPtr ptr, int index, out int rowOut, out int colOut);
 
@@ -446,7 +453,10 @@ namespace Maze.Interop
         public bool MazeGameGetTickEvent(UIntPtr gamePtr, int index, out MazeInterop.MazeGameEvent evt)
         {
             byte result = maze_c_maze_game_get_tick_event((IntPtr)(ulong)gamePtr, index, out uint kind, out uint row, out uint col);
-            evt = new MazeInterop.MazeGameEvent { Kind = (MazeInterop.MazeGameEventKind)kind, Row = row, Column = col };
+            uint payload = 0;
+            if (result != 0)
+                maze_c_maze_game_get_tick_event_payload((IntPtr)(ulong)gamePtr, index, out payload);
+            evt = new MazeInterop.MazeGameEvent { Kind = (MazeInterop.MazeGameEventKind)kind, Row = row, Column = col, Payload = payload };
             return result != 0;
         }
 
@@ -459,6 +469,40 @@ namespace Maze.Interop
         {
             byte result = maze_c_maze_game_get_key((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out uint id);
             key = new MazeInterop.MazeKey { Row = row, Column = col, Id = id };
+            return result != 0;
+        }
+
+        public uint MazeGameHp(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_hp((IntPtr)(ulong)gamePtr);
+        }
+
+        public uint MazeGameMaxHp(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_max_hp((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGameEnemyCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_enemy_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetEnemy(UIntPtr gamePtr, int index, out MazeInterop.MazeEnemy enemy)
+        {
+            byte result = maze_c_maze_game_get_enemy((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out uint id);
+            enemy = new MazeInterop.MazeEnemy { Row = row, Column = col, Id = id };
+            return result != 0;
+        }
+
+        public int MazeGameHealthPickupCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_health_pickup_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetHealthPickup(UIntPtr gamePtr, int index, out MazeInterop.MazeHealthPickup pickup)
+        {
+            byte result = maze_c_maze_game_get_health_pickup((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out uint id);
+            pickup = new MazeInterop.MazeHealthPickup { Row = row, Column = col, Id = id };
             return result != 0;
         }
 

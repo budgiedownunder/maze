@@ -1539,6 +1539,83 @@ namespace Maze.Interop.Tests
             Assert.Equal((int)MazeLoseReason.Stranded, reason);
         }
 
+        /// <summary>
+        /// Confirms HP / max-HP, enemy enumeration, and health-pickup enumeration surface through the interop layer.
+        /// </summary>
+        [Fact]
+        public void MazeGame_HpEnemiesAndHealthPickups_SurfaceThroughInterop()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame("""{"grid":[["S","E","H","F"]]}""");
+            try
+            {
+                Assert.Equal(3u, interop.MazeGameHp(gamePtr));
+                Assert.Equal(3u, interop.MazeGameMaxHp(gamePtr));
+
+                Assert.Equal(1, interop.MazeGameEnemyCount(gamePtr));
+                Assert.True(interop.MazeGameGetEnemy(gamePtr, 0, out MazeEnemy enemy));
+                Assert.Equal((0u, 1u, 0u), (enemy.Row, enemy.Column, enemy.Id));
+
+                Assert.Equal(1, interop.MazeGameHealthPickupCount(gamePtr));
+                Assert.True(interop.MazeGameGetHealthPickup(gamePtr, 0, out MazeHealthPickup pickup));
+                Assert.Equal((0u, 2u), (pickup.Row, pickup.Column));
+            }
+            finally
+            {
+                FreeMazeGame(gamePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms a tick surfaces EnemyMoved (payload = enemy id) and PlayerDamaged (payload = HP after)
+        /// through the interop tick-event buffer.
+        /// </summary>
+        [Fact]
+        public void MazeGame_Tick_SurfacesEnemyMovedAndPlayerDamagedWithPayloads()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame("""{"grid":[["S","E","F"]]}""");
+            try
+            {
+                int count = interop.MazeGameTick(gamePtr, 1500f);
+                Assert.Equal(2, count);
+
+                Assert.True(interop.MazeGameGetTickEvent(gamePtr, 0, out MazeGameEvent moved));
+                Assert.Equal(MazeGameEventKind.EnemyMoved, moved.Kind);
+                Assert.Equal((0u, 0u), (moved.Row, moved.Column));
+                Assert.Equal(0u, moved.Payload); // enemy id
+
+                Assert.True(interop.MazeGameGetTickEvent(gamePtr, 1, out MazeGameEvent damaged));
+                Assert.Equal(MazeGameEventKind.PlayerDamaged, damaged.Kind);
+                Assert.Equal(2u, damaged.Payload); // HP after the hit
+                Assert.Equal(2u, interop.MazeGameHp(gamePtr));
+            }
+            finally
+            {
+                FreeMazeGame(gamePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms the Killed round-trip through interop: draining HP to zero by walking into enemies
+        /// returns MoveResult 7 (Killed) and flips LoseReason to Killed.
+        /// </summary>
+        [Fact]
+        public void MazeGame_WalkingIntoEnemiesUntilZeroHp_FlipsKilledLoseState()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame("""{"grid":[["S","E","E","E","F"]]}""");
+            interop.MazeGameMovePlayer(gamePtr, 4); // HP 3 → 2
+            interop.MazeGameMovePlayer(gamePtr, 4); // HP 2 → 1
+            int result = interop.MazeGameMovePlayer(gamePtr, 4); // HP 1 → 0 → Killed
+            int isLost = interop.MazeGameIsLost(gamePtr);
+            int reason = interop.MazeGameLoseReason(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(7, result); // Killed
+            Assert.Equal(1, isLost);
+            Assert.Equal((int)MazeLoseReason.Killed, reason);
+        }
+
         // 1 row, 4 cols: S K K F — two uncollected keys
         private const string TwoKeyGameJson = """{"grid":[["S","K","K","F"]]}""";
 

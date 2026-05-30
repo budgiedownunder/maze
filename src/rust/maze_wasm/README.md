@@ -150,7 +150,14 @@ i32           maze_game_wasm_tick(MazeGameWasm* maze_game_wasm, f32 dt_ms);   //
 i32           maze_game_wasm_tick_event_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_tick_event(MazeGameWasm* maze_game_wasm, i32 index,
                                             u32* kind_out, u32* row_out, u32* col_out);
-                                                                              // kind: 0=DoorOpened
+                                                                              // kind: 0=DoorOpened, 1=EnemyMoved,
+                                                                              // 2=PlayerDamaged, 3=PlayerHealed, 4=PlayerNotHealed
+i32           maze_game_wasm_get_tick_event_payload(MazeGameWasm* maze_game_wasm, i32 index,
+                                                    u32* payload_out);        // enemy id / hp_after / reason; 0=ok, -1=error
+i32           maze_game_wasm_get_tick_event_string_payload(MazeGameWasm* maze_game_wasm, i32 index,
+                                                           u8* buf_out, u32* len_out);
+                                                                              // PlayerNotHealed message; two-call protocol
+                                                                              // (buf_out=null reads len_out, then re-call); 0=ok, -1=error
 i32           maze_game_wasm_key_count(MazeGameWasm* maze_game_wasm);         // uncollected only
 i32           maze_game_wasm_get_key(MazeGameWasm* maze_game_wasm, i32 index,
                                      u32* row_out, u32* col_out, u32* id_out);

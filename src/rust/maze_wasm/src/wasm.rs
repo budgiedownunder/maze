@@ -1403,15 +1403,7 @@ pub extern "C" fn maze_game_wasm_tick(maze_game_wasm: *mut MazeGameWasm, dt_ms: 
         return -1;
     }
     let g = unsafe { &mut *maze_game_wasm };
-    // Buffer only event variants the C tick-event getter knows how to
-    // marshal. Other variants stay internal to the Rust runtime; FFI
-    // surfaces for them land alongside the consumers that need them.
-    g.tick_events = g
-        .game
-        .tick(dt_ms)
-        .into_iter()
-        .filter(|e| matches!(e, maze::GameEvent::DoorOpened { .. }))
-        .collect();
+    g.tick_events = g.game.tick(dt_ms);
     g.tick_events.len() as i32
 }
 
@@ -1432,10 +1424,18 @@ pub extern "C" fn maze_game_wasm_tick_event_count(maze_game_wasm: *mut MazeGameW
     g.tick_events.len() as i32
 }
 
-/// Retrieves a single tick event from the buffer by `index`.
+/// Retrieves a single tick event's kind + cell coordinates from the buffer by `index`.
 ///
-/// Writes the event's kind code and cell coordinates into the out
-/// parameters. Kind encoding: `0` = DoorOpened.
+/// Writes the event's kind code and a `(row, col)` pair into the out parameters.
+/// Kind encoding (mirrors [`maze::GameEvent`]):
+/// - `0` = DoorOpened — `(row, col)` is the door cell.
+/// - `1` = EnemyMoved — `(row, col)` is the enemy's new cell; the id is carried
+///   by [`maze_game_wasm_get_tick_event_payload`].
+/// - `2` = PlayerDamaged — `(row, col)` is `(0, 0)`; `hp_after` via the payload getter.
+/// - `3` = PlayerHealed — `(row, col)` is the consumed pickup cell; `hp_after` via the payload getter.
+/// - `4` = PlayerNotHealed — `(row, col)` is the spared pickup cell; the reason via
+///   the payload getter and the default message via
+///   [`maze_game_wasm_get_tick_event_string_payload`].
 ///
 /// # Returns
 ///
@@ -1457,20 +1457,106 @@ pub extern "C" fn maze_game_wasm_get_tick_event(
     if index < 0 || index as usize >= g.tick_events.len() {
         return -1;
     }
-    let maze::GameEvent::DoorOpened { cell: (r, c) } = g.tick_events[index as usize] else {
-        // The tick buffer is pre-filtered to DoorOpened only — see
-        // `maze_game_wasm_tick`. Any other variant here would be a bug.
-        return -1;
+    let (kind, r, c) = match &g.tick_events[index as usize] {
+        maze::GameEvent::DoorOpened { cell: (r, c) } => (0u32, *r, *c),
+        maze::GameEvent::EnemyMoved { row, col, .. } => (1u32, *row, *col),
+        maze::GameEvent::PlayerDamaged { .. } => (2u32, 0, 0),
+        maze::GameEvent::PlayerHealed { cell: (r, c), .. } => (3u32, *r, *c),
+        maze::GameEvent::PlayerNotHealed { cell: (r, c), .. } => (4u32, *r, *c),
     };
     unsafe {
         if !out_kind.is_null() {
-            *out_kind = 0; // DoorOpened
+            *out_kind = kind;
         }
         if !out_row.is_null() {
             *out_row = r as u32;
         }
         if !out_col.is_null() {
             *out_col = c as u32;
+        }
+    }
+    0
+}
+
+/// Retrieves a tick event's `u32` payload by `index` — the extra scalar that
+/// doesn't fit the `(kind, row, col)` shape of [`maze_game_wasm_get_tick_event`]:
+/// `EnemyMoved` → enemy id; `PlayerDamaged` / `PlayerHealed` → `hp_after`;
+/// `PlayerNotHealed` → reason code (`0` = already at max HP); `DoorOpened` → `0`.
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_tick_event_payload(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_payload: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let g = unsafe { &*maze_game_wasm };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return -1;
+    }
+    let payload = match &g.tick_events[index as usize] {
+        maze::GameEvent::DoorOpened { .. } => 0,
+        maze::GameEvent::EnemyMoved { id, .. } => *id,
+        maze::GameEvent::PlayerDamaged { hp_after } => *hp_after,
+        maze::GameEvent::PlayerHealed { hp_after, .. } => *hp_after,
+        maze::GameEvent::PlayerNotHealed { reason, .. } => match reason {
+            maze::PlayerNotHealedReason::AlreadyAtMaxHp => 0,
+        },
+    };
+    unsafe {
+        if !out_payload.is_null() {
+            *out_payload = payload;
+        }
+    }
+    0
+}
+
+/// Retrieves the UTF-8 string payload of a tick event by `index` — currently only
+/// `PlayerNotHealed` carries one (its default message); every other variant
+/// reports a zero-length string.
+///
+/// Two-call protocol: call once with `out_buf` null to read the byte length into
+/// `out_len`, allocate a buffer of that size, then call again with `out_buf`
+/// pointing at it to copy the bytes. The buffer is stable between calls until the
+/// next [`maze_game_wasm_tick`].
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_tick_event_string_payload(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_buf: *mut u8,
+    out_len: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let g = unsafe { &*maze_game_wasm };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return -1;
+    }
+    let message: &str = match &g.tick_events[index as usize] {
+        maze::GameEvent::PlayerNotHealed { message, .. } => message,
+        _ => "",
+    };
+    let bytes = message.as_bytes();
+    unsafe {
+        if !out_len.is_null() {
+            *out_len = bytes.len() as u32;
+        }
+        if !out_buf.is_null() {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
         }
     }
     0

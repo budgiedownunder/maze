@@ -151,6 +151,10 @@ namespace Maze.Interop
             /// door remaining on a route from their current cell to the finish
             /// </summary>
             Stranded = 1,
+            /// <summary>
+            /// The player's HP reached zero from enemy collisions
+            /// </summary>
+            Killed = 2,
         }
         /// <summary>
         /// Kind of item carried in the player's bag. Mirrors the Rust
@@ -201,8 +205,16 @@ namespace Maze.Interop
         /// </summary>
         public enum MazeGameEventKind : uint
         {
-            /// <summary>A door finished opening — its <see cref="MazeDoorState"/> is now <see cref="MazeDoorState.Open"/></summary>
+            /// <summary>A door finished opening — its <see cref="MazeDoorState"/> is now <see cref="MazeDoorState.Open"/>. <see cref="MazeGameEvent.Row"/> / <see cref="MazeGameEvent.Column"/> is the door cell.</summary>
             DoorOpened = 0,
+            /// <summary>An enemy advanced one cell. <see cref="MazeGameEvent.Row"/> / <see cref="MazeGameEvent.Column"/> is its new cell; <see cref="MazeGameEvent.Payload"/> is the enemy id.</summary>
+            EnemyMoved = 1,
+            /// <summary>The player took same-cell collision damage. <see cref="MazeGameEvent.Payload"/> is the player's HP after the hit; the cell fields are unused.</summary>
+            PlayerDamaged = 2,
+            /// <summary>The player consumed a health pickup. <see cref="MazeGameEvent.Row"/> / <see cref="MazeGameEvent.Column"/> is the consumed cell; <see cref="MazeGameEvent.Payload"/> is the player's HP after the heal.</summary>
+            PlayerHealed = 3,
+            /// <summary>The player walked onto a health pickup that did not apply (already at max HP). The cell is spared; <see cref="MazeGameEvent.Payload"/> is the machine-readable reason code (0 = already at max HP).</summary>
+            PlayerNotHealed = 4,
         }
         /// <summary>
         /// One time-based game event emitted by a tick.
@@ -211,10 +223,16 @@ namespace Maze.Interop
         {
             /// <summary>The kind of event</summary>
             public MazeGameEventKind Kind;
-            /// <summary>Row of the cell the event applies to</summary>
+            /// <summary>Row of the cell the event applies to (unused for <see cref="MazeGameEventKind.PlayerDamaged"/>)</summary>
             public uint Row;
-            /// <summary>Column of the cell the event applies to</summary>
+            /// <summary>Column of the cell the event applies to (unused for <see cref="MazeGameEventKind.PlayerDamaged"/>)</summary>
             public uint Column;
+            /// <summary>
+            /// Event-specific scalar payload: enemy id (<see cref="MazeGameEventKind.EnemyMoved"/>),
+            /// HP-after (<see cref="MazeGameEventKind.PlayerDamaged"/> / <see cref="MazeGameEventKind.PlayerHealed"/>),
+            /// reason code (<see cref="MazeGameEventKind.PlayerNotHealed"/>), or <c>0</c> (<see cref="MazeGameEventKind.DoorOpened"/>).
+            /// </summary>
+            public uint Payload;
         }
         /// <summary>
         /// One uncollected key cell along with its stable id.
@@ -226,6 +244,32 @@ namespace Maze.Interop
             /// <summary>Column of the key cell</summary>
             public uint Column;
             /// <summary>Stable identifier derived from the key's origin cell</summary>
+            public uint Id;
+        }
+        /// <summary>
+        /// One enemy's current cell along with its stable id.
+        /// </summary>
+        public struct MazeEnemy
+        {
+            /// <summary>Current row of the enemy</summary>
+            public uint Row;
+            /// <summary>Current column of the enemy</summary>
+            public uint Column;
+            /// <summary>Stable identifier assigned at construction in row-major scan order of the `'E'` cells</summary>
+            public uint Id;
+        }
+        /// <summary>
+        /// One uncollected health-pickup cell. <see cref="Id"/> is always <c>0</c> —
+        /// pickups have no stable id; the cell coordinate is the natural key. The
+        /// field is kept for shape parity with <see cref="MazeKey"/> / <see cref="MazeEnemy"/>.
+        /// </summary>
+        public struct MazeHealthPickup
+        {
+            /// <summary>Row of the health-pickup cell</summary>
+            public uint Row;
+            /// <summary>Column of the health-pickup cell</summary>
+            public uint Column;
+            /// <summary>Always <c>0</c> — pickups have no stable id</summary>
             public uint Id;
         }
         /// <summary>
@@ -990,6 +1034,52 @@ namespace Maze.Interop
         public bool MazeGameGetKey(UIntPtr gamePtr, int index, out MazeKey key)
         {
             return connector.MazeGameGetKey(gamePtr, index, out key);
+        }
+        /// <summary>Returns the player's current HP</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Current HP</returns>
+        public uint MazeGameHp(UIntPtr gamePtr)
+        {
+            return connector.MazeGameHp(gamePtr);
+        }
+        /// <summary>Returns the player's maximum HP</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Maximum HP</returns>
+        public uint MazeGameMaxHp(UIntPtr gamePtr)
+        {
+            return connector.MazeGameMaxHp(gamePtr);
+        }
+        /// <summary>Returns the number of active enemies</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Enemy count</returns>
+        public int MazeGameEnemyCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameEnemyCount(gamePtr);
+        }
+        /// <summary>Retrieves a single enemy's current cell + stable id by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the enemy list</param>
+        /// <param name="enemy">Receives the enemy cell + id on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetEnemy(UIntPtr gamePtr, int index, out MazeEnemy enemy)
+        {
+            return connector.MazeGameGetEnemy(gamePtr, index, out enemy);
+        }
+        /// <summary>Returns the number of uncollected health-pickup cells</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected health-pickup count</returns>
+        public int MazeGameHealthPickupCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameHealthPickupCount(gamePtr);
+        }
+        /// <summary>Retrieves a single uncollected health-pickup cell by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the health-pickup list</param>
+        /// <param name="pickup">Receives the pickup cell on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetHealthPickup(UIntPtr gamePtr, int index, out MazeHealthPickup pickup)
+        {
+            return connector.MazeGameGetHealthPickup(gamePtr, index, out pickup);
         }
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)

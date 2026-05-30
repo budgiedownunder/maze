@@ -2506,15 +2506,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_door(
 #[no_mangle]
 pub extern "C" fn maze_c_maze_game_tick(ptr: *mut MazeGameC, dt_ms: f32) -> i32 {
     let g = unsafe { &mut *ptr };
-    // Buffer only event variants the C tick-event getter knows how to
-    // marshal. Other variants stay internal to the Rust runtime; FFI
-    // surfaces for them land alongside the consumers that need them.
-    g.tick_events = g
-        .game
-        .tick(dt_ms)
-        .into_iter()
-        .filter(|e| matches!(e, maze::GameEvent::DoorOpened { .. }))
-        .collect();
+    g.tick_events = g.game.tick(dt_ms);
     g.tick_events.len() as i32
 }
 
@@ -2539,11 +2531,20 @@ pub extern "C" fn maze_c_maze_game_tick_event_count(ptr: *mut MazeGameC) -> i32 
     g.tick_events.len() as i32
 }
 
-/// Retrieves a single tick event from the buffer by index.
+/// Retrieves a single tick event's kind + cell coordinates from the buffer by index.
 ///
-/// Writes the event's kind code and cell coordinates into the out parameters.
-/// Kind encoding (mirrors [`maze::GameEvent`]): `0` = DoorOpened. New
-/// variants extend the integer space.
+/// Writes the event's kind code and a `(row, col)` pair into the out parameters.
+/// Kind encoding (mirrors [`maze::GameEvent`]):
+/// - `0` = `DoorOpened` — `(row, col)` is the door cell.
+/// - `1` = `EnemyMoved` — `(row, col)` is the enemy's new cell; the enemy id is
+///   carried by [`maze_c_maze_game_get_tick_event_payload`].
+/// - `2` = `PlayerDamaged` — `(row, col)` is `(0, 0)`; `hp_after` is carried by
+///   [`maze_c_maze_game_get_tick_event_payload`].
+/// - `3` = `PlayerHealed` — `(row, col)` is the consumed pickup cell; `hp_after`
+///   is carried by [`maze_c_maze_game_get_tick_event_payload`].
+/// - `4` = `PlayerNotHealed` — `(row, col)` is the spared pickup cell; the reason
+///   code is carried by [`maze_c_maze_game_get_tick_event_payload`] and the
+///   default message by [`maze_c_maze_game_get_tick_event_string_payload`].
 ///
 /// Returns `1` on success, `0` if `index` is out of range.
 ///
@@ -2589,20 +2590,149 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event(
     if index < 0 || index as usize >= g.tick_events.len() {
         return 0;
     }
-    let maze::GameEvent::DoorOpened { cell: (r, c) } = g.tick_events[index as usize] else {
-        // The tick buffer is pre-filtered to DoorOpened only — see
-        // `maze_c_maze_game_tick`. Any other variant here would be a bug.
-        return 0;
+    let (kind, r, c) = match &g.tick_events[index as usize] {
+        maze::GameEvent::DoorOpened { cell: (r, c) } => (0u32, *r, *c),
+        maze::GameEvent::EnemyMoved { row, col, .. } => (1u32, *row, *col),
+        maze::GameEvent::PlayerDamaged { .. } => (2u32, 0, 0),
+        maze::GameEvent::PlayerHealed { cell: (r, c), .. } => (3u32, *r, *c),
+        maze::GameEvent::PlayerNotHealed { cell: (r, c), .. } => (4u32, *r, *c),
     };
     unsafe {
         if !out_kind.is_null() {
-            *out_kind = 0; // DoorOpened
+            *out_kind = kind;
         }
         if !out_row.is_null() {
             *out_row = r as u32;
         }
         if !out_col.is_null() {
             *out_col = c as u32;
+        }
+    }
+    1
+}
+
+/// Retrieves a tick event's `u32` payload by index — the extra scalar that
+/// doesn't fit the `(kind, row, col)` shape of
+/// [`maze_c_maze_game_get_tick_event`]:
+/// - `EnemyMoved` → the enemy id.
+/// - `PlayerDamaged` / `PlayerHealed` → `hp_after`.
+/// - `PlayerNotHealed` → the reason code (`0` = already at max HP).
+/// - `DoorOpened` → `0` (no extra payload).
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// `out_payload` may be null; a non-null pointer must be a valid writable
+/// location.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","E","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_tick(ptr, 1500.0); // enemy steps onto the player → EnemyMoved + PlayerDamaged
+/// let mut kind: u32 = 99;
+/// unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, std::ptr::null_mut(), std::ptr::null_mut()) };
+/// assert_eq!(kind, 1); // EnemyMoved
+/// let mut id: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_get_tick_event_payload(ptr, 0, &mut id) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(id, 0); // enemy id
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_payload(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_payload: *mut u32,
+) -> u8 {
+    let g = unsafe { &(*ptr) };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return 0;
+    }
+    let payload = match &g.tick_events[index as usize] {
+        maze::GameEvent::DoorOpened { .. } => 0,
+        maze::GameEvent::EnemyMoved { id, .. } => *id,
+        maze::GameEvent::PlayerDamaged { hp_after } => *hp_after,
+        maze::GameEvent::PlayerHealed { hp_after, .. } => *hp_after,
+        maze::GameEvent::PlayerNotHealed { reason, .. } => match reason {
+            maze::PlayerNotHealedReason::AlreadyAtMaxHp => 0,
+        },
+    };
+    unsafe {
+        if !out_payload.is_null() {
+            *out_payload = payload;
+        }
+    }
+    1
+}
+
+/// Retrieves the UTF-8 string payload of a tick event by index — currently only
+/// `PlayerNotHealed` carries one (its default human-readable message); every
+/// other variant reports a zero-length string.
+///
+/// Two-call protocol: call once with `out_buf` null to read the byte length into
+/// `out_len`, allocate a buffer of that size, then call again with `out_buf`
+/// pointing at it to copy the bytes. The buffer is stable between calls until the
+/// next [`maze_c_maze_game_tick`]. When `out_buf` is non-null the caller must have
+/// allocated at least `*out_len` bytes.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// `out_len` may be null. When `out_buf` is non-null it must point to a writable
+/// region of at least the byte length previously reported via `out_len`.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// // Player at full HP walks onto 'H' → the pickup is spared → PlayerNotHealed.
+/// let json = CString::new(r#"{"grid":[["S","H","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right onto 'H'
+/// maze_c_maze_game_tick(ptr, 0.0);      // flush the queued PlayerNotHealed
+/// let mut len: u32 = 0;
+/// let ok = unsafe { maze_c_maze_game_get_tick_event_string_payload(ptr, 0, std::ptr::null_mut(), &mut len) };
+/// assert_eq!(ok, 1);
+/// let mut buf = vec![0u8; len as usize];
+/// unsafe { maze_c_maze_game_get_tick_event_string_payload(ptr, 0, buf.as_mut_ptr(), &mut len) };
+/// assert_eq!(String::from_utf8(buf).unwrap(), "Already at maximum health");
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_string_payload(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_buf: *mut u8,
+    out_len: *mut u32,
+) -> u8 {
+    let g = unsafe { &(*ptr) };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return 0;
+    }
+    let message: &str = match &g.tick_events[index as usize] {
+        maze::GameEvent::PlayerNotHealed { message, .. } => message,
+        _ => "",
+    };
+    let bytes = message.as_bytes();
+    unsafe {
+        if !out_len.is_null() {
+            *out_len = bytes.len() as u32;
+        }
+        if !out_buf.is_null() {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
         }
     }
     1
@@ -4084,6 +4214,138 @@ mod tests {
         let mut c: u32 = 99;
         let ok = unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut k, &mut r, &mut c) };
         assert_eq!(ok, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — HP / enemies / health pickups / extended tick events ─────
+
+    #[test]
+    fn game_hp_and_max_hp_default_to_three() {
+        let json = CString::new(r#"{"grid":[["S","E","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_hp(ptr), 3);
+        assert_eq!(maze_c_maze_game_max_hp(ptr), 3);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_enemy_count_and_get_enemy() {
+        let json = CString::new(r#"{"grid":[["S","E","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_enemy_count(ptr), 1);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_enemy(ptr, 0, &mut row, &mut col, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!((row, col), (0, 1));
+        assert_eq!(id, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_health_pickup_count_and_get() {
+        let json = CString::new(r#"{"grid":[["S","H","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_health_pickup_count(ptr), 1);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_health_pickup(ptr, 0, &mut row, &mut col, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!((row, col), (0, 1));
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_tick_emits_enemy_moved_and_player_damaged_with_payloads() {
+        // Enemy at (0,1) chasing the player at (0,0). One full move period:
+        // the enemy steps onto the player → EnemyMoved (kind 1) then
+        // PlayerDamaged (kind 2).
+        let json = CString::new(r#"{"grid":[["S","E","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        let count = maze_c_maze_game_tick(ptr, 1500.0);
+        assert_eq!(count, 2);
+
+        let mut kind: u32 = 99;
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, &mut row, &mut col) };
+        assert_eq!(kind, 1); // EnemyMoved
+        assert_eq!((row, col), (0, 0));
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_tick_event_payload(ptr, 0, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!(id, 0); // enemy id
+
+        unsafe { maze_c_maze_game_get_tick_event(ptr, 1, &mut kind, &mut row, &mut col) };
+        assert_eq!(kind, 2); // PlayerDamaged
+        assert_eq!((row, col), (0, 0)); // no cell for damage
+        let mut hp_after: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event_payload(ptr, 1, &mut hp_after) };
+        assert_eq!(hp_after, 2);
+        assert_eq!(maze_c_maze_game_hp(ptr), 2);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_tick_emits_player_healed_after_damage() {
+        // Step onto the enemy (damage 3 → 2), flush, then step onto the health
+        // pickup below max HP → PlayerHealed (kind 3) at the pickup cell.
+        let json = CString::new(r#"{"grid":[["S","E","H","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // Right onto 'E' → damage queued
+        maze_c_maze_game_tick(ptr, 0.0); // flush; hp 3 → 2
+        assert_eq!(maze_c_maze_game_hp(ptr), 2);
+        maze_c_maze_game_move_player(ptr, 4); // Right onto 'H' (hp 2 < 3) → heal queued
+        let count = maze_c_maze_game_tick(ptr, 0.0);
+        assert_eq!(count, 1);
+        let mut kind: u32 = 99;
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, &mut row, &mut col) };
+        assert_eq!(kind, 3); // PlayerHealed
+        assert_eq!((row, col), (0, 2)); // consumed pickup cell
+        let mut hp_after: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event_payload(ptr, 0, &mut hp_after) };
+        assert_eq!(hp_after, 3);
+        assert_eq!(maze_c_maze_game_hp(ptr), 3);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_tick_emits_player_not_healed_with_string_payload() {
+        // Player at full HP walks onto 'H' → the pickup is spared →
+        // PlayerNotHealed (kind 4), reason 0, default message via the
+        // two-call string-payload protocol.
+        let json = CString::new(r#"{"grid":[["S","H","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // Right onto 'H'
+        let count = maze_c_maze_game_tick(ptr, 0.0);
+        assert_eq!(count, 1);
+
+        let mut kind: u32 = 99;
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, &mut row, &mut col) };
+        assert_eq!(kind, 4); // PlayerNotHealed
+        assert_eq!((row, col), (0, 1)); // spared pickup cell
+        let mut reason: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event_payload(ptr, 0, &mut reason) };
+        assert_eq!(reason, 0); // AlreadyAtMaxHp
+
+        let mut len: u32 = 0;
+        let ok = unsafe {
+            maze_c_maze_game_get_tick_event_string_payload(ptr, 0, std::ptr::null_mut(), &mut len)
+        };
+        assert_eq!(ok, 1);
+        let mut buf = vec![0u8; len as usize];
+        unsafe {
+            maze_c_maze_game_get_tick_event_string_payload(ptr, 0, buf.as_mut_ptr(), &mut len)
+        };
+        assert_eq!(String::from_utf8(buf).unwrap(), "Already at maximum health");
+        // The pickup was spared — still present.
+        assert_eq!(maze_c_maze_game_health_pickup_count(ptr), 1);
         maze_c_free_maze_game(ptr);
     }
 
