@@ -33,5 +33,16 @@ namespace Maze.Maui.App.Services
         /// <summary>Updates the runtime visual for the door at the given cell.
         /// <c>Locked</c> renders normally; <c>Opening</c> dims the icon; <c>Open</c> hides it.</summary>
         void SetDoorRuntimeState(int row, int col, DoorState state);
+
+        /// <summary>Enters game-runtime mode — enemy / health cells thereafter follow live
+        /// game state (the static spawn <c>'E'</c> marker is suppressed and live enemies tracked).</summary>
+        void BeginGameRuntime();
+
+        /// <summary>Moves the live enemy visual from its old cell to its new cell.
+        /// Pass <c>oldRow</c> / <c>oldCol</c> of <c>-1</c> for initial placement.</summary>
+        void SetEnemyCell(int oldRow, int oldCol, int newRow, int newCol, uint id);
+
+        /// <summary>Marks the health pickup at the given cell as consumed — the icon disappears.</summary>
+        void MarkHealthCollected(int row, int col);
     }
 }

@@ -26,12 +26,14 @@ namespace Maze.Api
         BlockedByLockedDoor = 4,
         StartedUnlocking = 5,
         Stranded = 6,
+        Killed = 7,
     }
 
     public enum LoseReason
     {
         None = 0,
         Stranded = 1,
+        Killed = 2,
     }
 
     public enum BagItemKind
@@ -53,11 +55,19 @@ namespace Maze.Api
     public enum GameEventKind
     {
         DoorOpened = 0,
+        EnemyMoved = 1,
+        PlayerDamaged = 2,
+        PlayerHealed = 3,
+        PlayerNotHealed = 4,
     }
 
-    public readonly record struct GameEvent(GameEventKind Kind, uint Row, uint Column);
+    public readonly record struct GameEvent(GameEventKind Kind, uint Row, uint Column, uint Payload);
 
     public readonly record struct KeyInfo(uint Row, uint Column, uint Id);
+
+    public readonly record struct EnemyInfo(uint Row, uint Column, uint Id);
+
+    public readonly record struct HealthPickupInfo(uint Row, uint Column);
 
     public sealed class MazeGame : IDisposable
     {
@@ -135,6 +145,11 @@ namespace Maze.Api
         public IReadOnlyList<BagItem> Bag { get; set; } = [];
         public IReadOnlyList<DoorInfo> Doors { get; set; } = [];
         public IReadOnlyList<KeyInfo> Keys { get; set; } = [];
+
+        public uint Hp { get; set; }
+        public uint MaxHp { get; set; }
+        public IReadOnlyList<EnemyInfo> Enemies { get; set; } = [];
+        public IReadOnlyList<HealthPickupInfo> HealthPickups { get; set; } = [];
 
         public void Dispose() { }
     }

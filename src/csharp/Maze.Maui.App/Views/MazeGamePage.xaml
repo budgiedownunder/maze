@@ -18,6 +18,14 @@ x:DataType="viewmodel:MazeGameViewModel"
         <Grid Grid.Row="0">
             <controls:MazeGrid x:Name="GameGrid" />
 
+            <!-- Damage flash — snaps to translucent red on a hit, fades out (code-behind). -->
+            <BoxView x:Name="DamageFlashOverlay"
+                     Color="Red"
+                     Opacity="0"
+                     InputTransparent="True"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill" />
+
             <Label Text="{Binding LoadStatus}"
                    HorizontalOptions="Center"
                    VerticalOptions="Center"
@@ -38,9 +46,30 @@ x:DataType="viewmodel:MazeGameViewModel"
             </Border>
         </Grid>
 
+        <!-- Status block: LIFE heart row above the BAG row, mirroring React's
+             paired status strip between the grid and the d-pad. -->
+        <VerticalStackLayout Grid.Row="1" Spacing="2" HorizontalOptions="Center" VerticalOptions="Center">
+
+        <!-- Centred LIFE heart row — one heart per MaxHp, dimmed when spent. -->
+        <HorizontalStackLayout x:Name="HpStack"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"
+                               Padding="0,2"
+                               Spacing="4">
+            <Label Text="LIFE" VerticalOptions="Center" FontSize="14" Opacity="0.8"/>
+            <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Hearts}"
+                                   Spacing="2"
+                                   VerticalOptions="Center">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="viewmodel:HeartState">
+                        <Image Source="health.png" Opacity="{Binding Opacity}" HeightRequest="22" WidthRequest="22" Aspect="AspectFit"/>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </HorizontalStackLayout>
+        </HorizontalStackLayout>
+
         <!-- Centred bag row — no background; mirrors React's `.maze-bag`. -->
         <HorizontalStackLayout x:Name="BagStack"
-                               Grid.Row="1"
                                HorizontalOptions="Center"
                                VerticalOptions="Center"
                                Padding="0,4"
@@ -63,6 +92,8 @@ x:DataType="viewmodel:MazeGameViewModel"
                 </BindableLayout.ItemTemplate>
             </HorizontalStackLayout>
         </HorizontalStackLayout>
+
+        </VerticalStackLayout>
 
         <!-- D-pad + Pickup, centre — hidden on Windows (arrow keys + E
              used instead); hidden until grid loads. The Pickup button sits

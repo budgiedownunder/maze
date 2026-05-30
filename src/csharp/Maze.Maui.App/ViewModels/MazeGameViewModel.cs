@@ -8,6 +8,14 @@ using Microsoft.Maui.Controls;
 
 namespace Maze.Maui.App.ViewModels
 {
+    /// <summary>One heart in the HP HUD. <see cref="Opacity"/> dims an empty heart.</summary>
+    /// <param name="Filled">Whether this heart represents remaining HP.</param>
+    public readonly record struct HeartState(bool Filled)
+    {
+        /// <summary>Render opacity — full for a filled heart, dimmed for an empty one.</summary>
+        public double Opacity => Filled ? 1.0 : 0.25;
+    }
+
     /// <summary>
     /// View model for the maze game page. Receives a <see cref="MazeItem"/> via Shell navigation,
     /// then drives a <see cref="MazeGame"/> session when <see cref="StartGame"/> is called by the page.
@@ -19,6 +27,9 @@ namespace Maze.Maui.App.ViewModels
         private MazeItem? _mazeItem;
         private MazeGame? _game;
         private IMazeGridView? _gameGrid;
+        // Tracks each enemy's last-known cell by id so EnemyMoved events (which carry
+        // only the new cell) can tell the grid which cell to vacate.
+        private readonly Dictionary<uint, (int row, int col)> _enemyCells = new();
 
         /// <summary>
         /// Constructor
@@ -86,6 +97,29 @@ namespace Maze.Maui.App.ViewModels
         [ObservableProperty]
         private LoseReason loseReason = LoseReason.None;
 
+        /// <summary>The player's current HP. Drives the heart-row HUD.</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(Hearts))]
+        private uint hp;
+
+        /// <summary>The player's maximum HP — the number of hearts in the HUD.</summary>
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(Hearts))]
+        private uint maxHp;
+
+        /// <summary>
+        /// One heart per <see cref="MaxHp"/>, full or dimmed according to <see cref="Hp"/>.
+        /// Drives the heart-row HUD via a bindable layout.
+        /// </summary>
+        public IReadOnlyList<HeartState> Hearts =>
+            Enumerable.Range(0, (int)MaxHp).Select(i => new HeartState(i < Hp)).ToList();
+
+        /// <summary>
+        /// Raised when the player takes damage. The page hooks this to flash the
+        /// damage overlay.
+        /// </summary>
+        public event Action? DamageFlashRequested;
+
         /// <summary>
         /// Whether the Pickup command should be enabled — true while the player
         /// is standing on an uncollected key cell and the game is still in play.
@@ -124,6 +158,7 @@ namespace Maze.Maui.App.ViewModels
             IsLost = false;
             LoseReason = LoseReason.None;
             CanPickup = false;
+            _enemyCells.Clear();
 
             if (_mazeItem?.Definition is null)
             {
@@ -140,8 +175,17 @@ namespace Maze.Maui.App.ViewModels
             try
             {
                 _game = (GameFactory ?? MazeGame.Create)(_mazeItem.Definition.DefinitionToJson());
+                Hp = _game.Hp;
+                MaxHp = _game.MaxHp;
+                gameGrid.BeginGameRuntime();
+                foreach (var enemy in _game.Enemies)
+                    _enemyCells[enemy.Id] = ((int)enemy.Row, (int)enemy.Column);
                 gameGrid.SetPlayerAt(_game.PlayerRow, _game.PlayerCol, _game.PlayerDirection);
                 RefreshPickupAvailability();
+                // Enemies move on a fixed cadence — run the tick loop continuously
+                // while any exist (the page's timer keeps firing while Tick() returns true).
+                if (_game.Enemies.Count > 0)
+                    TickStartRequested?.Invoke();
             }
             catch (Exception ex)
             {
@@ -166,11 +210,17 @@ namespace Maze.Maui.App.ViewModels
 
             if (result == MazeGameMoveResult.Moved
                 || result == MazeGameMoveResult.Complete
-                || result == MazeGameMoveResult.Stranded)
+                || result == MazeGameMoveResult.Stranded
+                || result == MazeGameMoveResult.Killed)
             {
                 _gameGrid.SetVisitedDotAt(prevRow, prevCol);
                 _gameGrid.SetPlayerAt(_game.PlayerRow, _game.PlayerCol, _game.PlayerDirection);
                 RefreshPickupAvailability();
+                // Flush events the move queued synchronously: PlayerDamaged from
+                // stepping into an enemy, PlayerHealed / PlayerNotHealed from
+                // stepping onto a health pickup. (No enemy advances on a 0ms tick.)
+                ProcessTickEvents(_game.Tick(0));
+                Hp = _game.Hp;
             }
 
             if (result == MazeGameMoveResult.StartedUnlocking)
@@ -184,7 +234,13 @@ namespace Maze.Maui.App.ViewModels
                 TickStartRequested?.Invoke();
             }
 
-            if (result == MazeGameMoveResult.Stranded)
+            if (result == MazeGameMoveResult.Killed)
+            {
+                IsLost = true;
+                LoseReason = _game.LoseReason;
+                await ShowResultPopup("You died!");
+            }
+            else if (result == MazeGameMoveResult.Stranded)
             {
                 IsLost = true;
                 LoseReason = _game.LoseReason;
@@ -225,15 +281,55 @@ namespace Maze.Maui.App.ViewModels
         public bool Tick(double dtMs)
         {
             if (_game is null || _gameGrid is null) return false;
-            GameEvent[] events = _game.Tick(dtMs);
+            if (_game.IsComplete || _game.IsLost) return false;
+            ProcessTickEvents(_game.Tick(dtMs));
+            Hp = _game.Hp;
+            // An enemy stepping onto the player drops HP with no player move; if that
+            // is fatal, surface the death here (a subsequent player Move would
+            // otherwise be the first to report it).
+            if (_game.IsLost && !IsLost)
+            {
+                IsLost = true;
+                LoseReason = _game.LoseReason;
+                _ = ShowResultPopup("You died!");
+                return false;
+            }
+            // Keep ticking while enemies exist (fixed-cadence movement) or a door is
+            // still opening; stop otherwise.
+            return _game.Enemies.Count > 0 || _game.Doors.Any(d => d.State == DoorState.Opening);
+        }
+
+        /// <summary>
+        /// Dispatches a batch of tick events to the grid view and HUD: door opens,
+        /// enemy moves, damage flashes, and consumed health pickups.
+        /// </summary>
+        private void ProcessTickEvents(GameEvent[] events)
+        {
+            if (_gameGrid is null) return;
             foreach (var evt in events)
             {
-                if (evt.Kind == GameEventKind.DoorOpened)
+                switch (evt.Kind)
                 {
-                    _gameGrid.SetDoorRuntimeState((int)evt.Row, (int)evt.Column, DoorState.Open);
+                    case GameEventKind.DoorOpened:
+                        _gameGrid.SetDoorRuntimeState((int)evt.Row, (int)evt.Column, DoorState.Open);
+                        break;
+                    case GameEventKind.EnemyMoved:
+                        uint id = evt.Payload;
+                        (int oldRow, int oldCol) = _enemyCells.TryGetValue(id, out var pos) ? pos : (-1, -1);
+                        _gameGrid.SetEnemyCell(oldRow, oldCol, (int)evt.Row, (int)evt.Column, id);
+                        _enemyCells[id] = ((int)evt.Row, (int)evt.Column);
+                        break;
+                    case GameEventKind.PlayerDamaged:
+                        DamageFlashRequested?.Invoke();
+                        break;
+                    case GameEventKind.PlayerHealed:
+                        _gameGrid.MarkHealthCollected((int)evt.Row, (int)evt.Column);
+                        break;
+                    case GameEventKind.PlayerNotHealed:
+                        // Pickup spared (player already at max HP) — nothing to render.
+                        break;
                 }
             }
-            return _game.Doors.Any(d => d.State == DoorState.Opening);
         }
 
         /// <summary>

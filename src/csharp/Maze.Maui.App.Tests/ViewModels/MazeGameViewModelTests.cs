@@ -232,7 +232,7 @@ namespace Maze.Maui.App.Tests.ViewModels
             var item = ItemWithDefinition();
             MazeGame stub = InstallGame(vm, grid.Object, item);
             stub.Doors = new List<DoorInfo> { new DoorInfo(0, 2, DoorState.Opening) };
-            stub.NextTickEvents = new[] { new GameEvent(GameEventKind.DoorOpened, 0, 2) };
+            stub.NextTickEvents = new[] { new GameEvent(GameEventKind.DoorOpened, 0, 2, 0) };
 
             bool keepTicking = vm.Tick(1000.0);
 
@@ -273,6 +273,109 @@ namespace Maze.Maui.App.Tests.ViewModels
 
             grid.Verify(g => g.SetVisitedDotAt(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
             dialog.Verify(d => d.ShowGameResult(It.IsAny<string>()), Times.Never);
+        }
+
+        // ---- Enemies / HP -------------------------------------------------
+
+        // Installs a game with the stub pre-configured (HP / enemies) BEFORE
+        // StartGame so the view-model seeds from them.
+        private static MazeGame InstallGamePreconfigured(MazeGameViewModel vm, IMazeGridView grid, MazeItem item, Action<MazeGame> configure)
+        {
+            vm.MazeItem = item;
+            MazeGame stub = MazeGame.CreateForTests();
+            configure(stub);
+            MazeGameViewModel.GameFactory = _ => stub;
+            try { vm.StartGame(grid); }
+            finally { MazeGameViewModel.GameFactory = null; }
+            return stub;
+        }
+
+        [Fact]
+        public void StartGame_SeedsHpAndMaxHp_AndBeginsGameRuntime()
+        {
+            var (vm, _, grid) = BuildVm();
+            MazeGame stub = InstallGamePreconfigured(vm, grid.Object, ItemWithDefinition(), s =>
+            {
+                s.Hp = 3;
+                s.MaxHp = 3;
+                s.Enemies = new List<EnemyInfo> { new EnemyInfo(0, 1, 0) };
+            });
+            _ = stub;
+
+            Assert.Equal(3u, vm.Hp);
+            Assert.Equal(3u, vm.MaxHp);
+            Assert.Equal(3, vm.Hearts.Count);
+            Assert.All(vm.Hearts, h => Assert.True(h.Filled));
+            grid.Verify(g => g.BeginGameRuntime(), Times.Once);
+        }
+
+        [Fact]
+        public void Move_IntoEnemy_DecrementsHpAndFlashesDamage()
+        {
+            var (vm, _, grid) = BuildVm();
+            MazeGame stub = InstallGamePreconfigured(vm, grid.Object, ItemWithDefinition(), s => { s.Hp = 3; s.MaxHp = 3; });
+            stub.NextMoveResult = MazeGameMoveResult.Moved;
+            // The move queues a PlayerDamaged event (HP after = 2) flushed by the 0ms tick.
+            stub.NextTickEvents = new[] { new GameEvent(GameEventKind.PlayerDamaged, 0, 0, 2) };
+            stub.Hp = 2;
+            bool flashed = false;
+            vm.DamageFlashRequested += () => flashed = true;
+
+            vm.Move(MazeGameDirection.Right);
+
+            Assert.Equal(2u, vm.Hp);
+            Assert.True(flashed);
+        }
+
+        [Fact]
+        public void Move_OntoHealthPickup_IncrementsHpAndMarksPickupCollected()
+        {
+            var (vm, _, grid) = BuildVm();
+            MazeGame stub = InstallGamePreconfigured(vm, grid.Object, ItemWithDefinition(), s => { s.Hp = 2; s.MaxHp = 3; });
+            stub.NextMoveResult = MazeGameMoveResult.Moved;
+            // The move queues a PlayerHealed event at the consumed cell (0,2), HP after = 3.
+            stub.NextTickEvents = new[] { new GameEvent(GameEventKind.PlayerHealed, 0, 2, 3) };
+            stub.Hp = 3;
+
+            vm.Move(MazeGameDirection.Right);
+
+            Assert.Equal(3u, vm.Hp);
+            grid.Verify(g => g.MarkHealthCollected(0, 2), Times.Once);
+        }
+
+        [Fact]
+        public void Tick_EnemyMovedEvent_NotifiesGridOfNewEnemyCell()
+        {
+            var (vm, _, grid) = BuildVm();
+            MazeGame stub = InstallGamePreconfigured(vm, grid.Object, ItemWithDefinition(), s =>
+            {
+                s.Hp = 3;
+                s.MaxHp = 3;
+                s.Enemies = new List<EnemyInfo> { new EnemyInfo(0, 1, 0) };
+            });
+            // Enemy id 0 advances from its spawn (0,1) to (0,0).
+            stub.NextTickEvents = new[] { new GameEvent(GameEventKind.EnemyMoved, 0, 0, 0) };
+
+            bool keepTicking = vm.Tick(1500.0);
+
+            grid.Verify(g => g.SetEnemyCell(0, 1, 0, 0, 0), Times.Once);
+            Assert.True(keepTicking); // an enemy still exists → keep ticking
+        }
+
+        [Fact]
+        public void Move_ResultKilled_FlipsIsLostAndShowsDeathPopup()
+        {
+            var (vm, dialog, grid) = BuildVm();
+            MazeGame stub = InstallGamePreconfigured(vm, grid.Object, ItemWithDefinition(), s => { s.Hp = 1; s.MaxHp = 3; });
+            stub.NextMoveResult = MazeGameMoveResult.Killed;
+            stub.LoseReason = LoseReason.Killed;
+            stub.Hp = 0;
+
+            vm.Move(MazeGameDirection.Right);
+
+            Assert.True(vm.IsLost);
+            Assert.Equal(LoseReason.Killed, vm.LoseReason);
+            dialog.Verify(d => d.ShowGameResult("You died!"), Times.Once);
         }
     }
 }

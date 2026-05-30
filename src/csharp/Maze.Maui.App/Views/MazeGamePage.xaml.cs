@@ -43,6 +43,7 @@ namespace Maze.Maui.App.Views
             GameGrid.CellTapped += OnGameGridCellTapped;
             GameGrid.CellDoubleTapped += OnGameGridCellTapped;
             _viewModel.TickStartRequested += OnTickStartRequested;
+            _viewModel.DamageFlashRequested += OnDamageFlashRequested;
             if (_gameStarted) return;
             _gameStarted = true;
             DpadGrid.IsVisible = false;
@@ -82,6 +83,7 @@ namespace Maze.Maui.App.Views
             GameGrid.CellTapped -= OnGameGridCellTapped;
             GameGrid.CellDoubleTapped -= OnGameGridCellTapped;
             _viewModel.TickStartRequested -= OnTickStartRequested;
+            _viewModel.DamageFlashRequested -= OnDamageFlashRequested;
         }
 
         /// <inheritdoc/>
@@ -187,6 +189,18 @@ namespace Maze.Maui.App.Views
         private void StopTickTimer()
         {
             _tickTimer?.Stop();
+        }
+
+        /// <summary>
+        /// Flashes the red damage overlay when the player takes a hit. Snaps to a
+        /// partial-alpha red, then fades back to transparent. Restarts cleanly on
+        /// back-to-back hits by resetting opacity before each fade.
+        /// </summary>
+        private void OnDamageFlashRequested()
+        {
+            DamageFlashOverlay.CancelAnimations();
+            DamageFlashOverlay.Opacity = 0.4;
+            DamageFlashOverlay.FadeTo(0, 300);
         }
 
         private IDispatcherTimer CreateTickTimer()

@@ -26,11 +26,22 @@ namespace Maze.Maui.App
         // _doorRuntimeState[r,c] holds the current DoorState for that door cell (default Locked).
         private bool[,] _keyCollected = new bool[0, 0];
         private DoorState[,] _doorRuntimeState = new DoorState[0, 0];
+        // Game-mode runtime overrides for enemy/health cells. Only consulted while
+        // _gameMode is true (a live game session); in editor mode the static 'E' /
+        // 'H' cells render as-is. _enemyAt[r,c] = count of live enemies on that cell
+        // (the static spawn 'E' is suppressed and the live position rendered instead).
+        // _healthCollected[r,c] == true → the pickup was consumed; hide its icon.
+        private bool _gameMode;
+        private int[,] _enemyAt = new int[0, 0];
+        private bool[,] _healthCollected = new bool[0, 0];
         // 1-based positions of start/finish cells (-1 = not set)
         private int _startRow = -1, _startCol = -1;
         private int _finishRow = -1, _finishCol = -1;
         // 1-based position of the current walker cell (-1 = no walker)
         private int _walkerRow = -1, _walkerCol = -1;
+        // Current player walker GIF source, so cells that recycle into view (or an
+        // enemy stacking onto the player's cell) can re-render the player on top.
+        private string _walkerImage = "walker_down.gif";
 
         /// <summary>
         /// Cell tapped event handler delegate
@@ -123,6 +134,9 @@ namespace Maze.Maui.App
             _solutionDirections = new MazeCellContent.PathDirection[RowCount, ColumnCount];
             _keyCollected = new bool[RowCount, ColumnCount];
             _doorRuntimeState = new DoorState[RowCount, ColumnCount];
+            _enemyAt = new int[RowCount, ColumnCount];
+            _healthCollected = new bool[RowCount, ColumnCount];
+            _gameMode = false;
             _startRow = _startCol = _finishRow = _finishCol = -1;
 
             for (int r = 0; r < RowCount; r++)
@@ -310,6 +324,15 @@ namespace Maze.Maui.App
         private void ApplyGameRuntimeState(MazeCellContent content, int row, int column)
         {
             if (_keyCollected.GetLength(0) <= row || _keyCollected.GetLength(1) <= column) return;
+            // A live enemy on the cell is rendered over whatever static content the
+            // cell holds. When the player shares the cell the walker is drawn on top
+            // and the enemy dimmed behind it; two or more enemies add a count chip.
+            if (_gameMode && _enemyAt[row, column] > 0)
+            {
+                bool playerHere = _walkerRow - 1 == row && _walkerCol - 1 == column;
+                content.SetEnemyStack(_enemyAt[row, column], playerHere ? _walkerImage : null);
+                return;
+            }
             if (_cellTypes[row, column] == CellType.Key && _keyCollected[row, column])
             {
                 // Collected key renders as an empty passage so the visited-dot
@@ -329,6 +352,98 @@ namespace Maze.Maui.App
                     default: content.SetIconOpacity(1.0); break;
                 }
             }
+            else if (_gameMode && _cellTypes[row, column] == CellType.Enemy)
+            {
+                // A spawn 'E' cell with no live enemy on it — the enemy has walked
+                // away, so the static spawn marker is suppressed.
+                content.Update(CellType.Empty, content.SolutionPathDirection);
+            }
+            else if (_gameMode && _cellTypes[row, column] == CellType.Health && _healthCollected[row, column])
+            {
+                // Consumed health pickup renders as an empty passage. The runtime
+                // auto-consumes the cell but the static grid char never changes.
+                content.Update(CellType.Empty, content.SolutionPathDirection);
+            }
+        }
+        /// <summary>
+        /// Enters game-runtime mode: enemy / health cells thereafter follow live
+        /// game state rather than the static grid. Seeds the live-enemy positions
+        /// from the spawn (<c>'E'</c>) cells. Called by the game view-model once a
+        /// session has started.
+        /// </summary>
+        public void BeginGameRuntime()
+        {
+            _gameMode = true;
+            for (int r = 0; r < RowCount; r++)
+            {
+                for (int c = 0; c < ColumnCount; c++)
+                {
+                    if (_cellTypes[r, c] == CellType.Enemy)
+                        _enemyAt[r, c] = 1;
+                }
+            }
+        }
+        /// <summary>
+        /// Moves the live enemy visual from its old cell to its new cell. The spawn
+        /// <c>'E'</c> marker is suppressed in game mode, so enemies are tracked by a
+        /// per-cell occupancy count rather than the static grid. Pass
+        /// <c>oldRow</c> / <c>oldCol</c> of <c>-1</c> for an enemy that has no prior
+        /// cell (initial placement).
+        /// </summary>
+        /// <param name="oldRow">Previous row (0-based), or -1 for none.</param>
+        /// <param name="oldCol">Previous column (0-based), or -1 for none.</param>
+        /// <param name="newRow">New row (0-based).</param>
+        /// <param name="newCol">New column (0-based).</param>
+        /// <param name="id">Stable enemy id (unused by the count-based model; kept for caller clarity).</param>
+        public void SetEnemyCell(int oldRow, int oldCol, int newRow, int newCol, uint id)
+        {
+            _ = id;
+            if (!_gameMode) return;
+            if (oldRow >= 0 && oldCol >= 0 && oldRow < RowCount && oldCol < ColumnCount && _enemyAt[oldRow, oldCol] > 0)
+            {
+                _enemyAt[oldRow, oldCol]--;
+                RefreshCellRuntime(oldRow, oldCol);
+            }
+            if (newRow >= 0 && newCol >= 0 && newRow < RowCount && newCol < ColumnCount)
+            {
+                _enemyAt[newRow, newCol]++;
+                RefreshCellRuntime(newRow, newCol);
+            }
+        }
+        /// <summary>
+        /// Marks the health pickup at the given 0-based cell as consumed — the icon
+        /// disappears (mirrors <see cref="MarkKeyCollected"/> for <c>'H'</c> cells).
+        /// </summary>
+        public void MarkHealthCollected(int row, int col)
+        {
+            if (row < 0 || col < 0 || row >= _healthCollected.GetLength(0) || col >= _healthCollected.GetLength(1)) return;
+            _healthCollected[row, col] = true;
+            RefreshCellRuntime(row, col);
+        }
+        /// <summary>
+        /// Rebuilds a cell's content from its static type plus the current game
+        /// runtime state. Skips cells the player walker currently occupies — its
+        /// content is the walker sprite, which must not be clobbered.
+        /// </summary>
+        private void RefreshCellRuntime(int row, int col)
+        {
+            MazeCellContent? content = GetCellContent(row + 1, col + 1);
+            if (content is null) return;
+            bool playerHere = _walkerRow - 1 == row && _walkerCol - 1 == col;
+            if (_gameMode && _enemyAt[row, col] > 0)
+            {
+                // Enemy occupancy (with the player layered on top when present).
+                content.SetEnemyStack(_enemyAt[row, col], playerHere ? _walkerImage : null);
+                return;
+            }
+            if (playerHere)
+            {
+                // Player owns the cell and no enemies remain — keep the walker.
+                content.SetWalker(_walkerImage);
+                return;
+            }
+            content.Update(_cellTypes[row, col], _solutionDirections[row, col]);
+            ApplyGameRuntimeState(content, row, col);
         }
         /// <summary>
         /// Marks the key at the given 0-based cell as collected — the cell
@@ -893,19 +1008,24 @@ namespace Maze.Maui.App
         /// </summary>
         private void SetWalkerCell(int row, int col, string walkerImage)
         {
-            // Restore previous walker cell
-            if (_walkerRow > 0)
-            {
-                MazeCellContent? prev = GetCellContent(_walkerRow, _walkerCol);
-                if (prev != null)
-                {
-                    prev.Update(_cellTypes[_walkerRow - 1, _walkerCol - 1], _solutionDirections[_walkerRow - 1, _walkerCol - 1]);
-                    ApplyGameRuntimeState(prev, _walkerRow - 1, _walkerCol - 1);
-                }
-            }
+            int prevRow = _walkerRow, prevCol = _walkerCol;
+            // Advance the walker state first so the previous cell rebuilds as
+            // "player no longer here" (an enemy left behind on it reappears).
             _walkerRow = row;
             _walkerCol = col;
-            GetCellContent(row, col)?.SetWalker(walkerImage);
+            _walkerImage = walkerImage;
+
+            if (prevRow > 0 && (prevRow != row || prevCol != col))
+                RefreshCellRuntime(prevRow - 1, prevCol - 1);
+
+            // Render the new cell: an enemy-occupied cell layers the walker over the
+            // dimmed enemy (plus a count chip for a stack); otherwise just the walker.
+            MazeCellContent? content = GetCellContent(row, col);
+            if (content is null) return;
+            if (_gameMode && _enemyAt[row - 1, col - 1] > 0)
+                content.SetEnemyStack(_enemyAt[row - 1, col - 1], walkerImage);
+            else
+                content.SetWalker(walkerImage);
         }
         /// <summary>
         /// Clears the walker visual and restores the cell to its normal state
@@ -1508,6 +1628,63 @@ namespace Maze.Maui.App
                     VerticalOptions = LayoutOptions.Fill,
                     IsAnimationPlaying = true
                 };
+            Content.BackgroundColor = Colors.Transparent;
+        }
+        /// <summary>
+        /// Renders a stacked game cell: the live enemy sprite, the player walker on
+        /// top when the player shares the cell (enemy dimmed behind it), and a
+        /// dark-green count chip in the top-right corner when two or more enemies
+        /// occupy the cell. Mirrors the React 2D game's enemy-stack rendering.
+        /// </summary>
+        /// <param name="enemyCount">Number of enemies on the cell (assumed &gt;= 1).</param>
+        /// <param name="walkerImage">Player walker GIF source when the player is here; otherwise null.</param>
+        public void SetEnemyStack(int enemyCount, string? walkerImage)
+        {
+            cellType = CellType.Enemy;
+            var layers = new Microsoft.Maui.Controls.Grid { BackgroundColor = Colors.Transparent };
+            if (enemyCount > 0)
+            {
+                layers.Add(new Image
+                {
+                    Source = "enemy.png",
+                    Aspect = Aspect.AspectFit,
+                    HorizontalOptions = LayoutOptions.Fill,
+                    VerticalOptions = LayoutOptions.Fill,
+                    // Dim the enemy behind the player so the player reads as foreground.
+                    Opacity = walkerImage is not null ? 0.5 : 1.0,
+                });
+            }
+            if (walkerImage is not null)
+            {
+                layers.Add(new Image
+                {
+                    Source = walkerImage,
+                    Aspect = Aspect.AspectFit,
+                    HorizontalOptions = LayoutOptions.Fill,
+                    VerticalOptions = LayoutOptions.Fill,
+                    IsAnimationPlaying = true,
+                });
+            }
+            if (enemyCount >= 2)
+            {
+                layers.Add(new Border
+                {
+                    BackgroundColor = Color.FromArgb("#2a4d18"),
+                    Stroke = Colors.Transparent,
+                    StrokeShape = new Microsoft.Maui.Controls.Shapes.RoundRectangle { CornerRadius = new CornerRadius(6) },
+                    Padding = new Thickness(3, 0),
+                    HorizontalOptions = LayoutOptions.End,
+                    VerticalOptions = LayoutOptions.Start,
+                    Content = new Label
+                    {
+                        Text = enemyCount.ToString(),
+                        TextColor = Colors.White,
+                        FontSize = 9,
+                        FontAttributes = FontAttributes.Bold,
+                    },
+                });
+            }
+            Content = layers;
             Content.BackgroundColor = Colors.Transparent;
         }
         /// <summary>
