@@ -38,6 +38,14 @@ namespace Maze.Maui.App.Views
         private static readonly string[] KeyHolderLabels = { "Pedestal", "Chest", "Floating Key" };
         private static readonly string[] KeyHolderValues = { "pedestal", "chest", "floating_key" };
 
+        // Display labels for the Enemy type picker. Same index pairing.
+        private static readonly string[] EnemyTypeLabels = { "Goblin", "Ghost" };
+        private static readonly string[] EnemyTypeValues = { "goblin", "ghost" };
+
+        // Display labels for the Health style picker. Same index pairing.
+        private static readonly string[] HealthStyleLabels = { "Heart", "Potion" };
+        private static readonly string[] HealthStyleValues = { "heart", "potion" };
+
         /// <summary>
         /// Constructor. Pre-fills the form from the previously-saved settings.
         /// </summary>
@@ -56,6 +64,8 @@ namespace Maze.Maui.App.Views
             foreach (var label in WallTypeLabels) WallTexturePicker.Items.Add(label);
             foreach (var label in DoorStyleLabels) DoorStylePicker.Items.Add(label);
             foreach (var label in KeyHolderLabels) KeyHolderPicker.Items.Add(label);
+            foreach (var label in EnemyTypeLabels) EnemyTypePicker.Items.Add(label);
+            foreach (var label in HealthStyleLabels) HealthStylePicker.Items.Add(label);
 
             // Pre-fill from saved settings.
             var settings = Play3dCustomLaunchSettingsStore.Load();
@@ -63,6 +73,8 @@ namespace Maze.Maui.App.Views
             WallTexturePicker.SelectedIndex = IndexOf(WallTypeValues, settings.WallType);
             DoorStylePicker.SelectedIndex = IndexOf(DoorStyleValues, settings.DoorStyle);
             KeyHolderPicker.SelectedIndex = IndexOf(KeyHolderValues, settings.KeyHolder);
+            EnemyTypePicker.SelectedIndex = IndexOf(EnemyTypeValues, settings.EnemyType);
+            HealthStylePicker.SelectedIndex = IndexOf(HealthStyleValues, settings.HealthStyle);
             QuadrantWallTypesCheck.IsChecked = settings.WallMaterialVariation;
             WallTintCheck.IsChecked = settings.WallTint;
             DeadEndObjectsCheck.IsChecked = settings.DeadEndObjects;
@@ -201,6 +213,8 @@ namespace Maze.Maui.App.Views
             var wall = WallTexturePicker.SelectedIndex >= 0 ? WallTypeValues[WallTexturePicker.SelectedIndex] : "brick";
             var doorStyle = DoorStylePicker.SelectedIndex >= 0 ? DoorStyleValues[DoorStylePicker.SelectedIndex] : "swing";
             var keyHolder = KeyHolderPicker.SelectedIndex >= 0 ? KeyHolderValues[KeyHolderPicker.SelectedIndex] : "pedestal";
+            var enemyType = EnemyTypePicker.SelectedIndex >= 0 ? EnemyTypeValues[EnemyTypePicker.SelectedIndex] : "goblin";
+            var healthStyle = HealthStylePicker.SelectedIndex >= 0 ? HealthStyleValues[HealthStylePicker.SelectedIndex] : "heart";
 
             var settings = new Play3dCustomLaunchSettings
             {
@@ -208,6 +222,8 @@ namespace Maze.Maui.App.Views
                 WallType = wall,
                 DoorStyle = doorStyle,
                 KeyHolder = keyHolder,
+                EnemyType = enemyType,
+                HealthStyle = healthStyle,
                 WallTint = WallTintCheck.IsChecked,
                 WallMaterialVariation = QuadrantWallTypesCheck.IsChecked,
                 DeadEndObjects = DeadEndObjectsCheck.IsChecked,

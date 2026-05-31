@@ -120,6 +120,18 @@
                 <Picker x:Name="KeyHolderPicker"/>
             </VerticalStackLayout>
 
+            <!-- Enemy type -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="Enemy type"/>
+                <Picker x:Name="EnemyTypePicker"/>
+            </VerticalStackLayout>
+
+            <!-- Health style -->
+            <VerticalStackLayout Spacing="4">
+                <Label Text="Health style"/>
+                <Picker x:Name="HealthStylePicker"/>
+            </VerticalStackLayout>
+
             <!-- Dead-end objects -->
             <HorizontalStackLayout Spacing="8">
                 <CheckBox x:Name="DeadEndObjectsCheck"/>

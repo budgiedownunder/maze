@@ -32,6 +32,8 @@ namespace Maze.Maui.App.Services
                 if (!Play3dCustomLaunchSettings.IsValidWallType(parsed.WallType)) parsed.WallType = "brick";
                 if (!Play3dCustomLaunchSettings.IsValidDoorStyle(parsed.DoorStyle)) parsed.DoorStyle = "swing";
                 if (!Play3dCustomLaunchSettings.IsValidKeyHolder(parsed.KeyHolder)) parsed.KeyHolder = "pedestal";
+                if (!Play3dCustomLaunchSettings.IsValidEnemyType(parsed.EnemyType)) parsed.EnemyType = "goblin";
+                if (!Play3dCustomLaunchSettings.IsValidHealthStyle(parsed.HealthStyle)) parsed.HealthStyle = "heart";
                 if (parsed.TimerSeconds <= 0) parsed.TimerSeconds = 60;
                 return parsed;
             }

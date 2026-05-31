@@ -22,6 +22,8 @@ namespace Maze.Maui.App.Tests.Models
             Assert.Equal("brick", s.WallType);
             Assert.Equal("swing", s.DoorStyle);
             Assert.Equal("pedestal", s.KeyHolder);
+            Assert.Equal("goblin", s.EnemyType);
+            Assert.Equal("heart", s.HealthStyle);
             Assert.False(s.WallTint);
             Assert.False(s.WallMaterialVariation);
             Assert.True(s.DeadEndObjects);
@@ -39,6 +41,8 @@ namespace Maze.Maui.App.Tests.Models
                 WallType = "dressed_stone",
                 DoorStyle = "portcullis",
                 KeyHolder = "chest",
+                EnemyType = "ghost",
+                HealthStyle = "potion",
                 WallTint = true,
                 WallMaterialVariation = false,
                 DeadEndObjects = false,
@@ -51,6 +55,8 @@ namespace Maze.Maui.App.Tests.Models
             // and forwards into the Bevy WASM StartConfig.
             Assert.Contains("doorStyle=portcullis", q);
             Assert.Contains("keyHolder=chest", q);
+            Assert.Contains("enemyType=ghost", q);
+            Assert.Contains("healthStyle=potion", q);
             Assert.Contains("skyType=day", q);
             Assert.Contains("wallType=dressed_stone", q);
             Assert.Contains("wallTint=1", q);
@@ -84,6 +90,28 @@ namespace Maze.Maui.App.Tests.Models
         public void IsValidKeyHolder_AcceptsCurrentWireVariantsOnly(string s, bool expected)
         {
             Assert.Equal(expected, Play3dCustomLaunchSettings.IsValidKeyHolder(s));
+        }
+
+        [Theory]
+        [InlineData("goblin", true)]
+        [InlineData("ghost", true)]
+        [InlineData("zombie", false)]   // never on the wire
+        [InlineData("", false)]
+        [InlineData("Goblin", false)]   // case-sensitive
+        public void IsValidEnemyType_AcceptsCurrentWireVariantsOnly(string s, bool expected)
+        {
+            Assert.Equal(expected, Play3dCustomLaunchSettings.IsValidEnemyType(s));
+        }
+
+        [Theory]
+        [InlineData("heart", true)]
+        [InlineData("potion", true)]
+        [InlineData("medkit", false)]   // never on the wire
+        [InlineData("", false)]
+        [InlineData("Heart", false)]    // case-sensitive
+        public void IsValidHealthStyle_AcceptsCurrentWireVariantsOnly(string s, bool expected)
+        {
+            Assert.Equal(expected, Play3dCustomLaunchSettings.IsValidHealthStyle(s));
         }
 
         [Theory]
