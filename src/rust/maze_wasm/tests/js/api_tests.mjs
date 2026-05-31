@@ -335,78 +335,14 @@ function registerMazeTests() {
             expect(cellType).to.deep.equal({ cell_type: 0 });
         });
 
-        // MazeWasm::set_wall_cells()
-        runBadArgTests(function (argTest) {
-            it(`should expect set_wall_cells() to fail for a maze when passed passed invalid 'start_row' argument (${argTest.desc})`, function () {
-                let maze = track(new MazeWasm());
-                maze.resize(2, 2);
-                expect(() => maze.set_wall_cells(argTest.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", argTest.desc));
-            });
-        });
-
-        runBadArgTests(function (argTest) {
-            it(`should expect set_wall_cells() to fail for a maze when passed invalid 'start_col' argument (${argTest.desc})`, function () {
-                let maze = track(new MazeWasm());
-                maze.resize(2, 2);
-                expect(() => maze.set_wall_cells(0, argTest.value)).to.throw(invalidArgumentError("start_col", "unsigned integer", argTest.desc));
-            });
-        });
-
-        runBadArgTests(function (argTest) {
-            it(`should expect set_wall_cells() to fail for a maze when passed invalid 'end_row' argument (${argTest.desc})`, function () {
-                let maze = track(new MazeWasm());
-                maze.resize(2, 2);
-                expect(() => maze.set_wall_cells(0, 0, argTest.value)).to.throw(invalidArgumentError("end_row", "unsigned integer", argTest.desc));
-            });
-        });
-
-        runBadArgTests(function (argTest) {
-            it(`should expect set_wall_cells() to fail for a maze when passed invalid 'end_col' argument (${argTest.desc})`, function () {
-                let maze = track(new MazeWasm());
-                maze.resize(2, 2);
-                expect(() => maze.set_wall_cells(0, 0, 0, argTest.value)).to.throw(invalidArgumentError("end_col", "unsigned integer", argTest.desc));
-            });
-        });
-
-        it(`should expect set_wall_cells() to fail for a maze when passed out of bounds 'start_row' argument`, function () {
-            let maze = track(new MazeWasm());
-            maze.resize(2, 2);
-            expect(() => maze.set_wall_cells(2, 0, 0, 0)).to.throw(invalidPointError("from", 2, 0));
-        });
-
-        it(`should expect set_wall_cells() to fail for a maze when passed out of bounds 'start_col' argument`, function () {
-            let maze = track(new MazeWasm());
-            maze.resize(2, 2);
-            expect(() => maze.set_wall_cells(1, 2, 0, 0)).to.throw(invalidPointError("from", 1, 2));
-        });
-
-        it(`should expect set_wall_cells() to fail for a maze when passed out of bounds 'end_row' argument`, function () {
-            let maze = track(new MazeWasm());
-            maze.resize(2, 2);
-            expect(() => maze.set_wall_cells(1, 1, 2, 0)).to.throw(invalidPointError("to", 2, 0));
-        });
-
-        it(`should expect set_wall_cells() to fail for a maze when passed out of bounds 'end_col' argument`, function () {
-            let maze = track(new MazeWasm());
-            maze.resize(2, 2);
-            expect(() => maze.set_wall_cells(1, 1, 1, 2)).to.throw(invalidPointError("to", 1, 2));
-        });
-
-        it(`should expect set_wall_cells() to succeed for a maze when passed valid arguments and for get_cell() to return the correct cell_type before/after`, function () {
-            let maze = track(new MazeWasm());
-            maze.resize(3, 3);
-            let startRow = 1, startCol = 1, endRow = 2, endCol = 2;
-            verifyCellType(maze, startRow, startCol, endRow, endCol, MazeCellTypeWasm.Empty);
-            maze.set_wall_cells(startRow, startCol, endRow, endCol);
-            verifyCellType(maze, startRow, startCol, endRow, endCol, MazeCellTypeWasm.Wall);
-        });
-
-        // MazeWasm::set_key_cells() / set_door_cells() / set_enemy_cells() / set_health_cells()
-        // Each typed setter mirrors set_wall_cells: same four (start_row, start_col,
-        // end_row, end_col) arguments and the same bad-argument handling, writing a
-        // different cell character whose get_cell() cell_type and to_json() character
-        // are asserted here (closing the JS coverage gap for Key/Door/Enemy/Health).
+        // MazeWasm::set_wall_cells() / set_key_cells() / set_door_cells() / set_enemy_cells() / set_health_cells()
+        // Every typed setter shares one signature (start_row, start_col, end_row,
+        // end_col) and one set of behaviours: identical bad-argument handling, the
+        // same from/to out-of-bounds errors, and a write that get_cell()'s cell_type
+        // and to_json()'s character both reflect. The single data-driven block below
+        // covers all five so a new setter only needs a row here.
         [
+            { method: 'set_wall_cells', cellType: MazeCellTypeWasm.Wall, char: 'W' },
             { method: 'set_key_cells', cellType: MazeCellTypeWasm.Key, char: 'K' },
             { method: 'set_door_cells', cellType: MazeCellTypeWasm.Door, char: 'D' },
             { method: 'set_enemy_cells', cellType: MazeCellTypeWasm.Enemy, char: 'E' },
@@ -444,10 +380,28 @@ function registerMazeTests() {
                 });
             });
 
-            it(`should expect ${setter.method}() to fail for a maze when passed an out of bounds location`, function () {
+            it(`should expect ${setter.method}() to fail for a maze when passed out of bounds 'start_row' argument`, function () {
                 let maze = track(new MazeWasm());
                 maze.resize(2, 2);
                 expect(() => maze[setter.method](2, 0, 0, 0)).to.throw(invalidPointError("from", 2, 0));
+            });
+
+            it(`should expect ${setter.method}() to fail for a maze when passed out of bounds 'start_col' argument`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(2, 2);
+                expect(() => maze[setter.method](1, 2, 0, 0)).to.throw(invalidPointError("from", 1, 2));
+            });
+
+            it(`should expect ${setter.method}() to fail for a maze when passed out of bounds 'end_row' argument`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(2, 2);
+                expect(() => maze[setter.method](1, 1, 2, 0)).to.throw(invalidPointError("to", 2, 0));
+            });
+
+            it(`should expect ${setter.method}() to fail for a maze when passed out of bounds 'end_col' argument`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(2, 2);
+                expect(() => maze[setter.method](1, 1, 1, 2)).to.throw(invalidPointError("to", 1, 2));
             });
 
             it(`should expect ${setter.method}() to succeed for valid arguments and for get_cell() to return the correct cell_type before/after`, function () {
