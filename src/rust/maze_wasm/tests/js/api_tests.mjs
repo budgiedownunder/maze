@@ -401,6 +401,73 @@ function registerMazeTests() {
             verifyCellType(maze, startRow, startCol, endRow, endCol, MazeCellTypeWasm.Wall);
         });
 
+        // MazeWasm::set_key_cells() / set_door_cells() / set_enemy_cells() / set_health_cells()
+        // Each typed setter mirrors set_wall_cells: same four (start_row, start_col,
+        // end_row, end_col) arguments and the same bad-argument handling, writing a
+        // different cell character whose get_cell() cell_type and to_json() character
+        // are asserted here (closing the JS coverage gap for Key/Door/Enemy/Health).
+        [
+            { method: 'set_key_cells', cellType: MazeCellTypeWasm.Key, char: 'K' },
+            { method: 'set_door_cells', cellType: MazeCellTypeWasm.Door, char: 'D' },
+            { method: 'set_enemy_cells', cellType: MazeCellTypeWasm.Enemy, char: 'E' },
+            { method: 'set_health_cells', cellType: MazeCellTypeWasm.Health, char: 'H' },
+        ].forEach(function (setter) {
+            runBadArgTests(function (argTest) {
+                it(`should expect ${setter.method}() to fail for a maze when passed invalid 'start_row' argument (${argTest.desc})`, function () {
+                    let maze = track(new MazeWasm());
+                    maze.resize(2, 2);
+                    expect(() => maze[setter.method](argTest.value)).to.throw(invalidArgumentError("start_row", "unsigned integer", argTest.desc));
+                });
+            });
+
+            runBadArgTests(function (argTest) {
+                it(`should expect ${setter.method}() to fail for a maze when passed invalid 'start_col' argument (${argTest.desc})`, function () {
+                    let maze = track(new MazeWasm());
+                    maze.resize(2, 2);
+                    expect(() => maze[setter.method](0, argTest.value)).to.throw(invalidArgumentError("start_col", "unsigned integer", argTest.desc));
+                });
+            });
+
+            runBadArgTests(function (argTest) {
+                it(`should expect ${setter.method}() to fail for a maze when passed invalid 'end_row' argument (${argTest.desc})`, function () {
+                    let maze = track(new MazeWasm());
+                    maze.resize(2, 2);
+                    expect(() => maze[setter.method](0, 0, argTest.value)).to.throw(invalidArgumentError("end_row", "unsigned integer", argTest.desc));
+                });
+            });
+
+            runBadArgTests(function (argTest) {
+                it(`should expect ${setter.method}() to fail for a maze when passed invalid 'end_col' argument (${argTest.desc})`, function () {
+                    let maze = track(new MazeWasm());
+                    maze.resize(2, 2);
+                    expect(() => maze[setter.method](0, 0, 0, argTest.value)).to.throw(invalidArgumentError("end_col", "unsigned integer", argTest.desc));
+                });
+            });
+
+            it(`should expect ${setter.method}() to fail for a maze when passed an out of bounds location`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(2, 2);
+                expect(() => maze[setter.method](2, 0, 0, 0)).to.throw(invalidPointError("from", 2, 0));
+            });
+
+            it(`should expect ${setter.method}() to succeed for valid arguments and for get_cell() to return the correct cell_type before/after`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(3, 3);
+                let startRow = 1, startCol = 1, endRow = 2, endCol = 2;
+                verifyCellType(maze, startRow, startCol, endRow, endCol, MazeCellTypeWasm.Empty);
+                maze[setter.method](startRow, startCol, endRow, endCol);
+                verifyCellType(maze, startRow, startCol, endRow, endCol, setter.cellType);
+            });
+
+            it(`should expect ${setter.method}() to write the '${setter.char}' character into the grid as seen via to_json()`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(3, 3);
+                maze[setter.method](1, 1, 1, 1);
+                let parsed = JSON.parse(maze.to_json());
+                expect(parsed.definition.grid[1][1]).to.equal(setter.char);
+            });
+        });
+
         // MazeWasm::clear_cells()
         runBadArgTests(function (argTest) {
             it(`should expect clear_cells() to fail for a maze when passed passed invalid 'start_row' argument (${argTest.desc})`, function () {
@@ -1098,6 +1165,35 @@ function registerMazeGameTests() {
                 },
             ]);
             expect(game.health_pickups()).to.deep.equal([{ row: 0, col: 1, id: 0 }]);
+        });
+
+        // time_until_next_event_ms() — idle game has no upcoming events
+        it('should expect time_until_next_event_ms() to be null on an idle game with no enemies or opening doors', function () {
+            let game = makeGame('{"grid":[["S"," ","F"]]}');
+            expect(game.time_until_next_event_ms()).to.equal(null);
+        });
+
+        // time_until_next_event_ms() — reports the soonest planned enemy commit
+        it('should expect time_until_next_event_ms() to report the soonest planned enemy commit', function () {
+            let game = makeGame('{"grid":[["S","E","F"]]}');
+            // Default move_period_ms = 1500.
+            expect(game.time_until_next_event_ms()).to.equal(1500);
+        });
+
+        // time_until_next_event_ms() — flushes to 0 once events are pending from a Move
+        it('should expect time_until_next_event_ms() to be 0 when events are pending from a prior move', function () {
+            let game = makeGame('{"grid":[["S","E","F"]]}');
+            game.move_player(DirectionWasm.Right); // queues PlayerDamaged
+            expect(game.time_until_next_event_ms()).to.equal(0);
+        });
+
+        // time_until_next_event_ms() — subtracts elapsed accum from the remaining period
+        it('should expect time_until_next_event_ms() to subtract elapsed accum from the remaining period', function () {
+            let game = makeGame('{"grid":[["S","E","F"]]}');
+            game.tick(0);   // drain the move-time queued events first
+            game.tick(400); // accum_ms = 400
+            const remaining = game.time_until_next_event_ms();
+            expect(remaining).to.be.closeTo(1100, 0.001);
         });
     });
 }

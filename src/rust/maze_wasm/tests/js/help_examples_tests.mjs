@@ -402,6 +402,122 @@ function testMazeSetWallCellsExpectedOutput() {
     ];
 }
 
+// Test MazeWasm::set_key_cells() example
+function testMazeSetKeyCells() {
+    let maze = null;
+    try {
+        maze = new MazeWasm();
+        maze.resize(10, 5);
+        maze.set_key_cells(0, 2, 0, 2);
+        for (let col = 0; col < 5; col++) {
+            console.log(`After set_key_cells(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+        }
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (maze) maze.free();
+    }
+}
+
+function testMazeSetKeyCellsExpectedOutput() {
+    return [
+        "After set_key_cells(), cell_type at (0, 0) =  0",
+        "After set_key_cells(), cell_type at (0, 1) =  0",
+        "After set_key_cells(), cell_type at (0, 2) =  4",
+        "After set_key_cells(), cell_type at (0, 3) =  0",
+        "After set_key_cells(), cell_type at (0, 4) =  0"
+    ];
+}
+
+// Test MazeWasm::set_door_cells() example
+function testMazeSetDoorCells() {
+    let maze = null;
+    try {
+        maze = new MazeWasm();
+        maze.resize(10, 5);
+        maze.set_door_cells(0, 2, 0, 2);
+        for (let col = 0; col < 5; col++) {
+            console.log(`After set_door_cells(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+        }
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (maze) maze.free();
+    }
+}
+
+function testMazeSetDoorCellsExpectedOutput() {
+    return [
+        "After set_door_cells(), cell_type at (0, 0) =  0",
+        "After set_door_cells(), cell_type at (0, 1) =  0",
+        "After set_door_cells(), cell_type at (0, 2) =  5",
+        "After set_door_cells(), cell_type at (0, 3) =  0",
+        "After set_door_cells(), cell_type at (0, 4) =  0"
+    ];
+}
+
+// Test MazeWasm::set_enemy_cells() example
+function testMazeSetEnemyCells() {
+    let maze = null;
+    try {
+        maze = new MazeWasm();
+        maze.resize(10, 5);
+        maze.set_enemy_cells(0, 2, 0, 2);
+        for (let col = 0; col < 5; col++) {
+            console.log(`After set_enemy_cells(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+        }
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (maze) maze.free();
+    }
+}
+
+function testMazeSetEnemyCellsExpectedOutput() {
+    return [
+        "After set_enemy_cells(), cell_type at (0, 0) =  0",
+        "After set_enemy_cells(), cell_type at (0, 1) =  0",
+        "After set_enemy_cells(), cell_type at (0, 2) =  6",
+        "After set_enemy_cells(), cell_type at (0, 3) =  0",
+        "After set_enemy_cells(), cell_type at (0, 4) =  0"
+    ];
+}
+
+// Test MazeWasm::set_health_cells() example
+function testMazeSetHealthCells() {
+    let maze = null;
+    try {
+        maze = new MazeWasm();
+        maze.resize(10, 5);
+        maze.set_health_cells(0, 2, 0, 2);
+        for (let col = 0; col < 5; col++) {
+            console.log(`After set_health_cells(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+        }
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (maze) maze.free();
+    }
+}
+
+function testMazeSetHealthCellsExpectedOutput() {
+    return [
+        "After set_health_cells(), cell_type at (0, 0) =  0",
+        "After set_health_cells(), cell_type at (0, 1) =  0",
+        "After set_health_cells(), cell_type at (0, 2) =  7",
+        "After set_health_cells(), cell_type at (0, 3) =  0",
+        "After set_health_cells(), cell_type at (0, 4) =  0"
+    ];
+}
+
 // Test MazeWasm::clear_cells() example
 function testMazeClearCells() {
     let maze = null;
@@ -1137,6 +1253,28 @@ function testMazeGameHealthPickupsExpectedOutput() {
     ];
 }
 
+// Test MazeGameWasm::time_until_next_event_ms() example
+function testMazeGameTimeUntilNextEventMs() {
+    let game = null;
+    try {
+        let json = '{"grid":[["S"," ","F"]]}';
+        game = MazeGameWasm.from_json(json);
+        console.log("timeUntilNextEventMs() = ", game.time_until_next_event_ms());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameTimeUntilNextEventMsExpectedOutput() {
+    return [
+        "timeUntilNextEventMs() =  null"
+    ];
+}
+
 // Tests
 const tests = [
     { name: "MazeWasm:new() example", testFunction: testMazeNew, expectedOutput: testMazeNewExpectedOutput },
@@ -1155,6 +1293,10 @@ const tests = [
     { name: "MazeWasm:set_finish_cell() example", testFunction: testMazeSetFinishCell, expectedOutput: testMazeSetFinishCellExpectedOutput },
     { name: "MazeWasm:get_finish_cell() example", testFunction: testMazeGetFinishCell, expectedOutput: testMazeGetFinishCellExpectedOutput },
     { name: "MazeWasm:set_wall_cells() example", testFunction: testMazeSetWallCells, expectedOutput: testMazeSetWallCellsExpectedOutput },
+    { name: "MazeWasm:set_key_cells() example", testFunction: testMazeSetKeyCells, expectedOutput: testMazeSetKeyCellsExpectedOutput },
+    { name: "MazeWasm:set_door_cells() example", testFunction: testMazeSetDoorCells, expectedOutput: testMazeSetDoorCellsExpectedOutput },
+    { name: "MazeWasm:set_enemy_cells() example", testFunction: testMazeSetEnemyCells, expectedOutput: testMazeSetEnemyCellsExpectedOutput },
+    { name: "MazeWasm:set_health_cells() example", testFunction: testMazeSetHealthCells, expectedOutput: testMazeSetHealthCellsExpectedOutput },
     { name: "MazeWasm:clear_cells() example", testFunction: testMazeClearCells, expectedOutput: testMazeClearCellsExpectedOutput },
     { name: "MazeWasm:to_json() example", testFunction: testMazeToJSON, expectedOutput: testMazeToJSONExpectedOutput },
     { name: "MazeWasm:from_json() example", testFunction: testMazeFromJSON, expectedOutput: testMazeFromJSONExpectedOutput },
@@ -1180,6 +1322,7 @@ const tests = [
     { name: "MazeGameWasm:max_hp() example", testFunction: testMazeGameMaxHp, expectedOutput: testMazeGameMaxHpExpectedOutput },
     { name: "MazeGameWasm:enemies() example", testFunction: testMazeGameEnemies, expectedOutput: testMazeGameEnemiesExpectedOutput },
     { name: "MazeGameWasm:health_pickups() example", testFunction: testMazeGameHealthPickups, expectedOutput: testMazeGameHealthPickupsExpectedOutput },
+    { name: "MazeGameWasm:time_until_next_event_ms() example", testFunction: testMazeGameTimeUntilNextEventMs, expectedOutput: testMazeGameTimeUntilNextEventMsExpectedOutput },
 ];
 
 const errorTemplate = (test, i, expected, logRows) =>

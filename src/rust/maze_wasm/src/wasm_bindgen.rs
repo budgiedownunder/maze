@@ -1653,6 +1653,230 @@ impl MazeWasm {
         Ok(())
     }
     #[wasm_bindgen]
+    /// Sets a range of cells within the maze instance to be keys (`cell_type` = [`MazeCellTypeWasm::Key`])
+    ///
+    /// # Arguments
+    ///
+    /// * `start_row` - Start row index (zero-based)
+    /// * `start_col` - Start column index (zero-based)
+    /// * `end_row` - End row index (zero-based)
+    /// * `end_col` - End column index (zero-based)
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the target location is out of range
+    ///
+    /// # Examples
+    ///
+    /// Create a new maze, resize it to 10 rows x 5 columns and then set
+    /// cell (0, 2) to be a key. Then print the `cell_type` for the top row,
+    /// where cell (0, 2) will be [`MazeCellTypeWasm::Key`] and the others
+    /// [`MazeCellTypeWasm::Empty`].
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let maze = null;
+    ///     try {
+    ///         maze = new MazeWasm();
+    ///         maze.resize(10, 5);
+    ///         maze.set_key_cells(0, 2, 0, 2);
+    ///         for (let col  = 0; col < 5; col ++) {
+    ///             console.log(`After set_key_cells(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+    ///         }
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn set_key_cells(
+        &mut self,
+        start_row: JsValue,
+        start_col: JsValue,
+        end_row: JsValue,
+        end_col: JsValue,
+    ) -> Result<(), JsValue> {
+        self.set_cell_values(start_row, start_col, end_row, end_col, 'K')?;
+        Ok(())
+    }
+    #[wasm_bindgen]
+    /// Sets a range of cells within the maze instance to be doors (`cell_type` = [`MazeCellTypeWasm::Door`])
+    ///
+    /// # Arguments
+    ///
+    /// * `start_row` - Start row index (zero-based)
+    /// * `start_col` - Start column index (zero-based)
+    /// * `end_row` - End row index (zero-based)
+    /// * `end_col` - End column index (zero-based)
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the target location is out of range
+    ///
+    /// # Examples
+    ///
+    /// Create a new maze, resize it to 10 rows x 5 columns and then set
+    /// cell (0, 2) to be a door. Then print the `cell_type` for the top row,
+    /// where cell (0, 2) will be [`MazeCellTypeWasm::Door`] and the others
+    /// [`MazeCellTypeWasm::Empty`].
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let maze = null;
+    ///     try {
+    ///         maze = new MazeWasm();
+    ///         maze.resize(10, 5);
+    ///         maze.set_door_cells(0, 2, 0, 2);
+    ///         for (let col  = 0; col < 5; col ++) {
+    ///             console.log(`After set_door_cells(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+    ///         }
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn set_door_cells(
+        &mut self,
+        start_row: JsValue,
+        start_col: JsValue,
+        end_row: JsValue,
+        end_col: JsValue,
+    ) -> Result<(), JsValue> {
+        self.set_cell_values(start_row, start_col, end_row, end_col, 'D')?;
+        Ok(())
+    }
+    #[wasm_bindgen]
+    /// Sets a range of cells within the maze instance to be enemy spawns (`cell_type` = [`MazeCellTypeWasm::Enemy`])
+    ///
+    /// # Arguments
+    ///
+    /// * `start_row` - Start row index (zero-based)
+    /// * `start_col` - Start column index (zero-based)
+    /// * `end_row` - End row index (zero-based)
+    /// * `end_col` - End column index (zero-based)
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the target location is out of range
+    ///
+    /// # Examples
+    ///
+    /// Create a new maze, resize it to 10 rows x 5 columns and then set
+    /// cell (0, 2) to be an enemy spawn. Then print the `cell_type` for the
+    /// top row, where cell (0, 2) will be [`MazeCellTypeWasm::Enemy`] and the
+    /// others [`MazeCellTypeWasm::Empty`].
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let maze = null;
+    ///     try {
+    ///         maze = new MazeWasm();
+    ///         maze.resize(10, 5);
+    ///         maze.set_enemy_cells(0, 2, 0, 2);
+    ///         for (let col  = 0; col < 5; col ++) {
+    ///             console.log(`After set_enemy_cells(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+    ///         }
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn set_enemy_cells(
+        &mut self,
+        start_row: JsValue,
+        start_col: JsValue,
+        end_row: JsValue,
+        end_col: JsValue,
+    ) -> Result<(), JsValue> {
+        self.set_cell_values(start_row, start_col, end_row, end_col, 'E')?;
+        Ok(())
+    }
+    #[wasm_bindgen]
+    /// Sets a range of cells within the maze instance to be health pickups (`cell_type` = [`MazeCellTypeWasm::Health`])
+    ///
+    /// # Arguments
+    ///
+    /// * `start_row` - Start row index (zero-based)
+    /// * `start_col` - Start column index (zero-based)
+    /// * `end_row` - End row index (zero-based)
+    /// * `end_col` - End column index (zero-based)
+    ///
+    /// # Returns
+    ///
+    /// This function will return an error in the following situations:
+    /// - If the target location is out of range
+    ///
+    /// # Examples
+    ///
+    /// Create a new maze, resize it to 10 rows x 5 columns and then set
+    /// cell (0, 2) to be a health pickup. Then print the `cell_type` for the
+    /// top row, where cell (0, 2) will be [`MazeCellTypeWasm::Health`] and the
+    /// others [`MazeCellTypeWasm::Empty`].
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let maze = null;
+    ///     try {
+    ///         maze = new MazeWasm();
+    ///         maze.resize(10, 5);
+    ///         maze.set_health_cells(0, 2, 0, 2);
+    ///         for (let col  = 0; col < 5; col ++) {
+    ///             console.log(`After set_health_cells(), cell_type at (0, ${col}) = `, maze.get_cell(0, col).cell_type);
+    ///         }
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (maze) maze.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn set_health_cells(
+        &mut self,
+        start_row: JsValue,
+        start_col: JsValue,
+        end_row: JsValue,
+        end_col: JsValue,
+    ) -> Result<(), JsValue> {
+        self.set_cell_values(start_row, start_col, end_row, end_col, 'H')?;
+        Ok(())
+    }
+    #[wasm_bindgen]
     /// Clears a range of cells within the maze instance, setting their `cell_type` = [`MazeCellTypeWasm::Empty`]
     ///
     /// # Arguments
