@@ -139,6 +139,7 @@ export const MazeGameEventType = {
   PlayerDamaged:   'playerDamaged',
   PlayerHealed:    'playerHealed',
   PlayerNotHealed: 'playerNotHealed',
+  KeyCollected:    'keyCollected',
 } as const
 export type MazeGameEventType = typeof MazeGameEventType[keyof typeof MazeGameEventType]
 
@@ -167,6 +168,7 @@ export type MazeGameEvent =
   | { type: typeof MazeGameEventType.PlayerDamaged;   hpAfter: number }
   | { type: typeof MazeGameEventType.PlayerHealed;    hpAfter: number; row: number; col: number }
   | { type: typeof MazeGameEventType.PlayerNotHealed; row: number; col: number; reason: MazePlayerNotHealedReason; message: string }
+  | { type: typeof MazeGameEventType.KeyCollected;    id:  number; row: number; col: number }
 
 export type { MazeGameWasm }
 

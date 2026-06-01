@@ -2252,6 +2252,10 @@ pub extern "C" fn maze_c_maze_game_lose_reason(ptr: *mut MazeGameC) -> i32 {
 /// `kind` encoding: `0` = Key (the only variant in the current bag model).
 /// New variants extend the kind space.
 ///
+/// Keys are auto-collected when the player walks onto a `'K'` cell, so an
+/// explicit call normally finds nothing left to collect and returns `0` — the
+/// cell was cleared as the player stepped onto it.
+///
 /// # Safety
 ///
 /// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
@@ -2274,11 +2278,11 @@ pub extern "C" fn maze_c_maze_game_lose_reason(ptr: *mut MazeGameC) -> i32 {
 /// let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
 /// assert_eq!(ok, 0);
 ///
-/// // Step onto the K cell, then pick it up.
+/// // Step onto the K cell — the key is auto-collected on walk-over, so an
+/// // explicit pickup at the now-cleared cell returns 0.
 /// maze_c_maze_game_move_player(ptr, 4); // Right
 /// let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
-/// assert_eq!(ok, 1);
-/// assert_eq!(k, 0); // Key
+/// assert_eq!(ok, 0);
 ///
 /// maze_c_free_maze_game(ptr);
 /// ```
@@ -2347,17 +2351,14 @@ pub extern "C" fn maze_c_maze_game_bag_count(ptr: *mut MazeGameC) -> i32 {
 ///
 /// let json = CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap();
 /// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
-/// maze_c_maze_game_move_player(ptr, 4); // Right onto K
-/// let mut k: u32 = 99;
-/// let mut id: u32 = 99;
-/// unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right onto K — auto-collected
 ///
 /// let mut k2: u32 = 99;
 /// let mut id2: u32 = 99;
 /// let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, 0, &mut k2, &mut id2) };
 /// assert_eq!(ok, 1);
 /// assert_eq!(k2, 0); // Key
-/// assert_eq!(id2, id);
+/// assert_eq!(id2, 0); // first key id
 ///
 /// maze_c_free_maze_game(ptr);
 /// ```
@@ -2493,10 +2494,8 @@ pub unsafe extern "C" fn maze_c_maze_game_get_door(
 ///
 /// let json = CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap();
 /// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
-/// maze_c_maze_game_move_player(ptr, 4); // Right → key
-/// let mut k: u32 = 0;
-/// let mut id: u32 = 0;
-/// unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right → key, auto-collected
+/// maze_c_maze_game_tick(ptr, 0.0);      // flush the KeyCollected event
 /// maze_c_maze_game_move_player(ptr, 4); // Right into door → StartedUnlocking
 /// let count = maze_c_maze_game_tick(ptr, 1000.0);
 /// assert_eq!(count, 1); // one DoorOpened event
@@ -2545,6 +2544,8 @@ pub extern "C" fn maze_c_maze_game_tick_event_count(ptr: *mut MazeGameC) -> i32 
 /// - `4` = `PlayerNotHealed` — `(row, col)` is the spared pickup cell; the reason
 ///   code is carried by [`maze_c_maze_game_get_tick_event_payload`] and the
 ///   default message by [`maze_c_maze_game_get_tick_event_string_payload`].
+/// - `5` = `KeyCollected` — `(row, col)` is the consumed key cell; the key id is
+///   carried by [`maze_c_maze_game_get_tick_event_payload`].
 ///
 /// Returns `1` on success, `0` if `index` is out of range.
 ///
@@ -2562,10 +2563,8 @@ pub extern "C" fn maze_c_maze_game_tick_event_count(ptr: *mut MazeGameC) -> i32 
 ///
 /// let json = CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap();
 /// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
-/// maze_c_maze_game_move_player(ptr, 4); // onto key
-/// let mut k: u32 = 0;
-/// let mut id: u32 = 0;
-/// unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+/// maze_c_maze_game_move_player(ptr, 4); // onto key — auto-collected
+/// maze_c_maze_game_tick(ptr, 0.0);      // flush the KeyCollected event
 /// maze_c_maze_game_move_player(ptr, 4); // into door → StartedUnlocking
 /// maze_c_maze_game_tick(ptr, 1000.0);
 /// let mut kind: u32 = 99;
@@ -2596,6 +2595,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event(
         maze::GameEvent::PlayerDamaged { .. } => (2u32, 0, 0),
         maze::GameEvent::PlayerHealed { cell: (r, c), .. } => (3u32, *r, *c),
         maze::GameEvent::PlayerNotHealed { cell: (r, c), .. } => (4u32, *r, *c),
+        maze::GameEvent::KeyCollected { cell: (r, c), .. } => (5u32, *r, *c),
     };
     unsafe {
         if !out_kind.is_null() {
@@ -2617,6 +2617,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event(
 /// - `EnemyMoved` → the enemy id.
 /// - `PlayerDamaged` / `PlayerHealed` → `hp_after`.
 /// - `PlayerNotHealed` → the reason code (`0` = already at max HP).
+/// - `KeyCollected` → the collected key id.
 /// - `DoorOpened` → `0` (no extra payload).
 ///
 /// Returns `1` on success, `0` if `index` is out of range.
@@ -2664,6 +2665,7 @@ pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_payload(
         maze::GameEvent::PlayerNotHealed { reason, .. } => match reason {
             maze::PlayerNotHealedReason::AlreadyAtMaxHp => 0,
         },
+        maze::GameEvent::KeyCollected { id, .. } => *id,
     };
     unsafe {
         if !out_payload.is_null() {
@@ -4082,36 +4084,30 @@ mod tests {
     }
 
     #[test]
-    fn game_pickup_on_key_cell_succeeds_and_grows_bag() {
+    fn game_move_onto_key_auto_collects_and_grows_bag() {
         let json = key_game_json();
         let ptr = new_game(&json);
-        maze_c_maze_game_move_player(ptr, 4); // Right → key cell
+        maze_c_maze_game_move_player(ptr, 4); // Right → key cell, auto-collected
+        assert_eq!(maze_c_maze_game_bag_count(ptr), 1);
+        // The cell is already cleared, so an explicit pickup finds nothing.
         let mut k: u32 = 99;
         let mut id: u32 = 99;
-        let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
-        assert_eq!(ok, 1);
-        assert_eq!(k, 0); // Key
-        assert_eq!(maze_c_maze_game_bag_count(ptr), 1);
-        // Second pickup at same cell returns 0 (cell now cleared).
         let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
         assert_eq!(ok, 0);
         maze_c_free_maze_game(ptr);
     }
 
     #[test]
-    fn game_get_bag_item_returns_picked_item() {
+    fn game_get_bag_item_returns_auto_collected_key() {
         let json = key_game_json();
         let ptr = new_game(&json);
-        maze_c_maze_game_move_player(ptr, 4);
-        let mut pk_k: u32 = 99;
-        let mut pk_id: u32 = 99;
-        unsafe { maze_c_maze_game_pickup(ptr, &mut pk_k, &mut pk_id) };
+        maze_c_maze_game_move_player(ptr, 4); // onto the key — auto-collected
         let mut k: u32 = 99;
         let mut id: u32 = 99;
         let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, 0, &mut k, &mut id) };
         assert_eq!(ok, 1);
-        assert_eq!(k, pk_k);
-        assert_eq!(id, pk_id);
+        assert_eq!(k, 0); // Key
+        assert_eq!(id, 0); // first key's id
         maze_c_free_maze_game(ptr);
     }
 
@@ -4162,11 +4158,9 @@ mod tests {
     fn game_tick_emits_door_opened_after_unlocking() {
         let json = door_game_json();
         let ptr = new_game(&json);
-        // Pickup key.
+        // Walk onto K → auto-collected; flush the resulting KeyCollected event.
         maze_c_maze_game_move_player(ptr, 4); // Right → K
-        let mut k: u32 = 0;
-        let mut id: u32 = 0;
-        unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        maze_c_maze_game_tick(ptr, 0.0);
         // Step into D → StartedUnlocking (5)
         let result = maze_c_maze_game_move_player(ptr, 4);
         assert_eq!(result, 5);

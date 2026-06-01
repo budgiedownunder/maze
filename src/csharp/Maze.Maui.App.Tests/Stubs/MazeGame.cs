@@ -59,6 +59,7 @@ namespace Maze.Api
         PlayerDamaged = 2,
         PlayerHealed = 3,
         PlayerNotHealed = 4,
+        KeyCollected = 5,
     }
 
     public readonly record struct GameEvent(GameEventKind Kind, uint Row, uint Column, uint Payload);

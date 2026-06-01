@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { MazeGameWasm } from 'maze_wasm'
 import {
   createMazeGame, moveMazeGamePlayer, freeMazeGame,
-  pickupItem, tickGame, getTimeUntilNextEvent,
+  tickGame, getTimeUntilNextEvent,
   MazeGameDirection, MazeGamePlayerMoveResult, MazeGameEventType,
   type MazeGameEvent,
 } from '../wasm/mazeWasm'
@@ -32,7 +32,7 @@ type LoadResult = {
 
 export function useMazeGame(
   definitionJson: string | null
-): [MazeGameHookState, (dir: MazeGameDirection) => void, () => void, () => void] {
+): [MazeGameHookState, (dir: MazeGameDirection) => void, () => void] {
   const [loadResult, setLoadResult] = useState<LoadResult | null>(null)
   // Bumped by restart() to force the effect to free and recreate the game from
   // the same definition. Part of the match key so the old (freed) game is never
@@ -145,19 +145,12 @@ export function useMazeGame(
     ) {
       setLoadResult(prev => prev ? { ...prev, version: prev.version + 1 } : prev)
     }
-    // A successful move may have queued PlayerDamaged / PlayerHealed /
-    // PlayerNotHealed events (wakeIn becomes 0), started a door opening
-    // (wakeIn becomes DOOR_OPEN_MS), or otherwise changed the schedule —
+    // A successful move may have queued KeyCollected / PlayerDamaged /
+    // PlayerHealed / PlayerNotHealed events (wakeIn becomes 0), started a door
+    // opening (wakeIn becomes DOOR_OPEN_MS), or otherwise changed the schedule —
     // re-evaluate so the next tick fires at the correct time.
     scheduleWake()
   }, [scheduleWake])
-
-  const pickup = useCallback(() => {
-    if (!gameRef.current) return
-    if (pickupItem(gameRef.current)) {
-      setLoadResult(prev => prev ? { ...prev, version: prev.version + 1 } : prev)
-    }
-  }, [])
 
   // Restart the current maze from the beginning. Bumping the nonce re-runs the
   // load effect, which frees the existing game and recreates it from the same
@@ -167,5 +160,5 @@ export function useMazeGame(
     setRestartNonce(n => n + 1)
   }, [])
 
-  return [{ game, version, loading, error, damageFlashKey }, move, pickup, restart]
+  return [{ game, version, loading, error, damageFlashKey }, move, restart]
 }

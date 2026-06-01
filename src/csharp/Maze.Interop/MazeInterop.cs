@@ -215,6 +215,8 @@ namespace Maze.Interop
             PlayerHealed = 3,
             /// <summary>The player walked onto a health pickup that did not apply (already at max HP). The cell is spared; <see cref="MazeGameEvent.Payload"/> is the machine-readable reason code (0 = already at max HP).</summary>
             PlayerNotHealed = 4,
+            /// <summary>The player walked onto a key and it was auto-collected into the bag. <see cref="MazeGameEvent.Row"/> / <see cref="MazeGameEvent.Column"/> is the consumed key cell; <see cref="MazeGameEvent.Payload"/> is the collected key id.</summary>
+            KeyCollected = 5,
         }
         /// <summary>
         /// One time-based game event emitted by a tick.

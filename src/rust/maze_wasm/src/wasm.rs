@@ -1436,6 +1436,8 @@ pub extern "C" fn maze_game_wasm_tick_event_count(maze_game_wasm: *mut MazeGameW
 /// - `4` = PlayerNotHealed — `(row, col)` is the spared pickup cell; the reason via
 ///   the payload getter and the default message via
 ///   [`maze_game_wasm_get_tick_event_string_payload`].
+/// - `5` = KeyCollected — `(row, col)` is the consumed key cell; the key id is
+///   carried by [`maze_game_wasm_get_tick_event_payload`].
 ///
 /// # Returns
 ///
@@ -1463,6 +1465,7 @@ pub extern "C" fn maze_game_wasm_get_tick_event(
         maze::GameEvent::PlayerDamaged { .. } => (2u32, 0, 0),
         maze::GameEvent::PlayerHealed { cell: (r, c), .. } => (3u32, *r, *c),
         maze::GameEvent::PlayerNotHealed { cell: (r, c), .. } => (4u32, *r, *c),
+        maze::GameEvent::KeyCollected { cell: (r, c), .. } => (5u32, *r, *c),
     };
     unsafe {
         if !out_kind.is_null() {
@@ -1481,7 +1484,8 @@ pub extern "C" fn maze_game_wasm_get_tick_event(
 /// Retrieves a tick event's `u32` payload by `index` — the extra scalar that
 /// doesn't fit the `(kind, row, col)` shape of [`maze_game_wasm_get_tick_event`]:
 /// `EnemyMoved` → enemy id; `PlayerDamaged` / `PlayerHealed` → `hp_after`;
-/// `PlayerNotHealed` → reason code (`0` = already at max HP); `DoorOpened` → `0`.
+/// `PlayerNotHealed` → reason code (`0` = already at max HP); `KeyCollected` →
+/// key id; `DoorOpened` → `0`.
 ///
 /// # Returns
 ///
@@ -1509,6 +1513,7 @@ pub extern "C" fn maze_game_wasm_get_tick_event_payload(
         maze::GameEvent::PlayerNotHealed { reason, .. } => match reason {
             maze::PlayerNotHealedReason::AlreadyAtMaxHp => 0,
         },
+        maze::GameEvent::KeyCollected { id, .. } => *id,
     };
     unsafe {
         if !out_payload.is_null() {

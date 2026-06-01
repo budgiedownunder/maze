@@ -95,12 +95,10 @@ x:DataType="viewmodel:MazeGameViewModel"
 
         </VerticalStackLayout>
 
-        <!-- D-pad + Pickup, centre — hidden on Windows (arrow keys + E
-             used instead); hidden until grid loads. The Pickup button sits
-             in the centre of the 3×3 dpad (mirrors React's `gridArea: 'pick'`
-             middle-cell placement). 4px row/column spacing + 8px button
+        <!-- D-pad, centre — hidden on Windows (arrow keys used instead);
+             hidden until grid loads. 4px row/column spacing + 8px button
              padding mirrors React's `.game-dpad` `gap: 4px` + `padding: 8px`
-             — gives discernable gaps around the centre Pickup button. -->
+             — gives discernable gaps around the empty centre cell. -->
         <Grid x:Name="DpadGrid"
               Grid.Row="2"
               HorizontalOptions="Center"
@@ -115,12 +113,6 @@ x:DataType="viewmodel:MazeGameViewModel"
             <Button Grid.Row="1" Grid.Column="0" ImageSource="dpad_left.png"  Text="" Padding="8" Pressed="OnDpadLeftPressed"  Released="OnDpadReleased"/>
             <Button Grid.Row="1" Grid.Column="2" ImageSource="dpad_right.png" Text="" Padding="8" Pressed="OnDpadRightPressed" Released="OnDpadReleased"/>
             <Button Grid.Row="2" Grid.Column="1" ImageSource="dpad_down.png"  Text="" Padding="8" Pressed="OnDpadDownPressed"  Released="OnDpadReleased"/>
-            <Button Grid.Row="1" Grid.Column="1"
-                    x:Name="PickupButton"
-                    ImageSource="key.png"
-                    Text=""
-                    Padding="8"
-                    Command="{Binding PickupCommand}"/>
         </Grid>
 
         <!-- Keyboard legend, shown on desktop only (code-behind). Mirrors the
@@ -135,7 +127,7 @@ x:DataType="viewmodel:MazeGameViewModel"
                FontSize="12"
                LineBreakMode="WordWrap"
                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-               Text="[&#8593;/W] Up    [&#8595;/S] Down    [&#8592;/A] Left    [&#8594;/D] Right    [E] Pick up" />
+               Text="[&#8593;/W] Up    [&#8595;/S] Down    [&#8592;/A] Left    [&#8594;/D] Right" />
 
     </Grid>
 

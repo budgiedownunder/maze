@@ -10,7 +10,7 @@ import { MazeGamePage } from '../../src/pages/MazeGamePage'
 
 // ── Mocks ────────────────────────────────────────────────────
 
-const { mockMove, mockPickup, mockUseMazeGame, mockGameInstance } = vi.hoisted(() => {
+const { mockMove, mockRestart, mockUseMazeGame, mockGameInstance } = vi.hoisted(() => {
   const mockGameInstance = {
     is_complete:      vi.fn().mockReturnValue(false),
     is_lost:          vi.fn().mockReturnValue(false),
@@ -29,13 +29,13 @@ const { mockMove, mockPickup, mockUseMazeGame, mockGameInstance } = vi.hoisted((
     free:             vi.fn(),
   }
   const mockMove = vi.fn()
-  const mockPickup = vi.fn()
+  const mockRestart = vi.fn()
   const mockUseMazeGame = vi.fn().mockReturnValue([
     { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0 },
     mockMove,
-    mockPickup,
+    mockRestart,
   ])
-  return { mockMove, mockPickup, mockUseMazeGame, mockGameInstance }
+  return { mockMove, mockRestart, mockUseMazeGame, mockGameInstance }
 })
 
 vi.mock('../../src/hooks/useMazeGame', () => ({
@@ -91,7 +91,7 @@ beforeEach(() => {
   mockUseMazeGame.mockReturnValue([
     { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0 },
     mockMove,
-    mockPickup,
+    mockRestart,
   ])
 })
 
@@ -258,7 +258,7 @@ describe('MazeGamePage', () => {
     mockUseMazeGame.mockReturnValue([
       { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0 },
       mockMove,
-      mockPickup,
+      mockRestart,
     ])
     const { container } = renderPage()
     await waitForLoad()
@@ -269,7 +269,7 @@ describe('MazeGamePage', () => {
     mockUseMazeGame.mockReturnValue([
       { game: mockGameInstance, version: 1, loading: false, error: null, damageFlashKey: 1 },
       mockMove,
-      mockPickup,
+      mockRestart,
     ])
     const { container } = renderPage()
     await waitForLoad()
@@ -323,14 +323,6 @@ describe('MazeGamePage', () => {
     expect(legend.textContent).toMatch(/Right/)
   })
 
-  it('keyboard legend includes the pick-up shortcut', async () => {
-    renderPage()
-    await waitForLoad()
-    const legend = document.querySelector('.maze-shortcuts-hint')!
-    expect(legend.textContent).toMatch(/Pick/)
-    expect(legend.textContent).toMatch(/\[E\]/)
-  })
-
   it('bag shows "empty" when nothing is collected', async () => {
     renderPage()
     await waitForLoad()
@@ -344,26 +336,6 @@ describe('MazeGamePage', () => {
     await waitForLoad()
     const bag = document.querySelector('.maze-bag')!
     expect(bag.querySelectorAll('img')).toHaveLength(2)
-  })
-
-  it('"E" key calls pickup', async () => {
-    renderPage()
-    await waitForLoad()
-    fireEvent.keyDown(window, { key: 'e' })
-    expect(mockPickup).toHaveBeenCalled()
-  })
-
-  it('Pick up button calls pickup', async () => {
-    renderPage()
-    await waitForLoad()
-    await userEvent.click(screen.getByRole('button', { name: /pick up/i }))
-    expect(mockPickup).toHaveBeenCalled()
-  })
-
-  it('Pick up button is aria-disabled when not standing on a key', async () => {
-    renderPage()
-    await waitForLoad()
-    expect(screen.getByRole('button', { name: /pick up/i })).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('keyboard legend shows arrow and letter key hints', async () => {

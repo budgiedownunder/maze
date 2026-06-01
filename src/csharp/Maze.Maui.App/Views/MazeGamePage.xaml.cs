@@ -8,8 +8,8 @@ namespace Maze.Maui.App.Views
     /// <summary>
     /// Interactive 2D maze game page. The player navigates the maze using arrow keys (Windows)
     /// or D-pad buttons (Android/iOS). Holding a key or D-pad button moves continuously at a
-    /// controlled rate; each press also moves one step immediately. Pressing E (or tapping the
-    /// Pickup button) collects the key under the player.
+    /// controlled rate; each press also moves one step immediately. Keys are auto-collected
+    /// when the player walks onto them.
     /// </summary>
     public partial class MazeGamePage : ContentPage
     {
@@ -132,12 +132,6 @@ namespace Maze.Maui.App.Views
 
         private void OnGameGridKeyDown(object? sender, MazeGridKeyDownEventArgs e)
         {
-            if (e.Key == Controls.Keyboard.Key.E)
-            {
-                if (_viewModel.PickupCommand.CanExecute(null))
-                    _viewModel.PickupCommand.Execute(null);
-                return;
-            }
             MazeGameDirection dir = e.Key switch
             {
                 Controls.Keyboard.Key.Up => MazeGameDirection.Up,

@@ -164,10 +164,8 @@ test.describe('MazeGamePage', () => {
     await expect(page.locator('.maze-grid-container').getByAltText('Key')).toBeVisible()
     await expect(page.locator('.maze-bag')).toContainText('empty')
 
-    // Step onto the key (not auto-collected), then pick it up with E.
+    // Step onto the key — it is auto-collected on walk-over, no button press.
     await page.keyboard.press('ArrowRight')
-    await page.waitForTimeout(150)
-    await page.keyboard.press('e')
     await page.waitForTimeout(150)
     // The key is now in the bag.
     await expect(page.locator('.maze-bag').getByAltText('Key')).toBeVisible()

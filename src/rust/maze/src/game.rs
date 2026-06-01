@@ -214,6 +214,16 @@ pub enum GameEvent {
         /// Engine-default human-readable text derived from `reason`.
         message: String,
     },
+    /// The player walked onto a key cell and it was auto-collected into the
+    /// bag. `cell` is the `(row, col)` of the key that was consumed so
+    /// renderers can despawn the matching visual entity directly from the
+    /// event; `id` is the collected key's stable identifier.
+    KeyCollected {
+        /// The key cell that was consumed.
+        cell: (usize, usize),
+        /// Stable id of the collected key.
+        id: u32,
+    },
 }
 
 /// Why a health pickup didn't apply.
@@ -392,10 +402,11 @@ pub struct MazeGameOptions {
 /// max HP).
 ///
 /// Cell rules applied during [`MazeGame::move_player`]:
-/// - `' '`, `'S'`, `'K'`, or `'E'` → [`MoveResult::Moved`] (a key is not
-///   collected by moving onto it — use [`MazeGame::pickup`]; the `'E'`
-///   character is just a spawn marker, so damage only fires when an enemy is
-///   actually present at the destination cell)
+/// - `' '`, `'S'`, `'K'`, or `'E'` → [`MoveResult::Moved`] (a key is
+///   auto-collected into the bag on walk-over — the cell becomes `' '` and a
+///   [`GameEvent::KeyCollected`] is queued for the next [`MazeGame::tick`];
+///   the `'E'` character is just a spawn marker, so damage only fires when an
+///   enemy is actually present at the destination cell)
 /// - `'F'` → [`MoveResult::Complete`] (no collision check at the goal)
 /// - `'D'` (door) → [`MoveResult::Moved`] when already open (or
 ///   [`MoveResult::Stranded`] when walking through leaves the player with
@@ -661,8 +672,9 @@ impl MazeGame {
     /// Returns [`MoveResult::Blocked`] if the target cell is a wall or out of
     /// bounds, [`MoveResult::Complete`] if the player reaches the finish cell,
     /// and [`MoveResult::Moved`] for an empty, start, key, or already-open door
-    /// cell. Moving onto a key (`'K'`) does not collect it — use
-    /// [`MazeGame::pickup`]. A locked door (`'D'`) yields
+    /// cell. Moving onto a key (`'K'`) auto-collects it into the bag, clears
+    /// the cell, and queues a [`GameEvent::KeyCollected`] that flushes on the
+    /// next [`MazeGame::tick`]. A locked door (`'D'`) yields
     /// [`MoveResult::StartedUnlocking`] when the player holds a key — consuming
     /// it and beginning the open (see [`MazeGame::tick`]) — or
     /// [`MoveResult::BlockedByLockedDoor`] otherwise. Stepping onto an open
@@ -802,7 +814,23 @@ impl MazeGame {
                 self.apply_collision_at_player_cell()
                     .unwrap_or(MoveResult::Moved)
             }
-            ' ' | 'S' | 'K' | 'E' => {
+            'K' => {
+                self.player_row = new_row;
+                self.player_col = new_col;
+                self.visited.push((new_row, new_col));
+                // Keys are auto-collected on walk-over: clear the cell, add to
+                // the bag, and queue an event so renderers can react. The door
+                // a held key opens is unlocked later by walking onto the `'D'`.
+                if let Some(BagItem::Key { id }) = self.pickup() {
+                    self.pending_events.push(GameEvent::KeyCollected {
+                        cell: (new_row, new_col),
+                        id,
+                    });
+                }
+                self.apply_collision_at_player_cell()
+                    .unwrap_or(MoveResult::Moved)
+            }
+            ' ' | 'S' | 'E' => {
                 self.player_row = new_row;
                 self.player_col = new_col;
                 self.visited.push((new_row, new_col));
@@ -967,16 +995,17 @@ impl MazeGame {
     /// use maze::{MazeGame, Direction, MoveResult, GameEvent};
     /// let json = r#"{"grid":[["S","K","D","F"]]}"#;
     /// let mut game = MazeGame::from_json(json).unwrap();
-    /// game.move_player(Direction::Right); // step onto the key
-    /// game.pickup();                      // collect it
+    /// game.move_player(Direction::Right); // step onto the key — auto-collected
+    /// game.tick(0.0);                      // flush the KeyCollected event
     /// assert_eq!(game.move_player(Direction::Right), MoveResult::StartedUnlocking);
     /// assert_eq!(game.tick(1000.0), vec![GameEvent::DoorOpened { cell: (0, 2) }]);
     /// ```
     pub fn tick(&mut self, dt_ms: f32) -> Vec<GameEvent> {
         // Drain events queued synchronously from `move_player` since the
-        // previous tick (`PlayerHealed` from auto-pickup, `PlayerDamaged` from
-        // walking into an enemy-occupied cell) so they surface ahead of
-        // anything this tick produces.
+        // previous tick (`PlayerHealed` from auto-pickup, `KeyCollected` from
+        // walking onto a key, `PlayerDamaged` from walking into an
+        // enemy-occupied cell) so they surface ahead of anything this tick
+        // produces.
         let mut events = std::mem::take(&mut self.pending_events);
         events.extend(self.tick_enemies(dt_ms));
         events.extend(self.tick_doors(dt_ms));
@@ -1209,17 +1238,20 @@ impl MazeGame {
     /// use maze::{MazeGame, Direction, BagItem};
     /// let json = r#"{"grid":[["S","K","F"]]}"#;
     /// let mut game = MazeGame::from_json(json).unwrap();
-    /// game.move_player(Direction::Right); // step onto the key
-    /// game.pickup();                      // collect it
+    /// game.move_player(Direction::Right); // step onto the key — auto-collected
     /// assert_eq!(game.bag(), &[BagItem::Key { id: 0 }]);
     /// ```
     pub fn bag(&self) -> &[BagItem] {
         &self.bag
     }
 
-    /// Picks up the collectible item (currently a key) at the player's current
-    /// cell, adding it to the bag and clearing the cell. Returns the collected
-    /// [`BagItem`], or `None` if the current cell holds no collectible.
+    /// Collects the key at the player's current cell, adding it to the bag and
+    /// clearing the cell. Returns the collected [`BagItem`], or `None` if the
+    /// current cell holds no collectible.
+    ///
+    /// This is the mechanism [`MazeGame::move_player`] uses to auto-collect a
+    /// key on walk-over, so an external caller normally finds nothing left to
+    /// collect — the cell was already cleared when the player stepped onto it.
     ///
     /// # Examples
     ///
@@ -1227,10 +1259,9 @@ impl MazeGame {
     /// use maze::{MazeGame, Direction, BagItem};
     /// let json = r#"{"grid":[["S","K","F"]]}"#;
     /// let mut game = MazeGame::from_json(json).unwrap();
-    /// game.move_player(Direction::Right); // step onto the key cell
-    /// assert_eq!(game.pickup(), Some(BagItem::Key { id: 0 }));
+    /// game.move_player(Direction::Right); // step onto the key — auto-collected
     /// assert_eq!(game.bag(), &[BagItem::Key { id: 0 }]);
-    /// assert_eq!(game.pickup(), None);    // nothing left to pick up
+    /// assert_eq!(game.pickup(), None);    // already collected on walk-over
     /// ```
     pub fn pickup(&mut self) -> Option<BagItem> {
         let cell = (self.player_row, self.player_col);
@@ -1876,38 +1907,40 @@ mod tests {
         );
     }
 
-    // ── keys — explicit pickup ───────────────────────────────────────────────────
+    // ── keys — auto-collect on walk-over ─────────────────────────────────────────
 
     #[test]
-    fn moving_onto_key_does_not_collect_it() {
+    fn moving_onto_key_auto_collects_it() {
         let json = r#"{"grid":[["S","K","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
         assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
         assert_eq!(game.player_col(), 1);
-        assert!(game.bag().is_empty());
-        assert_eq!(game.grid()[0][1], 'K'); // key still present
-        assert_eq!(game.keys(), vec![((0, 1), 0)]);
-    }
-
-    #[test]
-    fn pickup_collects_key_at_current_cell() {
-        let json = r#"{"grid":[["S","K","F"]]}"#;
-        let mut game = MazeGame::from_json(json).unwrap();
-        game.move_player(Direction::Right); // stand on the key
-        assert_eq!(game.pickup(), Some(BagItem::Key { id: 0 }));
-        assert_eq!(game.bag(), &[BagItem::Key { id: 0 }]);
+        assert_eq!(game.bag(), &[BagItem::Key { id: 0 }]); // collected into the bag
         assert_eq!(game.grid()[0][1], ' '); // cell cleared
         assert!(game.keys().is_empty());
     }
 
     #[test]
-    fn pickup_returns_none_when_no_key_present() {
+    fn walking_onto_key_queues_key_collected_event() {
+        let json = r#"{"grid":[["S","K","F"]]}"#;
+        let mut game = MazeGame::from_json(json).unwrap();
+        game.move_player(Direction::Right); // step onto the key — auto-collected
+        assert_eq!(
+            game.tick(0.0),
+            vec![GameEvent::KeyCollected {
+                cell: (0, 1),
+                id: 0
+            }]
+        );
+    }
+
+    #[test]
+    fn pickup_returns_none_after_key_auto_collected() {
         let json = r#"{"grid":[["S","K","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
         assert_eq!(game.pickup(), None); // on the start cell
-        game.move_player(Direction::Right);
-        game.pickup();
-        assert_eq!(game.pickup(), None); // already collected
+        game.move_player(Direction::Right); // onto the key — auto-collected
+        assert_eq!(game.pickup(), None); // already collected on walk-over
     }
 
     // ── doors — blocking & unlocking ─────────────────────────────────────────────
@@ -1925,22 +1958,10 @@ mod tests {
     }
 
     #[test]
-    fn door_blocks_if_key_not_picked_up() {
-        let json = r#"{"grid":[["S","K","D","F"]]}"#;
-        let mut game = MazeGame::from_json(json).unwrap();
-        game.move_player(Direction::Right); // onto the key, but do not pick it up
-        assert_eq!(
-            game.move_player(Direction::Right),
-            MoveResult::BlockedByLockedDoor
-        );
-    }
-
-    #[test]
     fn locked_door_with_key_starts_unlocking_and_consumes_key() {
         let json = r#"{"grid":[["S","K","D","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
-        game.move_player(Direction::Right); // onto the key
-        game.pickup(); // collect it
+        game.move_player(Direction::Right); // onto the key — auto-collected
         assert_eq!(
             game.move_player(Direction::Right),
             MoveResult::StartedUnlocking
@@ -1981,8 +2002,8 @@ mod tests {
     fn tick_opens_door_after_countdown_and_emits_event() {
         let json = r#"{"grid":[["S","K","D","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
-        game.move_player(Direction::Right);
-        game.pickup();
+        game.move_player(Direction::Right); // onto the key — auto-collected
+        game.tick(0.0); // flush the KeyCollected event
         game.move_player(Direction::Right); // StartedUnlocking
         assert_eq!(
             game.tick(1000.0),
@@ -1995,8 +2016,8 @@ mod tests {
     fn tick_partial_progress_does_not_open() {
         let json = r#"{"grid":[["S","K","D","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
-        game.move_player(Direction::Right);
-        game.pickup();
+        game.move_player(Direction::Right); // onto the key — auto-collected
+        game.tick(0.0); // flush the KeyCollected event
         game.move_player(Direction::Right); // StartedUnlocking
         assert!(game.tick(500.0).is_empty());
         assert!(game.tick(400.0).is_empty());
@@ -2446,17 +2467,16 @@ mod tests {
 
     #[test]
     fn cascade_unlock_two_doors_one_key_each_solvable() {
-        // S K1 D1 K2 D2 F — classic cascade. After K1 opens D1 the player
-        // picks up K2 to open D2. No strand at any walk-through.
+        // S K1 D1 K2 D2 F — classic cascade. Each key is auto-collected on
+        // walk-over and opens the door immediately past it. No strand at any
+        // walk-through.
         let json = r#"{"grid":[["S","K","D","K","D","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
         for _ in 0..2 {
-            game.move_player(Direction::Right);
-            if let Some(BagItem::Key { .. }) = game.pickup() {
-                game.move_player(Direction::Right); // StartedUnlocking
-                game.tick(1000.0);
-                assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
-            }
+            game.move_player(Direction::Right); // onto the key — auto-collected
+            game.move_player(Direction::Right); // StartedUnlocking
+            game.tick(1000.0);
+            assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
         }
         // Final step onto F.
         assert_eq!(game.move_player(Direction::Right), MoveResult::Complete);
@@ -3104,8 +3124,8 @@ mod tests {
             [" "," "," "," ","F"]
         ]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
-        game.move_player(Direction::Right); // (0,1) K
-        game.pickup();
+        game.move_player(Direction::Right); // (0,1) K — auto-collected
+        game.tick(0.0); // flush the KeyCollected event
         game.move_player(Direction::Right); // (0,2)
         let r = game.move_player(Direction::Right); // (0,3) StartedUnlocking
         assert_eq!(r, MoveResult::StartedUnlocking);
@@ -3588,8 +3608,8 @@ mod tests {
         // Standard K+D maze: pick up the key, walk into the door, tick part-way.
         let json = r#"{"grid":[["S","K","D","F"]]}"#;
         let mut game = MazeGame::from_json(json).unwrap();
-        let _ = game.move_player(Direction::Right);
-        game.pickup();
+        let _ = game.move_player(Direction::Right); // onto the key — auto-collected
+        game.tick(0.0); // flush the KeyCollected event
         let _ = game.move_player(Direction::Right); // StartedUnlocking
         // door progress = 0.0 → 1000 ms remaining.
         assert_eq!(game.time_until_next_event_ms(), Some(1000.0));

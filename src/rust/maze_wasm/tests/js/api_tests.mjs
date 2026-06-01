@@ -943,12 +943,19 @@ function registerMazeGameTests() {
             expect(game.bag()).to.deep.equal([]);
         });
 
-        // MazeGame::move_player() — moving onto a key does not auto-collect it
-        it('should expect move_player onto a key cell to return Moved without collecting the key', function () {
+        // MazeGame::move_player() — moving onto a key auto-collects it
+        it('should expect move_player onto a key cell to auto-collect it into the bag and clear keys()', function () {
             let game = makeGame('{"grid":[["S","K","F"]]}');
             expect(game.move_player(DirectionWasm.Right)).to.equal(MoveResultWasm.Moved);
-            expect(game.bag()).to.deep.equal([]);
-            expect(game.keys()).to.deep.equal([{ row: 0, col: 1, id: 0 }]);
+            expect(game.bag()).to.deep.equal([{ type: 'key', id: 0 }]);
+            expect(game.keys()).to.deep.equal([]);
+        });
+
+        // MazeGame::move_player() — auto-collecting a key queues a keyCollected event
+        it('should expect move_player onto a key cell to queue a keyCollected event for the next tick', function () {
+            let game = makeGame('{"grid":[["S","K","F"]]}');
+            game.move_player(DirectionWasm.Right); // onto the key — auto-collected
+            expect(game.tick(0)).to.deep.equal([{ type: 'keyCollected', id: 0, row: 0, col: 1 }]);
         });
 
         // MazeGame::pickup() — null when not on a collectible
@@ -957,11 +964,11 @@ function registerMazeGameTests() {
             expect(game.pickup()).to.equal(null);
         });
 
-        // MazeGame::pickup() — collects the key at the current cell
-        it('should expect pickup() to collect the key, add it to the bag, and clear it from keys()', function () {
+        // MazeGame::pickup() — null after the key was auto-collected on walk-over
+        it('should expect pickup() to return null after a key is auto-collected on walk-over', function () {
             let game = makeGame('{"grid":[["S","K","F"]]}');
-            game.move_player(DirectionWasm.Right);
-            expect(game.pickup()).to.deep.equal({ type: 'key', id: 0 });
+            game.move_player(DirectionWasm.Right); // onto the key — auto-collected
+            expect(game.pickup()).to.equal(null);
             expect(game.bag()).to.deep.equal([{ type: 'key', id: 0 }]);
             expect(game.keys()).to.deep.equal([]);
         });
@@ -981,8 +988,7 @@ function registerMazeGameTests() {
         // MazeGame::move_player() — locked door with a key begins unlocking
         it('should expect move_player into a locked door while holding a key to return StartedUnlocking', function () {
             let game = makeGame('{"grid":[["S","K","D","F"]]}');
-            game.move_player(DirectionWasm.Right); // onto the key
-            game.pickup();                          // collect it
+            game.move_player(DirectionWasm.Right); // onto the key — auto-collected
             expect(game.move_player(DirectionWasm.Right)).to.equal(MoveResultWasm.StartedUnlocking);
             expect(game.doors()).to.deep.equal([{ row: 0, col: 2, state: 'opening' }]);
         });
@@ -996,8 +1002,8 @@ function registerMazeGameTests() {
         // MazeGame::tick() — opens an opening door after the countdown
         it('should expect tick() to open an opening door and emit a doorOpened event', function () {
             let game = makeGame('{"grid":[["S","K","D","F"]]}');
-            game.move_player(DirectionWasm.Right);
-            game.pickup();
+            game.move_player(DirectionWasm.Right); // onto the key — auto-collected
+            game.tick(0);                           // flush the keyCollected event
             game.move_player(DirectionWasm.Right); // StartedUnlocking
             expect(game.tick(1000)).to.deep.equal([{ type: 'doorOpened', row: 0, col: 2 }]);
             expect(game.doors()).to.deep.equal([{ row: 0, col: 2, state: 'open' }]);
@@ -1006,8 +1012,8 @@ function registerMazeGameTests() {
         // MazeGame — an opened door becomes passable and the maze completable
         it('should expect an opened door to be passable (Moved) and allow completing the maze', function () {
             let game = makeGame('{"grid":[["S","K","D","F"]]}');
-            game.move_player(DirectionWasm.Right);
-            game.pickup();
+            game.move_player(DirectionWasm.Right); // onto the key — auto-collected
+            game.tick(0);                           // flush the keyCollected event
             game.move_player(DirectionWasm.Right); // StartedUnlocking
             game.tick(1000);                        // door opens
             expect(game.move_player(DirectionWasm.Right)).to.equal(MoveResultWasm.Moved);

@@ -1055,8 +1055,8 @@ function testMazeGamePickup() {
     try {
         let json = '{"grid":[["S","K","F"]]}';
         game = MazeGameWasm.from_json(json);
-        game.move_player(DirectionWasm.Right);
-        console.log("pickup() = ", game.pickup());
+        game.move_player(DirectionWasm.Right); // onto the key — auto-collected
+        console.log("pickup() = ", game.pickup()); // null: already collected
         return true;
     } catch (e) {
         console.error("Operation failed: ", e);
@@ -1068,7 +1068,7 @@ function testMazeGamePickup() {
 
 function testMazeGamePickupExpectedOutput() {
     return [
-        "pickup() =  { type: 'key', id: 0 }"
+        "pickup() =  null"
     ];
 }
 
@@ -1122,8 +1122,7 @@ function testMazeGameBag() {
     try {
         let json = '{"grid":[["S","K","F"]]}';
         game = MazeGameWasm.from_json(json);
-        game.move_player(DirectionWasm.Right);
-        game.pickup();
+        game.move_player(DirectionWasm.Right); // onto the key — auto-collected
         console.log("bag() = ", game.bag());
         return true;
     } catch (e) {
@@ -1146,8 +1145,8 @@ function testMazeGameTick() {
     try {
         let json = '{"grid":[["S","K","D","F"]]}';
         game = MazeGameWasm.from_json(json);
-        game.move_player(DirectionWasm.Right); // onto the key
-        game.pickup();                          // collect it
+        game.move_player(DirectionWasm.Right); // onto the key — auto-collected
+        game.tick(0);                           // flush the keyCollected event
         game.move_player(DirectionWasm.Right); // start unlocking the door
         console.log("tick(1000) = ", game.tick(1000));
         return true;

@@ -121,14 +121,6 @@ namespace Maze.Maui.App.ViewModels
         public event Action? DamageFlashRequested;
 
         /// <summary>
-        /// Whether the Pickup command should be enabled — true while the player
-        /// is standing on an uncollected key cell and the game is still in play.
-        /// </summary>
-        [ObservableProperty]
-        [NotifyCanExecuteChangedFor(nameof(PickupCommand))]
-        private bool canPickup;
-
-        /// <summary>
         /// Raised when a player move started a door unlocking. The page hooks
         /// this to start its tick-timer; the timer repeatedly calls
         /// <see cref="Tick(double)"/> until it returns <c>false</c>.
@@ -157,7 +149,6 @@ namespace Maze.Maui.App.ViewModels
             Bag = [];
             IsLost = false;
             LoseReason = LoseReason.None;
-            CanPickup = false;
             _enemyCells.Clear();
 
             if (_mazeItem?.Definition is null)
@@ -181,7 +172,6 @@ namespace Maze.Maui.App.ViewModels
                 foreach (var enemy in _game.Enemies)
                     _enemyCells[enemy.Id] = ((int)enemy.Row, (int)enemy.Column);
                 gameGrid.SetPlayerAt(_game.PlayerRow, _game.PlayerCol, _game.PlayerDirection);
-                RefreshPickupAvailability();
                 // Enemies move on a fixed cadence — run the tick loop continuously
                 // while any exist (the page's timer keeps firing while Tick() returns true).
                 if (_game.Enemies.Count > 0)
@@ -215,10 +205,10 @@ namespace Maze.Maui.App.ViewModels
             {
                 _gameGrid.SetVisitedDotAt(prevRow, prevCol);
                 _gameGrid.SetPlayerAt(_game.PlayerRow, _game.PlayerCol, _game.PlayerDirection);
-                RefreshPickupAvailability();
-                // Flush events the move queued synchronously: PlayerDamaged from
-                // stepping into an enemy, PlayerHealed / PlayerNotHealed from
-                // stepping onto a health pickup. (No enemy advances on a 0ms tick.)
+                // Flush events the move queued synchronously: KeyCollected from
+                // walking onto a key, PlayerDamaged from stepping into an enemy,
+                // PlayerHealed / PlayerNotHealed from stepping onto a health
+                // pickup. (No enemy advances on a 0ms tick.)
                 ProcessTickEvents(_game.Tick(0));
                 Hp = _game.Hp;
             }
@@ -251,22 +241,6 @@ namespace Maze.Maui.App.ViewModels
                 _gameGrid.SetPlayerCelebrate(_game.PlayerRow, _game.PlayerCol);
                 await ShowResultPopup("You win!", won: true);
             }
-        }
-
-        /// <summary>
-        /// Picks up the collectible at the player's current cell. No-op when no
-        /// collectible is present (<see cref="CanPickup"/> is then false).
-        /// </summary>
-        [RelayCommand(CanExecute = nameof(CanPickup))]
-        public void Pickup()
-        {
-            if (_game is null || _gameGrid is null) return;
-            BagItem? picked = _game.Pickup();
-            if (picked is null) return;
-            // The picked key was at the player's current cell.
-            _gameGrid.MarkKeyCollected(_game.PlayerRow, _game.PlayerCol);
-            Bag = _game.Bag;
-            RefreshPickupAvailability();
         }
 
         /// <summary>
@@ -305,7 +279,7 @@ namespace Maze.Maui.App.ViewModels
         /// </summary>
         private void ProcessTickEvents(GameEvent[] events)
         {
-            if (_gameGrid is null) return;
+            if (_gameGrid is null || _game is null) return;
             foreach (var evt in events)
             {
                 switch (evt.Kind)
@@ -328,6 +302,12 @@ namespace Maze.Maui.App.ViewModels
                     case GameEventKind.PlayerNotHealed:
                         // Pickup spared (player already at max HP) — nothing to render.
                         break;
+                    case GameEventKind.KeyCollected:
+                        // A key was auto-collected on walk-over: clear its grid
+                        // visual and refresh the bag so the new key shows.
+                        _gameGrid.MarkKeyCollected((int)evt.Row, (int)evt.Column);
+                        Bag = _game.Bag;
+                        break;
                 }
             }
         }
@@ -342,7 +322,6 @@ namespace Maze.Maui.App.ViewModels
             _gameGrid?.IsInteractionLocked = false;
             _gameGrid = null;
             Bag = [];
-            CanPickup = false;
         }
 
         private async Task ShowResultPopup(string message, bool won)
@@ -361,18 +340,6 @@ namespace Maze.Maui.App.ViewModels
             // same grid view the session was started with.
             if (playAgain && _gameGrid is not null)
                 StartGame(_gameGrid);
-        }
-
-        private void RefreshPickupAvailability()
-        {
-            if (_game is null || _game.IsComplete || _game.IsLost)
-            {
-                CanPickup = false;
-                return;
-            }
-            int r = _game.PlayerRow;
-            int c = _game.PlayerCol;
-            CanPickup = _game.Keys.Any(k => k.Row == (uint)r && k.Column == (uint)c);
         }
 
         private static (int row, int col) NeighbourCell(int row, int col, MazeGameDirection direction) => direction switch

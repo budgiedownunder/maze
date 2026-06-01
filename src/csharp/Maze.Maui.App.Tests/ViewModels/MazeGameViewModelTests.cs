@@ -184,22 +184,22 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
-        public void Pickup_OnUncollectedKey_AddsToBagAndMarksGridCollected()
+        public void Move_OntoKey_AutoCollectsKeyAndMarksGridCollected()
         {
             var (vm, _, grid) = BuildVm();
             var item = ItemWithDefinition();
             MazeGame stub = InstallGame(vm, grid.Object, item);
 
-            // Place the player on a key cell (0,1) with a single uncollected key.
+            // The engine auto-collects the key on walk-over: the move lands the
+            // player on (0,1) and the 0ms tick flush carries a KeyCollected event;
+            // the grown bag is what the engine reports afterwards.
             stub.PlayerRow = 0;
             stub.PlayerCol = 1;
-            stub.Keys = new List<KeyInfo> { new KeyInfo(0, 1, 42) };
-            stub.NextPickupItem = new BagItem(BagItemKind.Key, 42);
+            stub.NextMoveResult = MazeGameMoveResult.Moved;
+            stub.NextTickEvents = new[] { new GameEvent(GameEventKind.KeyCollected, 0, 1, 42) };
+            stub.Bag = new List<BagItem> { new BagItem(BagItemKind.Key, 42) };
 
-            // PickupCommand.Execute bypasses CanExecute, which is fine for a unit
-            // test — we're verifying the orchestration that runs once Pickup() is
-            // invoked, independent of how the page enables the button.
-            vm.PickupCommand.Execute(null);
+            vm.Move(MazeGameDirection.Right);
 
             Assert.Single(vm.Bag);
             Assert.Equal(new BagItem(BagItemKind.Key, 42), vm.Bag[0]);

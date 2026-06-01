@@ -4,7 +4,7 @@ import { getMaze } from '../api/client'
 import { useToken } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useMazeGame, MazeGameDirection } from '../hooks/useMazeGame'
-import { getBag, getKeys, getHp, getMaxHp, MazeGameLoseReason } from '../wasm/mazeWasm'
+import { getBag, getHp, getMaxHp, MazeGameLoseReason } from '../wasm/mazeWasm'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { MazeGrid } from '../components/MazeGrid'
@@ -35,16 +35,12 @@ export function MazeGamePage() {
   const gameCellSize = window.matchMedia('(pointer: coarse)').matches ? 60 : 32
 
   const definitionJson = maze ? JSON.stringify(maze.definition) : null
-  const [{ game, version, loading, error, damageFlashKey }, move, pickup, restart] = useMazeGame(definitionJson)
+  const [{ game, version, loading, error, damageFlashKey }, move, restart] = useMazeGame(definitionJson)
 
-  // Bag contents and whether the player is standing on an uncollected key —
-  // recomputed whenever the game advances (version bump).
+  // Bag contents — recomputed whenever the game advances (version bump). Keys
+  // are auto-collected on walk-over, so the bag grows as the player moves.
   const bag = useMemo(
     () => (game ? getBag(game) : []),
-    [game, version], // eslint-disable-line react-hooks/exhaustive-deps
-  )
-  const onKey = useMemo(
-    () => (game ? getKeys(game).some(k => k.row === game.player_row() && k.col === game.player_col()) : false),
     [game, version], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
@@ -91,13 +87,12 @@ export function MazeGamePage() {
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (game?.is_complete() || game?.is_lost()) return
-      if (e.key === 'e' || e.key === 'E') { e.preventDefault(); pickup(); return }
       const dir = KEY_MAP[e.key]
       if (dir !== undefined) { e.preventDefault(); move(dir) }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [move, pickup, game])
+  }, [move, game])
 
   return (
     <div className="maze-game-page">
@@ -182,17 +177,13 @@ export function MazeGamePage() {
               <button type="button" aria-label="Move right" onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Right) }} onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'right' }}>
                 <img src="/images/maze/dpad_right.png" alt="" draggable={false} />
               </button>
-              <button type="button" aria-label="Pick up" onClick={() => pickup()} onContextMenu={e => e.preventDefault()} aria-disabled={!onKey} style={{ gridArea: 'pick' }}>
-                <img src="/images/maze/key.svg" alt="" draggable={false} />
-              </button>
             </div>
 
             <div className="maze-shortcuts-hint">
               [&#x2191;/W]&nbsp;Up&nbsp;&nbsp;&nbsp;
               [&#x2193;/S]&nbsp;Down&nbsp;&nbsp;&nbsp;
               [&#x2190;/A]&nbsp;Left&nbsp;&nbsp;&nbsp;
-              [&#x2192;/D]&nbsp;Right&nbsp;&nbsp;&nbsp;
-              [E]&nbsp;Pick&nbsp;up
+              [&#x2192;/D]&nbsp;Right
             </div>
 
             {showResult && (

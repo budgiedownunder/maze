@@ -234,6 +234,12 @@ fn to_js_game_event_obj(event: &maze::GameEvent) -> Object {
             Reflect::set(&obj, &JsValue::from_str("reason"), &JsValue::from_str(reason_str)).unwrap();
             Reflect::set(&obj, &JsValue::from_str("message"), &JsValue::from_str(message)).unwrap();
         }
+        maze::GameEvent::KeyCollected { cell: (row, col), id } => {
+            Reflect::set(&obj, &JsValue::from_str("type"), &JsValue::from_str("keyCollected")).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("id"), &JsValue::from_f64(*id as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64)).unwrap();
+            Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64)).unwrap();
+        }
     }
     obj
 }
@@ -544,6 +550,9 @@ impl MazeGameWasm {
     /// Picks up the collectible item (currently a key) at the player's current cell,
     /// returning it as a `{ type, id }` object, or `null` if the cell holds none.
     ///
+    /// Keys are auto-collected when the player walks onto a `'K'` cell, so this
+    /// normally returns `null` — the cell was cleared as the player stepped onto it.
+    ///
     /// # Examples
     ///
     /// ```javascript
@@ -557,8 +566,8 @@ impl MazeGameWasm {
     ///     let game = null;
     ///     try {
     ///         game = MazeGameWasm.from_json('{"grid":[["S","K","F"]]}');
-    ///         game.move_player(DirectionWasm.Right);
-    ///         console.log("pickup() = ", game.pickup());
+    ///         game.move_player(DirectionWasm.Right); // onto the key — auto-collected
+    ///         console.log("pickup() = ", game.pickup()); // null: already collected
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);
     ///     } finally {
@@ -590,8 +599,8 @@ impl MazeGameWasm {
     ///     let game = null;
     ///     try {
     ///         game = MazeGameWasm.from_json('{"grid":[["S","K","D","F"]]}');
-    ///         game.move_player(DirectionWasm.Right); // onto the key
-    ///         game.pickup();                         // collect it
+    ///         game.move_player(DirectionWasm.Right); // onto the key — auto-collected
+    ///         game.tick(0);                          // flush the keyCollected event
     ///         game.move_player(DirectionWasm.Right); // start unlocking the door
     ///         console.log("tick(1000) = ", game.tick(1000));
     ///     } catch (e) {
@@ -692,8 +701,7 @@ impl MazeGameWasm {
     ///     let game = null;
     ///     try {
     ///         game = MazeGameWasm.from_json('{"grid":[["S","K","F"]]}');
-    ///         game.move_player(DirectionWasm.Right);
-    ///         game.pickup();
+    ///         game.move_player(DirectionWasm.Right); // onto the key — auto-collected
     ///         console.log("bag() = ", game.bag());
     ///     } catch (e) {
     ///         console.error("Operation failed: ", e);

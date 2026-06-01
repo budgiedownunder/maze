@@ -230,7 +230,7 @@ code {
 @media (pointer: coarse) {
   .game-dpad {
     display: grid;
-    grid-template-areas: ". up ." "left pick right" ". down .";
+    grid-template-areas: ". up ." "left . right" ". down .";
     gap: 4px;
     margin-top: 12px;
     touch-action: none;

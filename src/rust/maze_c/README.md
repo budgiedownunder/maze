@@ -135,6 +135,7 @@ uint8_t maze_c_maze_game_get_visited_cell(MazeGameC* ptr, int32_t index,
 | 2 | PlayerDamaged | `(0, 0)` (unused) | HP after the hit |
 | 3 | PlayerHealed | the consumed pickup cell | HP after the heal |
 | 4 | PlayerNotHealed | the spared pickup cell | reason code (`0` = already at max HP); message via `get_tick_event_string_payload` |
+| 5 | KeyCollected | the consumed key cell | collected key id |
 
 **Memory ownership:** The caller must call `maze_c_free_maze_game` when done. Passing `null` to `free` is safe and has no effect.
 

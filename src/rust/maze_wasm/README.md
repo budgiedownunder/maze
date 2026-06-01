@@ -93,8 +93,8 @@ const result = game.move_player(DirectionWasm.Right);
 // Includes the start cell; only appended on successful moves
 const cells = game.visited_cells();
 
-// Keys are not collected by moving — call pickup() while standing on a key cell.
-const item    = game.pickup();          // → { type: 'key', id } or null
+// Keys are auto-collected by moving onto them (pickup() then returns null).
+const item    = game.pickup();          // → null (key already collected on walk-over)
 const keys    = game.keys();            // → [{ row, col, id }]  (uncollected keys)
 const doors   = game.doors();           // → [{ row, col, state: 'locked' | 'opening' | 'open' }]
 const bag     = game.bag();             // → [{ type: 'key', id }]  (collected items)
@@ -108,6 +108,7 @@ const pickups = game.health_pickups(); // → [{ row, col, id }]  (uncollected '
 //   { type: 'playerDamaged',  hpAfter }
 //   { type: 'playerHealed',   hpAfter, row, col }
 //   { type: 'playerNotHealed', row, col, reason, message }
+//   { type: 'keyCollected',   id, row, col }
 const events = game.tick(16);
 
 // Time in ms until the next tick will produce an event — for setTimeout-driven
@@ -151,9 +152,10 @@ i32           maze_game_wasm_tick_event_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_tick_event(MazeGameWasm* maze_game_wasm, i32 index,
                                             u32* kind_out, u32* row_out, u32* col_out);
                                                                               // kind: 0=DoorOpened, 1=EnemyMoved,
-                                                                              // 2=PlayerDamaged, 3=PlayerHealed, 4=PlayerNotHealed
+                                                                              // 2=PlayerDamaged, 3=PlayerHealed, 4=PlayerNotHealed,
+                                                                              // 5=KeyCollected
 i32           maze_game_wasm_get_tick_event_payload(MazeGameWasm* maze_game_wasm, i32 index,
-                                                    u32* payload_out);        // enemy id / hp_after / reason; 0=ok, -1=error
+                                                    u32* payload_out);        // enemy id / hp_after / reason / key id; 0=ok, -1=error
 i32           maze_game_wasm_get_tick_event_string_payload(MazeGameWasm* maze_game_wasm, i32 index,
                                                            u8* buf_out, u32* len_out);
                                                                               // PlayerNotHealed message; two-call protocol

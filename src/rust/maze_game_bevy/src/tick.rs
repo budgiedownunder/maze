@@ -18,6 +18,8 @@
 //!   implicit feedback (cell stays `'H'`, HP HUD stays full) is
 //!   sufficient in a first-person 3D view; the React + MAUI bag-area UX
 //!   surfaces the typed reason + message text.
+//! - [`maze::GameEvent::KeyCollected`] → no-op here; the floating key
+//!   visual is reconciled by the per-frame key systems.
 
 use crate::state::GameState;
 use crate::world::objects::door::DoorMarker;
@@ -80,6 +82,10 @@ pub(crate) fn game_tick_system(
                 // stays `'H'`, heart row stays full — is sufficient in
                 // a first-person 3D view; the React + MAUI bag-area UX
                 // surfaces the typed reason + message text.
+            }
+            GameEvent::KeyCollected { .. } => {
+                // No per-event work here; the floating key visual is
+                // reconciled by the per-frame key systems.
             }
         }
     }

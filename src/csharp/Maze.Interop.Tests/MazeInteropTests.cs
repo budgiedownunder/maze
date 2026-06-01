@@ -1387,20 +1387,20 @@ namespace Maze.Interop.Tests
         }
 
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGamePickup"/> succeeds after walking onto a key cell
+        /// Confirms that walking onto a key cell auto-collects it into the bag, leaving
+        /// nothing for an explicit <see cref="Maze.Interop.MazeInterop.MazeGamePickup"/> to take.
         /// </summary>
         [Fact]
-        public void MazeGamePickup_ShouldSucceed_OnKeyCell()
+        public void MazeGameMovePlayer_ShouldAutoCollectKey_OnKeyCell()
         {
             MazeInterop interop = GetInterop();
             UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
-            interop.MazeGameMovePlayer(gamePtr, 4); // Right → key cell
-            bool ok = interop.MazeGamePickup(gamePtr, out MazeBagItem item);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → key cell, auto-collected
             int count = interop.MazeGameBagCount(gamePtr);
+            bool ok = interop.MazeGamePickup(gamePtr, out MazeBagItem _);
             FreeMazeGame(gamePtr);
-            Assert.True(ok);
-            Assert.Equal(MazeBagItemKind.Key, item.Kind);
             Assert.Equal(1, count);
+            Assert.False(ok); // already collected on walk-over
         }
 
         /// <summary>
@@ -1417,20 +1417,19 @@ namespace Maze.Interop.Tests
         }
 
         /// <summary>
-        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetBagItem"/> returns the picked item after pickup
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetBagItem"/> returns the auto-collected key
         /// </summary>
         [Fact]
-        public void MazeGameGetBagItem_ShouldReturnPickedItem()
+        public void MazeGameGetBagItem_ShouldReturnAutoCollectedKey()
         {
             MazeInterop interop = GetInterop();
             UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
-            interop.MazeGameMovePlayer(gamePtr, 4);
-            interop.MazeGamePickup(gamePtr, out MazeBagItem picked);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → key cell, auto-collected
             bool ok = interop.MazeGameGetBagItem(gamePtr, 0, out MazeBagItem item);
             FreeMazeGame(gamePtr);
             Assert.True(ok);
-            Assert.Equal(picked.Kind, item.Kind);
-            Assert.Equal(picked.Id, item.Id);
+            Assert.Equal(MazeBagItemKind.Key, item.Kind);
+            Assert.Equal(0u, item.Id);
         }
 
         // 1 row, 4 cols: S[0,0] K[0,1] D[0,2] F[0,3]
@@ -1489,8 +1488,8 @@ namespace Maze.Interop.Tests
         {
             MazeInterop interop = GetInterop();
             UIntPtr gamePtr = interop.NewMazeGame(DoorGameJson);
-            interop.MazeGameMovePlayer(gamePtr, 4); // Right → K
-            interop.MazeGamePickup(gamePtr, out _);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → K, auto-collected
+            interop.MazeGameTick(gamePtr, 0f);      // flush the KeyCollected event
             int unlockResult = interop.MazeGameMovePlayer(gamePtr, 4); // into D
             Assert.Equal(5, unlockResult); // StartedUnlocking
 
@@ -1526,8 +1525,8 @@ namespace Maze.Interop.Tests
         {
             MazeInterop interop = GetInterop();
             UIntPtr gamePtr = interop.NewMazeGame(DecoyStrandGameJson);
-            interop.MazeGameMovePlayer(gamePtr, 4); // Right → K
-            interop.MazeGamePickup(gamePtr, out _);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → K, auto-collected
+            interop.MazeGameTick(gamePtr, 0f);      // flush the KeyCollected event
             interop.MazeGameMovePlayer(gamePtr, 2); // Down → StartedUnlocking decoy
             interop.MazeGameTick(gamePtr, 1000f);
             int result = interop.MazeGameMovePlayer(gamePtr, 2); // Walk through decoy → Stranded
@@ -1651,24 +1650,25 @@ namespace Maze.Interop.Tests
         }
 
         /// <summary>
-        /// Confirms that pickup removes a key from the uncollected list while the remaining key's id is preserved
+        /// Confirms that walking onto a key auto-collects it — shrinking the uncollected
+        /// list while the remaining key's id is preserved
         /// </summary>
         [Fact]
-        public void MazeGameGetKey_ShouldShrink_AfterPickup()
+        public void MazeGameGetKey_ShouldShrink_AfterAutoCollect()
         {
             MazeInterop interop = GetInterop();
             UIntPtr gamePtr = interop.NewMazeGame(TwoKeyGameJson);
             interop.MazeGameGetKey(gamePtr, 1, out MazeKey k2Before);
-            interop.MazeGameMovePlayer(gamePtr, 4); // Right → first K
-            interop.MazeGamePickup(gamePtr, out MazeBagItem picked);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → first K, auto-collected
             int countAfter = interop.MazeGameKeyCount(gamePtr);
             bool ok = interop.MazeGameGetKey(gamePtr, 0, out MazeKey remaining);
+            interop.MazeGameGetBagItem(gamePtr, 0, out MazeBagItem collected);
             FreeMazeGame(gamePtr);
             Assert.Equal(1, countAfter);
             Assert.True(ok);
             Assert.Equal((0u, 2u), (remaining.Row, remaining.Column));
             Assert.Equal(k2Before.Id, remaining.Id); // surviving key keeps its id
-            Assert.NotEqual(picked.Id, remaining.Id); // collected and remaining ids are distinct
+            Assert.NotEqual(collected.Id, remaining.Id); // collected and remaining ids are distinct
         }
 
         /// <summary>

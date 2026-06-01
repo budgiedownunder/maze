@@ -4,7 +4,7 @@ import { renderHook, act } from '@testing-library/react'
 // vi.hoisted() ensures all mock helpers are initialised before vi.mock() hoisting.
 const {
   mockCreateMazeGame, mockMoveMazeGamePlayer, mockFreeMazeGame,
-  mockPickupItem, mockTickGame, mockGetTimeUntilNextEvent, mockGameInstance,
+  mockTickGame, mockGetTimeUntilNextEvent, mockGameInstance,
 } = vi.hoisted(() => {
     const mockGameInstance = {
       player_row: vi.fn().mockReturnValue(0),
@@ -20,7 +20,6 @@ const {
       mockCreateMazeGame: vi.fn().mockResolvedValue(mockGameInstance),
       mockMoveMazeGamePlayer: vi.fn().mockReturnValue(1), // Moved
       mockFreeMazeGame: vi.fn(),
-      mockPickupItem: vi.fn().mockReturnValue(null),
       mockTickGame: vi.fn().mockReturnValue([]),
       mockGetTimeUntilNextEvent: vi.fn().mockReturnValue(null),
       mockGameInstance,
@@ -31,7 +30,6 @@ vi.mock('../../src/wasm/mazeWasm', () => ({
   createMazeGame: mockCreateMazeGame,
   moveMazeGamePlayer: mockMoveMazeGamePlayer,
   freeMazeGame: mockFreeMazeGame,
-  pickupItem: mockPickupItem,
   tickGame: mockTickGame,
   getTimeUntilNextEvent: mockGetTimeUntilNextEvent,
   MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
@@ -116,22 +114,6 @@ describe('useMazeGame', () => {
     const { result } = renderHook(() => useMazeGame(DEFINITION_JSON))
     await act(async () => {})
     act(() => { result.current[1](MazeGameDirection.Right) })
-    expect(result.current[0].version).toBe(0)
-  })
-
-  it('pickup picks up an item — version increments', async () => {
-    mockPickupItem.mockReturnValue({ type: 'key', id: 0 })
-    const { result } = renderHook(() => useMazeGame(DEFINITION_JSON))
-    await act(async () => {})
-    act(() => { result.current[2]() })
-    expect(result.current[0].version).toBe(1)
-  })
-
-  it('pickup with nothing to collect — version unchanged', async () => {
-    mockPickupItem.mockReturnValue(null)
-    const { result } = renderHook(() => useMazeGame(DEFINITION_JSON))
-    await act(async () => {})
-    act(() => { result.current[2]() })
     expect(result.current[0].version).toBe(0)
   })
 

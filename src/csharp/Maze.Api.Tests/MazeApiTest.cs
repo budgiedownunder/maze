@@ -1432,29 +1432,25 @@ namespace Maze.Api.Tests
         }
 
         /// <summary>
-        /// Confirms that <see cref="MazeGame.Pickup"/> collects a key and grows <see cref="MazeGame.Bag"/>
+        /// Confirms that walking onto a key auto-collects it and grows <see cref="MazeGame.Bag"/>
         /// </summary>
         [Fact]
-        public void MazeGamePickup_ShouldCollectKey_AndGrowBag()
+        public void MazeGameMovePlayer_ShouldAutoCollectKey_AndGrowBag()
         {
             using MazeGame game = MazeGame.Create(KeyGameJson);
-            game.MovePlayer(MazeGameDirection.Right); // onto K
-            BagItem? picked = game.Pickup();
-            Assert.NotNull(picked);
-            Assert.Equal(BagItemKind.Key, picked!.Value.Kind);
+            game.MovePlayer(MazeGameDirection.Right); // onto K — auto-collected
             Assert.Single(game.Bag);
-            Assert.Equal(picked.Value, game.Bag[0]);
+            Assert.Equal(BagItemKind.Key, game.Bag[0].Kind);
         }
 
         /// <summary>
-        /// Confirms that calling <see cref="MazeGame.Pickup"/> a second time at the same cell returns null
+        /// Confirms that <see cref="MazeGame.Pickup"/> returns null after a key was auto-collected on walk-over
         /// </summary>
         [Fact]
-        public void MazeGamePickup_ShouldReturnNull_OnSecondCallAtSameCell()
+        public void MazeGamePickup_ShouldReturnNull_AfterKeyAutoCollected()
         {
             using MazeGame game = MazeGame.Create(KeyGameJson);
-            game.MovePlayer(MazeGameDirection.Right);
-            game.Pickup();
+            game.MovePlayer(MazeGameDirection.Right); // onto K — auto-collected
             Assert.Null(game.Pickup());
             Assert.Single(game.Bag);
         }
@@ -1495,8 +1491,8 @@ namespace Maze.Api.Tests
         public void MazeGame_KeyDoorHappyPath_TickEmitsDoorOpened_AndCompletes()
         {
             using MazeGame game = MazeGame.Create(DoorGameJson);
-            game.MovePlayer(MazeGameDirection.Right); // onto K
-            game.Pickup();
+            game.MovePlayer(MazeGameDirection.Right); // onto K — auto-collected
+            game.Tick(0.0); // flush the KeyCollected event
             Assert.Equal(MazeGameMoveResult.StartedUnlocking, game.MovePlayer(MazeGameDirection.Right));
 
             GameEvent[] events = game.Tick(1000.0);
@@ -1520,8 +1516,8 @@ namespace Maze.Api.Tests
         public void MazeGame_DecoyDoorWalkThrough_FlipsIsLostAndLoseReason()
         {
             using MazeGame game = MazeGame.Create(DecoyStrandGameJson);
-            game.MovePlayer(MazeGameDirection.Right); // onto K
-            game.Pickup();
+            game.MovePlayer(MazeGameDirection.Right); // onto K — auto-collected
+            game.Tick(0.0); // flush the KeyCollected event
             game.MovePlayer(MazeGameDirection.Down);  // StartedUnlocking decoy
             game.Tick(1000.0);
             Assert.Equal(MazeGameMoveResult.Stranded, game.MovePlayer(MazeGameDirection.Down));
@@ -1658,18 +1654,17 @@ namespace Maze.Api.Tests
         /// the remaining key's stable id
         /// </summary>
         [Fact]
-        public void MazeGameKeys_ShouldShrink_AfterPickup_PreservingRemainingId()
+        public void MazeGameKeys_ShouldShrink_AfterAutoCollect_PreservingRemainingId()
         {
             using MazeGame game = MazeGame.Create(TwoKeyGameJson);
             uint secondKeyIdBefore = game.Keys[1].Id;
-            game.MovePlayer(MazeGameDirection.Right); // onto first K
-            BagItem? picked = game.Pickup();
+            game.MovePlayer(MazeGameDirection.Right); // onto first K — auto-collected
             var keys = game.Keys;
-            Assert.NotNull(picked);
+            Assert.Single(game.Bag);
             Assert.Single(keys);
             Assert.Equal((0u, 2u), (keys[0].Row, keys[0].Column));
             Assert.Equal(secondKeyIdBefore, keys[0].Id);
-            Assert.NotEqual(picked.Value.Id, keys[0].Id);
+            Assert.NotEqual(game.Bag[0].Id, keys[0].Id);
         }
 
         /// <summary>

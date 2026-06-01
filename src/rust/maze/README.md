@@ -20,7 +20,7 @@ The `maze` crate is written in `Rust` and defines an API for calculating maze so
 - `LoseReason` - enum representing why a game ended in a loss (`Stranded`, `Killed`; extensible)
 - `DoorState` - enum representing a door's lifecycle (`Locked`, `Opening`, `Open`)
 - `BagItem` - enum representing an item carried in the player's bag (currently `Key`)
-- `GameEvent` - enum representing a time-based event emitted by `MazeGame::tick` (`DoorOpened`, `EnemyMoved`, `PlayerDamaged`, `PlayerHealed`, `PlayerNotHealed`)
+- `GameEvent` - enum representing a time-based event emitted by `MazeGame::tick` (`DoorOpened`, `EnemyMoved`, `PlayerDamaged`, `PlayerHealed`, `PlayerNotHealed`, `KeyCollected`)
 - `Enemy` - represents an `'E'` cell at runtime: position, planned next-cell target, per-tick move period, damage per same-cell collision
 - `PlayerNotHealedReason` - enum carried on `GameEvent::PlayerNotHealed` (currently `AlreadyAtMaxHp`)
 - `MazeGame` - a running game session tracking player position, direction, visited cells, completion, lose state, the player's bag, per-cell door state, HP / max-HP, and the live enemies and health pickups
@@ -64,7 +64,7 @@ The `game` module (`maze::game`) provides an interactive cell-based game session
 | `LoseReason` | `Stranded` \| `Killed` |
 | `DoorState` | `Locked` \| `Opening { progress }` \| `Open` |
 | `BagItem` | `Key { id }` (serialises as `{"type":"key","id":…}`) |
-| `GameEvent` | `DoorOpened { cell }` \| `EnemyMoved { id, row, col }` \| `PlayerDamaged { hp_after }` \| `PlayerHealed { hp_after, cell }` \| `PlayerNotHealed { cell, reason, message }` |
+| `GameEvent` | `DoorOpened { cell }` \| `EnemyMoved { id, row, col }` \| `PlayerDamaged { hp_after }` \| `PlayerHealed { hp_after, cell }` \| `PlayerNotHealed { cell, reason, message }` \| `KeyCollected { cell, id }` |
 | `Enemy` | `{ id, row, col, target_row, target_col, move_period_ms, accum_ms, damage }` — one per `'E'` cell at construction |
 | `PlayerNotHealedReason` | `AlreadyAtMaxHp` |
 
@@ -100,7 +100,7 @@ assert_eq!(game.visited_cells(), &[(0, 0), (0, 1), (0, 2)]);
 | `' '` (empty) | `Moved` |
 | `'S'` (start) | `Moved` |
 | `'F'` (finish) | `Complete` |
-| `'K'` (key) | `Moved` (key is not collected by moving — pick it up explicitly) |
+| `'K'` (key) | `Moved` — the key is auto-collected on walk-over: the cell clears to `' '`, the key enters the bag, and a `GameEvent::KeyCollected { cell, id }` fires |
 | `'D'` (door, open) | `Moved` — or `Stranded` if walking through leaves the player without enough still-collectible keys for the closed doors still on any route to the finish |
 | `'D'` (door, locked, key held) | `StartedUnlocking` (key consumed; opens over time via `tick`) |
 | `'D'` (door, locked, no key / still opening) | `BlockedByLockedDoor` |
@@ -109,7 +109,7 @@ assert_eq!(game.visited_cells(), &[(0, 0), (0, 1), (0, 2)]);
 | `'W'` (wall) | `Blocked` |
 | Out of bounds | `Blocked` |
 
-Keys are not collected by walking over them — call `MazeGame::pickup()` while standing on a key cell to add it to the bag. Doors open over real time rather than blocking permanently: holding against a locked door while carrying a key starts it opening, and `MazeGame::tick(dt_ms)` advances and completes the open (emitting `GameEvent::DoorOpened`). Collected items are read via `MazeGame::bag()`, doors via `MazeGame::doors()`, and uncollected keys via `MazeGame::keys()`.
+Keys are auto-collected by walking over them — stepping onto a `'K'` cell adds the key to the bag, clears the cell, and queues a `GameEvent::KeyCollected { cell, id }` that flushes on the next `tick`. (`MazeGame::pickup()` remains as the internal collect mechanism; an external call normally finds nothing left since the cell was already cleared on walk-over.) Doors open over real time rather than blocking permanently: holding against a locked door while carrying a key starts it opening, and `MazeGame::tick(dt_ms)` advances and completes the open (emitting `GameEvent::DoorOpened`). Collected items are read via `MazeGame::bag()`, doors via `MazeGame::doors()`, and uncollected keys via `MazeGame::keys()`.
 
 The game also tracks a lose state: `MazeGame::is_lost()` and `MazeGame::lose_reason()` report whether the session has ended in a loss and why. At each door walk-through the runtime compares the minimum closed-door count on any path to the finish (a lock-blind 0-1 BFS from the player's current cell) against the maximum number of keys the player could ultimately hold (`bag.len()` + a state-space BFS over `(cell, collected, opened)` from the current state, falling back to a lock-blind key reachability count above 16 combined `'K'` + `'D'` cells). When the closed-doors count exceeds the available keys, `LoseReason::Stranded` is set and `move_player` returns `MoveResult::Stranded` at the moment of detection. Host-driven losses such as a wall-clock timeout live entirely in the host (the 3D game owns its own countdown).
 
