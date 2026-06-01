@@ -86,6 +86,10 @@ namespace Maze.Maui.App.Views
             // wall tint based on the quadrant-variation checkbox.
             UpdateWallControlsEnabled();
 
+            // Start on the Scene tab (its panel is visible in XAML; this sets
+            // the matching tab-button highlight).
+            SelectTab(LaunchTab.Scene);
+
             // Cap the popup body's maximum height to (almost) the
             // host window height. Combined with the Grid's middle * row,
             // this lets the inner ScrollView shrink while keeping
@@ -173,6 +177,43 @@ namespace Maze.Maui.App.Views
         private static extern short GetAsyncKeyState(int vKey);
         private const int VK_SHIFT = 0x10;
 #endif
+
+        // Identifies which group of launch settings is currently shown. The
+        // fields are split across these tabs so the popup reads as a few short
+        // panels rather than one long scrolling list.
+        private enum LaunchTab { Scene, Objects, Decor }
+
+        private void OnSceneTabClicked(object sender, EventArgs e) => SelectTab(LaunchTab.Scene);
+        private void OnObjectsTabClicked(object sender, EventArgs e) => SelectTab(LaunchTab.Objects);
+        private void OnDecorTabClicked(object sender, EventArgs e) => SelectTab(LaunchTab.Decor);
+
+        /// <summary>
+        /// Shows the chosen tab's panel (hiding the others) and updates the tab
+        /// buttons so the active one is highlighted. All controls stay in the
+        /// visual tree regardless of the active tab, so prefill and the Play
+        /// read-back are unaffected by which tab is showing.
+        /// </summary>
+        private void SelectTab(LaunchTab tab)
+        {
+            SceneTab.IsVisible = tab == LaunchTab.Scene;
+            ObjectsTab.IsVisible = tab == LaunchTab.Objects;
+            DecorTab.IsVisible = tab == LaunchTab.Decor;
+
+            ApplyTabButtonStyle(SceneTabButton, SceneTabUnderline, tab == LaunchTab.Scene);
+            ApplyTabButtonStyle(ObjectsTabButton, ObjectsTabUnderline, tab == LaunchTab.Objects);
+            ApplyTabButtonStyle(DecorTabButton, DecorTabUnderline, tab == LaunchTab.Decor);
+        }
+
+        // Highlight the selected tab with a bold label, full opacity and a
+        // visible accent underline; dim the rest and hide their underlines.
+        // The bold/opacity cues plus the themed underline colour read correctly
+        // under both light and dark themes.
+        private static void ApplyTabButtonStyle(Button button, BoxView underline, bool selected)
+        {
+            button.FontAttributes = selected ? FontAttributes.Bold : FontAttributes.None;
+            button.Opacity = selected ? 1.0 : 0.6;
+            underline.IsVisible = selected;
+        }
 
         /// <summary>
         /// Fires when the Quadrant wall types checkbox changes. Disables the
