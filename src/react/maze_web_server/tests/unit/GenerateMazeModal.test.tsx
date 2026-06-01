@@ -433,6 +433,81 @@ describe('GenerateMazeModal loading and error props', () => {
     expect(screen.getByRole('button', { name: 'Generate' })).toBeDisabled()
   })
 
+  it('snaps a now-out-of-range start/finish to the corners when Rows shrinks (on blur)', async () => {
+    // sampleGrid is 3×3 with S at (1,1), F at (3,3). Push start/finish rows to
+    // the bottom of a 3-row grid, then shrink to 2 rows: both rows are now out
+    // of range and must snap (start→1, finish→new max) once the Rows edit is
+    // committed by blurring the field.
+    renderModal()
+    fireEvent.change(screen.getByLabelText('Start Row'), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('Finish Row'), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '2' } })
+    fireEvent.blur(screen.getByLabelText('Rows'))
+    expect(screen.getByLabelText('Start Row')).toHaveValue(1)
+    expect(screen.getByLabelText('Finish Row')).toHaveValue(2)
+  })
+
+  it('does not clamp on each keystroke — only on commit (blur)', async () => {
+    // Regression guard: typing a multi-digit dimension must not clamp against an
+    // intermediate value. Starting from 3 rows with finish at row 3, typing the
+    // "1" then "5" of "15" (simulated as successive change events) must not snap
+    // finish to 1 mid-edit; the in-range value survives once committed.
+    renderModal()
+    const rowsInput = screen.getByLabelText('Rows')
+    fireEvent.change(rowsInput, { target: { value: '1' } })
+    fireEvent.change(rowsInput, { target: { value: '15' } })
+    // No blur yet: start/finish are untouched while typing.
+    expect(screen.getByLabelText('Finish Row')).toHaveValue(3)
+    fireEvent.blur(rowsInput)
+    // After commit, the in-range finish (3 ≤ 15) is preserved, not reset.
+    expect(screen.getByLabelText('Start Row')).toHaveValue(1)
+    expect(screen.getByLabelText('Finish Row')).toHaveValue(3)
+  })
+
+  it('commits the dimension clamp on Enter as well as blur', async () => {
+    renderModal()
+    fireEvent.change(screen.getByLabelText('Start Row'), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('Finish Row'), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('Rows'), { target: { value: '2' } })
+    fireEvent.keyDown(screen.getByLabelText('Rows'), { key: 'Enter' })
+    expect(screen.getByLabelText('Start Row')).toHaveValue(1)
+    expect(screen.getByLabelText('Finish Row')).toHaveValue(2)
+  })
+
+  it('leaves an in-range start/finish untouched when Columns grows (on blur)', async () => {
+    // Growing the grid never invalidates an existing coordinate, so the
+    // author's chosen start/finish must be preserved exactly.
+    renderModal()
+    fireEvent.change(screen.getByLabelText('Start Column'), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('Finish Column'), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('Columns'), { target: { value: '9' } })
+    fireEvent.blur(screen.getByLabelText('Columns'))
+    expect(screen.getByLabelText('Start Column')).toHaveValue(2)
+    expect(screen.getByLabelText('Finish Column')).toHaveValue(2)
+  })
+
+  it('groups fields into Size & Position / Features tabs and switches panels on click', async () => {
+    renderModal()
+    // Size & Position is the default active tab: its panel holds the dimension
+    // and start/finish fields; the Features panel is hidden.
+    const sizePanel = screen.getByRole('tabpanel', { name: 'Size & Position' })
+    expect(sizePanel).toBeVisible()
+    expect(sizePanel).toContainElement(screen.getByLabelText('Rows'))
+    expect(sizePanel).toContainElement(screen.getByLabelText('Start Row'))
+    expect(screen.queryByRole('tabpanel', { name: 'Features' })).toBeNull()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Features' }))
+    const featuresPanel = screen.getByRole('tabpanel', { name: 'Features' })
+    expect(featuresPanel).toBeVisible()
+    expect(featuresPanel).toContainElement(screen.getByLabelText('Doors'))
+    expect(screen.getByRole('tab', { name: 'Features' })).toHaveAttribute('aria-selected', 'true')
+    // Switching tabs hides the Size & Position panel.
+    expect(screen.queryByRole('tabpanel', { name: 'Size & Position' })).toBeNull()
+
+    // The action buttons stay reachable regardless of the active tab.
+    expect(screen.getByRole('button', { name: 'Generate' })).toBeVisible()
+  })
+
   it('displays the error prop when there is no validation error', async () => {
     renderModal({ error: 'WASM generation failed' })
     expect(screen.getByRole('alert')).toHaveTextContent('WASM generation failed')
