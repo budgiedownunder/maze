@@ -79,6 +79,9 @@ namespace Maze.Maui.App.Views
 
             RowsEntry.Text = rows.ToString();
             ColsEntry.Text = cols.ToString();
+            // Seed the clamp baselines so an Unfocused with no edit is a no-op.
+            _lastClampedRows = RowsEntry.Text;
+            _lastClampedCols = ColsEntry.Text;
 
             // Display start/finish as 1-based
             StartRowEntry.Text = (startRow + 1).ToString();
@@ -100,6 +103,15 @@ namespace Maze.Maui.App.Views
                 ErrorLabel.Text = $"Generation failed: {generationError}";
                 ErrorLabel.IsVisible = true;
             }
+
+            // Start on the Size tab (its panel is visible in XAML; this sets the
+            // matching tab-button highlight).
+            SelectTab(GenerateTab.Size);
+
+            // Changing the grid dimensions resets start/finish to the usual
+            // top-left / bottom-right; only arm this after the prefill above so
+            // construction doesn't clobber the seeded start/finish positions.
+            _initialized = true;
 
             // Land focus on the first edit field. Deferred to the dispatcher so
             // the native handlers are attached by the time Focus() runs.
@@ -192,6 +204,87 @@ namespace Maze.Maui.App.Views
         private static extern short GetAsyncKeyState(int vKey);
         private const int VK_SHIFT = 0x10;
 #endif
+
+        // Identifies which group of generate fields is currently shown. The
+        // fields are split across these tabs so the popup reads as a few short
+        // panels rather than one long scrolling list.
+        private enum GenerateTab { Size, Features }
+
+        private void OnSizeTabClicked(object sender, EventArgs e) => SelectTab(GenerateTab.Size);
+        private void OnFeaturesTabClicked(object sender, EventArgs e) => SelectTab(GenerateTab.Features);
+
+        /// <summary>
+        /// Shows the chosen tab's panel (hiding the other) and updates the tab
+        /// buttons so the active one is highlighted. All controls stay in the
+        /// visual tree regardless of the active tab, so prefill and the Generate
+        /// read-back are unaffected by which tab is showing.
+        /// </summary>
+        private void SelectTab(GenerateTab tab)
+        {
+            SizeTab.IsVisible = tab == GenerateTab.Size;
+            FeaturesTab.IsVisible = tab == GenerateTab.Features;
+
+            ApplyTabButtonStyle(SizeTabButton, SizeTabUnderline, tab == GenerateTab.Size);
+            ApplyTabButtonStyle(FeaturesTabButton, FeaturesTabUnderline, tab == GenerateTab.Features);
+        }
+
+        // Highlight the selected tab with a bold label, full opacity and a
+        // visible accent underline; dim the rest and hide their underlines.
+        // The bold/opacity cues plus the themed underline colour read correctly
+        // under both light and dark themes.
+        private static void ApplyTabButtonStyle(Button button, BoxView underline, bool selected)
+        {
+            button.FontAttributes = selected ? FontAttributes.Bold : FontAttributes.None;
+            button.Opacity = selected ? 1.0 : 0.6;
+            underline.IsVisible = selected;
+        }
+
+        // True once the constructor's prefill is complete, so the
+        // dimension-change reset handlers below don't fire during construction
+        // (which would overwrite the seeded start/finish positions).
+        private readonly bool _initialized;
+
+        // Last dimension values the clamp ran against — so an Unfocused that
+        // didn't actually change Rows/Columns is a no-op (we must not "fix" a
+        // deliberately out-of-range start/finish the user is about to submit;
+        // that's the parser's job). Seeded from the constructor's prefill.
+        private string _lastClampedRows = string.Empty;
+        private string _lastClampedCols = string.Empty;
+
+        // Re-clamping start/finish to the new bounds runs only when the user
+        // commits an actual dimension change — Unfocused (tab/click away) or
+        // Completed (Enter) — not on every keystroke. Clamping per-keystroke
+        // would snap against the intermediate value (e.g. the "1" of a "15"
+        // being typed) before the edit is finished. A committed change nudges a
+        // start/finish coordinate only if it would now fall outside the new
+        // bounds (start→top/left corner, finish→new far edge); in-range
+        // coordinates are left exactly as the author set them. Entries are
+        // 1-based.
+        private void OnRowsCommitted(object sender, EventArgs e)
+        {
+            if (RowsEntry.Text == _lastClampedRows) return;
+            _lastClampedRows = RowsEntry.Text;
+            ClampStartFinish(RowsEntry.Text, StartRowEntry, FinishRowEntry);
+        }
+
+        private void OnColsCommitted(object sender, EventArgs e)
+        {
+            if (ColsEntry.Text == _lastClampedCols) return;
+            _lastClampedCols = ColsEntry.Text;
+            ClampStartFinish(ColsEntry.Text, StartColEntry, FinishColEntry);
+        }
+
+        private void ClampStartFinish(string dimensionText, Entry startEntry, Entry finishEntry)
+        {
+            if (!_initialized) return;
+            if (!int.TryParse(dimensionText, out int max) || max < 1) return;
+            if (!InRange(startEntry.Text, max)) startEntry.Text = "1";
+            if (!InRange(finishEntry.Text, max)) finishEntry.Text = max.ToString();
+        }
+
+        // True when a 1-based coordinate string sits within 1..max (inclusive).
+        private static bool InRange(string coordText, int max) =>
+            int.TryParse(coordText, out int n) && n >= 1 && n <= max;
 
         /// <summary>
         /// Handles the Generate button click. Validates inputs and closes the popup with the
