@@ -4,7 +4,7 @@ interface Props {
   message: string
   /**
    * Visual tone. `'success'` shows the celebration GIF; `'fail'` shows the
-   * game-over (skull) image with a muted-red heading.
+   * game-over GIF with a muted-red heading.
    */
   tone?: 'success' | 'fail'
   onClose: () => void
@@ -30,7 +30,7 @@ export function GameResultPopup({ message, tone = 'success', onClose, onPlayAgai
       style={{ borderRadius: 12, padding: 24, border: 'none', textAlign: 'center', maxWidth: 360 }}
     >
       <img
-        src={tone === 'fail' ? '/images/maze/game_over.png' : '/images/maze/celebrate.gif'}
+        src={tone === 'fail' ? '/images/maze/game_over.gif' : '/images/maze/celebrate.gif'}
         alt={tone === 'fail' ? 'Game over' : 'Celebration'}
         width={200}
         height={200}

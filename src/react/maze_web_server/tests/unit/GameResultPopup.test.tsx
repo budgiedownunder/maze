@@ -29,7 +29,7 @@ describe('GameResultPopup', () => {
   it('shows the game-over image when tone is fail', () => {
     render(<GameResultPopup message="You're stranded!!" tone="fail" onClose={vi.fn()} />)
     expect(screen.queryByAltText('Celebration')).not.toBeInTheDocument()
-    expect(screen.getByAltText('Game over')).toHaveAttribute('src', '/images/maze/game_over.png')
+    expect(screen.getByAltText('Game over')).toHaveAttribute('src', '/images/maze/game_over.gif')
     expect(screen.getByText("You're stranded!!")).toBeInTheDocument()
   })
 
