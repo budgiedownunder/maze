@@ -65,6 +65,9 @@ describe('Play3dCustomLaunchModal', () => {
     await userEvent.type(timer, '120')
     const sky = screen.getByLabelText(/sky/i) as HTMLSelectElement
     await userEvent.selectOptions(sky, 'sunset')
+    // Door style and key holder live on the Objects tab — activate it before
+    // interacting with their (otherwise hidden) controls.
+    await userEvent.click(screen.getByRole('tab', { name: /objects/i }))
     const door = screen.getByLabelText(/door style/i) as HTMLSelectElement
     await userEvent.selectOptions(door, 'portcullis')
     const keyHolder = screen.getByLabelText(/key holder/i) as HTMLSelectElement
@@ -83,6 +86,31 @@ describe('Play3dCustomLaunchModal', () => {
     render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={onCancel} onPlay={() => {}} />)
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }))
     expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+
+  it('groups fields into Scene / Objects / Decor tabs and switches panels on click', async () => {
+    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    // Scene is the default active tab: its panel is visible, the others hidden.
+    const scenePanel = screen.getByRole('tabpanel', { name: /scene/i })
+    expect(scenePanel).toBeVisible()
+    expect(scenePanel).toContainElement(screen.getByLabelText(/sky/i))
+    // The Objects panel exists but is hidden until its tab is selected.
+    expect(screen.getByRole('tab', { name: /objects/i })).toHaveAttribute('aria-selected', 'false')
+    // getByRole excludes hidden tabpanels by default, so the Objects panel is
+    // not queryable while Scene is active — proving only one panel shows.
+    expect(screen.queryByRole('tabpanel', { name: /objects/i })).toBeNull()
+
+    await userEvent.click(screen.getByRole('tab', { name: /objects/i }))
+    const objectsPanel = screen.getByRole('tabpanel', { name: /objects/i })
+    expect(objectsPanel).toBeVisible()
+    expect(objectsPanel).toContainElement(screen.getByLabelText(/door style/i))
+    expect(screen.getByRole('tab', { name: /objects/i })).toHaveAttribute('aria-selected', 'true')
+    // Switching tabs hides the Scene panel.
+    expect(screen.queryByRole('tabpanel', { name: /scene/i })).toBeNull()
+
+    // The time limit + actions stay reachable regardless of the active tab.
+    expect(screen.getByLabelText(/time limit/i)).toBeVisible()
+    expect(screen.getByRole('button', { name: /play/i })).toBeVisible()
   })
 
   it('pre-fills from localStorage when settings have been saved before', () => {
@@ -142,6 +170,8 @@ describe('Play3dCustomLaunchModal', () => {
   it('passes enemyType and healthStyle through onPlay on submit', async () => {
     const onPlay = vi.fn()
     render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={onPlay} />)
+    // Enemy type and health style live on the Objects tab.
+    await userEvent.click(screen.getByRole('tab', { name: /objects/i }))
     const enemy = screen.getByLabelText(/enemy type/i) as HTMLSelectElement
     await userEvent.selectOptions(enemy, 'ghost')
     const health = screen.getByLabelText(/health style/i) as HTMLSelectElement
