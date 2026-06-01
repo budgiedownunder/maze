@@ -802,6 +802,7 @@ test('Generate Maze dialog has all expected fields', async ({ page }) => {
   await page.getByLabel('Cell 1,1').click()
   await page.getByRole('button', { name: 'Generate' }).click()
   const dialog = page.getByRole('dialog', { name: 'Generate Maze' })
+  // Size & Position tab (default): dimensions + start/finish.
   await expect(dialog.getByLabel('Rows')).toBeVisible()
   await expect(dialog.getByLabel('Columns')).toBeVisible()
   await expect(dialog.getByLabel('Start Row')).toBeVisible()
@@ -809,6 +810,8 @@ test('Generate Maze dialog has all expected fields', async ({ page }) => {
   await expect(dialog.getByLabel('Finish Row')).toBeVisible()
   await expect(dialog.getByLabel('Finish Column')).toBeVisible()
   await expect(dialog.getByLabel('Min Solution Length')).toBeVisible()
+  // Features tab: doors / keys / enemies / health counts.
+  await dialog.getByRole('tab', { name: 'Features' }).click()
   await expect(dialog.getByLabel('Doors', { exact: true })).toBeVisible()
   await expect(dialog.getByLabel('Spare Doors')).toBeVisible()
   await expect(dialog.getByLabel('Spare Keys')).toBeVisible()
@@ -855,6 +858,8 @@ test('generating with doors places key and door cells in the grid', async ({ pag
   await dialog.getByLabel('Finish Row').fill('15')
   await dialog.getByLabel('Finish Column').fill('15')
   await dialog.getByLabel('Min Solution Length').fill('8')
+  // Doors lives on the Features tab.
+  await dialog.getByRole('tab', { name: 'Features' }).click()
   await dialog.getByLabel('Doors', { exact: true }).fill('3')
   await dialog.getByRole('button', { name: 'Generate' }).click()
   await expect(page.getByRole('dialog', { name: 'Generate Maze' })).not.toBeVisible()
@@ -875,6 +880,8 @@ test('generating with enemies and health places enemy and health cells in the gr
   await dialog.getByLabel('Finish Row').fill('15')
   await dialog.getByLabel('Finish Column').fill('15')
   await dialog.getByLabel('Min Solution Length').fill('8')
+  // Enemies and Health live on the Features tab.
+  await dialog.getByRole('tab', { name: 'Features' }).click()
   await dialog.getByLabel('Enemies').fill('2')
   await dialog.getByLabel('Health').fill('2')
   await dialog.getByRole('button', { name: 'Generate' }).click()
