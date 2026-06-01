@@ -1,5 +1,4 @@
-use crate::state::{dispatch_can_pickup, Animation, GameState};
-use crate::world::objects::key_holder::KeyMarker;
+use crate::state::{Animation, GameState};
 use crate::world::{camera_pos_for, explore_cell_raw};
 use bevy::prelude::*;
 use maze::MoveResult;
@@ -174,51 +173,3 @@ pub(crate) fn quit_system(
 /// [`crate::overlays::pause::pause_system`] instead, leaving this system a no-op.
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn quit_system() {}
-
-/// Collects the key at the player's current cell on `F`. `MazeGame::pickup`
-/// already no-ops unless the player stands on an uncollected key, so success
-/// (a returned item) is the signal to despawn that cell's key holder; the bag
-/// HUD then reflects the new bag on its next update. `F` is used because `Q`/`E`
-/// drive camera pitch and `Space` toggles pause. The 3D game has no
-/// touch/pointer input layer, so pickup — like movement — is keyboard-only.
-pub(crate) fn pickup_system(
-    mut commands: Commands,
-    keys: Option<Res<ButtonInput<KeyCode>>>,
-    mut state: ResMut<GameState>,
-    holders: Query<(Entity, &KeyMarker)>,
-) {
-    if state.paused || state.won || state.lost {
-        return;
-    }
-    let Some(keys) = keys else {
-        return;
-    };
-    if !keys.just_pressed(KeyCode::KeyF) {
-        return;
-    }
-    let cell = (state.game.player_row(), state.game.player_col());
-    if state.game.pickup().is_some() {
-        for (entity, marker) in &holders {
-            if marker.cell == cell {
-                commands.entity(entity).despawn();
-            }
-        }
-    }
-}
-
-/// Tracks whether the player stands on an uncollected key and pushes the change
-/// to the host page via [`dispatch_can_pickup`], so a touch device can show a
-/// contextual pickup control (and enable the double-tap pickup gesture). The
-/// flag is forced off once the game has resolved.
-pub(crate) fn pickup_prompt_system(mut state: ResMut<GameState>) {
-    let on_key = if state.won || state.lost {
-        false
-    } else {
-        let cell = (state.game.player_row(), state.game.player_col());
-        state.game.keys().iter().any(|(c, _)| *c == cell)
-    };
-    if on_key != state.can_pickup {
-        state.can_pickup = on_key;
-        dispatch_can_pickup(on_key);
-    }
-}

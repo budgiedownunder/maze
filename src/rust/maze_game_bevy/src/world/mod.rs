@@ -354,7 +354,6 @@ pub(crate) fn spawn_world(
         won: false,
         lost: false,
         paused: false,
-        can_pickup: false,
         damage_flash_timer: 0.0,
     });
 

@@ -18,12 +18,14 @@
 //!   implicit feedback (cell stays `'H'`, HP HUD stays full) is
 //!   sufficient in a first-person 3D view; the React + MAUI bag-area UX
 //!   surfaces the typed reason + message text.
-//! - [`maze::GameEvent::KeyCollected`] → no-op here; the floating key
-//!   visual is reconciled by the per-frame key systems.
+//! - [`maze::GameEvent::KeyCollected`] → tags the matching `KeyMarker` with
+//!   `CollectingKey`, so `key_collection_system` plays the rise-and-shrink
+//!   flourish and despawns the holder.
 
 use crate::state::GameState;
 use crate::world::objects::door::DoorMarker;
 use crate::world::objects::health::HealthMarker;
+use crate::world::objects::key_holder::{CollectingKey, KeyMarker};
 use bevy::prelude::*;
 use maze::GameEvent;
 
@@ -49,6 +51,7 @@ pub(crate) fn game_tick_system(
     mut state: ResMut<GameState>,
     mut doors: Query<&mut DoorMarker>,
     health_pickups: Query<(Entity, &HealthMarker)>,
+    key_holders: Query<(Entity, &KeyMarker)>,
 ) {
     if state.paused || state.won || state.lost {
         return;
@@ -83,9 +86,12 @@ pub(crate) fn game_tick_system(
                 // a first-person 3D view; the React + MAUI bag-area UX
                 // surfaces the typed reason + message text.
             }
-            GameEvent::KeyCollected { .. } => {
-                // No per-event work here; the floating key visual is
-                // reconciled by the per-frame key systems.
+            GameEvent::KeyCollected { cell, .. } => {
+                for (entity, marker) in &key_holders {
+                    if marker.cell == cell {
+                        commands.entity(entity).insert(CollectingKey::default());
+                    }
+                }
             }
         }
     }

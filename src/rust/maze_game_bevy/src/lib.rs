@@ -18,7 +18,7 @@ use bevy::prelude::*;
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
     use crate::hud::{bag, clock, hp, minimap, statusbar};
-    use crate::movement::{movement_system, pickup_prompt_system, pickup_system, quit_system};
+    use crate::movement::{movement_system, quit_system};
     use crate::outcome::outcome_watcher_system;
     use crate::overlays::{lose, pause, title, win};
     use crate::state::{AppState, PendingMazeJson, TitleTimer};
@@ -30,7 +30,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
             door::door_animation_system,
             enemy::{enemy_animation_system, ghost::ghost_hem_wave_system},
             health::health_animation_system,
-            key_holder::{key_holder_system, key_sparks_system},
+            key_holder::{key_collection_system, key_holder_system, key_sparks_system},
         },
         sky, spawn_world,
     };
@@ -67,8 +67,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_holder_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, key_sparks_system.run_if(in_state(AppState::Playing)))
-        .add_systems(Update, pickup_system.run_if(in_state(AppState::Playing)))
-        .add_systems(Update, pickup_prompt_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, key_collection_system.run_if(in_state(AppState::Playing)))
         // The single game-state tick driver runs in `FixedUpdate` for
         // deterministic, frame-rate independent stepping (doors, enemies,
         // HP arithmetic). Per-entity animation systems read the resulting

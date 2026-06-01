@@ -4,9 +4,11 @@
 //! slowly spinning (the bob/spin mirrors the finish
 //! [`crate::world::objects::finish::orb`]) above a base chosen by
 //! [`crate::state::KeyHolderStyle`]: a stone **pedestal**, a wooden **chest**, or
-//! **nothing** (the key floats alone). The holder entity carries [`KeyMarker`];
-//! picking the key up (see [`crate::movement::pickup_system`]) despawns the whole
-//! holder.
+//! **nothing** (the key floats alone). The holder entity carries [`KeyMarker`].
+//! Walking onto the key auto-collects it: [`crate::tick::game_tick_system`] tags
+//! the holder with [`CollectingKey`] on the `KeyCollected` event, and
+//! [`key_collection_system`] plays a brief rise-and-shrink flourish before
+//! despawning the whole holder.
 //!
 //! The key itself is built from shared primitives — a ringed bow (a torus), a
 //! shaft, and two teeth — each paired with a black inverted-hull outline so the
@@ -35,6 +37,15 @@ const KEY_SCALE: f32 = 0.5;
 const KEY_BOB_RATE: f32 = 2.0;
 const KEY_BOB_AMPLITUDE: f32 = 0.08;
 const KEY_SPIN_RATE: f32 = 1.5;
+
+/// Duration of the key-collection flourish, in seconds.
+const KEY_COLLECT_DURATION: f32 = 0.35;
+/// How far (world units) the holder rises over the collection flourish as it
+/// shrinks away — reads as the key being whisked up to the player.
+const KEY_COLLECT_RISE: f32 = 1.2;
+/// Spin rate (rad/s) during collection — faster than the idle spin for a
+/// "snatched away" feel.
+const KEY_COLLECT_SPIN_RATE: f32 = 12.0;
 
 /// Pedestal emissive RGB — neutral dim stone, matching the dead-end landmark
 /// palette so the holder reads as carved masonry.
@@ -65,11 +76,19 @@ const SPARK_MAX_RADIUS: f32 = 0.6;
 const SPARK_RATE: f32 = 0.6;
 const SPARK_EMISSIVE: LinearRgba = LinearRgba::new(1.6, 1.35, 0.7, 1.0);
 
-/// Marker on a key holder's root entity, keyed by grid cell. Picking the key up
-/// despawns this entity (and its base / key children).
+/// Marker on a key holder's root entity, keyed by grid cell. Auto-collecting
+/// the key tags this entity with [`CollectingKey`], which despawns it (and its
+/// base / key children) once the collection flourish finishes.
 #[derive(Component)]
 pub(crate) struct KeyMarker {
     pub(crate) cell: (usize, usize),
+}
+
+/// Tags a key holder whose key was just auto-collected. [`key_collection_system`]
+/// rises and shrinks the holder over [`KEY_COLLECT_DURATION`], then despawns it.
+#[derive(Component, Default)]
+pub(crate) struct CollectingKey {
+    elapsed: f32,
 }
 
 /// Marker on the floating key group, animated by [`key_holder_system`].
@@ -364,6 +383,32 @@ pub(crate) fn key_holder_system(time: Res<Time>, mut keys: Query<(&FloatingKey, 
         transform.translation.y =
             key.base_y + KEY_BOB_AMPLITUDE * (time.elapsed_secs() * KEY_BOB_RATE).sin();
         transform.rotate_y(time.delta_secs() * KEY_SPIN_RATE);
+    }
+}
+
+/// `Update`: plays the key-collection flourish on any holder tagged
+/// [`CollectingKey`] — the whole group rises while shrinking to nothing and
+/// spinning faster — then despawns the holder when the animation completes. The
+/// idle bob/spin on the child [`FloatingKey`] keeps running in local space, so
+/// the key tumbles as it's whisked up.
+pub(crate) fn key_collection_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut holders: Query<(Entity, &mut CollectingKey, &mut Transform)>,
+) {
+    let dt = time.delta_secs();
+    for (entity, mut collecting, mut transform) in &mut holders {
+        collecting.elapsed += dt;
+        let progress = (collecting.elapsed / KEY_COLLECT_DURATION).min(1.0);
+        if progress >= 1.0 {
+            commands.entity(entity).despawn();
+            continue;
+        }
+        // Ease-out so the key leaps up quickly then settles into nothing.
+        let eased = 1.0 - (1.0 - progress) * (1.0 - progress);
+        transform.translation.y = KEY_COLLECT_RISE * eased;
+        transform.scale = Vec3::splat(1.0 - eased);
+        transform.rotate_y(dt * KEY_COLLECT_SPIN_RATE);
     }
 }
 
