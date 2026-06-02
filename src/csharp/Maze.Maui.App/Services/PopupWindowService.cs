@@ -61,6 +61,17 @@ namespace Maze.Maui.App.Services
         }
 
         /// <summary>
+        /// Displays the 2D game pause menu (Resume / Restart) as a popup window.
+        /// </summary>
+        /// <returns>The chosen <see cref="PauseMenuResult"/> (<see cref="PauseMenuResult.Resume"/> if dismissed)</returns>
+        public async Task<PauseMenuResult> ShowPauseMenu()
+        {
+            var popup = new Views.PausePopup();
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<PauseMenuResult>(popup);
+            return result.Result;
+        }
+
+        /// <summary>
         /// Displays the Play 3D difficulty picker (Easy / Tricky / Hard) as a popup window
         /// </summary>
         /// <returns>A task that contains the chosen <see cref="Models.Difficulty"/>, or <c>null</c> if the user cancelled</returns>

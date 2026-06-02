@@ -47,6 +47,8 @@ beforeEach(() => {
   mockMoveMazeGamePlayer.mockReturnValue(MazeGamePlayerMoveResult.Moved)
   mockGetTimeUntilNextEvent.mockReturnValue(null)
   mockTickGame.mockReturnValue([])
+  mockGameInstance.is_complete.mockReturnValue(false)
+  mockGameInstance.is_lost.mockReturnValue(false)
 })
 
 describe('useMazeGame', () => {
@@ -115,6 +117,31 @@ describe('useMazeGame', () => {
     await act(async () => {})
     act(() => { result.current[1](MazeGameDirection.Right) })
     expect(result.current[0].version).toBe(0)
+  })
+
+  it('togglePause sets paused and blocks moves; resuming re-enables them', async () => {
+    mockMoveMazeGamePlayer.mockReturnValue(MazeGamePlayerMoveResult.Moved)
+    const { result } = renderHook(() => useMazeGame(DEFINITION_JSON))
+    await act(async () => {})
+    // Pause.
+    act(() => { result.current[3]() })
+    expect(result.current[0].paused).toBe(true)
+    // A move while paused is a no-op (no version bump).
+    act(() => { result.current[1](MazeGameDirection.Right) })
+    expect(result.current[0].version).toBe(0)
+    // Resume.
+    act(() => { result.current[3]() })
+    expect(result.current[0].paused).toBe(false)
+    act(() => { result.current[1](MazeGameDirection.Right) })
+    expect(result.current[0].version).toBe(1)
+  })
+
+  it('togglePause is a no-op once the game is complete', async () => {
+    mockGameInstance.is_complete.mockReturnValue(true)
+    const { result } = renderHook(() => useMazeGame(DEFINITION_JSON))
+    await act(async () => {})
+    act(() => { result.current[3]() })
+    expect(result.current[0].paused).toBe(false)
   })
 
   it('unmount calls freeMazeGame', async () => {

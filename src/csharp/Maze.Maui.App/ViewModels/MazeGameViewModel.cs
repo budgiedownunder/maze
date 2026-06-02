@@ -60,6 +60,12 @@ namespace Maze.Maui.App.ViewModels
         public bool IsShowingResultPopup { get; private set; }
 
         /// <summary>
+        /// True while the pause popup is being displayed.
+        /// Used by the page to suppress lifecycle-driven cleanup during popup show/hide.
+        /// </summary>
+        public bool IsShowingPausePopup { get; private set; }
+
+        /// <summary>
         /// Status message shown on error. Empty when no message.
         /// </summary>
         [ObservableProperty]
@@ -128,6 +134,19 @@ namespace Maze.Maui.App.ViewModels
         public event Action? TickStartRequested;
 
         /// <summary>
+        /// Whether the game is paused. While paused the tick loop is stopped and
+        /// moves are ignored; the pause popup is shown.
+        /// </summary>
+        [ObservableProperty]
+        private bool isPaused;
+
+        /// <summary>
+        /// Raised when the game is paused. The page hooks this to stop its
+        /// tick timer (resume re-arms it via <see cref="TickStartRequested"/>).
+        /// </summary>
+        public event Action? PauseRequested;
+
+        /// <summary>
         /// Test seam — overrides the default <see cref="MazeGame.Create"/>
         /// factory <see cref="StartGame"/> uses to spin up a game session.
         /// Production code never sets this; left at <c>null</c>,
@@ -148,6 +167,7 @@ namespace Maze.Maui.App.ViewModels
             _gameGrid = gameGrid;
             Bag = [];
             IsLost = false;
+            IsPaused = false;
             LoseReason = LoseReason.None;
             _enemyCells.Clear();
 
@@ -190,7 +210,7 @@ namespace Maze.Maui.App.ViewModels
         public async void Move(MazeGameDirection direction)
         {
             if (_game is null || _gameGrid is null || direction == MazeGameDirection.None
-                || _game.IsComplete || _game.IsLost)
+                || _game.IsComplete || _game.IsLost || IsPaused)
                 return;
 
             int prevRow = _game.PlayerRow;
@@ -240,6 +260,48 @@ namespace Maze.Maui.App.ViewModels
             {
                 _gameGrid.SetPlayerCelebrate(_game.PlayerRow, _game.PlayerCol);
                 await ShowResultPopup("You win!", won: true);
+            }
+        }
+
+        /// <summary>
+        /// Pauses the game and shows the pause menu (Resume / Restart). Triggered
+        /// by the centre D-pad button or the Space / Esc keys. No-op once the
+        /// game is won/lost or already paused.
+        /// </summary>
+        [RelayCommand]
+        public async Task Pause()
+        {
+            if (_game is null || _gameGrid is null || IsPaused || _game.IsComplete || _game.IsLost)
+                return;
+            // Capture the grid now: showing the popup drives the page's
+            // navigation lifecycle, and the IsShowingPausePopup guard keeps it
+            // from running cleanup — but a local keeps Restart safe regardless.
+            IMazeGridView grid = _gameGrid;
+            IsPaused = true;
+            PauseRequested?.Invoke(); // page stops the tick timer
+            PauseMenuResult action;
+            IsShowingPausePopup = true;
+            try
+            {
+                action = await _dialogService.ShowPauseMenu();
+            }
+            finally
+            {
+                IsShowingPausePopup = false;
+            }
+            if (action == PauseMenuResult.Restart)
+            {
+                // Full reset reuses the same grid view; it clears IsPaused and
+                // re-arms the tick loop.
+                StartGame(grid);
+            }
+            else
+            {
+                IsPaused = false;
+                // Re-arm the tick loop. OnTickStartRequested reseeds the dt
+                // baseline to now, so the paused span isn't counted as elapsed
+                // time (otherwise enemies lurch forward on resume).
+                TickStartRequested?.Invoke();
             }
         }
 

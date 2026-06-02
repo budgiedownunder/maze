@@ -97,8 +97,8 @@ x:DataType="viewmodel:MazeGameViewModel"
 
         <!-- D-pad, centre — hidden on Windows (arrow keys used instead);
              hidden until grid loads. 4px row/column spacing + 8px button
-             padding mirrors React's `.game-dpad` `gap: 4px` + `padding: 8px`
-             — gives discernable gaps around the empty centre cell. -->
+             padding mirrors React's `.game-dpad` `gap: 4px` + `padding: 8px`.
+             The centre cell holds the pause "||" button. -->
         <Grid x:Name="DpadGrid"
               Grid.Row="2"
               HorizontalOptions="Center"
@@ -111,6 +111,7 @@ x:DataType="viewmodel:MazeGameViewModel"
               IsVisible="False">
             <Button Grid.Row="0" Grid.Column="1" ImageSource="dpad_up.png"    Text="" Padding="8" Pressed="OnDpadUpPressed"    Released="OnDpadReleased"/>
             <Button Grid.Row="1" Grid.Column="0" ImageSource="dpad_left.png"  Text="" Padding="8" Pressed="OnDpadLeftPressed"  Released="OnDpadReleased"/>
+            <Button Grid.Row="1" Grid.Column="1" ImageSource="dpad_pause.png" Text="" Padding="8" Command="{Binding PauseCommand}"/>
             <Button Grid.Row="1" Grid.Column="2" ImageSource="dpad_right.png" Text="" Padding="8" Pressed="OnDpadRightPressed" Released="OnDpadReleased"/>
             <Button Grid.Row="2" Grid.Column="1" ImageSource="dpad_down.png"  Text="" Padding="8" Pressed="OnDpadDownPressed"  Released="OnDpadReleased"/>
         </Grid>
@@ -127,7 +128,7 @@ x:DataType="viewmodel:MazeGameViewModel"
                FontSize="12"
                LineBreakMode="WordWrap"
                TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
-               Text="[&#8593;/W] Up    [&#8595;/S] Down    [&#8592;/A] Left    [&#8594;/D] Right" />
+               Text="[&#8593;/W] Up    [&#8595;/S] Down    [&#8592;/A] Left    [&#8594;/D] Right    [Space/Esc] Pause" />
 
     </Grid>
 

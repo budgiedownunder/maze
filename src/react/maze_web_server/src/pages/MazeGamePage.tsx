@@ -9,6 +9,7 @@ import { useMenuVariant } from '../hooks/useMenuVariant'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { MazeGrid } from '../components/MazeGrid'
 import { GameResultPopup } from '../components/GameResultPopup'
+import { PausePopup } from '../components/PausePopup'
 import type { Maze } from '../types/api'
 
 const KEY_MAP: Record<string, MazeGameDirection> = {
@@ -35,7 +36,7 @@ export function MazeGamePage() {
   const gameCellSize = window.matchMedia('(pointer: coarse)').matches ? 60 : 32
 
   const definitionJson = maze ? JSON.stringify(maze.definition) : null
-  const [{ game, version, loading, error, damageFlashKey }, move, restart] = useMazeGame(definitionJson)
+  const [{ game, version, loading, error, damageFlashKey, paused }, move, restart, togglePause] = useMazeGame(definitionJson)
 
   // Bag contents — recomputed whenever the game advances (version bump). Keys
   // are auto-collected on walk-over, so the bag grows as the player moves.
@@ -87,12 +88,17 @@ export function MazeGamePage() {
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (game?.is_complete() || game?.is_lost()) return
+      // Space / Esc toggle pause. preventDefault stops Space from scrolling the
+      // page or activating a focused popup button, and stops Esc from closing
+      // the modal natively (the toggle owns resume).
+      if (e.key === ' ' || e.key === 'Escape') { e.preventDefault(); togglePause(); return }
       const dir = KEY_MAP[e.key]
+      // move() is itself a no-op while paused, so no explicit guard needed here.
       if (dir !== undefined) { e.preventDefault(); move(dir) }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [move, game])
+  }, [move, togglePause, game])
 
   return (
     <div className="maze-game-page">
@@ -177,14 +183,25 @@ export function MazeGamePage() {
               <button type="button" aria-label="Move right" onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Right) }} onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'right' }}>
                 <img src="/images/maze/dpad_right.png" alt="" draggable={false} />
               </button>
+              <button type="button" aria-label={paused ? 'Resume' : 'Pause'} onClick={() => togglePause()} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'pause' }}>
+                <img src="/images/maze/dpad_pause.png" alt="" draggable={false} />
+              </button>
             </div>
 
             <div className="maze-shortcuts-hint">
               [&#x2191;/W]&nbsp;Up&nbsp;&nbsp;&nbsp;
               [&#x2193;/S]&nbsp;Down&nbsp;&nbsp;&nbsp;
               [&#x2190;/A]&nbsp;Left&nbsp;&nbsp;&nbsp;
-              [&#x2192;/D]&nbsp;Right
+              [&#x2192;/D]&nbsp;Right&nbsp;&nbsp;&nbsp;
+              [Space/Esc]&nbsp;Pause
             </div>
+
+            {paused && (
+              <PausePopup
+                onResume={() => togglePause()}
+                onRestart={() => restart()}
+              />
+            )}
 
             {showResult && (
               <GameResultPopup

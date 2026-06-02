@@ -128,6 +128,45 @@ test.describe('MazeGamePage', () => {
     expect(damaged).toBe(true)
   })
 
+  test('Space pauses the game (enemies frozen), Resume continues, Restart resets', async ({ page }) => {
+    // EnemyGauntlet grid ['S','E','E','E','F']: an enemy sits adjacent and
+    // commits onto the player every ~1500ms. Pausing must freeze that tick so
+    // HP holds; resuming must let the enemy hit again.
+    await page.goto('/play/maze-enemy-gauntlet')
+    await expect(page.getByAltText('Player')).toBeVisible()
+    const hpHud = page.getByLabel('Health')
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+
+    // Pause immediately and hold for longer than an enemy move period — HP must
+    // not drop while the pause popup is showing.
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Paused')).toBeVisible()
+    await page.waitForTimeout(2000)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(0)
+
+    // Resume — the popup closes and enemy ticks resume; a held key eventually
+    // takes a hit.
+    await page.getByRole('button', { name: 'Resume' }).click()
+    await expect(page.getByText('Paused')).toBeHidden()
+    const deadline = Date.now() + 5000
+    let damaged = false
+    while (Date.now() < deadline) {
+      await page.keyboard.press('ArrowLeft')
+      await page.waitForTimeout(130)
+      if (await hpHud.getByAltText('Lost health', { exact: true }).count() > 0) { damaged = true; break }
+    }
+    expect(damaged).toBe(true)
+
+    // Restart from the pause menu resets HP to full and closes the popup.
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Paused')).toBeVisible()
+    await page.getByRole('button', { name: 'Restart' }).click()
+    await expect(page.getByText('Paused')).toBeHidden()
+    await expect(page.getByAltText('Player')).toBeVisible()
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(0)
+  })
+
   test('walking onto a health pickup below max HP heals and removes the in-grid symbol', async ({ page }) => {
     // EnemyHealth grid ['S','E','H','F']: collide with the enemy to drop to 2/3,
     // then walk onto the health pickup to heal back to 3/3. The consumed pickup's

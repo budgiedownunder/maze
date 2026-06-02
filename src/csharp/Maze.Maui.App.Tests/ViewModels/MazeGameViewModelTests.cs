@@ -207,6 +207,77 @@ namespace Maze.Maui.App.Tests.ViewModels
         }
 
         [Fact]
+        public async Task Pause_RaisesPauseRequested_AndResumeClearsIsPaused()
+        {
+            var (vm, dialog, grid) = BuildVm();
+            MazeGame stub = InstallGame(vm, grid.Object, ItemWithDefinition());
+            stub.PlayerRow = 0;
+            stub.PlayerCol = 0;
+            dialog.Setup(d => d.ShowPauseMenu()).ReturnsAsync(PauseMenuResult.Resume);
+            bool pauseRequested = false;
+            vm.PauseRequested += () => pauseRequested = true;
+
+            await vm.PauseCommand.ExecuteAsync(null);
+
+            Assert.True(pauseRequested);          // page was told to stop the tick timer
+            Assert.False(vm.IsPaused);            // Resume cleared the paused state
+            dialog.Verify(d => d.ShowPauseMenu(), Times.Once);
+        }
+
+        [Fact]
+        public async Task Pause_BlocksMovesWhilePaused()
+        {
+            var (vm, dialog, grid) = BuildVm();
+            MazeGame stub = InstallGame(vm, grid.Object, ItemWithDefinition());
+            stub.NextMoveResult = MazeGameMoveResult.Moved;
+            // Hold the pause popup open via a controllable task so we can probe the
+            // paused state mid-flight.
+            var popup = new TaskCompletionSource<PauseMenuResult>();
+            dialog.Setup(d => d.ShowPauseMenu()).Returns(popup.Task);
+
+            Task pauseTask = vm.PauseCommand.ExecuteAsync(null);
+            Assert.True(vm.IsPaused);
+            // While the popup is up, the page must skip its lifecycle cleanup.
+            Assert.True(vm.IsShowingPausePopup);
+
+            vm.Move(MazeGameDirection.Right);
+            // A move is a no-op while paused — SetVisitedDotAt (only ever called by
+            // a successful Move, never by StartGame) must not have fired.
+            grid.Verify(g => g.SetVisitedDotAt(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+
+            popup.SetResult(PauseMenuResult.Resume);
+            await pauseTask;
+            Assert.False(vm.IsPaused);
+            Assert.False(vm.IsShowingPausePopup);
+        }
+
+        [Fact]
+        public async Task Pause_Restart_RestartsTheGame()
+        {
+            var (vm, dialog, grid) = BuildVm();
+            var item = ItemWithDefinition();
+            MazeGame stub = MazeGame.CreateForTests();
+            MazeGameViewModel.GameFactory = _ => stub;
+            try
+            {
+                vm.MazeItem = item;
+                vm.StartGame(grid.Object);
+                dialog.Setup(d => d.ShowPauseMenu()).ReturnsAsync(PauseMenuResult.Restart);
+
+                await vm.PauseCommand.ExecuteAsync(null);
+            }
+            finally
+            {
+                MazeGameViewModel.GameFactory = null;
+            }
+
+            Assert.False(vm.IsPaused);
+            // Restart re-runs StartGame, which re-initialises the grid (once for the
+            // initial start, once for the restart).
+            grid.Verify(g => g.Initialize(false, item), Times.Exactly(2));
+        }
+
+        [Fact]
         public void Move_ResultStartedUnlocking_RaisesTickStartRequestedAndMarksDoorOpening()
         {
             var (vm, _, grid) = BuildVm();

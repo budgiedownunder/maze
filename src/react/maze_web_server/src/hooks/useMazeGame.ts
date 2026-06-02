@@ -19,6 +19,9 @@ export interface MazeGameHookState {
   // `key` on the damage-flash overlay so the CSS animation restarts on every
   // hit even when consecutive hits would otherwise dedupe.
   damageFlashKey: number
+  // Whether the game is paused. While paused the tick loop is frozen and
+  // moves are ignored; the page shows the pause popup.
+  paused: boolean
 }
 
 type LoadResult = {
@@ -32,12 +35,17 @@ type LoadResult = {
 
 export function useMazeGame(
   definitionJson: string | null
-): [MazeGameHookState, (dir: MazeGameDirection) => void, () => void] {
+): [MazeGameHookState, (dir: MazeGameDirection) => void, () => void, () => void] {
   const [loadResult, setLoadResult] = useState<LoadResult | null>(null)
   // Bumped by restart() to force the effect to free and recreate the game from
   // the same definition. Part of the match key so the old (freed) game is never
   // read during the recreate window.
   const [restartNonce, setRestartNonce] = useState(0)
+  // Pause state drives the popup; pausedRef mirrors it for the synchronous
+  // guards in move() and scheduleWake() (which fire from timers / event
+  // handlers, after the latest render).
+  const [paused, setPaused] = useState(false)
+  const pausedRef = useRef(false)
   const gameRef = useRef<MazeGameWasm | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTickAtRef = useRef<number>(0)
@@ -84,6 +92,7 @@ export function useMazeGame(
   // (typically triggered by a player move) restarts it.
   const scheduleWake = useCallback(() => {
     if (timerRef.current !== null) { clearTimeout(timerRef.current); timerRef.current = null }
+    if (pausedRef.current) return
     const g = gameRef.current
     if (!g) return
     if (g.is_complete() || g.is_lost()) return
@@ -112,6 +121,8 @@ export function useMazeGame(
     createMazeGame(definitionJson).then(newGame => {
       if (cancelled) { freeMazeGame(newGame); return }
       gameRef.current = newGame
+      pausedRef.current = false
+      setPaused(false)
       lastTickAtRef.current = performance.now()
       setLoadResult({ key, nonce, game: newGame, error: null, version: 0, damageFlashKey: 0 })
       // A fresh game with enemies or opening doors already has a non-null
@@ -129,6 +140,7 @@ export function useMazeGame(
 
   const move = useCallback((dir: MazeGameDirection) => {
     if (!gameRef.current) return
+    if (pausedRef.current) return
     if (gameRef.current.is_complete() || gameRef.current.is_lost()) return
     const now = Date.now()
     if (dir !== lastMoveDirectionRef.current) lastMoveTickRef.current = 0
@@ -152,13 +164,35 @@ export function useMazeGame(
     scheduleWake()
   }, [scheduleWake])
 
+  // Toggle pause. Pausing freezes the tick loop (enemies + door progress) and
+  // makes move() a no-op. Resuming reseeds the tick clock to now so the paused
+  // span isn't counted as elapsed dt (otherwise enemies lurch forward), then
+  // re-arms the loop. Pausing is a no-op once the game is won or lost — the
+  // result popup owns that end state.
+  const togglePause = useCallback(() => {
+    const g = gameRef.current
+    if (!g || g.is_complete() || g.is_lost()) return
+    const next = !pausedRef.current
+    pausedRef.current = next
+    setPaused(next)
+    if (next) {
+      stopTickLoop()
+    } else {
+      lastTickAtRef.current = performance.now()
+      scheduleWake()
+    }
+  }, [stopTickLoop, scheduleWake])
+
   // Restart the current maze from the beginning. Bumping the nonce re-runs the
   // load effect, which frees the existing game and recreates it from the same
   // definition; the nonce in the match key keeps the freed game from rendering
-  // during the recreate window.
+  // during the recreate window. Clearing pause synchronously closes the pause
+  // popup immediately rather than waiting for the async recreate.
   const restart = useCallback(() => {
+    pausedRef.current = false
+    setPaused(false)
     setRestartNonce(n => n + 1)
   }, [])
 
-  return [{ game, version, loading, error, damageFlashKey }, move, restart]
+  return [{ game, version, loading, error, damageFlashKey, paused }, move, restart, togglePause]
 }

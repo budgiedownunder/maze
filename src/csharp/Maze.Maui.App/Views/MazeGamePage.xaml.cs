@@ -47,6 +47,7 @@ namespace Maze.Maui.App.Views
             GameGrid.CellTapped += OnGameGridCellTapped;
             GameGrid.CellDoubleTapped += OnGameGridCellTapped;
             _viewModel.TickStartRequested += OnTickStartRequested;
+            _viewModel.PauseRequested += OnPauseRequested;
             _viewModel.DamageFlashRequested += OnDamageFlashRequested;
             if (_gameStarted) return;
             _gameStarted = true;
@@ -83,13 +84,14 @@ namespace Maze.Maui.App.Views
         protected override void OnNavigatedFrom(NavigatedFromEventArgs args)
         {
             base.OnNavigatedFrom(args);
-            if (_viewModel.IsShowingResultPopup) return;
+            if (_viewModel.IsShowingResultPopup || _viewModel.IsShowingPausePopup) return;
             StopDpad();
             StopTickTimer();
             GameGrid.KeyDown -= OnGameGridKeyDown;
             GameGrid.CellTapped -= OnGameGridCellTapped;
             GameGrid.CellDoubleTapped -= OnGameGridCellTapped;
             _viewModel.TickStartRequested -= OnTickStartRequested;
+            _viewModel.PauseRequested -= OnPauseRequested;
             _viewModel.DamageFlashRequested -= OnDamageFlashRequested;
         }
 
@@ -98,7 +100,7 @@ namespace Maze.Maui.App.Views
         {
             base.OnDisappearing();
             Shell.Current.Navigating -= OnShellNavigating;
-            if (_viewModel.IsShowingResultPopup) return;
+            if (_viewModel.IsShowingResultPopup || _viewModel.IsShowingPausePopup) return;
             _gameStarted = false;
             DpadGrid.IsVisible = false;
             BagStack.IsVisible = false;
@@ -132,6 +134,13 @@ namespace Maze.Maui.App.Views
 
         private void OnGameGridKeyDown(object? sender, MazeGridKeyDownEventArgs e)
         {
+            // Space / Esc toggle pause (mirrors the centre D-pad "||" button).
+            if (e.Key is Controls.Keyboard.Key.Space or Controls.Keyboard.Key.Escape)
+            {
+                if (_viewModel.PauseCommand.CanExecute(null))
+                    _viewModel.PauseCommand.Execute(null);
+                return;
+            }
             MazeGameDirection dir = e.Key switch
             {
                 Controls.Keyboard.Key.Up => MazeGameDirection.Up,
@@ -191,6 +200,14 @@ namespace Maze.Maui.App.Views
         {
             _tickTimer?.Stop();
         }
+
+        /// <summary>
+        /// Stops the tick loop when the game is paused. Hooked to
+        /// <see cref="MazeGameViewModel.PauseRequested"/>; resume re-arms the
+        /// loop via <see cref="MazeGameViewModel.TickStartRequested"/>, which
+        /// also reseeds the dt baseline.
+        /// </summary>
+        private void OnPauseRequested() => StopTickTimer();
 
         /// <summary>
         /// Flashes the red damage overlay when the player takes a hit. Snaps to a

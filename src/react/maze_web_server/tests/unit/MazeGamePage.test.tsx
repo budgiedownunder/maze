@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
@@ -10,7 +10,7 @@ import { MazeGamePage } from '../../src/pages/MazeGamePage'
 
 // ── Mocks ────────────────────────────────────────────────────
 
-const { mockMove, mockRestart, mockUseMazeGame, mockGameInstance } = vi.hoisted(() => {
+const { mockMove, mockRestart, mockTogglePause, mockUseMazeGame, mockGameInstance } = vi.hoisted(() => {
   const mockGameInstance = {
     is_complete:      vi.fn().mockReturnValue(false),
     is_lost:          vi.fn().mockReturnValue(false),
@@ -30,12 +30,14 @@ const { mockMove, mockRestart, mockUseMazeGame, mockGameInstance } = vi.hoisted(
   }
   const mockMove = vi.fn()
   const mockRestart = vi.fn()
+  const mockTogglePause = vi.fn()
   const mockUseMazeGame = vi.fn().mockReturnValue([
-    { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0 },
+    { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0, paused: false },
     mockMove,
     mockRestart,
+    mockTogglePause,
   ])
-  return { mockMove, mockRestart, mockUseMazeGame, mockGameInstance }
+  return { mockMove, mockRestart, mockTogglePause, mockUseMazeGame, mockGameInstance }
 })
 
 vi.mock('../../src/hooks/useMazeGame', () => ({
@@ -54,6 +56,15 @@ vi.mock('../../src/components/GameResultPopup', () => ({
     <div data-testid="game-result-popup" data-tone={tone}>
       <span>{message}</span>
       <button type="button" onClick={onClose}>Close</button>
+    </div>
+  ),
+}))
+
+vi.mock('../../src/components/PausePopup', () => ({
+  PausePopup: ({ onResume, onRestart }: { onResume: () => void; onRestart: () => void }) => (
+    <div data-testid="pause-popup">
+      <button type="button" onClick={onResume}>Resume</button>
+      <button type="button" onClick={onRestart}>Restart</button>
     </div>
   ),
 }))
@@ -89,9 +100,10 @@ beforeEach(() => {
   mockGameInstance.hp.mockReturnValue(3)
   mockGameInstance.max_hp.mockReturnValue(3)
   mockUseMazeGame.mockReturnValue([
-    { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0 },
+    { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0, paused: false },
     mockMove,
     mockRestart,
+    mockTogglePause,
   ])
 })
 
@@ -256,9 +268,10 @@ describe('MazeGamePage', () => {
 
   it('damage flash overlay is not rendered when damageFlashKey is 0', async () => {
     mockUseMazeGame.mockReturnValue([
-      { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0 },
+      { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0, paused: false },
       mockMove,
       mockRestart,
+      mockTogglePause,
     ])
     const { container } = renderPage()
     await waitForLoad()
@@ -267,9 +280,10 @@ describe('MazeGamePage', () => {
 
   it('damage flash overlay is rendered when damageFlashKey > 0', async () => {
     mockUseMazeGame.mockReturnValue([
-      { game: mockGameInstance, version: 1, loading: false, error: null, damageFlashKey: 1 },
+      { game: mockGameInstance, version: 1, loading: false, error: null, damageFlashKey: 1, paused: false },
       mockMove,
       mockRestart,
+      mockTogglePause,
     ])
     const { container } = renderPage()
     await waitForLoad()
@@ -346,5 +360,55 @@ describe('MazeGamePage', () => {
     expect(legend.textContent).toMatch(/S/)
     expect(legend.textContent).toMatch(/A/)
     expect(legend.textContent).toMatch(/D/)
+  })
+
+  it('keyboard legend includes the pause shortcut', async () => {
+    renderPage()
+    await waitForLoad()
+    const legend = document.querySelector('.maze-shortcuts-hint')!
+    expect(legend.textContent).toMatch(/Pause/)
+  })
+
+  it('"Space" key toggles pause', async () => {
+    renderPage()
+    await waitForLoad()
+    fireEvent.keyDown(window, { key: ' ' })
+    expect(mockTogglePause).toHaveBeenCalled()
+  })
+
+  it('"Escape" key toggles pause', async () => {
+    renderPage()
+    await waitForLoad()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(mockTogglePause).toHaveBeenCalled()
+  })
+
+  it('D-pad pause button toggles pause', async () => {
+    renderPage()
+    await waitForLoad()
+    await userEvent.click(screen.getByRole('button', { name: /pause/i }))
+    expect(mockTogglePause).toHaveBeenCalled()
+  })
+
+  it('pause popup is shown only when paused, with Resume and Restart wired', async () => {
+    mockUseMazeGame.mockReturnValue([
+      { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0, paused: true },
+      mockMove,
+      mockRestart,
+      mockTogglePause,
+    ])
+    renderPage()
+    await waitForLoad()
+    const popup = screen.getByTestId('pause-popup')
+    await userEvent.click(within(popup).getByRole('button', { name: 'Resume' }))
+    expect(mockTogglePause).toHaveBeenCalled()
+    await userEvent.click(within(popup).getByRole('button', { name: 'Restart' }))
+    expect(mockRestart).toHaveBeenCalled()
+  })
+
+  it('pause popup is absent when not paused', async () => {
+    renderPage()
+    await waitForLoad()
+    expect(screen.queryByTestId('pause-popup')).not.toBeInTheDocument()
   })
 })
