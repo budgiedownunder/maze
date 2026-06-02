@@ -75,7 +75,7 @@ x:DataType="viewmodel:MazeGameViewModel"
                                Padding="0,4"
                                Spacing="6"
                                IsVisible="False">
-            <Label Text="Bag:" VerticalOptions="Center" FontSize="14" Opacity="0.8"/>
+            <Label Text="BAG" VerticalOptions="Center" FontSize="14" Opacity="0.8"/>
             <Label Text="empty"
                    VerticalOptions="Center"
                    FontSize="14"
