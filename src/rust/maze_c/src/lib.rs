@@ -43,6 +43,8 @@ pub struct MazeC {
 /// - `min_spine_length`: `0` = use default (`(row_count + col_count) / 2`)
 /// - `max_retries`: `0` = use default (100)
 /// - `branch_from_finish`: `0` = false (default), `1` = true
+/// - `door_count` / `spare_doors` / `spare_keys`: `0` = none (default)
+/// - `enemy_count` / `health_count`: `0` = none (default)
 ///
 /// # Examples
 ///
@@ -69,6 +71,11 @@ pub struct MazeCGeneratorOptions {
     pub min_spine_length: u32,
     pub max_retries: u32,
     pub branch_from_finish: u8,
+    pub door_count: u32,
+    pub spare_doors: u32,
+    pub spare_keys: u32,
+    pub enemy_count: u32,
+    pub health_count: u32,
 }
 
 /// Opaque game session handle, exposed to C# via P/Invoke.
@@ -94,6 +101,9 @@ pub struct MazeCGeneratorOptions {
 /// ```
 pub struct MazeGameC {
     game: maze::MazeGame,
+    /// Tick events buffered between consecutive `maze_c_maze_game_tick` calls.
+    /// `tick` overwrites this; `get_tick_event` reads from it by index.
+    tick_events: Vec<maze::GameEvent>,
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -448,6 +458,10 @@ pub unsafe extern "C" fn maze_c_maze_get_cell_type(
         'S' => 1,
         'F' => 2,
         'W' => 3,
+        'K' => 4,
+        'D' => 5,
+        'E' => 6,
+        'H' => 7,
         _ => 0,
     };
     if !out_cell_type.is_null() {
@@ -732,6 +746,142 @@ pub extern "C" fn maze_c_maze_set_wall_cells(
 ) -> u8 {
     clear_last_error();
     set_cell_range(ptr, start_row, start_col, end_row, end_col, 'W')
+}
+
+/// Sets a rectangular range of cells to keys (`'K'`). Returns `1` on success, `0` on error.
+///
+/// # Examples
+///
+/// Resize a maze to 3 × 3, set cell (1, 1) as a key, and assert its cell
+/// type is Key (4).
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 3, 3);
+///
+/// let ok = maze_c_maze_set_key_cells(ptr, 1, 1, 1, 1);
+/// assert_eq!(ok, 1);
+///
+/// let mut ct: u32 = 0;
+/// unsafe { maze_c_maze_get_cell_type(ptr, 1, 1, &mut ct) };
+/// assert_eq!(ct, 4, "expected Key at (1, 1)");
+///
+/// maze_c_free_maze(ptr);
+/// ```
+#[no_mangle]
+pub extern "C" fn maze_c_maze_set_key_cells(
+    ptr: *mut MazeC,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u8 {
+    clear_last_error();
+    set_cell_range(ptr, start_row, start_col, end_row, end_col, 'K')
+}
+
+/// Sets a rectangular range of cells to doors (`'D'`). Returns `1` on success, `0` on error.
+///
+/// # Examples
+///
+/// Resize a maze to 3 × 3, set cell (1, 2) as a door, and assert its cell
+/// type is Door (5).
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 3, 3);
+///
+/// let ok = maze_c_maze_set_door_cells(ptr, 1, 2, 1, 2);
+/// assert_eq!(ok, 1);
+///
+/// let mut ct: u32 = 0;
+/// unsafe { maze_c_maze_get_cell_type(ptr, 1, 2, &mut ct) };
+/// assert_eq!(ct, 5, "expected Door at (1, 2)");
+///
+/// maze_c_free_maze(ptr);
+/// ```
+#[no_mangle]
+pub extern "C" fn maze_c_maze_set_door_cells(
+    ptr: *mut MazeC,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u8 {
+    clear_last_error();
+    set_cell_range(ptr, start_row, start_col, end_row, end_col, 'D')
+}
+
+/// Sets a rectangular range of cells to enemy spawns (`'E'`). Returns `1` on success, `0` on error.
+///
+/// # Examples
+///
+/// Resize a maze to 3 × 3, set cell (1, 1) as an enemy spawn, and assert its
+/// cell type is Enemy (6).
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 3, 3);
+///
+/// let ok = maze_c_maze_set_enemy_cells(ptr, 1, 1, 1, 1);
+/// assert_eq!(ok, 1);
+///
+/// let mut ct: u32 = 0;
+/// unsafe { maze_c_maze_get_cell_type(ptr, 1, 1, &mut ct) };
+/// assert_eq!(ct, 6, "expected Enemy at (1, 1)");
+///
+/// maze_c_free_maze(ptr);
+/// ```
+#[no_mangle]
+pub extern "C" fn maze_c_maze_set_enemy_cells(
+    ptr: *mut MazeC,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u8 {
+    clear_last_error();
+    set_cell_range(ptr, start_row, start_col, end_row, end_col, 'E')
+}
+
+/// Sets a rectangular range of cells to health pickups (`'H'`). Returns `1` on success, `0` on error.
+///
+/// # Examples
+///
+/// Resize a maze to 3 × 3, set cell (1, 2) as a health pickup, and assert its
+/// cell type is Health (7).
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let ptr = maze_c_new_maze();
+/// maze_c_maze_resize(ptr, 3, 3);
+///
+/// let ok = maze_c_maze_set_health_cells(ptr, 1, 2, 1, 2);
+/// assert_eq!(ok, 1);
+///
+/// let mut ct: u32 = 0;
+/// unsafe { maze_c_maze_get_cell_type(ptr, 1, 2, &mut ct) };
+/// assert_eq!(ct, 7, "expected Health at (1, 2)");
+///
+/// maze_c_free_maze(ptr);
+/// ```
+#[no_mangle]
+pub extern "C" fn maze_c_maze_set_health_cells(
+    ptr: *mut MazeC,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u8 {
+    clear_last_error();
+    set_cell_range(ptr, start_row, start_col, end_row, end_col, 'H')
 }
 
 /// Clears (empties) a rectangular range of cells. Returns `1` on success, `0` on error.
@@ -1359,6 +1509,11 @@ pub extern "C" fn maze_c_new_generator_options(
         min_spine_length: 0,
         max_retries: 0,
         branch_from_finish: 0,
+        door_count: 0,
+        spare_doors: 0,
+        spare_keys: 0,
+        enemy_count: 0,
+        health_count: 0,
     });
     increment_num_objects_allocated();
     Box::into_raw(opts)
@@ -1524,6 +1679,146 @@ pub extern "C" fn maze_c_generator_options_set_branch_from_finish(
     opts.branch_from_finish = value;
 }
 
+/// Sets the number of real path doors auto-placed on the spine.
+///
+/// `0` (the default) places none; the value is clamped further by the Rust
+/// generator (see `maze::MAX_AUTO_DOORS`) and rejected outright if
+/// `2 * door_count + spare_doors + spare_keys` exceeds the key-aware
+/// solver's `maze::MAX_TOTAL_FEATURES` cap (see [`maze_c_maze_generate`]).
+///
+/// # Examples
+///
+/// Create generator options and set the door count to 3.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_door_count(opts, 3);
+/// assert_eq!(unsafe { (*opts).door_count }, 3);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_door_count(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.door_count = value;
+}
+
+/// Sets the number of decoy doors planted on off-spine branches.
+///
+/// `0` (the default) places none. See [`maze_c_generator_options_set_door_count`]
+/// for the joint cap that applies across all three K/D fields.
+///
+/// # Examples
+///
+/// Create generator options and set the spare-door count to 2.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_spare_doors(opts, 2);
+/// assert_eq!(unsafe { (*opts).spare_doors }, 2);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_spare_doors(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.spare_doors = value;
+}
+
+/// Sets the number of spare keys planted on off-spine branches.
+///
+/// `0` (the default) places none. See [`maze_c_generator_options_set_door_count`]
+/// for the joint cap that applies across all three K/D fields.
+///
+/// # Examples
+///
+/// Create generator options and set the spare-key count to 2.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_spare_keys(opts, 2);
+/// assert_eq!(unsafe { (*opts).spare_keys }, 2);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_spare_keys(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.spare_keys = value;
+}
+
+/// Sets the number of enemies to auto-place at random passable cells.
+///
+/// `0` (the default) places none. The generator clamps the request to
+/// `maze::MAX_ENEMY_COUNT` and to the number of eligible cells. Enemies
+/// never spawn on the start, finish, the cells immediately around the
+/// start, or any key / door / enemy / health cell.
+///
+/// # Examples
+///
+/// Create generator options and set the enemy count to 3.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_enemy_count(opts, 3);
+/// assert_eq!(unsafe { (*opts).enemy_count }, 3);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_enemy_count(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.enemy_count = value;
+}
+
+/// Sets the number of health pickups to auto-place at random passable cells.
+///
+/// `0` (the default) places none. The generator clamps the request to
+/// `maze::MAX_HEALTH_COUNT` and to the number of eligible cells, using the
+/// same eligibility rules as enemy placement.
+///
+/// # Examples
+///
+/// Create generator options and set the health-pickup count to 2.
+///
+/// ```rust
+/// use maze_c::*;
+///
+/// let opts = maze_c_new_generator_options(10, 10, 0, 42);
+/// maze_c_generator_options_set_health_count(opts, 2);
+/// assert_eq!(unsafe { (*opts).health_count }, 2);
+/// maze_c_free_generator_options(opts);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_generator_options_set_health_count(
+    ptr: *mut MazeCGeneratorOptions,
+    value: u32,
+) {
+    let opts = unsafe { &mut *ptr };
+    opts.health_count = value;
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Maze generation
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1608,6 +1903,11 @@ pub extern "C" fn maze_c_maze_generate(
         max_retries,
         branch_from_finish,
         seed: Some(opts.seed),
+        door_count: Some(opts.door_count as usize),
+        spare_doors: Some(opts.spare_doors as usize),
+        spare_keys: Some(opts.spare_keys as usize),
+        enemy_count: Some(opts.enemy_count as usize),
+        health_count: Some(opts.health_count as usize),
     };
 
     let generator = Generator {
@@ -1708,7 +2008,7 @@ pub unsafe extern "C" fn maze_c_new_maze_game(json: *const c_char) -> *mut MazeG
     };    
     match maze::MazeGame::from_json(json_str) {
         Ok(game) => {
-            let boxed = Box::new(MazeGameC { game });
+            let boxed = Box::new(MazeGameC { game, tick_events: Vec::new() });
             increment_num_objects_allocated();
             Box::into_raw(boxed)
         }
@@ -1762,7 +2062,8 @@ pub extern "C" fn maze_c_free_maze_game(ptr: *mut MazeGameC) {
 /// `dir` encoding: `0`=None, `1`=Up, `2`=Down, `3`=Left, `4`=Right.
 ///
 /// Returns the move result: `0`=None, `1`=Moved, `2`=Blocked, `3`=Complete,
-/// or `-1` for an unknown `dir` value.
+/// `4`=BlockedByLockedDoor, `5`=StartedUnlocking, `6`=Stranded, or `-1` for an
+/// unknown `dir` value.
 ///
 /// # Examples
 ///
@@ -1789,6 +2090,10 @@ pub extern "C" fn maze_c_maze_game_move_player(ptr: *mut MazeGameC, dir: i32) ->
         maze::MoveResult::Moved => 1,
         maze::MoveResult::Blocked => 2,
         maze::MoveResult::Complete => 3,
+        maze::MoveResult::BlockedByLockedDoor => 4,
+        maze::MoveResult::StartedUnlocking => 5,
+        maze::MoveResult::Stranded => 6,
+        maze::MoveResult::Killed => 7,
     }
 }
 
@@ -1880,6 +2185,774 @@ pub extern "C" fn maze_c_maze_game_player_direction(ptr: *mut MazeGameC) -> i32 
 pub extern "C" fn maze_c_maze_game_is_complete(ptr: *mut MazeGameC) -> i32 {
     let game = unsafe { &(*ptr).game };
     if game.is_complete() { 1 } else { 0 }
+}
+
+/// Returns `1` if the game is in a lost state, `0` otherwise.
+///
+/// The companion [`maze_c_maze_game_lose_reason`] returns the reason code when
+/// this returns `1`.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_is_lost(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_is_lost(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    if game.is_lost() { 1 } else { 0 }
+}
+
+/// Returns the lose-reason code for the game session.
+///
+/// Encoding: `0` = None (the game is not lost), `1` = Stranded (the player
+/// can no longer hold enough keys to open every closed door remaining on a
+/// route to the finish). Mirrors the [`maze::LoseReason`] enum; new variants
+/// extend the integer space.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_lose_reason(ptr), 0); // None
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_lose_reason(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    match game.lose_reason() {
+        None => 0,
+        Some(maze::LoseReason::Stranded) => 1,
+        Some(maze::LoseReason::Killed) => 2,
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — bag / pickup
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Attempts to pick up a collectible at the player's current cell.
+///
+/// On success returns `1` and writes the kind / id of the picked item into
+/// `*out_kind` / `*out_id`. On failure (no collectible at the player's cell)
+/// returns `0` and the out-parameters are not written.
+///
+/// `kind` encoding: `0` = Key (the only variant in the current bag model).
+/// New variants extend the kind space.
+///
+/// Keys are auto-collected when the player walks onto a `'K'` cell, so an
+/// explicit call normally finds nothing left to collect and returns `0` — the
+/// cell was cleared as the player stepped onto it.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// `out_kind` and `out_id` may be null; non-null pointers must be valid
+/// writable locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// // Player at (0,0); key at (0,1); finish at (0,2).
+/// let json = CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+///
+/// // Standing on S → no pickup.
+/// let mut k: u32 = 99;
+/// let mut id: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+/// assert_eq!(ok, 0);
+///
+/// // Step onto the K cell — the key is auto-collected on walk-over, so an
+/// // explicit pickup at the now-cleared cell returns 0.
+/// maze_c_maze_game_move_player(ptr, 4); // Right
+/// let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+/// assert_eq!(ok, 0);
+///
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_pickup(
+    ptr: *mut MazeGameC,
+    out_kind: *mut u32,
+    out_id: *mut u32,
+) -> u8 {
+    let game = unsafe { &mut (*ptr).game };
+    match game.pickup() {
+        Some(maze::BagItem::Key { id }) => {
+            unsafe {
+                if !out_kind.is_null() {
+                    *out_kind = 0; // Key
+                }
+                if !out_id.is_null() {
+                    *out_id = id;
+                }
+            }
+            1
+        }
+        None => 0,
+    }
+}
+
+/// Returns the number of items currently in the player's bag.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_bag_count(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_bag_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.bag().len() as i32
+}
+
+/// Retrieves a single bag item by index.
+///
+/// Writes the item's kind code and id into `*out_kind` / `*out_id`. Returns
+/// `1` on success, `0` if `index` is out of range.
+///
+/// `kind` encoding: `0` = Key.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// `out_kind` and `out_id` may be null; non-null pointers must be valid
+/// writable locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right onto K — auto-collected
+///
+/// let mut k2: u32 = 99;
+/// let mut id2: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, 0, &mut k2, &mut id2) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(k2, 0); // Key
+/// assert_eq!(id2, 0); // first key id
+///
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_bag_item(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_kind: *mut u32,
+    out_id: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let bag = game.bag();
+    if index < 0 || index as usize >= bag.len() {
+        return 0;
+    }
+    let maze::BagItem::Key { id } = bag[index as usize];
+    unsafe {
+        if !out_kind.is_null() {
+            *out_kind = 0; // Key
+        }
+        if !out_id.is_null() {
+            *out_id = id;
+        }
+    }
+    1
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — doors / tick / events
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Returns the number of door cells (`'D'`) in the maze, regardless of state.
+///
+/// The count is fixed for the lifetime of the game session (opening a door
+/// changes its [`maze::DoorState`] but does not remove it from the list).
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_door_count(ptr), 1);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_door_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.doors().len() as i32
+}
+
+/// Retrieves a single door cell by index.
+///
+/// Writes the door's row, column, and current state code into the out
+/// parameters. State encoding mirrors [`maze::DoorState`]:
+/// `0` = Locked, `1` = Opening, `2` = Open.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// let mut row: u32 = 99;
+/// let mut col: u32 = 99;
+/// let mut state: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_get_door(ptr, 0, &mut row, &mut col, &mut state) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(row, 0);
+/// assert_eq!(col, 2);
+/// assert_eq!(state, 0); // Locked
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_door(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_state: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let doors = game.doors();
+    if index < 0 || index as usize >= doors.len() {
+        return 0;
+    }
+    let ((r, c), state) = doors[index as usize];
+    let state_code: u32 = match state {
+        maze::DoorState::Locked => 0,
+        maze::DoorState::Opening { .. } => 1,
+        maze::DoorState::Open => 2,
+    };
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_state.is_null() {
+            *out_state = state_code;
+        }
+    }
+    1
+}
+
+/// Advances time-based game state by `dt_ms` milliseconds and buffers the
+/// resulting events on the game session. Returns the number of events
+/// produced. Subsequent calls to [`maze_c_maze_game_tick_event_count`] /
+/// [`maze_c_maze_game_get_tick_event`] read from the same buffer until the
+/// next call to `tick` overwrites it.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right → key, auto-collected
+/// maze_c_maze_game_tick(ptr, 0.0);      // flush the KeyCollected event
+/// maze_c_maze_game_move_player(ptr, 4); // Right into door → StartedUnlocking
+/// let count = maze_c_maze_game_tick(ptr, 1000.0);
+/// assert_eq!(count, 1); // one DoorOpened event
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_tick(ptr: *mut MazeGameC, dt_ms: f32) -> i32 {
+    let g = unsafe { &mut *ptr };
+    g.tick_events = g.game.tick(dt_ms);
+    g.tick_events.len() as i32
+}
+
+/// Returns the number of events currently buffered from the most recent
+/// [`maze_c_maze_game_tick`] call. Zero before the first tick.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S"," ","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_tick_event_count(ptr), 0);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_tick_event_count(ptr: *mut MazeGameC) -> i32 {
+    let g = unsafe { &(*ptr) };
+    g.tick_events.len() as i32
+}
+
+/// Retrieves a single tick event's kind + cell coordinates from the buffer by index.
+///
+/// Writes the event's kind code and a `(row, col)` pair into the out parameters.
+/// Kind encoding (mirrors [`maze::GameEvent`]):
+/// - `0` = `DoorOpened` — `(row, col)` is the door cell.
+/// - `1` = `EnemyMoved` — `(row, col)` is the enemy's new cell; the enemy id is
+///   carried by [`maze_c_maze_game_get_tick_event_payload`].
+/// - `2` = `PlayerDamaged` — `(row, col)` is `(0, 0)`; `hp_after` is carried by
+///   [`maze_c_maze_game_get_tick_event_payload`].
+/// - `3` = `PlayerHealed` — `(row, col)` is the consumed pickup cell; `hp_after`
+///   is carried by [`maze_c_maze_game_get_tick_event_payload`].
+/// - `4` = `PlayerNotHealed` — `(row, col)` is the spared pickup cell; the reason
+///   code is carried by [`maze_c_maze_game_get_tick_event_payload`] and the
+///   default message by [`maze_c_maze_game_get_tick_event_string_payload`].
+/// - `5` = `KeyCollected` — `(row, col)` is the consumed key cell; the key id is
+///   carried by [`maze_c_maze_game_get_tick_event_payload`].
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // onto key — auto-collected
+/// maze_c_maze_game_tick(ptr, 0.0);      // flush the KeyCollected event
+/// maze_c_maze_game_move_player(ptr, 4); // into door → StartedUnlocking
+/// maze_c_maze_game_tick(ptr, 1000.0);
+/// let mut kind: u32 = 99;
+/// let mut row: u32 = 99;
+/// let mut col: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, &mut row, &mut col) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(kind, 0); // DoorOpened
+/// assert_eq!((row, col), (0, 2));
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_tick_event(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_kind: *mut u32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+) -> u8 {
+    let g = unsafe { &(*ptr) };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return 0;
+    }
+    let (kind, r, c) = match &g.tick_events[index as usize] {
+        maze::GameEvent::DoorOpened { cell: (r, c) } => (0u32, *r, *c),
+        maze::GameEvent::EnemyMoved { row, col, .. } => (1u32, *row, *col),
+        maze::GameEvent::PlayerDamaged { .. } => (2u32, 0, 0),
+        maze::GameEvent::PlayerHealed { cell: (r, c), .. } => (3u32, *r, *c),
+        maze::GameEvent::PlayerNotHealed { cell: (r, c), .. } => (4u32, *r, *c),
+        maze::GameEvent::KeyCollected { cell: (r, c), .. } => (5u32, *r, *c),
+    };
+    unsafe {
+        if !out_kind.is_null() {
+            *out_kind = kind;
+        }
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+    }
+    1
+}
+
+/// Retrieves a tick event's `u32` payload by index — the extra scalar that
+/// doesn't fit the `(kind, row, col)` shape of
+/// [`maze_c_maze_game_get_tick_event`]:
+/// - `EnemyMoved` → the enemy id.
+/// - `PlayerDamaged` / `PlayerHealed` → `hp_after`.
+/// - `PlayerNotHealed` → the reason code (`0` = already at max HP).
+/// - `KeyCollected` → the collected key id.
+/// - `DoorOpened` → `0` (no extra payload).
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// `out_payload` may be null; a non-null pointer must be a valid writable
+/// location.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","E","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_tick(ptr, 1500.0); // enemy steps onto the player → EnemyMoved + PlayerDamaged
+/// let mut kind: u32 = 99;
+/// unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, std::ptr::null_mut(), std::ptr::null_mut()) };
+/// assert_eq!(kind, 1); // EnemyMoved
+/// let mut id: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_get_tick_event_payload(ptr, 0, &mut id) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(id, 0); // enemy id
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_payload(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_payload: *mut u32,
+) -> u8 {
+    let g = unsafe { &(*ptr) };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return 0;
+    }
+    let payload = match &g.tick_events[index as usize] {
+        maze::GameEvent::DoorOpened { .. } => 0,
+        maze::GameEvent::EnemyMoved { id, .. } => *id,
+        maze::GameEvent::PlayerDamaged { hp_after } => *hp_after,
+        maze::GameEvent::PlayerHealed { hp_after, .. } => *hp_after,
+        maze::GameEvent::PlayerNotHealed { reason, .. } => match reason {
+            maze::PlayerNotHealedReason::AlreadyAtMaxHp => 0,
+        },
+        maze::GameEvent::KeyCollected { id, .. } => *id,
+    };
+    unsafe {
+        if !out_payload.is_null() {
+            *out_payload = payload;
+        }
+    }
+    1
+}
+
+/// Retrieves the UTF-8 string payload of a tick event by index — currently only
+/// `PlayerNotHealed` carries one (its default human-readable message); every
+/// other variant reports a zero-length string.
+///
+/// Two-call protocol: call once with `out_buf` null to read the byte length into
+/// `out_len`, allocate a buffer of that size, then call again with `out_buf`
+/// pointing at it to copy the bytes. The buffer is stable between calls until the
+/// next [`maze_c_maze_game_tick`]. When `out_buf` is non-null the caller must have
+/// allocated at least `*out_len` bytes.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// `out_len` may be null. When `out_buf` is non-null it must point to a writable
+/// region of at least the byte length previously reported via `out_len`.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// // Player at full HP walks onto 'H' → the pickup is spared → PlayerNotHealed.
+/// let json = CString::new(r#"{"grid":[["S","H","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// maze_c_maze_game_move_player(ptr, 4); // Right onto 'H'
+/// maze_c_maze_game_tick(ptr, 0.0);      // flush the queued PlayerNotHealed
+/// let mut len: u32 = 0;
+/// let ok = unsafe { maze_c_maze_game_get_tick_event_string_payload(ptr, 0, std::ptr::null_mut(), &mut len) };
+/// assert_eq!(ok, 1);
+/// let mut buf = vec![0u8; len as usize];
+/// unsafe { maze_c_maze_game_get_tick_event_string_payload(ptr, 0, buf.as_mut_ptr(), &mut len) };
+/// assert_eq!(String::from_utf8(buf).unwrap(), "Already at maximum health");
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_tick_event_string_payload(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_buf: *mut u8,
+    out_len: *mut u32,
+) -> u8 {
+    let g = unsafe { &(*ptr) };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return 0;
+    }
+    let message: &str = match &g.tick_events[index as usize] {
+        maze::GameEvent::PlayerNotHealed { message, .. } => message,
+        _ => "",
+    };
+    let bytes = message.as_bytes();
+    unsafe {
+        if !out_len.is_null() {
+            *out_len = bytes.len() as u32;
+        }
+        if !out_buf.is_null() {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
+        }
+    }
+    1
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — keys (uncollected, sorted by (row, col))
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Returns the number of uncollected key cells in the maze.
+///
+/// The count shrinks as the player picks keys up (collected keys disappear
+/// from this list — they move into the bag).
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","K","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// assert_eq!(maze_c_maze_game_key_count(ptr), 2);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_key_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.keys().len() as i32
+}
+
+/// Retrieves a single uncollected key cell by index.
+///
+/// Writes the key's row, column, and stable id into the out parameters.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+///
+/// # Examples
+///
+/// ```rust
+/// use maze_c::*;
+/// use std::ffi::CString;
+///
+/// let json = CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap();
+/// let ptr = unsafe { maze_c_new_maze_game(json.as_ptr()) };
+/// let mut row: u32 = 99;
+/// let mut col: u32 = 99;
+/// let mut id: u32 = 99;
+/// let ok = unsafe { maze_c_maze_game_get_key(ptr, 0, &mut row, &mut col, &mut id) };
+/// assert_eq!(ok, 1);
+/// assert_eq!(row, 0);
+/// assert_eq!(col, 1);
+/// maze_c_free_maze_game(ptr);
+/// ```
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_key(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let keys = game.keys();
+    if index < 0 || index as usize >= keys.len() {
+        return 0;
+    }
+    let ((r, c), id) = keys[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = id;
+        }
+    }
+    1
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MazeGameC — HP, enemies, health pickups
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Returns the player's current HP.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_hp(ptr: *mut MazeGameC) -> u32 {
+    let game = unsafe { &(*ptr).game };
+    game.hp()
+}
+
+/// Returns the player's maximum HP.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_max_hp(ptr: *mut MazeGameC) -> u32 {
+    let game = unsafe { &(*ptr).game };
+    game.max_hp()
+}
+
+/// Returns the number of active enemies.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_enemy_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    game.enemies().len() as i32
+}
+
+/// Retrieves a single enemy's current cell + stable id by index.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_enemy(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let enemies = game.enemies();
+    if index < 0 || index as usize >= enemies.len() {
+        return 0;
+    }
+    let enemy = &enemies[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = enemy.row as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = enemy.col as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = enemy.id;
+        }
+    }
+    1
+}
+
+/// Returns the number of uncollected health-pickup cells (live `'H'`).
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_game_health_pickup_count(ptr: *mut MazeGameC) -> i32 {
+    let game = unsafe { &(*ptr).game };
+    health_pickup_cells(game).len() as i32
+}
+
+/// Retrieves a single uncollected health-pickup cell by index. `out_id`
+/// is always written as `0` — pickups have no stable id, the cell
+/// coordinate is the natural key. The field is kept on the signature for
+/// shape parity with [`maze_c_maze_game_get_enemy`] /
+/// [`maze_c_maze_game_get_key`] so callers can use a single
+/// `(row, col, id)` row-getter pattern.
+///
+/// Returns `1` on success, `0` if `index` is out of range.
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze_game`].
+/// Out parameters may be null; non-null pointers must be valid writable
+/// locations.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_game_get_health_pickup(
+    ptr: *mut MazeGameC,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> u8 {
+    let game = unsafe { &(*ptr).game };
+    let pickups = health_pickup_cells(game);
+    if index < 0 || index as usize >= pickups.len() {
+        return 0;
+    }
+    let (r, c) = pickups[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = 0;
+        }
+    }
+    1
+}
+
+fn health_pickup_cells(game: &maze::MazeGame) -> Vec<(usize, usize)> {
+    game.grid()
+        .iter()
+        .enumerate()
+        .flat_map(|(r, row)| {
+            row.iter()
+                .enumerate()
+                .filter(|(_, &ch)| ch == 'H')
+                .map(move |(c, _)| (r, c))
+        })
+        .collect()
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -2213,6 +3286,113 @@ mod tests {
                 assert_eq!(ct, 3, "expected Wall at ({r},{c})");
             }
         }
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn can_set_key_cells() {
+        let ptr = new_maze();
+        maze_c_maze_resize(ptr, 5, 5);
+        let ok = maze_c_maze_set_key_cells(ptr, 1, 1, 3, 3);
+        assert_eq!(ok, 1);
+        for r in 0..5_u32 {
+            for c in 0..5_u32 {
+                let mut ct: u32 = 99;
+                unsafe { maze_c_maze_get_cell_type(ptr, r, c, &mut ct) };
+                let inside = (1..=3).contains(&r) && (1..=3).contains(&c);
+                assert_eq!(
+                    ct,
+                    if inside { 4 } else { 0 },
+                    "expected {} at ({r},{c})",
+                    if inside { "Key" } else { "Empty" },
+                );
+            }
+        }
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn can_set_door_cells() {
+        let ptr = new_maze();
+        maze_c_maze_resize(ptr, 5, 5);
+        let ok = maze_c_maze_set_door_cells(ptr, 0, 4, 2, 4);
+        assert_eq!(ok, 1);
+        for r in 0..5_u32 {
+            for c in 0..5_u32 {
+                let mut ct: u32 = 99;
+                unsafe { maze_c_maze_get_cell_type(ptr, r, c, &mut ct) };
+                let inside = (0..=2).contains(&r) && c == 4;
+                assert_eq!(
+                    ct,
+                    if inside { 5 } else { 0 },
+                    "expected {} at ({r},{c})",
+                    if inside { "Door" } else { "Empty" },
+                );
+            }
+        }
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn can_set_enemy_cells() {
+        let ptr = new_maze();
+        maze_c_maze_resize(ptr, 5, 5);
+        let ok = maze_c_maze_set_enemy_cells(ptr, 1, 1, 2, 2);
+        assert_eq!(ok, 1);
+        for r in 0..5_u32 {
+            for c in 0..5_u32 {
+                let mut ct: u32 = 99;
+                unsafe { maze_c_maze_get_cell_type(ptr, r, c, &mut ct) };
+                let inside = (1..=2).contains(&r) && (1..=2).contains(&c);
+                assert_eq!(
+                    ct,
+                    if inside { 6 } else { 0 },
+                    "expected {} at ({r},{c})",
+                    if inside { "Enemy" } else { "Empty" },
+                );
+            }
+        }
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn can_set_health_cells() {
+        let ptr = new_maze();
+        maze_c_maze_resize(ptr, 5, 5);
+        let ok = maze_c_maze_set_health_cells(ptr, 0, 4, 2, 4);
+        assert_eq!(ok, 1);
+        for r in 0..5_u32 {
+            for c in 0..5_u32 {
+                let mut ct: u32 = 99;
+                unsafe { maze_c_maze_get_cell_type(ptr, r, c, &mut ct) };
+                let inside = (0..=2).contains(&r) && c == 4;
+                assert_eq!(
+                    ct,
+                    if inside { 7 } else { 0 },
+                    "expected {} at ({r},{c})",
+                    if inside { "Health" } else { "Empty" },
+                );
+            }
+        }
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn set_key_cells_fails_for_empty_maze() {
+        let ptr = new_maze();
+        let ok = maze_c_maze_set_key_cells(ptr, 0, 0, 0, 0);
+        assert_eq!(ok, 0);
+        assert!(last_error_str().is_some());
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
+    fn set_door_cells_fails_for_invalid_end_location() {
+        let ptr = new_maze();
+        maze_c_maze_resize(ptr, 3, 3);
+        let ok = maze_c_maze_set_door_cells(ptr, 0, 0, 5, 5);
+        assert_eq!(ok, 0);
+        assert!(last_error_str().is_some());
         unsafe { maze_c_free_maze(ptr) };
     }
 
@@ -2645,6 +3825,32 @@ mod tests {
     }
 
     #[test]
+    fn generate_maze_places_enemies_and_health() {
+        let ptr = new_maze();
+        let opts = maze_c_new_generator_options(15, 15, 0, 123);
+        maze_c_generator_options_set_enemy_count(opts, 3);
+        maze_c_generator_options_set_health_count(opts, 2);
+        let ok = maze_c_maze_generate(ptr, opts);
+        assert_eq!(ok, 1, "generate failed: {:?}", last_error_str());
+        let mw = unsafe { &*ptr };
+        let mut enemies = 0;
+        let mut health = 0;
+        for row in &mw.maze.definition.grid {
+            for &ch in row {
+                match ch {
+                    'E' => enemies += 1,
+                    'H' => health += 1,
+                    _ => {}
+                }
+            }
+        }
+        assert_eq!(enemies, 3, "expected 3 enemy cells");
+        assert_eq!(health, 2, "expected 2 health cells");
+        maze_c_free_generator_options(opts);
+        unsafe { maze_c_free_maze(ptr) };
+    }
+
+    #[test]
     fn generate_maze_error_too_small() {
         let ptr = new_maze();
         let opts = maze_c_new_generator_options(1, 1, 0, 0);
@@ -2831,6 +4037,409 @@ mod tests {
         let json = simple_game_json();
         let ptr = new_game(&json);
         assert_eq!(maze_c_maze_game_is_complete(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_initial_is_not_lost() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_is_lost(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_initial_lose_reason_is_none() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_lose_reason(ptr), 0); // None
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — bag / pickup ──────────────────────────────────────────────
+
+    fn key_game_json() -> CString {
+        // 1 row, 3 cols: S at (0,0), K at (0,1), F at (0,2)
+        CString::new(r#"{"grid":[["S","K","F"]]}"#).unwrap()
+    }
+
+    #[test]
+    fn game_initial_bag_is_empty() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_bag_count(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_pickup_on_non_key_cell_returns_zero() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut k: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        assert_eq!(ok, 0);
+        assert_eq!(maze_c_maze_game_bag_count(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_move_onto_key_auto_collects_and_grows_bag() {
+        let json = key_game_json();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // Right → key cell, auto-collected
+        assert_eq!(maze_c_maze_game_bag_count(ptr), 1);
+        // The cell is already cleared, so an explicit pickup finds nothing.
+        let mut k: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        assert_eq!(ok, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_bag_item_returns_auto_collected_key() {
+        let json = key_game_json();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // onto the key — auto-collected
+        let mut k: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, 0, &mut k, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!(k, 0); // Key
+        assert_eq!(id, 0); // first key's id
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_bag_item_out_of_range_returns_zero() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut k: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, 0, &mut k, &mut id) };
+        assert_eq!(ok, 0); // empty bag → 0 out of range
+        let ok = unsafe { maze_c_maze_game_get_bag_item(ptr, -1, &mut k, &mut id) };
+        assert_eq!(ok, 0); // negative index → 0
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — doors / tick / events ─────────────────────────────────────
+
+    fn door_game_json() -> CString {
+        // 1 row, 4 cols: S at (0,0), K at (0,1), D at (0,2), F at (0,3)
+        CString::new(r#"{"grid":[["S","K","D","F"]]}"#).unwrap()
+    }
+
+    #[test]
+    fn game_initial_door_count_for_door_grid() {
+        let json = door_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_door_count(ptr), 1);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_door_returns_locked_initially() {
+        let json = door_game_json();
+        let ptr = new_game(&json);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut state: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_door(ptr, 0, &mut row, &mut col, &mut state) };
+        assert_eq!(ok, 1);
+        assert_eq!(row, 0);
+        assert_eq!(col, 2);
+        assert_eq!(state, 0); // Locked
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_tick_emits_door_opened_after_unlocking() {
+        let json = door_game_json();
+        let ptr = new_game(&json);
+        // Walk onto K → auto-collected; flush the resulting KeyCollected event.
+        maze_c_maze_game_move_player(ptr, 4); // Right → K
+        maze_c_maze_game_tick(ptr, 0.0);
+        // Step into D → StartedUnlocking (5)
+        let result = maze_c_maze_game_move_player(ptr, 4);
+        assert_eq!(result, 5);
+        // Tick a full second → DoorOpened event, count = 1.
+        let count = maze_c_maze_game_tick(ptr, 1000.0);
+        assert_eq!(count, 1);
+        assert_eq!(maze_c_maze_game_tick_event_count(ptr), 1);
+        // Read the event back.
+        let mut kind: u32 = 99;
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, &mut row, &mut col) };
+        assert_eq!(ok, 1);
+        assert_eq!(kind, 0); // DoorOpened
+        assert_eq!((row, col), (0, 2));
+        // Door is now Open (state code 2).
+        let mut drow: u32 = 0;
+        let mut dcol: u32 = 0;
+        let mut state: u32 = 99;
+        unsafe { maze_c_maze_game_get_door(ptr, 0, &mut drow, &mut dcol, &mut state) };
+        assert_eq!(state, 2);
+        // StartedUnlocking did not move the player — still on K cell (0,1).
+        // Step right onto the now-open door (0,2), then right again to F (0,3).
+        let result = maze_c_maze_game_move_player(ptr, 4);
+        assert_eq!(result, 1); // Moved through open door
+        let result = maze_c_maze_game_move_player(ptr, 4);
+        assert_eq!(result, 3); // Complete
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_tick_event_count_is_zero_before_first_tick() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_tick_event_count(ptr), 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_tick_event_out_of_range_returns_zero() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut k: u32 = 99;
+        let mut r: u32 = 99;
+        let mut c: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut k, &mut r, &mut c) };
+        assert_eq!(ok, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — HP / enemies / health pickups / extended tick events ─────
+
+    #[test]
+    fn game_hp_and_max_hp_default_to_three() {
+        let json = CString::new(r#"{"grid":[["S","E","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_hp(ptr), 3);
+        assert_eq!(maze_c_maze_game_max_hp(ptr), 3);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_enemy_count_and_get_enemy() {
+        let json = CString::new(r#"{"grid":[["S","E","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_enemy_count(ptr), 1);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_enemy(ptr, 0, &mut row, &mut col, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!((row, col), (0, 1));
+        assert_eq!(id, 0);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_health_pickup_count_and_get() {
+        let json = CString::new(r#"{"grid":[["S","H","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_health_pickup_count(ptr), 1);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_health_pickup(ptr, 0, &mut row, &mut col, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!((row, col), (0, 1));
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_tick_emits_enemy_moved_and_player_damaged_with_payloads() {
+        // Enemy at (0,1) chasing the player at (0,0). One full move period:
+        // the enemy steps onto the player → EnemyMoved (kind 1) then
+        // PlayerDamaged (kind 2).
+        let json = CString::new(r#"{"grid":[["S","E","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        let count = maze_c_maze_game_tick(ptr, 1500.0);
+        assert_eq!(count, 2);
+
+        let mut kind: u32 = 99;
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, &mut row, &mut col) };
+        assert_eq!(kind, 1); // EnemyMoved
+        assert_eq!((row, col), (0, 0));
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_tick_event_payload(ptr, 0, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!(id, 0); // enemy id
+
+        unsafe { maze_c_maze_game_get_tick_event(ptr, 1, &mut kind, &mut row, &mut col) };
+        assert_eq!(kind, 2); // PlayerDamaged
+        assert_eq!((row, col), (0, 0)); // no cell for damage
+        let mut hp_after: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event_payload(ptr, 1, &mut hp_after) };
+        assert_eq!(hp_after, 2);
+        assert_eq!(maze_c_maze_game_hp(ptr), 2);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_tick_emits_player_healed_after_damage() {
+        // Step onto the enemy (damage 3 → 2), flush, then step onto the health
+        // pickup below max HP → PlayerHealed (kind 3) at the pickup cell.
+        let json = CString::new(r#"{"grid":[["S","E","H","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // Right onto 'E' → damage queued
+        maze_c_maze_game_tick(ptr, 0.0); // flush; hp 3 → 2
+        assert_eq!(maze_c_maze_game_hp(ptr), 2);
+        maze_c_maze_game_move_player(ptr, 4); // Right onto 'H' (hp 2 < 3) → heal queued
+        let count = maze_c_maze_game_tick(ptr, 0.0);
+        assert_eq!(count, 1);
+        let mut kind: u32 = 99;
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, &mut row, &mut col) };
+        assert_eq!(kind, 3); // PlayerHealed
+        assert_eq!((row, col), (0, 2)); // consumed pickup cell
+        let mut hp_after: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event_payload(ptr, 0, &mut hp_after) };
+        assert_eq!(hp_after, 3);
+        assert_eq!(maze_c_maze_game_hp(ptr), 3);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_tick_emits_player_not_healed_with_string_payload() {
+        // Player at full HP walks onto 'H' → the pickup is spared →
+        // PlayerNotHealed (kind 4), reason 0, default message via the
+        // two-call string-payload protocol.
+        let json = CString::new(r#"{"grid":[["S","H","F"]]}"#).unwrap();
+        let ptr = new_game(&json);
+        maze_c_maze_game_move_player(ptr, 4); // Right onto 'H'
+        let count = maze_c_maze_game_tick(ptr, 0.0);
+        assert_eq!(count, 1);
+
+        let mut kind: u32 = 99;
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event(ptr, 0, &mut kind, &mut row, &mut col) };
+        assert_eq!(kind, 4); // PlayerNotHealed
+        assert_eq!((row, col), (0, 1)); // spared pickup cell
+        let mut reason: u32 = 99;
+        unsafe { maze_c_maze_game_get_tick_event_payload(ptr, 0, &mut reason) };
+        assert_eq!(reason, 0); // AlreadyAtMaxHp
+
+        let mut len: u32 = 0;
+        let ok = unsafe {
+            maze_c_maze_game_get_tick_event_string_payload(ptr, 0, std::ptr::null_mut(), &mut len)
+        };
+        assert_eq!(ok, 1);
+        let mut buf = vec![0u8; len as usize];
+        unsafe {
+            maze_c_maze_game_get_tick_event_string_payload(ptr, 0, buf.as_mut_ptr(), &mut len)
+        };
+        assert_eq!(String::from_utf8(buf).unwrap(), "Already at maximum health");
+        // The pickup was spared — still present.
+        assert_eq!(maze_c_maze_game_health_pickup_count(ptr), 1);
+        maze_c_free_maze_game(ptr);
+    }
+
+    // ── MazeGameC — keys ──────────────────────────────────────────────────────
+
+    fn two_key_game_json() -> CString {
+        // 1 row, 4 cols: S K K F
+        CString::new(r#"{"grid":[["S","K","K","F"]]}"#).unwrap()
+    }
+
+    #[test]
+    fn game_key_count_reports_uncollected_keys() {
+        let json = two_key_game_json();
+        let ptr = new_game(&json);
+        assert_eq!(maze_c_maze_game_key_count(ptr), 2);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_key_returns_first_key_cell() {
+        let json = two_key_game_json();
+        let ptr = new_game(&json);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_key(ptr, 0, &mut row, &mut col, &mut id) };
+        assert_eq!(ok, 1);
+        assert_eq!(row, 0);
+        assert_eq!(col, 1);
+        // Verify we can read the second key as well, with a distinct id.
+        let mut row2: u32 = 99;
+        let mut col2: u32 = 99;
+        let mut id2: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_key(ptr, 1, &mut row2, &mut col2, &mut id2) };
+        assert_eq!(ok, 1);
+        assert_eq!(row2, 0);
+        assert_eq!(col2, 2);
+        assert_ne!(id, id2);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_key_collection_removes_key_from_list() {
+        let json = two_key_game_json();
+        let ptr = new_game(&json);
+        // Step right onto the first key and pick it up.
+        maze_c_maze_game_move_player(ptr, 4);
+        let mut k: u32 = 0;
+        let mut id: u32 = 0;
+        unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        // Only one key remains.
+        assert_eq!(maze_c_maze_game_key_count(ptr), 1);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut rem_id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_key(ptr, 0, &mut row, &mut col, &mut rem_id) };
+        assert_eq!(ok, 1);
+        // The remaining key is the second cell (0,2) — and its id is preserved.
+        assert_eq!((row, col), (0, 2));
+        assert_ne!(rem_id, id);
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_key_out_of_range_returns_zero() {
+        let json = simple_game_json();
+        let ptr = new_game(&json);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut id: u32 = 99;
+        let ok = unsafe { maze_c_maze_game_get_key(ptr, 0, &mut row, &mut col, &mut id) };
+        assert_eq!(ok, 0); // no keys → out of range
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_decoy_door_walk_through_sets_stranded_lose_state() {
+        // Mirrors the maze-crate test
+        // `decoy_door_with_only_one_key_strands_on_walk_through`. One key,
+        // one real door, one decoy door — detouring through the decoy
+        // burns the only key, and walking through it strands the player.
+        #[rustfmt::skip]
+        let json = CString::new(
+            r#"{"grid":[["S","K","D","F"],["W","D","W","W"],["W"," ","W","W"]]}"#
+        ).unwrap();
+        let ptr = new_game(&json);
+        // Grab the key at (0,1).
+        maze_c_maze_game_move_player(ptr, 4); // Right
+        let mut k: u32 = 0;
+        let mut id: u32 = 0;
+        unsafe { maze_c_maze_game_pickup(ptr, &mut k, &mut id) };
+        // Step into the decoy door at (1,1).
+        maze_c_maze_game_move_player(ptr, 2); // Down → StartedUnlocking
+        // Tick long enough to open it.
+        maze_c_maze_game_tick(ptr, 1000.0);
+        // Walk through the decoy — this is the strand trigger.
+        let result = maze_c_maze_game_move_player(ptr, 2);
+        assert_eq!(result, 6); // Stranded
+        assert_eq!(maze_c_maze_game_is_lost(ptr), 1);
+        assert_eq!(maze_c_maze_game_lose_reason(ptr), 1); // Stranded
         maze_c_free_maze_game(ptr);
     }
 

@@ -1,7 +1,4 @@
-use crate::overlays::win;
-use crate::state::{
-    dispatch_game_result, Animation, GameClock, GameConfig, GameOutcome, GameResult, GameState,
-};
+use crate::state::{Animation, GameState};
 use crate::world::{camera_pos_for, explore_cell_raw};
 use bevy::prelude::*;
 use maze::MoveResult;
@@ -14,12 +11,9 @@ const MAX_PITCH_DOWN: f32 = PI / 2.0; // 90° — straight down
 const MAX_PITCH_UP: f32 = PI * 45.0 / 180.0; // 45° — half-way up
 
 pub(crate) fn movement_system(
-    mut commands: Commands,
     time: Res<Time>,
     keys: Option<Res<ButtonInput<KeyCode>>>,
     mut state: ResMut<GameState>,
-    clock: Res<GameClock>,
-    config: Res<GameConfig>,
     mut camera: Query<&mut Transform, With<Camera3d>>,
 ) {
     // While paused, freeze movement, animation, and pitch entirely — the
@@ -40,22 +34,12 @@ pub(crate) fn movement_system(
         let anim = state.anim.take().unwrap();
         state.visual_pos = anim.target_pos;
         state.visual_yaw = anim.target_yaw;
-
-        // Check whether the player just arrived at the finish cell
-        let (r, c) = (state.game.player_row(), state.game.player_col());
-        if !state.won && state.grid[r][c] == 'F' {
-            state.won = true;
-            win::spawn_win_overlay(&mut commands);
-            dispatch_game_result(&GameResult {
-                outcome: GameOutcome::Win,
-                elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,
-                difficulty: config.difficulty.clone(),
-                rows: state.grid.len() as u32,
-                cols: state.grid.first().map(|r| r.len()).unwrap_or(0) as u32,
-                seed: if config.rows > 0 { Some(config.seed) } else { None },
-                extras: std::collections::BTreeMap::new(),
-            });
-        }
+        // Win / lose detection lives in `crate::outcome::outcome_watcher_system`
+        // — it runs every frame (not just on anim completion) so an
+        // enemy-tick kill of a stationary player still surfaces the death
+        // overlay immediately. The watcher gates on `state.anim.is_none()`
+        // so move-triggered outcomes still wait for the camera to settle
+        // on the destination cell.
     } else if state.anim.is_some() {
         let pos = state.anim.as_ref().unwrap().current_pos();
         let yaw = state.anim.as_ref().unwrap().current_yaw();
@@ -116,24 +100,48 @@ pub(crate) fn movement_system(
             });
         } else if forward {
             let dir = state.facing.to_direction();
-            let result = state.game.move_player(dir);
-            if matches!(result, MoveResult::Moved | MoveResult::Complete) {
-                let (row, col) = (state.game.player_row(), state.game.player_col());
-                let nrows = state.grid.len();
-                let ncols = state.grid[0].len();
-                explore_cell_raw(&mut state.explored, nrows, ncols, row, col);
-                let (start_pos, start_yaw) = (state.visual_pos, state.visual_yaw);
-                // Forward moves don't change facing, so the target camera
-                // position uses the same yaw as the start.
-                let target_pos = camera_pos_for(row, col, start_yaw);
-                state.anim = Some(Animation {
-                    start_pos,
-                    target_pos,
-                    start_yaw,
-                    target_yaw: start_yaw,
-                    elapsed: 0.0,
-                    duration: MOVE_DUR,
-                });
+            match state.game.move_player(dir) {
+                // `Stranded` reports a successful step onto an open door cell
+                // that has just left the player too short of keys to finish —
+                // the move itself succeeded, so the camera follows; the lose
+                // surface (HUD message) is wired separately via
+                // `game.is_lost()` / `game.lose_reason()`.
+                MoveResult::Moved | MoveResult::Complete | MoveResult::Stranded => {
+                    let (row, col) = (state.game.player_row(), state.game.player_col());
+                    let nrows = state.grid.len();
+                    let ncols = state.grid[0].len();
+                    explore_cell_raw(&mut state.explored, nrows, ncols, row, col);
+                    let (start_pos, start_yaw) = (state.visual_pos, state.visual_yaw);
+                    // Forward moves don't change facing, so the target camera
+                    // position uses the same yaw as the start.
+                    let target_pos = camera_pos_for(row, col, start_yaw);
+                    state.anim = Some(Animation {
+                        start_pos,
+                        target_pos,
+                        start_yaw,
+                        target_yaw: start_yaw,
+                        elapsed: 0.0,
+                        duration: MOVE_DUR,
+                    });
+                }
+                // Held against a locked door with a key in the bag: the key is
+                // consumed and the door begins opening (advanced by
+                // `door_tick_system`). The player does not move — holding
+                // forward simply waits out the open countdown, after which the
+                // door reports `Open` and the next press moves through it.
+                MoveResult::StartedUnlocking => {}
+                // Locked door with no key, or a door still opening: no move.
+                MoveResult::BlockedByLockedDoor => {}
+                // The player's HP dropped to 0 from this move (either the
+                // destination cell held an enemy, or — if the player was
+                // already dying from a tick collision — the short-circuit
+                // path returned Killed without processing). The death
+                // overlay is spawned by the post-move `is_lost()` check
+                // below, which reads `lose_reason()` and chooses the right
+                // subtitle. No camera animation here — the player is dead.
+                MoveResult::Killed => {}
+                // Wall / boundary, or `Direction::None`: no move.
+                MoveResult::Blocked | MoveResult::None => {}
             }
         }
     }
@@ -146,6 +154,8 @@ pub(crate) fn movement_system(
     }
 }
 
+/// Esc quits the native desktop app.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn quit_system(
     keys: Option<Res<ButtonInput<KeyCode>>>,
     mut exit: bevy::ecs::message::MessageWriter<AppExit>,
@@ -156,3 +166,10 @@ pub(crate) fn quit_system(
         }
     }
 }
+
+/// In the browser there is no application to quit, and writing `AppExit` would
+/// halt the Bevy loop and freeze the game (the timer stops with no way to
+/// resume). So Esc does not quit on wasm — it is handled as a pause toggle by
+/// [`crate::overlays::pause::pause_system`] instead, leaving this system a no-op.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn quit_system() {}

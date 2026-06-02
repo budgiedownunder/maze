@@ -202,8 +202,14 @@ pub(crate) fn spawn_dead_end_object_for_cell(
     // A single distinctive object per dead-end cell — brazier / urn /
     // broken pillar / chest, picked by hashing (row, col, seed). Skipped
     // for start / finish cells (the player stands on start, the finish
-    // has the orb) and when the per-difficulty toggle is off.
-    if !config.landmarks.dead_end_objects || cell == 'S' || cell == 'F' || !is_dead_end(grid, r, c) {
+    // has the orb), for key / door cells (they own the dead-end with their
+    // holder / panel — a key is commonly placed in a dead-end), for enemy
+    // and health-pickup cells (the goblin / heart entity owns the cell's
+    // visual), and when the per-difficulty toggle is off.
+    if !config.landmarks.dead_end_objects
+        || matches!(cell, 'S' | 'F' | 'K' | 'D' | 'E' | 'H')
+        || !is_dead_end(grid, r, c)
+    {
         return;
     }
     let x = c as f32 * CELL_SIZE + 1.0;

@@ -21,9 +21,16 @@ describe('GameResultPopup', () => {
     expect(screen.getByText('You did it!')).toBeInTheDocument()
   })
 
-  it('renders celebrate.gif', () => {
+  it('renders celebrate.gif by default (success tone)', () => {
     renderPopup()
     expect(screen.getByAltText('Celebration')).toHaveAttribute('src', '/images/maze/celebrate.gif')
+  })
+
+  it('shows the game-over image when tone is fail', () => {
+    render(<GameResultPopup message="You're stranded!!" tone="fail" onClose={vi.fn()} />)
+    expect(screen.queryByAltText('Celebration')).not.toBeInTheDocument()
+    expect(screen.getByAltText('Game over')).toHaveAttribute('src', '/images/maze/game_over.gif')
+    expect(screen.getByText("You're stranded!!")).toBeInTheDocument()
   })
 
   it('Close button calls onClose', async () => {
@@ -31,6 +38,16 @@ describe('GameResultPopup', () => {
     renderPopup(onClose)
     await userEvent.click(screen.getByRole('button', { name: /close/i }))
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('renders a Play Again button only when onPlayAgain is provided, and it fires the callback', async () => {
+    const onPlayAgain = vi.fn()
+    const { rerender } = render(<GameResultPopup message="You win!" onClose={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /play again/i })).not.toBeInTheDocument()
+
+    rerender(<GameResultPopup message="You win!" onClose={vi.fn()} onPlayAgain={onPlayAgain} />)
+    await userEvent.click(screen.getByRole('button', { name: /play again/i }))
+    expect(onPlayAgain).toHaveBeenCalledOnce()
   })
 
   it('Escape key does not dismiss — onCancel is prevented', () => {

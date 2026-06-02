@@ -394,7 +394,7 @@
   <script type="module">
     import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=8';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=50';
     const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
@@ -444,6 +444,10 @@
       const DEFAULT_LAUNCH_SETTINGS = {
         skyType: 'night',
         wallType: 'brick',
+        doorStyle: 'swing',
+        keyHolder: 'pedestal',
+        enemyType: 'goblin',
+        healthStyle: 'heart',
         wallTint: false,
         wallMaterialVariation: false,
         deadEndObjects: true,
@@ -483,6 +487,10 @@
         return {
           skyType: readStr('skyType', base.skyType),
           wallType: readStr('wallType', base.wallType),
+          doorStyle: readStr('doorStyle', base.doorStyle),
+          keyHolder: readStr('keyHolder', base.keyHolder),
+          enemyType: readStr('enemyType', base.enemyType),
+          healthStyle: readStr('healthStyle', base.healthStyle),
           wallTint: readBool('wallTint', base.wallTint),
           wallMaterialVariation: readBool('wallMaterialVariation', base.wallMaterialVariation),
           deadEndObjects: readBool('deadEndObjects', base.deadEndObjects),
@@ -514,6 +522,10 @@
         mode: truncateMode(maze.name),
         skyType: settings.skyType,
         wallType: settings.wallType,
+        doorStyle: settings.doorStyle,
+        keyHolder: settings.keyHolder,
+        enemyType: settings.enemyType,
+        healthStyle: settings.healthStyle,
         landmarks: {
           wallTint: settings.wallTint,
           wallMaterialVariation: settings.wallMaterialVariation,
@@ -679,6 +691,8 @@
               setTimeout(() => fire(key, 'keyup'), TILT_HOLD_MS);
             }
           }
+          // A plain tap (no swipe, no hold) does nothing — keys are
+          // auto-collected on walk-over, so there is no pickup gesture.
         }
         touchStart = null;
       }, { passive: true });

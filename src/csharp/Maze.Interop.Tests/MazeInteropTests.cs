@@ -698,6 +698,78 @@ namespace Maze.Interop.Tests
             FreeMaze(mazePtr);
         }
         /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetKeyCells"/>
+        /// sets a range to keys and that
+        /// <see cref="Maze.Interop.MazeInterop.MazeGetCellType"/> returns
+        /// <see cref="MazeCellType.Key"/> (4) for those cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetKeyCells_SucceedsForValidCellRange()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(5, 10);
+            interop.MazeSetKeyCells(mazePtr, 1, 1, 2, 3);
+            AssertRangeCellType(mazePtr, 1, 1, 2, 3, MazeCellType.Key);
+            FreeMaze(mazePtr);
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeSetDoorCells"/>
+        /// sets a range to doors and that
+        /// <see cref="Maze.Interop.MazeInterop.MazeGetCellType"/> returns
+        /// <see cref="MazeCellType.Door"/> (5) for those cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetDoorCells_SucceedsForValidCellRange()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(5, 10);
+            interop.MazeSetDoorCells(mazePtr, 0, 4, 1, 5);
+            AssertRangeCellType(mazePtr, 0, 4, 1, 5, MazeCellType.Door);
+            FreeMaze(mazePtr);
+        }
+        /// <summary>
+        /// Confirms that key and door cells round-trip through
+        /// <see cref="Maze.Interop.MazeInterop.MazeToJson"/> with the
+        /// expected `'K'` / `'D'` characters in the grid JSON.
+        /// </summary>
+        [Fact]
+        public void MazeSetKeyAndDoorCells_RoundTripsThroughMazeToJson()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(1, 4);
+            interop.MazeSetStartCell(mazePtr, 0, 0);
+            interop.MazeSetKeyCells(mazePtr, 0, 1, 0, 1);
+            interop.MazeSetDoorCells(mazePtr, 0, 2, 0, 2);
+            interop.MazeSetFinishCell(mazePtr, 0, 3);
+            string json = interop.MazeToJson(mazePtr);
+            FreeMaze(mazePtr);
+            Assert.Contains("\"S\"", json);
+            Assert.Contains("\"K\"", json);
+            Assert.Contains("\"D\"", json);
+            Assert.Contains("\"F\"", json);
+        }
+        /// <summary>
+        /// Confirms that enemy and health cells round-trip through
+        /// <see cref="Maze.Interop.MazeInterop.MazeToJson"/> with the
+        /// expected `'E'` / `'H'` characters in the grid JSON.
+        /// </summary>
+        [Fact]
+        public void MazeSetEnemyAndHealthCells_RoundTripsThroughMazeToJson()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(1, 4);
+            interop.MazeSetStartCell(mazePtr, 0, 0);
+            interop.MazeSetEnemyCells(mazePtr, 0, 1, 0, 1);
+            interop.MazeSetHealthCells(mazePtr, 0, 2, 0, 2);
+            interop.MazeSetFinishCell(mazePtr, 0, 3);
+            string json = interop.MazeToJson(mazePtr);
+            FreeMaze(mazePtr);
+            Assert.Contains("\"S\"", json);
+            Assert.Contains("\"E\"", json);
+            Assert.Contains("\"H\"", json);
+            Assert.Contains("\"F\"", json);
+        }
+        /// <summary>
         /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeToJson"/> succeeds and produces the expected output
         /// </summary>
         [Fact]
@@ -1009,6 +1081,93 @@ namespace Maze.Interop.Tests
         }
 
         /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetDoorCount"/>,
+        /// <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetSpareDoors"/>, and
+        /// <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetSpareKeys"/> produce a grid 
+        /// containing the requested key/door cell counts.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithKeysAndDoors_PlacesThemInTheProducedGrid()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(15, 15, MazeGenerationAlgorithm.RecursiveBacktracking, 7);
+            try
+            {
+                interop.GeneratorOptionsSetDoorCount(optionsPtr, 3);
+                interop.GeneratorOptionsSetSpareDoors(optionsPtr, 2);
+                interop.GeneratorOptionsSetSpareKeys(optionsPtr, 1);
+                interop.MazeGenerate(mazePtr, optionsPtr);
+                string json = interop.MazeToJson(mazePtr);
+                int dCount = json.Split('D').Length - 1;
+                int kCount = json.Split('K').Length - 1;
+                // Each real door places one 'K' + one 'D'; spares add their kind only.
+                Assert.Equal(5, dCount); // 3 real doors + 2 spare doors
+                Assert.Equal(4, kCount); // 3 real keys + 1 spare key
+            }
+            finally
+            {
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetEnemyCount"/>
+        /// and <see cref="Maze.Interop.MazeInterop.GeneratorOptionsSetHealthCount"/>
+        /// produce a grid containing the requested `'E'` / `'H'` cell counts.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithEnemiesAndHealth_PlacesThemInTheProducedGrid()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(15, 15, MazeGenerationAlgorithm.RecursiveBacktracking, 123);
+            try
+            {
+                interop.GeneratorOptionsSetEnemyCount(optionsPtr, 3);
+                interop.GeneratorOptionsSetHealthCount(optionsPtr, 2);
+                interop.MazeGenerate(mazePtr, optionsPtr);
+                string json = interop.MazeToJson(mazePtr);
+                int eCount = json.Split('E').Length - 1;
+                int hCount = json.Split('H').Length - 1;
+                Assert.Equal(3, eCount);
+                Assert.Equal(2, hCount);
+            }
+            finally
+            {
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms that the generator's key + door cap (mirrored at the
+        /// <c>Maze.MaxTotalFeatures</c> layer) surfaces as a thrown exception
+        /// when the request would exceed it.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithKeysPlusDoorsOverCap_ShouldThrow()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = interop.NewMaze();
+            UIntPtr optionsPtr = interop.NewGeneratorOptions(15, 15, MazeGenerationAlgorithm.RecursiveBacktracking, 7);
+            try
+            {
+                // 2 * 8 + 0 + 1 = 17 > 16
+                interop.GeneratorOptionsSetDoorCount(optionsPtr, 8);
+                interop.GeneratorOptionsSetSpareKeys(optionsPtr, 1);
+                var ex = Assert.Throws<Exception>(() => interop.MazeGenerate(mazePtr, optionsPtr));
+                Assert.Contains("exceeds the cap", ex.Message);
+            }
+            finally
+            {
+                interop.FreeGeneratorOptions(optionsPtr);
+                interop.FreeMaze(mazePtr);
+            }
+        }
+
+        /// <summary>
         /// Confirms that <see cref="Maze.Interop.MazeInterop.NewGeneratorOptions"/> fails if an invalid row count is specified
         /// </summary>
         [Fact]
@@ -1170,6 +1329,359 @@ namespace Maze.Interop.Tests
             int complete = interop.MazeGameIsComplete(gamePtr);
             FreeMazeGame(gamePtr);
             Assert.Equal(0, complete);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameIsLost"/> returns 0 for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameIsLost_ShouldReturn0_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int lost = interop.MazeGameIsLost(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, lost);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameLoseReason"/> returns 0 (None) for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameLoseReason_ShouldReturnNone_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int reason = interop.MazeGameLoseReason(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal((int)MazeLoseReason.None, reason);
+        }
+
+        // 1 row, 3 cols: S[0,0]  K[0,1]  F[0,2]
+        private const string KeyGameJson = """{"grid":[["S","K","F"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameBagCount"/> returns 0 for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameBagCount_ShouldReturn0_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
+            int count = interop.MazeGameBagCount(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, count);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGamePickup"/> returns false when the player's cell holds no collectible
+        /// </summary>
+        [Fact]
+        public void MazeGamePickup_ShouldReturnFalse_OnNonKeyCell()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
+            bool ok = interop.MazeGamePickup(gamePtr, out MazeBagItem _);
+            FreeMazeGame(gamePtr);
+            Assert.False(ok);
+        }
+
+        /// <summary>
+        /// Confirms that walking onto a key cell auto-collects it into the bag, leaving
+        /// nothing for an explicit <see cref="Maze.Interop.MazeInterop.MazeGamePickup"/> to take.
+        /// </summary>
+        [Fact]
+        public void MazeGameMovePlayer_ShouldAutoCollectKey_OnKeyCell()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → key cell, auto-collected
+            int count = interop.MazeGameBagCount(gamePtr);
+            bool ok = interop.MazeGamePickup(gamePtr, out MazeBagItem _);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(1, count);
+            Assert.False(ok); // already collected on walk-over
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetBagItem"/> returns false for an empty bag
+        /// </summary>
+        [Fact]
+        public void MazeGameGetBagItem_ShouldReturnFalse_ForEmptyBag()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
+            bool ok = interop.MazeGameGetBagItem(gamePtr, 0, out MazeBagItem _);
+            FreeMazeGame(gamePtr);
+            Assert.False(ok);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetBagItem"/> returns the auto-collected key
+        /// </summary>
+        [Fact]
+        public void MazeGameGetBagItem_ShouldReturnAutoCollectedKey()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(KeyGameJson);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → key cell, auto-collected
+            bool ok = interop.MazeGameGetBagItem(gamePtr, 0, out MazeBagItem item);
+            FreeMazeGame(gamePtr);
+            Assert.True(ok);
+            Assert.Equal(MazeBagItemKind.Key, item.Kind);
+            Assert.Equal(0u, item.Id);
+        }
+
+        // 1 row, 4 cols: S[0,0] K[0,1] D[0,2] F[0,3]
+        private const string DoorGameJson = """{"grid":[["S","K","D","F"]]}""";
+        // Mirrors the maze-crate strand fixture: real door on the top row, decoy door on the side branch.
+        private const string DecoyStrandGameJson = """{"grid":[["S","K","D","F"],["W","D","W","W"],["W"," ","W","W"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameDoorCount"/> returns the number of door cells
+        /// </summary>
+        [Fact]
+        public void MazeGameDoorCount_ShouldReturnNumberOfDoorCells()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(DoorGameJson);
+            int count = interop.MazeGameDoorCount(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(1, count);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetDoor"/> returns Locked for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameGetDoor_ShouldReturnLocked_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(DoorGameJson);
+            bool ok = interop.MazeGameGetDoor(gamePtr, 0, out MazeDoor door);
+            FreeMazeGame(gamePtr);
+            Assert.True(ok);
+            Assert.Equal(0u, door.Row);
+            Assert.Equal(2u, door.Column);
+            Assert.Equal(MazeDoorState.Locked, door.State);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameTickEventCount"/> returns 0 before any tick
+        /// </summary>
+        [Fact]
+        public void MazeGameTickEventCount_ShouldReturn0_Initially()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            int count = interop.MazeGameTickEventCount(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(0, count);
+        }
+
+        /// <summary>
+        /// Confirms the S→K→D→F happy path: pickup, step into door (StartedUnlocking), tick (DoorOpened event),
+        /// door state transitions to Open, final step Completes.
+        /// </summary>
+        [Fact]
+        public void MazeGameTick_ShouldEmitDoorOpened_AndFlipDoorToOpen_AfterUnlocking()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(DoorGameJson);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → K, auto-collected
+            interop.MazeGameTick(gamePtr, 0f);      // flush the KeyCollected event
+            int unlockResult = interop.MazeGameMovePlayer(gamePtr, 4); // into D
+            Assert.Equal(5, unlockResult); // StartedUnlocking
+
+            int eventCount = interop.MazeGameTick(gamePtr, 1000f);
+            Assert.Equal(1, eventCount);
+            Assert.Equal(1, interop.MazeGameTickEventCount(gamePtr));
+
+            bool gotEvent = interop.MazeGameGetTickEvent(gamePtr, 0, out MazeGameEvent evt);
+            Assert.True(gotEvent);
+            Assert.Equal(MazeGameEventKind.DoorOpened, evt.Kind);
+            Assert.Equal(0u, evt.Row);
+            Assert.Equal(2u, evt.Column);
+
+            interop.MazeGameGetDoor(gamePtr, 0, out MazeDoor door);
+            Assert.Equal(MazeDoorState.Open, door.State);
+
+            // StartedUnlocking did not move the player — they're still on K.
+            // Step through the open door, then onto F.
+            int throughDoor = interop.MazeGameMovePlayer(gamePtr, 4);
+            int completeResult = interop.MazeGameMovePlayer(gamePtr, 4);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(1, throughDoor); // Moved
+            Assert.Equal(3, completeResult); // Complete
+        }
+
+        /// <summary>
+        /// Confirms the strand round-trip end-to-end: detouring into a decoy door with the only key burns it,
+        /// walking through the decoy strands the player, MoveResult is Stranded, IsLost is true,
+        /// and LoseReason is Stranded. Validates the lose-state plumbing through a real door traversal.
+        /// </summary>
+        [Fact]
+        public void MazeGame_DecoyDoorWalkThrough_ShouldStrandAndFlipLoseState()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(DecoyStrandGameJson);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → K, auto-collected
+            interop.MazeGameTick(gamePtr, 0f);      // flush the KeyCollected event
+            interop.MazeGameMovePlayer(gamePtr, 2); // Down → StartedUnlocking decoy
+            interop.MazeGameTick(gamePtr, 1000f);
+            int result = interop.MazeGameMovePlayer(gamePtr, 2); // Walk through decoy → Stranded
+            int isLost = interop.MazeGameIsLost(gamePtr);
+            int reason = interop.MazeGameLoseReason(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(6, result); // Stranded
+            Assert.Equal(1, isLost);
+            Assert.Equal((int)MazeLoseReason.Stranded, reason);
+        }
+
+        /// <summary>
+        /// Confirms HP / max-HP, enemy enumeration, and health-pickup enumeration surface through the interop layer.
+        /// </summary>
+        [Fact]
+        public void MazeGame_HpEnemiesAndHealthPickups_SurfaceThroughInterop()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame("""{"grid":[["S","E","H","F"]]}""");
+            try
+            {
+                Assert.Equal(3u, interop.MazeGameHp(gamePtr));
+                Assert.Equal(3u, interop.MazeGameMaxHp(gamePtr));
+
+                Assert.Equal(1, interop.MazeGameEnemyCount(gamePtr));
+                Assert.True(interop.MazeGameGetEnemy(gamePtr, 0, out MazeEnemy enemy));
+                Assert.Equal((0u, 1u, 0u), (enemy.Row, enemy.Column, enemy.Id));
+
+                Assert.Equal(1, interop.MazeGameHealthPickupCount(gamePtr));
+                Assert.True(interop.MazeGameGetHealthPickup(gamePtr, 0, out MazeHealthPickup pickup));
+                Assert.Equal((0u, 2u), (pickup.Row, pickup.Column));
+            }
+            finally
+            {
+                FreeMazeGame(gamePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms a tick surfaces EnemyMoved (payload = enemy id) and PlayerDamaged (payload = HP after)
+        /// through the interop tick-event buffer.
+        /// </summary>
+        [Fact]
+        public void MazeGame_Tick_SurfacesEnemyMovedAndPlayerDamagedWithPayloads()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame("""{"grid":[["S","E","F"]]}""");
+            try
+            {
+                int count = interop.MazeGameTick(gamePtr, 1500f);
+                Assert.Equal(2, count);
+
+                Assert.True(interop.MazeGameGetTickEvent(gamePtr, 0, out MazeGameEvent moved));
+                Assert.Equal(MazeGameEventKind.EnemyMoved, moved.Kind);
+                Assert.Equal((0u, 0u), (moved.Row, moved.Column));
+                Assert.Equal(0u, moved.Payload); // enemy id
+
+                Assert.True(interop.MazeGameGetTickEvent(gamePtr, 1, out MazeGameEvent damaged));
+                Assert.Equal(MazeGameEventKind.PlayerDamaged, damaged.Kind);
+                Assert.Equal(2u, damaged.Payload); // HP after the hit
+                Assert.Equal(2u, interop.MazeGameHp(gamePtr));
+            }
+            finally
+            {
+                FreeMazeGame(gamePtr);
+            }
+        }
+
+        /// <summary>
+        /// Confirms the Killed round-trip through interop: draining HP to zero by walking into enemies
+        /// returns MoveResult 7 (Killed) and flips LoseReason to Killed.
+        /// </summary>
+        [Fact]
+        public void MazeGame_WalkingIntoEnemiesUntilZeroHp_FlipsKilledLoseState()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame("""{"grid":[["S","E","E","E","F"]]}""");
+            interop.MazeGameMovePlayer(gamePtr, 4); // HP 3 → 2
+            interop.MazeGameMovePlayer(gamePtr, 4); // HP 2 → 1
+            int result = interop.MazeGameMovePlayer(gamePtr, 4); // HP 1 → 0 → Killed
+            int isLost = interop.MazeGameIsLost(gamePtr);
+            int reason = interop.MazeGameLoseReason(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(7, result); // Killed
+            Assert.Equal(1, isLost);
+            Assert.Equal((int)MazeLoseReason.Killed, reason);
+        }
+
+        // 1 row, 4 cols: S K K F — two uncollected keys
+        private const string TwoKeyGameJson = """{"grid":[["S","K","K","F"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameKeyCount"/> reports both uncollected keys
+        /// </summary>
+        [Fact]
+        public void MazeGameKeyCount_ShouldReturnNumberOfUncollectedKeys()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(TwoKeyGameJson);
+            int count = interop.MazeGameKeyCount(gamePtr);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(2, count);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetKey"/> returns each key cell with a distinct id
+        /// </summary>
+        [Fact]
+        public void MazeGameGetKey_ShouldReturnDistinctKeys()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(TwoKeyGameJson);
+            bool ok1 = interop.MazeGameGetKey(gamePtr, 0, out MazeKey k1);
+            bool ok2 = interop.MazeGameGetKey(gamePtr, 1, out MazeKey k2);
+            FreeMazeGame(gamePtr);
+            Assert.True(ok1);
+            Assert.True(ok2);
+            Assert.Equal((0u, 1u), (k1.Row, k1.Column));
+            Assert.Equal((0u, 2u), (k2.Row, k2.Column));
+            Assert.NotEqual(k1.Id, k2.Id);
+        }
+
+        /// <summary>
+        /// Confirms that walking onto a key auto-collects it — shrinking the uncollected
+        /// list while the remaining key's id is preserved
+        /// </summary>
+        [Fact]
+        public void MazeGameGetKey_ShouldShrink_AfterAutoCollect()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(TwoKeyGameJson);
+            interop.MazeGameGetKey(gamePtr, 1, out MazeKey k2Before);
+            interop.MazeGameMovePlayer(gamePtr, 4); // Right → first K, auto-collected
+            int countAfter = interop.MazeGameKeyCount(gamePtr);
+            bool ok = interop.MazeGameGetKey(gamePtr, 0, out MazeKey remaining);
+            interop.MazeGameGetBagItem(gamePtr, 0, out MazeBagItem collected);
+            FreeMazeGame(gamePtr);
+            Assert.Equal(1, countAfter);
+            Assert.True(ok);
+            Assert.Equal((0u, 2u), (remaining.Row, remaining.Column));
+            Assert.Equal(k2Before.Id, remaining.Id); // surviving key keeps its id
+            Assert.NotEqual(collected.Id, remaining.Id); // collected and remaining ids are distinct
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Interop.MazeInterop.MazeGameGetKey"/> returns false for an empty key list
+        /// </summary>
+        [Fact]
+        public void MazeGameGetKey_ShouldReturnFalse_WhenNoKeys()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr gamePtr = interop.NewMazeGame(SimpleGameJson);
+            bool ok = interop.MazeGameGetKey(gamePtr, 0, out MazeKey _);
+            FreeMazeGame(gamePtr);
+            Assert.False(ok);
         }
 
         /// <summary>

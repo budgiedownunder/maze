@@ -53,6 +53,22 @@ namespace Maze.Api
             /// A cell containing a wall, meaning it can't be passed through
             /// </summary>
             Wall = 3,
+            /// <summary>
+            /// A cell containing a key that can be picked up at gameplay time
+            /// </summary>
+            Key = 4,
+            /// <summary>
+            /// A cell containing a door that blocks passage until unlocked by a key
+            /// </summary>
+            Door = 5,
+            /// <summary>
+            /// A cell where an enemy spawns at gameplay time
+            /// </summary>
+            Enemy = 6,
+            /// <summary>
+            /// A cell containing a health pickup that restores HP when walked over
+            /// </summary>
+            Health = 7,
         }
 
         /// <summary>
@@ -109,6 +125,80 @@ namespace Maze.Api
             public UInt32? MaxRetries { get; set; }
             /// <summary>Whether branches may grow out of the finish cell. Defaults to false.</summary>
             public bool? BranchFromFinish { get; set; }
+            /// <summary>
+            /// Number of real path doors to auto-place on the maze's spine (each
+            /// paired with one key hidden on a preceding branch). When null,
+            /// defaults to 0 (a lock-free maze). The joint cap is
+            /// <c>2 * DoorCount + SpareDoors + SpareKeys &lt;= <see cref="MaxTotalFeatures"/></c>.
+            /// </summary>
+            public UInt32? DoorCount { get; set; }
+            /// <summary>
+            /// Number of decoy doors planted on off-spine branches, visually
+            /// indistinguishable from real path doors. Opening one burns a key
+            /// the player may have needed for a real door, potentially stranding
+            /// them. When null, defaults to 0.
+            /// </summary>
+            public UInt32? SpareDoors { get; set; }
+            /// <summary>
+            /// Number of spare keys planted on off-spine branches, giving the
+            /// player a budget to spend on decoys before they risk stranding.
+            /// When null, defaults to 0.
+            /// </summary>
+            public UInt32? SpareKeys { get; set; }
+            /// <summary>
+            /// Number of enemies to auto-place at random passable cells. When
+            /// null, defaults to 0. Clamped by the generator to
+            /// <see cref="MaxEnemyCount"/> and to the eligible-cell count.
+            /// </summary>
+            public UInt32? EnemyCount { get; set; }
+            /// <summary>
+            /// Number of health pickups to auto-place at random passable cells.
+            /// When null, defaults to 0. Clamped by the generator to
+            /// <see cref="MaxHealthCount"/> and to the eligible-cell count.
+            /// </summary>
+            public UInt32? HealthCount { get; set; }
+        }
+        /// <summary>
+        /// Maximum combined count of key and door cells any maze may carry.
+        /// Mirrors <c>maze::MAX_TOTAL_FEATURES</c> on the Rust
+        /// side.
+        /// </summary>
+        public const UInt32 MaxTotalFeatures = 16;
+        /// <summary>
+        /// Maximum value accepted by each of <see cref="GenerationOptions.DoorCount"/>,
+        /// <see cref="GenerationOptions.SpareDoors"/>, and
+        /// <see cref="GenerationOptions.SpareKeys"/> individually. The generator
+        /// clamps real-door counts to this internally (see <c>maze::MAX_AUTO_DOORS</c>);
+        /// per-field UI validation rejects above-cap requests up front so the cross-field
+        /// rule in <see cref="ExceedsGenerateFeatureCap"/> never has to handle silly inputs.
+        /// </summary>
+        public const UInt32 MaxDoorCount = 8;
+        /// <summary>
+        /// Maximum value accepted by <see cref="GenerationOptions.EnemyCount"/>.
+        /// Mirrors <c>maze::MAX_ENEMY_COUNT</c> on the Rust side; the generator
+        /// clamps requests to this internally and per-field UI validation
+        /// rejects above-cap requests up front.
+        /// </summary>
+        public const UInt32 MaxEnemyCount = 8;
+        /// <summary>
+        /// Maximum value accepted by <see cref="GenerationOptions.HealthCount"/>.
+        /// Mirrors <c>maze::MAX_HEALTH_COUNT</c> on the Rust side; the generator
+        /// clamps requests to this internally and per-field UI validation
+        /// rejects above-cap requests up front.
+        /// </summary>
+        public const UInt32 MaxHealthCount = 8;
+        /// <summary>
+        /// Returns <c>true</c> when a Generate request's planned key + door cell
+        /// count would exceed <see cref="MaxTotalFeatures"/>. Each real door
+        /// contributes one key and one door to the produced grid,
+        /// so the formula is <c>2 * doorCount + spareDoors + spareKeys &gt; <see cref="MaxTotalFeatures"/></c>.
+        /// </summary>
+        /// <param name="doorCount">Number of real path doors (each paired with one key)</param>
+        /// <param name="spareDoors">Number of decoy doors</param>
+        /// <param name="spareKeys">Number of spare keys</param>
+        public static bool ExceedsGenerateFeatureCap(UInt32 doorCount, UInt32 spareDoors, UInt32 spareKeys)
+        {
+            return 2 * doorCount + spareDoors + spareKeys > MaxTotalFeatures;
         }
         /// <summary>
         /// Converts a [MazePoint](xref:Maze.Interop.MazeInterop.MazePoint) to a [Maze.Point](xref:Maze.Api.Maze.Point)
@@ -186,6 +276,16 @@ namespace Maze.Api
                         Interop.GeneratorOptionsSetMaxRetries(optionsPtr, options.MaxRetries.Value);
                     if (options.BranchFromFinish.HasValue)
                         Interop.GeneratorOptionsSetBranchFromFinish(optionsPtr, options.BranchFromFinish.Value ? (byte)1 : (byte)0);
+                    if (options.DoorCount.HasValue)
+                        Interop.GeneratorOptionsSetDoorCount(optionsPtr, options.DoorCount.Value);
+                    if (options.SpareDoors.HasValue)
+                        Interop.GeneratorOptionsSetSpareDoors(optionsPtr, options.SpareDoors.Value);
+                    if (options.SpareKeys.HasValue)
+                        Interop.GeneratorOptionsSetSpareKeys(optionsPtr, options.SpareKeys.Value);
+                    if (options.EnemyCount.HasValue)
+                        Interop.GeneratorOptionsSetEnemyCount(optionsPtr, options.EnemyCount.Value);
+                    if (options.HealthCount.HasValue)
+                        Interop.GeneratorOptionsSetHealthCount(optionsPtr, options.HealthCount.Value);
                     Interop.MazeGenerate(maze._mazePtr, optionsPtr);
                 }
                 finally
@@ -368,6 +468,54 @@ namespace Maze.Api
         public void SetWallCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             Interop.MazeSetWallCells(_mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells to keys within a maze, or will throw
+        /// an exception if the keys cannot be set.
+        /// </summary>
+        /// <param name="startRow">Target start row</param>
+        /// <param name="startCol">Target start column</param>
+        /// <param name="endRow">Target end row</param>
+        /// <param name="endCol">Target end column</param>
+        public void SetKeyCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            Interop.MazeSetKeyCells(_mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells to doors within a maze, or will throw
+        /// an exception if the doors cannot be set.
+        /// </summary>
+        /// <param name="startRow">Target start row</param>
+        /// <param name="startCol">Target start column</param>
+        /// <param name="endRow">Target end row</param>
+        /// <param name="endCol">Target end column</param>
+        public void SetDoorCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            Interop.MazeSetDoorCells(_mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells to enemy spawns within a maze, or will throw
+        /// an exception if the cells cannot be set.
+        /// </summary>
+        /// <param name="startRow">Target start row</param>
+        /// <param name="startCol">Target start column</param>
+        /// <param name="endRow">Target end row</param>
+        /// <param name="endCol">Target end column</param>
+        public void SetEnemyCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            Interop.MazeSetEnemyCells(_mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells to health pickups within a maze, or will throw
+        /// an exception if the cells cannot be set.
+        /// </summary>
+        /// <param name="startRow">Target start row</param>
+        /// <param name="startCol">Target start column</param>
+        /// <param name="endRow">Target end row</param>
+        /// <param name="endCol">Target end column</param>
+        public void SetHealthCells(UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            Interop.MazeSetHealthCells(_mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
         /// Inserts rows into the maze, or will throw an exception if the rows cannot be inserted

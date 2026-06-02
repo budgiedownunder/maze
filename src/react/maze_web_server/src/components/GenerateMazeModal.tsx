@@ -1,7 +1,21 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import type { GenerateOptions } from '../types/api'
-import { exceedsMazeCellCap } from '../utils/validation'
+import {
+  exceedsGenerateFeatureCap, exceedsMazeCellCap,
+  MAX_DOOR_COUNT, MAX_ENEMY_COUNT, MAX_HEALTH_COUNT, MAX_TOTAL_FEATURES,
+} from '../utils/validation'
+
+// Tab identifiers grouping the generate fields so the dialog reads as a few
+// short panels rather than one long scrolling list. The validation error and
+// action buttons stay pinned below the panels so an error from any field is
+// visible regardless of which tab is showing.
+const TABS = ['sizePosition', 'features'] as const
+type GenerateTab = (typeof TABS)[number]
+const TAB_LABELS: Record<GenerateTab, string> = {
+  sizePosition: 'Size & Position',
+  features: 'Features',
+}
 
 interface Props {
   grid: string[][]
@@ -24,6 +38,14 @@ function defaultsFromGrid(grid: string[][]) {
   const cols = grid[0]?.length || 5
   const start = findCell(grid, 'S')
   const finish = findCell(grid, 'F')
+  // Seed the Doors / Enemies / Health fields with the counts already in the maze
+  // (so regenerating preserves the author's content), falling back to 0.
+  // Spare Doors and Spare Keys default to 0 — the grid alone can't tell us
+  // which `'D'` cells were decoys vs real path doors, so the safe default is
+  // "no extras" and let the author opt in.
+  const doors = grid.reduce((n, row) => n + row.filter(c => c === 'D').length, 0)
+  const enemies = grid.reduce((n, row) => n + row.filter(c => c === 'E').length, 0)
+  const healths = grid.reduce((n, row) => n + row.filter(c => c === 'H').length, 0)
   return {
     rows: String(rows),
     cols: String(cols),
@@ -32,12 +54,18 @@ function defaultsFromGrid(grid: string[][]) {
     finishRow: String((finish?.row ?? rows - 1) + 1),
     finishCol: String((finish?.col ?? cols - 1) + 1),
     minSpineLength: '1',
+    doorCount: String(doors),
+    spareDoors: '0',
+    spareKeys: '0',
+    enemyCount: String(enemies),
+    healthCount: String(healths),
   }
 }
 
 export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = false, error, onGenerate, onCancel }: Props) {
   const { max_maze_cells } = useAppFeatures()
   const defaults = defaultsFromGrid(grid)
+  const [activeTab, setActiveTab] = useState<GenerateTab>('sizePosition')
   const [rows, setRows] = useState(defaults.rows)
   const [cols, setCols] = useState(defaults.cols)
   const [startRow, setStartRow] = useState(defaults.startRow)
@@ -47,7 +75,65 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
   const [minSpineLength, setMinSpineLength] = useState(
     initialMinSpineLength != null ? String(initialMinSpineLength) : defaults.minSpineLength,
   )
+  const [doorCount, setDoorCount] = useState(defaults.doorCount)
+  const [spareDoors, setSpareDoors] = useState(defaults.spareDoors)
+  const [spareKeys, setSpareKeys] = useState(defaults.spareKeys)
+  const [enemyCount, setEnemyCount] = useState(defaults.enemyCount)
+  const [healthCount, setHealthCount] = useState(defaults.healthCount)
   const [validationError, setValidationError] = useState<string | null>(null)
+
+  // Whether a 1-based coordinate string sits within 1..max (inclusive).
+  function inRange(coord: string, max: number) {
+    const n = parseInt(coord, 10)
+    return Number.isInteger(n) && n >= 1 && n <= max
+  }
+
+  // Last dimension value the clamp ran against — so a blur that didn't actually
+  // change Rows/Columns is a no-op (we must not "fix" a deliberately out-of-range
+  // start/finish the user is about to submit; that's validation's job).
+  const lastClampedRows = useRef(defaults.rows)
+  const lastClampedCols = useRef(defaults.cols)
+
+  // Re-clamping start/finish to the new bounds runs only when the user commits
+  // an actual dimension change (blur or Enter), not on every keystroke —
+  // otherwise typing "15" would clamp against the intermediate "1" before the
+  // "5" is typed. A committed change nudges a start/finish coordinate only if it
+  // would now fall outside the new bounds (start→top/left corner, finish→new far
+  // edge); in-range coordinates are left exactly as the author set them. Fields
+  // are 1-based, so the dimension value is itself the far-edge coordinate.
+  function commitRows() {
+    if (rows === lastClampedRows.current) return
+    lastClampedRows.current = rows
+    const r = parseInt(rows, 10)
+    if (!Number.isInteger(r) || r < 1) return
+    if (!inRange(startRow, r)) setStartRow('1')
+    if (!inRange(finishRow, r)) setFinishRow(String(r))
+  }
+
+  function commitCols() {
+    if (cols === lastClampedCols.current) return
+    lastClampedCols.current = cols
+    const c = parseInt(cols, 10)
+    if (!Number.isInteger(c) || c < 1) return
+    if (!inRange(startCol, c)) setStartCol('1')
+    if (!inRange(finishCol, c)) setFinishCol(String(c))
+  }
+
+  // Enter commits the dimension edit without leaving the field (mirrors the
+  // blur behaviour) so keyboard users get the same clamp as click/tab-away.
+  function commitOnEnter(e: React.KeyboardEvent, commit: () => void) {
+    if (e.key === 'Enter') commit()
+  }
+
+  // Arrow-key navigation across the tab strip, matching the WAI-ARIA tabs
+  // pattern (Left/Right move between tabs, wrapping at the ends).
+  function handleTabKeyDown(e: React.KeyboardEvent, index: number) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    const delta = e.key === 'ArrowRight' ? 1 : -1
+    const next = (index + delta + TABS.length) % TABS.length
+    setActiveTab(TABS[next])
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -58,6 +144,11 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
     const fr = parseInt(finishRow, 10)
     const fc = parseInt(finishCol, 10)
     const msl = parseInt(minSpineLength, 10)
+    const doors = parseInt(doorCount, 10)
+    const sdoors = parseInt(spareDoors, 10)
+    const skeys = parseInt(spareKeys, 10)
+    const enemies = parseInt(enemyCount, 10)
+    const healths = parseInt(healthCount, 10)
 
     if (!Number.isInteger(r) || r < 3) {
       setValidationError('Rows must be a whole number of 3 or more.')
@@ -95,57 +186,181 @@ export function GenerateMazeModal({ grid, initialMinSpineLength, isLoading = fal
       setValidationError('Min Solution Length must be a whole number of 1 or more.')
       return
     }
+    if (!Number.isInteger(doors) || doors < 0 || doors > MAX_DOOR_COUNT) {
+      setValidationError(`Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
+      return
+    }
+    if (!Number.isInteger(sdoors) || sdoors < 0 || sdoors > MAX_DOOR_COUNT) {
+      setValidationError(`Spare Doors must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
+      return
+    }
+    if (!Number.isInteger(skeys) || skeys < 0 || skeys > MAX_DOOR_COUNT) {
+      setValidationError(`Spare Keys must be a whole number between 0 and ${MAX_DOOR_COUNT}.`)
+      return
+    }
+    if (!Number.isInteger(enemies) || enemies < 0 || enemies > MAX_ENEMY_COUNT) {
+      setValidationError(`Enemies must be a whole number between 0 and ${MAX_ENEMY_COUNT}.`)
+      return
+    }
+    if (!Number.isInteger(healths) || healths < 0 || healths > MAX_HEALTH_COUNT) {
+      setValidationError(`Health must be a whole number between 0 and ${MAX_HEALTH_COUNT}.`)
+      return
+    }
+    // Cross-field budget: each real door contributes one 'K' and one 'D' to
+    // the generated grid, so the formula counts doors twice. The cap mirrors
+    // the key-aware solver's MAX_TOTAL_FEATURES so a generated maze always
+    // has a solvable path the editor can display.
+    if (exceedsGenerateFeatureCap(doors, sdoors, skeys)) {
+      const total = 2 * doors + sdoors + skeys
+      setValidationError(
+        `Total keys + doors (${total}) exceeds the limit of ${MAX_TOTAL_FEATURES}. ` +
+          `Each door brings a key, so the count is 2·Doors + Spare Doors + Spare Keys.`,
+      )
+      return
+    }
 
     setValidationError(null)
-    onGenerate({ rowCount: r, colCount: c, startRow: sr, startCol: sc, finishRow: fr, finishCol: fc, minSpineLength: msl })
+    onGenerate({
+      rowCount: r,
+      colCount: c,
+      startRow: sr,
+      startCol: sc,
+      finishRow: fr,
+      finishCol: fc,
+      minSpineLength: msl,
+      doorCount: doors,
+      spareDoors: sdoors,
+      spareKeys: skeys,
+      enemyCount: enemies,
+      healthCount: healths,
+    })
   }
 
   const displayError = validationError ?? error
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Generate Maze" className="modal-overlay" style={{ zIndex: 1200, cursor: isLoading ? 'wait' : undefined }}>
-      <div className="modal modal-sm">
+      <div className="modal modal-sm modal-with-scroll-body">
         <h2 className="modal-title">Generate Maze</h2>
-        <form className="modal-form" onSubmit={handleSubmit}>
-          <label>
-            Rows
-            <input type="number" className="input" value={rows} autoFocus
-              onChange={e => { setRows(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Columns
-            <input type="number" className="input" value={cols}
-              onChange={e => { setCols(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Start Row
-            <input type="number" className="input" value={startRow}
-              onChange={e => { setStartRow(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Start Column
-            <input type="number" className="input" value={startCol}
-              onChange={e => { setStartCol(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Finish Row
-            <input type="number" className="input" value={finishRow}
-              onChange={e => { setFinishRow(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Finish Column
-            <input type="number" className="input" value={finishCol}
-              onChange={e => { setFinishCol(e.target.value); setValidationError(null) }} />
-          </label>
-          <label>
-            Min Solution Length
-            <input type="number" className="input" value={minSpineLength}
-              onChange={e => { setMinSpineLength(e.target.value); setValidationError(null) }} />
-          </label>
-          {displayError && <p role="alert" className="error-msg">{displayError}</p>}
-          <div className="modal-actions-row">
-            <button type="button" onClick={onCancel} className="btn-gray">Cancel</button>
-            <button type="submit" className="btn-primary" disabled={isLoading}>Generate</button>
+        {/* noValidate keeps the in-modal JS validation as the source of truth —
+            otherwise the `min`/`max` attributes on the number inputs below
+            would let the browser block form submission for an out-of-range
+            typed value, hiding the per-field "must be a whole number…" alerts.
+            The attributes are still useful: they cap each input's native
+            spinner (so the user can't click past the bound). */}
+        <form className="modal-form" noValidate onSubmit={handleSubmit}>
+          <div className="modal-tabs" role="tablist" aria-label="Generate settings">
+            {TABS.map((tab, index) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                id={`generate-tab-${tab}`}
+                aria-selected={activeTab === tab}
+                aria-controls={`generate-panel-${tab}`}
+                tabIndex={activeTab === tab ? 0 : -1}
+                className="modal-tab"
+                onClick={() => setActiveTab(tab)}
+                onKeyDown={e => handleTabKeyDown(e, index)}
+              >
+                {TAB_LABELS[tab]}
+              </button>
+            ))}
+          </div>
+
+          {/* Scrollable middle region: only the active tab's fields scroll when
+              the viewport is too short; the title, the pinned error + action
+              buttons stay outside this box. */}
+          <div className="modal-scroll-body">
+            <div
+              role="tabpanel"
+              id="generate-panel-sizePosition"
+              aria-labelledby="generate-tab-sizePosition"
+              hidden={activeTab !== 'sizePosition'}
+            >
+              <label>
+                Rows
+                <input type="number" className="input" value={rows} min={3} autoFocus
+                  onChange={e => { setRows(e.target.value); setValidationError(null) }}
+                  onBlur={commitRows}
+                  onKeyDown={e => commitOnEnter(e, commitRows)} />
+              </label>
+              <label>
+                Columns
+                <input type="number" className="input" value={cols} min={3}
+                  onChange={e => { setCols(e.target.value); setValidationError(null) }}
+                  onBlur={commitCols}
+                  onKeyDown={e => commitOnEnter(e, commitCols)} />
+              </label>
+              <label>
+                Min Solution Length
+                <input type="number" className="input" value={minSpineLength} min={0}
+                  onChange={e => { setMinSpineLength(e.target.value); setValidationError(null) }} />
+              </label>
+              <label>
+                Start Row
+                <input type="number" className="input" value={startRow} min={0}
+                  onChange={e => { setStartRow(e.target.value); setValidationError(null) }} />
+              </label>
+              <label>
+                Start Column
+                <input type="number" className="input" value={startCol} min={0}
+                  onChange={e => { setStartCol(e.target.value); setValidationError(null) }} />
+              </label>
+              <label>
+                Finish Row
+                <input type="number" className="input" value={finishRow} min={0}
+                  onChange={e => { setFinishRow(e.target.value); setValidationError(null) }} />
+              </label>
+              <label>
+                Finish Column
+                <input type="number" className="input" value={finishCol} min={0}
+                  onChange={e => { setFinishCol(e.target.value); setValidationError(null) }} />
+              </label>
+            </div>
+
+            <div
+              role="tabpanel"
+              id="generate-panel-features"
+              aria-labelledby="generate-tab-features"
+              hidden={activeTab !== 'features'}
+            >
+              <label>
+                Doors
+                <input type="number" className="input" value={doorCount} min={0} max={MAX_DOOR_COUNT}
+                  onChange={e => { setDoorCount(e.target.value); setValidationError(null) }} />
+              </label>
+              <label>
+                Spare Doors
+                <input type="number" className="input" value={spareDoors} min={0} max={MAX_DOOR_COUNT}
+                  onChange={e => { setSpareDoors(e.target.value); setValidationError(null) }} />
+              </label>
+              <label>
+                Spare Keys
+                <input type="number" className="input" value={spareKeys} min={0} max={MAX_DOOR_COUNT}
+                  onChange={e => { setSpareKeys(e.target.value); setValidationError(null) }} />
+              </label>
+              <label>
+                Enemies
+                <input type="number" className="input" value={enemyCount} min={0} max={MAX_ENEMY_COUNT}
+                  onChange={e => { setEnemyCount(e.target.value); setValidationError(null) }} />
+              </label>
+              <label>
+                Health
+                <input type="number" className="input" value={healthCount} min={0} max={MAX_HEALTH_COUNT}
+                  onChange={e => { setHealthCount(e.target.value); setValidationError(null) }} />
+              </label>
+            </div>
+          </div>
+
+          {/* Pinned below the tab panels: the validation error and action
+              buttons stay visible regardless of the active tab. */}
+          <div className="modal-tab-footer">
+            {displayError && <p role="alert" className="error-msg">{displayError}</p>}
+            <div className="modal-actions-row">
+              <button type="button" onClick={onCancel} className="btn-gray">Cancel</button>
+              <button type="submit" className="btn-primary" disabled={isLoading}>Generate</button>
+            </div>
           </div>
         </form>
       </div>

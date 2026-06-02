@@ -19,7 +19,7 @@ The following components are present:
 | `Rust`       | [`auth`](../api/rust/auth/view_content.md)                                     | Authentication library
 |              | [`comms`](../api/rust/comms/view_content.md)                                   | Outbound email communications library
 |              | [`data_model`](../api/rust/data_model/view_content.md)                         | Data model library
-|              | [`maze`](../api/rust/maze/view_content.md)                                     | Maze definition and calculation library
+|              | [`maze`](../api/rust/maze/view_content.md)                                     | Maze definition, calculation, and gameplay engine library
 |              | [`maze_c`](../api/rust/maze_c/view_content.md)                                 | Maze C API library
 |              | [`maze_console`](../api/rust/maze_console/view_content.md)                     | Maze console application
 |              | [`maze_game_bevy`](../api/rust/maze_game_bevy/view_content.md)                 | 3D maze game engine library
@@ -32,4 +32,5 @@ The following components are present:
 |              |                                                                                |
 | `Web`        | [`Maze REST API`](../api/web/maze_rest/view_content.md)                        | RESTful Web API for managing and solving mazes 
 |              |                                                                                |
-| `WebAssembly`| [`maze_wasm`](../api/wasm/maze_wasm/view_content.md)                           | WebAssembly API for defining and solving mazes 
+| `WebAssembly`| [`maze_game_bevy_wasm`](../api/wasm/maze_game_bevy_wasm/view_content.md)       | WebAssembly API for 3D maze game engine
+|              | [`maze_wasm`](../api/wasm/maze_wasm/view_content.md)                           | WebAssembly API for defining and solving mazes 

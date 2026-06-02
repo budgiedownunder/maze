@@ -70,6 +70,26 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Event handler</returns>
         public event EventHandler? SetFinishRequested;
         /// <summary>
+        /// Represents a set key cell(s) requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetKeyRequested;
+        /// <summary>
+        /// Represents a set door cell(s) requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetDoorRequested;
+        /// <summary>
+        /// Represents a set enemy cell(s) requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetEnemyRequested;
+        /// <summary>
+        /// Represents a set health cell(s) requested event handler
+        /// </summary>
+        /// <returns>Event handler</returns>
+        public event EventHandler? SetHealthRequested;
+        /// <summary>
         /// Represents a clear cells requested event handler
         /// </summary>
         /// <returns>Event handler</returns>
@@ -174,6 +194,30 @@ namespace Maze.Maui.App.ViewModels
         /// <returns>Boolean value</returns>
         [ObservableProperty]
         protected bool canSetFinish = false;
+        /// <summary>
+        /// Indicates whether key cells can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool canSetKey = false;
+        /// <summary>
+        /// Indicates whether door cells can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool canSetDoor = false;
+        /// <summary>
+        /// Indicates whether enemy cells can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool canSetEnemy = false;
+        /// <summary>
+        /// Indicates whether health cells can be set within the current selection
+        /// </summary>
+        /// <returns>Boolean value</returns>
+        [ObservableProperty]
+        protected bool canSetHealth = false;
         /// <summary>
         /// Indicates whether the currently selected cells can be cleared
         /// </summary>
@@ -331,6 +375,46 @@ namespace Maze.Maui.App.ViewModels
             UpdateCanSaveRefresh(true);
         }
         /// <summary>
+        /// Set key cell(s) within selection command
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        private async Task SetKeyAsync()
+        {
+            await RunRequest(SetKeyRequested);
+            UpdateCanSaveRefresh(true);
+        }
+        /// <summary>
+        /// Set door cell(s) within selection command
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        private async Task SetDoorAsync()
+        {
+            await RunRequest(SetDoorRequested);
+            UpdateCanSaveRefresh(true);
+        }
+        /// <summary>
+        /// Set enemy cell(s) within selection command
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        private async Task SetEnemyAsync()
+        {
+            await RunRequest(SetEnemyRequested);
+            UpdateCanSaveRefresh(true);
+        }
+        /// <summary>
+        /// Set health cell(s) within selection command
+        /// </summary>
+        /// <returns>Task</returns>
+        [RelayCommandAttribute]
+        private async Task SetHealthAsync()
+        {
+            await RunRequest(SetHealthRequested);
+            UpdateCanSaveRefresh(true);
+        }
+        /// <summary>
         /// Clear selected cell content command
         /// </summary>
         /// <returns>Task</returns>
@@ -395,12 +479,31 @@ namespace Maze.Maui.App.ViewModels
             await RunRequest(WalkSolutionRequested);
         }
         /// <summary>
-        /// Saves the given maze definition
+        /// Saves the given maze definition. Refuses the save up-front when the
+        /// grid carries more key + door cells than the key-aware
+        /// solver can handle (<see cref="Api.Maze.MaxTotalFeatures"/>)
         /// </summary>
         /// <param name="definition">Maze definition</param>
         /// <returns>Task containing a boolean result</returns>
         public async Task<bool> SaveMaze(Api.Maze definition)
         {
+            // Only key + door cells are capped here: they drive the key-aware
+            // solver's feature budget. Enemy and health cells map to empty
+            // passages for the solver and carry no such budget, so there is
+            // deliberately no per-maze enemy/health cap — the editor allows any
+            // number of them.
+            (uint keys, uint doors) = Utils.MazeCellCounter.CountKeysAndDoors(definition);
+            if (keys + doors > Api.Maze.MaxTotalFeatures)
+            {
+                await _dialogService.ShowAlert(
+                    "Cannot save",
+                    $"This maze has {keys} keys + {doors} doors = {keys + doors}, " +
+                    $"over the limit of {Api.Maze.MaxTotalFeatures}. " +
+                    "Remove some key or door cells before saving.",
+                    "OK");
+                return false;
+            }
+
             bool saved = false;
 
             try

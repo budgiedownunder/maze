@@ -78,14 +78,45 @@ const game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
 game.player_row();       // → number (0-based row index)
 game.player_col();       // → number (0-based column index)
 game.player_direction(); // → DirectionWasm (None=0, Up=1, Down=2, Left=3, Right=4)
-game.is_complete();      // → boolean
+game.is_complete();      // → boolean (player reached the finish)
+game.is_lost();          // → boolean (player stranded, or HP drained to zero)
+game.lose_reason();      // → 'stranded' | 'killed' | null
+game.hp();               // → number (current player HP)
+game.max_hp();           // → number (maximum player HP; constant for the session)
 
-// Returns MoveResultWasm (None=0, Moved=1, Blocked=2, Complete=3)
+// Returns MoveResultWasm (None=0, Moved=1, Blocked=2, Complete=3,
+//                         BlockedByLockedDoor=4, StartedUnlocking=5,
+//                         Stranded=6, Killed=7)
 const result = game.move_player(DirectionWasm.Right);
 
 // Array of { row: number, col: number } objects in visit order
 // Includes the start cell; only appended on successful moves
 const cells = game.visited_cells();
+
+// Keys are auto-collected by moving onto them (pickup() then returns null).
+const item    = game.pickup();          // → null (key already collected on walk-over)
+const keys    = game.keys();            // → [{ row, col, id }]  (uncollected keys)
+const doors   = game.doors();           // → [{ row, col, state: 'locked' | 'opening' | 'open' }]
+const bag     = game.bag();             // → [{ type: 'key', id }]  (collected items)
+const enemies = game.enemies();         // → [{ row, col, id }]  (live enemies, stable enemy-id order)
+const pickups = game.health_pickups(); // → [{ row, col, id }]  (uncollected 'H' cells, row-major order)
+
+// Advance time-based state (opening doors, enemy AI, queued damage / heal events).
+// Returns the events that occurred during the tick (or queued by prior move_player calls):
+//   { type: 'doorOpened',     row, col }
+//   { type: 'enemyMoved',     id, row, col }
+//   { type: 'playerDamaged',  hpAfter }
+//   { type: 'playerHealed',   hpAfter, row, col }
+//   { type: 'playerNotHealed', row, col, reason, message }
+//   { type: 'keyCollected',   id, row, col }
+const events = game.tick(16);
+
+// Time in ms until the next tick will produce an event — for setTimeout-driven
+// host loops that sleep instead of polling at frame rate. Returns 0 when a
+// move_player call has queued events waiting to flush, the soonest pending
+// enemy commit or door-open completion otherwise, or null when the game is
+// idle (no enemy planning a step, no door opening, no pending events).
+const waitMs = game.time_until_next_event_ms();  // → number | null
 ```
 
 ### wasm-lite (C FFI)
@@ -94,7 +125,9 @@ For non-JS WASM hosts (Wasmtime, .NET, native via P/Invoke).
 
 ```c
 // Direction encoding: 0=None, 1=Up, 2=Down, 3=Left, 4=Right
-// MoveResult encoding: 0=None, 1=Moved, 2=Blocked, 3=Complete, -1=null pointer
+// MoveResult encoding: 0=None, 1=Moved, 2=Blocked, 3=Complete,
+//                      4=BlockedByLockedDoor, 5=StartedUnlocking, 6=Stranded,
+//                      7=Killed, -1=null pointer
 
 MazeGameWasm* new_maze_game_wasm(const u8* json_string_ptr);  // returns null on error
 void          free_maze_game_wasm(MazeGameWasm* maze_game_wasm);
@@ -103,9 +136,47 @@ i32           maze_game_wasm_player_row(MazeGameWasm* maze_game_wasm);       // 
 i32           maze_game_wasm_player_col(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_player_direction(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_is_complete(MazeGameWasm* maze_game_wasm);      // 1=true, 0=false, -1=null
+i32           maze_game_wasm_is_lost(MazeGameWasm* maze_game_wasm);           // 1=true, 0=false, -1=null
+i32           maze_game_wasm_lose_reason(MazeGameWasm* maze_game_wasm);       // 0=None, 1=Stranded, 2=Killed, -1=null
+i32           maze_game_wasm_pickup(MazeGameWasm* maze_game_wasm,
+                                    u32* kind_out, u32* id_out);              // 0=ok, -1=no item / null
+i32           maze_game_wasm_bag_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_bag_item(MazeGameWasm* maze_game_wasm, i32 index,
+                                          u32* kind_out, u32* id_out);        // 0=ok, -1=error
+i32           maze_game_wasm_door_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_door(MazeGameWasm* maze_game_wasm, i32 index,
+                                      u32* row_out, u32* col_out, u32* state_out);
+                                                                              // state: 0=Locked, 1=Opening, 2=Open
+i32           maze_game_wasm_tick(MazeGameWasm* maze_game_wasm, f32 dt_ms);   // returns event count; buffers on session
+i32           maze_game_wasm_tick_event_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_tick_event(MazeGameWasm* maze_game_wasm, i32 index,
+                                            u32* kind_out, u32* row_out, u32* col_out);
+                                                                              // kind: 0=DoorOpened, 1=EnemyMoved,
+                                                                              // 2=PlayerDamaged, 3=PlayerHealed, 4=PlayerNotHealed,
+                                                                              // 5=KeyCollected
+i32           maze_game_wasm_get_tick_event_payload(MazeGameWasm* maze_game_wasm, i32 index,
+                                                    u32* payload_out);        // enemy id / hp_after / reason / key id; 0=ok, -1=error
+i32           maze_game_wasm_get_tick_event_string_payload(MazeGameWasm* maze_game_wasm, i32 index,
+                                                           u8* buf_out, u32* len_out);
+                                                                              // PlayerNotHealed message; two-call protocol
+                                                                              // (buf_out=null reads len_out, then re-call); 0=ok, -1=error
+i32           maze_game_wasm_key_count(MazeGameWasm* maze_game_wasm);         // uncollected only
+i32           maze_game_wasm_get_key(MazeGameWasm* maze_game_wasm, i32 index,
+                                     u32* row_out, u32* col_out, u32* id_out);
+                                                                              // 0=ok, -1=error
 i32           maze_game_wasm_visited_cell_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_visited_cell(MazeGameWasm* maze_game_wasm, i32 index,
                                               i32* row_out, i32* col_out);   // 0=ok, -1=error
+i32           maze_game_wasm_hp(MazeGameWasm* maze_game_wasm);                // -1 on null
+i32           maze_game_wasm_max_hp(MazeGameWasm* maze_game_wasm);            // -1 on null
+i32           maze_game_wasm_enemy_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_enemy(MazeGameWasm* maze_game_wasm, i32 index,
+                                       u32* row_out, u32* col_out, u32* id_out);
+                                                                              // 0=ok, -1=error
+i32           maze_game_wasm_health_pickup_count(MazeGameWasm* maze_game_wasm);
+i32           maze_game_wasm_get_health_pickup(MazeGameWasm* maze_game_wasm, i32 index,
+                                               u32* row_out, u32* col_out, u32* id_out);
+                                                                              // 0=ok, -1=error; id is always 0
 ```
 
 The `json_string_ptr` argument must point to a length-prefixed string (4-byte little-endian length followed by UTF-8 bytes), allocated via `allocate_sized_memory`.

@@ -185,7 +185,7 @@ pub trait TokenStore {
     /// concurrent `consume_token` calls against the same id must produce
     /// exactly one winner.
     async fn consume_token(&mut self, id: Uuid) -> Result<OneTimeToken, Error>;
-    /// Removes every outstanding [`TokenPurpose::EmailVerification`] token
+    /// Removes every outstanding [`data_model::TokenPurpose::EmailVerification`] token
     /// belonging to `user_id` whose `target_email` matches the supplied
     /// address (case-insensitive). Returns the number of tokens removed.
     /// Used by the verification re-send handler so re-issuing supersedes

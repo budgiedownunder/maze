@@ -7,7 +7,7 @@ The `maze` project contains the following `Rust` crates:
 | [`auth`](auth/view_content.md)                                     | Authentication library
 | [`comms`](comms/view_content.md)                                   | Outbound email communications library
 | [`data_model`](data_model/view_content.md)                         | Data model library
-| [`maze`](maze/view_content.md)                                     | Maze definition and calculation library
+| [`maze`](maze/view_content.md)                                     | Maze definition, calculation, and gameplay engine library
 | [`maze_c`](maze_c/view_content.md)                                 | Maze C API library
 | [`maze_console`](maze_console/view_content.md)                     | Maze console application
 | [`maze_game_bevy`](maze_game_bevy/view_content.md)                 | 3D maze game engine library

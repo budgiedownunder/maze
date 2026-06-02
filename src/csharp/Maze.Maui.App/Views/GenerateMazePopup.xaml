@@ -18,25 +18,79 @@
         popup to the platform popup container's width without this
         cap.
     -->
-    <Border Padding="12,20"
+    <Border x:Name="RootBorder"
+            Padding="12,20"
             MaximumWidthRequest="320"
             StrokeShape="RoundRectangle 8"
             Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+        <!--
+            5-row Grid: pinned title (Auto) / pinned tab strip (Auto) /
+            scrollable active-tab panel (*) / pinned error (Auto) /
+            pinned button row (Auto). The middle * row enforces the
+            height ceiling when the Border itself is height-capped —
+            MAUI's ScrollView doesn't reliably honour
+            MaximumHeightRequest on its own, but a * row inside a
+            height-bounded Grid does. The Border's MaximumHeightRequest
+            is set dynamically in code-behind to track the host window
+            height. On a tall window the cap is well above the natural
+            content height, so the Border stays content-sized and the
+            * row falls back to Auto behaviour — popup doesn't inflate.
+            On a short window the cap kicks in and only the active tab's
+            panel scrolls while the title, tab strip, error and buttons
+            stay anchored. The fields are grouped across the Size &amp;
+            Position / Features tabs so the form reads as a couple of
+            short panels rather than one long scrolling list.
+        -->
+        <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="12">
+
+            <!-- Title -->
+            <Label Grid.Row="0"
+                   Text="Generate Maze"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center"/>
+
+            <!-- Tab strip (pinned): two equal-width buttons selecting
+                 which panel is shown. Transparent background + themed text
+                 colour so they read as tabs, not filled buttons; the active
+                 tab gets a bold label and an accent underline (the 2px
+                 BoxView row beneath each button). Highlighting is applied in
+                 code-behind via SelectTab / ApplyTabButtonStyle. The
+                 underline row is always present (2px); only the active
+                 column's BoxView is visible, so toggling never shifts the
+                 layout. -->
+            <Grid Grid.Row="1" ColumnDefinitions="*,*" RowDefinitions="Auto,2" ColumnSpacing="0" RowSpacing="0">
+                <!-- Smaller font + tight horizontal padding so the long
+                     "Size & Position" label fits inside the fixed-width
+                     (~148 px) column without ellipsis-truncating. MAUI Button
+                     neither wraps nor auto-shrinks its text, and the popup width
+                     is capped, so the label has to be sized to fit. -->
+                <Button Grid.Row="0" Grid.Column="0" x:Name="SizeTabButton" Text="Size &amp; Position" Clicked="OnSizeTabClicked"
+                        FontSize="12" Padding="2,8"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+                <Button Grid.Row="0" Grid.Column="1" x:Name="FeaturesTabButton" Text="Features" Clicked="OnFeaturesTabClicked"
+                        FontSize="12" Padding="2,8"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+                <BoxView Grid.Row="1" Grid.Column="0" x:Name="SizeTabUnderline" IsVisible="False"
+                         Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
+                <BoxView Grid.Row="1" Grid.Column="1" x:Name="FeaturesTabUnderline" IsVisible="False"
+                         Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
+            </Grid>
 
         <!--
-            Vertical scrolling on short viewports — the popup would
-            otherwise extend off-screen on phone landscape / smaller
-            phone-portrait. The ScrollView is bounded by
-            `MaximumHeightRequest`: content shorter than that doesn't
-            scroll (the popup stays at its natural height), longer
-            content scrolls inside the cap.
+            Vertical scrolling on short viewports — only the active tab's
+            panel lives inside this ScrollView. Height is bounded by the
+            Border's dynamically-set MaximumHeightRequest above (propagated
+            via the Grid's middle * row) rather than a static cap here.
 
             `HorizontalOptions="Center"` is needed to stop the
             ScrollView from claiming Fill horizontally and dragging
             the popup width up to the parent container's full width.
         -->
-        <ScrollView MaximumHeightRequest="600" HorizontalOptions="Center">
+        <ScrollView Grid.Row="2" HorizontalOptions="Center">
         <!--
             No `MinimumWidthRequest` floor — the layout sizes to its
             natural content width on every platform, which avoids any
@@ -44,58 +98,74 @@
             simulators. The Border above caps the upper end at
             `MaximumWidthRequest="320"` for desktop.
         -->
-        <VerticalStackLayout Spacing="12">
+        <Grid>
 
-            <!-- Title -->
-            <Label Text="Generate Maze"
-                   FontSize="18"
-                   FontAttributes="Bold"
-                   HorizontalOptions="Center"
-                   Margin="0,0,0,4"/>
-
-            <!-- Fields -->
-            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="8">
-
+            <!-- Size & Position tab: dimensions, min solution length, start + finish locations -->
+            <Grid x:Name="SizeTab" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="12">
                 <Label Grid.Row="0" Grid.Column="0" Text="Rows" VerticalOptions="Center"/>
-                <Entry Grid.Row="0" Grid.Column="1" x:Name="RowsEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+                <Entry Grid.Row="0" Grid.Column="1" x:Name="RowsEntry" Keyboard="Numeric" HorizontalOptions="Fill" Unfocused="OnRowsCommitted" Completed="OnRowsCommitted"/>
 
                 <Label Grid.Row="1" Grid.Column="0" Text="Columns" VerticalOptions="Center"/>
-                <Entry Grid.Row="1" Grid.Column="1" x:Name="ColsEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+                <Entry Grid.Row="1" Grid.Column="1" x:Name="ColsEntry" Keyboard="Numeric" HorizontalOptions="Fill" Unfocused="OnColsCommitted" Completed="OnColsCommitted"/>
 
-                <Label Grid.Row="2" Grid.Column="0" Text="Start Row" VerticalOptions="Center"/>
-                <Entry Grid.Row="2" Grid.Column="1" x:Name="StartRowEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+                <Label Grid.Row="2" Grid.Column="0" Text="Min Solution Length" VerticalOptions="Center"/>
+                <Entry Grid.Row="2" Grid.Column="1" x:Name="MinSolutionLengthEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
 
-                <Label Grid.Row="3" Grid.Column="0" Text="Start Column" VerticalOptions="Center"/>
-                <Entry Grid.Row="3" Grid.Column="1" x:Name="StartColEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+                <Label Grid.Row="3" Grid.Column="0" Text="Start Row" VerticalOptions="Center"/>
+                <Entry Grid.Row="3" Grid.Column="1" x:Name="StartRowEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
 
-                <Label Grid.Row="4" Grid.Column="0" Text="Finish Row" VerticalOptions="Center"/>
-                <Entry Grid.Row="4" Grid.Column="1" x:Name="FinishRowEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+                <Label Grid.Row="4" Grid.Column="0" Text="Start Column" VerticalOptions="Center"/>
+                <Entry Grid.Row="4" Grid.Column="1" x:Name="StartColEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
 
-                <Label Grid.Row="5" Grid.Column="0" Text="Finish Column" VerticalOptions="Center"/>
-                <Entry Grid.Row="5" Grid.Column="1" x:Name="FinishColEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+                <Label Grid.Row="5" Grid.Column="0" Text="Finish Row" VerticalOptions="Center"/>
+                <Entry Grid.Row="5" Grid.Column="1" x:Name="FinishRowEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
 
-                <Label Grid.Row="6" Grid.Column="0" Text="Min Solution Length" VerticalOptions="Center"/>
-                <Entry Grid.Row="6" Grid.Column="1" x:Name="MinSolutionLengthEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
-
+                <Label Grid.Row="6" Grid.Column="0" Text="Finish Column" VerticalOptions="Center"/>
+                <Entry Grid.Row="6" Grid.Column="1" x:Name="FinishColEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
             </Grid>
 
-            <!-- Validation error -->
-            <Label x:Name="ErrorLabel"
+            <!-- Features tab: doors / keys / enemies / health counts. Inactive tabs
+                 stay measured (Opacity 0 + InputTransparent) rather than collapsed
+                 via IsVisible, so the content area always sizes to the largest tab —
+                 the popup doesn't resize as you switch between tabs. -->
+            <Grid x:Name="FeaturesTab" Opacity="0" InputTransparent="True" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="12">
+                <Label Grid.Row="0" Grid.Column="0" Text="Doors" VerticalOptions="Center"/>
+                <Entry Grid.Row="0" Grid.Column="1" x:Name="DoorCountEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="1" Grid.Column="0" Text="Spare Doors" VerticalOptions="Center"/>
+                <Entry Grid.Row="1" Grid.Column="1" x:Name="SpareDoorsEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="2" Grid.Column="0" Text="Spare Keys" VerticalOptions="Center"/>
+                <Entry Grid.Row="2" Grid.Column="1" x:Name="SpareKeysEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="3" Grid.Column="0" Text="Enemies" VerticalOptions="Center"/>
+                <Entry Grid.Row="3" Grid.Column="1" x:Name="EnemyCountEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+
+                <Label Grid.Row="4" Grid.Column="0" Text="Health" VerticalOptions="Center"/>
+                <Entry Grid.Row="4" Grid.Column="1" x:Name="HealthCountEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+            </Grid>
+
+        </Grid>
+        </ScrollView>
+
+            <!-- Validation error (pinned below the panels so an error from
+                 any field is visible regardless of the active tab). -->
+            <Label Grid.Row="3"
+                   x:Name="ErrorLabel"
                    TextColor="{AppThemeBinding Light={StaticResource Fail}, Dark={StaticResource FailDark}}"
                    FontSize="12"
                    IsVisible="False"
                    HorizontalOptions="Center"/>
 
-            <!-- Buttons -->
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,4,0,0">
-                <Button Grid.Column="0" x:Name="CancelButton" Text="Cancel" Clicked="OnCancelClicked"
-                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
-                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
-                <Button Grid.Column="1" x:Name="GenerateButton" Text="Generate" Clicked="OnGenerateClicked"/>
-            </Grid>
+        <!-- Buttons: pinned outside the ScrollView so Cancel/Generate stay visible. -->
+        <Grid Grid.Row="4" ColumnDefinitions="*,*" ColumnSpacing="10">
+            <Button Grid.Column="0" x:Name="CancelButton" Text="Cancel" Clicked="OnCancelClicked"
+                    BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
+                    TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+            <Button Grid.Column="1" x:Name="GenerateButton" Text="Generate" Clicked="OnGenerateClicked"/>
+        </Grid>
 
-        </VerticalStackLayout>
-        </ScrollView>
+        </Grid>
     </Border>
 
 </toolkit:Popup>

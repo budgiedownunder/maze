@@ -14,12 +14,12 @@
 //!     which user's email row to flip.
 //!
 //! Every dispatched verification email is recorded in the email audit
-//! log via [`dispatch_verification_email`]: a Pending row is written
+//! log via `dispatch_verification_email`: a Pending row is written
 //! synchronously, then the spawned send task updates it to
 //! Accepted/Failed once the provider responds. Already-verified
 //! requests no-op without recording (there's nothing to send).
 //!
-//! Verification tokens carry [`TokenPurpose::EmailVerification`] with a
+//! Verification tokens carry [`data_model::TokenPurpose::EmailVerification`] with a
 //! 24-hour TTL and a `target_email` populated.
 
 use std::sync::Arc;

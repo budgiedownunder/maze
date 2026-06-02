@@ -196,6 +196,25 @@ pub(crate) fn wall_material_index(
     ((zone + shuffle) % WALL_MATERIAL_VARIANTS as u64) as usize
 }
 
+/// The wall material kind (`WALL_MATERIAL_*` index) used by cell `(r, c)`.
+/// Mirrors the kind-selection logic in [`spawn_walls_for_cell`]: the
+/// per-quadrant material variation when that landmark is on, otherwise the
+/// single configured `wall_type`. A door panel reuses this so it always
+/// renders in the same material as the wall it sits between.
+pub(crate) fn wall_kind_for_cell(
+    r: usize,
+    c: usize,
+    rows: usize,
+    cols: usize,
+    config: &GameConfig,
+) -> usize {
+    if config.landmarks.wall_material_variation {
+        wall_material_index(r, c, rows, cols, config.seed)
+    } else {
+        config.wall_type.to_kind_index()
+    }
+}
+
 pub(crate) fn spawn_walls_for_cell(
     commands: &mut Commands,
     assets: &WallAssets,

@@ -99,6 +99,10 @@ pub(crate) struct GameState {
     pub(crate) won: bool,
     pub(crate) lost: bool,
     pub(crate) paused: bool,
+    /// Remaining milliseconds for the red damage-flash overlay. `0.0` when
+    /// no flash is active. Set on `PlayerDamaged` event and decremented by
+    /// the damage-flash system; the overlay fades its alpha proportionally.
+    pub(crate) damage_flash_timer: f32,
 }
 
 #[derive(Resource)]
@@ -145,12 +149,42 @@ pub struct GameConfig {
     /// as [`Landmarks::wall_tint`]. Default `Brick` so the pre-Step-14
     /// hard-coded look is preserved.
     pub wall_type: WallType,
+    /// Door open-animation style. Default `Swing`.
+    pub door_style: DoorStyle,
+    /// Key-holder appearance for `'K'` cells. Default `Pedestal`.
+    pub key_holder: KeyHolderStyle,
+    /// Move period for enemies (ms of accumulated `tick(dt_ms)` per cell
+    /// advance). Threaded into `MazeGameOptions::enemy_move_period_ms`.
+    /// Default `1500.0` (matches the maze crate's default).
+    pub enemy_move_period_ms: f32,
+    /// Damage each enemy deals on same-cell collision. Threaded into
+    /// `MazeGameOptions::enemy_damage`. Default `1`.
+    pub enemy_damage: u32,
+    /// Maximum player HP — also the heal cap. Threaded into
+    /// `MazeGameOptions::max_hp`. Default `3`.
+    pub max_hp: u32,
+    /// Starting player HP. Threaded into `MazeGameOptions::starting_hp`
+    /// (clamped to `[1, max_hp]` inside the maze crate). Default `3`
+    /// (= `max_hp` → start at full health).
+    pub starting_hp: u32,
+    /// Visual variant used for every enemy in the session. Default
+    /// `Goblin`. The AI and damage mechanics are identical across
+    /// variants — only the spawned rig differs.
+    pub enemy_type: EnemyType,
+    /// Visual variant used for every health pickup in the session.
+    /// Default `Heart`. The auto-pickup + heal mechanics are identical
+    /// across variants — only the spawned rig differs.
+    pub health_style: HealthStyle,
 }
 
 /// Atmospheric sky modes. Each variant maps to a procedurally generated
 /// dome texture + a paired light preset (see `world/sky`). Default is
 /// `Night` so a missing or unrecognised config value preserves the
-/// pre-Step-10 visual.
+/// pre-Step-10 visual. `Dungeon` and `Chamber` are the odd ones out: instead
+/// of an open sky they cap every passable cell with a ceiling and dim the
+/// lighting, for an enclosed feel. `Dungeon` uses a hewn dark-rock ceiling;
+/// `Chamber` uses the cell's own wall material, reading as a finished, built
+/// interior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SkyType {
     #[default]
@@ -158,6 +192,8 @@ pub enum SkyType {
     Sunrise,
     Day,
     Sunset,
+    Dungeon,
+    Chamber,
 }
 
 impl SkyType {
@@ -169,6 +205,8 @@ impl SkyType {
             Self::Sunrise => "sunrise",
             Self::Day => "day",
             Self::Sunset => "sunset",
+            Self::Dungeon => "dungeon",
+            Self::Chamber => "chamber",
         }
     }
 
@@ -182,13 +220,15 @@ impl SkyType {
             "sunrise" => Self::Sunrise,
             "day" => Self::Day,
             "sunset" => Self::Sunset,
+            "dungeon" => Self::Dungeon,
+            "chamber" => Self::Chamber,
             _ => Self::Night,
         }
     }
 }
 
 /// Wall texture kinds for the per-cell tinted path. Each variant maps
-/// to one of the `WALL_MATERIAL_*` indices in [`crate::world::walls`].
+/// to one of the `WALL_MATERIAL_*` indices in `crate::world::walls`.
 /// Default is `Brick` so a missing or unrecognised wire value preserves
 /// the pre-Step-14 hard-coded look.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -225,7 +265,7 @@ impl WallType {
     }
 
     /// Returns the matching `WALL_MATERIAL_*` index used by
-    /// [`crate::world::walls`]. Single source of truth so no call site
+    /// `crate::world::walls`. Single source of truth so no call site
     /// hard-codes the integer mapping.
     pub fn to_kind_index(self) -> usize {
         match self {
@@ -233,6 +273,131 @@ impl WallType {
             Self::DressedStone => crate::world::walls::WALL_MATERIAL_DRESSED_STONE,
             Self::Wood => crate::world::walls::WALL_MATERIAL_WOOD,
             Self::Cobblestone => crate::world::walls::WALL_MATERIAL_COBBLESTONE,
+        }
+    }
+}
+
+/// Door open-animation styles. `Swing` only applies to a straight-corridor
+/// door (a single leaf hinged between the side walls); at any other topology —
+/// and for the other styles at every topology — a leaf is hung on each open
+/// edge, and `Swing` degrades to `Slide` there because a swing needs walls to
+/// anchor against. Default `Swing` preserves the topology-driven look the game
+/// shipped with.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DoorStyle {
+    #[default]
+    Swing,
+    Slide,
+    Portcullis,
+    Dissolve,
+}
+
+impl DoorStyle {
+    /// `snake_case` wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Swing => "swing",
+            Self::Slide => "slide",
+            Self::Portcullis => "portcullis",
+            Self::Dissolve => "dissolve",
+        }
+    }
+
+    /// Parses a wire string into a [`DoorStyle`]. Unknown values fall back to
+    /// [`DoorStyle::Swing`] — same forgiving policy as [`WallType::from_wire_str`].
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "slide" => Self::Slide,
+            "portcullis" => Self::Portcullis,
+            "dissolve" => Self::Dissolve,
+            _ => Self::Swing,
+        }
+    }
+}
+
+/// Key-holder styles for `'K'` cells. Default `Pedestal` preserves the shipped
+/// look. (These variants may later distinguish key *types*, not just looks.)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum KeyHolderStyle {
+    #[default]
+    Pedestal,
+    Chest,
+    FloatingKey,
+}
+
+impl KeyHolderStyle {
+    /// `snake_case` wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Pedestal => "pedestal",
+            Self::Chest => "chest",
+            Self::FloatingKey => "floating_key",
+        }
+    }
+
+    /// Parses a wire string into a [`KeyHolderStyle`]. Unknown values fall back
+    /// to [`KeyHolderStyle::Pedestal`].
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "chest" => Self::Chest,
+            "floating_key" => Self::FloatingKey,
+            _ => Self::Pedestal,
+        }
+    }
+}
+
+/// Enemy visual variants. Both variants use the same AI / damage
+/// mechanics — only the spawned rig differs. Default `Goblin`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EnemyType {
+    #[default]
+    Goblin,
+    Ghost,
+}
+
+impl EnemyType {
+    /// Lowercase wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Goblin => "goblin",
+            Self::Ghost => "ghost",
+        }
+    }
+
+    /// Parses a wire string into an [`EnemyType`]. Unknown values fall
+    /// back to [`EnemyType::Goblin`].
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "ghost" => Self::Ghost,
+            _ => Self::Goblin,
+        }
+    }
+}
+
+/// Health-pickup visual variants. Both variants use the same auto-pickup
+/// + heal mechanics — only the spawned rig differs. Default `Heart`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HealthStyle {
+    #[default]
+    Heart,
+    Potion,
+}
+
+impl HealthStyle {
+    /// Lowercase wire form, matching the JSON / TOML strings the server emits.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Heart => "heart",
+            Self::Potion => "potion",
+        }
+    }
+
+    /// Parses a wire string into a [`HealthStyle`]. Unknown values fall
+    /// back to [`HealthStyle::Heart`].
+    pub fn from_wire_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "potion" => Self::Potion,
+            _ => Self::Heart,
         }
     }
 }
@@ -298,6 +463,14 @@ impl Default for GameConfig {
             landmarks: Landmarks::default(),
             sky_type: SkyType::default(),
             wall_type: WallType::default(),
+            door_style: DoorStyle::default(),
+            key_holder: KeyHolderStyle::default(),
+            enemy_move_period_ms: 1500.0,
+            enemy_damage: 1,
+            max_hp: 3,
+            starting_hp: 3,
+            enemy_type: EnemyType::default(),
+            health_style: HealthStyle::default(),
         }
     }
 }

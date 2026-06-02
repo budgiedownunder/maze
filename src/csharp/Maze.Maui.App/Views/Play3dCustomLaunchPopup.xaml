@@ -21,19 +21,77 @@
         naturally. 320 = 280 (content min) + 24 (Border's 12+12 H padding) +
         a few px of headroom for the rounded-corner stroke.
     -->
-    <Border Padding="12,20"
+    <Border x:Name="RootBorder"
+            Padding="12,20"
             MaximumWidthRequest="320"
             StrokeShape="RoundRectangle 8"
             Stroke="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray500}}"
             BackgroundColor="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}">
+        <!--
+            5-row Grid: pinned title (Auto) / pinned tab strip (Auto) /
+            scrollable active-tab panel (*) / pinned time-limit + error
+            (Auto) / pinned button row (Auto). The middle * row enforces
+            the height ceiling once the Border is height-capped — MAUI's
+            ScrollView doesn't reliably honour MaximumHeightRequest on
+            its own, but a * row inside a height-bounded Grid does. The
+            Border's MaximumHeightRequest is set dynamically in
+            code-behind to the host window height; below that cap the
+            Border stays content-sized (the * row falls back to Auto), so
+            the popup doesn't inflate on a tall window. When the window
+            shrinks, only the active tab's panel scrolls — the title, tab
+            strip, time limit and Cancel/Play row stay anchored. The
+            settings are grouped across the Scene / Objects / Decor tabs
+            so the form reads as a few short panels rather than one long
+            scrolling list.
+        -->
+        <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="12">
+
+            <!-- Title (pinned). WordWrap so a long maze name wraps onto
+                 a second line inside the popup width instead of pushing
+                 the popup wider / clipping at the screen edge. -->
+            <Label Grid.Row="0"
+                   x:Name="TitleLabel"
+                   Text="Play 3D"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   HorizontalTextAlignment="Center"
+                   HorizontalOptions="Fill"
+                   LineBreakMode="WordWrap"/>
+
+            <!-- Tab strip (pinned): three equal-width buttons selecting
+                 which panel is shown. Transparent background + themed text
+                 colour so they read as tabs, not filled buttons; the active
+                 tab gets a bold label and an accent underline (the 2px
+                 BoxView row beneath each button). Highlighting is applied in
+                 code-behind via SelectTab / ApplyTabButtonStyle. The
+                 underline row is always present (2px); only the active
+                 column's BoxView is visible, so toggling never shifts the
+                 layout. -->
+            <Grid Grid.Row="1" ColumnDefinitions="*,*,*" RowDefinitions="Auto,2" ColumnSpacing="0" RowSpacing="0">
+                <Button Grid.Row="0" Grid.Column="0" x:Name="SceneTabButton" Text="Scene" Clicked="OnSceneTabClicked"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+                <Button Grid.Row="0" Grid.Column="1" x:Name="ObjectsTabButton" Text="Objects" Clicked="OnObjectsTabClicked"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+                <Button Grid.Row="0" Grid.Column="2" x:Name="DecorTabButton" Text="Decor" Clicked="OnDecorTabClicked"
+                        BackgroundColor="Transparent"
+                        TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
+                <BoxView Grid.Row="1" Grid.Column="0" x:Name="SceneTabUnderline" IsVisible="False"
+                         Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
+                <BoxView Grid.Row="1" Grid.Column="1" x:Name="ObjectsTabUnderline" IsVisible="False"
+                         Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
+                <BoxView Grid.Row="1" Grid.Column="2" x:Name="DecorTabUnderline" IsVisible="False"
+                         Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"/>
+            </Grid>
 
         <!--
-            Vertical scrolling on short viewports — this popup has more
-            controls than GenerateMazePopup and would otherwise extend
-            off-screen on phone landscape / smaller phone-portrait. The
-            ScrollView is bounded by `MaximumHeightRequest`: content
-            shorter than that doesn't scroll (the popup stays at its
-            natural height), longer content scrolls inside the cap.
+            Vertical scrolling on short viewports — only the active tab's
+            panel lives inside this ScrollView, so a tall panel scrolls
+            while the title, tab strip, time limit and buttons stay
+            anchored. The ScrollView is bounded by `MaximumHeightRequest`
+            (via the * Grid row): content shorter than that doesn't
+            scroll.
 
             `HorizontalOptions="Center"` prevents the ScrollView from
             claiming Fill on the horizontal axis. Without it, ScrollView
@@ -43,7 +101,7 @@
             window width while GenerateMazePopup (no ScrollView) sized
             naturally to its content's MinimumWidthRequest.
         -->
-        <ScrollView MaximumHeightRequest="600" HorizontalOptions="Center">
+        <ScrollView x:Name="FormScrollView" Grid.Row="2" HorizontalOptions="Center">
         <!--
             No `MinimumWidthRequest` floor — the layout sizes to its
             natural content width on every platform, which is typically
@@ -51,91 +109,117 @@
             The Border above still caps the upper end at
             `MaximumWidthRequest="320"` for desktop.
         -->
-        <VerticalStackLayout Spacing="6">
+        <Grid>
 
-            <!-- Title. WordWrap so a long maze name wraps onto a second
-                 line inside the popup width instead of pushing the
-                 popup wider / clipping at the screen edge. -->
-            <Label x:Name="TitleLabel"
-                   Text="Play 3D"
-                   FontSize="18"
-                   FontAttributes="Bold"
-                   HorizontalTextAlignment="Center"
-                   HorizontalOptions="Fill"
-                   LineBreakMode="WordWrap"
-                   Margin="0,0,0,4"/>
+            <!-- Scene tab: sky + wall appearance -->
+            <VerticalStackLayout x:Name="SceneTab" Spacing="12">
+                <!-- Sky -->
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Sky"/>
+                    <Picker x:Name="SkyPicker"/>
+                </VerticalStackLayout>
 
-            <!-- Sky -->
-            <VerticalStackLayout Spacing="4">
-                <Label Text="Sky"/>
-                <Picker x:Name="SkyPicker"/>
+                <!-- Quadrant wall types -->
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox x:Name="QuadrantWallTypesCheck" CheckedChanged="OnQuadrantWallTypesChanged"/>
+                    <Label Text="Quadrant wall types" VerticalOptions="Center"/>
+                </HorizontalStackLayout>
+
+                <!-- Wall texture -->
+                <VerticalStackLayout x:Name="WallTextureStack" Spacing="4">
+                    <Label x:Name="WallTextureLabel" Text="Wall texture"/>
+                    <Picker x:Name="WallTexturePicker"/>
+                </VerticalStackLayout>
+
+                <!-- Varied wall tints -->
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox x:Name="WallTintCheck"/>
+                    <Label x:Name="WallTintLabel" Text="Varied wall tints" VerticalOptions="Center"/>
+                </HorizontalStackLayout>
             </VerticalStackLayout>
 
-            <!-- Quadrant wall types -->
-            <HorizontalStackLayout Spacing="8">
-                <CheckBox x:Name="QuadrantWallTypesCheck" CheckedChanged="OnQuadrantWallTypesChanged"/>
-                <Label Text="Quadrant wall types" VerticalOptions="Center"/>
-            </HorizontalStackLayout>
+            <!-- Objects tab: object styles. Inactive tabs stay measured (Opacity 0
+                 + InputTransparent) rather than collapsed via IsVisible, so the
+                 content area always sizes to the largest tab — the popup doesn't
+                 resize between tabs and narrower tabs don't appear centre-aligned. -->
+            <VerticalStackLayout x:Name="ObjectsTab" Spacing="12" Opacity="0" InputTransparent="True">
+                <!-- Door style -->
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Door style"/>
+                    <Picker x:Name="DoorStylePicker"/>
+                </VerticalStackLayout>
 
-            <!-- Wall texture -->
-            <VerticalStackLayout x:Name="WallTextureStack" Spacing="4">
-                <Label x:Name="WallTextureLabel" Text="Wall texture"/>
-                <Picker x:Name="WallTexturePicker"/>
+                <!-- Key holder -->
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Key holder"/>
+                    <Picker x:Name="KeyHolderPicker"/>
+                </VerticalStackLayout>
+
+                <!-- Enemy type -->
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Enemy type"/>
+                    <Picker x:Name="EnemyTypePicker"/>
+                </VerticalStackLayout>
+
+                <!-- Health style -->
+                <VerticalStackLayout Spacing="4">
+                    <Label Text="Health style"/>
+                    <Picker x:Name="HealthStylePicker"/>
+                </VerticalStackLayout>
             </VerticalStackLayout>
 
-            <!-- Varied wall tints -->
-            <HorizontalStackLayout Spacing="8">
-                <CheckBox x:Name="WallTintCheck"/>
-                <Label x:Name="WallTintLabel" Text="Varied wall tints" VerticalOptions="Center"/>
-            </HorizontalStackLayout>
+            <!-- Decor tab: landmark toggles (inactive: measured but Opacity 0 + InputTransparent). -->
+            <VerticalStackLayout x:Name="DecorTab" Spacing="12" Opacity="0" InputTransparent="True">
+                <!-- Dead-end objects -->
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox x:Name="DeadEndObjectsCheck"/>
+                    <Label Text="Dead-end objects" VerticalOptions="Center"/>
+                </HorizontalStackLayout>
 
-            <!-- Dead-end objects -->
-            <HorizontalStackLayout Spacing="8">
-                <CheckBox x:Name="DeadEndObjectsCheck"/>
-                <Label Text="Dead-end objects" VerticalOptions="Center"/>
-            </HorizontalStackLayout>
+                <!-- Wall decorations -->
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox x:Name="WallDecorationsCheck"/>
+                    <Label Text="Sparse wall decorations" VerticalOptions="Center"/>
+                </HorizontalStackLayout>
 
-            <!-- Wall decorations -->
-            <HorizontalStackLayout Spacing="8">
-                <CheckBox x:Name="WallDecorationsCheck"/>
-                <Label Text="Sparse wall decorations" VerticalOptions="Center"/>
-            </HorizontalStackLayout>
+                <!-- Floor junction markers -->
+                <HorizontalStackLayout Spacing="8">
+                    <CheckBox x:Name="FloorAccentsCheck"/>
+                    <Label Text="Floor junction markers" VerticalOptions="Center"/>
+                </HorizontalStackLayout>
+            </VerticalStackLayout>
 
-            <!-- Floor junction markers -->
-            <HorizontalStackLayout Spacing="8">
-                <CheckBox x:Name="FloorAccentsCheck"/>
-                <Label Text="Floor junction markers" VerticalOptions="Center"/>
-            </HorizontalStackLayout>
+        </Grid>
+        </ScrollView>
 
-            <!-- Time limit -->
-            <VerticalStackLayout Spacing="4">
+            <!-- Time limit + validation error (pinned below the panels so
+                 a timer error is never hidden on an inactive tab). -->
+            <VerticalStackLayout Grid.Row="3" Spacing="4">
                 <Label Text="Time limit (seconds)"/>
                 <Entry x:Name="TimerEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
+                <Label x:Name="ErrorLabel"
+                       TextColor="{AppThemeBinding Light={StaticResource Fail}, Dark={StaticResource FailDark}}"
+                       FontSize="12"
+                       IsVisible="False"
+                       HorizontalOptions="Center"/>
             </VerticalStackLayout>
 
-            <!-- Validation error -->
-            <Label x:Name="ErrorLabel"
-                   TextColor="{AppThemeBinding Light={StaticResource Fail}, Dark={StaticResource FailDark}}"
-                   FontSize="12"
-                   IsVisible="False"
-                   HorizontalOptions="Center"/>
-
-            <!-- Buttons. Centred HorizontalStackLayout with explicit
-                 button widths so they don't span the full popup width
-                 (which would make a 4-char "Play" button absurdly
-                 wide). 100 px each is enough for the longest label
-                 ("Cancel") at the default button font size. -->
-            <HorizontalStackLayout HorizontalOptions="Center"
-                                   Spacing="10"
-                                   Margin="0,4,0,0">
+            <!-- Buttons (pinned outside the ScrollView so Cancel/Play
+                 stay visible). Centred with explicit button widths so
+                 they don't span the full popup width (which would make
+                 a 4-char "Play" button absurdly wide). 100 px each is
+                 enough for the longest label ("Cancel") at the default
+                 button font size. -->
+            <HorizontalStackLayout Grid.Row="4"
+                                   HorizontalOptions="Center"
+                                   Spacing="10">
                 <Button x:Name="CancelButton" Text="Cancel" WidthRequest="100" Clicked="OnCancelClicked"
                         BackgroundColor="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}"
                         TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
                 <Button x:Name="PlayButton" Text="Play" WidthRequest="100" Clicked="OnPlayClicked"/>
             </HorizontalStackLayout>
 
-        </VerticalStackLayout>
-        </ScrollView>
+        </Grid>
     </Border>
 
 </toolkit:Popup>

@@ -99,6 +99,49 @@ pub fn validate_maze_cell_count(rows: usize, cols: usize, max: usize) -> Result<
     Ok(())
 }
 
+/// Validates that the number of `'K'` (key) and `'D'` (door) cells in
+/// `grid` fits within `max`. Each `MazeStore` impl calls this from
+/// `create_maze` / `update_maze` to refuse over-cap mazes before they
+/// reach storage — the key-aware solver tracks each `'K'` and `'D'` as
+/// a bit in a `u32` mask, so its search is exponential in their sum and
+/// it refuses to solve above `max::maze::MAX_TOTAL_FEATURES`. The cap
+/// here mirrors that limit so a saved maze can always be solved.
+///
+/// # Returns
+///
+/// `Ok(())` if `keys + doors ≤ max`,
+/// `Err(Error::MazeHasTooManyFeatures { keys, doors, max })` otherwise.
+///
+/// # Examples
+///
+/// Probe a grid with 5 keys + 4 doors against an 16-feature cap
+/// ```
+/// use storage::validation::validate_maze_feature_count;
+///
+/// let grid: Vec<Vec<char>> = vec![
+///     vec!['S', 'K', 'D', 'K', 'F'],
+///     vec!['K', 'D', 'K', 'D', 'K'],
+/// ];
+/// assert!(validate_maze_feature_count(&grid, 16).is_ok());
+/// ```
+pub fn validate_maze_feature_count(grid: &[Vec<char>], max: usize) -> Result<(), Error> {
+    let mut keys = 0usize;
+    let mut doors = 0usize;
+    for row in grid {
+        for &ch in row {
+            match ch {
+                'K' => keys += 1,
+                'D' => doors += 1,
+                _ => {}
+            }
+        }
+    }
+    if keys + doors > max {
+        return Err(Error::MazeHasTooManyFeatures { keys, doors, max });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,5 +251,49 @@ mod tests {
         let err = validate_maze_cell_count(usize::MAX, 2, 3_600)
             .expect_err("overflow should not bypass the cap");
         assert!(matches!(err, Error::MazeHasTooManyCells { .. }));
+    }
+
+    // ─── validate_maze_feature_count ─────────────────────────────────────
+
+    fn grid_with_keys_and_doors(keys: usize, doors: usize) -> Vec<Vec<char>> {
+        let mut row: Vec<char> = std::iter::repeat_n('K', keys).collect();
+        row.extend(std::iter::repeat_n('D', doors));
+        vec![row]
+    }
+
+    #[test]
+    fn validate_maze_feature_count_accepts_at_cap() {
+        validate_maze_feature_count(&grid_with_keys_and_doors(8, 8), 16)
+            .expect("at-cap should pass");
+    }
+
+    #[test]
+    fn validate_maze_feature_count_accepts_just_under_cap() {
+        let grid: Vec<Vec<char>> = vec![vec!['K', 'D', 'K', 'D', 'K', 'D']]; // 3+3=6
+        validate_maze_feature_count(&grid, 16).expect("under-cap should pass");
+    }
+
+    #[test]
+    fn validate_maze_feature_count_rejects_over_cap() {
+        let err = validate_maze_feature_count(&grid_with_keys_and_doors(9, 8), 16)
+            .expect_err("over-cap should fail");
+        match err {
+            Error::MazeHasTooManyFeatures { keys, doors, max } => {
+                assert_eq!(keys, 9);
+                assert_eq!(doors, 8);
+                assert_eq!(max, 16);
+            }
+            other => panic!("expected MazeHasTooManyFeatures, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_maze_feature_count_ignores_other_cells() {
+        // S/F/W/' ' don't count toward the budget.
+        let grid: Vec<Vec<char>> = vec![
+            vec!['S', ' ', 'W', 'F'],
+            vec![' ', 'W', ' ', ' '],
+        ];
+        validate_maze_feature_count(&grid, 0).expect("no K/D so any cap passes");
     }
 }

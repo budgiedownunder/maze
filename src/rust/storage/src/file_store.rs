@@ -16,7 +16,7 @@ use utils::file::{delete_dir, delete_file, dir_exists, file_exists};
 use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
 use crate::{
     file_store_migration,
-    validation::{validate_email_format, validate_maze_cell_count, validate_user_fields},
+    validation::{validate_email_format, validate_maze_cell_count, validate_maze_feature_count, validate_user_fields},
     Error, MazeItem, Store,
 };
 
@@ -2057,7 +2057,7 @@ fn generate_now_millis() -> chrono::DateTime<chrono::Utc> {
 #[async_trait]
 impl MazeStore for FileStore {
     /// Returns the cell-count ceiling enforced by this file store on
-    /// create/update — see [`MAX_MAZE_CELLS`].
+    /// create/update — see [`crate::MAX_MAZE_CELLS`].
     ///
     /// # Examples
     ///
@@ -2140,6 +2140,7 @@ impl MazeStore for FileStore {
             maze.definition.col_count(),
             MAX_MAZE_CELLS,
         )?;
+        validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
         // Reject case-insensitive name collision before writing — the
         // `write_maze_file` overwrite check uses `Path::exists`, which
         // is case-insensitive on NTFS/APFS but case-sensitive on ext4.
@@ -2273,6 +2274,7 @@ impl MazeStore for FileStore {
             maze.definition.col_count(),
             MAX_MAZE_CELLS,
         )?;
+        validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
         if !self.maze_exists(owner, &maze.id) {
             return Err(Error::MazeIdNotFound(maze.id.to_string()));
         }
@@ -2719,7 +2721,7 @@ impl TokenStore for FileStore {
         Ok(token)
     }
 
-    /// Removes every outstanding [`TokenPurpose::EmailVerification`]
+    /// Removes every outstanding [`data_model::TokenPurpose::EmailVerification`]
     /// token belonging to `user_id` whose `target_email` matches the
     /// supplied address (case-insensitive). Used by the verification
     /// re-send handler so re-issuing supersedes prior tokens.

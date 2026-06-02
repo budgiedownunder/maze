@@ -27,7 +27,7 @@ The player starts at the start cell facing the first open neighbour cycling thro
 | `Q` | Tilt camera up (clamped at +45°) |
 | `E` | Tilt camera down (clamped at -90°, looking at the floor) |
 | `Space` | Pause / resume (freezes the timer and movement; "PAUSED" overlay shows) |
-| `Escape` | Quit |
+| `Escape` | Quit (native desktop). In the browser there's nothing to quit, so `Escape` toggles pause / resume like `Space`. |
 
 Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. Turning and movement are gated by an animation lock, but pitch input is allowed to update during these animations (though not after winning).
 
@@ -39,10 +39,12 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Per-cell wall tint variation** — pick one of six emissive variants for for wall panels, so different corridor sections have different shades. Bypassed when **per-quadrant wall material variation** is on for that difficulty.
 - **Configurable wall texture** — when **per-quadrant wall material variation** is off, the chosen wall texture (one of brick / dressed stone / wood / cobblestone) applies uniformly across the maze, with the per-cell tint variation still riding on top. Selected per difficulty via `[game.play3d.<difficulty>] wall_type`; default `brick`. Bypassed when **wall material variation** is on (same gating as `wall_tint`).
 - **Per-quadrant wall material variation** — splits the maze into a 2×2 NW/NE/SW/SE grid; each quadrant renders with its own wall material (brick / dressed stone / wood / cobblestone), with the quadrant-to-kind mapping permuted by the seed so different seeds rotate which quadrant gets which material. Supersedes the per-cell tint variation AND the configured `wall_type` when on. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_material_variation`. The wood and cobblestone textures are RGB-coloured at 128×128 with per-plank / per-cobble tone palettes (honey / oak / walnut / dark-walnut for wood; warm-light, warm-mid, brown-weathered, mossy-green for cobblestone); brick and dressed stone are still greyscale at 64×64 with emissive-tinted chromaticity.
-- **Atmospheric sky modes** — `night` (dense stars on deep indigo), `sunrise` (soft warm pink with medium stars), `day` (sky-blue with broken white/grey clouds), and `sunset` (warm orange with sparse dark clouds and sparse stars). Each mode renders a procedural panoramic dome around the player (gradient + cloud blobs baked into the dome texture; stars are tiny 3D entities parented to the dome so they stay angularly fixed in the sky as the player walks) and ships a paired ambient + directional light preset so the corridors visibly feel like the chosen time of day. Selected per difficulty via `[game.play3d.<difficulty>] sky_type`; default `night`.
+- **Atmospheric sky modes** — `night` (dense stars on deep indigo), `sunrise` (soft warm pink with medium stars), `day` (sky-blue with broken white/grey clouds), `sunset` (warm orange with sparse dark clouds and sparse stars), and two enclosed modes, `dungeon` and `chamber`. The open-air modes each render a procedural panoramic dome around the player (gradient + cloud blobs baked into the dome texture; stars are tiny 3D entities parented to the dome so they stay angularly fixed in the sky as the player walks) and ship a paired ambient + directional light preset so the corridors visibly feel like the chosen time of day. The enclosed modes instead cap every passable cell with a ceiling tile at the top of the walls and dim the lighting, sealing the player in (the dome behind is near-black so the grout gaps between tiles read as dark seams): `dungeon` uses a hewn dark-rock ceiling (a tileable rock-face texture tinted by a dim emissive), while `chamber` uses the cell's own wall material so the maze reads as a finished, built interior (brick maze → brick ceiling, timber maze → timber ceiling). Each ceiling tile is inset so a grid of dark grout lines separates adjacent tiles — that structure is what keeps it reading as a solid coffered ceiling rather than open sky. Selected per difficulty via `[game.play3d.<difficulty>] sky_type`; default `night`.
 - **Dead-end landmark objects** — every dead-end cell (passable cell with exactly one open neighbour, excluding start / finish) gets a distinctive landmark — a brazier, urn, broken pillar, or chest — picked by hashing `(row, col, seed)`. Each landmark is a composite of several scaled primitives (a brazier is column + bowl + halo with a sin-flicker on the bowl glow; an urn is a stacked-cylinder vase silhouette with two darker pattern bands wrapping the belly; a pillar is base + shaft + capital with vertical perimeter grooves around the discs; a chest is body + rounded lid + leather binding cross on every side face + lid-top binding + front-face keyhole). Every visible sub-mesh ships paired with a slightly-larger black sibling using the inverted-hull outline trick (`cull_mode: Face::Front`) so each part reads as distinct from its neighbours and from the corridor walls behind it. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] dead_end_objects`.
 - **Sparse wall decorations** — ~1 in 10 wall panels gets a decorative emissive decoration (vent grate, faded poster, rune glyph, or glowing glass) projected on its inside face. Placement and kind are seeded from `(row, col, face, seed)` so the same maze always decorates the same walls. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] wall_decorations`.
 - **Floor accents at junctions** — every 3- or 4-way junction cell (passable cell with more than two open neighbours, excluding start / finish) gets a single flat accent on its floor — moss, cracked tile, mosaic, or arcane sigil — picked by hashing `(row, col, seed)`. Reinforces "this is a decision point" memory. Each difficulty can toggle this via `[game.play3d.<difficulty>.landmarks] floor_accents`.
+- **Keys, doors & a bag** — `K` cells render a glowing gold key — a ringed bow, shaft, and teeth, each paired with a black inverted-hull outline so the parts read distinctly — floating, bobbing, and slowly spinning above a stone pedestal. Walk onto one to auto-collect it — the holder rises and shrinks away in a brief flourish — adding it to the **bag HUD** (a row of key icons along the bottom of the screen, which grows on pickup and shrinks when a key is spent). `D` cells are **doors** rendered in the surrounding cell's wall material, marked with a brass keyhole and eligible for the same sparse wall decorations as ordinary wall panels. A door cell is locked — impassable from every side — until you hold forward against it while carrying a key, which consumes the key and opens it over ~1 s, permanently. How a door *opens* depends on the cell's shape: a **straight corridor** (two open edges on opposing sides) gets a single leaf that **swings** on a hinge; any other topology (corner, T-junction, open area) seals **each** open edge with a leaf that **slides down into the floor**, since a swing would sweep awkwardly through the open space. The built-in demo maze places a key in a dead-end and a door guarding the finish, so the mechanic is playable from `cargo run` with no maze authoring.
+- **Enemies, HP & health pickups** — `E` cells spawn a moving enemy rig that bobs in place and chases the player along a wall-aware BFS shortest path at a fixed move period (default 1500 ms per cell, `N > E > S > W` tie-break on equal-distance choices). Two visual rigs are selectable via `GameConfig.enemy_type`: **Goblin** (default — green body with painted ear-to-ear mouth and per-side eyeballs) and **Ghost** (translucent floating figure with a hemisphere head, truncated-cone body, rippling sheet hem, and a glowing-red eyeball inside each arch-shaped eye). Same-cell collisions — whether the player walks onto an enemy's cell or an enemy steps onto the player's cell — fire `GameEvent::PlayerDamaged` and a brief red damage-flash overlay; the **HP HUD** (top-left, "LIFE" label + a row of red heart icons that dim as HP drops) is rebuilt on every change. Reaching 0 HP routes through the same lose path as a wall-clock timeout — movement freezes and the lose overlay appears. `H` cells spawn a floating health pickup with a gentle scale pulse + Y-spin idle, selectable via `GameConfig.health_style`: **Heart** (default — two upper sphere lobes + a flat-faced downward pyramid tip whose corners tuck flush into the lobes) and **Potion** (capped bottle with a glowing liquid). Auto-pickup on walk-over: when `hp < max_hp` the cell clears + a `PlayerHealed` event fires + HP increments; when `hp == max_hp` the cell stays + a `PlayerNotHealed` event surfaces an "already at full health" hint so the host can flash it.
 - **Back-edge camera viewpoint** — instead of standing at the dead-centre of each cell, the camera sits behind the cell centre in the direction opposite the player's facing. This brings perpendicular openings (corridors on the left or right of the current cell) into a glancing angle inside the Field of View (FOV) rather than leaving them at 90° off-axis, and keeps the wall directly ahead a comfortable distance away. Turning the camera in place orbits it to the back edge relative to the new facing, so the player always reads as standing at the "back" of their cell looking forward.
 - **Adaptive FOV** — the camera's vertical FOV is configured at 60° for the reference 16:9 viewport (≈91° horizontal at that aspect). On viewports narrower than the reference (phone portrait, tall windows), the vertical FOV grows so the horizontal FOV stays constant — a perpendicular opening that's visible on desktop is still visible on a phone in portrait. Capped at 100° vertical to prevent fisheye on extreme-portrait viewports.
 - Floor grid lines at cell boundaries for orientation feedback.
@@ -51,7 +53,7 @@ Pitch is updated continuously at a fixed angular rate while `Q` or `E` is held. 
 - **Minimap overlay** (top-right corner) — fixed viewport centred on the player; only explored cells and their immediate neighbours are revealed. The whole panel re-anchors to the window's top-right corner on resize.
 - **Win overlay** — on reaching the finish cell, movement stops and a "You Win!" panel appears centred on screen.
 - Gold-leaf rain — on win, small gold leaf sprites spawn continuously across the full screen width and fall with gentle rotation and drift, celebrating completion.
-- **Lose overlay** — on not completing in time, movement stops and a "You Lose!" panel appears centred on screen.
+- **Lose overlay** — on not completing in time, or on reaching 0 HP from enemy collisions, movement stops and a "You Lose!" panel appears centred on screen.
 - Rain-Lightning — on lose, rain sprites spawn continuously across the full screen width and fall accompanied by periodic lightning flashes.
 
 ## Getting Started
@@ -91,9 +93,11 @@ The crate is organised into focused per-concern modules under `src/`:
 src/
 ├── lib.rs                  module decls + public re-exports + build_app
 ├── palette.rs              cross-module colour constants
-├── state.rs                shared state / config types (GameConfig, GameState, etc.)
+├── state.rs                shared state / config types (GameConfig, EnemyType, HealthStyle, GameState, etc.)
 ├── images.rs               generic Bevy Image factory (sampler-tuned)
-├── movement.rs             input + animation + win-detection + quit
+├── movement.rs             input + animation + quit
+├── tick.rs                 central game_tick_system + damage-flash overlay system
+├── outcome.rs              outcome_watcher_system (win / lose detection from MazeGame state)
 ├── world/                  3D scene construction
 │   ├── mod.rs              spawn_world orchestrator + grid helpers
 │   ├── textures/           shared procedural world textures
@@ -101,6 +105,7 @@ src/
 │   │   ├── brick.rs        make_brick_texture (consumed by walls)
 │   │   ├── cobblestone.rs  make_cobblestone_texture (wall material variant)
 │   │   ├── dressed_stone.rs make_dressed_stone_texture (wall material variant)
+│   │   ├── rock.rs         make_rock_texture (tileable rock face for the dungeon ceiling)
 │   │   ├── tile.rs         make_tile_texture (consumed by floor tile/start/finish)
 │   │   └── wood.rs         make_wood_texture (wall material variant)
 │   ├── floor/              floor cells, grid lines, start, finish
@@ -128,44 +133,74 @@ src/
 │   │       ├── mosaic.rs   concentric-mosaic texture + material
 │   │       └── sigil.rs    pentagram-sigil texture + material
 │   ├── objects/            3D physical objects placed in the world
-│   │   ├── mod.rs          ObjectAssets bundle + spawn_objects_for_cell
+│   │   ├── mod.rs          ObjectAssets bundle + spawn_objects_for_cell (finish, dead-end, key holders, doors, enemies, health)
 │   │   ├── finish/         objects placed at the finish cell
 │   │   │   ├── mod.rs      FinishAssets bundle + spawn_finish_for_cell ('F' predicate)
 │   │   │   └── orb.rs      FinishOrb + orb mesh/material/light + orb_system
-│   │   └── dead_end/       dead-end landmark objects (placement seeded)
-│   │       ├── mod.rs      DeadEndObject + DeadEndAssets + dispatcher + hash + is_dead_end
-│   │       ├── brazier.rs  brazier: stone column + glow + spawn helper
-│   │       ├── urn.rs      urn material + spawn helper
-│   │       ├── pillar.rs   broken-pillar material + spawn helper
-│   │       └── chest.rs    chest material + spawn helper
-│   └── sky/                sky / atmosphere modes
-│       ├── mod.rs          spawn_sky dispatcher + shared util fns (PRNG, sRGB byte conv)
-│       ├── dome.rs         inverted-sphere dome + camera-follow system
-│       ├── procedural.rs   sky-dome backdrop (gradient baker + make_sky_texture orchestrator)
-│       ├── clouds.rs       cloud blobs painted into the dome texture (CloudSpec + paint)
-│       ├── stars.rs        3D entity starfield (tiny emissive spheres, parented to dome)
-│       ├── day/mod.rs      bright sky-blue with broken clouds
-│       ├── night/mod.rs    deep indigo with dense stars
-│       ├── sunrise/mod.rs  soft warm pink with medium stars
-│       └── sunset/mod.rs   warm orange with sparse clouds + sparse stars
-├── hud/                    top-screen overlays
+│   │   ├── dead_end/       dead-end landmark objects (placement seeded)
+│   │   │   ├── mod.rs      DeadEndObject + DeadEndAssets + dispatcher + hash + is_dead_end
+│   │   │   ├── brazier.rs  brazier: stone column + glow + spawn helper
+│   │   │   ├── urn.rs      urn material + spawn helper
+│   │   │   ├── pillar.rs   broken-pillar material + spawn helper
+│   │   │   └── chest.rs    chest material + spawn helper
+│   │   ├── key_holder/     'K' cells: pedestal + glowing outlined floating key
+│   │   │   └── mod.rs      KeyMarker / FloatingKey + assets + spawn + key_holder_system
+│   │   ├── door/           'D' cells: door leaves (a view of the door's lock state)
+│   │   │   ├── mod.rs      DoorMarker + topology dispatch + tick / animation systems
+│   │   │   ├── panel.rs    the wall-material door slab
+│   │   │   ├── keyhole.rs  brass lock plate + dark keyhole cutout
+│   │   │   ├── swing.rs    swinging-leaf rig (straight corridors)
+│   │   │   └── slide.rs    sliding-leaf rig (corners / junctions; retracts into floor)
+│   │   ├── enemy/          'E' cells: a moving rig that chases the player
+│   │   │   ├── mod.rs      EnemyMarker + EnemyAssets dispatcher (by GameConfig.enemy_type) + shared animation system
+│   │   │   ├── goblin.rs   default goblin rig: green body with painted mouth and per-side eyeballs
+│   │   │   └── ghost.rs    ghost rig: hemisphere head + truncated-cone body + rippling hem + arch eyes with glowing-red pupils
+│   │   └── health/         'H' cells: floating pickup with idle pulse + spin
+│   │       ├── mod.rs      HealthMarker + HealthAssets dispatcher (by GameConfig.health_style) + shared animation system
+│   │       ├── heart.rs    default heart rig: two upper sphere lobes + flat-faced downward pyramid tip flush with the lobes
+│   │       └── potion.rs   potion rig: capped bottle with a glowing liquid
+│   ├── sky/                sky / atmosphere modes
+│   │   ├── mod.rs          spawn_sky dispatcher + shared util fns (PRNG, sRGB byte conv)
+│   │   ├── dome.rs         inverted-sphere dome + camera-follow system
+│   │   ├── procedural.rs   sky-dome backdrop (gradient baker + make_sky_texture orchestrator)
+│   │   ├── clouds.rs       cloud blobs painted into the dome texture (CloudSpec + paint)
+│   │   ├── stars.rs        3D entity starfield (tiny emissive spheres, parented to dome)
+│   │   ├── day/mod.rs      bright sky-blue with broken clouds
+│   │   ├── night/mod.rs    deep indigo with dense stars
+│   │   ├── sunrise/mod.rs  soft warm pink with medium stars
+│   │   ├── sunset/mod.rs   warm orange with sparse clouds + sparse stars
+│   │   ├── dungeon/mod.rs  enclosed: near-black cool dome + dim light (pairs with roof/dungeon.rs)
+│   │   └── chamber/mod.rs  enclosed: near-black warm dome + dim light (pairs with roof/chamber.rs)
+│   └── roof/               per-cell ceiling for the enclosed sky types
+│       ├── mod.rs          RoofCell + shared inset-tile mesh + per-sky-type dispatch
+│       ├── dungeon.rs      dark-rock ceiling material (textures/rock.rs)
+│       └── chamber.rs      ceiling in the cell's wall material
+├── hud/                    HUD overlays
 │   ├── mod.rs              module declarations
 │   ├── minimap.rs          top-right minimap overlay
 │   ├── statusbar.rs        top-left mode label
-│   └── clock.rs            top-centre countdown clock + lose-state trigger
+│   ├── clock.rs            top-centre countdown clock + lose-state trigger
+│   ├── hp.rs               top-left "LIFE" label + red-heart icon row, rebuilt on every HP change
+│   └── bag/                bottom-centre inventory HUD
+│       ├── mod.rs          BagHud + bag_hud_system (icon row, rebuilt on change)
+│       └── key.rs          procedural key-icon texture
 └── overlays/               full-screen modal layers
     ├── mod.rs              module declarations
     ├── title.rs            title-screen splash
     ├── win.rs              win panel + gold-leaf rain
-    ├── lose.rs             lose panel + rain + lightning
+    ├── lose.rs             lose panel + rain + lightning (timer expiry or HP = 0)
     └── pause.rs            paused overlay
 ```
 
 `spawn_world` is a thin orchestrator: it resolves the maze source into
 `GameState` + `GameClock`, spawns the camera and the sky, builds per-domain
 asset bundles (`walls`, `floor`, `decorations`, `objects`), runs a per-cell
-loop calling each domain's `spawn_*_for_cell`, and finishes with HUD +
+loop calling each domain's `spawn_*_for_cell` (including the door leaves,
+enemy rigs, and health-pickup rigs, which are spawned alongside the loop
+because they borrow either the cell's wall material or the per-config rig
+choice), and finishes with the HUD (clock, status bar, minimap, HP, bag) +
 paused-overlay spawns. The only items re-exported through `lib.rs` are
 `build_app`, `generate_maze_json`, and the public types `GameConfig`,
-`Landmarks`, `GameOutcome`, `GameResult`. Everything else is `pub(crate)` or
-fully private.
+`Landmarks`, `SkyType`, `WallType`, `EnemyType`, `HealthStyle`,
+`GameOutcome`, `GameResult`. Everything else is `pub(crate)` or fully
+private.

@@ -206,6 +206,8 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
     expect(payload.landmarks.wallDecorations).toBe(true)
     expect(payload.landmarks.floorAccents).toBe(true)
     expect(payload.skyType).toBe('night')
+    expect(payload.enemyType).toBe('goblin')
+    expect(payload.healthStyle).toBe('heart')
     expect(payload.timerSeconds).toBe(60)
     expect(payload.mode).toBe('My Maze')
     expect(typeof payload.mazeJson).toBe('string')
@@ -221,6 +223,10 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
         JSON.stringify({
           skyType: 'sunset',
           wallType: 'wood',
+          doorStyle: 'portcullis',
+          keyHolder: 'chest',
+          enemyType: 'ghost',
+          healthStyle: 'potion',
           wallTint: true,
           wallMaterialVariation: false,
           deadEndObjects: false,
@@ -234,6 +240,10 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
     const payload = await capturedPayload(page)
     expect(payload.skyType).toBe('sunset')
     expect(payload.wallType).toBe('wood')
+    expect(payload.doorStyle).toBe('portcullis')
+    expect(payload.keyHolder).toBe('chest')
+    expect(payload.enemyType).toBe('ghost')
+    expect(payload.healthStyle).toBe('potion')
     expect(payload.timerSeconds).toBe(240)
     expect(payload.landmarks.wallTint).toBe(true)
     expect(payload.landmarks.wallMaterialVariation).toBe(false)
@@ -287,6 +297,10 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
       id: 'test-id',
       skyType: 'day',
       wallType: 'cobblestone',
+      doorStyle: 'dissolve',
+      keyHolder: 'floating_key',
+      enemyType: 'ghost',
+      healthStyle: 'potion',
       wallTint: '1',
       wallMaterialVariation: '0',
       deadEndObjects: '0',
@@ -299,6 +313,10 @@ test.describe('Game host user-edited maze launch (?id=...)', () => {
     // URL wins for every field.
     expect(payload.skyType).toBe('day')
     expect(payload.wallType).toBe('cobblestone')
+    expect(payload.doorStyle).toBe('dissolve')
+    expect(payload.keyHolder).toBe('floating_key')
+    expect(payload.enemyType).toBe('ghost')
+    expect(payload.healthStyle).toBe('potion')
     expect(payload.timerSeconds).toBe(300)
     expect(payload.landmarks.wallTint).toBe(true)
     expect(payload.landmarks.wallMaterialVariation).toBe(false)

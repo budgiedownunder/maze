@@ -1,6 +1,8 @@
+pub(crate) mod chamber;
 pub(crate) mod clouds;
 pub(crate) mod day;
 pub(crate) mod dome;
+pub(crate) mod dungeon;
 pub(crate) mod night;
 pub(crate) mod procedural;
 pub(crate) mod stars;
@@ -55,5 +57,7 @@ pub(crate) fn spawn_sky(
         SkyType::Sunrise => sunrise::spawn_sunrise(commands, meshes, materials, images),
         SkyType::Day => day::spawn_day(commands, meshes, materials, images),
         SkyType::Sunset => sunset::spawn_sunset(commands, meshes, materials, images),
+        SkyType::Dungeon => dungeon::spawn_dungeon(commands, meshes, materials, images),
+        SkyType::Chamber => chamber::spawn_chamber(commands, meshes, materials, images),
     }
 }

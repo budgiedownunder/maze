@@ -60,17 +60,28 @@ namespace Maze.Maui.App.Views
         /// <param name="finishRow">Default finish cell row (0-based)</param>
         /// <param name="finishCol">Default finish cell column (0-based)</param>
         /// <param name="minSolutionLength">Default minimum solution length</param>
+        /// <param name="doorCount">Default number of real path doors to auto-place (0 = none)</param>
+        /// <param name="spareDoors">Default number of decoy doors to plant (0 = none)</param>
+        /// <param name="spareKeys">Default number of spare keys to plant (0 = none)</param>
+        /// <param name="enemyCount">Default number of enemies to auto-place (0 = none)</param>
+        /// <param name="healthCount">Default number of health pickups to auto-place (0 = none)</param>
         /// <param name="maxMazeCells">Server-reported cell-count cap (<c>AppFeatures.MaxMazeCells</c>); <c>null</c> means no cap</param>
         /// <param name="generationError">Optional error message from a previous generation attempt, displayed inline</param>
         public GenerateMazePopup(uint rows, uint cols,
             uint startRow, uint startCol, uint finishRow, uint finishCol,
-            uint minSolutionLength, int? maxMazeCells = null, string? generationError = null)
+            uint minSolutionLength,
+            uint doorCount = 0, uint spareDoors = 0, uint spareKeys = 0,
+            uint enemyCount = 0, uint healthCount = 0,
+            int? maxMazeCells = null, string? generationError = null)
         {
             InitializeComponent();
             _maxMazeCells = maxMazeCells;
 
             RowsEntry.Text = rows.ToString();
             ColsEntry.Text = cols.ToString();
+            // Seed the clamp baselines so an Unfocused with no edit is a no-op.
+            _lastClampedRows = RowsEntry.Text;
+            _lastClampedCols = ColsEntry.Text;
 
             // Display start/finish as 1-based
             StartRowEntry.Text = (startRow + 1).ToString();
@@ -80,15 +91,42 @@ namespace Maze.Maui.App.Views
 
             MinSolutionLengthEntry.Text = minSolutionLength.ToString();
 
+            DoorCountEntry.Text = doorCount.ToString();
+            SpareDoorsEntry.Text = spareDoors.ToString();
+            SpareKeysEntry.Text = spareKeys.ToString();
+
+            EnemyCountEntry.Text = enemyCount.ToString();
+            HealthCountEntry.Text = healthCount.ToString();
+
             if (generationError is not null)
             {
                 ErrorLabel.Text = $"Generation failed: {generationError}";
                 ErrorLabel.IsVisible = true;
             }
 
+            // Start on the Size tab (its panel is visible in XAML; this sets the
+            // matching tab-button highlight).
+            SelectTab(GenerateTab.Size);
+
+            // Changing the grid dimensions resets start/finish to the usual
+            // top-left / bottom-right; only arm this after the prefill above so
+            // construction doesn't clobber the seeded start/finish positions.
+            _initialized = true;
+
             // Land focus on the first edit field. Deferred to the dispatcher so
             // the native handlers are attached by the time Focus() runs.
             Opened += (s, e) => Dispatcher.Dispatch(() => RowsEntry.Focus());
+
+            // Cap the popup body's maximum height to (almost) the host
+            // window height. Combined with the Grid's middle * row, this
+            // lets the inner ScrollView shrink while keeping the pinned
+            // title + Cancel/Generate row visible on a short window. On
+            // a tall window the cap is well above the natural content
+            // height, so the Border stays content-sized — popup doesn't
+            // inflate. Re-applied on window resize; unsubscribed when
+            // the popup closes. Same approach as Play3dCustomLaunchPopup.
+            Loaded += OnPopupLoaded;
+            Closed += OnPopupClosed;
 
 #if WINDOWS
             // Trap Tab / Shift+Tab so focus cycles inside the popup. CT.Maui v13
@@ -97,6 +135,46 @@ namespace Maze.Maui.App.Views
             // toolbar / page underneath.
             Loaded += OnLoadedWindows;
 #endif
+        }
+
+        // Margin between the host window height and the popup Border
+        // max height — leaves room for the OS title bar + popup chrome
+        // + a few px of breathing space so the popup never sits flush
+        // against the window edge. Conservative on the high side so
+        // the pinned button row never clips on any platform.
+        private const double PopupVerticalMarginPx = 80;
+        // Floor for the popup Border height — well below any plausible
+        // popup with title + a couple of form rows + buttons so the
+        // popup never collapses to unusable on extreme small windows.
+        private const double MinPopupHeightPx = 240;
+
+        private Microsoft.Maui.Controls.Window? _trackedWindow;
+
+        private void OnPopupLoaded(object? sender, EventArgs e)
+        {
+            UpdateRootBorderMaxHeight();
+            _trackedWindow = (Application.Current?.Windows.Count > 0 ? Application.Current.Windows[0] : null);
+            if (_trackedWindow is { } w)
+                w.SizeChanged += OnWindowSizeChanged;
+        }
+
+        private void OnPopupClosed(object? sender, EventArgs e)
+        {
+            if (_trackedWindow is { } w)
+            {
+                w.SizeChanged -= OnWindowSizeChanged;
+                _trackedWindow = null;
+            }
+        }
+
+        private void OnWindowSizeChanged(object? sender, EventArgs e) => UpdateRootBorderMaxHeight();
+
+        private void UpdateRootBorderMaxHeight()
+        {
+            var window = (Application.Current?.Windows.Count > 0 ? Application.Current.Windows[0] : null);
+            if (window is null) return;
+            double available = Math.Max(MinPopupHeightPx, window.Height - PopupVerticalMarginPx);
+            RootBorder.MaximumHeightRequest = available;
         }
 
 #if WINDOWS
@@ -126,6 +204,98 @@ namespace Maze.Maui.App.Views
         private static extern short GetAsyncKeyState(int vKey);
         private const int VK_SHIFT = 0x10;
 #endif
+
+        // Identifies which group of generate fields is currently shown. The
+        // fields are split across these tabs so the popup reads as a few short
+        // panels rather than one long scrolling list.
+        private enum GenerateTab { Size, Features }
+
+        private void OnSizeTabClicked(object sender, EventArgs e) => SelectTab(GenerateTab.Size);
+        private void OnFeaturesTabClicked(object sender, EventArgs e) => SelectTab(GenerateTab.Features);
+
+        /// <summary>
+        /// Shows the chosen tab's panel (hiding the other) and updates the tab
+        /// buttons so the active one is highlighted. All controls stay in the
+        /// visual tree regardless of the active tab, so prefill and the Generate
+        /// read-back are unaffected by which tab is showing.
+        /// </summary>
+        private void SelectTab(GenerateTab tab)
+        {
+            SetPanelActive(SizeTab, tab == GenerateTab.Size);
+            SetPanelActive(FeaturesTab, tab == GenerateTab.Features);
+
+            ApplyTabButtonStyle(SizeTabButton, SizeTabUnderline, tab == GenerateTab.Size);
+            ApplyTabButtonStyle(FeaturesTabButton, FeaturesTabUnderline, tab == GenerateTab.Features);
+        }
+
+        // Show + enable only the active tab panel, but keep every panel measured so
+        // the content area always sizes to the largest tab — the popup doesn't
+        // resize between tabs. Collapsing inactive panels via IsVisible would drop
+        // them from the layout, so the popup would shrink/grow per tab. Opacity 0 +
+        // InputTransparent hides and disables them while preserving their footprint.
+        private static void SetPanelActive(View panel, bool active)
+        {
+            panel.Opacity = active ? 1.0 : 0.0;
+            panel.InputTransparent = !active;
+        }
+
+        // Highlight the selected tab with a bold label, full opacity and a
+        // visible accent underline; dim the rest and hide their underlines.
+        // The bold/opacity cues plus the themed underline colour read correctly
+        // under both light and dark themes.
+        private static void ApplyTabButtonStyle(Button button, BoxView underline, bool selected)
+        {
+            button.FontAttributes = selected ? FontAttributes.Bold : FontAttributes.None;
+            button.Opacity = selected ? 1.0 : 0.6;
+            underline.IsVisible = selected;
+        }
+
+        // True once the constructor's prefill is complete, so the
+        // dimension-change reset handlers below don't fire during construction
+        // (which would overwrite the seeded start/finish positions).
+        private readonly bool _initialized;
+
+        // Last dimension values the clamp ran against — so an Unfocused that
+        // didn't actually change Rows/Columns is a no-op (we must not "fix" a
+        // deliberately out-of-range start/finish the user is about to submit;
+        // that's the parser's job). Seeded from the constructor's prefill.
+        private string _lastClampedRows = string.Empty;
+        private string _lastClampedCols = string.Empty;
+
+        // Re-clamping start/finish to the new bounds runs only when the user
+        // commits an actual dimension change — Unfocused (tab/click away) or
+        // Completed (Enter) — not on every keystroke. Clamping per-keystroke
+        // would snap against the intermediate value (e.g. the "1" of a "15"
+        // being typed) before the edit is finished. A committed change nudges a
+        // start/finish coordinate only if it would now fall outside the new
+        // bounds (start→top/left corner, finish→new far edge); in-range
+        // coordinates are left exactly as the author set them. Entries are
+        // 1-based.
+        private void OnRowsCommitted(object sender, EventArgs e)
+        {
+            if (RowsEntry.Text == _lastClampedRows) return;
+            _lastClampedRows = RowsEntry.Text;
+            ClampStartFinish(RowsEntry.Text, StartRowEntry, FinishRowEntry);
+        }
+
+        private void OnColsCommitted(object sender, EventArgs e)
+        {
+            if (ColsEntry.Text == _lastClampedCols) return;
+            _lastClampedCols = ColsEntry.Text;
+            ClampStartFinish(ColsEntry.Text, StartColEntry, FinishColEntry);
+        }
+
+        private void ClampStartFinish(string dimensionText, Entry startEntry, Entry finishEntry)
+        {
+            if (!_initialized) return;
+            if (!int.TryParse(dimensionText, out int max) || max < 1) return;
+            if (!InRange(startEntry.Text, max)) startEntry.Text = "1";
+            if (!InRange(finishEntry.Text, max)) finishEntry.Text = max.ToString();
+        }
+
+        // True when a 1-based coordinate string sits within 1..max (inclusive).
+        private static bool InRange(string coordText, int max) =>
+            int.TryParse(coordText, out int n) && n >= 1 && n <= max;
 
         /// <summary>
         /// Handles the Generate button click. Validates inputs and closes the popup with the
@@ -172,6 +342,11 @@ namespace Maze.Maui.App.Views
                 finishRowText: FinishRowEntry.Text,
                 finishColText: FinishColEntry.Text,
                 minSolutionLengthText: MinSolutionLengthEntry.Text,
+                doorCountText: DoorCountEntry.Text,
+                spareDoorsText: SpareDoorsEntry.Text,
+                spareKeysText: SpareKeysEntry.Text,
+                enemyCountText: EnemyCountEntry.Text,
+                healthCountText: HealthCountEntry.Text,
                 maxMazeCells: _maxMazeCells,
                 out var parsed,
                 out error))
@@ -189,6 +364,11 @@ namespace Maze.Maui.App.Views
                 FinishRow = parsed.FinishRow,
                 FinishCol = parsed.FinishCol,
                 MinSpineLength = parsed.MinSolutionLength,
+                DoorCount = parsed.DoorCount,
+                SpareDoors = parsed.SpareDoors,
+                SpareKeys = parsed.SpareKeys,
+                EnemyCount = parsed.EnemyCount,
+                HealthCount = parsed.HealthCount,
             };
             return true;
         }

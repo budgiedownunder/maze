@@ -1,6 +1,17 @@
 ﻿namespace Maze.Maui.App.Services
 {
     /// <summary>
+    /// The action chosen from the 2D game pause menu.
+    /// </summary>
+    public enum PauseMenuResult
+    {
+        /// <summary>Resume the current game (default — also used if the popup is dismissed).</summary>
+        Resume = 0,
+        /// <summary>Restart the current maze from the beginning.</summary>
+        Restart = 1,
+    }
+
+    /// <summary>
     /// Represents a dialog service interface
     /// </summary>
     public interface IDialogService
@@ -51,11 +62,18 @@
         public Task<string> DisplayPrompt(string title, string message, string valueName, string accept = "OK", string cancel = "Cancel",
             string? placeholder = null, int maxlength = -1, Keyboard? keyboard = null, string? initialValue = "", bool allowEmpty = false, bool trimResult = true);
         /// <summary>
-        /// Displays the game result popup with a celebration sprite and the given message.
+        /// Displays the game result popup with the given message. A win shows the
+        /// celebration sprite; a loss shows the game-over (skull) image.
         /// </summary>
         /// <param name="message">Result message to display</param>
-        /// <returns>A task that completes when the popup is dismissed</returns>
-        public Task ShowGameResult(string message);
+        /// <param name="won">Whether the game was won (celebration) or lost (game-over image)</param>
+        /// <returns>A task that resolves to <c>true</c> when the player chose Play Again, otherwise <c>false</c></returns>
+        public Task<bool> ShowGameResult(string message, bool won);
+        /// <summary>
+        /// Displays the 2D game pause menu (Resume / Restart).
+        /// </summary>
+        /// <returns>A task resolving to the chosen <see cref="PauseMenuResult"/> (<see cref="PauseMenuResult.Resume"/> if dismissed)</returns>
+        public Task<PauseMenuResult> ShowPauseMenu();
         /// <summary>
         /// Displays the Play 3D difficulty picker (Easy / Tricky / Hard).
         /// </summary>

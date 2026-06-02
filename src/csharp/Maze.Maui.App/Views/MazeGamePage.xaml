@@ -7,48 +7,129 @@ x:DataType="viewmodel:MazeGameViewModel"
              x:Class="Maze.Maui.App.Views.MazeGamePage"
              Title="{Binding Title}">
 
-    <AbsoluteLayout>
+    <!-- Three-row layout: maze grid on top (fills remaining space),
+         a centred bag row beneath it, then the optional dpad row at
+         the very bottom (hidden on Windows). Mirrors React: the bag
+         strip sits directly under the grid above the dpad, with
+         centred text and no background tint. -->
+    <Grid RowDefinitions="*,Auto,Auto,Auto">
 
-        <controls:MazeGrid x:Name="GameGrid"
-                           AbsoluteLayout.LayoutFlags="All"
-                           AbsoluteLayout.LayoutBounds="0,0,1,1" />
+        <!-- Maze area -->
+        <Grid Grid.Row="0">
+            <controls:MazeGrid x:Name="GameGrid" />
 
-        <Label Text="{Binding LoadStatus}"
-               AbsoluteLayout.LayoutFlags="PositionProportional"
-               AbsoluteLayout.LayoutBounds="0.5,0.5,AutoSize,AutoSize"
-               HorizontalOptions="Center"
-               VerticalOptions="Center"
-               IsVisible="{Binding HasLoadStatus}" />
+            <!-- Damage flash — snaps to translucent red on a hit, fades out (code-behind). -->
+            <BoxView x:Name="DamageFlashOverlay"
+                     Color="Red"
+                     Opacity="0"
+                     InputTransparent="True"
+                     HorizontalOptions="Fill"
+                     VerticalOptions="Fill" />
 
-        <!-- D-pad overlay, bottom-centre — hidden on Windows (arrow keys used instead); hidden until grid loads -->
-        <Grid x:Name="DpadGrid"
-              AbsoluteLayout.LayoutFlags="XProportional,YProportional"
-              AbsoluteLayout.LayoutBounds="0.5,1,160,160"
-              RowDefinitions="*,*,*" ColumnDefinitions="*,*,*"
-              Opacity="0.85"
-              IsVisible="False">
-            <Button Grid.Row="0" Grid.Column="1" ImageSource="dpad_up.png"    Text="" Pressed="OnDpadUpPressed"    Released="OnDpadReleased"/>
-            <Button Grid.Row="1" Grid.Column="0" ImageSource="dpad_left.png"  Text="" Pressed="OnDpadLeftPressed"  Released="OnDpadReleased"/>
-            <Button Grid.Row="1" Grid.Column="2" ImageSource="dpad_right.png" Text="" Pressed="OnDpadRightPressed" Released="OnDpadReleased"/>
-            <Button Grid.Row="2" Grid.Column="1" ImageSource="dpad_down.png"  Text="" Pressed="OnDpadDownPressed"  Released="OnDpadReleased"/>
+            <Label Text="{Binding LoadStatus}"
+                   HorizontalOptions="Center"
+                   VerticalOptions="Center"
+                   IsVisible="{Binding HasLoadStatus}" />
+
+            <!-- Busy overlay — covers the grid while loading -->
+            <Border IsVisible="{Binding IsBusy}"
+                    BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#303030}"
+                    StrokeShape="RoundRectangle 8"
+                    Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
+                    Padding="20"
+                    VerticalOptions="Center"
+                    HorizontalOptions="Center">
+                <ActivityIndicator IsRunning="{Binding IsBusy}"
+                                   Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
+                                   WidthRequest="50"
+                                   HeightRequest="50" />
+            </Border>
         </Grid>
 
-        <!-- Busy overlay — covers the grid while loading -->
-        <Border IsVisible="{Binding IsBusy}"
-                AbsoluteLayout.LayoutFlags="All"
-                AbsoluteLayout.LayoutBounds="0,0,1,1"
-                BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#303030}"
-                StrokeShape="RoundRectangle 8"
-                Stroke="{AppThemeBinding Light={StaticResource Gray300}, Dark={StaticResource Gray600}}"
-                Padding="20"
-                VerticalOptions="Center"
-                HorizontalOptions="Center">
-            <ActivityIndicator IsRunning="{Binding IsBusy}"
-                               Color="{AppThemeBinding Light={StaticResource Primary}, Dark={StaticResource PrimaryDark}}"
-                               WidthRequest="50"
-                               HeightRequest="50" />
-        </Border>
+        <!-- Status block: LIFE heart row above the BAG row, mirroring React's
+             paired status strip between the grid and the d-pad. -->
+        <VerticalStackLayout Grid.Row="1" Spacing="2" HorizontalOptions="Center" VerticalOptions="Center">
 
-    </AbsoluteLayout>
+        <!-- Centred LIFE heart row — one heart per MaxHp, dimmed when spent. -->
+        <HorizontalStackLayout x:Name="HpStack"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"
+                               Padding="0,2"
+                               Spacing="4">
+            <Label Text="LIFE" VerticalOptions="Center" FontSize="14" Opacity="0.8"/>
+            <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Hearts}"
+                                   Spacing="2"
+                                   VerticalOptions="Center">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="viewmodel:HeartState">
+                        <Image Source="health.png" Opacity="{Binding Opacity}" HeightRequest="22" WidthRequest="22" Aspect="AspectFit"/>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </HorizontalStackLayout>
+        </HorizontalStackLayout>
+
+        <!-- Centred bag row — no background; mirrors React's `.maze-bag`. -->
+        <HorizontalStackLayout x:Name="BagStack"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"
+                               Padding="0,4"
+                               Spacing="6"
+                               IsVisible="False">
+            <Label Text="BAG" VerticalOptions="Center" FontSize="14" Opacity="0.8"/>
+            <Label Text="empty"
+                   VerticalOptions="Center"
+                   FontSize="14"
+                   FontAttributes="Italic"
+                   Opacity="0.6"
+                   IsVisible="{Binding IsBagEmpty}"/>
+            <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Bag}"
+                                   Spacing="2"
+                                   VerticalOptions="Center">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate>
+                        <Image Source="key.png" HeightRequest="24" WidthRequest="24" Aspect="AspectFit"/>
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </HorizontalStackLayout>
+        </HorizontalStackLayout>
+
+        </VerticalStackLayout>
+
+        <!-- D-pad, centre — hidden on Windows (arrow keys used instead);
+             hidden until grid loads. 4px row/column spacing + 8px button
+             padding mirrors React's `.game-dpad` `gap: 4px` + `padding: 8px`.
+             The centre cell holds the pause "||" button. -->
+        <Grid x:Name="DpadGrid"
+              Grid.Row="2"
+              HorizontalOptions="Center"
+              WidthRequest="160"
+              HeightRequest="160"
+              Padding="6"
+              RowSpacing="4"
+              ColumnSpacing="4"
+              RowDefinitions="*,*,*" ColumnDefinitions="*,*,*"
+              IsVisible="False">
+            <Button Grid.Row="0" Grid.Column="1" ImageSource="dpad_up.png"    Text="" Padding="8" Pressed="OnDpadUpPressed"    Released="OnDpadReleased"/>
+            <Button Grid.Row="1" Grid.Column="0" ImageSource="dpad_left.png"  Text="" Padding="8" Pressed="OnDpadLeftPressed"  Released="OnDpadReleased"/>
+            <Button Grid.Row="1" Grid.Column="1" ImageSource="dpad_pause.png" Text="" Padding="8" Command="{Binding PauseCommand}"/>
+            <Button Grid.Row="1" Grid.Column="2" ImageSource="dpad_right.png" Text="" Padding="8" Pressed="OnDpadRightPressed" Released="OnDpadReleased"/>
+            <Button Grid.Row="2" Grid.Column="1" ImageSource="dpad_down.png"  Text="" Padding="8" Pressed="OnDpadDownPressed"  Released="OnDpadReleased"/>
+        </Grid>
+
+        <!-- Keyboard legend, shown on desktop only (code-behind). Mirrors the
+             React 2D game's shortcuts hint. -->
+        <Label x:Name="ShortcutsHint"
+               Grid.Row="3"
+               IsVisible="False"
+               VerticalOptions="End"
+               HorizontalOptions="Fill"
+               Padding="10,6"
+               FontFamily="Courier New"
+               FontSize="12"
+               LineBreakMode="WordWrap"
+               TextColor="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}"
+               Text="[&#8593;/W] Up    [&#8595;/S] Down    [&#8592;/A] Left    [&#8594;/D] Right    [Space/Esc] Pause" />
+
+    </Grid>
 
 </ContentPage>

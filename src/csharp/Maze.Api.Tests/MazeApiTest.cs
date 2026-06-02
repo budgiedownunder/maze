@@ -572,6 +572,104 @@ namespace Maze.Api.Tests
             }
         }
         /// <summary>
+        /// Confirms that <see cref="Maze.SetKeyCells"/> succeeds and
+        /// <see cref="Maze.GetCellType"/> returns <see cref="Maze.CellType.Key"/>
+        /// for the affected cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetKeyCells_SucceedsForValidCellRange()
+        {
+            using (Maze maze = new Maze(5, 10))
+            {
+                maze.SetKeyCells(1, 1, 2, 3);
+                AssertRangeCellType(maze, 1, 1, 2, 3, Maze.CellType.Key);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.SetDoorCells"/> succeeds and
+        /// <see cref="Maze.GetCellType"/> returns <see cref="Maze.CellType.Door"/>
+        /// for the affected cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetDoorCells_SucceedsForValidCellRange()
+        {
+            using (Maze maze = new Maze(5, 10))
+            {
+                maze.SetDoorCells(0, 4, 1, 5);
+                AssertRangeCellType(maze, 0, 4, 1, 5, Maze.CellType.Door);
+            }
+        }
+        /// <summary>
+        /// Confirms that K and D cells round-trip through
+        /// <see cref="Maze.ToJson"/> with the expected `'K'` / `'D'`
+        /// characters in the grid JSON.
+        /// </summary>
+        [Fact]
+        public void MazeSetKeyAndDoorCells_RoundTripsThroughToJson()
+        {
+            using (Maze maze = new Maze(1, 4))
+            {
+                maze.SetStartCell(0, 0);
+                maze.SetKeyCells(0, 1, 0, 1);
+                maze.SetDoorCells(0, 2, 0, 2);
+                maze.SetFinishCell(0, 3);
+                string json = maze.ToJson();
+                Assert.Contains("\"S\"", json);
+                Assert.Contains("\"K\"", json);
+                Assert.Contains("\"D\"", json);
+                Assert.Contains("\"F\"", json);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.SetEnemyCells"/> succeeds and
+        /// <see cref="Maze.GetCellType"/> returns <see cref="Maze.CellType.Enemy"/>
+        /// for the affected cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetEnemyCells_SucceedsForValidCellRange()
+        {
+            using (Maze maze = new Maze(5, 10))
+            {
+                maze.SetEnemyCells(1, 1, 2, 3);
+                AssertRangeCellType(maze, 1, 1, 2, 3, Maze.CellType.Enemy);
+            }
+        }
+        /// <summary>
+        /// Confirms that <see cref="Maze.SetHealthCells"/> succeeds and
+        /// <see cref="Maze.GetCellType"/> returns <see cref="Maze.CellType.Health"/>
+        /// for the affected cells.
+        /// </summary>
+        [Fact]
+        public void MazeSetHealthCells_SucceedsForValidCellRange()
+        {
+            using (Maze maze = new Maze(5, 10))
+            {
+                maze.SetHealthCells(0, 4, 1, 5);
+                AssertRangeCellType(maze, 0, 4, 1, 5, Maze.CellType.Health);
+            }
+        }
+        /// <summary>
+        /// Confirms that E and H cells round-trip through
+        /// <see cref="Maze.ToJson"/> with the expected `'E'` / `'H'`
+        /// characters in the grid JSON.
+        /// </summary>
+        [Fact]
+        public void MazeSetEnemyAndHealthCells_RoundTripsThroughToJson()
+        {
+            using (Maze maze = new Maze(1, 4))
+            {
+                maze.SetStartCell(0, 0);
+                maze.SetEnemyCells(0, 1, 0, 1);
+                maze.SetHealthCells(0, 2, 0, 2);
+                maze.SetFinishCell(0, 3);
+                string json = maze.ToJson();
+                Assert.Contains("\"S\"", json);
+                Assert.Contains("\"E\"", json);
+                Assert.Contains("\"H\"", json);
+                Assert.Contains("\"F\"", json);
+            }
+        }
+        /// <summary>
         /// Confirms that <see cref="Maze.ToJson"/> succeeds
         /// </summary>
         [Fact]
@@ -1034,6 +1132,129 @@ namespace Maze.Api.Tests
                 $"Seeds {seedA} and {seedB} produced identical mazes — seed precision may be lost (ulong→float truncation)");
         }
 
+        // --- Maze.MaxTotalFeatures / ExceedsGenerateFeatureCap + Key/Door generation round-trip ---
+
+        /// <summary>
+        /// Pins <see cref="Maze.MaxTotalFeatures"/> to 16 so the React-side
+        /// <c>MAX_TOTAL_FEATURES</c> constant and the Rust-side
+        /// <c>maze::MAX_TOTAL_FEATURES</c> stay in sync.
+        /// </summary>
+        [Fact]
+        public void MaxTotalFeatures_IsSixteen()
+        {
+            Assert.Equal(16u, Maze.MaxTotalFeatures);
+        }
+
+        /// <summary>
+        /// Pins <see cref="Maze.MaxEnemyCount"/> to 8 so the React-side
+        /// <c>MAX_ENEMY_COUNT</c> constant and the Rust-side
+        /// <c>maze::MAX_ENEMY_COUNT</c> stay in sync.
+        /// </summary>
+        [Fact]
+        public void MaxEnemyCount_IsEight()
+        {
+            Assert.Equal(8u, Maze.MaxEnemyCount);
+        }
+
+        /// <summary>
+        /// Pins <see cref="Maze.MaxHealthCount"/> to 8 so the React-side
+        /// <c>MAX_HEALTH_COUNT</c> constant and the Rust-side
+        /// <c>maze::MAX_HEALTH_COUNT</c> stay in sync.
+        /// </summary>
+        [Fact]
+        public void MaxHealthCount_IsEight()
+        {
+            Assert.Equal(8u, Maze.MaxHealthCount);
+        }
+
+        /// <summary>
+        /// Confirms the budget formula <c>2 * doorCount + spareDoors + spareKeys</c>:
+        /// at-cap is accepted, just-over is rejected.
+        /// </summary>
+        [Fact]
+        public void ExceedsGenerateFeatureCap_BoundaryValues()
+        {
+            // At cap (2*8 = 16): allowed
+            Assert.False(Maze.ExceedsGenerateFeatureCap(8, 0, 0));
+            // Just over (2*8 + 1 = 17): rejected
+            Assert.True(Maze.ExceedsGenerateFeatureCap(8, 1, 0));
+            // Spread evenly at cap (8 + 4 + 4 = 16): allowed
+            Assert.False(Maze.ExceedsGenerateFeatureCap(4, 4, 4));
+            // Spread evenly just over (8 + 4 + 5 = 17): rejected
+            Assert.True(Maze.ExceedsGenerateFeatureCap(4, 4, 5));
+            // All-zero: trivially allowed
+            Assert.False(Maze.ExceedsGenerateFeatureCap(0, 0, 0));
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> threads <c>DoorCount</c>,
+        /// <c>SpareDoors</c>, and <c>SpareKeys</c> through to the Rust generator
+        /// by checking the produced grid's key and door cell counts.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithKeysAndDoors_PlacesThemInTheProducedGrid()
+        {
+            using Maze maze = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 15,
+                ColCount = 15,
+                Seed = 7,
+                MinSpineLength = 8,
+                DoorCount = 3,
+                SpareDoors = 2,
+                SpareKeys = 1,
+            });
+            string json = maze.ToJson();
+            int dCount = json.Split('D').Length - 1;
+            int kCount = json.Split('K').Length - 1;
+            Assert.Equal(5, dCount); // 3 real + 2 spare doors
+            Assert.Equal(4, kCount); // 3 real + 1 spare key
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> threads <c>EnemyCount</c>
+        /// and <c>HealthCount</c> through to the Rust generator by checking the
+        /// produced grid's `'E'` and `'H'` cell counts.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithEnemiesAndHealth_PlacesThemInTheProducedGrid()
+        {
+            using Maze maze = Maze.Generate(new Maze.GenerationOptions
+            {
+                RowCount = 15,
+                ColCount = 15,
+                Seed = 123,
+                EnemyCount = 3,
+                HealthCount = 2,
+            });
+            string json = maze.ToJson();
+            int eCount = json.Split('E').Length - 1;
+            int hCount = json.Split('H').Length - 1;
+            Assert.Equal(3, eCount);
+            Assert.Equal(2, hCount);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="Maze.Generate"/> propagates the Rust
+        /// generator's key + door cap rejection as a thrown exception.
+        /// </summary>
+        [Fact]
+        public void MazeGenerate_WithKeysPlusDoorsOverCap_ShouldThrow()
+        {
+            var exception = Assert.ThrowsAny<Exception>(() =>
+            {
+                Maze.Generate(new Maze.GenerationOptions
+                {
+                    RowCount = 15,
+                    ColCount = 15,
+                    Seed = 7,
+                    DoorCount = 8,
+                    SpareKeys = 1, // 2*8 + 0 + 1 = 17 > 16
+                });
+            });
+            Assert.Contains("exceeds the cap", exception.Message);
+        }
+
         // --- MazeGame tests ---
 
         // 1 row, 3 cols: S[0,0]  [0,1]  F[0,2]
@@ -1156,6 +1377,236 @@ namespace Maze.Api.Tests
         }
 
         /// <summary>
+        /// Confirms that <see cref="MazeGame.IsLost"/> is false for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameIsLost_ShouldBeFalse_Initially()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.False(game.IsLost);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.LoseReason"/> is <see cref="LoseReason.None"/> for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameLoseReason_ShouldBeNone_Initially()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.Equal(LoseReason.None, game.LoseReason);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGameMoveResult"/> has the extended values for the locked-door / strand flow.
+        /// Mirrors the Rust <c>MoveResult</c> integer codes that <c>maze_c</c> / <c>maze_wasm</c> emit.
+        /// </summary>
+        [Fact]
+        public void MazeGameMoveResult_ShouldExtendForLockedDoorAndStranded()
+        {
+            Assert.Equal(4, (int)MazeGameMoveResult.BlockedByLockedDoor);
+            Assert.Equal(5, (int)MazeGameMoveResult.StartedUnlocking);
+            Assert.Equal(6, (int)MazeGameMoveResult.Stranded);
+        }
+
+        // 1 row, 3 cols: S[0,0]  K[0,1]  F[0,2]
+        private const string KeyGameJson = """{"grid":[["S","K","F"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Bag"/> is empty for a fresh game
+        /// </summary>
+        [Fact]
+        public void MazeGameBag_ShouldBeEmpty_Initially()
+        {
+            using MazeGame game = MazeGame.Create(KeyGameJson);
+            Assert.Empty(game.Bag);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Pickup"/> returns null when the player's cell holds no collectible
+        /// </summary>
+        [Fact]
+        public void MazeGamePickup_ShouldReturnNull_OnNonKeyCell()
+        {
+            using MazeGame game = MazeGame.Create(KeyGameJson);
+            Assert.Null(game.Pickup());
+        }
+
+        /// <summary>
+        /// Confirms that walking onto a key auto-collects it and grows <see cref="MazeGame.Bag"/>
+        /// </summary>
+        [Fact]
+        public void MazeGameMovePlayer_ShouldAutoCollectKey_AndGrowBag()
+        {
+            using MazeGame game = MazeGame.Create(KeyGameJson);
+            game.MovePlayer(MazeGameDirection.Right); // onto K — auto-collected
+            Assert.Single(game.Bag);
+            Assert.Equal(BagItemKind.Key, game.Bag[0].Kind);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Pickup"/> returns null after a key was auto-collected on walk-over
+        /// </summary>
+        [Fact]
+        public void MazeGamePickup_ShouldReturnNull_AfterKeyAutoCollected()
+        {
+            using MazeGame game = MazeGame.Create(KeyGameJson);
+            game.MovePlayer(MazeGameDirection.Right); // onto K — auto-collected
+            Assert.Null(game.Pickup());
+            Assert.Single(game.Bag);
+        }
+
+        // 1 row, 4 cols: S[0,0] K[0,1] D[0,2] F[0,3]
+        private const string DoorGameJson = """{"grid":[["S","K","D","F"]]}""";
+        // Mirrors the maze-crate strand fixture: real door on the top row, decoy door on the side branch.
+        private const string DecoyStrandGameJson = """{"grid":[["S","K","D","F"],["W","D","W","W"],["W"," ","W","W"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Doors"/> lists each door cell with its current state
+        /// </summary>
+        [Fact]
+        public void MazeGameDoors_ShouldReportLockedDoor_Initially()
+        {
+            using MazeGame game = MazeGame.Create(DoorGameJson);
+            var doors = game.Doors;
+            Assert.Single(doors);
+            Assert.Equal(new DoorInfo(0, 2, DoorState.Locked), doors[0]);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Tick"/> returns an empty array when nothing is in flight
+        /// </summary>
+        [Fact]
+        public void MazeGameTick_ShouldReturnEmpty_WhenNoDoorIsOpening()
+        {
+            using MazeGame game = MazeGame.Create(DoorGameJson);
+            Assert.Empty(game.Tick(1000.0));
+        }
+
+        /// <summary>
+        /// Confirms the S→K→D→F happy path end-to-end via the high-level <see cref="MazeGame"/> API:
+        /// step onto key, pickup, step into door (StartedUnlocking), Tick(1000ms) → DoorOpened event +
+        /// door state flips to Open, final step Completes.
+        /// </summary>
+        [Fact]
+        public void MazeGame_KeyDoorHappyPath_TickEmitsDoorOpened_AndCompletes()
+        {
+            using MazeGame game = MazeGame.Create(DoorGameJson);
+            game.MovePlayer(MazeGameDirection.Right); // onto K — auto-collected
+            game.Tick(0.0); // flush the KeyCollected event
+            Assert.Equal(MazeGameMoveResult.StartedUnlocking, game.MovePlayer(MazeGameDirection.Right));
+
+            GameEvent[] events = game.Tick(1000.0);
+            Assert.Single(events);
+            Assert.Equal(new GameEvent(GameEventKind.DoorOpened, 0, 2, 0), events[0]);
+            Assert.Equal(DoorState.Open, game.Doors[0].State);
+
+            // StartedUnlocking did not move the player — step through the open door, then onto F.
+            Assert.Equal(MazeGameMoveResult.Moved, game.MovePlayer(MazeGameDirection.Right));
+            Assert.Equal(MazeGameMoveResult.Complete, game.MovePlayer(MazeGameDirection.Right));
+            Assert.True(game.IsComplete);
+        }
+
+        /// <summary>
+        /// Confirms the strand round-trip end-to-end via the high-level <see cref="MazeGame"/> API:
+        /// detouring into a decoy door with the only key burns it; walking through the decoy strands the player,
+        /// flipping <see cref="MazeGame.IsLost"/> to true and <see cref="MazeGame.LoseReason"/> to
+        /// <see cref="LoseReason.Stranded"/>. Validates the lose-state plumbing through a real door traversal.
+        /// </summary>
+        [Fact]
+        public void MazeGame_DecoyDoorWalkThrough_FlipsIsLostAndLoseReason()
+        {
+            using MazeGame game = MazeGame.Create(DecoyStrandGameJson);
+            game.MovePlayer(MazeGameDirection.Right); // onto K — auto-collected
+            game.Tick(0.0); // flush the KeyCollected event
+            game.MovePlayer(MazeGameDirection.Down);  // StartedUnlocking decoy
+            game.Tick(1000.0);
+            Assert.Equal(MazeGameMoveResult.Stranded, game.MovePlayer(MazeGameDirection.Down));
+            Assert.True(game.IsLost);
+            Assert.Equal(LoseReason.Stranded, game.LoseReason);
+        }
+
+        /// <summary>
+        /// Confirms HP / max-HP defaults, enemy + health-pickup enumeration, and that walking
+        /// onto a pickup below max HP heals and removes it from <see cref="MazeGame.HealthPickups"/>.
+        /// </summary>
+        [Fact]
+        public void MazeGame_HpEnemiesAndHealthPickups_SurfaceThroughTheApi()
+        {
+            // ['S','E','H','F']: one enemy at (0,1), one health pickup at (0,2).
+            using MazeGame game = MazeGame.Create("""{"grid":[["S","E","H","F"]]}""");
+            Assert.Equal(3u, game.Hp);
+            Assert.Equal(3u, game.MaxHp);
+
+            Assert.Single(game.Enemies);
+            Assert.Equal(new EnemyInfo(0, 1, 0), game.Enemies[0]);
+            Assert.Single(game.HealthPickups);
+            Assert.Equal(new HealthPickupInfo(0, 2), game.HealthPickups[0]);
+
+            // Step onto the enemy → 1 damage (HP 3 → 2).
+            game.MovePlayer(MazeGameDirection.Right);
+            game.Tick(0.0); // flush the queued PlayerDamaged
+            Assert.Equal(2u, game.Hp);
+
+            // Step onto the pickup below max HP → heal (HP 2 → 3) and the pickup is consumed.
+            game.MovePlayer(MazeGameDirection.Right);
+            game.Tick(0.0);
+            Assert.Equal(3u, game.Hp);
+            Assert.Empty(game.HealthPickups);
+        }
+
+        /// <summary>
+        /// Confirms a tick advances the enemy and surfaces <see cref="GameEventKind.EnemyMoved"/>
+        /// (payload = enemy id) and <see cref="GameEventKind.PlayerDamaged"/> (payload = HP after).
+        /// </summary>
+        [Fact]
+        public void MazeGame_Tick_SurfacesEnemyMovedAndPlayerDamagedWithPayloads()
+        {
+            // Enemy at (0,1) chasing the player at (0,0). One move period: enemy
+            // steps onto the player → EnemyMoved then PlayerDamaged.
+            using MazeGame game = MazeGame.Create("""{"grid":[["S","E","F"]]}""");
+            GameEvent[] events = game.Tick(1500.0);
+            Assert.Equal(2, events.Length);
+            Assert.Equal(new GameEvent(GameEventKind.EnemyMoved, 0, 0, 0), events[0]);
+            Assert.Equal(GameEventKind.PlayerDamaged, events[1].Kind);
+            Assert.Equal(2u, events[1].Payload); // HP after the hit
+            Assert.Equal(2u, game.Hp);
+        }
+
+        /// <summary>
+        /// Confirms a walk-over health pickup at full HP surfaces <see cref="GameEventKind.PlayerNotHealed"/>
+        /// and spares the pickup.
+        /// </summary>
+        [Fact]
+        public void MazeGame_Tick_SurfacesPlayerNotHealedAtMaxHp()
+        {
+            using MazeGame game = MazeGame.Create("""{"grid":[["S","H","F"]]}""");
+            game.MovePlayer(MazeGameDirection.Right); // onto 'H' at full HP
+            GameEvent[] events = game.Tick(0.0);
+            Assert.Single(events);
+            Assert.Equal(GameEventKind.PlayerNotHealed, events[0].Kind);
+            Assert.Equal((uint)0, events[0].Payload); // reason: already at max HP
+            Assert.Single(game.HealthPickups); // spared
+        }
+
+        /// <summary>
+        /// Confirms the Killed round-trip: draining HP to zero by walking into enemies returns
+        /// <see cref="MazeGameMoveResult.Killed"/> and flips <see cref="MazeGame.LoseReason"/> to
+        /// <see cref="LoseReason.Killed"/>.
+        /// </summary>
+        [Fact]
+        public void MazeGame_WalkingIntoEnemiesUntilZeroHp_ReturnsKilledAndFlipsLoseReason()
+        {
+            // ['S','E','E','E','F']: three successive collisions drain HP 3 → 0.
+            using MazeGame game = MazeGame.Create("""{"grid":[["S","E","E","E","F"]]}""");
+            Assert.Equal(MazeGameMoveResult.Moved, game.MovePlayer(MazeGameDirection.Right)); // HP 3 → 2
+            Assert.Equal(MazeGameMoveResult.Moved, game.MovePlayer(MazeGameDirection.Right)); // HP 2 → 1
+            Assert.Equal(MazeGameMoveResult.Killed, game.MovePlayer(MazeGameDirection.Right)); // HP 1 → 0
+            Assert.True(game.IsLost);
+            Assert.Equal(LoseReason.Killed, game.LoseReason);
+            Assert.Equal(0u, game.Hp);
+        }
+
+        /// <summary>
         /// Confirms that <see cref="MazeGame.VisitedCells"/> contains only the start cell before any moves
         /// </summary>
         [Fact]
@@ -1179,6 +1630,51 @@ namespace Maze.Api.Tests
             Assert.Equal(2, game.VisitedCells.Count);
             game.MovePlayer(MazeGameDirection.Right); // [0,2] = F
             Assert.Equal(3, game.VisitedCells.Count);
+        }
+
+        // 1 row, 4 cols: S K K F — two uncollected keys
+        private const string TwoKeyGameJson = """{"grid":[["S","K","K","F"]]}""";
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Keys"/> reports both uncollected keys with distinct ids
+        /// </summary>
+        [Fact]
+        public void MazeGameKeys_ShouldReportBothKeys_Initially()
+        {
+            using MazeGame game = MazeGame.Create(TwoKeyGameJson);
+            var keys = game.Keys;
+            Assert.Equal(2, keys.Count);
+            Assert.Equal((0u, 1u), (keys[0].Row, keys[0].Column));
+            Assert.Equal((0u, 2u), (keys[1].Row, keys[1].Column));
+            Assert.NotEqual(keys[0].Id, keys[1].Id);
+        }
+
+        /// <summary>
+        /// Confirms that pickup removes the collected key from <see cref="MazeGame.Keys"/> while preserving
+        /// the remaining key's stable id
+        /// </summary>
+        [Fact]
+        public void MazeGameKeys_ShouldShrink_AfterAutoCollect_PreservingRemainingId()
+        {
+            using MazeGame game = MazeGame.Create(TwoKeyGameJson);
+            uint secondKeyIdBefore = game.Keys[1].Id;
+            game.MovePlayer(MazeGameDirection.Right); // onto first K — auto-collected
+            var keys = game.Keys;
+            Assert.Single(game.Bag);
+            Assert.Single(keys);
+            Assert.Equal((0u, 2u), (keys[0].Row, keys[0].Column));
+            Assert.Equal(secondKeyIdBefore, keys[0].Id);
+            Assert.NotEqual(game.Bag[0].Id, keys[0].Id);
+        }
+
+        /// <summary>
+        /// Confirms that <see cref="MazeGame.Keys"/> is empty for a maze with no key cells
+        /// </summary>
+        [Fact]
+        public void MazeGameKeys_ShouldBeEmpty_WhenNoKeys()
+        {
+            using MazeGame game = MazeGame.Create(SimpleGameJson);
+            Assert.Empty(game.Keys);
         }
     }
     /// <summary>

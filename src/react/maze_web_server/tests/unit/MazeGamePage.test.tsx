@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
@@ -10,21 +10,34 @@ import { MazeGamePage } from '../../src/pages/MazeGamePage'
 
 // ── Mocks ────────────────────────────────────────────────────
 
-const { mockMove, mockUseMazeGame, mockGameInstance } = vi.hoisted(() => {
+const { mockMove, mockRestart, mockTogglePause, mockUseMazeGame, mockGameInstance } = vi.hoisted(() => {
   const mockGameInstance = {
     is_complete:      vi.fn().mockReturnValue(false),
+    is_lost:          vi.fn().mockReturnValue(false),
+    lose_reason:      vi.fn().mockReturnValue(null),
     player_row:       vi.fn().mockReturnValue(0),
     player_col:       vi.fn().mockReturnValue(0),
     player_direction: vi.fn().mockReturnValue(0),
     visited_cells:    vi.fn().mockReturnValue([]),
+    keys:             vi.fn().mockReturnValue([]),
+    doors:            vi.fn().mockReturnValue([]),
+    bag:              vi.fn().mockReturnValue([]),
+    hp:               vi.fn().mockReturnValue(3),
+    max_hp:           vi.fn().mockReturnValue(3),
+    enemies:          vi.fn().mockReturnValue([]),
+    health_pickups:   vi.fn().mockReturnValue([]),
     free:             vi.fn(),
   }
   const mockMove = vi.fn()
+  const mockRestart = vi.fn()
+  const mockTogglePause = vi.fn()
   const mockUseMazeGame = vi.fn().mockReturnValue([
-    { game: mockGameInstance, version: 0, loading: false, error: null },
+    { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0, paused: false },
     mockMove,
+    mockRestart,
+    mockTogglePause,
   ])
-  return { mockMove, mockUseMazeGame, mockGameInstance }
+  return { mockMove, mockRestart, mockTogglePause, mockUseMazeGame, mockGameInstance }
 })
 
 vi.mock('../../src/hooks/useMazeGame', () => ({
@@ -39,10 +52,19 @@ vi.mock('../../src/components/MazeGrid', () => ({
 }))
 
 vi.mock('../../src/components/GameResultPopup', () => ({
-  GameResultPopup: ({ message, onClose }: { message: string; onClose: () => void }) => (
-    <div data-testid="game-result-popup">
+  GameResultPopup: ({ message, tone = 'success', onClose }: { message: string; tone?: 'success' | 'fail'; onClose: () => void }) => (
+    <div data-testid="game-result-popup" data-tone={tone}>
       <span>{message}</span>
       <button type="button" onClick={onClose}>Close</button>
+    </div>
+  ),
+}))
+
+vi.mock('../../src/components/PausePopup', () => ({
+  PausePopup: ({ onResume, onRestart }: { onResume: () => void; onRestart: () => void }) => (
+    <div data-testid="pause-popup">
+      <button type="button" onClick={onResume}>Resume</button>
+      <button type="button" onClick={onRestart}>Restart</button>
     </div>
   ),
 }))
@@ -73,9 +95,15 @@ async function waitForLoad() {
 beforeEach(() => {
   vi.clearAllMocks()
   mockGameInstance.is_complete.mockReturnValue(false)
+  mockGameInstance.is_lost.mockReturnValue(false)
+  mockGameInstance.lose_reason.mockReturnValue(null)
+  mockGameInstance.hp.mockReturnValue(3)
+  mockGameInstance.max_hp.mockReturnValue(3)
   mockUseMazeGame.mockReturnValue([
-    { game: mockGameInstance, version: 0, loading: false, error: null },
+    { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0, paused: false },
     mockMove,
+    mockRestart,
+    mockTogglePause,
   ])
 })
 
@@ -192,6 +220,94 @@ describe('MazeGamePage', () => {
     renderPage()
     await waitFor(() => expect(screen.getByTestId('game-result-popup')).toBeInTheDocument())
     expect(screen.getByText('You win!')).toBeInTheDocument()
+    expect(screen.getByTestId('game-result-popup')).toHaveAttribute('data-tone', 'success')
+  })
+
+  it('GameResultPopup shows stranded message + fail tone when game is lost', async () => {
+    mockGameInstance.is_lost.mockReturnValue(true)
+    mockGameInstance.lose_reason.mockReturnValue('stranded')
+    renderPage()
+    await waitFor(() => expect(screen.getByTestId('game-result-popup')).toBeInTheDocument())
+    expect(screen.getByText("You're stranded!!")).toBeInTheDocument()
+    expect(screen.getByTestId('game-result-popup')).toHaveAttribute('data-tone', 'fail')
+  })
+
+  it('GameResultPopup shows "You died!" message + fail tone when player is killed', async () => {
+    mockGameInstance.is_lost.mockReturnValue(true)
+    mockGameInstance.lose_reason.mockReturnValue('killed')
+    renderPage()
+    await waitFor(() => expect(screen.getByTestId('game-result-popup')).toBeInTheDocument())
+    expect(screen.getByText('You died!')).toBeInTheDocument()
+    expect(screen.getByTestId('game-result-popup')).toHaveAttribute('data-tone', 'fail')
+  })
+
+  it('HP HUD renders maxHp hearts with hp filled and the remainder dimmed', async () => {
+    mockGameInstance.hp.mockReturnValue(2)
+    mockGameInstance.max_hp.mockReturnValue(5)
+    renderPage()
+    await waitForLoad()
+    const hpHud = screen.getByLabelText('Health')
+    expect(hpHud).toBeInTheDocument()
+    const hearts = hpHud.querySelectorAll('img')
+    expect(hearts.length).toBe(5)
+    expect(hearts[0]).toHaveAttribute('alt', 'Health')
+    expect(hearts[1]).toHaveAttribute('alt', 'Health')
+    expect(hearts[2]).toHaveAttribute('alt', 'Lost health')
+    expect(hearts[3]).toHaveAttribute('alt', 'Lost health')
+    expect(hearts[4]).toHaveAttribute('alt', 'Lost health')
+    expect(hearts[0]).not.toHaveClass('maze-hp-hud-heart--empty')
+    expect(hearts[2]).toHaveClass('maze-hp-hud-heart--empty')
+  })
+
+  it('HP HUD is not rendered when maxHp is 0', async () => {
+    mockGameInstance.max_hp.mockReturnValue(0)
+    renderPage()
+    await waitForLoad()
+    expect(screen.queryByLabelText('Health')).not.toBeInTheDocument()
+  })
+
+  it('damage flash overlay is not rendered when damageFlashKey is 0', async () => {
+    mockUseMazeGame.mockReturnValue([
+      { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0, paused: false },
+      mockMove,
+      mockRestart,
+      mockTogglePause,
+    ])
+    const { container } = renderPage()
+    await waitForLoad()
+    expect(container.querySelector('.maze-damage-flash')).toBeNull()
+  })
+
+  it('damage flash overlay is rendered when damageFlashKey > 0', async () => {
+    mockUseMazeGame.mockReturnValue([
+      { game: mockGameInstance, version: 1, loading: false, error: null, damageFlashKey: 1, paused: false },
+      mockMove,
+      mockRestart,
+      mockTogglePause,
+    ])
+    const { container } = renderPage()
+    await waitForLoad()
+    expect(container.querySelector('.maze-damage-flash')).toBeInTheDocument()
+  })
+
+  it('keyboard ignored when game is lost', async () => {
+    mockGameInstance.is_lost.mockReturnValue(true)
+    mockGameInstance.lose_reason.mockReturnValue('stranded')
+    renderPage()
+    await waitForLoad()
+    fireEvent.keyDown(window, { key: 'ArrowUp' })
+    expect(mockMove).not.toHaveBeenCalled()
+  })
+
+  it('D-pad buttons are aria-disabled when game is lost', async () => {
+    mockGameInstance.is_lost.mockReturnValue(true)
+    mockGameInstance.lose_reason.mockReturnValue('stranded')
+    renderPage()
+    await waitForLoad()
+    expect(screen.getByRole('button', { name: /move up/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: /move down/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: /move left/i })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: /move right/i })).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('Close button on GameResultPopup dismisses it', async () => {
@@ -221,6 +337,21 @@ describe('MazeGamePage', () => {
     expect(legend.textContent).toMatch(/Right/)
   })
 
+  it('bag shows "empty" when nothing is collected', async () => {
+    renderPage()
+    await waitForLoad()
+    const bag = document.querySelector('.maze-bag')!
+    expect(bag.textContent).toMatch(/empty/)
+  })
+
+  it('bag shows a key icon for each collected key', async () => {
+    mockGameInstance.bag.mockReturnValue([{ type: 'key', id: 0 }, { type: 'key', id: 1 }])
+    renderPage()
+    await waitForLoad()
+    const bag = document.querySelector('.maze-bag')!
+    expect(bag.querySelectorAll('img')).toHaveLength(2)
+  })
+
   it('keyboard legend shows arrow and letter key hints', async () => {
     renderPage()
     await waitForLoad()
@@ -229,5 +360,55 @@ describe('MazeGamePage', () => {
     expect(legend.textContent).toMatch(/S/)
     expect(legend.textContent).toMatch(/A/)
     expect(legend.textContent).toMatch(/D/)
+  })
+
+  it('keyboard legend includes the pause shortcut', async () => {
+    renderPage()
+    await waitForLoad()
+    const legend = document.querySelector('.maze-shortcuts-hint')!
+    expect(legend.textContent).toMatch(/Pause/)
+  })
+
+  it('"Space" key toggles pause', async () => {
+    renderPage()
+    await waitForLoad()
+    fireEvent.keyDown(window, { key: ' ' })
+    expect(mockTogglePause).toHaveBeenCalled()
+  })
+
+  it('"Escape" key toggles pause', async () => {
+    renderPage()
+    await waitForLoad()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(mockTogglePause).toHaveBeenCalled()
+  })
+
+  it('D-pad pause button toggles pause', async () => {
+    renderPage()
+    await waitForLoad()
+    await userEvent.click(screen.getByRole('button', { name: /pause/i }))
+    expect(mockTogglePause).toHaveBeenCalled()
+  })
+
+  it('pause popup is shown only when paused, with Resume and Restart wired', async () => {
+    mockUseMazeGame.mockReturnValue([
+      { game: mockGameInstance, version: 0, loading: false, error: null, damageFlashKey: 0, paused: true },
+      mockMove,
+      mockRestart,
+      mockTogglePause,
+    ])
+    renderPage()
+    await waitForLoad()
+    const popup = screen.getByTestId('pause-popup')
+    await userEvent.click(within(popup).getByRole('button', { name: 'Resume' }))
+    expect(mockTogglePause).toHaveBeenCalled()
+    await userEvent.click(within(popup).getByRole('button', { name: 'Restart' }))
+    expect(mockRestart).toHaveBeenCalled()
+  })
+
+  it('pause popup is absent when not paused', async () => {
+    renderPage()
+    await waitForLoad()
+    expect(screen.queryByTestId('pause-popup')).not.toBeInTheDocument()
   })
 })

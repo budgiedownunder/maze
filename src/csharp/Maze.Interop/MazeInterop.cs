@@ -120,6 +120,159 @@ namespace Maze.Interop
             /// A cell containing a wall, meaning it can't be passed through
             /// </summary>
             Wall = 3,
+            /// <summary>
+            /// A cell containing a key that can be picked up at gameplay time
+            /// </summary>
+            Key = 4,
+            /// <summary>
+            /// A cell containing a door that blocks passage until unlocked by a key
+            /// </summary>
+            Door = 5,
+            /// <summary>
+            /// A cell where an enemy spawns at gameplay time
+            /// </summary>
+            Enemy = 6,
+            /// <summary>
+            /// A cell containing a health pickup that restores HP when walked over
+            /// </summary>
+            Health = 7,
+        }
+        /// <summary>
+        /// Reason a game ended in a loss. Mirrors the Rust `maze::LoseReason` enum.
+        /// </summary>
+        public enum MazeLoseReason
+        {
+            /// <summary>
+            /// The game is not lost
+            /// </summary>
+            None = 0,
+            /// <summary>
+            /// The player can no longer hold enough keys to open every closed
+            /// door remaining on a route from their current cell to the finish
+            /// </summary>
+            Stranded = 1,
+            /// <summary>
+            /// The player's HP reached zero from enemy collisions
+            /// </summary>
+            Killed = 2,
+        }
+        /// <summary>
+        /// Kind of item carried in the player's bag. Mirrors the Rust
+        /// `maze::BagItem` tagged enum. New item kinds extend the integer space.
+        /// </summary>
+        public enum MazeBagItemKind : uint
+        {
+            /// <summary>A key that can open one door</summary>
+            Key = 0,
+        }
+        /// <summary>
+        /// One item in the player's bag.
+        /// </summary>
+        public struct MazeBagItem
+        {
+            /// <summary>The kind of item</summary>
+            public MazeBagItemKind Kind;
+            /// <summary>Stable identifier for the item (e.g. derived from the key's origin cell)</summary>
+            public uint Id;
+        }
+        /// <summary>
+        /// Lifecycle state of a door cell. Mirrors the Rust `maze::DoorState` enum.
+        /// </summary>
+        public enum MazeDoorState : uint
+        {
+            /// <summary>Closed and locked; requires a key to open</summary>
+            Locked = 0,
+            /// <summary>Currently opening; will transition to <see cref="Open"/> on the next sufficient tick</summary>
+            Opening = 1,
+            /// <summary>Fully open and permanently passable</summary>
+            Open = 2,
+        }
+        /// <summary>
+        /// One door cell along with its current state.
+        /// </summary>
+        public struct MazeDoor
+        {
+            /// <summary>Row of the door cell</summary>
+            public uint Row;
+            /// <summary>Column of the door cell</summary>
+            public uint Column;
+            /// <summary>Current state of the door</summary>
+            public MazeDoorState State;
+        }
+        /// <summary>
+        /// Kind of event produced by <see cref="MazeInterop.MazeGameTick(UIntPtr, float)">MazeGameTick()</see>.
+        /// Mirrors the Rust `maze::GameEvent` tagged enum.
+        /// </summary>
+        public enum MazeGameEventKind : uint
+        {
+            /// <summary>A door finished opening — its <see cref="MazeDoorState"/> is now <see cref="MazeDoorState.Open"/>. <see cref="MazeGameEvent.Row"/> / <see cref="MazeGameEvent.Column"/> is the door cell.</summary>
+            DoorOpened = 0,
+            /// <summary>An enemy advanced one cell. <see cref="MazeGameEvent.Row"/> / <see cref="MazeGameEvent.Column"/> is its new cell; <see cref="MazeGameEvent.Payload"/> is the enemy id.</summary>
+            EnemyMoved = 1,
+            /// <summary>The player took same-cell collision damage. <see cref="MazeGameEvent.Payload"/> is the player's HP after the hit; the cell fields are unused.</summary>
+            PlayerDamaged = 2,
+            /// <summary>The player consumed a health pickup. <see cref="MazeGameEvent.Row"/> / <see cref="MazeGameEvent.Column"/> is the consumed cell; <see cref="MazeGameEvent.Payload"/> is the player's HP after the heal.</summary>
+            PlayerHealed = 3,
+            /// <summary>The player walked onto a health pickup that did not apply (already at max HP). The cell is spared; <see cref="MazeGameEvent.Payload"/> is the machine-readable reason code (0 = already at max HP).</summary>
+            PlayerNotHealed = 4,
+            /// <summary>The player walked onto a key and it was auto-collected into the bag. <see cref="MazeGameEvent.Row"/> / <see cref="MazeGameEvent.Column"/> is the consumed key cell; <see cref="MazeGameEvent.Payload"/> is the collected key id.</summary>
+            KeyCollected = 5,
+        }
+        /// <summary>
+        /// One time-based game event emitted by a tick.
+        /// </summary>
+        public struct MazeGameEvent
+        {
+            /// <summary>The kind of event</summary>
+            public MazeGameEventKind Kind;
+            /// <summary>Row of the cell the event applies to (unused for <see cref="MazeGameEventKind.PlayerDamaged"/>)</summary>
+            public uint Row;
+            /// <summary>Column of the cell the event applies to (unused for <see cref="MazeGameEventKind.PlayerDamaged"/>)</summary>
+            public uint Column;
+            /// <summary>
+            /// Event-specific scalar payload: enemy id (<see cref="MazeGameEventKind.EnemyMoved"/>),
+            /// HP-after (<see cref="MazeGameEventKind.PlayerDamaged"/> / <see cref="MazeGameEventKind.PlayerHealed"/>),
+            /// reason code (<see cref="MazeGameEventKind.PlayerNotHealed"/>), or <c>0</c> (<see cref="MazeGameEventKind.DoorOpened"/>).
+            /// </summary>
+            public uint Payload;
+        }
+        /// <summary>
+        /// One uncollected key cell along with its stable id.
+        /// </summary>
+        public struct MazeKey
+        {
+            /// <summary>Row of the key cell</summary>
+            public uint Row;
+            /// <summary>Column of the key cell</summary>
+            public uint Column;
+            /// <summary>Stable identifier derived from the key's origin cell</summary>
+            public uint Id;
+        }
+        /// <summary>
+        /// One enemy's current cell along with its stable id.
+        /// </summary>
+        public struct MazeEnemy
+        {
+            /// <summary>Current row of the enemy</summary>
+            public uint Row;
+            /// <summary>Current column of the enemy</summary>
+            public uint Column;
+            /// <summary>Stable identifier assigned at construction in row-major scan order of the `'E'` cells</summary>
+            public uint Id;
+        }
+        /// <summary>
+        /// One uncollected health-pickup cell. <see cref="Id"/> is always <c>0</c> —
+        /// pickups have no stable id; the cell coordinate is the natural key. The
+        /// field is kept for shape parity with <see cref="MazeKey"/> / <see cref="MazeEnemy"/>.
+        /// </summary>
+        public struct MazeHealthPickup
+        {
+            /// <summary>Row of the health-pickup cell</summary>
+            public uint Row;
+            /// <summary>Column of the health-pickup cell</summary>
+            public uint Column;
+            /// <summary>Always <c>0</c> — pickups have no stable id</summary>
+            public uint Id;
         }
         /// <summary>
         /// Private constructor (singleton pattern)
@@ -416,6 +569,38 @@ namespace Maze.Interop
             connector.MazeSetWallCells(mazePtr, startRow, startCol, endRow, endCol);
         }
         /// <summary>
+        /// Sets a range of cells in a maze to keys, or throws an
+        /// exception if the cells cannot be set.
+        /// </summary>
+        public void MazeSetKeyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            connector.MazeSetKeyCells(mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells in a maze to doors, or throws an
+        /// exception if the cells cannot be set.
+        /// </summary>
+        public void MazeSetDoorCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            connector.MazeSetDoorCells(mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells in a maze to enemy spawns, or throws an
+        /// exception if the cells cannot be set.
+        /// </summary>
+        public void MazeSetEnemyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            connector.MazeSetEnemyCells(mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
+        /// Sets a range of cells in a maze to health pickups, or throws an
+        /// exception if the cells cannot be set.
+        /// </summary>
+        public void MazeSetHealthCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            connector.MazeSetHealthCells(mazePtr, startRow, startCol, endRow, endCol);
+        }
+        /// <summary>
         /// Clears a range of wall cells within a maze, or will throw an exception
         /// if the cells cannot be cleared
         /// </summary>
@@ -606,6 +791,53 @@ namespace Maze.Interop
             connector.GeneratorOptionsSetBranchFromFinish(optionsPtr, value);
         }
         /// <summary>
+        /// Sets the door_count on a <c>GeneratorOptions</c> (0 = none, the default).
+        /// Real path doors auto-placed on the spine by the Rust generator; each
+        /// real door contributes one key and one door cell to the
+        /// produced grid, so the joint cap is <c>2 * door_count + spare_doors +
+        /// spare_keys &lt;= MAX_TOTAL_FEATURES (16)</c>.
+        /// </summary>
+        public void GeneratorOptionsSetDoorCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetDoorCount(optionsPtr, value);
+        }
+        /// <summary>
+        /// Sets the spare_doors on a <c>GeneratorOptions</c> (0 = none, the
+        /// default). Decoy doors planted on off-spine branches.
+        /// </summary>
+        public void GeneratorOptionsSetSpareDoors(UIntPtr optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetSpareDoors(optionsPtr, value);
+        }
+        /// <summary>
+        /// Sets the spare_keys on a <c>GeneratorOptions</c> (0 = none, the
+        /// default). Spare keys planted on off-spine branches, giving the
+        /// player a budget to burn on decoys before they risk stranding.
+        /// </summary>
+        public void GeneratorOptionsSetSpareKeys(UIntPtr optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetSpareKeys(optionsPtr, value);
+        }
+        /// <summary>
+        /// Sets the enemy_count on a <c>GeneratorOptions</c> (0 = none, the
+        /// default). Enemies auto-placed at random passable cells, clamped by
+        /// the generator to its enemy ceiling and the eligible-cell count.
+        /// </summary>
+        public void GeneratorOptionsSetEnemyCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetEnemyCount(optionsPtr, value);
+        }
+        /// <summary>
+        /// Sets the health_count on a <c>GeneratorOptions</c> (0 = none, the
+        /// default). Health pickups auto-placed at random passable cells,
+        /// clamped by the generator to its health ceiling and the eligible-cell
+        /// count.
+        /// </summary>
+        public void GeneratorOptionsSetHealthCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            connector.GeneratorOptionsSetHealthCount(optionsPtr, value);
+        }
+        /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails
         /// </summary>
         /// <param name="mazePtr">Pointer to maze</param>
@@ -645,7 +877,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="gamePtr">Pointer to game session</param>
         /// <param name="dir">Direction: 0=None 1=Up 2=Down 3=Left 4=Right</param>
-        /// <returns>0=None 1=Moved 2=Blocked 3=Complete</returns>
+        /// <returns>0=None 1=Moved 2=Blocked 3=Complete 4=BlockedByLockedDoor 5=StartedUnlocking 6=Stranded</returns>
         public int MazeGameMovePlayer(UIntPtr gamePtr, int dir)
         {
             return connector.MazeGameMovePlayer(gamePtr, dir);
@@ -685,6 +917,171 @@ namespace Maze.Interop
         public int MazeGameIsComplete(UIntPtr gamePtr)
         {
             return connector.MazeGameIsComplete(gamePtr);
+        }
+        /// <summary>
+        /// Returns whether the game is in a lost state
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>1 if lost, 0 otherwise</returns>
+        public int MazeGameIsLost(UIntPtr gamePtr)
+        {
+            return connector.MazeGameIsLost(gamePtr);
+        }
+        /// <summary>
+        /// Returns the lose-reason code for the game session
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>0=None 1=Stranded</returns>
+        public int MazeGameLoseReason(UIntPtr gamePtr)
+        {
+            return connector.MazeGameLoseReason(gamePtr);
+        }
+        /// <summary>
+        /// Attempts to pick up a collectible at the player's current cell.
+        /// Adds the item to the bag and clears the cell on success.
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="item">Receives the picked item on success</param>
+        /// <returns>True if an item was picked up; false if the player's cell holds no collectible</returns>
+        public bool MazeGamePickup(UIntPtr gamePtr, out MazeBagItem item)
+        {
+            return connector.MazeGamePickup(gamePtr, out item);
+        }
+        /// <summary>
+        /// Returns the number of items currently in the player's bag
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Bag size</returns>
+        public int MazeGameBagCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameBagCount(gamePtr);
+        }
+        /// <summary>
+        /// Retrieves a single bag item by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the bag</param>
+        /// <param name="item">Receives the bag item on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetBagItem(UIntPtr gamePtr, int index, out MazeBagItem item)
+        {
+            return connector.MazeGameGetBagItem(gamePtr, index, out item);
+        }
+        /// <summary>
+        /// Returns the number of door cells in the maze, regardless of state
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Door count</returns>
+        public int MazeGameDoorCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameDoorCount(gamePtr);
+        }
+        /// <summary>
+        /// Retrieves a single door cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the door list</param>
+        /// <param name="door">Receives the door cell + state on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetDoor(UIntPtr gamePtr, int index, out MazeDoor door)
+        {
+            return connector.MazeGameGetDoor(gamePtr, index, out door);
+        }
+        /// <summary>
+        /// Advances time-based game state by <paramref name="dtMs"/> milliseconds
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="dtMs">Elapsed time in milliseconds</param>
+        /// <returns>Number of events produced by this tick</returns>
+        public int MazeGameTick(UIntPtr gamePtr, float dtMs)
+        {
+            return connector.MazeGameTick(gamePtr, dtMs);
+        }
+        /// <summary>
+        /// Returns the number of events currently buffered from the most recent tick
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Tick event count</returns>
+        public int MazeGameTickEventCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameTickEventCount(gamePtr);
+        }
+        /// <summary>
+        /// Retrieves a single tick event from the buffer by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the tick event buffer</param>
+        /// <param name="evt">Receives the tick event on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetTickEvent(UIntPtr gamePtr, int index, out MazeGameEvent evt)
+        {
+            return connector.MazeGameGetTickEvent(gamePtr, index, out evt);
+        }
+        /// <summary>
+        /// Returns the number of uncollected key cells in the maze
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected key count</returns>
+        public int MazeGameKeyCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameKeyCount(gamePtr);
+        }
+        /// <summary>
+        /// Retrieves a single uncollected key cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the uncollected-keys list</param>
+        /// <param name="key">Receives the key cell + stable id on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetKey(UIntPtr gamePtr, int index, out MazeKey key)
+        {
+            return connector.MazeGameGetKey(gamePtr, index, out key);
+        }
+        /// <summary>Returns the player's current HP</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Current HP</returns>
+        public uint MazeGameHp(UIntPtr gamePtr)
+        {
+            return connector.MazeGameHp(gamePtr);
+        }
+        /// <summary>Returns the player's maximum HP</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Maximum HP</returns>
+        public uint MazeGameMaxHp(UIntPtr gamePtr)
+        {
+            return connector.MazeGameMaxHp(gamePtr);
+        }
+        /// <summary>Returns the number of active enemies</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Enemy count</returns>
+        public int MazeGameEnemyCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameEnemyCount(gamePtr);
+        }
+        /// <summary>Retrieves a single enemy's current cell + stable id by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the enemy list</param>
+        /// <param name="enemy">Receives the enemy cell + id on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetEnemy(UIntPtr gamePtr, int index, out MazeEnemy enemy)
+        {
+            return connector.MazeGameGetEnemy(gamePtr, index, out enemy);
+        }
+        /// <summary>Returns the number of uncollected health-pickup cells</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected health-pickup count</returns>
+        public int MazeGameHealthPickupCount(UIntPtr gamePtr)
+        {
+            return connector.MazeGameHealthPickupCount(gamePtr);
+        }
+        /// <summary>Retrieves a single uncollected health-pickup cell by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the health-pickup list</param>
+        /// <param name="pickup">Receives the pickup cell on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetHealthPickup(UIntPtr gamePtr, int index, out MazeHealthPickup pickup)
+        {
+            return connector.MazeGameGetHealthPickup(gamePtr, index, out pickup);
         }
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)

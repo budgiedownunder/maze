@@ -82,12 +82,67 @@ pub struct Play3dDifficultyConfig {
     /// `brick` so the no-config and pre-Step-14 behaviour is preserved.
     #[serde(default = "default_wall_type")]
     pub wall_type: WallTypeConfig,
+    /// Door open-animation style for this difficulty. Default `swing`.
+    #[serde(default = "default_door_style")]
+    pub door_style: DoorStyleConfig,
+    /// Key-holder style for `'K'` cells this difficulty. Default `pedestal`.
+    #[serde(default = "default_key_holder")]
+    pub key_holder: KeyHolderStyleConfig,
+    /// Number of doors (each paired with one key) the maze generator
+    /// auto-places into this difficulty's maze. Doors gate the solution path
+    /// and the maze stays solvable (key-aware verified). Clamped to what the
+    /// maze can hold. Default 0 = a lock-free maze.
+    #[serde(default = "default_play3d_door_count")]
+    pub door_count: u32,
+    /// Number of decoy doors planted on off-spine branches after the maze
+    /// passes the solvability check. A decoy is visually indistinguishable
+    /// from a real path door — opening one burns a key the player might have
+    /// needed for a real door and (when the spare budget is exhausted)
+    /// strands them. Clamped to `MAX_AUTO_DOORS` and to feasibility. Default
+    /// 0 = no decoys.
+    #[serde(default = "default_play3d_spare_doors")]
+    pub spare_doors: u32,
+    /// Number of spare keys planted on off-spine branches, giving the player
+    /// a budget to burn on decoys before they risk stranding. Default 0.
+    #[serde(default = "default_play3d_spare_keys")]
+    pub spare_keys: u32,
+    /// Number of enemies (`'E'` cells) the generator auto-places on this
+    /// difficulty's maze. Clamped to `maze::MAX_ENEMY_COUNT` (= 8) and to
+    /// the available eligible cells. Default 0 = no enemies.
+    #[serde(default = "default_play3d_enemy_count")]
+    pub enemy_count: u32,
+    /// Number of health pickups (`'H'` cells) the generator auto-places
+    /// on this difficulty's maze. Clamped to `maze::MAX_HEALTH_COUNT`
+    /// (= 8) and to the available eligible cells. Default 0 = no
+    /// health pickups.
+    #[serde(default = "default_play3d_health_count")]
+    pub health_count: u32,
+    /// Enemy rig kind to spawn at every `'E'` cell. Same rig for every
+    /// enemy on a given difficulty (per-enemy variation is deferred to a
+    /// later plan). Default `goblin`.
+    #[serde(default = "default_enemy_type")]
+    pub enemy_type: EnemyTypeConfig,
+    /// Health-pickup rig kind to spawn at every `'H'` cell. Default
+    /// `heart`.
+    #[serde(default = "default_health_style")]
+    pub health_style: HealthStyleConfig,
+    /// How often each enemy advances one cell, in milliseconds of
+    /// real-game time. Lower = harder. Default 1500.
+    #[serde(default = "default_play3d_enemy_move_period_ms")]
+    pub enemy_move_period_ms: u32,
+    /// Player's HP cap for this difficulty. Starting HP is set to this
+    /// value (the Bevy `StartConfig` re-uses `max_hp` for `starting_hp`).
+    /// Default 3.
+    #[serde(default = "default_play3d_max_hp")]
+    pub max_hp: u32,
 }
 
 /// Atmospheric sky modes. Wire form (TOML / JSON) is lowercase
-/// (`"night" | "sunrise" | "day" | "sunset"`). Unknown values
-/// deserialise as `Night` rather than failing the entire `AppConfig`
-/// load — same forgiving policy as the rest of this module.
+/// (`"night" | "sunrise" | "day" | "sunset" | "dungeon" | "chamber"`).
+/// Unknown values deserialise as `Night` rather than failing the entire
+/// `AppConfig` load — same forgiving policy as the rest of this module.
+/// `Dungeon` swaps the open sky for a dark-rock ceiling over every cell;
+/// `Chamber` caps it instead with a ceiling in the cell's wall material.
 #[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SkyTypeConfig {
@@ -96,6 +151,8 @@ pub enum SkyTypeConfig {
     Sunrise,
     Day,
     Sunset,
+    Dungeon,
+    Chamber,
 }
 
 impl SkyTypeConfig {
@@ -106,6 +163,8 @@ impl SkyTypeConfig {
             Self::Sunrise => "sunrise",
             Self::Day => "day",
             Self::Sunset => "sunset",
+            Self::Dungeon => "dungeon",
+            Self::Chamber => "chamber",
         }
     }
 }
@@ -117,6 +176,8 @@ impl<'de> Deserialize<'de> for SkyTypeConfig {
             "sunrise" => Self::Sunrise,
             "day" => Self::Day,
             "sunset" => Self::Sunset,
+            "dungeon" => Self::Dungeon,
+            "chamber" => Self::Chamber,
             _ => Self::Night,
         })
     }
@@ -157,6 +218,140 @@ impl<'de> Deserialize<'de> for WallTypeConfig {
             "wood" => Self::Wood,
             "cobblestone" => Self::Cobblestone,
             _ => Self::Brick,
+        })
+    }
+}
+
+/// Door open-animation style for the 3D game. Wire form (TOML / JSON) is
+/// `snake_case` (`"swing" | "slide" | "portcullis" | "dissolve"`). Unknown
+/// values deserialise as `Swing` rather than failing the entire `AppConfig`
+/// load — same forgiving policy as [`SkyTypeConfig`].
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DoorStyleConfig {
+    #[default]
+    Swing,
+    Slide,
+    Portcullis,
+    Dissolve,
+}
+
+impl DoorStyleConfig {
+    /// `snake_case` wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Swing => "swing",
+            Self::Slide => "slide",
+            Self::Portcullis => "portcullis",
+            Self::Dissolve => "dissolve",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for DoorStyleConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "slide" => Self::Slide,
+            "portcullis" => Self::Portcullis,
+            "dissolve" => Self::Dissolve,
+            _ => Self::Swing,
+        })
+    }
+}
+
+/// Key-holder style for `'K'` cells in the 3D game. Wire form (TOML / JSON) is
+/// `snake_case` (`"pedestal" | "chest" | "floating_key"`). Unknown values
+/// deserialise as `Pedestal` — same forgiving policy as [`SkyTypeConfig`].
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyHolderStyleConfig {
+    #[default]
+    Pedestal,
+    Chest,
+    FloatingKey,
+}
+
+impl KeyHolderStyleConfig {
+    /// `snake_case` wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Pedestal => "pedestal",
+            Self::Chest => "chest",
+            Self::FloatingKey => "floating_key",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for KeyHolderStyleConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "chest" => Self::Chest,
+            "floating_key" => Self::FloatingKey,
+            _ => Self::Pedestal,
+        })
+    }
+}
+
+/// Enemy rig kind for `'E'` cells in the 3D game. Wire form (TOML / JSON)
+/// is lowercase (`"goblin" | "ghost"`). Unknown values deserialise as
+/// `Goblin` — same forgiving policy as [`SkyTypeConfig`].
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum EnemyTypeConfig {
+    #[default]
+    Goblin,
+    Ghost,
+}
+
+impl EnemyTypeConfig {
+    /// Lowercase wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Goblin => "goblin",
+            Self::Ghost => "ghost",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for EnemyTypeConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "ghost" => Self::Ghost,
+            _ => Self::Goblin,
+        })
+    }
+}
+
+/// Health-pickup rig kind for `'H'` cells in the 3D game. Wire form
+/// (TOML / JSON) is lowercase (`"heart" | "potion"`). Unknown values
+/// deserialise as `Heart` — same forgiving policy as [`SkyTypeConfig`].
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum HealthStyleConfig {
+    #[default]
+    Heart,
+    Potion,
+}
+
+impl HealthStyleConfig {
+    /// Lowercase wire string used in JSON responses + TOML values.
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Heart => "heart",
+            Self::Potion => "potion",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for HealthStyleConfig {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "potion" => Self::Potion,
+            _ => Self::Heart,
         })
     }
 }
@@ -231,6 +426,17 @@ impl Default for Play3dDifficultyConfig {
             landmarks: LandmarksConfig::default(),
             sky_type: default_sky_type(),
             wall_type: default_wall_type(),
+            door_style: default_door_style(),
+            key_holder: default_key_holder(),
+            door_count: default_play3d_door_count(),
+            spare_doors: default_play3d_spare_doors(),
+            spare_keys: default_play3d_spare_keys(),
+            enemy_count: default_play3d_enemy_count(),
+            health_count: default_play3d_health_count(),
+            enemy_type: default_enemy_type(),
+            health_style: default_health_style(),
+            enemy_move_period_ms: default_play3d_enemy_move_period_ms(),
+            max_hp: default_play3d_max_hp(),
         }
     }
 }
@@ -277,9 +483,11 @@ impl Play3dConfig {
 
 impl Default for Play3dConfig {
     fn default() -> Self {
-        // Defaults align with what the plan documents and what the standalone
-        // Bevy game uses when no config is fetched — keeping the no-config /
-        // misconfigured path behaving like Step 2 instead of crashing.
+        // Fallback presets for the no-config / misconfigured path. The
+        // `min_solution_length`s are kept comfortably below each grid's geometric
+        // minimum path so generation always succeeds with the bushier
+        // growing-tree generator (whose spines are shorter than the old
+        // recursive-backtracking "rivers"); operators raise them via config.toml.
         Self {
             title: default_play3d_title(),
             easy: Play3dDifficultyConfig {
@@ -287,7 +495,7 @@ impl Default for Play3dConfig {
                 cols: 8,
                 timer_seconds: 120,
                 seed: 8_080_808,
-                min_solution_length: 30,
+                min_solution_length: 12,
                 minimap_cell_px: default_minimap_cell_px(),
                 minimap_radius: default_minimap_radius(),
                 title: None,
@@ -295,13 +503,24 @@ impl Default for Play3dConfig {
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
                 wall_type: default_wall_type(),
+                door_style: default_door_style(),
+                key_holder: default_key_holder(),
+                door_count: 2,
+                spare_doors: 0,
+                spare_keys: 0,
+                enemy_count: 1,
+                health_count: 2,
+                enemy_type: EnemyTypeConfig::Goblin,
+                health_style: HealthStyleConfig::Heart,
+                enemy_move_period_ms: 1800,
+                max_hp: 3,
             },
             tricky: Play3dDifficultyConfig {
                 rows: 15,
                 cols: 15,
                 timer_seconds: 240,
                 seed: 15_151_515,
-                min_solution_length: 90,
+                min_solution_length: 24,
                 minimap_cell_px: default_minimap_cell_px(),
                 minimap_radius: default_minimap_radius(),
                 title: None,
@@ -309,13 +528,24 @@ impl Default for Play3dConfig {
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
                 wall_type: default_wall_type(),
+                door_style: default_door_style(),
+                key_holder: default_key_holder(),
+                door_count: 3,
+                spare_doors: 2,
+                spare_keys: 1,
+                enemy_count: 3,
+                health_count: 3,
+                enemy_type: EnemyTypeConfig::Goblin,
+                health_style: HealthStyleConfig::Heart,
+                enemy_move_period_ms: 1500,
+                max_hp: 3,
             },
             hard: Play3dDifficultyConfig {
                 rows: 25,
                 cols: 25,
                 timer_seconds: 420,
                 seed: 25_252_525,
-                min_solution_length: 220,
+                min_solution_length: 44,
                 minimap_cell_px: default_minimap_cell_px(),
                 minimap_radius: default_minimap_radius(),
                 title: None,
@@ -323,6 +553,17 @@ impl Default for Play3dConfig {
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
                 wall_type: default_wall_type(),
+                door_style: default_door_style(),
+                key_holder: default_key_holder(),
+                door_count: 4,
+                spare_doors: 3,
+                spare_keys: 1,
+                enemy_count: 5,
+                health_count: 4,
+                enemy_type: EnemyTypeConfig::Goblin,
+                health_style: HealthStyleConfig::Heart,
+                enemy_move_period_ms: 1200,
+                max_hp: 3,
             },
         }
     }
@@ -358,6 +599,41 @@ fn default_play3d_seed() -> u64 {
 }
 fn default_play3d_min_solution_length() -> u32 {
     0
+}
+fn default_play3d_door_count() -> u32 {
+    0
+}
+fn default_play3d_spare_doors() -> u32 {
+    0
+}
+fn default_play3d_spare_keys() -> u32 {
+    0
+}
+fn default_play3d_enemy_count() -> u32 {
+    0
+}
+fn default_play3d_health_count() -> u32 {
+    0
+}
+fn default_play3d_enemy_move_period_ms() -> u32 {
+    1500
+}
+fn default_play3d_max_hp() -> u32 {
+    3
+}
+
+/// Enemy rig kind defaults to goblin — the default rig the Bevy game ships
+/// with. Operators override per difficulty via
+/// `[game.play3d.<difficulty>] enemy_type = "ghost"`.
+fn default_enemy_type() -> EnemyTypeConfig {
+    EnemyTypeConfig::Goblin
+}
+
+/// Health-pickup rig kind defaults to heart — the default rig the Bevy
+/// game ships with. Operators override per difficulty via
+/// `[game.play3d.<difficulty>] health_style = "potion"`.
+fn default_health_style() -> HealthStyleConfig {
+    HealthStyleConfig::Heart
 }
 
 /// The minimap cell pixel size the game shipped with.
@@ -418,6 +694,19 @@ fn default_sky_type() -> SkyTypeConfig {
 /// difficulty via `[game.play3d.<difficulty>] wall_type = "wood"`.
 fn default_wall_type() -> WallTypeConfig {
     WallTypeConfig::Brick
+}
+
+/// Door style defaults to swing — the topology-driven look the 3D game shipped
+/// with. Operators override per difficulty via
+/// `[game.play3d.<difficulty>] door_style = "portcullis"`.
+fn default_door_style() -> DoorStyleConfig {
+    DoorStyleConfig::Swing
+}
+
+/// Key-holder style defaults to pedestal. Operators override per difficulty via
+/// `[game.play3d.<difficulty>] key_holder = "chest"`.
+fn default_key_holder() -> KeyHolderStyleConfig {
+    KeyHolderStyleConfig::Pedestal
 }
 
 #[cfg(test)]
@@ -649,6 +938,8 @@ mod tests {
         assert_eq!(SkyTypeConfig::Sunrise.as_wire_str(), "sunrise");
         assert_eq!(SkyTypeConfig::Day.as_wire_str(), "day");
         assert_eq!(SkyTypeConfig::Sunset.as_wire_str(), "sunset");
+        assert_eq!(SkyTypeConfig::Dungeon.as_wire_str(), "dungeon");
+        assert_eq!(SkyTypeConfig::Chamber.as_wire_str(), "chamber");
     }
 
     #[test]
@@ -720,6 +1011,197 @@ mod tests {
         assert_eq!(WallTypeConfig::DressedStone.as_wire_str(), "dressed_stone");
         assert_eq!(WallTypeConfig::Wood.as_wire_str(), "wood");
         assert_eq!(WallTypeConfig::Cobblestone.as_wire_str(), "cobblestone");
+    }
+
+    #[test]
+    fn door_style_round_trips_from_toml_and_defaults_to_swing() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            door_style = "portcullis"
+
+            [play3d.tricky]
+            rows = 12
+            cols = 12
+            timer_seconds = 180
+            seed = 43
+            min_solution_length = 60
+            door_style = "DISSOLVE"
+            # case-insensitive
+
+            [play3d.hard]
+            rows = 20
+            cols = 20
+            timer_seconds = 360
+            seed = 44
+            min_solution_length = 160
+            # door_style deliberately omitted — defaults to swing
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.door_style, DoorStyleConfig::Portcullis);
+        assert_eq!(cfg.play3d.tricky.door_style, DoorStyleConfig::Dissolve);
+        assert_eq!(cfg.play3d.hard.door_style, DoorStyleConfig::Swing);
+        assert_eq!(Play3dConfig::default().easy.door_style, DoorStyleConfig::Swing);
+    }
+
+    #[test]
+    fn unknown_door_style_falls_back_to_swing() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            door_style = "teleport"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
+        assert_eq!(cfg.play3d.easy.door_style, DoorStyleConfig::Swing);
+    }
+
+    #[test]
+    fn key_holder_round_trips_from_toml_and_defaults_to_pedestal() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            key_holder = "chest"
+
+            [play3d.tricky]
+            rows = 12
+            cols = 12
+            timer_seconds = 180
+            seed = 43
+            min_solution_length = 60
+            key_holder = "FLOATING_KEY"
+            # case-insensitive
+
+            [play3d.hard]
+            rows = 20
+            cols = 20
+            timer_seconds = 360
+            seed = 44
+            min_solution_length = 160
+            # key_holder deliberately omitted — defaults to pedestal
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.key_holder, KeyHolderStyleConfig::Chest);
+        assert_eq!(cfg.play3d.tricky.key_holder, KeyHolderStyleConfig::FloatingKey);
+        assert_eq!(cfg.play3d.hard.key_holder, KeyHolderStyleConfig::Pedestal);
+        assert_eq!(
+            Play3dConfig::default().easy.key_holder,
+            KeyHolderStyleConfig::Pedestal
+        );
+    }
+
+    #[test]
+    fn unknown_key_holder_falls_back_to_pedestal() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            key_holder = "vault"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
+        assert_eq!(cfg.play3d.easy.key_holder, KeyHolderStyleConfig::Pedestal);
+    }
+
+    #[test]
+    fn door_count_round_trips_from_toml_and_defaults_to_zero() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 15
+            cols = 15
+            timer_seconds = 120
+            seed = 42
+            min_solution_length = 20
+            door_count = 3
+
+            [play3d.tricky]
+            rows = 20
+            cols = 20
+            timer_seconds = 240
+            seed = 43
+            min_solution_length = 60
+            # door_count deliberately omitted — defaults to 0
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.door_count, 3);
+        assert_eq!(cfg.play3d.tricky.door_count, 0);
+        // The shipped fallback presets seed a few doors per difficulty.
+        assert_eq!(Play3dConfig::default().easy.door_count, 2);
+        assert_eq!(Play3dConfig::default().hard.door_count, 4);
+    }
+
+    #[test]
+    fn spare_doors_and_spare_keys_round_trip_from_toml_and_default_to_zero() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 15
+            cols = 15
+            timer_seconds = 120
+            seed = 42
+            min_solution_length = 20
+            spare_doors = 2
+            spare_keys = 1
+
+            [play3d.tricky]
+            rows = 20
+            cols = 20
+            timer_seconds = 240
+            seed = 43
+            min_solution_length = 60
+            # spare_doors / spare_keys deliberately omitted — default to 0
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.play3d.easy.spare_doors, 2);
+        assert_eq!(cfg.play3d.easy.spare_keys, 1);
+        assert_eq!(cfg.play3d.tricky.spare_doors, 0);
+        assert_eq!(cfg.play3d.tricky.spare_keys, 0);
+        // The shipped fallback presets ramp the strand risk by difficulty.
+        let d = Play3dConfig::default();
+        assert_eq!((d.easy.spare_doors, d.easy.spare_keys), (0, 0));
+        assert_eq!((d.tricky.spare_doors, d.tricky.spare_keys), (2, 1));
+        assert_eq!((d.hard.spare_doors, d.hard.spare_keys), (3, 1));
+    }
+
+    #[test]
+    fn door_style_and_key_holder_as_wire_str_match_serde_form() {
+        assert_eq!(DoorStyleConfig::Swing.as_wire_str(), "swing");
+        assert_eq!(DoorStyleConfig::Slide.as_wire_str(), "slide");
+        assert_eq!(DoorStyleConfig::Portcullis.as_wire_str(), "portcullis");
+        assert_eq!(DoorStyleConfig::Dissolve.as_wire_str(), "dissolve");
+        assert_eq!(KeyHolderStyleConfig::Pedestal.as_wire_str(), "pedestal");
+        assert_eq!(KeyHolderStyleConfig::Chest.as_wire_str(), "chest");
+        assert_eq!(KeyHolderStyleConfig::FloatingKey.as_wire_str(), "floating_key");
     }
 
     #[test]
@@ -796,5 +1278,78 @@ mod tests {
         // Omitted sub-sections fall back to Play3dDifficultyConfig::default().
         assert_eq!(cfg.play3d.tricky.rows, 8);
         assert_eq!(cfg.play3d.hard.timer_seconds, 120);
+    }
+
+    #[test]
+    fn unknown_enemy_type_falls_back_to_goblin() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            enemy_type = "dragon"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
+        assert_eq!(cfg.play3d.easy.enemy_type, EnemyTypeConfig::Goblin);
+    }
+
+    #[test]
+    fn unknown_health_style_falls_back_to_heart() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            health_style = "elixir"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("typo must not fail load");
+        assert_eq!(cfg.play3d.easy.health_style, HealthStyleConfig::Heart);
+    }
+
+    #[test]
+    fn enemy_type_and_health_style_as_wire_str_matches_serde_form() {
+        assert_eq!(EnemyTypeConfig::Goblin.as_wire_str(), "goblin");
+        assert_eq!(EnemyTypeConfig::Ghost.as_wire_str(), "ghost");
+        assert_eq!(HealthStyleConfig::Heart.as_wire_str(), "heart");
+        assert_eq!(HealthStyleConfig::Potion.as_wire_str(), "potion");
+    }
+
+    #[test]
+    fn enemy_and_health_knobs_round_trip_from_toml() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            enemy_count = 4
+            health_count = 3
+            enemy_type = "ghost"
+            health_style = "potion"
+            enemy_move_period_ms = 900
+            max_hp = 5
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).unwrap();
+        let preset = &cfg.play3d.easy;
+        assert_eq!(preset.enemy_count, 4);
+        assert_eq!(preset.health_count, 3);
+        assert_eq!(preset.enemy_type, EnemyTypeConfig::Ghost);
+        assert_eq!(preset.health_style, HealthStyleConfig::Potion);
+        assert_eq!(preset.enemy_move_period_ms, 900);
+        assert_eq!(preset.max_hp, 5);
     }
 }

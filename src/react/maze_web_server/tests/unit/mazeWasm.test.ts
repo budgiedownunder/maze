@@ -92,6 +92,11 @@ const sampleOptions: GenerateOptions = {
   finishRow: 5,
   finishCol: 7,
   minSpineLength: 6,
+  doorCount: 2,
+  spareDoors: 1,
+  spareKeys: 1,
+  enemyCount: 3,
+  healthCount: 2,
 }
 
 beforeEach(() => {
@@ -127,7 +132,12 @@ describe('generateMaze', () => {
       6,    // minSpineLength
       100,  // max_retries
       undefined,
-      undefined
+      undefined,
+      2,    // doorCount
+      1,    // spareDoors
+      1,    // spareKeys
+      3,    // enemyCount
+      2,    // healthCount
     )
   })
 

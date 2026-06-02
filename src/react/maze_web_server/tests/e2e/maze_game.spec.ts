@@ -53,6 +53,174 @@ test.describe('MazeGamePage', () => {
     await expect(page.getByAltText('Player')).toBeVisible()
   })
 
+  test('walking into enemies decrements HP and HP=0 shows the You died popup', async ({ page }) => {
+    // EnemyGauntlet maze grid: ['S', 'E', 'E', 'E', 'F'] — three enemies in a
+    // row directly between start and finish. Each Move-right collides the
+    // player into another enemy; HP starts at 3 and drains to 0 on the third.
+    await page.goto('/play/maze-enemy-gauntlet')
+    await expect(page.getByAltText('Player')).toBeVisible()
+
+    const hpHud = page.getByLabel('Health')
+    await expect(hpHud).toBeVisible()
+    // HP starts at 3/3 — all three hearts filled (alt="Health"), zero dimmed.
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(0)
+
+    // Walk into the first enemy — HP goes 3 → 2 (one dimmed heart).
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(2)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(1)
+
+    // Second enemy — HP goes 2 → 1.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(1)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(2)
+
+    // Third enemy — HP drains to 0, the move returns Killed, and the result
+    // popup shows "You died!".
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByText('You died!')).toBeVisible()
+  })
+
+  test('Play Again on the result popup restarts the maze', async ({ page }) => {
+    // Die on the gauntlet, then Play Again restarts: the popup closes and HP is
+    // back to full (3/3) on a fresh game from the same definition.
+    await page.goto('/play/maze-enemy-gauntlet')
+    await expect(page.getByAltText('Player')).toBeVisible()
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.press('ArrowRight')
+      await page.waitForTimeout(150)
+    }
+    await expect(page.getByText('You died!')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Play Again' }).click()
+
+    await expect(page.getByText('You died!')).toBeHidden()
+    const hpHud = page.getByLabel('Health')
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(0)
+  })
+
+  test('enemies keep advancing on their move period while the player presses keys (tick loop not reset by moves)', async ({ page }) => {
+    // EnemyGauntlet grid ['S','E','E','E','F']: the player starts at column 0
+    // with an enemy on the adjacent cell. Pressing ArrowLeft is blocked at the
+    // left edge, so the player never leaves the start cell — but every keypress
+    // still fires move() -> scheduleWake(). The adjacent enemy must still commit
+    // onto the player on its move period (~1500ms) and deal damage. Before the
+    // tick-loop fix, each move reset the enemy countdown, so a player holding a
+    // key froze the enemies and was never hit.
+    await page.goto('/play/maze-enemy-gauntlet')
+    await expect(page.getByAltText('Player')).toBeVisible()
+
+    const hpHud = page.getByLabel('Health')
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+
+    // Simulate a held key: repeated blocked moves, faster than one enemy period.
+    const deadline = Date.now() + 5000
+    let damaged = false
+    while (Date.now() < deadline) {
+      await page.keyboard.press('ArrowLeft')
+      await page.waitForTimeout(130)
+      if (await hpHud.getByAltText('Lost health', { exact: true }).count() > 0) { damaged = true; break }
+    }
+    expect(damaged).toBe(true)
+  })
+
+  test('Space pauses the game (enemies frozen), Resume continues, Restart resets', async ({ page }) => {
+    // EnemyGauntlet grid ['S','E','E','E','F']: an enemy sits adjacent and
+    // commits onto the player every ~1500ms. Pausing must freeze that tick so
+    // HP holds; resuming must let the enemy hit again.
+    await page.goto('/play/maze-enemy-gauntlet')
+    await expect(page.getByAltText('Player')).toBeVisible()
+    const hpHud = page.getByLabel('Health')
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+
+    // Pause immediately and hold for longer than an enemy move period — HP must
+    // not drop while the pause popup is showing.
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Paused')).toBeVisible()
+    await page.waitForTimeout(2000)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(0)
+
+    // Resume — the popup closes and enemy ticks resume; a held key eventually
+    // takes a hit.
+    await page.getByRole('button', { name: 'Resume' }).click()
+    await expect(page.getByText('Paused')).toBeHidden()
+    const deadline = Date.now() + 5000
+    let damaged = false
+    while (Date.now() < deadline) {
+      await page.keyboard.press('ArrowLeft')
+      await page.waitForTimeout(130)
+      if (await hpHud.getByAltText('Lost health', { exact: true }).count() > 0) { damaged = true; break }
+    }
+    expect(damaged).toBe(true)
+
+    // Restart from the pause menu resets HP to full and closes the popup.
+    await page.keyboard.press('Space')
+    await expect(page.getByText('Paused')).toBeVisible()
+    await page.getByRole('button', { name: 'Restart' }).click()
+    await expect(page.getByText('Paused')).toBeHidden()
+    await expect(page.getByAltText('Player')).toBeVisible()
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(0)
+  })
+
+  test('walking onto a health pickup below max HP heals and removes the in-grid symbol', async ({ page }) => {
+    // EnemyHealth grid ['S','E','H','F']: collide with the enemy to drop to 2/3,
+    // then walk onto the health pickup to heal back to 3/3. The consumed pickup's
+    // in-grid symbol must disappear — it is rendered from the runtime's live
+    // health-pickup list, not the static grid char (which never changes).
+    await page.goto('/play/maze-enemy-health')
+    await expect(page.getByAltText('Player')).toBeVisible()
+
+    const grid = page.locator('.maze-grid-container')
+    const hpHud = page.getByLabel('Health')
+
+    // The pickup symbol shows in the grid and HP starts full (3/3).
+    await expect(grid.getByAltText('Health')).toBeVisible()
+    await expect(hpHud.getByAltText('Health', { exact: true })).toHaveCount(3)
+
+    // Step onto the enemy: HP 3 → 2.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(1)
+
+    // Step onto the health pickup: HP 2 → 3 and the in-grid symbol is consumed.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await expect(hpHud.getByAltText('Lost health', { exact: true })).toHaveCount(0)
+    await expect(grid.getByAltText('Health')).toHaveCount(0)
+  })
+
+  test('collecting a key opens a door and completes the maze', async ({ page }) => {
+    // KeyDoor maze grid: ['S', 'K', 'D', 'F']
+    await page.goto('/play/maze-keydoor')
+    await expect(page.getByAltText('Player')).toBeVisible()
+
+    // The key shows on the grid and the bag starts empty.
+    await expect(page.locator('.maze-grid-container').getByAltText('Key')).toBeVisible()
+    await expect(page.locator('.maze-bag')).toContainText('empty')
+
+    // Step onto the key — it is auto-collected on walk-over, no button press.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    // The key is now in the bag.
+    await expect(page.locator('.maze-bag').getByAltText('Key')).toBeVisible()
+
+    // Move toward the locked door — begins unlocking; the door opens over ~1s.
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByAltText('Door')).toBeHidden({ timeout: 3000 })
+
+    // Pass through the now-open door and reach the finish.
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(150)
+    await expect(page.getByText('You win!')).toBeVisible()
+  })
+
   // ──────────────────────────────────────────────────────────────
   // Gameplay
   // ──────────────────────────────────────────────────────────────

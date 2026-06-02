@@ -1,23 +1,37 @@
 mod hud;
 mod images;
 mod movement;
+mod outcome;
 mod overlays;
 mod palette;
 mod state;
+mod tick;
 mod world;
 
-pub use state::{GameConfig, GameOutcome, GameResult, Landmarks, SkyType, WallType};
+pub use state::{
+    DoorStyle, EnemyType, GameConfig, GameOutcome, GameResult, HealthStyle, KeyHolderStyle,
+    Landmarks, SkyType, WallType,
+};
 pub use world::generate_maze_json;
 
 use bevy::prelude::*;
 
 pub fn build_app(app: &mut App, maze_json: Option<&str>) {
-    use crate::hud::{clock, minimap, statusbar};
+    use crate::hud::{bag, clock, hp, minimap, statusbar};
     use crate::movement::{movement_system, quit_system};
+    use crate::outcome::outcome_watcher_system;
     use crate::overlays::{lose, pause, title, win};
     use crate::state::{AppState, PendingMazeJson, TitleTimer};
+    use crate::tick::{damage_flash_system, game_tick_system};
     use crate::world::{
-        objects::{self, dead_end::brazier_flicker_system},
+        objects::{
+            self,
+            dead_end::brazier_flicker_system,
+            door::door_animation_system,
+            enemy::{enemy_animation_system, ghost::ghost_hem_wave_system},
+            health::health_animation_system,
+            key_holder::{key_collection_system, key_holder_system, key_sparks_system},
+        },
         sky, spawn_world,
     };
 
@@ -37,6 +51,7 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(OnExit(AppState::TitleScreen), title::teardown_title)
         .add_systems(OnEnter(AppState::Playing), spawn_world)
         .add_systems(Update, movement_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, outcome_watcher_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::win_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, win::leaf_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, clock::tick_clock_system.run_if(in_state(AppState::Playing)))
@@ -50,6 +65,23 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, minimap::minimap_resize_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, objects::finish::orb::orb_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, brazier_flicker_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, key_holder_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, key_sparks_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, key_collection_system.run_if(in_state(AppState::Playing)))
+        // The single game-state tick driver runs in `FixedUpdate` for
+        // deterministic, frame-rate independent stepping (doors, enemies,
+        // HP arithmetic). Per-entity animation systems read the resulting
+        // state in `Update` for smooth per-frame motion.
+        .add_systems(FixedUpdate, game_tick_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, door_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, enemy_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, ghost_hem_wave_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, health_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, bag::bag_hud_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, hp::hp_hud_system.run_if(in_state(AppState::Playing)))
+        // Damage flash runs through pause/lost so an in-flight flash from
+        // the last live tick finishes fading rather than freezing on screen.
+        .add_systems(Update, damage_flash_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, pause::pause_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, sky::sky_dome_follow_camera.run_if(in_state(AppState::Playing)))
         .add_systems(Update, world::camera_fov_resize_system.run_if(in_state(AppState::Playing)))
@@ -69,8 +101,13 @@ mod tests {
         initial_facing,
         objects::{
             dead_end::{BrazierBowl, DeadEndObject},
+            door::DoorMarker,
+            enemy::EnemyMarker,
             finish::orb::FinishOrb,
+            health::HealthMarker,
+            key_holder::KeyMarker,
         },
+        roof::RoofCell,
         sky::dome::SkyDome,
         walls::WallCell,
         CAMERA_EDGE_OFFSET, CAMERA_FOV_REFERENCE_ASPECT, CAMERA_FOV_VERTICAL_MAX_RADIANS,
@@ -90,6 +127,18 @@ mod tests {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, StatesPlugin));
         build_app(&mut app, None);
+        app.update(); // OnEnter(TitleScreen) runs
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Playing);
+        app.update(); // OnExit(TitleScreen) + OnEnter(Playing) run
+        app
+    }
+
+    fn make_playing_app_with(maze_json: &str) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        build_app(&mut app, Some(maze_json));
         app.update(); // OnEnter(TitleScreen) runs
         app.world_mut()
             .resource_mut::<NextState<AppState>>()
@@ -158,6 +207,83 @@ mod tests {
     }
 
     #[test]
+    fn no_roof_for_open_sky() {
+        // The default sky (Night) is open-air — no ceiling panels.
+        let mut app = make_playing_app();
+        let count = app.world_mut().query::<&RoofCell>().iter(app.world()).count();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn dungeon_sky_caps_every_passable_cell() {
+        let mut app = make_playing_app_with_config(GameConfig {
+            sky_type: SkyType::Dungeon,
+            ..GameConfig::default()
+        });
+        let count = app.world_mut().query::<&RoofCell>().iter(app.world()).count();
+        let grid = demo_grid();
+        let expected = grid.iter().flat_map(|r| r.iter()).filter(|&&c| c != 'W').count();
+        assert_eq!(count, expected, "dungeon sky caps every passable cell");
+    }
+
+    #[test]
+    fn chamber_sky_caps_every_passable_cell() {
+        // Chamber is the other roofed sky type — same per-cell ceiling coverage
+        // as dungeon, only the material differs (cell's wall material).
+        let mut app = make_playing_app_with_config(GameConfig {
+            sky_type: SkyType::Chamber,
+            ..GameConfig::default()
+        });
+        let count = app.world_mut().query::<&RoofCell>().iter(app.world()).count();
+        let grid = demo_grid();
+        let expected = grid.iter().flat_map(|r| r.iter()).filter(|&&c| c != 'W').count();
+        assert_eq!(count, expected, "chamber sky caps every passable cell");
+    }
+
+    #[test]
+    fn corridor_door_is_a_single_swing_leaf() {
+        // One key at (0,1) and one door at (0,2). The door's open edges are on
+        // opposing sides (key to the west, finish to the east) — a straight
+        // corridor — so it renders as a single swinging leaf. Markers spawn even
+        // under MinimalPlugins (no mesh/material assets), so this asserts the
+        // topology dispatch regardless of rendering.
+        let mut app = make_playing_app_with(r#"{"grid":[["S","K","D","F"]]}"#);
+        let keys = app.world_mut().query::<&KeyMarker>().iter(app.world()).count();
+        let doors = app.world_mut().query::<&DoorMarker>().iter(app.world()).count();
+        assert_eq!(keys, 1, "expected one key holder");
+        assert_eq!(doors, 1, "a straight-corridor door is a single leaf");
+    }
+
+    #[test]
+    fn junction_door_seals_each_open_edge() {
+        // A door cell with three open neighbours (N=start, S=open, E=finish;
+        // W=wall) is not a straight corridor, so it seals each open edge with its
+        // own (sliding) leaf — three in total.
+        let mut app = make_playing_app_with(
+            r#"{"grid":[["W","S","W"],["W","D","F"],["W"," ","W"]]}"#,
+        );
+        let doors = app.world_mut().query::<&DoorMarker>().iter(app.world()).count();
+        assert_eq!(doors, 3, "a 3-open door cell seals each open edge");
+    }
+
+    #[test]
+    fn key_cell_has_no_dead_end_object() {
+        // A key sitting in a dead-end must show its holder, not a brazier/chest.
+        // Grid: a vertical stub where (2,1) is a dead-end holding a key.
+        let mut app = make_playing_app_with(
+            r#"{"grid":[["S"," ","F"],["W","K","W"],["W","W","W"]]}"#,
+        );
+        let dead_end = app
+            .world_mut()
+            .query::<&DeadEndObject>()
+            .iter(app.world())
+            .count();
+        let keys = app.world_mut().query::<&KeyMarker>().iter(app.world()).count();
+        assert_eq!(keys, 1, "expected the key holder");
+        assert_eq!(dead_end, 0, "key cell must not also get a dead-end object");
+    }
+
+    #[test]
     fn playing_no_title_entities() {
         let mut app = make_playing_app();
         let count = app.world_mut().query::<&TitleEntity>().iter(app.world()).count();
@@ -187,13 +313,15 @@ mod tests {
     fn build_app_with_none_uses_demo_grid() {
         let app = make_playing_app();
         let state = app.world().resource::<GameState>();
-        assert_eq!(state.grid.len(), 7);
-        assert_eq!(state.grid[0].len(), 7);
+        let demo = demo_grid();
+        assert_eq!(state.grid.len(), demo.len());
+        assert_eq!(state.grid[0].len(), demo[0].len());
     }
 
     #[test]
     fn initial_facing_prefers_south_when_open() {
-        let grid = demo_grid();
+        // South open → faced first (the S→E→N→W cycle starts at South).
+        let grid = vec![vec!['S'], vec![' ']];
         assert_eq!(initial_facing(&grid, 0, 0), GridFacing::South);
     }
 
@@ -410,13 +538,202 @@ mod tests {
     }
 
     #[test]
+    fn demo_grid_is_well_formed() {
+        use crate::world::demo_grid;
+        use crate::world::objects::dead_end::is_dead_end;
+        use std::collections::{HashSet, VecDeque};
+
+        let grid = demo_grid();
+        let rows = grid.len();
+        let cols = grid[0].len();
+
+        let count = |target: char| grid.iter().flatten().filter(|&&c| c == target).count();
+        assert_eq!(count('S'), 1, "exactly one start");
+        assert_eq!(count('F'), 1, "exactly one finish");
+        assert!(count('K') >= 1, "at least one key");
+        assert!(count('D') >= 1, "at least one door");
+
+        let find = |target: char| {
+            grid.iter()
+                .enumerate()
+                .find_map(|(r, row)| row.iter().position(|&c| c == target).map(|c| (r, c)))
+                .unwrap()
+        };
+        let start = find('S');
+
+        // BFS from the start. `doors_passable = false` models locked doors
+        // (treats 'D' as a wall); `true` models every door open.
+        let reachable = |doors_passable: bool| -> HashSet<(usize, usize)> {
+            let mut seen = HashSet::new();
+            let mut queue = VecDeque::new();
+            seen.insert(start);
+            queue.push_back(start);
+            while let Some((r, c)) = queue.pop_front() {
+                let mut neighbours = Vec::new();
+                if r > 0 {
+                    neighbours.push((r - 1, c));
+                }
+                if r + 1 < rows {
+                    neighbours.push((r + 1, c));
+                }
+                if c > 0 {
+                    neighbours.push((r, c - 1));
+                }
+                if c + 1 < cols {
+                    neighbours.push((r, c + 1));
+                }
+                for (nr, nc) in neighbours {
+                    let ch = grid[nr][nc];
+                    let passable = ch != 'W' && (doors_passable || ch != 'D');
+                    if passable && seen.insert((nr, nc)) {
+                        queue.push_back((nr, nc));
+                    }
+                }
+            }
+            seen
+        };
+
+        let finish = find('F');
+        let key = find('K');
+        let locked = reachable(false);
+        let unlocked = reachable(true);
+
+        // The door genuinely gates the finish, and the key is obtainable first.
+        assert!(!locked.contains(&finish), "finish must be gated by the door");
+        assert!(unlocked.contains(&finish), "finish reachable once the door opens");
+        assert!(locked.contains(&key), "key reachable while the door is locked");
+
+        // Several dead-ends remain for landmark objects (S/F/K/D excluded).
+        let mut dead_ends = 0;
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &cell) in row.iter().enumerate() {
+                if !matches!(cell, 'S' | 'F' | 'K' | 'D') && is_dead_end(&grid, r, c) {
+                    dead_ends += 1;
+                }
+            }
+        }
+        assert!(dead_ends >= 6, "expected >= 6 landmark dead-ends, got {dead_ends}");
+    }
+
+    #[test]
+    fn demo_grid_contains_a_decoy_door() {
+        // The demo grid must expose both a real path door AND a decoy: the
+        // player burning their lone key on the decoy is the on-ramp to
+        // experiencing the `Stranded` lose surface without going through the
+        // full Play-3D config flow. Structural check: exactly one of the
+        // grid's `'D'` cells lies on the lock-blind S→F path; any others are
+        // off-spine decoys.
+        use crate::world::demo_grid;
+        use maze::MazeGame;
+        use std::collections::{HashMap, HashSet, VecDeque};
+
+        let grid = demo_grid();
+        let rows = grid.len();
+        let cols = grid[0].len();
+
+        // Find S, F, and all D cells.
+        let find_one = |target: char| {
+            grid.iter()
+                .enumerate()
+                .find_map(|(r, row)| row.iter().position(|&c| c == target).map(|c| (r, c)))
+                .unwrap()
+        };
+        let start = find_one('S');
+        let finish = find_one('F');
+        let doors: HashSet<(usize, usize)> = grid
+            .iter()
+            .enumerate()
+            .flat_map(|(r, row)| {
+                row.iter()
+                    .enumerate()
+                    .filter(|(_, &c)| c == 'D')
+                    .map(move |(c, _)| (r, c))
+            })
+            .collect();
+        assert!(
+            doors.len() >= 2,
+            "demo grid needs at least one real path door + one decoy, got {}",
+            doors.len()
+        );
+
+        // Lock-blind BFS from S → F (every non-'W' cell passable) with parent
+        // pointers, so we can read the shortest-path doors back.
+        let mut parent: HashMap<(usize, usize), (usize, usize)> = HashMap::new();
+        let mut visited: HashSet<(usize, usize)> = HashSet::new();
+        let mut q: VecDeque<(usize, usize)> = VecDeque::new();
+        visited.insert(start);
+        q.push_back(start);
+        while let Some((r, c)) = q.pop_front() {
+            if (r, c) == finish {
+                break;
+            }
+            let mut neighbours = Vec::with_capacity(4);
+            if r > 0 {
+                neighbours.push((r - 1, c));
+            }
+            if r + 1 < rows {
+                neighbours.push((r + 1, c));
+            }
+            if c > 0 {
+                neighbours.push((r, c - 1));
+            }
+            if c + 1 < cols {
+                neighbours.push((r, c + 1));
+            }
+            for n in neighbours {
+                if grid[n.0][n.1] == 'W' {
+                    continue;
+                }
+                if visited.insert(n) {
+                    parent.insert(n, (r, c));
+                    q.push_back(n);
+                }
+            }
+        }
+        assert!(visited.contains(&finish), "finish must be lock-blind reachable");
+
+        // Walk back from F to find which D cells lie on the spine.
+        let mut spine_doors: HashSet<(usize, usize)> = HashSet::new();
+        let mut cur = finish;
+        while cur != start {
+            if doors.contains(&cur) {
+                spine_doors.insert(cur);
+            }
+            cur = parent[&cur];
+        }
+        assert_eq!(
+            spine_doors.len(),
+            1,
+            "demo grid should have exactly one real path door on the spine, got {}",
+            spine_doors.len()
+        );
+        let decoy_count = doors.len() - spine_doors.len();
+        assert!(
+            decoy_count >= 1,
+            "demo grid should have at least one off-spine decoy, got {decoy_count}"
+        );
+
+        // Cross-check with the actual `MazeGame` runtime: at construction it
+        // identifies the spine doors via the same algorithm and exposes the
+        // count via `path_doors_remaining_closed` (indirectly, via the lose
+        // semantics). We can verify here that constructing a `MazeGame` from
+        // the demo grid succeeds and reports neither complete nor lost — a
+        // cheap end-to-end smoke check that the demo grid is a valid
+        // starting state for the strand scenario.
+        let json = crate::world::grid_to_json(&grid);
+        let game = MazeGame::from_json(&json).expect("demo grid loads as a game");
+        assert!(!game.is_complete(), "fresh game must not be complete");
+        assert!(!game.is_lost(), "fresh game must not be lost");
+    }
+
+    #[test]
     fn playing_spawns_brazier_bowl_marker() {
-        // The demo grid contains at least one dead-end cell, and the
+        // The demo grid contains several dead-end cells, and the
         // dead-end-object hash is deterministic — so at least one of the
         // four landmark kinds will be spawned. We can't guarantee a
-        // brazier from a single demo grid (the hash picks one of four),
-        // so seed the config to force kind 0 (brazier) — `seed = 0` puts
-        // demo-grid cell (1,0) into the brazier branch via the hash.
+        // brazier from any single dead-end (the hash picks one of four),
+        // so sweep for a seed that forces kind 0 (brazier) on some
+        // landmark dead-end.
         let mut app = make_playing_app_with_config(GameConfig {
             seed: brazier_forcing_seed(),
             ..GameConfig::default()
@@ -440,7 +757,9 @@ mod tests {
         for seed in 0u64..1024 {
             for (r, row) in grid.iter().enumerate() {
                 for (c, &cell) in row.iter().enumerate() {
-                    if cell == 'S' || cell == 'F' {
+                    // Mirror `spawn_dead_end_object_for_cell`'s exclusions: only
+                    // cells that actually receive a landmark are candidates.
+                    if matches!(cell, 'S' | 'F' | 'K' | 'D') {
                         continue;
                     }
                     if is_dead_end(&grid, r, c) && dead_end_object_index(r, c, seed) == 0 {
@@ -539,6 +858,19 @@ mod tests {
     }
 
     #[test]
+    fn dungeon_sky_spawns_dome_and_lights() {
+        // The dungeon caps cells with a ceiling but still spawns a (near-black)
+        // dome behind it and a dim ambient + overhead light, so the shared
+        // assertion holds.
+        assert_sky_spawns_dome_and_light(SkyType::Dungeon);
+    }
+
+    #[test]
+    fn chamber_sky_spawns_dome_and_lights() {
+        assert_sky_spawns_dome_and_light(SkyType::Chamber);
+    }
+
+    #[test]
     fn default_sky_type_is_night() {
         assert_eq!(GameConfig::default().sky_type, SkyType::Night);
     }
@@ -550,6 +882,8 @@ mod tests {
             SkyType::Sunrise,
             SkyType::Day,
             SkyType::Sunset,
+            SkyType::Dungeon,
+            SkyType::Chamber,
         ] {
             assert_eq!(SkyType::from_wire_str(st.as_wire_str()), st);
         }
@@ -639,5 +973,141 @@ mod tests {
 
         assert_eq!(count_on, count_off);
         assert_eq!(count_on, expected_wall_panel_count(&demo_grid()));
+    }
+
+    // ── enemies, health pickups, HP HUD (Bevy parity with maze crate) ─────────
+
+    #[test]
+    fn enemy_marker_spawned_per_e_cell() {
+        let mut app = make_playing_app();
+        let grid = demo_grid();
+        let expected = grid.iter().flatten().filter(|&&c| c == 'E').count();
+        let count = app
+            .world_mut()
+            .query::<&EnemyMarker>()
+            .iter(app.world())
+            .count();
+        assert_eq!(count, expected);
+        assert!(count >= 1, "demo grid must contain at least one 'E' cell");
+    }
+
+    #[test]
+    fn enemy_marker_ids_align_with_row_major_scan() {
+        // EnemyMarker.id is assigned by the row-major counter in
+        // spawn_world; maze::Enemy.id is assigned by the same row-major
+        // scan inside MazeGame::from_json_with_options. The two must
+        // match so enemy_animation_system can correlate them.
+        let mut app = make_playing_app();
+        let mut marker_ids: Vec<u32> = app
+            .world_mut()
+            .query::<&EnemyMarker>()
+            .iter(app.world())
+            .map(|m| m.id)
+            .collect();
+        marker_ids.sort();
+        let game = app.world().resource::<GameState>().game.enemies();
+        let mut runtime_ids: Vec<u32> = game.iter().map(|e| e.id).collect();
+        runtime_ids.sort();
+        assert_eq!(marker_ids, runtime_ids);
+    }
+
+    #[test]
+    fn health_marker_spawned_per_h_cell() {
+        let mut app = make_playing_app();
+        let grid = demo_grid();
+        let expected = grid.iter().flatten().filter(|&&c| c == 'H').count();
+        let count = app
+            .world_mut()
+            .query::<&HealthMarker>()
+            .iter(app.world())
+            .count();
+        assert_eq!(count, expected);
+        assert!(count >= 1, "demo grid must contain at least one 'H' cell");
+    }
+
+    #[test]
+    fn hp_hud_spawns_max_hp_heart_icons() {
+        let mut app = make_playing_app();
+        let count = app
+            .world_mut()
+            .query::<&crate::hud::hp::HpHeartIcon>()
+            .iter(app.world())
+            .count() as u32;
+        let max_hp = app.world().resource::<GameState>().game.max_hp();
+        assert_eq!(count, max_hp);
+    }
+
+    #[test]
+    fn demo_grid_is_well_formed_with_enemy_and_health() {
+        // Extends `demo_grid_is_well_formed` for the new vocabulary —
+        // exactly one 'E' and one 'H' so the smoke-test exercises both
+        // rigs without confusing the player with a horde.
+        let grid = demo_grid();
+        let count = |target: char| grid.iter().flatten().filter(|&&c| c == target).count();
+        assert_eq!(count('E'), 1, "exactly one enemy spawn");
+        assert_eq!(count('H'), 1, "exactly one health pickup");
+    }
+
+    // ── EnemyType / HealthStyle wire round-trip + rig dispatch ────────────────
+
+    #[test]
+    fn enemy_type_wire_round_trip() {
+        for variant in [EnemyType::Goblin, EnemyType::Ghost] {
+            assert_eq!(EnemyType::from_wire_str(variant.as_wire_str()), variant);
+        }
+    }
+
+    #[test]
+    fn enemy_type_unknown_wire_string_falls_back_to_goblin() {
+        assert_eq!(EnemyType::from_wire_str(""), EnemyType::Goblin);
+        assert_eq!(EnemyType::from_wire_str("totally-unknown"), EnemyType::Goblin);
+    }
+
+    #[test]
+    fn health_style_wire_round_trip() {
+        for variant in [HealthStyle::Heart, HealthStyle::Potion] {
+            assert_eq!(HealthStyle::from_wire_str(variant.as_wire_str()), variant);
+        }
+    }
+
+    #[test]
+    fn health_style_unknown_wire_string_falls_back_to_heart() {
+        assert_eq!(HealthStyle::from_wire_str(""), HealthStyle::Heart);
+        assert_eq!(
+            HealthStyle::from_wire_str("totally-unknown"),
+            HealthStyle::Heart,
+        );
+    }
+
+    #[test]
+    fn playing_with_ghost_enemy_type_spawns_ghost_tag() {
+        // `GhostTag` is a zero-cost unit marker on the root entity of
+        // every ghost rig — present regardless of whether the
+        // asset-bearing child entities spawned, so headless tests (no
+        // mesh / material plugins) can distinguish the rig.
+        use crate::world::objects::enemy::ghost::GhostTag;
+        let goblin_tag_count = {
+            let mut g = make_playing_app();
+            g.world_mut().query::<&GhostTag>().iter(g.world()).count()
+        };
+        assert_eq!(
+            goblin_tag_count, 0,
+            "Goblin rig must not spawn any GhostTag entities",
+        );
+        let mut ghost_app = make_playing_app_with_config(GameConfig {
+            enemy_type: EnemyType::Ghost,
+            ..GameConfig::default()
+        });
+        let ghost_tag_count = ghost_app
+            .world_mut()
+            .query::<&GhostTag>()
+            .iter(ghost_app.world())
+            .count();
+        let grid = demo_grid();
+        let expected = grid.iter().flatten().filter(|&&c| c == 'E').count();
+        assert_eq!(
+            ghost_tag_count, expected,
+            "Ghost rig must spawn one GhostTag per 'E' cell",
+        );
     }
 }

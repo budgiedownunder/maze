@@ -64,7 +64,9 @@ pub(crate) fn tick_clock_system(
 
     // Spawn lose UI — mirrors the win-UI spawn in movement_system. Colours swapped for a
     // muted red theme so it reads as loss without resorting to skulls or anything morbid.
-    lose::spawn_lose_overlay(&mut commands);
+    // The Bevy clock owns the timeout end-to-end (the inner `MazeGame` doesn't model it);
+    // the subtitle is hardcoded here rather than read from `MazeGame::lose_reason()`.
+    lose::spawn_lose_overlay(&mut commands, "Time's up");
     dispatch_game_result(&GameResult {
         outcome: GameOutcome::Lose,
         elapsed_ms: (clock.elapsed_secs * 1000.0) as u64,

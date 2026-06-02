@@ -148,6 +148,10 @@ namespace Maze.Maui.App.Views
             _viewModel.SetWallRequested += (s, e) => { ChangeSelectionToWall(); };
             _viewModel.SetStartRequested += (s, e) => { ChangeSelectionToStart(); };
             _viewModel.SetFinishRequested += (s, e) => { ChangeSelectionToFinish(); };
+            _viewModel.SetKeyRequested += (s, e) => { ChangeSelectionToKey(); };
+            _viewModel.SetDoorRequested += (s, e) => { ChangeSelectionToDoor(); };
+            _viewModel.SetEnemyRequested += (s, e) => { ChangeSelectionToEnemy(); };
+            _viewModel.SetHealthRequested += (s, e) => { ChangeSelectionToHealth(); };
             _viewModel.ClearRequested += (s, e) => { ClearSelection(); };
             _viewModel.SolveRequested += (s, e) => { Solve(); };
             _viewModel.WalkSolutionRequested += async (s, e) => { await WalkSolution(); };
@@ -306,6 +310,22 @@ namespace Maze.Maui.App.Views
                     if (_viewModel.CanSetFinish)
                         _viewModel.SetFinishCommand.Execute(null);
                     break;
+                case Controls.Keyboard.Key.K:
+                    if (_viewModel.CanSetKey)
+                        _viewModel.SetKeyCommand.Execute(null);
+                    break;
+                case Controls.Keyboard.Key.D:
+                    if (_viewModel.CanSetDoor)
+                        _viewModel.SetDoorCommand.Execute(null);
+                    break;
+                case Controls.Keyboard.Key.E:
+                    if (_viewModel.CanSetEnemy)
+                        _viewModel.SetEnemyCommand.Execute(null);
+                    break;
+                case Controls.Keyboard.Key.H:
+                    if (_viewModel.CanSetHealth)
+                        _viewModel.SetHealthCommand.Execute(null);
+                    break;
                 case Controls.Keyboard.Key.Delete:
                     if (_viewModel.CanClear)
                         _viewModel.ClearCommand.Execute(null);
@@ -335,6 +355,34 @@ namespace Maze.Maui.App.Views
         private void ChangeSelectionToFinish()
         {
             ChangeSelectedCellsContent(Maze.CellType.Finish);
+        }
+        /// <summary>
+        /// Changes the selected cells to key cells
+        /// </summary>
+        private void ChangeSelectionToKey()
+        {
+            ChangeSelectedCellsContent(Maze.CellType.Key);
+        }
+        /// <summary>
+        /// Changes the selected cells to door cells
+        /// </summary>
+        private void ChangeSelectionToDoor()
+        {
+            ChangeSelectedCellsContent(Maze.CellType.Door);
+        }
+        /// <summary>
+        /// Changes the selected cells to enemy cells
+        /// </summary>
+        private void ChangeSelectionToEnemy()
+        {
+            ChangeSelectedCellsContent(Maze.CellType.Enemy);
+        }
+        /// <summary>
+        /// Changes the selected cells to health cells
+        /// </summary>
+        private void ChangeSelectionToHealth()
+        {
+            ChangeSelectedCellsContent(Maze.CellType.Health);
         }
         /// <summary>
         /// Clears the selected cell(s) content
@@ -484,11 +532,22 @@ namespace Maze.Maui.App.Views
                 uint minSolutionLength = _lastMinSolutionLength is uint last && last <= rows * cols
                     ? last
                     : defaultMinSolutionLength;
+                // Seed Doors from the existing 'D' cell count so regenerating
+                // preserves the author's door count. Spare Doors / Spare Keys
+                // stay at 0 — the grid alone can't tell us which dootr/key
+                // cells were decoys vs real path doors, so the safe default
+                // is "no extras" and let the author opt in.
+                uint doorCount = current.IsEmpty ? 0 : MazeCellCounter.CountCellsOfType(current, Maze.CellType.Door);
+                uint spareDoors = 0, spareKeys = 0;
+                // Enemies / Health default to 0 — regenerating from an existing
+                // maze doesn't preserve their count (the safe default is "none",
+                // and the author opts in each time).
+                uint enemyCount = 0, healthCount = 0;
                 string? generationError = null;
 
                 while (true)
                 {
-                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, _appFeaturesService.Features.MaxMazeCells, generationError);
+                    var popup = new GenerateMazePopup(rows, cols, startRow, startCol, finishRow, finishCol, minSolutionLength, doorCount, spareDoors, spareKeys, enemyCount, healthCount, _appFeaturesService.Features.MaxMazeCells, generationError);
                     IPopupResult<Maze.GenerationOptions?> result = await this.ShowPopupAsync<Maze.GenerationOptions?>(popup);
 
                     if (result.WasDismissedByTappingOutsideOfPopup || result.Result is not Maze.GenerationOptions popupOptions)
@@ -504,6 +563,11 @@ namespace Maze.Maui.App.Views
                         FinishRow = popupOptions.FinishRow,
                         FinishCol = popupOptions.FinishCol,
                         MinSpineLength = popupOptions.MinSpineLength,
+                        DoorCount = popupOptions.DoorCount,
+                        SpareDoors = popupOptions.SpareDoors,
+                        SpareKeys = popupOptions.SpareKeys,
+                        EnemyCount = popupOptions.EnemyCount,
+                        HealthCount = popupOptions.HealthCount,
                     };
 
                     bool generationSucceeded = false;
@@ -531,6 +595,11 @@ namespace Maze.Maui.App.Views
                         finishRow = popupOptions.FinishRow ?? finishRow;
                         finishCol = popupOptions.FinishCol ?? finishCol;
                         minSolutionLength = popupOptions.MinSpineLength ?? minSolutionLength;
+                        doorCount = popupOptions.DoorCount ?? doorCount;
+                        spareDoors = popupOptions.SpareDoors ?? spareDoors;
+                        spareKeys = popupOptions.SpareKeys ?? spareKeys;
+                        enemyCount = popupOptions.EnemyCount ?? enemyCount;
+                        healthCount = popupOptions.HealthCount ?? healthCount;
                     }
                     finally
                     {
@@ -651,6 +720,10 @@ namespace Maze.Maui.App.Views
             _viewModel.CanSetWall = !status.IsAllWalls && !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanSetStart = status.IsSingleCell && !status.IsStart && !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanSetFinish = status.IsSingleCell && !status.IsFinish && !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanSetKey = !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanSetDoor = !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanSetEnemy = !IsSolutionDisplayed && !_isWalking;
+            _viewModel.CanSetHealth = !IsSolutionDisplayed && !_isWalking;
             _viewModel.CanClear = !status.IsEmpty && !IsSolutionDisplayed && !_isWalking;
         }
         /// <summary>
@@ -753,6 +826,7 @@ namespace Maze.Maui.App.Views
             bool haveSelection = MazeGrid.HasActiveCell;
             bool showTopRowLayout = showSelectRangeButtons || haveSelection || _isWalking || IsSolutionDisplayed || IsInitialized;
             ShowMainGridRow(0, showTopRowLayout);
+            ShortcutsHint.IsVisible = haveSelection && !IsTouchOnlyDevice && !_isWalking;
             if (showTopRowLayout)
             {
                 ShowCellEditButtons();

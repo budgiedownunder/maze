@@ -21,6 +21,11 @@ namespace Maze.Maui.App.Tests.Utils
         private const string ValidFinishRow = "10";
         private const string ValidFinishCol = "10";
         private const string ValidMinSolutionLength = "5";
+        private const string ValidDoorCount = "0";
+        private const string ValidSpareDoors = "0";
+        private const string ValidSpareKeys = "0";
+        private const string ValidEnemyCount = "0";
+        private const string ValidHealthCount = "0";
 
         private static bool TryParseBaseline(
             int? cap,
@@ -32,10 +37,17 @@ namespace Maze.Maui.App.Tests.Utils
             string? startCol = ValidStartCol,
             string? finishRow = ValidFinishRow,
             string? finishCol = ValidFinishCol,
-            string? minSolutionLength = ValidMinSolutionLength)
+            string? minSolutionLength = ValidMinSolutionLength,
+            string? doorCount = ValidDoorCount,
+            string? spareDoors = ValidSpareDoors,
+            string? spareKeys = ValidSpareKeys,
+            string? enemyCount = ValidEnemyCount,
+            string? healthCount = ValidHealthCount)
             => GenerateMazeOptionsParser.TryParse(
                 rows, cols, startRow, startCol, finishRow, finishCol,
-                minSolutionLength, cap, out parsed, out error);
+                minSolutionLength, doorCount, spareDoors, spareKeys,
+                enemyCount, healthCount,
+                cap, out parsed, out error);
 
         // ── Happy path ─────────────────────────────────────────────────
 
@@ -55,6 +67,9 @@ namespace Maze.Maui.App.Tests.Utils
             Assert.Equal(9u, parsed.FinishRow);
             Assert.Equal(9u, parsed.FinishCol);
             Assert.Equal(5u, parsed.MinSolutionLength);
+            Assert.Equal(0u, parsed.DoorCount);
+            Assert.Equal(0u, parsed.SpareDoors);
+            Assert.Equal(0u, parsed.SpareKeys);
         }
 
         [Fact]
@@ -203,6 +218,180 @@ namespace Maze.Maui.App.Tests.Utils
             Assert.Equal(10u, parsed!.Rows);
             Assert.Equal(10u, parsed.Cols);
             Assert.Equal(5u, parsed.MinSolutionLength);
+        }
+
+        // ── Doors / Spare Doors / Spare Keys per-field bounds ──────────
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("  ")]
+        public void TryParse_treats_empty_door_count_as_zero(string? text)
+        {
+            bool ok = TryParseBaseline(cap: null, out var parsed, out _, doorCount: text);
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+            Assert.Equal(0u, parsed!.DoorCount);
+        }
+
+        [Theory]
+        [InlineData("0")]
+        [InlineData("8")]
+        public void TryParse_accepts_door_count_in_range(string text)
+        {
+            bool ok = TryParseBaseline(cap: null, out var parsed, out _, doorCount: text);
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+            Assert.Equal(uint.Parse(text), parsed!.DoorCount);
+        }
+
+        [Theory]
+        [InlineData("9")]
+        [InlineData("100")]
+        [InlineData("abc")]
+        [InlineData("-1")]
+        public void TryParse_rejects_door_count_out_of_range(string text)
+        {
+            bool ok = TryParseBaseline(cap: null, out _, out var error, doorCount: text);
+            Assert.False(ok);
+            Assert.Equal("Doors must be a whole number between 0 and 8.", error);
+        }
+
+        [Theory]
+        [InlineData("9")]
+        [InlineData("100")]
+        [InlineData("abc")]
+        public void TryParse_rejects_spare_doors_out_of_range(string text)
+        {
+            bool ok = TryParseBaseline(cap: null, out _, out var error, spareDoors: text);
+            Assert.False(ok);
+            Assert.Equal("Spare Doors must be a whole number between 0 and 8.", error);
+        }
+
+        [Theory]
+        [InlineData("9")]
+        [InlineData("100")]
+        [InlineData("abc")]
+        public void TryParse_rejects_spare_keys_out_of_range(string text)
+        {
+            bool ok = TryParseBaseline(cap: null, out _, out var error, spareKeys: text);
+            Assert.False(ok);
+            Assert.Equal("Spare Keys must be a whole number between 0 and 8.", error);
+        }
+
+        // ── Cross-field K + D cap (2*Doors + SpareDoors + SpareKeys <= 16) ──
+
+        [Fact]
+        public void TryParse_accepts_combination_at_the_K_plus_D_cap()
+        {
+            // 2*8 + 0 + 0 = 16 — exactly at cap.
+            bool ok = TryParseBaseline(
+                cap: null, out var parsed, out _,
+                doorCount: "8", spareDoors: "0", spareKeys: "0");
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+            Assert.Equal(8u, parsed!.DoorCount);
+        }
+
+        [Fact]
+        public void TryParse_accepts_split_combination_at_the_K_plus_D_cap()
+        {
+            // 2*4 + 4 + 4 = 16 — exactly at cap, split.
+            bool ok = TryParseBaseline(
+                cap: null, out var parsed, out _,
+                doorCount: "4", spareDoors: "4", spareKeys: "4");
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+        }
+
+        [Fact]
+        public void TryParse_rejects_combination_just_over_the_K_plus_D_cap()
+        {
+            // 2*7 + 1 + 2 = 17 — just over.
+            bool ok = TryParseBaseline(
+                cap: null, out _, out var error,
+                doorCount: "7", spareDoors: "1", spareKeys: "2");
+            Assert.False(ok);
+            Assert.Equal(
+                "Total keys + doors (17) exceeds the limit of 16. " +
+                "Each door brings a key, so the count is 2·Doors + Spare Doors + Spare Keys.",
+                error);
+        }
+
+        // ── Enemies / Health per-field bounds ──────────────────────────
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("  ")]
+        public void TryParse_treats_empty_enemy_and_health_as_zero(string? text)
+        {
+            bool ok = TryParseBaseline(cap: null, out var parsed, out _, enemyCount: text, healthCount: text);
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+            Assert.Equal(0u, parsed!.EnemyCount);
+            Assert.Equal(0u, parsed.HealthCount);
+        }
+
+        [Theory]
+        [InlineData("0")]
+        [InlineData("8")]
+        public void TryParse_accepts_enemy_count_in_range(string text)
+        {
+            bool ok = TryParseBaseline(cap: null, out var parsed, out _, enemyCount: text);
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+            Assert.Equal(uint.Parse(text), parsed!.EnemyCount);
+        }
+
+        [Theory]
+        [InlineData("0")]
+        [InlineData("8")]
+        public void TryParse_accepts_health_count_in_range(string text)
+        {
+            bool ok = TryParseBaseline(cap: null, out var parsed, out _, healthCount: text);
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+            Assert.Equal(uint.Parse(text), parsed!.HealthCount);
+        }
+
+        [Theory]
+        [InlineData("9")]
+        [InlineData("100")]
+        [InlineData("abc")]
+        [InlineData("-1")]
+        public void TryParse_rejects_enemy_count_out_of_range(string text)
+        {
+            bool ok = TryParseBaseline(cap: null, out _, out var error, enemyCount: text);
+            Assert.False(ok);
+            Assert.Equal("Enemies must be a whole number between 0 and 8.", error);
+        }
+
+        [Theory]
+        [InlineData("9")]
+        [InlineData("100")]
+        [InlineData("abc")]
+        public void TryParse_rejects_health_count_out_of_range(string text)
+        {
+            bool ok = TryParseBaseline(cap: null, out _, out var error, healthCount: text);
+            Assert.False(ok);
+            Assert.Equal("Health must be a whole number between 0 and 8.", error);
+        }
+
+        [Fact]
+        public void TryParse_enemy_and_health_do_not_count_against_the_K_plus_D_cap()
+        {
+            // Doors at the K+D cap (2*8 = 16) plus the maximum enemies + health
+            // still parses — enemies / health are solver-empty and carry no
+            // feature budget.
+            bool ok = TryParseBaseline(
+                cap: null, out var parsed, out _,
+                doorCount: "8", spareDoors: "0", spareKeys: "0",
+                enemyCount: "8", healthCount: "8");
+            Assert.True(ok);
+            Assert.NotNull(parsed);
+            Assert.Equal(8u, parsed!.EnemyCount);
+            Assert.Equal(8u, parsed.HealthCount);
         }
     }
 }

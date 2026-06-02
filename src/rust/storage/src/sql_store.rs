@@ -13,7 +13,7 @@
 
 use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
 use crate::{
-    validation::{validate_email_format, validate_maze_cell_count, validate_user_fields},
+    validation::{validate_email_format, validate_maze_cell_count, validate_maze_feature_count, validate_user_fields},
     Error, MazeItem, Store,
 };
 use async_trait::async_trait;
@@ -1636,14 +1636,14 @@ impl UserStore for SqlStore {
     }
 
     /// Locates a user by an email address regardless of verification state.
-    /// Same SQL shape as [`find_user_by_verified_email`] minus the
+    /// Same SQL shape as [`Self::find_user_by_verified_email`] minus the
     /// `ue.verified <> 0` filter. The `user_emails.email` UNIQUE constraint
     /// guarantees at most one match in healthy state; the multi-row guard
     /// is here for parity and to fail loudly if a future migration ever
     /// weakens that constraint.
     ///
     /// See the trait doc-comment for usage rules — auth code must use
-    /// [`find_user_by_verified_email`] instead.
+    /// [`Self::find_user_by_verified_email`] instead.
     async fn find_user_by_email_any_state(&self, email: &str) -> Result<User, Error> {
         let mut rows = sqlx::query(&q(
             self.kind,
@@ -2551,7 +2551,7 @@ async fn fetch_user_email_row(
 #[async_trait]
 impl MazeStore for SqlStore {
     /// Returns the cell-count ceiling enforced by this SQL store on
-    /// create/update — see [`MAX_MAZE_CELLS`].
+    /// create/update — see [`crate::MAX_MAZE_CELLS`].
     ///
     /// # Examples
     ///
@@ -2642,6 +2642,7 @@ impl MazeStore for SqlStore {
             maze.definition.col_count(),
             MAX_MAZE_CELLS,
         )?;
+        validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
 
         let existing = sqlx::query(&q(
             self.kind,
@@ -2809,6 +2810,7 @@ impl MazeStore for SqlStore {
             maze.definition.col_count(),
             MAX_MAZE_CELLS,
         )?;
+        validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
         let definition_json = serde_json::to_string(&maze)?;
         let result = sqlx::query(&q(
             self.kind,

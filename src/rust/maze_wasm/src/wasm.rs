@@ -206,6 +206,78 @@ pub extern "C" fn maze_wasm_set_wall_cells(
     set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'W')
 }
 
+/// Sets cells to keys (`'K'`) in a `MazeWasm`. Mirrors
+/// [`maze_wasm_set_wall_cells`] for the `'K'` cell character.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+///
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_key_cells(
+    maze_wasm: *mut MazeWasm,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u32 {
+    set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'K')
+}
+
+/// Sets cells to doors (`'D'`) in a `MazeWasm`. Mirrors
+/// [`maze_wasm_set_wall_cells`] for the `'D'` cell character.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+///
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_door_cells(
+    maze_wasm: *mut MazeWasm,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u32 {
+    set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'D')
+}
+
+/// Sets cells to enemy spawns (`'E'`) in a `MazeWasm`. Mirrors
+/// [`maze_wasm_set_wall_cells`] for the `'E'` cell character.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+///
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_enemy_cells(
+    maze_wasm: *mut MazeWasm,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u32 {
+    set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'E')
+}
+
+/// Sets cells to health pickups (`'H'`) in a `MazeWasm`. Mirrors
+/// [`maze_wasm_set_wall_cells`] for the `'H'` cell character.
+///
+/// # Returns
+///
+/// Zero if successful, else an error pointer
+///
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_health_cells(
+    maze_wasm: *mut MazeWasm,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> u32 {
+    set_cell_values(maze_wasm, start_row, start_col, end_row, end_col, 'H')
+}
+
 /// Sets cells values in a `MazeWasm` to empty
 ///
 /// # Returns
@@ -724,6 +796,8 @@ fn ptr_to_string(ptr: *const u8) -> String {
 /// - min_spine_length:     `0`        = use default ((row_count + col_count) / 2)
 /// - max_retries:          `0`        = use default (100)
 /// - branch_from_finish:   `0` = false (default), `1` = true
+/// - door_count / spare_doors / spare_keys: `0` = none (default)
+/// - enemy_count / health_count: `0` = none (default)
 #[cfg(feature = "wasm-lite")]
 #[repr(C)]
 pub struct GeneratorOptionsWasm {
@@ -738,6 +812,11 @@ pub struct GeneratorOptionsWasm {
     pub min_spine_length:   u32,
     pub max_retries:        u32,
     pub branch_from_finish: u8,
+    pub door_count:         u32,
+    pub spare_doors:        u32,
+    pub spare_keys:         u32,
+    pub enemy_count:        u32,
+    pub health_count:       u32,
 }
 /// Creates a new `GeneratorOptionsWasm` with the given required fields and default optional fields.
 ///
@@ -764,6 +843,11 @@ pub extern "C" fn new_generator_options_wasm(
         min_spine_length:   0,
         max_retries:        0,
         branch_from_finish: 0,
+        door_count:         0,
+        spare_doors:        0,
+        spare_keys:         0,
+        enemy_count:        0,
+        health_count:       0,
     });
     increment_num_objects_allocated();
     Box::into_raw(opts)
@@ -810,6 +894,53 @@ pub extern "C" fn generator_options_set_branch_from_finish(ptr: *mut GeneratorOp
     let opts = unsafe { &mut *ptr };
     opts.branch_from_finish = value;
 }
+/// Sets the number of real path doors auto-placed on the spine
+/// (`0` = none, the default).
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_door_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.door_count = value;
+}
+/// Sets the number of decoy doors planted on off-spine branches
+/// (`0` = none, the default).
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_spare_doors(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.spare_doors = value;
+}
+/// Sets the number of spare keys planted on off-spine branches
+/// (`0` = none, the default).
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_spare_keys(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.spare_keys = value;
+}
+/// Sets the number of enemies to auto-place at random passable cells
+/// (`0` = none, the default). Clamped by the generator to
+/// `maze::MAX_ENEMY_COUNT` and to the number of eligible cells.
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_enemy_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.enemy_count = value;
+}
+/// Sets the number of health pickups to auto-place at random passable cells
+/// (`0` = none, the default). Clamped by the generator to
+/// `maze::MAX_HEALTH_COUNT` and to the number of eligible cells.
+#[cfg(feature = "wasm-lite")]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn generator_options_set_health_count(ptr: *mut GeneratorOptionsWasm, value: u32) {
+    let opts = unsafe { &mut *ptr };
+    opts.health_count = value;
+}
 /// Generates a maze, populating the given `MazeWasm`.
 ///
 /// # Returns
@@ -849,6 +980,11 @@ pub extern "C" fn maze_wasm_generate(
         max_retries,
         branch_from_finish,
         seed: Some(opts.seed),
+        door_count: Some(opts.door_count as usize),
+        spare_doors: Some(opts.spare_doors as usize),
+        spare_keys: Some(opts.spare_keys as usize),
+        enemy_count: Some(opts.enemy_count as usize),
+        health_count: Some(opts.health_count as usize),
     };
 
     let generator = Generator { options: generator_options };
@@ -876,7 +1012,7 @@ pub extern "C" fn free_generator_options_wasm(ptr: *mut GeneratorOptionsWasm) {
 // ── MazeGameWasm wasm-lite exports ───────────────────────────────────────────
 //
 // Direction i32 encoding: 0=None 1=Up 2=Down 3=Left 4=Right
-// MoveResult i32 encoding: 0=None 1=Moved 2=Blocked 3=Complete; -1=null pointer
+// MoveResult i32 encoding: 0=None 1=Moved 2=Blocked 3=Complete 4=BlockedByLockedDoor 5=StartedUnlocking 6=Stranded; -1=null pointer
 //
 // NOTE: these integer encodings intentionally match the discriminant values of
 // DirectionWasm and MoveResultWasm in wasm_common.rs. If either enum is changed,
@@ -963,8 +1099,9 @@ pub extern "C" fn free_maze_game_wasm(maze_game_wasm: *mut MazeGameWasm) {
 ///
 /// # Returns
 ///
-/// `0`=None, `1`=Moved, `2`=Blocked, `3`=Complete,
-/// or `-1` for a null pointer or unknown `dir` value.
+/// `0`=None, `1`=Moved, `2`=Blocked, `3`=Complete, `4`=BlockedByLockedDoor,
+/// `5`=StartedUnlocking, `6`=Stranded, or `-1` for a null pointer or unknown
+/// `dir` value.
 ///
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
@@ -982,6 +1119,10 @@ pub extern "C" fn maze_game_wasm_move_player(maze_game_wasm: *mut MazeGameWasm, 
         maze::MoveResult::Moved => 1,
         maze::MoveResult::Blocked => 2,
         maze::MoveResult::Complete => 3,
+        maze::MoveResult::BlockedByLockedDoor => 4,
+        maze::MoveResult::StartedUnlocking => 5,
+        maze::MoveResult::Stranded => 6,
+        maze::MoveResult::Killed => 7,
     }
 }
 
@@ -1048,6 +1189,577 @@ pub extern "C" fn maze_game_wasm_is_complete(maze_game_wasm: *mut MazeGameWasm) 
     }
     let game = unsafe { &(*maze_game_wasm).game };
     if game.is_complete() { 1 } else { 0 }
+}
+
+/// Returns whether the game is in a lost state.
+///
+/// The companion [`maze_game_wasm_lose_reason`] returns the reason code when
+/// this returns `1`.
+///
+/// # Returns
+///
+/// `1` if lost, `0` if not, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_is_lost(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    if game.is_lost() { 1 } else { 0 }
+}
+
+/// Returns the lose-reason code for the game session.
+///
+/// Encoding: `0` = None (the game is not lost), `1` = Stranded (the player
+/// can no longer hold enough keys to open every closed door remaining on a
+/// route to the finish). Mirrors the [`maze::LoseReason`] enum; new variants
+/// extend the integer space.
+///
+/// # Returns
+///
+/// `0`=None, `1`=Stranded, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_lose_reason(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    match game.lose_reason() {
+        None => 0,
+        Some(maze::LoseReason::Stranded) => 1,
+        Some(maze::LoseReason::Killed) => 2,
+    }
+}
+
+/// Attempts to pick up a collectible at the player's current cell.
+///
+/// Writes the picked item's kind / id into `*out_kind` / `*out_id` on success.
+/// `kind` encoding: `0` = Key (the only variant in the current bag model).
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or when the player's current
+/// cell holds no collectible.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_pickup(
+    maze_game_wasm: *mut MazeGameWasm,
+    out_kind: *mut u32,
+    out_id: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &mut (*maze_game_wasm).game };
+    match game.pickup() {
+        Some(maze::BagItem::Key { id }) => {
+            unsafe {
+                if !out_kind.is_null() {
+                    *out_kind = 0; // Key
+                }
+                if !out_id.is_null() {
+                    *out_id = id;
+                }
+            }
+            0
+        }
+        None => -1,
+    }
+}
+
+/// Returns the number of items currently in the player's bag.
+///
+/// # Returns
+///
+/// The bag size, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_bag_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.bag().len() as i32
+}
+
+/// Retrieves a single bag item by `index`.
+///
+/// Writes the item's kind code and id into `*out_kind` / `*out_id` on success.
+/// `kind` encoding: `0` = Key.
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_bag_item(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_kind: *mut u32,
+    out_id: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let bag = game.bag();
+    if index < 0 || index as usize >= bag.len() {
+        return -1;
+    }
+    let maze::BagItem::Key { id } = bag[index as usize];
+    unsafe {
+        if !out_kind.is_null() {
+            *out_kind = 0; // Key
+        }
+        if !out_id.is_null() {
+            *out_id = id;
+        }
+    }
+    0
+}
+
+/// Returns the number of door cells (`'D'`) in the maze, regardless of state.
+///
+/// # Returns
+///
+/// The door count, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_door_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.doors().len() as i32
+}
+
+/// Retrieves a single door cell by `index`.
+///
+/// Writes the door's row, column, and current state code into the out
+/// parameters. State encoding: `0` = Locked, `1` = Opening, `2` = Open.
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_door(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_state: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let doors = game.doors();
+    if index < 0 || index as usize >= doors.len() {
+        return -1;
+    }
+    let ((r, c), state) = doors[index as usize];
+    let state_code: u32 = match state {
+        maze::DoorState::Locked => 0,
+        maze::DoorState::Opening { .. } => 1,
+        maze::DoorState::Open => 2,
+    };
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_state.is_null() {
+            *out_state = state_code;
+        }
+    }
+    0
+}
+
+/// Advances time-based game state by `dt_ms` milliseconds, buffering the
+/// resulting events on the game session. Subsequent calls to
+/// [`maze_game_wasm_tick_event_count`] / [`maze_game_wasm_get_tick_event`]
+/// read from the same buffer until the next `tick` overwrites it.
+///
+/// # Returns
+///
+/// The number of events produced, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_tick(maze_game_wasm: *mut MazeGameWasm, dt_ms: f32) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let g = unsafe { &mut *maze_game_wasm };
+    g.tick_events = g.game.tick(dt_ms);
+    g.tick_events.len() as i32
+}
+
+/// Returns the number of events currently buffered from the most recent
+/// [`maze_game_wasm_tick`] call.
+///
+/// # Returns
+///
+/// The buffer size, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_tick_event_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let g = unsafe { &*maze_game_wasm };
+    g.tick_events.len() as i32
+}
+
+/// Retrieves a single tick event's kind + cell coordinates from the buffer by `index`.
+///
+/// Writes the event's kind code and a `(row, col)` pair into the out parameters.
+/// Kind encoding (mirrors [`maze::GameEvent`]):
+/// - `0` = DoorOpened — `(row, col)` is the door cell.
+/// - `1` = EnemyMoved — `(row, col)` is the enemy's new cell; the id is carried
+///   by [`maze_game_wasm_get_tick_event_payload`].
+/// - `2` = PlayerDamaged — `(row, col)` is `(0, 0)`; `hp_after` via the payload getter.
+/// - `3` = PlayerHealed — `(row, col)` is the consumed pickup cell; `hp_after` via the payload getter.
+/// - `4` = PlayerNotHealed — `(row, col)` is the spared pickup cell; the reason via
+///   the payload getter and the default message via
+///   [`maze_game_wasm_get_tick_event_string_payload`].
+/// - `5` = KeyCollected — `(row, col)` is the consumed key cell; the key id is
+///   carried by [`maze_game_wasm_get_tick_event_payload`].
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_tick_event(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_kind: *mut u32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let g = unsafe { &*maze_game_wasm };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return -1;
+    }
+    let (kind, r, c) = match &g.tick_events[index as usize] {
+        maze::GameEvent::DoorOpened { cell: (r, c) } => (0u32, *r, *c),
+        maze::GameEvent::EnemyMoved { row, col, .. } => (1u32, *row, *col),
+        maze::GameEvent::PlayerDamaged { .. } => (2u32, 0, 0),
+        maze::GameEvent::PlayerHealed { cell: (r, c), .. } => (3u32, *r, *c),
+        maze::GameEvent::PlayerNotHealed { cell: (r, c), .. } => (4u32, *r, *c),
+        maze::GameEvent::KeyCollected { cell: (r, c), .. } => (5u32, *r, *c),
+    };
+    unsafe {
+        if !out_kind.is_null() {
+            *out_kind = kind;
+        }
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+    }
+    0
+}
+
+/// Retrieves a tick event's `u32` payload by `index` — the extra scalar that
+/// doesn't fit the `(kind, row, col)` shape of [`maze_game_wasm_get_tick_event`]:
+/// `EnemyMoved` → enemy id; `PlayerDamaged` / `PlayerHealed` → `hp_after`;
+/// `PlayerNotHealed` → reason code (`0` = already at max HP); `KeyCollected` →
+/// key id; `DoorOpened` → `0`.
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_tick_event_payload(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_payload: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let g = unsafe { &*maze_game_wasm };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return -1;
+    }
+    let payload = match &g.tick_events[index as usize] {
+        maze::GameEvent::DoorOpened { .. } => 0,
+        maze::GameEvent::EnemyMoved { id, .. } => *id,
+        maze::GameEvent::PlayerDamaged { hp_after } => *hp_after,
+        maze::GameEvent::PlayerHealed { hp_after, .. } => *hp_after,
+        maze::GameEvent::PlayerNotHealed { reason, .. } => match reason {
+            maze::PlayerNotHealedReason::AlreadyAtMaxHp => 0,
+        },
+        maze::GameEvent::KeyCollected { id, .. } => *id,
+    };
+    unsafe {
+        if !out_payload.is_null() {
+            *out_payload = payload;
+        }
+    }
+    0
+}
+
+/// Retrieves the UTF-8 string payload of a tick event by `index` — currently only
+/// `PlayerNotHealed` carries one (its default message); every other variant
+/// reports a zero-length string.
+///
+/// Two-call protocol: call once with `out_buf` null to read the byte length into
+/// `out_len`, allocate a buffer of that size, then call again with `out_buf`
+/// pointing at it to copy the bytes. The buffer is stable between calls until the
+/// next [`maze_game_wasm_tick`].
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_tick_event_string_payload(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_buf: *mut u8,
+    out_len: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let g = unsafe { &*maze_game_wasm };
+    if index < 0 || index as usize >= g.tick_events.len() {
+        return -1;
+    }
+    let message: &str = match &g.tick_events[index as usize] {
+        maze::GameEvent::PlayerNotHealed { message, .. } => message,
+        _ => "",
+    };
+    let bytes = message.as_bytes();
+    unsafe {
+        if !out_len.is_null() {
+            *out_len = bytes.len() as u32;
+        }
+        if !out_buf.is_null() {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_buf, bytes.len());
+        }
+    }
+    0
+}
+
+/// Returns the number of uncollected key cells in the maze.
+///
+/// The count shrinks as the player picks keys up — collected keys move
+/// into the bag.
+///
+/// # Returns
+///
+/// The key count, or `-1` for a null pointer.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_key_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.keys().len() as i32
+}
+
+/// Retrieves a single uncollected key cell by `index`.
+///
+/// Writes the key's row, column, and stable id into the out parameters.
+///
+/// # Returns
+///
+/// `0` on success, or `-1` for a null pointer or out-of-range `index`.
+///
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_key(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let keys = game.keys();
+    if index < 0 || index as usize >= keys.len() {
+        return -1;
+    }
+    let ((r, c), id) = keys[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = id;
+        }
+    }
+    0
+}
+
+/// Returns the player's current HP, or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_hp(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.hp() as i32
+}
+
+/// Returns the player's maximum HP, or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_max_hp(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.max_hp() as i32
+}
+
+/// Returns the number of active enemies, or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_enemy_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    game.enemies().len() as i32
+}
+
+/// Retrieves a single enemy's current cell + stable id by index. Writes
+/// the enemy's row / column / id into the out parameters. Returns `0` on
+/// success, `-1` on null pointer or out-of-range index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_enemy(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let enemies = game.enemies();
+    if index < 0 || index as usize >= enemies.len() {
+        return -1;
+    }
+    let enemy = &enemies[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = enemy.row as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = enemy.col as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = enemy.id;
+        }
+    }
+    0
+}
+
+/// Returns the number of uncollected health-pickup cells (live `'H'`),
+/// or `-1` for a null pointer.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_health_pickup_count(maze_game_wasm: *mut MazeGameWasm) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    count_health_pickups(game) as i32
+}
+
+/// Retrieves a single uncollected health-pickup cell by index. Writes the
+/// cell's row / column into the out parameters; `out_id` is always
+/// written as `0` — pickups have no stable id, the cell coordinate is
+/// the natural key. The field is kept on the signature for shape parity
+/// with [`maze_game_wasm_get_enemy`] / [`maze_game_wasm_get_key`] so
+/// callers can use a single `(row, col, id)` row-getter pattern.
+/// Returns `0` on success, `-1` on null pointer or out-of-range index.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_game_wasm_get_health_pickup(
+    maze_game_wasm: *mut MazeGameWasm,
+    index: i32,
+    out_row: *mut u32,
+    out_col: *mut u32,
+    out_id: *mut u32,
+) -> i32 {
+    if maze_game_wasm.is_null() {
+        return -1;
+    }
+    let game = unsafe { &(*maze_game_wasm).game };
+    let pickups = health_pickup_cells(game);
+    if index < 0 || index as usize >= pickups.len() {
+        return -1;
+    }
+    let (r, c) = pickups[index as usize];
+    unsafe {
+        if !out_row.is_null() {
+            *out_row = r as u32;
+        }
+        if !out_col.is_null() {
+            *out_col = c as u32;
+        }
+        if !out_id.is_null() {
+            *out_id = 0;
+        }
+    }
+    0
+}
+
+fn count_health_pickups(game: &maze::MazeGame) -> usize {
+    game.grid().iter().flatten().filter(|&&c| c == 'H').count()
+}
+
+fn health_pickup_cells(game: &maze::MazeGame) -> Vec<(usize, usize)> {
+    game.grid()
+        .iter()
+        .enumerate()
+        .flat_map(|(r, row)| {
+            row.iter()
+                .enumerate()
+                .filter(|(_, &ch)| ch == 'H')
+                .map(move |(c, _)| (r, c))
+        })
+        .collect()
 }
 
 /// Returns the number of cells in the visited-cells list.

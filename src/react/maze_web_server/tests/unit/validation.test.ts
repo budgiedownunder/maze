@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { validateSignupForm } from '../../src/utils/validation'
+import {
+  countKeysAndDoors,
+  exceedsGenerateFeatureCap,
+  exceedsKeyDoorCap,
+  MAX_TOTAL_FEATURES,
+  validateSignupForm,
+} from '../../src/utils/validation'
 import {
   validateChangePasswordForm,
   validateSetPasswordForm,
@@ -130,5 +136,48 @@ describe('validateSetPasswordForm', () => {
 
   it('requires a special character', () => {
     expect(validateSetPasswordForm({ newPassword: 'Password1a', confirmPassword: 'Password1a' })).toMatch(/special/)
+  })
+})
+
+describe('countKeysAndDoors', () => {
+  it('counts K and D cells, ignoring everything else', () => {
+    const grid = [
+      ['S', 'K', 'D', 'F'],
+      ['W', 'K', ' ', 'D'],
+    ]
+    expect(countKeysAndDoors(grid)).toEqual({ keys: 2, doors: 2 })
+  })
+
+  it('returns zero on an empty grid', () => {
+    expect(countKeysAndDoors([])).toEqual({ keys: 0, doors: 0 })
+  })
+})
+
+describe('exceedsKeyDoorCap', () => {
+  it('returns false when K + D is at the cap', () => {
+    const grid: string[][] = [[]]
+    for (let i = 0; i < 8; i++) grid[0].push('K')
+    for (let i = 0; i < 8; i++) grid[0].push('D')
+    expect(exceedsKeyDoorCap(grid)).toBe(false)
+  })
+
+  it('returns true when K + D is over the cap', () => {
+    const grid: string[][] = [[]]
+    for (let i = 0; i < 9; i++) grid[0].push('K')
+    for (let i = 0; i < 8; i++) grid[0].push('D')
+    expect(exceedsKeyDoorCap(grid)).toBe(true)
+  })
+})
+
+describe('exceedsGenerateFeatureCap', () => {
+  it('counts each real door twice (key + door pair)', () => {
+    expect(exceedsGenerateFeatureCap(8, 0, 0)).toBe(false) // 2*8 = 16 at cap
+    expect(exceedsGenerateFeatureCap(8, 1, 0)).toBe(true)  // 17 > 16
+    expect(exceedsGenerateFeatureCap(4, 4, 4)).toBe(false) // 8 + 4 + 4 = 16
+    expect(exceedsGenerateFeatureCap(4, 4, 5)).toBe(true)  // 17 > 16
+  })
+
+  it('pins MAX_TOTAL_FEATURES to 16 so the Rust side stays in sync', () => {
+    expect(MAX_TOTAL_FEATURES).toBe(16)
   })
 })

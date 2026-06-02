@@ -23,7 +23,7 @@ mod test_definitions {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use tokio::sync::{RwLock as AsyncRwLock, RwLockReadGuard};
-    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::{validate_maze_cell_count, validate_user_fields}};
+    use storage::{Error as StoreError, SharedStore, Store, store::EmailAuditLog, store::MazeStore, store::TokenStore, store::UserStore, store::Manage, MazeItem, validation::{validate_maze_cell_count, validate_maze_feature_count, validate_user_fields}};
     use data_model::{AuditOutcome, EmailAuditEntry, OneTimeToken};
     use uuid::Uuid;
 
@@ -261,6 +261,7 @@ mod test_definitions {
                 maze.definition.col_count(),
                 MOCK_MAX_MAZE_CELLS,
             )?;
+            validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
             let id = MockMaze::create_id_from_name(&maze.name);
 
             if mock_user.mazes.contains_key(&id) {
@@ -296,6 +297,7 @@ mod test_definitions {
                 maze.definition.col_count(),
                 MOCK_MAX_MAZE_CELLS,
             )?;
+            validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
             if mock_user.mazes.contains_key(&maze.id) {
                 mock_user.mazes.insert(
                     maze.id.to_string(),
@@ -781,6 +783,19 @@ mod test_definitions {
 
     fn new_sized_maze(id: &str, name: &str, rows: usize, cols: usize) -> Maze {
         let mut maze = Maze::new(MazeDefinition::new(rows, cols));
+        maze.id = id.to_string();
+        maze.name = name.to_string();
+        maze
+    }
+
+    /// Builds a maze with 9 'K' + 8 'D' cells (17 > maze::MAX_TOTAL_FEATURES)
+    /// so the handler / store K + D cap rejects it.
+    fn new_too_many_features_maze(id: &str, name: &str) -> Maze {
+        let mut row: Vec<char> = vec!['S'];
+        row.extend(std::iter::repeat_n('K', 9));
+        row.extend(std::iter::repeat_n('D', 8));
+        row.push('F');
+        let mut maze: Maze = Maze::new(MazeDefinition::from_vec(vec![row]));
         maze.id = id.to_string();
         maze.name = name.to_string();
         maze
@@ -2868,6 +2883,21 @@ mod test_definitions {
         .await;
     }
 
+    #[actix_web::test]
+    async fn cannot_create_maze_that_exceeds_feature_cap() {
+        // 9 keys + 8 doors = 17 > maze::MAX_TOTAL_FEATURES (16). The
+        // store-level validate_maze_feature_count rejects, the handler maps
+        // it to 422.
+        run_create_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::Empty),
+            Some(VALID_USERNAME_1),
+            true,
+            new_too_many_features_maze("", "over_feature_cap_maze"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        )
+        .await;
+    }
+
     // Get maze
     #[actix_web::test]
     #[should_panic(expected = "Unauthorized request")]
@@ -2946,6 +2976,21 @@ mod test_definitions {
             true,
             id,
             new_sized_maze(id, "maze_a", 70, 60),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        )
+        .await;
+    }
+
+    #[actix_web::test]
+    async fn cannot_update_maze_that_exceeds_feature_cap() {
+        // 9 keys + 8 doors = 17 > maze::MAX_TOTAL_FEATURES (16).
+        let id = "maze_a.json";
+        run_update_maze_test(
+            &CreateUsersDef::new(0, 1, MazeContent::ThreeMazes),
+            Some(VALID_USERNAME_1),
+            true,
+            id,
+            new_too_many_features_maze(id, "maze_a"),
             StatusCode::UNPROCESSABLE_ENTITY,
         )
         .await;
@@ -3091,6 +3136,11 @@ mod test_definitions {
             max_retries,
             branch_from_finish: None,
             seed: None,
+            door_count: None,
+            spare_doors: None,
+            spare_keys: None,
+            enemy_count: None,
+            health_count: None,
         }
     }
 
@@ -5926,10 +5976,19 @@ mod test_definitions {
         assert_eq!(body.cols, 8);
         assert_eq!(body.timer_seconds, 120);
         assert_eq!(body.seed, 8_080_808);
-        assert_eq!(body.min_solution_length, 30);
+        assert_eq!(body.min_solution_length, 12);
         assert_eq!(body.minimap_cell_px, 10);
         assert_eq!(body.minimap_radius, 5);
         assert_eq!(body.title, "Maze 3D");
+        assert_eq!(body.door_count, 2);
+        assert_eq!(body.spare_doors, 0);
+        assert_eq!(body.spare_keys, 0);
+        assert_eq!(body.enemy_count, 1);
+        assert_eq!(body.health_count, 2);
+        assert_eq!(body.enemy_type, "goblin");
+        assert_eq!(body.health_style, "heart");
+        assert_eq!(body.enemy_move_period_ms, 1800);
+        assert_eq!(body.max_hp, 3);
     }
 
     #[actix_web::test]
@@ -5946,7 +6005,16 @@ mod test_definitions {
         assert_eq!(body.cols, 15);
         assert_eq!(body.timer_seconds, 240);
         assert_eq!(body.seed, 15_151_515);
-        assert_eq!(body.min_solution_length, 90);
+        assert_eq!(body.min_solution_length, 24);
+        assert_eq!(body.door_count, 3);
+        assert_eq!(body.spare_doors, 2);
+        assert_eq!(body.spare_keys, 1);
+        assert_eq!(body.enemy_count, 3);
+        assert_eq!(body.health_count, 3);
+        assert_eq!(body.enemy_type, "goblin");
+        assert_eq!(body.health_style, "heart");
+        assert_eq!(body.enemy_move_period_ms, 1500);
+        assert_eq!(body.max_hp, 3);
 
         let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=hard", None, None);
         let resp = test::call_service(&app, req).await;
@@ -5957,7 +6025,16 @@ mod test_definitions {
         assert_eq!(body.cols, 25);
         assert_eq!(body.timer_seconds, 420);
         assert_eq!(body.seed, 25_252_525);
-        assert_eq!(body.min_solution_length, 220);
+        assert_eq!(body.min_solution_length, 44);
+        assert_eq!(body.door_count, 4);
+        assert_eq!(body.spare_doors, 3);
+        assert_eq!(body.spare_keys, 1);
+        assert_eq!(body.enemy_count, 5);
+        assert_eq!(body.health_count, 4);
+        assert_eq!(body.enemy_type, "goblin");
+        assert_eq!(body.health_style, "heart");
+        assert_eq!(body.enemy_move_period_ms, 1200);
+        assert_eq!(body.max_hp, 3);
     }
 
     #[actix_web::test]
@@ -6067,6 +6144,33 @@ mod test_definitions {
         let body: Play3dConfigResponse = test::read_body_json(resp).await;
         assert_eq!(body.minimap_cell_px, 14);
         assert_eq!(body.minimap_radius, 9);
+    }
+
+    #[actix_web::test]
+    async fn get_play3d_config_returns_door_and_key_holder_styles() {
+        use crate::config::game::{DoorStyleConfig, KeyHolderStyleConfig};
+        let mut user_defs = vec![];
+        let features: SharedFeatures = Arc::new(RwLock::new(AppFeaturesConfig::default()));
+        let mut app_config = AppConfig::default();
+        app_config.security.password_hash = auth::config::PasswordHashConfig::for_testing();
+        app_config.comms.enabled = true;
+        // Easy gets explicit non-default styles; tricky keeps the defaults.
+        app_config.game.play3d.easy.door_style = DoorStyleConfig::Portcullis;
+        app_config.game.play3d.easy.key_holder = KeyHolderStyleConfig::Chest;
+        let (app, _, _, _, _) =
+            create_test_app_with_config(&mut user_defs, None, false, features, app_config).await;
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=easy", None, None);
+        let resp = test::call_service(&app, req).await;
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.door_style, "portcullis");
+        assert_eq!(body.key_holder, "chest");
+
+        let req = create_test_get_request("/api/v1/game/play3d-config?difficulty=tricky", None, None);
+        let resp = test::call_service(&app, req).await;
+        let body: Play3dConfigResponse = test::read_body_json(resp).await;
+        assert_eq!(body.door_style, "swing");
+        assert_eq!(body.key_holder, "pedestal");
     }
 
     // **************************************************************************************************

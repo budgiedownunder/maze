@@ -2,7 +2,7 @@ import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, u
 import type { CellPoint } from '../hooks/useMazeEditor'
 import type { WalkState } from '../hooks/useWalkAnimation'
 import type { MazeGameWasm } from 'maze_wasm'
-import { MazeGameDirection } from '../wasm/mazeWasm'
+import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies, getHealthPickups } from '../wasm/mazeWasm'
 
 export const CELL_SIZE = 32
 export const HEADER_SIZE = 24
@@ -29,6 +29,10 @@ function cellImage(cell: string): { src: string; alt: string } | null {
   if (cell === 'W') return { src: '/images/maze/wall.png', alt: 'Wall' }
   if (cell === 'S') return { src: '/images/maze/start_flag.png', alt: 'Start' }
   if (cell === 'F') return { src: '/images/maze/finish_flag.png', alt: 'Finish' }
+  if (cell === 'K') return { src: '/images/maze/key.svg', alt: 'Key' }
+  if (cell === 'D') return { src: '/images/maze/door.svg', alt: 'Door' }
+  if (cell === 'E') return { src: '/images/maze/enemy.svg', alt: 'Enemy' }
+  if (cell === 'H') return { src: '/images/maze/health.svg', alt: 'Health' }
   return null
 }
 
@@ -136,6 +140,45 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
       if (!game) return null
       const cells = game.visited_cells() as unknown as Array<{ row: number; col: number }>
       return new Set(cells.map(c => `${c.row},${c.col}`))
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // In game mode, key/door visuals follow runtime state (not the static grid char):
+    // collected keys are gone, doors carry their open/locked/opening state.
+    const keyCells = useMemo(() => {
+      if (!game) return null
+      return new Set(getKeys(game).map(k => `${k.row},${k.col}`))
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const doorStateByCell = useMemo(() => {
+      if (!game) return null
+      const map = new Map<string, string>()
+      for (const d of getDoors(game)) map.set(`${d.row},${d.col}`, d.state)
+      return map
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Live (uncollected) health-pickup cells. Walking onto an `'H'` cell
+    // auto-consumes it in the runtime, but the static grid char never changes,
+    // so in game mode the symbol is rendered only while the cell is still in
+    // the runtime's health-pickup list; once consumed it disappears.
+    const healthCells = useMemo(() => {
+      if (!game) return null
+      return new Set(getHealthPickups(game).map(h => `${h.row},${h.col}`))
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Live enemy positions, counted per cell. The static grid char `'E'` is
+    // the spawn marker only — the maze runtime never rewrites it as the
+    // enemy walks — so in game mode the spawn-cell `'E'` is suppressed and
+    // the live position is rendered as an overlay sprite instead. Multiple
+    // enemies can share a cell (including the player's cell), so the map
+    // tracks counts rather than a Set membership.
+    const enemyCountByCell = useMemo(() => {
+      if (!game) return null
+      const counts = new Map<string, number>()
+      for (const e of getEnemies(game)) {
+        const key = `${e.row},${e.col}`
+        counts.set(key, (counts.get(key) ?? 0) + 1)
+      }
+      return counts
     }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const solutionMap = useMemo(
@@ -417,8 +460,31 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const isWalker = walkInfo?.walkerKey === key
                   const walkedImgSrc = !isWalker ? walkInfo?.walkedMap.get(key) : undefined
                   const solutionImgSrc = solutionMap.get(key)
+                  const suppressFootstep = cell === 'S' || cell === 'F' || cell === 'K' || cell === 'D' || cell === 'E' || cell === 'H'
                   const isGamePlayer = game !== null && game !== undefined && playerRow === r && playerCol === c
-                  const img = (isWalker || isGamePlayer) ? null : cellImage(cell)
+                  let img = (isWalker || isGamePlayer) ? null : cellImage(cell)
+                  let imgStyle: React.CSSProperties | undefined
+                  // Game mode: a collected key disappears, an open door disappears, and
+                  // a door that is opening is dimmed. A consumed health pickup
+                  // disappears. Editor mode renders K/D/H as-is.
+                  // The spawn-cell `'E'` character is suppressed in game mode — the live
+                  // enemy is rendered as an overlay sprite below based on getEnemies(),
+                  // not from the static grid char.
+                  if (game && img) {
+                    if (cell === 'K') {
+                      if (!keyCells?.has(key)) img = null
+                    } else if (cell === 'D') {
+                      const st = doorStateByCell?.get(key)
+                      if (st === MazeDoorState.Open) img = null
+                      else if (st === MazeDoorState.Opening) imgStyle = { opacity: 0.5 }
+                    } else if (cell === 'E') {
+                      img = null
+                    } else if (cell === 'H') {
+                      if (!healthCells?.has(key)) img = null
+                    }
+                  }
+                  const enemyCount = game !== null && game !== undefined ? (enemyCountByCell?.get(key) ?? 0) : 0
+                  const hasEnemy = enemyCount > 0
                   return (
                     <td
                       key={`cell-${r}-${c}`}
@@ -430,23 +496,63 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                       {isWalker && (
                         <img src={walkInfo!.walkerImg} alt="Walker" className="maze-cell-solution-img" />
                       )}
-                      {!isWalker && img && <img src={img.src} alt={img.alt} />}
-                      {walkedImgSrc && cell !== 'S' && cell !== 'F' && (
+                      {!isWalker && img && (
+                        <img
+                          src={img.src}
+                          alt={img.alt}
+                          className={cell === 'K' ? 'maze-cell-key-img' : undefined}
+                          style={imgStyle}
+                        />
+                      )}
+                      {walkedImgSrc && !suppressFootstep && (
                         <img src={walkedImgSrc} alt="Solution path" className="maze-cell-solution-img" />
                       )}
-                      {!isWalker && solutionImgSrc && cell !== 'S' && cell !== 'F' && (
+                      {!isWalker && solutionImgSrc && !suppressFootstep && (
                         <img src={solutionImgSrc} alt="Solution path" className="maze-cell-solution-img" />
                       )}
-                      {game && visitedSet?.has(key) && !isGamePlayer && (
+                      {game && visitedSet?.has(key) && !isGamePlayer && !hasEnemy && (
                         cell === 'S'
                           ? <img src="/images/maze/start_flag.png" alt="Start"
                                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
                           : <img src={VISITED_DOT_IMG} alt="" aria-hidden
                                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
                       )}
+                      {/* Non-player cell with enemies: render the goblin
+                          sprite at full opacity. A green count chip in the
+                          top-right corner surfaces stacks of 2+ enemies. */}
+                      {hasEnemy && !isGamePlayer && (
+                        <>
+                          <img src="/images/maze/enemy.svg" alt="Enemy"
+                               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                          {enemyCount > 1 && (
+                            <span className="maze-cell-enemy-stack-count" aria-label={`${enemyCount} enemies`}>
+                              {enemyCount}
+                            </span>
+                          )}
+                        </>
+                      )}
+                      {/* Player cell with co-located enemies: render the
+                          goblin sprite at half opacity behind the player so
+                          the player walker still reads as the foreground
+                          but the player can see what's attacking them. A red
+                          count chip in the top-right corner surfaces the
+                          count when more than one enemy is piled up. */}
+                      {isGamePlayer && hasEnemy && (
+                        <img src="/images/maze/enemy.svg" alt={enemyCount === 1 ? 'Enemy on player cell' : `${enemyCount} enemies on player cell`}
+                             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: 0.5, pointerEvents: 'none' }} />
+                      )}
                       {isGamePlayer && (
                         <img src={gameWalkerImg(playerDir, isComplete)} alt="Player"
                              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+                      )}
+                      {isGamePlayer && enemyCount > 1 && (
+                        <span
+                          className="maze-cell-enemy-attack-count"
+                          aria-label={`${enemyCount} enemies attacking`}
+                          title={`${enemyCount} enemies attacking`}
+                        >
+                          {enemyCount}
+                        </span>
                       )}
                     </td>
                   )

@@ -28,6 +28,22 @@ namespace Maze.Maui.App.Models
         /// <summary>Wall texture wire token (lowercase / snake_case).</summary>
         public string WallType { get; set; } = "brick";
 
+        /// <summary>Door style wire token (lowercase / snake_case) — selects the
+        /// 3D door rig (swing / slide / portcullis / dissolve).</summary>
+        public string DoorStyle { get; set; } = "swing";
+
+        /// <summary>Key-holder style wire token (lowercase / snake_case) — selects
+        /// the 3D pickup rig (pedestal / chest / floating_key).</summary>
+        public string KeyHolder { get; set; } = "pedestal";
+
+        /// <summary>Enemy type wire token (lowercase) — selects the 3D enemy
+        /// rig (goblin / ghost).</summary>
+        public string EnemyType { get; set; } = "goblin";
+
+        /// <summary>Health-pickup style wire token (lowercase) — selects the
+        /// 3D pickup rig (heart / potion).</summary>
+        public string HealthStyle { get; set; } = "heart";
+
         /// <summary>Per-cell wall tint variation on?</summary>
         public bool WallTint { get; set; } = false;
 
@@ -61,6 +77,10 @@ namespace Maze.Maui.App.Models
             {
                 "skyType=" + Uri.EscapeDataString(SkyType),
                 "wallType=" + Uri.EscapeDataString(WallType),
+                "doorStyle=" + Uri.EscapeDataString(DoorStyle),
+                "keyHolder=" + Uri.EscapeDataString(KeyHolder),
+                "enemyType=" + Uri.EscapeDataString(EnemyType),
+                "healthStyle=" + Uri.EscapeDataString(HealthStyle),
                 "wallTint=" + (WallTint ? "1" : "0"),
                 "wallMaterialVariation=" + (WallMaterialVariation ? "1" : "0"),
                 "deadEndObjects=" + (DeadEndObjects ? "1" : "0"),
@@ -77,7 +97,7 @@ namespace Maze.Maui.App.Models
         /// the default on a stale stored value.
         /// </summary>
         public static bool IsValidSkyType(string s) =>
-            s is "night" or "sunrise" or "day" or "sunset";
+            s is "night" or "sunrise" or "day" or "sunset" or "dungeon" or "chamber";
 
         /// <summary>
         /// Returns <c>true</c> when <paramref name="s"/> is a recognised
@@ -86,5 +106,37 @@ namespace Maze.Maui.App.Models
         /// </summary>
         public static bool IsValidWallType(string s) =>
             s is "brick" or "dressed_stone" or "wood" or "cobblestone";
+
+        /// <summary>
+        /// Returns <c>true</c> when <paramref name="s"/> is a recognised
+        /// door-style wire value. Used by the store + popup to fall back to
+        /// the default on a stale stored value.
+        /// </summary>
+        public static bool IsValidDoorStyle(string s) =>
+            s is "swing" or "slide" or "portcullis" or "dissolve";
+
+        /// <summary>
+        /// Returns <c>true</c> when <paramref name="s"/> is a recognised
+        /// key-holder wire value. Used by the store + popup to fall back to
+        /// the default on a stale stored value.
+        /// </summary>
+        public static bool IsValidKeyHolder(string s) =>
+            s is "pedestal" or "chest" or "floating_key";
+
+        /// <summary>
+        /// Returns <c>true</c> when <paramref name="s"/> is a recognised
+        /// enemy-type wire value. Used by the store + popup to fall back to
+        /// the default on a stale stored value.
+        /// </summary>
+        public static bool IsValidEnemyType(string s) =>
+            s is "goblin" or "ghost";
+
+        /// <summary>
+        /// Returns <c>true</c> when <paramref name="s"/> is a recognised
+        /// health-style wire value. Used by the store + popup to fall back to
+        /// the default on a stale stored value.
+        /// </summary>
+        public static bool IsValidHealthStyle(string s) =>
+            s is "heart" or "potion";
     }
 }

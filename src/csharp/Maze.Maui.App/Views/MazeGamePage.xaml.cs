@@ -1,21 +1,27 @@
 using Maze.Api;
 using Maze.Maui.App.ViewModels;
 using Maze.Maui.Controls.Pointer;
+using Maze.Maui.Services;
 
 namespace Maze.Maui.App.Views
 {
     /// <summary>
     /// Interactive 2D maze game page. The player navigates the maze using arrow keys (Windows)
     /// or D-pad buttons (Android/iOS). Holding a key or D-pad button moves continuously at a
-    /// controlled rate; each press also moves one step immediately.
+    /// controlled rate; each press also moves one step immediately. Keys are auto-collected
+    /// when the player walks onto them.
     /// </summary>
     public partial class MazeGamePage : ContentPage
     {
         private const int MoveIntervalMs = 120;
+        private const int TickIntervalMs = 16; // ~60Hz; drives door-opening animation
 
         private readonly MazeGameViewModel _viewModel;
+        private readonly IDeviceTypeService _deviceTypeService;
         private bool _gameStarted = false;
         private IDispatcherTimer? _dpadTimer;
+        private IDispatcherTimer? _tickTimer;
+        private long _lastTickMs = 0;
         private MazeGameDirection _dpadDirection = MazeGameDirection.None;
         private long _lastMoveTickMs = 0;
         private MazeGameDirection _lastMoveDirection = MazeGameDirection.None;
@@ -24,10 +30,12 @@ namespace Maze.Maui.App.Views
         /// Constructor
         /// </summary>
         /// <param name="viewModel">Injected game view model</param>
-        public MazeGamePage(MazeGameViewModel viewModel)
+        /// <param name="deviceTypeService">Injected device type service (drives the desktop-only keyboard legend)</param>
+        public MazeGamePage(MazeGameViewModel viewModel, IDeviceTypeService deviceTypeService)
         {
             InitializeComponent();
             _viewModel = viewModel;
+            _deviceTypeService = deviceTypeService;
             BindingContext = viewModel;
         }
 
@@ -38,9 +46,13 @@ namespace Maze.Maui.App.Views
             GameGrid.KeyDown += OnGameGridKeyDown;
             GameGrid.CellTapped += OnGameGridCellTapped;
             GameGrid.CellDoubleTapped += OnGameGridCellTapped;
+            _viewModel.TickStartRequested += OnTickStartRequested;
+            _viewModel.PauseRequested += OnPauseRequested;
+            _viewModel.DamageFlashRequested += OnDamageFlashRequested;
             if (_gameStarted) return;
             _gameStarted = true;
             DpadGrid.IsVisible = false;
+            BagStack.IsVisible = false;
             SetBusyIndicators(true);
             Dispatcher.Dispatch(async () =>
             {
@@ -53,6 +65,10 @@ namespace Maze.Maui.App.Views
                 {
                     SetBusyIndicators(false);
                     DpadGrid.IsVisible = DeviceInfo.Platform != DevicePlatform.WinUI;
+                    // The keyboard legend is only useful where a physical keyboard
+                    // drives the game, so it shows on non-touch (desktop) devices.
+                    ShortcutsHint.IsVisible = !_deviceTypeService.IsTouchOnlyDevice();
+                    BagStack.IsVisible = true;
                 }
             });
         }
@@ -68,11 +84,15 @@ namespace Maze.Maui.App.Views
         protected override void OnNavigatedFrom(NavigatedFromEventArgs args)
         {
             base.OnNavigatedFrom(args);
-            if (_viewModel.IsShowingResultPopup) return;
+            if (_viewModel.IsShowingResultPopup || _viewModel.IsShowingPausePopup) return;
             StopDpad();
+            StopTickTimer();
             GameGrid.KeyDown -= OnGameGridKeyDown;
             GameGrid.CellTapped -= OnGameGridCellTapped;
             GameGrid.CellDoubleTapped -= OnGameGridCellTapped;
+            _viewModel.TickStartRequested -= OnTickStartRequested;
+            _viewModel.PauseRequested -= OnPauseRequested;
+            _viewModel.DamageFlashRequested -= OnDamageFlashRequested;
         }
 
         /// <inheritdoc/>
@@ -80,9 +100,10 @@ namespace Maze.Maui.App.Views
         {
             base.OnDisappearing();
             Shell.Current.Navigating -= OnShellNavigating;
-            if (_viewModel.IsShowingResultPopup) return;
+            if (_viewModel.IsShowingResultPopup || _viewModel.IsShowingPausePopup) return;
             _gameStarted = false;
             DpadGrid.IsVisible = false;
+            BagStack.IsVisible = false;
             _viewModel.Cleanup();
         }
 
@@ -113,6 +134,13 @@ namespace Maze.Maui.App.Views
 
         private void OnGameGridKeyDown(object? sender, MazeGridKeyDownEventArgs e)
         {
+            // Space / Esc toggle pause (mirrors the centre D-pad "||" button).
+            if (e.Key is Controls.Keyboard.Key.Space or Controls.Keyboard.Key.Escape)
+            {
+                if (_viewModel.PauseCommand.CanExecute(null))
+                    _viewModel.PauseCommand.Execute(null);
+                return;
+            }
             MazeGameDirection dir = e.Key switch
             {
                 Controls.Keyboard.Key.Up => MazeGameDirection.Up,
@@ -149,6 +177,62 @@ namespace Maze.Maui.App.Views
             var timer = Dispatcher.CreateTimer();
             timer.Interval = TimeSpan.FromMilliseconds(MoveIntervalMs);
             timer.Tick += (_, _) => Move(_dpadDirection);
+            return timer;
+        }
+
+        /// <summary>
+        /// Starts the ~60Hz tick timer that drives door-opening animation.
+        /// Hooked to <see cref="MazeGameViewModel.TickStartRequested"/>; the
+        /// view-model's <see cref="MazeGameViewModel.Tick(double)"/> returns
+        /// <c>false</c> once no door is still opening, which stops the timer.
+        /// </summary>
+        private void OnTickStartRequested()
+        {
+            _tickTimer ??= CreateTickTimer();
+            if (!_tickTimer.IsRunning)
+            {
+                _lastTickMs = Environment.TickCount64;
+                _tickTimer.Start();
+            }
+        }
+
+        private void StopTickTimer()
+        {
+            _tickTimer?.Stop();
+        }
+
+        /// <summary>
+        /// Stops the tick loop when the game is paused. Hooked to
+        /// <see cref="MazeGameViewModel.PauseRequested"/>; resume re-arms the
+        /// loop via <see cref="MazeGameViewModel.TickStartRequested"/>, which
+        /// also reseeds the dt baseline.
+        /// </summary>
+        private void OnPauseRequested() => StopTickTimer();
+
+        /// <summary>
+        /// Flashes the red damage overlay when the player takes a hit. Snaps to a
+        /// partial-alpha red, then fades back to transparent. Restarts cleanly on
+        /// back-to-back hits by resetting opacity before each fade.
+        /// </summary>
+        private void OnDamageFlashRequested()
+        {
+            DamageFlashOverlay.CancelAnimations();
+            DamageFlashOverlay.Opacity = 0.4;
+            DamageFlashOverlay.FadeTo(0, 300);
+        }
+
+        private IDispatcherTimer CreateTickTimer()
+        {
+            var timer = Dispatcher.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(TickIntervalMs);
+            timer.Tick += (_, _) =>
+            {
+                long now = Environment.TickCount64;
+                double dt = Math.Clamp(now - _lastTickMs, 1, 100);
+                _lastTickMs = now;
+                if (!_viewModel.Tick(dt))
+                    timer.Stop();
+            };
             return timer;
         }
 

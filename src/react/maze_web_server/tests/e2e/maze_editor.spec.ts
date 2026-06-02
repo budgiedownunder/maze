@@ -179,6 +179,148 @@ test('clicking Clear removes a wall', async ({ page }) => {
   await expect(page.getByLabel('Cell 2,2').getByAltText('Wall')).not.toBeVisible()
 })
 
+test('clicking Clear removes a key (Clear is enabled on a key cell)', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Place a key on empty cell (0,1), then clear it
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Key' }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Key')).toBeVisible()
+
+  // Clear must be enabled on a key cell, and clicking it removes the key
+  await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Clear', exact: true }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Key')).not.toBeVisible()
+})
+
+test('Set Key button is enabled on a selected cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Cell (0,1) in Alpha maze is empty
+  await page.getByLabel('Cell 1,2').click()
+
+  await expect(page.getByRole('button', { name: 'Set Key' })).toBeEnabled()
+})
+
+test('Set Door button is enabled on a selected cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+
+  await expect(page.getByRole('button', { name: 'Set Door' })).toBeEnabled()
+})
+
+test('clicking Set Key places a key image in the cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Key' }).click()
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Key')).toBeVisible()
+})
+
+test('clicking Set Door places a door image in the cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Door' }).click()
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Door')).toBeVisible()
+})
+
+test('Set Enemy button is enabled on a selected cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+
+  await expect(page.getByRole('button', { name: 'Set Enemy' })).toBeEnabled()
+})
+
+test('Set Health button is enabled on a selected cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+
+  await expect(page.getByRole('button', { name: 'Set Health' })).toBeEnabled()
+})
+
+test('clicking Set Enemy places an enemy image in the cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Enemy' }).click()
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).toBeVisible()
+})
+
+test('clicking Set Health places a health image in the cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Health' }).click()
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Health')).toBeVisible()
+})
+
+test('Clear removes an enemy (Clear is enabled on an enemy cell)', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Enemy' }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).toBeVisible()
+
+  await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Clear', exact: true }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).not.toBeVisible()
+})
+
+test('Clear removes a health pickup (Clear is enabled on a health cell)', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Health' }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Health')).toBeVisible()
+
+  await expect(page.getByRole('button', { name: 'Clear', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Clear', exact: true }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Health')).not.toBeVisible()
+})
+
+test('placing E and H, saving, and refreshing persists both cells', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Enemy' }).click()
+  await page.getByLabel('Cell 1,3').click()
+  await page.getByRole('button', { name: 'Set Health' }).click()
+
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+
+  // Dirty with a throwaway wall so Refresh enables; then Refresh re-fetches
+  // from the server to prove the previous save round-tripped.
+  await page.getByLabel('Cell 3,1').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await page.getByRole('button', { name: 'Refresh' }).click()
+  await page.getByRole('button', { name: 'Reload' }).click()
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).toBeVisible()
+  await expect(page.getByLabel('Cell 1,3').getByAltText('Health')).toBeVisible()
+  await expect(page.getByLabel('Cell 3,1').getByAltText('Wall')).not.toBeVisible()
+})
+
 // ──────────────────────────────────────────────────────────────
 // Keyboard navigation
 // ──────────────────────────────────────────────────────────────
@@ -242,6 +384,48 @@ test('F shortcut sets the finish on an empty cell', async ({ page }) => {
   await expect(page.getByLabel('Cell 1,2').getByAltText('Finish')).toBeVisible()
   // Old finish should be cleared
   await expect(page.getByLabel('Cell 3,3').getByAltText('Finish')).not.toBeVisible()
+})
+
+test('K shortcut sets a key on the active cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Select empty cell (0,1) and press K
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByLabel('Maze grid').press('k')
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Key')).toBeVisible()
+})
+
+test('D shortcut sets a door on the active cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Select empty cell (0,1) and press D
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByLabel('Maze grid').press('d')
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Door')).toBeVisible()
+})
+
+test('E shortcut sets an enemy on the active cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByLabel('Maze grid').press('e')
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).toBeVisible()
+})
+
+test('H shortcut sets a health pickup on the active cell', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByLabel('Maze grid').press('h')
+
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Health')).toBeVisible()
 })
 
 test('Home key moves active cell to start of row', async ({ page }) => {
@@ -618,6 +802,7 @@ test('Generate Maze dialog has all expected fields', async ({ page }) => {
   await page.getByLabel('Cell 1,1').click()
   await page.getByRole('button', { name: 'Generate' }).click()
   const dialog = page.getByRole('dialog', { name: 'Generate Maze' })
+  // Size & Position tab (default): dimensions + start/finish.
   await expect(dialog.getByLabel('Rows')).toBeVisible()
   await expect(dialog.getByLabel('Columns')).toBeVisible()
   await expect(dialog.getByLabel('Start Row')).toBeVisible()
@@ -625,6 +810,13 @@ test('Generate Maze dialog has all expected fields', async ({ page }) => {
   await expect(dialog.getByLabel('Finish Row')).toBeVisible()
   await expect(dialog.getByLabel('Finish Column')).toBeVisible()
   await expect(dialog.getByLabel('Min Solution Length')).toBeVisible()
+  // Features tab: doors / keys / enemies / health counts.
+  await dialog.getByRole('tab', { name: 'Features' }).click()
+  await expect(dialog.getByLabel('Doors', { exact: true })).toBeVisible()
+  await expect(dialog.getByLabel('Spare Doors')).toBeVisible()
+  await expect(dialog.getByLabel('Spare Keys')).toBeVisible()
+  await expect(dialog.getByLabel('Enemies')).toBeVisible()
+  await expect(dialog.getByLabel('Health')).toBeVisible()
 })
 
 test('Generate Maze dialog defaults reflect the current grid dimensions', async ({ page }) => {
@@ -652,6 +844,50 @@ test('generating a maze replaces the grid with the new dimensions', async ({ pag
   await expect(page.getByRole('dialog', { name: 'Generate Maze' })).not.toBeVisible()
   await expect(page.getByLabel('Row 5')).toBeVisible()
   await expect(page.getByLabel('Column 5')).toBeVisible()
+})
+
+test('generating with doors places key and door cells in the grid', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Generate' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Generate Maze' })
+  await dialog.getByLabel('Rows').fill('15')
+  await dialog.getByLabel('Columns').fill('15')
+  await dialog.getByLabel('Start Row').fill('1')
+  await dialog.getByLabel('Start Column').fill('1')
+  await dialog.getByLabel('Finish Row').fill('15')
+  await dialog.getByLabel('Finish Column').fill('15')
+  await dialog.getByLabel('Min Solution Length').fill('8')
+  // Doors lives on the Features tab.
+  await dialog.getByRole('tab', { name: 'Features' }).click()
+  await dialog.getByLabel('Doors', { exact: true }).fill('3')
+  await dialog.getByRole('button', { name: 'Generate' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generate Maze' })).not.toBeVisible()
+  // Auto-placed key and door cells render their icons in the editor grid.
+  await expect(page.getByAltText('Door').first()).toBeVisible()
+  await expect(page.getByAltText('Key').first()).toBeVisible()
+})
+
+test('generating with enemies and health places enemy and health cells in the grid', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+  await page.getByRole('button', { name: 'Generate' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Generate Maze' })
+  await dialog.getByLabel('Rows').fill('15')
+  await dialog.getByLabel('Columns').fill('15')
+  await dialog.getByLabel('Start Row').fill('1')
+  await dialog.getByLabel('Start Column').fill('1')
+  await dialog.getByLabel('Finish Row').fill('15')
+  await dialog.getByLabel('Finish Column').fill('15')
+  await dialog.getByLabel('Min Solution Length').fill('8')
+  // Enemies and Health live on the Features tab.
+  await dialog.getByRole('tab', { name: 'Features' }).click()
+  await dialog.getByLabel('Enemies').fill('2')
+  await dialog.getByLabel('Health').fill('2')
+  await dialog.getByRole('button', { name: 'Generate' }).click()
+  await expect(page.getByRole('dialog', { name: 'Generate Maze' })).not.toBeVisible()
+  await expect(page.getByAltText('Enemy').first()).toBeVisible()
+  await expect(page.getByAltText('Health').first()).toBeVisible()
 })
 
 test('cancelling Generate dialog leaves the grid unchanged', async ({ page }) => {
@@ -795,6 +1031,10 @@ test('shortcut hint bar contains expected shortcuts', async ({ page }) => {
   await expect(hint).toContainText('[W]')
   await expect(hint).toContainText('[S]')
   await expect(hint).toContainText('[F]')
+  await expect(hint).toContainText('[K]')
+  await expect(hint).toContainText('[D]')
+  await expect(hint).toContainText('[E]')
+  await expect(hint).toContainText('[H]')
   await expect(hint).toContainText('[DEL]')
   await expect(hint).toContainText('[Shift] Range')
 })

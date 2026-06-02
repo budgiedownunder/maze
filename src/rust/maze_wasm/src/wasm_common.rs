@@ -1,5 +1,5 @@
 use data_model::{Maze, MazeDefinition};
-use maze::MazeGame;
+use maze::{GameEvent, MazeGame};
 #[cfg(any(feature = "wasm-bindgen", feature = "wasm-lite"))]
 use maze::GenerationAlgorithm;
 #[cfg(feature = "wasm-bindgen")]
@@ -28,25 +28,19 @@ pub struct MazeWasm {
 pub struct MazeGameWasm {
     #[wasm_bindgen(skip)]
     pub game: MazeGame,
+    #[wasm_bindgen(skip)]
+    pub tick_events: Vec<GameEvent>,
 }
 
 #[cfg(not(feature = "wasm-bindgen"))]
-#[repr(C)]
 pub struct MazeGameWasm {
     pub game: MazeGame,
-}
-
-impl Clone for MazeWasm {
-    fn clone(&self) -> Self {
-        MazeWasm {
-            maze: self.maze.clone(),
-        }
-    }
+    pub tick_events: Vec<GameEvent>,
 }
 
 /// Identifies the type of a maze cell.
 ///
-/// Returned by [`MazeWasm::get_cell_type`].
+/// Returned by `maze_wasm_get_cell_type`.
 #[cfg(feature = "wasm-bindgen")]
 #[wasm_bindgen]
 pub enum MazeCellTypeWasm {
@@ -54,6 +48,10 @@ pub enum MazeCellTypeWasm {
     Start,
     Finish,
     Wall,
+    Key,
+    Door,
+    Enemy,
+    Health,
 }
 
 /// Identifies the type of a maze cell.
@@ -66,6 +64,10 @@ pub enum MazeCellTypeWasm {
     Start,
     Finish,
     Wall,
+    Key,
+    Door,
+    Enemy,
+    Health,
 }
 
 /// Identifies the maze generation algorithm to use.
@@ -122,10 +124,14 @@ pub enum DirectionWasm {
 #[cfg(feature = "wasm-bindgen")]
 #[wasm_bindgen]
 pub enum MoveResultWasm {
-    None     = 0,
-    Moved    = 1,
-    Blocked  = 2,
-    Complete = 3,
+    None                = 0,
+    Moved               = 1,
+    Blocked             = 2,
+    Complete            = 3,
+    BlockedByLockedDoor = 4,
+    StartedUnlocking    = 5,
+    Stranded            = 6,
+    Killed              = 7,
 }
 
 /// Result returned by `maze_game_wasm_move_player`.
@@ -133,10 +139,14 @@ pub enum MoveResultWasm {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub enum MoveResultWasm {
-    None     = 0,
-    Moved    = 1,
-    Blocked  = 2,
-    Complete = 3,
+    None                = 0,
+    Moved               = 1,
+    Blocked             = 2,
+    Complete            = 3,
+    BlockedByLockedDoor = 4,
+    StartedUnlocking    = 5,
+    Stranded            = 6,
+    Killed              = 7,
 }
 
 /// Converts a [`GenerationAlgorithmWasm`] value to the corresponding [`maze::GenerationAlgorithm`].
@@ -158,6 +168,10 @@ pub fn to_cell_type_enum(cell_type: char) -> MazeCellTypeWasm {
         'S' => MazeCellTypeWasm::Start,
         'F' => MazeCellTypeWasm::Finish,
         'W' => MazeCellTypeWasm::Wall,
+        'K' => MazeCellTypeWasm::Key,
+        'D' => MazeCellTypeWasm::Door,
+        'E' => MazeCellTypeWasm::Enemy,
+        'H' => MazeCellTypeWasm::Health,
         _ => MazeCellTypeWasm::Empty,
     }
 }
@@ -179,6 +193,9 @@ pub fn new_maze() -> Maze {
 /// `Ok(MazeGameWasm)` on success, or `Err(String)` if the JSON is invalid or has no start cell.
 ///
 pub fn new_maze_game(json: &str) -> Result<MazeGameWasm, String> {
-    MazeGame::from_json(json).map(|game| MazeGameWasm { game })
+    MazeGame::from_json(json).map(|game| MazeGameWasm {
+        game,
+        tick_events: Vec::new(),
+    })
 }
 

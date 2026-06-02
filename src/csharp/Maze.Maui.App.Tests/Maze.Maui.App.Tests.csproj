@@ -47,6 +47,8 @@
              Link="LinkedSource\Extensions\StringExtensions.cs" />
     <Compile Include="..\Maze.Maui.App\Utils\MazeCellCap.cs"
              Link="LinkedSource\Utils\MazeCellCap.cs" />
+    <Compile Include="..\Maze.Maui.App\Utils\MazeCellCounter.cs"
+             Link="LinkedSource\Utils\MazeCellCounter.cs" />
     <Compile Include="..\Maze.Maui.App\Utils\GenerateMazeOptionsParser.cs"
              Link="LinkedSource\Utils\GenerateMazeOptionsParser.cs" />
     <Compile Include="..\Maze.Maui.App\Models\Difficulty.cs"

@@ -1,13 +1,15 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { getMaze } from '../api/client'
 import { useToken } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useMazeGame, MazeGameDirection } from '../hooks/useMazeGame'
+import { getBag, getHp, getMaxHp, MazeGameLoseReason } from '../wasm/mazeWasm'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { MazeGrid } from '../components/MazeGrid'
 import { GameResultPopup } from '../components/GameResultPopup'
+import { PausePopup } from '../components/PausePopup'
 import type { Maze } from '../types/api'
 
 const KEY_MAP: Record<string, MazeGameDirection> = {
@@ -34,14 +36,36 @@ export function MazeGamePage() {
   const gameCellSize = window.matchMedia('(pointer: coarse)').matches ? 60 : 32
 
   const definitionJson = maze ? JSON.stringify(maze.definition) : null
-  const [{ game, version, loading, error }, move] = useMazeGame(definitionJson)
+  const [{ game, version, loading, error, damageFlashKey, paused }, move, restart, togglePause] = useMazeGame(definitionJson)
+
+  // Bag contents — recomputed whenever the game advances (version bump). Keys
+  // are auto-collected on walk-over, so the bag grows as the player moves.
+  const bag = useMemo(
+    () => (game ? getBag(game) : []),
+    [game, version], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  // HP HUD state — re-read each version bump.
+  const hp = useMemo(
+    () => (game ? getHp(game) : 0),
+    [game, version], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const maxHp = useMemo(
+    () => (game ? getMaxHp(game) : 0),
+    [game, version], // eslint-disable-line react-hooks/exhaustive-deps
+  )
 
   const isComplete = game?.is_complete() ?? false
+  const isLost = game?.is_lost() ?? false
+  const loseReason = game?.lose_reason() as string | null | undefined
+  const resultMessage = isLost
+    ? (loseReason === MazeGameLoseReason.Killed ? 'You died!' : "You're stranded!!")
+    : 'You win!'
   const [showResult, setShowResult] = useState(false)
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (isComplete) setShowResult(true)
-  }, [isComplete])
+    if (isComplete || isLost) setShowResult(true)
+  }, [isComplete, isLost])
 
   const repeatTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const repeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -63,13 +87,18 @@ export function MazeGamePage() {
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (game?.is_complete()) return
+      if (game?.is_complete() || game?.is_lost()) return
+      // Space / Esc toggle pause. preventDefault stops Space from scrolling the
+      // page or activating a focused popup button, and stops Esc from closing
+      // the modal natively (the toggle owns resume).
+      if (e.key === ' ' || e.key === 'Escape') { e.preventDefault(); togglePause(); return }
       const dir = KEY_MAP[e.key]
+      // move() is itself a no-op while paused, so no explicit guard needed here.
       if (dir !== undefined) { e.preventDefault(); move(dir) }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [move, game])
+  }, [move, togglePause, game])
 
   return (
     <div className="maze-game-page">
@@ -100,6 +129,14 @@ export function MazeGamePage() {
 
         {maze && game && !loading && !loadError && !error && (
           <>
+            {damageFlashKey > 0 && (
+              <div
+                key={damageFlashKey}
+                className="maze-damage-flash"
+                aria-hidden="true"
+              />
+            )}
+
             <MazeGrid
               grid={maze.definition.grid}
               solution={null}
@@ -110,18 +147,44 @@ export function MazeGamePage() {
               cellSize={gameCellSize}
             />
 
+            <div className="maze-game-status">
+              {maxHp > 0 && (
+                <div className="maze-hp-hud" aria-label="Health">
+                  <span className="maze-hp-hud-label">LIFE</span>
+                  {Array.from({ length: maxHp }, (_, i) => (
+                    <img
+                      key={i}
+                      src="/images/maze/health.svg"
+                      alt={i < hp ? 'Health' : 'Lost health'}
+                      className={i < hp ? 'maze-hp-hud-heart' : 'maze-hp-hud-heart maze-hp-hud-heart--empty'}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <div className="maze-bag" aria-label="Bag">
+                <span>BAG</span>
+                {bag.length === 0
+                  ? <span className="maze-bag-empty">empty</span>
+                  : bag.map((_, i) => <img key={i} src="/images/maze/key.svg" alt="Key" />)}
+              </div>
+            </div>
+
             <div className="game-dpad" aria-label="D-pad">
-              <button type="button" aria-label="Move up"    onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Up) }}    onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete} style={{ gridArea: 'up' }}>
+              <button type="button" aria-label="Move up"    onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Up) }}    onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'up' }}>
                 <img src="/images/maze/dpad_up.png" alt="" draggable={false} />
               </button>
-              <button type="button" aria-label="Move left"  onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Left) }}  onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete} style={{ gridArea: 'left' }}>
+              <button type="button" aria-label="Move left"  onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Left) }}  onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'left' }}>
                 <img src="/images/maze/dpad_left.png" alt="" draggable={false} />
               </button>
-              <button type="button" aria-label="Move down"  onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Down) }}  onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete} style={{ gridArea: 'down' }}>
+              <button type="button" aria-label="Move down"  onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Down) }}  onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'down' }}>
                 <img src="/images/maze/dpad_down.png" alt="" draggable={false} />
               </button>
-              <button type="button" aria-label="Move right" onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Right) }} onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete} style={{ gridArea: 'right' }}>
+              <button type="button" aria-label="Move right" onPointerDown={e => { e.preventDefault(); startRepeat(MazeGameDirection.Right) }} onPointerUp={stopRepeat} onPointerLeave={stopRepeat} onPointerCancel={stopRepeat} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'right' }}>
                 <img src="/images/maze/dpad_right.png" alt="" draggable={false} />
+              </button>
+              <button type="button" aria-label={paused ? 'Resume' : 'Pause'} onClick={() => togglePause()} onContextMenu={e => e.preventDefault()} aria-disabled={isComplete || isLost} style={{ gridArea: 'pause' }}>
+                <img src="/images/maze/dpad_pause.png" alt="" draggable={false} />
               </button>
             </div>
 
@@ -129,13 +192,23 @@ export function MazeGamePage() {
               [&#x2191;/W]&nbsp;Up&nbsp;&nbsp;&nbsp;
               [&#x2193;/S]&nbsp;Down&nbsp;&nbsp;&nbsp;
               [&#x2190;/A]&nbsp;Left&nbsp;&nbsp;&nbsp;
-              [&#x2192;/D]&nbsp;Right
+              [&#x2192;/D]&nbsp;Right&nbsp;&nbsp;&nbsp;
+              [Space/Esc]&nbsp;Pause
             </div>
+
+            {paused && (
+              <PausePopup
+                onResume={() => togglePause()}
+                onRestart={() => restart()}
+              />
+            )}
 
             {showResult && (
               <GameResultPopup
-                message="You win!"
+                message={resultMessage}
+                tone={isLost ? 'fail' : 'success'}
                 onClose={() => setShowResult(false)}
+                onPlayAgain={() => { setShowResult(false); restart() }}
               />
             )}
           </>

@@ -4,15 +4,31 @@
 // `public/game/index.html` reads the same key to build the StartConfig
 // it sends to the wasm boundary.
 
-export const SKY_TYPES = ['night', 'sunrise', 'day', 'sunset'] as const
+export const SKY_TYPES = ['night', 'sunrise', 'day', 'sunset', 'dungeon', 'chamber'] as const
 export type SkyType = (typeof SKY_TYPES)[number]
 
 export const WALL_TYPES = ['brick', 'dressed_stone', 'wood', 'cobblestone'] as const
 export type WallType = (typeof WALL_TYPES)[number]
 
+export const DOOR_STYLES = ['swing', 'slide', 'portcullis', 'dissolve'] as const
+export type DoorStyle = (typeof DOOR_STYLES)[number]
+
+export const KEY_HOLDER_STYLES = ['pedestal', 'chest', 'floating_key'] as const
+export type KeyHolderStyle = (typeof KEY_HOLDER_STYLES)[number]
+
+export const ENEMY_TYPES = ['goblin', 'ghost'] as const
+export type EnemyType = (typeof ENEMY_TYPES)[number]
+
+export const HEALTH_STYLES = ['heart', 'potion'] as const
+export type HealthStyle = (typeof HEALTH_STYLES)[number]
+
 export interface Play3dCustomLaunchSettings {
   skyType: SkyType
   wallType: WallType
+  doorStyle: DoorStyle
+  keyHolder: KeyHolderStyle
+  enemyType: EnemyType
+  healthStyle: HealthStyle
   wallTint: boolean
   wallMaterialVariation: boolean
   deadEndObjects: boolean
@@ -24,6 +40,15 @@ export interface Play3dCustomLaunchSettings {
 export const PLAY3D_CUSTOM_LAUNCH_DEFAULTS: Play3dCustomLaunchSettings = {
   skyType: 'night',
   wallType: 'brick',
+  // Door / key-holder styles default to the topology-driven swing and the
+  // stone pedestal — the look the 3D game shipped with.
+  doorStyle: 'swing',
+  keyHolder: 'pedestal',
+  // Enemy / health styles default to the same variants the Bevy crate's
+  // `EnemyType::default()` / `HealthStyle::default()` and the server's
+  // `EnemyTypeConfig::default()` / `HealthStyleConfig::default()` use.
+  enemyType: 'goblin',
+  healthStyle: 'heart',
   // Match the prior hard-coded "clean look" overrides for user-edited
   // mazes — `wall_tint` and `wall_material_variation` off so the user's
   // layout is the visual focus by default. The user can still flip
@@ -56,10 +81,30 @@ export function loadPlay3dCustomLaunchSettings(): Play3dCustomLaunchSettings {
     const wallType: WallType = (WALL_TYPES as readonly string[]).includes(parsed.wallType ?? '')
       ? (parsed.wallType as WallType)
       : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.wallType
+    const doorStyle: DoorStyle = (DOOR_STYLES as readonly string[]).includes(parsed.doorStyle ?? '')
+      ? (parsed.doorStyle as DoorStyle)
+      : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.doorStyle
+    const keyHolder: KeyHolderStyle = (KEY_HOLDER_STYLES as readonly string[]).includes(
+      parsed.keyHolder ?? '',
+    )
+      ? (parsed.keyHolder as KeyHolderStyle)
+      : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.keyHolder
+    const enemyType: EnemyType = (ENEMY_TYPES as readonly string[]).includes(parsed.enemyType ?? '')
+      ? (parsed.enemyType as EnemyType)
+      : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.enemyType
+    const healthStyle: HealthStyle = (HEALTH_STYLES as readonly string[]).includes(
+      parsed.healthStyle ?? '',
+    )
+      ? (parsed.healthStyle as HealthStyle)
+      : PLAY3D_CUSTOM_LAUNCH_DEFAULTS.healthStyle
     const timer = Number(parsed.timerSeconds)
     return {
       skyType,
       wallType,
+      doorStyle,
+      keyHolder,
+      enemyType,
+      healthStyle,
       wallTint: parsed.wallTint ?? PLAY3D_CUSTOM_LAUNCH_DEFAULTS.wallTint,
       wallMaterialVariation:
         parsed.wallMaterialVariation ?? PLAY3D_CUSTOM_LAUNCH_DEFAULTS.wallMaterialVariation,

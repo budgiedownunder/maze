@@ -38,7 +38,12 @@ pub(crate) fn pause_system(
         return;
     }
     let Some(keys) = keys else { return; };
-    if !keys.just_pressed(KeyCode::Space) {
+    // Space toggles pause everywhere. In the browser Esc also toggles pause: it
+    // can't quit there (see `crate::movement::quit_system`), so rather than
+    // freeze the app it doubles as pause/resume.
+    let toggle = keys.just_pressed(KeyCode::Space)
+        || (cfg!(target_arch = "wasm32") && keys.just_pressed(KeyCode::Escape));
+    if !toggle {
         return;
     }
     state.paused = !state.paused;

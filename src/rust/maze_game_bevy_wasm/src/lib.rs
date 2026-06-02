@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use maze_game_bevy::{GameConfig, Landmarks, SkyType, WallType};
+use maze_game_bevy::{
+    DoorStyle, EnemyType, GameConfig, HealthStyle, KeyHolderStyle, Landmarks, SkyType, WallType,
+};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
@@ -65,7 +67,61 @@ struct StartConfig {
     #[serde(default)]
     wall_type: String,
     #[serde(default)]
+    door_style: String,
+    #[serde(default)]
+    key_holder: String,
+    #[serde(default)]
+    door_count: u32,
+    #[serde(default)]
+    spare_doors: u32,
+    #[serde(default)]
+    spare_keys: u32,
+    #[serde(default)]
+    enemy_count: u32,
+    #[serde(default)]
+    health_count: u32,
+    #[serde(default = "default_enemy_move_period_ms")]
+    enemy_move_period_ms: f32,
+    #[serde(default = "default_enemy_damage")]
+    enemy_damage: u32,
+    #[serde(default = "default_max_hp")]
+    max_hp: u32,
+    #[serde(default = "default_starting_hp")]
+    starting_hp: u32,
+    #[serde(default = "default_enemy_type")]
+    enemy_type: String,
+    #[serde(default = "default_health_style")]
+    health_style: String,
+    #[serde(default)]
     maze_json: Option<String>,
+}
+
+/// Defaults for the per-game tuning knobs. Match the values in
+/// `MazeGameOptions::default()` so omitting them from the host payload
+/// (e.g. the bare `/game/?id=` path) yields the same behaviour the maze
+/// crate would have used on its own.
+fn default_enemy_move_period_ms() -> f32 {
+    1500.0
+}
+
+fn default_enemy_damage() -> u32 {
+    1
+}
+
+fn default_max_hp() -> u32 {
+    3
+}
+
+fn default_starting_hp() -> u32 {
+    3
+}
+
+fn default_enemy_type() -> String {
+    "goblin".to_string()
+}
+
+fn default_health_style() -> String {
+    "heart".to_string()
 }
 
 /// Shape of the nested `landmarks` object in the host JSON payload —
@@ -173,6 +229,11 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
                 cfg.cols,
                 cfg.seed,
                 cfg.min_solution_length,
+                cfg.door_count,
+                cfg.spare_doors,
+                cfg.spare_keys,
+                cfg.enemy_count,
+                cfg.health_count,
             )
             .map_err(|err| JsValue::from_str(&format!("Maze generation failed: {err}")))?,
         )
@@ -201,6 +262,14 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         },
         sky_type: SkyType::from_wire_str(&cfg.sky_type),
         wall_type: WallType::from_wire_str(&cfg.wall_type),
+        door_style: DoorStyle::from_wire_str(&cfg.door_style),
+        key_holder: KeyHolderStyle::from_wire_str(&cfg.key_holder),
+        enemy_move_period_ms: cfg.enemy_move_period_ms,
+        enemy_damage: cfg.enemy_damage,
+        max_hp: cfg.max_hp,
+        starting_hp: cfg.starting_hp,
+        enemy_type: EnemyType::from_wire_str(&cfg.enemy_type),
+        health_style: HealthStyle::from_wire_str(&cfg.health_style),
     });
     maze_game_bevy::build_app(&mut app, maze_json.as_deref());
     app.run();
@@ -235,6 +304,17 @@ mod tests {
         assert_eq!(cfg.mode, "");
         assert_eq!(cfg.sky_type, "");
         assert_eq!(cfg.wall_type, "brick");
+        assert_eq!(cfg.door_count, 0);
+        assert_eq!(cfg.spare_doors, 0);
+        assert_eq!(cfg.spare_keys, 0);
+        assert_eq!(cfg.enemy_count, 0);
+        assert_eq!(cfg.health_count, 0);
+        assert_eq!(cfg.enemy_move_period_ms, 1500.0);
+        assert_eq!(cfg.enemy_damage, 1);
+        assert_eq!(cfg.max_hp, 3);
+        assert_eq!(cfg.starting_hp, 3);
+        assert_eq!(cfg.enemy_type, "goblin");
+        assert_eq!(cfg.health_style, "heart");
         assert!(cfg.difficulty.is_none());
         assert!(cfg.maze_json.is_some());
         // The single landmark override must take effect; the rest fall

@@ -1,6 +1,7 @@
 pub(crate) mod decorations;
 pub(crate) mod floor;
 pub(crate) mod objects;
+pub(crate) mod roof;
 pub(crate) mod sky;
 pub(crate) mod textures;
 pub(crate) mod walls;
@@ -9,7 +10,7 @@ use crate::hud;
 use crate::overlays::pause;
 use crate::state::{GameClock, GameConfig, GameState, GridFacing, PendingMazeJson};
 use bevy::prelude::*;
-use maze::{GenerationAlgorithm, Generator, GeneratorOptions, MazeGame};
+use maze::{GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MazeGameOptions};
 use std::collections::HashSet;
 
 pub(crate) const CELL_SIZE: f32 = 2.0;
@@ -80,11 +81,22 @@ pub(crate) fn camera_fov_for_aspect(aspect: f32) -> f32 {
 /// generation failures surface up the call stack — and into the browser's
 /// `#loading` error overlay — *before* Bevy enters `AppState::Playing`, where
 /// the rest of the game systems would otherwise panic on missing resources.
+///
+/// The argument list mirrors the JS host's `StartConfig` fields one-for-one
+/// rather than introducing an intermediate parameter struct — the host already
+/// destructures the JSON payload into local variables and forwarding them
+/// positionally is the most direct mapping.
+#[allow(clippy::too_many_arguments)]
 pub fn generate_maze_json(
     rows: u32,
     cols: u32,
     seed: u64,
     min_solution_length: u32,
+    door_count: u32,
+    spare_doors: u32,
+    spare_keys: u32,
+    enemy_count: u32,
+    health_count: u32,
 ) -> Result<String, String> {
     let options = GeneratorOptions {
         row_count: rows as usize,
@@ -96,6 +108,11 @@ pub fn generate_maze_json(
         max_retries: None,
         branch_from_finish: None,
         seed: Some(seed),
+        door_count: Some(door_count as usize),
+        spare_doors: Some(spare_doors as usize),
+        spare_keys: Some(spare_keys as usize),
+        enemy_count: Some(enemy_count as usize),
+        health_count: Some(health_count as usize),
     };
     let maze = Generator { options }
         .generate()
@@ -103,15 +120,31 @@ pub fn generate_maze_json(
     Ok(grid_to_json(&maze.definition.grid))
 }
 
+/// Built-in fallback maze for the native binary and the bare wasm `start()`
+/// path (the React `/game/` flow always supplies a real maze). An 11×11
+/// perfect maze chosen to exercise the full feature set: a key (`K` at `(1,3)`)
+/// sits along a corridor, the real path door (`D` at `(8,9)`) is the *only*
+/// cell adjacent to the finish so it gates `F` outright, a **decoy** door
+/// (`D` at `(2,9)`) hangs off the top-right branch (so a player tempted to
+/// burn their only key on it strands themselves), and several further
+/// dead-ends pick up landmark objects (brazier / urn / pillar / chest). The
+/// intended solve is: collect the key, navigate the spine down and east,
+/// then hold against the real door to open it before reaching the finish.
+/// See `demo_grid_is_well_formed` for the structural guarantees this layout
+/// upholds.
 pub(crate) fn demo_grid() -> Vec<Vec<char>> {
     vec![
-        vec!['S', ' ', ' ', ' ', ' ', ' ', ' '],
-        vec![' ', 'W', 'W', 'W', 'W', 'W', ' '],
-        vec![' ', 'W', ' ', ' ', ' ', 'W', ' '],
-        vec![' ', 'W', ' ', 'W', ' ', 'W', ' '],
-        vec![' ', ' ', ' ', 'W', ' ', ' ', ' '],
-        vec!['W', 'W', 'W', 'W', ' ', 'W', 'W'],
-        vec![' ', ' ', ' ', ' ', ' ', ' ', 'F'],
+        vec!['W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
+        vec!['W', 'S', ' ', 'K', ' ', 'E', ' ', 'H', ' ', ' ', 'W'],
+        vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'D', 'W'],
+        vec!['W', ' ', ' ', ' ', 'W', ' ', ' ', ' ', 'W', ' ', 'W'],
+        vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'W', 'W'],
+        vec!['W', ' ', 'W', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'W'],
+        vec!['W', ' ', 'W', 'W', 'W', ' ', 'W', 'W', 'W', 'W', 'W'],
+        vec!['W', ' ', ' ', ' ', 'W', ' ', ' ', ' ', 'W', 'F', 'W'],
+        vec!['W', ' ', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'D', 'W'],
+        vec!['W', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 'W'],
+        vec!['W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W', 'W'],
     ]
 }
 
@@ -276,9 +309,16 @@ pub(crate) fn spawn_world(
     // we fall back to the built-in demo grid (the native / no-config path).
     // Generation failures are surfaced before we ever reach here — see
     // `generate_maze_json` and `maze_game_bevy_wasm::start_with_config`.
+    let game_opts = MazeGameOptions {
+        enemy_move_period_ms: Some(config.enemy_move_period_ms),
+        enemy_damage: Some(config.enemy_damage),
+        max_hp: Some(config.max_hp),
+        starting_hp: Some(config.starting_hp),
+    };
     let (game, grid) = match pending.0.as_deref() {
         Some(json) => {
-            let game = MazeGame::from_json(json).expect("maze JSON was validated by the REST API");
+            let game = MazeGame::from_json_with_options(json, game_opts)
+                .expect("maze JSON was validated by the REST API");
             let grid = game.grid().to_vec();
             (game, grid)
         }
@@ -286,7 +326,8 @@ pub(crate) fn spawn_world(
             let grid = demo_grid();
             let json = grid_to_json(&grid);
             (
-                MazeGame::from_json(&json).expect("demo grid is hardcoded and always valid"),
+                MazeGame::from_json_with_options(&json, game_opts)
+                    .expect("demo grid is hardcoded and always valid"),
                 grid,
             )
         }
@@ -313,6 +354,7 @@ pub(crate) fn spawn_world(
         won: false,
         lost: false,
         paused: false,
+        damage_flash_timer: 0.0,
     });
 
     // Timer comes from `GameConfig.timer_seconds`. The default (60 s, see
@@ -338,8 +380,13 @@ pub(crate) fn spawn_world(
     let floor_assets = floor::build_floor_assets(&mut meshes, &mut materials, &mut images);
     let decoration_assets =
         decorations::build_decoration_assets(&mut meshes, &mut materials, &mut images);
-    let object_assets = objects::build_object_assets(&mut meshes, &mut materials);
+    let object_assets = objects::build_object_assets(&mut meshes, &mut materials, &mut images);
+    let roof_assets = roof::build_roof_assets(&mut meshes, &mut materials, &mut images, &config);
 
+    // Row-major scan order matches `MazeGame`'s enemy-id assignment, so
+    // bumping this counter per `'E'` keeps the Bevy `EnemyMarker.id`
+    // aligned with the runtime `maze::Enemy.id`.
+    let mut enemy_id: u32 = 0;
     for (r, row) in grid.iter().enumerate() {
         for (c, &cell) in row.iter().enumerate() {
             if cell == 'W' {
@@ -364,7 +411,27 @@ pub(crate) fn spawn_world(
                 r,
                 c,
                 &config,
+                enemy_id,
             );
+            if cell == 'E' {
+                enemy_id += 1;
+            }
+            // Doors are spawned here (not inside `spawn_objects_for_cell`)
+            // because the panel borrows the cell's wall material from
+            // `wall_assets`.
+            objects::door::spawn_door_for_cell(
+                &mut commands,
+                &object_assets.door,
+                &wall_assets,
+                &decoration_assets.wall,
+                &mut materials,
+                &grid,
+                cell,
+                r,
+                c,
+                &config,
+            );
+            roof::spawn_roof_for_cell(&mut commands, &roof_assets, &wall_assets, &grid, r, c, &config);
         }
     }
 
@@ -377,5 +444,13 @@ pub(crate) fn spawn_world(
     );
     hud::clock::spawn_clock_hud(&mut commands, &window);
     hud::statusbar::spawn_statusbar(&mut commands, &window, &config);
+    hud::bag::spawn_bag_hud(&mut commands, &window, &mut images);
+    hud::hp::spawn_hp_hud(
+        &mut commands,
+        &window,
+        &mut images,
+        config.max_hp,
+        config.starting_hp,
+    );
     pause::spawn_paused_overlay(&mut commands);
 }

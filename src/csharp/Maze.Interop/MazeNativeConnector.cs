@@ -29,6 +29,10 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern byte maze_c_maze_set_finish_cell(IntPtr ptr, UInt32 row, UInt32 col);
         [DllImport("__Internal")] private static extern byte maze_c_maze_get_finish_cell(IntPtr ptr, out UInt32 outRow, out UInt32 outCol);
         [DllImport("__Internal")] private static extern byte maze_c_maze_set_wall_cells(IntPtr ptr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
+        [DllImport("__Internal")] private static extern byte maze_c_maze_set_key_cells(IntPtr ptr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
+        [DllImport("__Internal")] private static extern byte maze_c_maze_set_door_cells(IntPtr ptr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
+        [DllImport("__Internal")] private static extern byte maze_c_maze_set_enemy_cells(IntPtr ptr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
+        [DllImport("__Internal")] private static extern byte maze_c_maze_set_health_cells(IntPtr ptr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
         [DllImport("__Internal")] private static extern byte maze_c_maze_clear_cells(IntPtr ptr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol);
         [DllImport("__Internal")] private static extern byte maze_c_maze_insert_rows(IntPtr ptr, UInt32 startRow, UInt32 count);
         [DllImport("__Internal")] private static extern byte maze_c_maze_delete_rows(IntPtr ptr, UInt32 startRow, UInt32 count);
@@ -51,6 +55,11 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_min_spine_length(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_max_retries(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern void maze_c_generator_options_set_branch_from_finish(IntPtr ptr, byte value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_door_count(IntPtr ptr, UInt32 value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_spare_doors(IntPtr ptr, UInt32 value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_spare_keys(IntPtr ptr, UInt32 value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_enemy_count(IntPtr ptr, UInt32 value);
+        [DllImport("__Internal")] private static extern void maze_c_generator_options_set_health_count(IntPtr ptr, UInt32 value);
         [DllImport("__Internal")] private static extern byte maze_c_maze_generate(IntPtr mazePtr, IntPtr optsPtr);
         [DllImport("__Internal")] private static extern IntPtr maze_c_new_maze_game([MarshalAs(UnmanagedType.LPUTF8Str)] string json);
         [DllImport("__Internal")] private static extern void   maze_c_free_maze_game(IntPtr ptr);
@@ -59,6 +68,25 @@ namespace Maze.Interop
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_player_col(IntPtr ptr);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_player_direction(IntPtr ptr);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_is_complete(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_is_lost(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_lose_reason(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_pickup(IntPtr ptr, out uint kindOut, out uint idOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_bag_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_bag_item(IntPtr ptr, int index, out uint kindOut, out uint idOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_door_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_door(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint stateOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_tick(IntPtr ptr, float dtMs);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_tick_event_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_tick_event(IntPtr ptr, int index, out uint kindOut, out uint rowOut, out uint colOut);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_tick_event_payload(IntPtr ptr, int index, out uint payloadOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_key_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_key(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint idOut);
+        [DllImport("__Internal")] private static extern uint   maze_c_maze_game_hp(IntPtr ptr);
+        [DllImport("__Internal")] private static extern uint   maze_c_maze_game_max_hp(IntPtr ptr);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_enemy_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_enemy(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint idOut);
+        [DllImport("__Internal")] private static extern int    maze_c_maze_game_health_pickup_count(IntPtr ptr);
+        [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_health_pickup(IntPtr ptr, int index, out uint rowOut, out uint colOut, out uint idOut);
         [DllImport("__Internal")] private static extern int    maze_c_maze_game_visited_cell_count(IntPtr ptr);
         [DllImport("__Internal")] private static extern byte   maze_c_maze_game_get_visited_cell(IntPtr ptr, int index, out int rowOut, out int colOut);
 
@@ -154,6 +182,26 @@ namespace Maze.Interop
         public void MazeSetWallCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             ThrowIfError(maze_c_maze_set_wall_cells((IntPtr)(ulong)mazePtr, startRow, startCol, endRow, endCol));
+        }
+
+        public void MazeSetKeyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            ThrowIfError(maze_c_maze_set_key_cells((IntPtr)(ulong)mazePtr, startRow, startCol, endRow, endCol));
+        }
+
+        public void MazeSetDoorCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            ThrowIfError(maze_c_maze_set_door_cells((IntPtr)(ulong)mazePtr, startRow, startCol, endRow, endCol));
+        }
+
+        public void MazeSetEnemyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            ThrowIfError(maze_c_maze_set_enemy_cells((IntPtr)(ulong)mazePtr, startRow, startCol, endRow, endCol));
+        }
+
+        public void MazeSetHealthCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            ThrowIfError(maze_c_maze_set_health_cells((IntPtr)(ulong)mazePtr, startRow, startCol, endRow, endCol));
         }
 
         public void MazeClearCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
@@ -278,6 +326,31 @@ namespace Maze.Interop
             maze_c_generator_options_set_branch_from_finish((IntPtr)(ulong)optionsPtr, value);
         }
 
+        public void GeneratorOptionsSetDoorCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_door_count((IntPtr)(ulong)optionsPtr, value);
+        }
+
+        public void GeneratorOptionsSetSpareDoors(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_spare_doors((IntPtr)(ulong)optionsPtr, value);
+        }
+
+        public void GeneratorOptionsSetSpareKeys(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_spare_keys((IntPtr)(ulong)optionsPtr, value);
+        }
+
+        public void GeneratorOptionsSetEnemyCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_enemy_count((IntPtr)(ulong)optionsPtr, value);
+        }
+
+        public void GeneratorOptionsSetHealthCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            maze_c_generator_options_set_health_count((IntPtr)(ulong)optionsPtr, value);
+        }
+
         public void MazeGenerate(UIntPtr mazePtr, UIntPtr optionsPtr)
         {
             ThrowIfError(maze_c_maze_generate((IntPtr)(ulong)mazePtr, (IntPtr)(ulong)optionsPtr));
@@ -324,6 +397,113 @@ namespace Maze.Interop
         public int MazeGameIsComplete(UIntPtr gamePtr)
         {
             return maze_c_maze_game_is_complete((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGameIsLost(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_is_lost((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGameLoseReason(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_lose_reason((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGamePickup(UIntPtr gamePtr, out MazeInterop.MazeBagItem item)
+        {
+            byte result = maze_c_maze_game_pickup((IntPtr)(ulong)gamePtr, out uint kind, out uint id);
+            item = new MazeInterop.MazeBagItem { Kind = (MazeInterop.MazeBagItemKind)kind, Id = id };
+            return result != 0;
+        }
+
+        public int MazeGameBagCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_bag_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetBagItem(UIntPtr gamePtr, int index, out MazeInterop.MazeBagItem item)
+        {
+            byte result = maze_c_maze_game_get_bag_item((IntPtr)(ulong)gamePtr, index, out uint kind, out uint id);
+            item = new MazeInterop.MazeBagItem { Kind = (MazeInterop.MazeBagItemKind)kind, Id = id };
+            return result != 0;
+        }
+
+        public int MazeGameDoorCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_door_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetDoor(UIntPtr gamePtr, int index, out MazeInterop.MazeDoor door)
+        {
+            byte result = maze_c_maze_game_get_door((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out uint state);
+            door = new MazeInterop.MazeDoor { Row = row, Column = col, State = (MazeInterop.MazeDoorState)state };
+            return result != 0;
+        }
+
+        public int MazeGameTick(UIntPtr gamePtr, float dtMs)
+        {
+            return maze_c_maze_game_tick((IntPtr)(ulong)gamePtr, dtMs);
+        }
+
+        public int MazeGameTickEventCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_tick_event_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetTickEvent(UIntPtr gamePtr, int index, out MazeInterop.MazeGameEvent evt)
+        {
+            byte result = maze_c_maze_game_get_tick_event((IntPtr)(ulong)gamePtr, index, out uint kind, out uint row, out uint col);
+            uint payload = 0;
+            if (result != 0)
+                maze_c_maze_game_get_tick_event_payload((IntPtr)(ulong)gamePtr, index, out payload);
+            evt = new MazeInterop.MazeGameEvent { Kind = (MazeInterop.MazeGameEventKind)kind, Row = row, Column = col, Payload = payload };
+            return result != 0;
+        }
+
+        public int MazeGameKeyCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_key_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetKey(UIntPtr gamePtr, int index, out MazeInterop.MazeKey key)
+        {
+            byte result = maze_c_maze_game_get_key((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out uint id);
+            key = new MazeInterop.MazeKey { Row = row, Column = col, Id = id };
+            return result != 0;
+        }
+
+        public uint MazeGameHp(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_hp((IntPtr)(ulong)gamePtr);
+        }
+
+        public uint MazeGameMaxHp(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_max_hp((IntPtr)(ulong)gamePtr);
+        }
+
+        public int MazeGameEnemyCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_enemy_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetEnemy(UIntPtr gamePtr, int index, out MazeInterop.MazeEnemy enemy)
+        {
+            byte result = maze_c_maze_game_get_enemy((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out uint id);
+            enemy = new MazeInterop.MazeEnemy { Row = row, Column = col, Id = id };
+            return result != 0;
+        }
+
+        public int MazeGameHealthPickupCount(UIntPtr gamePtr)
+        {
+            return maze_c_maze_game_health_pickup_count((IntPtr)(ulong)gamePtr);
+        }
+
+        public bool MazeGameGetHealthPickup(UIntPtr gamePtr, int index, out MazeInterop.MazeHealthPickup pickup)
+        {
+            byte result = maze_c_maze_game_get_health_pickup((IntPtr)(ulong)gamePtr, index, out uint row, out uint col, out uint id);
+            pickup = new MazeInterop.MazeHealthPickup { Row = row, Column = col, Id = id };
+            return result != 0;
         }
 
         public int MazeGameVisitedCellCount(UIntPtr gamePtr)

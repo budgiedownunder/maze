@@ -144,6 +144,101 @@ namespace Maze.Maui.App.Tests.ViewModels
             dialog.Verify(d => d.ShowAlert("Error", It.Is<string>(m => m.Contains("Failed to save maze")), "OK"), Times.Once);
         }
 
+        // ---- SaveMaze Key + Door cap guard --------------------------------------
+
+        [Fact]
+        public async Task SaveMaze_OverKeyDoorCap_RejectsWithAlertAndNoServiceCall()
+        {
+            var (vm, _, dialog, service) = BuildVm();
+            vm.IsStored = true;
+            vm.MazeItem = new MazeItem { ID = "abc", Name = "My Maze" };
+            // 9 keys + 8 doors = 17 > MaxTotalFeatures (16)
+            var maze = new Api.Maze(1, 20);
+            maze.SetKeyCells(0, 0, 0, 8);
+            maze.SetDoorCells(0, 9, 0, 16);
+
+            var result = await vm.SaveMaze(maze);
+
+            Assert.False(result);
+            dialog.Verify(d => d.ShowAlert(
+                "Cannot save",
+                It.Is<string>(m => m.Contains("9 keys + 8 doors = 17") && m.Contains("over the limit of 16")),
+                "OK"), Times.Once);
+            service.Verify(s => s.UpdateMazeItem(It.IsAny<MazeItem>()), Times.Never);
+            service.Verify(s => s.CreateMazeItem(It.IsAny<MazeItem>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task SaveMaze_AtKeyDoorCap_CallsUpdateService()
+        {
+            var (vm, _, _, service) = BuildVm();
+            vm.IsStored = true;
+            vm.MazeItem = new MazeItem { ID = "abc", Name = "My Maze" };
+            // 8 keys + 8 doors = 16 = MaxTotalFeatures
+            var maze = new Api.Maze(1, 20);
+            maze.SetKeyCells(0, 0, 0, 7);
+            maze.SetDoorCells(0, 8, 0, 15);
+
+            var result = await vm.SaveMaze(maze);
+
+            Assert.True(result);
+            service.Verify(s => s.UpdateMazeItem(It.IsAny<MazeItem>()), Times.Once);
+        }
+
+        // ---- Set Key / Set Door commands ------------------------------------
+
+        [Fact]
+        public async Task SetKeyCommand_RaisesSetKeyRequestedAndMarksDirty()
+        {
+            var (vm, _, _, _) = BuildVm();
+            int raised = 0;
+            vm.SetKeyRequested += (_, _) => raised++;
+
+            await vm.SetKeyCommand.ExecuteAsync(null);
+
+            Assert.Equal(1, raised);
+            Assert.True(vm.IsDirty);
+        }
+
+        [Fact]
+        public async Task SetDoorCommand_RaisesSetDoorRequestedAndMarksDirty()
+        {
+            var (vm, _, _, _) = BuildVm();
+            int raised = 0;
+            vm.SetDoorRequested += (_, _) => raised++;
+
+            await vm.SetDoorCommand.ExecuteAsync(null);
+
+            Assert.Equal(1, raised);
+            Assert.True(vm.IsDirty);
+        }
+
+        [Fact]
+        public async Task SetEnemyCommand_RaisesSetEnemyRequestedAndMarksDirty()
+        {
+            var (vm, _, _, _) = BuildVm();
+            int raised = 0;
+            vm.SetEnemyRequested += (_, _) => raised++;
+
+            await vm.SetEnemyCommand.ExecuteAsync(null);
+
+            Assert.Equal(1, raised);
+            Assert.True(vm.IsDirty);
+        }
+
+        [Fact]
+        public async Task SetHealthCommand_RaisesSetHealthRequestedAndMarksDirty()
+        {
+            var (vm, _, _, _) = BuildVm();
+            int raised = 0;
+            vm.SetHealthRequested += (_, _) => raised++;
+
+            await vm.SetHealthCommand.ExecuteAsync(null);
+
+            Assert.Equal(1, raised);
+            Assert.True(vm.IsDirty);
+        }
+
         // ---- RefreshMaze ----------------------------------------------------
 
         [Fact]

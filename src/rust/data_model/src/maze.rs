@@ -91,6 +91,8 @@ impl Maze {
     /// - `'F'`:  Represents the finishing cell (limited to one).
     /// - `'W'`:  Represents a wall.
     /// - `' '`:  Represents an empty cell.
+    /// - `'K'`:  Represents a cell holding a key (multiple allowed).
+    /// - `'D'`:  Represents a door (multiple allowed).
     ///
     /// # Arguments
     ///

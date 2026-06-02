@@ -83,6 +83,10 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? mazeSetFinishCell;
         protected IWebAssemblyFunction? mazeGetFinishCell;
         protected IWebAssemblyFunction? mazeSetWallCells;
+        protected IWebAssemblyFunction? mazeSetKeyCells;
+        protected IWebAssemblyFunction? mazeSetDoorCells;
+        protected IWebAssemblyFunction? mazeSetEnemyCells;
+        protected IWebAssemblyFunction? mazeSetHealthCells;
         protected IWebAssemblyFunction? mazeClearCells;
         protected IWebAssemblyFunction? mazeInsertRows;
         protected IWebAssemblyFunction? mazeDeleteRows;
@@ -105,6 +109,11 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? generatorOptionsSetMinSpineLength;
         protected IWebAssemblyFunction? generatorOptionsSetMaxRetries;
         protected IWebAssemblyFunction? generatorOptionsSetBranchFromFinish;
+        protected IWebAssemblyFunction? generatorOptionsSetDoorCount;
+        protected IWebAssemblyFunction? generatorOptionsSetSpareDoors;
+        protected IWebAssemblyFunction? generatorOptionsSetSpareKeys;
+        protected IWebAssemblyFunction? generatorOptionsSetEnemyCount;
+        protected IWebAssemblyFunction? generatorOptionsSetHealthCount;
         protected IWebAssemblyFunction? mazeGenerate;
         protected IWebAssemblyFunction? freeGeneratorOptions;
         protected IWebAssemblyFunction? newMazeGame;
@@ -114,6 +123,25 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? mazeGamePlayerCol;
         protected IWebAssemblyFunction? mazeGamePlayerDirection;
         protected IWebAssemblyFunction? mazeGameIsComplete;
+        protected IWebAssemblyFunction? mazeGameIsLost;
+        protected IWebAssemblyFunction? mazeGameLoseReason;
+        protected IWebAssemblyFunction? mazeGamePickup;
+        protected IWebAssemblyFunction? mazeGameBagCount;
+        protected IWebAssemblyFunction? mazeGameGetBagItem;
+        protected IWebAssemblyFunction? mazeGameDoorCount;
+        protected IWebAssemblyFunction? mazeGameGetDoor;
+        protected IWebAssemblyFunction? mazeGameTick;
+        protected IWebAssemblyFunction? mazeGameTickEventCount;
+        protected IWebAssemblyFunction? mazeGameGetTickEvent;
+        protected IWebAssemblyFunction? mazeGameGetTickEventPayload;
+        protected IWebAssemblyFunction? mazeGameKeyCount;
+        protected IWebAssemblyFunction? mazeGameGetKey;
+        protected IWebAssemblyFunction? mazeGameHp;
+        protected IWebAssemblyFunction? mazeGameMaxHp;
+        protected IWebAssemblyFunction? mazeGameEnemyCount;
+        protected IWebAssemblyFunction? mazeGameGetEnemy;
+        protected IWebAssemblyFunction? mazeGameHealthPickupCount;
+        protected IWebAssemblyFunction? mazeGameGetHealthPickup;
         protected IWebAssemblyFunction? mazeGameVisitedCellCount;
         protected IWebAssemblyFunction? mazeGameGetVisitedCell;
         /// <summary>
@@ -270,6 +298,34 @@ namespace Maze.Interop
         public void MazeSetWallCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
         {
             UInt32 errorPtr = (UInt32)(Int32)(mazeSetWallCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>Sets a range of cells in a maze to keys</summary>
+        public void MazeSetKeyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            UInt32 errorPtr = (UInt32)(Int32)(mazeSetKeyCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>Sets a range of cells in a maze to doors</summary>
+        public void MazeSetDoorCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            UInt32 errorPtr = (UInt32)(Int32)(mazeSetDoorCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>Sets a range of cells in a maze to enemy spawns</summary>
+        public void MazeSetEnemyCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            UInt32 errorPtr = (UInt32)(Int32)(mazeSetEnemyCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>Sets a range of cells in a maze to health pickups</summary>
+        public void MazeSetHealthCells(UIntPtr mazePtr, UInt32 startRow, UInt32 startCol, UInt32 endRow, UInt32 endCol)
+        {
+            UInt32 errorPtr = (UInt32)(Int32)(mazeSetHealthCells?.Invoke((long)(uint)mazePtr, startRow, startCol, endRow, endCol) ?? 0);
             if (errorPtr != 0)
                 TidyAndThrowError(errorPtr);
         }
@@ -576,6 +632,41 @@ namespace Maze.Interop
         {
             generatorOptionsSetBranchFromFinish?.Invoke((long)(uint)optionsPtr, (int)value);
         }
+        /// <summary>Sets the door_count on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of real path doors to auto-place (0 = none)</param>
+        public void GeneratorOptionsSetDoorCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetDoorCount?.Invoke((long)(uint)optionsPtr, value);
+        }
+        /// <summary>Sets the spare_doors on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of decoy doors to plant on off-spine branches (0 = none)</param>
+        public void GeneratorOptionsSetSpareDoors(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetSpareDoors?.Invoke((long)(uint)optionsPtr, value);
+        }
+        /// <summary>Sets the spare_keys on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of spare keys to plant on off-spine branches (0 = none)</param>
+        public void GeneratorOptionsSetSpareKeys(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetSpareKeys?.Invoke((long)(uint)optionsPtr, value);
+        }
+        /// <summary>Sets the enemy_count on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of enemies to auto-place at random passable cells (0 = none)</param>
+        public void GeneratorOptionsSetEnemyCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetEnemyCount?.Invoke((long)(uint)optionsPtr, value);
+        }
+        /// <summary>Sets the health_count on a <c>GeneratorOptions</c></summary>
+        /// <param name="optionsPtr">Pointer to the generator options</param>
+        /// <param name="value">Number of health pickups to auto-place at random passable cells (0 = none)</param>
+        public void GeneratorOptionsSetHealthCount(UIntPtr optionsPtr, UInt32 value)
+        {
+            generatorOptionsSetHealthCount?.Invoke((long)(uint)optionsPtr, value);
+        }
         /// <summary>
         /// Generates a maze, populating the given maze, or will throw an exception if the operation fails
         /// </summary>
@@ -673,7 +764,7 @@ namespace Maze.Interop
         /// </summary>
         /// <param name="gamePtr">Pointer to game session</param>
         /// <param name="dir">Direction: 0=None 1=Up 2=Down 3=Left 4=Right</param>
-        /// <returns>0=None 1=Moved 2=Blocked 3=Complete</returns>
+        /// <returns>0=None 1=Moved 2=Blocked 3=Complete 4=BlockedByLockedDoor 5=StartedUnlocking 6=Stranded</returns>
         public int MazeGameMovePlayer(UIntPtr gamePtr, int dir)
         {
             return (int)(mazeGameMovePlayer?.Invoke((long)(uint)gamePtr, dir) ?? 0);
@@ -713,6 +804,268 @@ namespace Maze.Interop
         public int MazeGameIsComplete(UIntPtr gamePtr)
         {
             return (int)(mazeGameIsComplete?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Returns whether the game is in a lost state
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>1 if lost, 0 otherwise</returns>
+        public int MazeGameIsLost(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameIsLost?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Returns the lose-reason code for the game session
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>0=None 1=Stranded</returns>
+        public int MazeGameLoseReason(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameLoseReason?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Attempts to pick up a collectible at the player's current cell
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="item">Receives the picked item on success</param>
+        /// <returns>True if an item was picked up; false otherwise</returns>
+        public bool MazeGamePickup(UIntPtr gamePtr, out MazeInterop.MazeBagItem item)
+        {
+            UInt32 kindOutPtr = AllocateSizedMemory(4);
+            UInt32 idOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGamePickup?.Invoke(
+                (long)(uint)gamePtr,
+                (long)(uint)(kindOutPtr + 4),
+                (long)(uint)(idOutPtr + 4)) ?? -1);
+            item.Kind = (MazeInterop.MazeBagItemKind)memory.ReadUInt32(kindOutPtr + 4);
+            item.Id = memory.ReadUInt32(idOutPtr + 4);
+            FreeSizedMemory(kindOutPtr);
+            FreeSizedMemory(idOutPtr);
+            return result == 0;
+        }
+        /// <summary>
+        /// Returns the number of items currently in the player's bag
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Bag size</returns>
+        public int MazeGameBagCount(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameBagCount?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Retrieves a single bag item by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the bag</param>
+        /// <param name="item">Receives the bag item on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetBagItem(UIntPtr gamePtr, int index, out MazeInterop.MazeBagItem item)
+        {
+            UInt32 kindOutPtr = AllocateSizedMemory(4);
+            UInt32 idOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGameGetBagItem?.Invoke(
+                (long)(uint)gamePtr, index,
+                (long)(uint)(kindOutPtr + 4),
+                (long)(uint)(idOutPtr + 4)) ?? -1);
+            item.Kind = (MazeInterop.MazeBagItemKind)memory.ReadUInt32(kindOutPtr + 4);
+            item.Id = memory.ReadUInt32(idOutPtr + 4);
+            FreeSizedMemory(kindOutPtr);
+            FreeSizedMemory(idOutPtr);
+            return result == 0;
+        }
+        /// <summary>
+        /// Returns the number of door cells in the maze, regardless of state
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Door count</returns>
+        public int MazeGameDoorCount(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameDoorCount?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Retrieves a single door cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the door list</param>
+        /// <param name="door">Receives the door cell + state on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetDoor(UIntPtr gamePtr, int index, out MazeInterop.MazeDoor door)
+        {
+            UInt32 rowOutPtr = AllocateSizedMemory(4);
+            UInt32 colOutPtr = AllocateSizedMemory(4);
+            UInt32 stateOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGameGetDoor?.Invoke(
+                (long)(uint)gamePtr, index,
+                (long)(uint)(rowOutPtr + 4),
+                (long)(uint)(colOutPtr + 4),
+                (long)(uint)(stateOutPtr + 4)) ?? -1);
+            door.Row = memory.ReadUInt32(rowOutPtr + 4);
+            door.Column = memory.ReadUInt32(colOutPtr + 4);
+            door.State = (MazeInterop.MazeDoorState)memory.ReadUInt32(stateOutPtr + 4);
+            FreeSizedMemory(rowOutPtr);
+            FreeSizedMemory(colOutPtr);
+            FreeSizedMemory(stateOutPtr);
+            return result == 0;
+        }
+        /// <summary>
+        /// Advances time-based game state by <paramref name="dtMs"/> milliseconds
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="dtMs">Elapsed time in milliseconds</param>
+        /// <returns>Number of events produced by this tick</returns>
+        public int MazeGameTick(UIntPtr gamePtr, float dtMs)
+        {
+            return (int)(mazeGameTick?.Invoke((long)(uint)gamePtr, dtMs) ?? 0);
+        }
+        /// <summary>
+        /// Returns the number of events currently buffered from the most recent tick
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Tick event count</returns>
+        public int MazeGameTickEventCount(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameTickEventCount?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Retrieves a single tick event from the buffer by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the tick event buffer</param>
+        /// <param name="evt">Receives the tick event on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetTickEvent(UIntPtr gamePtr, int index, out MazeInterop.MazeGameEvent evt)
+        {
+            UInt32 kindOutPtr = AllocateSizedMemory(4);
+            UInt32 rowOutPtr = AllocateSizedMemory(4);
+            UInt32 colOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGameGetTickEvent?.Invoke(
+                (long)(uint)gamePtr, index,
+                (long)(uint)(kindOutPtr + 4),
+                (long)(uint)(rowOutPtr + 4),
+                (long)(uint)(colOutPtr + 4)) ?? -1);
+            evt.Kind = (MazeInterop.MazeGameEventKind)memory.ReadUInt32(kindOutPtr + 4);
+            evt.Row = memory.ReadUInt32(rowOutPtr + 4);
+            evt.Column = memory.ReadUInt32(colOutPtr + 4);
+            evt.Payload = 0;
+            FreeSizedMemory(kindOutPtr);
+            FreeSizedMemory(rowOutPtr);
+            FreeSizedMemory(colOutPtr);
+            if (result == 0)
+            {
+                UInt32 payloadOutPtr = AllocateSizedMemory(4);
+                mazeGameGetTickEventPayload?.Invoke((long)(uint)gamePtr, index, (long)(uint)(payloadOutPtr + 4));
+                evt.Payload = memory.ReadUInt32(payloadOutPtr + 4);
+                FreeSizedMemory(payloadOutPtr);
+            }
+            return result == 0;
+        }
+        /// <summary>
+        /// Returns the number of uncollected key cells in the maze
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected key count</returns>
+        public int MazeGameKeyCount(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameKeyCount?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>
+        /// Retrieves a single uncollected key cell by index
+        /// </summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the uncollected-keys list</param>
+        /// <param name="key">Receives the key cell + stable id on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetKey(UIntPtr gamePtr, int index, out MazeInterop.MazeKey key)
+        {
+            UInt32 rowOutPtr = AllocateSizedMemory(4);
+            UInt32 colOutPtr = AllocateSizedMemory(4);
+            UInt32 idOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGameGetKey?.Invoke(
+                (long)(uint)gamePtr, index,
+                (long)(uint)(rowOutPtr + 4),
+                (long)(uint)(colOutPtr + 4),
+                (long)(uint)(idOutPtr + 4)) ?? -1);
+            key.Row = memory.ReadUInt32(rowOutPtr + 4);
+            key.Column = memory.ReadUInt32(colOutPtr + 4);
+            key.Id = memory.ReadUInt32(idOutPtr + 4);
+            FreeSizedMemory(rowOutPtr);
+            FreeSizedMemory(colOutPtr);
+            FreeSizedMemory(idOutPtr);
+            return result == 0;
+        }
+        /// <summary>Returns the player's current HP</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Current HP</returns>
+        public uint MazeGameHp(UIntPtr gamePtr)
+        {
+            return (uint)(int)(mazeGameHp?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>Returns the player's maximum HP</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Maximum HP</returns>
+        public uint MazeGameMaxHp(UIntPtr gamePtr)
+        {
+            return (uint)(int)(mazeGameMaxHp?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>Returns the number of active enemies</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Enemy count</returns>
+        public int MazeGameEnemyCount(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameEnemyCount?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>Retrieves a single enemy's current cell + stable id by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the enemy list</param>
+        /// <param name="enemy">Receives the enemy cell + id on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetEnemy(UIntPtr gamePtr, int index, out MazeInterop.MazeEnemy enemy)
+        {
+            UInt32 rowOutPtr = AllocateSizedMemory(4);
+            UInt32 colOutPtr = AllocateSizedMemory(4);
+            UInt32 idOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGameGetEnemy?.Invoke(
+                (long)(uint)gamePtr, index,
+                (long)(uint)(rowOutPtr + 4),
+                (long)(uint)(colOutPtr + 4),
+                (long)(uint)(idOutPtr + 4)) ?? -1);
+            enemy.Row = memory.ReadUInt32(rowOutPtr + 4);
+            enemy.Column = memory.ReadUInt32(colOutPtr + 4);
+            enemy.Id = memory.ReadUInt32(idOutPtr + 4);
+            FreeSizedMemory(rowOutPtr);
+            FreeSizedMemory(colOutPtr);
+            FreeSizedMemory(idOutPtr);
+            return result == 0;
+        }
+        /// <summary>Returns the number of uncollected health-pickup cells</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <returns>Uncollected health-pickup count</returns>
+        public int MazeGameHealthPickupCount(UIntPtr gamePtr)
+        {
+            return (int)(mazeGameHealthPickupCount?.Invoke((long)(uint)gamePtr) ?? 0);
+        }
+        /// <summary>Retrieves a single uncollected health-pickup cell by index</summary>
+        /// <param name="gamePtr">Pointer to game session</param>
+        /// <param name="index">Zero-based index into the health-pickup list</param>
+        /// <param name="pickup">Receives the pickup cell on success</param>
+        /// <returns>True if the index was valid; false if out of range</returns>
+        public bool MazeGameGetHealthPickup(UIntPtr gamePtr, int index, out MazeInterop.MazeHealthPickup pickup)
+        {
+            UInt32 rowOutPtr = AllocateSizedMemory(4);
+            UInt32 colOutPtr = AllocateSizedMemory(4);
+            UInt32 idOutPtr = AllocateSizedMemory(4);
+            int result = (int)(mazeGameGetHealthPickup?.Invoke(
+                (long)(uint)gamePtr, index,
+                (long)(uint)(rowOutPtr + 4),
+                (long)(uint)(colOutPtr + 4),
+                (long)(uint)(idOutPtr + 4)) ?? -1);
+            pickup.Row = memory.ReadUInt32(rowOutPtr + 4);
+            pickup.Column = memory.ReadUInt32(colOutPtr + 4);
+            pickup.Id = memory.ReadUInt32(idOutPtr + 4);
+            FreeSizedMemory(rowOutPtr);
+            FreeSizedMemory(colOutPtr);
+            FreeSizedMemory(idOutPtr);
+            return result == 0;
         }
         /// <summary>
         /// Returns the number of cells visited by the player (including the start cell)

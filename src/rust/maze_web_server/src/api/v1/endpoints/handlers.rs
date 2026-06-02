@@ -236,6 +236,13 @@ fn get_maze_too_many_cells_error(rows: usize, cols: usize, max: usize) -> Error 
     ))
 }
 
+fn get_maze_too_many_features_error(keys: usize, doors: usize, max: usize) -> Error {
+    ErrorUnprocessableEntity(format!(
+        "Maze has too many keys + doors: {keys} keys + {doors} doors = {total} exceeds the {max} limit",
+        total = keys + doors
+    ))
+}
+
 pub (crate) fn get_maze_solve_error_string(err: &MazeError) -> String {
     format!("The maze could not be solved: {err}")
 }
@@ -447,6 +454,40 @@ pub struct Play3dConfigResponse {
     /// `dressed_stone`, `wood`, `cobblestone`. Safely degrades to
     /// `brick` if unrecognised.
     pub wall_type: String,
+    /// Door open-animation style. One of `swing`, `slide`, `portcullis`,
+    /// `dissolve`. Safely degrades to `swing` if unrecognised.
+    pub door_style: String,
+    /// Key-holder style for `'K'` cells. One of `pedestal`, `chest`,
+    /// `floating_key`. Safely degrades to `pedestal` if unrecognised.
+    pub key_holder: String,
+    /// Number of doors (each with one key) the generator auto-places into the
+    /// maze for this difficulty. `0` = a lock-free maze.
+    pub door_count: u32,
+    /// Number of decoy doors planted on off-spine branches. Opening one burns
+    /// a key the player may have needed for a real door, potentially
+    /// stranding them. `0` = no decoys.
+    pub spare_doors: u32,
+    /// Number of spare keys planted on off-spine branches — a budget the
+    /// player can spend on decoys before they risk stranding. `0` = none.
+    pub spare_keys: u32,
+    /// Number of enemies (`'E'` cells) the generator auto-places. Clamped
+    /// to `maze::MAX_ENEMY_COUNT` (= 8). `0` = no enemies.
+    pub enemy_count: u32,
+    /// Number of health pickups (`'H'` cells) the generator auto-places.
+    /// Clamped to `maze::MAX_HEALTH_COUNT` (= 8). `0` = no pickups.
+    pub health_count: u32,
+    /// Enemy rig kind to spawn at every `'E'` cell. One of `goblin`,
+    /// `ghost`. Safely degrades to `goblin` if unrecognised.
+    pub enemy_type: String,
+    /// Health-pickup rig kind to spawn at every `'H'` cell. One of
+    /// `heart`, `potion`. Safely degrades to `heart` if unrecognised.
+    pub health_style: String,
+    /// How often each enemy advances one cell, in milliseconds of
+    /// real-game time. Lower = harder.
+    pub enemy_move_period_ms: u32,
+    /// Player's HP cap for this difficulty. Starting HP is set to this
+    /// value.
+    pub max_hp: u32,
 }
 
 /// JSON shape of the per-difficulty landmark toggles in
@@ -515,6 +556,17 @@ pub async fn get_play3d_config(
         },
         sky_type: preset.sky_type.as_wire_str().to_string(),
         wall_type: preset.wall_type.as_wire_str().to_string(),
+        door_style: preset.door_style.as_wire_str().to_string(),
+        key_holder: preset.key_holder.as_wire_str().to_string(),
+        door_count: preset.door_count,
+        spare_doors: preset.spare_doors,
+        spare_keys: preset.spare_keys,
+        enemy_count: preset.enemy_count,
+        health_count: preset.health_count,
+        enemy_type: preset.enemy_type.as_wire_str().to_string(),
+        health_style: preset.health_style.as_wire_str().to_string(),
+        enemy_move_period_ms: preset.enemy_move_period_ms,
+        max_hp: preset.max_hp,
     }))
 }
 
@@ -2032,6 +2084,8 @@ pub async fn create_maze(
                 StoreError::MazeIdExists(id) => Err(get_maze_exists_error(&id)),
                 StoreError::MazeHasTooManyCells { rows, cols, max } =>
                     Err(get_maze_too_many_cells_error(rows, cols, max)),
+                StoreError::MazeHasTooManyFeatures { keys, doors, max } =>
+                    Err(get_maze_too_many_features_error(keys, doors, max)),
                 _ => Err(get_maze_create_internal_error(&err))
             }
         }
@@ -2128,6 +2182,8 @@ pub async fn update_maze(
                StoreError::MazeIdNotFound(id) => Err(get_maze_not_found_error(&id)),
                StoreError::MazeHasTooManyCells { rows, cols, max } =>
                     Err(get_maze_too_many_cells_error(rows, cols, max)),
+               StoreError::MazeHasTooManyFeatures { keys, doors, max } =>
+                    Err(get_maze_too_many_features_error(keys, doors, max)),
                 _ => Err(get_maze_fetch_internal_error(&id, &err))
             }
         }

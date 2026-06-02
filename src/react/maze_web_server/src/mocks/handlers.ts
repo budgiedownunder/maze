@@ -60,6 +60,46 @@ export const mockMazeBeta: Maze = {
   },
 }
 
+// A keys-&-doors maze for game play. Kept out of `mockMazes` (and thus the maze
+// list) so list-count assertions stay at two; the GET /mazes/:id handler serves it
+// directly by id for deep-linked /play/maze-keydoor.
+export const mockMazeKeyDoor: Maze = {
+  id: 'maze-keydoor',
+  name: 'KeyDoor',
+  definition: {
+    grid: [
+      ['S', 'K', 'D', 'F'],
+    ],
+  },
+}
+
+// An enemies-only maze for game play. Three enemies in a row let the e2e walk
+// the player into successive collisions, verifying HP decrement, damage flash,
+// and the death popup on the final hit. Health pickups intentionally absent
+// so each collision deterministically loses one HP.
+export const mockMazeEnemyGauntlet: Maze = {
+  id: 'maze-enemy-gauntlet',
+  name: 'EnemyGauntlet',
+  definition: {
+    grid: [
+      ['S', 'E', 'E', 'E', 'F'],
+    ],
+  },
+}
+
+// An enemy followed by a health pickup: collide with the enemy to drop below
+// max HP, then walk onto the pickup to heal and consume it. Used to assert that
+// a consumed pickup's in-grid symbol disappears.
+export const mockMazeEnemyHealth: Maze = {
+  id: 'maze-enemy-health',
+  name: 'EnemyHealth',
+  definition: {
+    grid: [
+      ['S', 'E', 'H', 'F'],
+    ],
+  },
+}
+
 export let mockMazes: Maze[] = [mockMazeAlpha, mockMazeBeta]
 
 export function resetMockMazes(): void {
@@ -252,6 +292,9 @@ export const handlers = [
 
   http.get(`${BASE}/mazes/:id`, ({ params }) => {
     const maze = mockMazes.find(m => m.id === params.id)
+      ?? (params.id === mockMazeKeyDoor.id ? mockMazeKeyDoor : undefined)
+      ?? (params.id === mockMazeEnemyGauntlet.id ? mockMazeEnemyGauntlet : undefined)
+      ?? (params.id === mockMazeEnemyHealth.id ? mockMazeEnemyHealth : undefined)
     if (!maze) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json(maze)
   }),

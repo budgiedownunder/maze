@@ -53,10 +53,22 @@ namespace Maze.Maui.App.Services
         /// </summary>
         /// <param name="message">Message</param>
         /// <returns>A task that completes when the popup is dismissed</returns>
-        public async Task ShowGameResult(string message)
+        public async Task<bool> ShowGameResult(string message, bool won)
         {
-            var popup = new Views.GameResultPopup(message);
-            await Shell.Current.CurrentPage.ShowPopupAsync(popup);
+            var popup = new Views.GameResultPopup(message, won);
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<bool>(popup);
+            return result.Result;
+        }
+
+        /// <summary>
+        /// Displays the 2D game pause menu (Resume / Restart) as a popup window.
+        /// </summary>
+        /// <returns>The chosen <see cref="PauseMenuResult"/> (<see cref="PauseMenuResult.Resume"/> if dismissed)</returns>
+        public async Task<PauseMenuResult> ShowPauseMenu()
+        {
+            var popup = new Views.PausePopup();
+            var result = await Shell.Current.CurrentPage.ShowPopupAsync<PauseMenuResult>(popup);
+            return result.Result;
         }
 
         /// <summary>

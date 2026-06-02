@@ -12,6 +12,11 @@ export interface GenerateOptions {
   finishRow: number    // 1-based
   finishCol: number    // 1-based
   minSpineLength: number
+  doorCount: number    // number of real path doors (each with one key) to auto-place; 0 = none
+  spareDoors: number   // number of decoy doors planted on off-spine branches; 0 = none
+  spareKeys: number    // number of spare keys planted on off-spine branches; 0 = none
+  enemyCount: number   // number of enemy cells to auto-place at random passable cells; 0 = none
+  healthCount: number  // number of health-pickup cells to auto-place at random passable cells; 0 = none
 }
 
 let initialized = false
@@ -48,7 +53,12 @@ export async function generateMaze(options: GenerateOptions): Promise<MazeDefini
         options.minSpineLength,
         100,        // max_retries
         undefined,  // branch_from_finish (use WASM default)
-        undefined   // seed (random)
+        undefined,  // seed (random)
+        options.doorCount,
+        options.spareDoors,
+        options.spareKeys,
+        options.enemyCount,
+        options.healthCount,
       )
     } catch (ex) { throw toError(ex) }
     const parsed = JSON.parse(maze.to_json()) as { definition: MazeDefinition }
@@ -95,12 +105,70 @@ export type MazeGameDirection = typeof MazeGameDirection[keyof typeof MazeGameDi
 
 // Integer values match Rust MoveResultWasm / C# MoveResult exactly.
 export const MazeGamePlayerMoveResult = {
-  None:     0,
-  Moved:    1,
-  Blocked:  2,
-  Complete: 3,
+  None:                0,
+  Moved:               1,
+  Blocked:             2,
+  Complete:            3,
+  BlockedByLockedDoor: 4,
+  StartedUnlocking:    5,
+  Stranded:            6,
+  Killed:              7,
 } as const
 export type MazeGamePlayerMoveResult = typeof MazeGamePlayerMoveResult[keyof typeof MazeGamePlayerMoveResult]
+
+// String values match the strings emitted by `MazeGameWasm::lose_reason()` in
+// wasm_bindgen.rs. Consumers reference these constants, never the literals.
+export const MazeGameLoseReason = {
+  Stranded: 'stranded',
+  Killed:   'killed',
+} as const
+export type MazeGameLoseReason = typeof MazeGameLoseReason[keyof typeof MazeGameLoseReason]
+
+// String values match the objects emitted by wasm_bindgen.rs (and the Rust DoorState /
+// GameEvent / BagItem variants). Consumers reference these constants, never the literals.
+export const MazeDoorState = {
+  Locked:  'locked',
+  Opening: 'opening',
+  Open:    'open',
+} as const
+export type MazeDoorState = typeof MazeDoorState[keyof typeof MazeDoorState]
+
+export const MazeGameEventType = {
+  DoorOpened:      'doorOpened',
+  EnemyMoved:      'enemyMoved',
+  PlayerDamaged:   'playerDamaged',
+  PlayerHealed:    'playerHealed',
+  PlayerNotHealed: 'playerNotHealed',
+  KeyCollected:    'keyCollected',
+} as const
+export type MazeGameEventType = typeof MazeGameEventType[keyof typeof MazeGameEventType]
+
+// String values match the `reason` field on `playerNotHealed` events emitted by
+// wasm_bindgen.rs (and Rust's `PlayerNotHealedReason`).
+export const MazePlayerNotHealedReason = {
+  AlreadyAtMaxHp: 'already_at_max_hp',
+} as const
+export type MazePlayerNotHealedReason =
+  typeof MazePlayerNotHealedReason[keyof typeof MazePlayerNotHealedReason]
+
+export const MazeBagItemType = {
+  Key: 'key',
+} as const
+export type MazeBagItemType = typeof MazeBagItemType[keyof typeof MazeBagItemType]
+
+// Object shapes returned by the MazeGameWasm accessors.
+export interface MazeDoor { row: number; col: number; state: MazeDoorState }
+export interface MazeKeyCell { row: number; col: number; id: number }
+export interface MazeEnemy { row: number; col: number; id: number }
+export interface MazeHealthPickup { row: number; col: number; id: number }
+export type MazeBagItem = { type: typeof MazeBagItemType.Key; id: number }
+export type MazeGameEvent =
+  | { type: typeof MazeGameEventType.DoorOpened;      row: number; col: number }
+  | { type: typeof MazeGameEventType.EnemyMoved;      id:  number; row: number; col: number }
+  | { type: typeof MazeGameEventType.PlayerDamaged;   hpAfter: number }
+  | { type: typeof MazeGameEventType.PlayerHealed;    hpAfter: number; row: number; col: number }
+  | { type: typeof MazeGameEventType.PlayerNotHealed; row: number; col: number; reason: MazePlayerNotHealedReason; message: string }
+  | { type: typeof MazeGameEventType.KeyCollected;    id:  number; row: number; col: number }
 
 export type { MazeGameWasm }
 
@@ -119,6 +187,70 @@ export async function createMazeGame(definitionJson: string): Promise<MazeGameWa
 export function moveMazeGamePlayer(game: MazeGameWasm, dir: MazeGameDirection): MazeGamePlayerMoveResult {
   // MazeGameDirection and DirectionWasm share identical integer values — cast is zero-cost.
   return game.move_player(dir as unknown as DirectionWasm) as unknown as MazeGamePlayerMoveResult
+}
+
+/** Picks up the item at the player's current cell, or null if the cell holds none. */
+export function pickupItem(game: MazeGameWasm): MazeBagItem | null {
+  return game.pickup() as unknown as MazeBagItem | null
+}
+
+/** Advances time-based state by dtMs milliseconds; returns the events that occurred. */
+export function tickGame(game: MazeGameWasm, dtMs: number): MazeGameEvent[] {
+  return game.tick(dtMs) as unknown as MazeGameEvent[]
+}
+
+/** Returns the door cells and their current state. */
+export function getDoors(game: MazeGameWasm): MazeDoor[] {
+  return game.doors() as unknown as MazeDoor[]
+}
+
+/** Returns the cells still holding an uncollected key. */
+export function getKeys(game: MazeGameWasm): MazeKeyCell[] {
+  return game.keys() as unknown as MazeKeyCell[]
+}
+
+/** Returns the live enemies in stable enemy-id order. */
+export function getEnemies(game: MazeGameWasm): MazeEnemy[] {
+  return game.enemies() as unknown as MazeEnemy[]
+}
+
+/** Returns the uncollected health-pickup cells in row-major scan order. */
+export function getHealthPickups(game: MazeGameWasm): MazeHealthPickup[] {
+  return game.health_pickups() as unknown as MazeHealthPickup[]
+}
+
+/** Returns the player's current HP. */
+export function getHp(game: MazeGameWasm): number {
+  return game.hp()
+}
+
+/** Returns the player's maximum HP. */
+export function getMaxHp(game: MazeGameWasm): number {
+  return game.max_hp()
+}
+
+/**
+ * Returns the time in milliseconds until the next tick will produce an event,
+ * or null when the game is idle. Lets a setTimeout-driven host loop sleep
+ * instead of polling at frame rate. See the Rust doc-banner for the formula.
+ */
+export function getTimeUntilNextEvent(game: MazeGameWasm): number | null {
+  return game.time_until_next_event_ms() as unknown as number | null
+}
+
+/** Returns the player's bag contents, in pickup order. */
+export function getBag(game: MazeGameWasm): MazeBagItem[] {
+  return game.bag() as unknown as MazeBagItem[]
+}
+
+/** Whether the game has ended in a loss (player stranded — too few keys for remaining real path doors). */
+export function isMazeGameLost(game: MazeGameWasm): boolean {
+  return game.is_lost()
+}
+
+/** Lose reason ('stranded'), or null while the game is still in play or already won. */
+export function mazeGameLoseReason(game: MazeGameWasm): MazeGameLoseReason | null {
+  return game.lose_reason() as unknown as MazeGameLoseReason | null
 }
 
 /** Frees the WASM game object. Call on unmount or when definitionJson changes. */
