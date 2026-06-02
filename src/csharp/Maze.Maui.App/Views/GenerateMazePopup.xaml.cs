@@ -221,11 +221,22 @@ namespace Maze.Maui.App.Views
         /// </summary>
         private void SelectTab(GenerateTab tab)
         {
-            SizeTab.IsVisible = tab == GenerateTab.Size;
-            FeaturesTab.IsVisible = tab == GenerateTab.Features;
+            SetPanelActive(SizeTab, tab == GenerateTab.Size);
+            SetPanelActive(FeaturesTab, tab == GenerateTab.Features);
 
             ApplyTabButtonStyle(SizeTabButton, SizeTabUnderline, tab == GenerateTab.Size);
             ApplyTabButtonStyle(FeaturesTabButton, FeaturesTabUnderline, tab == GenerateTab.Features);
+        }
+
+        // Show + enable only the active tab panel, but keep every panel measured so
+        // the content area always sizes to the largest tab — the popup doesn't
+        // resize between tabs. Collapsing inactive panels via IsVisible would drop
+        // them from the layout, so the popup would shrink/grow per tab. Opacity 0 +
+        // InputTransparent hides and disables them while preserving their footprint.
+        private static void SetPanelActive(View panel, bool active)
+        {
+            panel.Opacity = active ? 1.0 : 0.0;
+            panel.InputTransparent = !active;
         }
 
         // Highlight the selected tab with a bold label, full opacity and a

@@ -138,8 +138,11 @@
                 </HorizontalStackLayout>
             </VerticalStackLayout>
 
-            <!-- Objects tab: object styles -->
-            <VerticalStackLayout x:Name="ObjectsTab" Spacing="12" IsVisible="False">
+            <!-- Objects tab: object styles. Inactive tabs stay measured (Opacity 0
+                 + InputTransparent) rather than collapsed via IsVisible, so the
+                 content area always sizes to the largest tab — the popup doesn't
+                 resize between tabs and narrower tabs don't appear centre-aligned. -->
+            <VerticalStackLayout x:Name="ObjectsTab" Spacing="12" Opacity="0" InputTransparent="True">
                 <!-- Door style -->
                 <VerticalStackLayout Spacing="4">
                     <Label Text="Door style"/>
@@ -165,8 +168,8 @@
                 </VerticalStackLayout>
             </VerticalStackLayout>
 
-            <!-- Decor tab: landmark toggles -->
-            <VerticalStackLayout x:Name="DecorTab" Spacing="12" IsVisible="False">
+            <!-- Decor tab: landmark toggles (inactive: measured but Opacity 0 + InputTransparent). -->
+            <VerticalStackLayout x:Name="DecorTab" Spacing="12" Opacity="0" InputTransparent="True">
                 <!-- Dead-end objects -->
                 <HorizontalStackLayout Spacing="8">
                     <CheckBox x:Name="DeadEndObjectsCheck"/>

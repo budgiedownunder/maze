@@ -61,10 +61,17 @@
                  column's BoxView is visible, so toggling never shifts the
                  layout. -->
             <Grid Grid.Row="1" ColumnDefinitions="*,*" RowDefinitions="Auto,2" ColumnSpacing="0" RowSpacing="0">
+                <!-- Smaller font + tight horizontal padding so the long
+                     "Size & Position" label fits inside the fixed-width
+                     (~148 px) column without ellipsis-truncating. MAUI Button
+                     neither wraps nor auto-shrinks its text, and the popup width
+                     is capped, so the label has to be sized to fit. -->
                 <Button Grid.Row="0" Grid.Column="0" x:Name="SizeTabButton" Text="Size &amp; Position" Clicked="OnSizeTabClicked"
+                        FontSize="12" Padding="2,8"
                         BackgroundColor="Transparent"
                         TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
                 <Button Grid.Row="0" Grid.Column="1" x:Name="FeaturesTabButton" Text="Features" Clicked="OnFeaturesTabClicked"
+                        FontSize="12" Padding="2,8"
                         BackgroundColor="Transparent"
                         TextColor="{AppThemeBinding Light={StaticResource Gray950}, Dark={StaticResource Gray100}}"/>
                 <BoxView Grid.Row="1" Grid.Column="0" x:Name="SizeTabUnderline" IsVisible="False"
@@ -117,8 +124,11 @@
                 <Entry Grid.Row="6" Grid.Column="1" x:Name="FinishColEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
             </Grid>
 
-            <!-- Features tab: doors / keys / enemies / health counts -->
-            <Grid x:Name="FeaturesTab" IsVisible="False" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="12">
+            <!-- Features tab: doors / keys / enemies / health counts. Inactive tabs
+                 stay measured (Opacity 0 + InputTransparent) rather than collapsed
+                 via IsVisible, so the content area always sizes to the largest tab —
+                 the popup doesn't resize as you switch between tabs. -->
+            <Grid x:Name="FeaturesTab" Opacity="0" InputTransparent="True" ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="12">
                 <Label Grid.Row="0" Grid.Column="0" Text="Doors" VerticalOptions="Center"/>
                 <Entry Grid.Row="0" Grid.Column="1" x:Name="DoorCountEntry" Keyboard="Numeric" HorizontalOptions="Fill"/>
 
