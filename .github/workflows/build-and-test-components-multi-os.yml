@@ -227,6 +227,7 @@ jobs:
 
     - name: Install Playwright browser
       working-directory: ./src/react/maze_web_server
+      timeout-minutes: 15
       run: npx playwright install chromium --with-deps
 
     - name: Run React E2E tests
