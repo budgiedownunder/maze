@@ -392,8 +392,8 @@ impl CellEntity {
     }
 
     /// Whether the override sets no field at all. A field-less override carries
-    /// no information and is normalised away on read (it would serialise back to
-    /// a bare character anyway).
+    /// no information and is normalised away on both read and write — it parses
+    /// out of the map on deserialise and serialises back to a bare character.
     fn is_empty(&self) -> bool {
         match self {
             CellEntity::Enemy(e) => e.is_empty(),
@@ -515,7 +515,9 @@ impl Serialize for MazeDefinition {
         // it carries one or more overrides whose type matches the cell, in
         // which case it emits the array form. Overrides whose type no longer
         // matches the cell character (e.g. left stale by an in-place edit) are
-        // dropped so the output is always valid.
+        // dropped, as are field-less overrides (which carry no information and
+        // would only bloat the cell to an array), so the output is always the
+        // canonical bare-char-unless-overridden form.
         let rows: Vec<Vec<SerCell>> = self
             .grid
             .iter()
@@ -530,7 +532,7 @@ impl Serialize for MazeDefinition {
                             .map(|overrides| {
                                 overrides
                                     .iter()
-                                    .filter(|over| over.cell_char() == ch)
+                                    .filter(|over| over.cell_char() == ch && !over.is_empty())
                                     .collect()
                             })
                             .unwrap_or_default();
@@ -2329,6 +2331,21 @@ mod tests {
         );
         let back = serde_json::to_string(&d).expect("Failed to serialize");
         assert_eq!(back, r#"{"grid":[["S","W"],[" ","F"]]}"#);
+    }
+
+    #[test]
+    fn field_less_override_in_map_is_dropped_on_serialise() {
+        // A field-less override reaches the map only via a set call (the tolerant
+        // deserialiser drops it on read). Write is canonical regardless of how the
+        // map was populated, so such an override must serialise as a bare
+        // character — never bloat the cell to an empty array form.
+        let mut d = MazeDefinition::from_vec(vec![vec!['S', 'E'], vec!['K', 'F']]);
+        d.cell_entities
+            .insert((0, 1), vec![CellEntity::Enemy(EnemyOverride::default())]);
+        d.cell_entities
+            .insert((1, 0), vec![CellEntity::Key(KeyOverride::default())]);
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, r#"{"grid":[["S","E"],["K","F"]]}"#);
     }
 
     #[test]
