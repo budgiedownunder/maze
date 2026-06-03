@@ -1659,9 +1659,13 @@ pub extern "C" fn maze_game_wasm_enemy_count(maze_game_wasm: *mut MazeGameWasm) 
     game.enemies().len() as i32
 }
 
-/// Retrieves a single enemy's current cell + stable id by index. Writes
-/// the enemy's row / column / id into the out parameters. Returns `0` on
-/// success, `-1` on null pointer or out-of-range index.
+/// Retrieves a single enemy's current cell, stable id, and resolved per-enemy
+/// tunables by index. Writes row / column / id plus `out_damage` /
+/// `out_move_period_ms` (resolved values: per-cell override else the per-game
+/// default) and `out_enemy_type` (the rig override: `-1` when the spawn cell
+/// set none, else the [`maze::EnemyType`] ordinal — `0` = goblin, `1` = ghost)
+/// into the out parameters. Returns `0` on success, `-1` on null pointer or
+/// out-of-range index.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn maze_game_wasm_get_enemy(
@@ -1670,6 +1674,9 @@ pub extern "C" fn maze_game_wasm_get_enemy(
     out_row: *mut u32,
     out_col: *mut u32,
     out_id: *mut u32,
+    out_damage: *mut u32,
+    out_move_period_ms: *mut f32,
+    out_enemy_type: *mut i32,
 ) -> i32 {
     if maze_game_wasm.is_null() {
         return -1;
@@ -1690,8 +1697,28 @@ pub extern "C" fn maze_game_wasm_get_enemy(
         if !out_id.is_null() {
             *out_id = enemy.id;
         }
+        if !out_damage.is_null() {
+            *out_damage = enemy.damage;
+        }
+        if !out_move_period_ms.is_null() {
+            *out_move_period_ms = enemy.move_period_ms;
+        }
+        if !out_enemy_type.is_null() {
+            *out_enemy_type = enemy_type_to_ffi(enemy.enemy_type);
+        }
     }
     0
+}
+
+/// Encodes an optional enemy rig override for the FFI boundary: `-1` for
+/// "no per-cell override", else the [`maze::EnemyType`] ordinal (`0` = goblin,
+/// `1` = ghost). C# maps the ordinal back to its `EnemyType`.
+fn enemy_type_to_ffi(enemy_type: Option<maze::EnemyType>) -> i32 {
+    match enemy_type {
+        None => -1,
+        Some(maze::EnemyType::Goblin) => 0,
+        Some(maze::EnemyType::Ghost) => 1,
+    }
 }
 
 /// Returns the number of uncollected health-pickup cells (live `'H'`),

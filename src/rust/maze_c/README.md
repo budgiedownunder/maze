@@ -60,8 +60,12 @@ uint32_t maze_c_maze_game_hp(MazeGameC* ptr);
 uint32_t maze_c_maze_game_max_hp(MazeGameC* ptr);
 int32_t maze_c_maze_game_enemy_count(MazeGameC* ptr);
 uint8_t maze_c_maze_game_get_enemy(MazeGameC* ptr, int32_t index,
-                                   uint32_t* row_out, uint32_t* col_out, uint32_t* id_out);
+                                   uint32_t* row_out, uint32_t* col_out, uint32_t* id_out,
+                                   uint32_t* damage_out, float* move_period_ms_out,
+                                   int32_t* enemy_type_out);
                                                         // 1 = success, 0 = out-of-range
+                                                        // damage_out / move_period_ms_out: resolved per-enemy values
+                                                        // enemy_type_out: -1 = no rig override, 0 = goblin, 1 = ghost
 int32_t maze_c_maze_game_health_pickup_count(MazeGameC* ptr);
 uint8_t maze_c_maze_game_get_health_pickup(MazeGameC* ptr, int32_t index,
                                            uint32_t* row_out, uint32_t* col_out, uint32_t* id_out);

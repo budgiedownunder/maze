@@ -2853,7 +2853,12 @@ pub extern "C" fn maze_c_maze_game_enemy_count(ptr: *mut MazeGameC) -> i32 {
     game.enemies().len() as i32
 }
 
-/// Retrieves a single enemy's current cell + stable id by index.
+/// Retrieves a single enemy's current cell, stable id, and resolved per-enemy
+/// tunables by index. `out_damage` / `out_move_period_ms` carry the resolved
+/// values (per-cell override else the per-game default). `out_enemy_type`
+/// carries the visual-rig override: `-1` when the spawn cell set none (the
+/// renderer falls back to its default), else the [`maze::EnemyType`] ordinal
+/// (`0` = goblin, `1` = ghost).
 ///
 /// Returns `1` on success, `0` if `index` is out of range.
 ///
@@ -2870,6 +2875,9 @@ pub unsafe extern "C" fn maze_c_maze_game_get_enemy(
     out_row: *mut u32,
     out_col: *mut u32,
     out_id: *mut u32,
+    out_damage: *mut u32,
+    out_move_period_ms: *mut f32,
+    out_enemy_type: *mut i32,
 ) -> u8 {
     let game = unsafe { &(*ptr).game };
     let enemies = game.enemies();
@@ -2887,8 +2895,28 @@ pub unsafe extern "C" fn maze_c_maze_game_get_enemy(
         if !out_id.is_null() {
             *out_id = enemy.id;
         }
+        if !out_damage.is_null() {
+            *out_damage = enemy.damage;
+        }
+        if !out_move_period_ms.is_null() {
+            *out_move_period_ms = enemy.move_period_ms;
+        }
+        if !out_enemy_type.is_null() {
+            *out_enemy_type = enemy_type_to_ffi(enemy.enemy_type);
+        }
     }
     1
+}
+
+/// Encodes an optional enemy rig override for the FFI boundary: `-1` for
+/// "no per-cell override", else the [`maze::EnemyType`] ordinal (`0` = goblin,
+/// `1` = ghost). C# maps the ordinal back to its `EnemyType`.
+fn enemy_type_to_ffi(enemy_type: Option<maze::EnemyType>) -> i32 {
+    match enemy_type {
+        None => -1,
+        Some(maze::EnemyType::Goblin) => 0,
+        Some(maze::EnemyType::Ghost) => 1,
+    }
 }
 
 /// Returns the number of uncollected health-pickup cells (live `'H'`).
@@ -4230,11 +4258,80 @@ mod tests {
         let mut row: u32 = 99;
         let mut col: u32 = 99;
         let mut id: u32 = 99;
-        let ok = unsafe { maze_c_maze_game_get_enemy(ptr, 0, &mut row, &mut col, &mut id) };
+        let mut damage: u32 = 99;
+        let mut move_period_ms: f32 = -1.0;
+        let mut enemy_type: i32 = 99;
+        let ok = unsafe {
+            maze_c_maze_game_get_enemy(
+                ptr,
+                0,
+                &mut row,
+                &mut col,
+                &mut id,
+                &mut damage,
+                &mut move_period_ms,
+                &mut enemy_type,
+            )
+        };
         assert_eq!(ok, 1);
         assert_eq!((row, col), (0, 1));
         assert_eq!(id, 0);
+        // Defaults for an enemy with no per-cell override.
+        assert_eq!(damage, 1);
+        assert_eq!(move_period_ms, 1500.0);
+        assert_eq!(enemy_type, -1); // no rig override
         maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn game_get_enemy_surfaces_per_cell_override() {
+        let json = CString::new(
+            r#"{"grid":[["S",[{"type":"E","enemyType":"ghost","damage":3,"movePeriodMs":600.0}],"F"]]}"#,
+        )
+        .unwrap();
+        let ptr = new_game(&json);
+        let mut row: u32 = 99;
+        let mut col: u32 = 99;
+        let mut id: u32 = 99;
+        let mut damage: u32 = 99;
+        let mut move_period_ms: f32 = -1.0;
+        let mut enemy_type: i32 = 99;
+        let ok = unsafe {
+            maze_c_maze_game_get_enemy(
+                ptr,
+                0,
+                &mut row,
+                &mut col,
+                &mut id,
+                &mut damage,
+                &mut move_period_ms,
+                &mut enemy_type,
+            )
+        };
+        assert_eq!(ok, 1);
+        assert_eq!(damage, 3);
+        assert_eq!(move_period_ms, 600.0);
+        assert_eq!(enemy_type, 1); // ghost
+        maze_c_free_maze_game(ptr);
+    }
+
+    #[test]
+    fn maze_with_enemy_override_round_trips_through_json() {
+        // The char-or-array cell form survives a from_json -> to_json round-trip
+        // at the FFI boundary (serde in data_model does the work).
+        let src = r#"{"id":"m","name":"n","definition":{"grid":[["S",[{"type":"E","damage":2}],"F"]]}}"#;
+        let json = CString::new(src).unwrap();
+        let maze_ptr = maze_c_new_maze();
+        let rc = unsafe { maze_c_maze_from_json(maze_ptr, json.as_ptr()) };
+        assert_eq!(rc, 1); // 1 = success
+        let out = maze_c_maze_to_json(maze_ptr);
+        let round_tripped = unsafe { CStr::from_ptr(out) }.to_str().unwrap().to_string();
+        assert!(
+            round_tripped.contains(r#"[{"type":"E","damage":2}]"#),
+            "override array form missing from round-trip: {round_tripped}"
+        );
+        unsafe { maze_c_free_string(out) };
+        maze_c_free_maze(maze_ptr);
     }
 
     #[test]

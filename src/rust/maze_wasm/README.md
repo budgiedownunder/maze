@@ -171,8 +171,11 @@ i32           maze_game_wasm_hp(MazeGameWasm* maze_game_wasm);                //
 i32           maze_game_wasm_max_hp(MazeGameWasm* maze_game_wasm);            // -1 on null
 i32           maze_game_wasm_enemy_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_enemy(MazeGameWasm* maze_game_wasm, i32 index,
-                                       u32* row_out, u32* col_out, u32* id_out);
+                                       u32* row_out, u32* col_out, u32* id_out,
+                                       u32* damage_out, f32* move_period_ms_out, i32* enemy_type_out);
                                                                               // 0=ok, -1=error
+                                                                              // damage_out / move_period_ms_out: resolved per-enemy values
+                                                                              // enemy_type_out: -1=no rig override, 0=goblin, 1=ghost
 i32           maze_game_wasm_health_pickup_count(MazeGameWasm* maze_game_wasm);
 i32           maze_game_wasm_get_health_pickup(MazeGameWasm* maze_game_wasm, i32 index,
                                                u32* row_out, u32* col_out, u32* id_out);
