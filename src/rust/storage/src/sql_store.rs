@@ -13,7 +13,7 @@
 
 use crate::store::{EmailAuditLog, Manage, MazeStore, TokenStore, UserStore};
 use crate::{
-    validation::{validate_email_format, validate_maze_cell_count, validate_maze_feature_count, validate_user_fields},
+    validation::{validate_email_format, validate_maze_cell_count, validate_maze_definition_size, validate_maze_feature_count, validate_user_fields},
     Error, MazeItem, Store,
 };
 use async_trait::async_trait;
@@ -155,6 +155,19 @@ fn integrity_violation(detail: &str) -> Error {
 /// divergence when the same data set is later loaded under MySQL or
 /// PostgreSQL, both of which do enforce VARCHAR length.
 pub const MAX_MAZE_CELLS: usize = 3_600;
+
+/// Byte ceiling enforced by [`SqlStore`] on the serialised maze written to the
+/// `mazes.definition VARCHAR(16000)` column. The cell-count cap above assumes
+/// plain single-character cells (`4·N·M + …` chars); per-cell entity overrides
+/// inflate individual cells well beyond that, so a maze can be under the
+/// cell-count cap yet still overflow the column. This byte cap is the
+/// authoritative storage guard — it is checked against the exact string about
+/// to be written, so an over-cap maze is refused with
+/// [`Error::MazeDefinitionTooLarge`] rather than truncated by the database.
+/// Matches the column width; applied uniformly across drivers (SQLite ignores
+/// `VARCHAR` length, but enforcing it avoids dev-vs-prod divergence under
+/// MySQL / PostgreSQL).
+pub const MAX_MAZE_DEFINITION_BYTES: usize = 16_000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -2659,6 +2672,7 @@ impl MazeStore for SqlStore {
 
         maze.id = Uuid::new_v4().to_string();
         let definition_json = serde_json::to_string(&maze)?;
+        validate_maze_definition_size(definition_json.len(), MAX_MAZE_DEFINITION_BYTES)?;
 
         sqlx::query(&q(
             self.kind,
@@ -2812,6 +2826,7 @@ impl MazeStore for SqlStore {
         )?;
         validate_maze_feature_count(&maze.definition.grid, maze::MAX_TOTAL_FEATURES)?;
         let definition_json = serde_json::to_string(&maze)?;
+        validate_maze_definition_size(definition_json.len(), MAX_MAZE_DEFINITION_BYTES)?;
         let result = sqlx::query(&q(
             self.kind,
             "UPDATE mazes SET name = ?, definition = ? WHERE owner_id = ? AND id = ?",
@@ -4295,6 +4310,48 @@ mod tests {
                 assert_eq!(max, MAX_MAZE_CELLS);
             }
             other => panic!("expected MazeHasTooManyCells, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn sql_store_create_maze_rejects_oversized_definition_from_overrides() {
+        use data_model::{CellEntity, EnemyOverride, EnemyType, MazeDefinition};
+        let mut store = new_sqlite_store().await;
+        let owner = seed_owner(&mut store).await;
+        // 30 × 30 = 900 cells — comfortably under the 3,600-cell cap — but
+        // filling the cells with enemy overrides inflates the serialised
+        // definition far past the 16,000-byte column. This is exactly the case
+        // the cell-count cap can't catch: the byte guard must reject it.
+        let mut grid = vec![vec!['E'; 30]; 30];
+        grid[0][0] = 'S';
+        grid[29][29] = 'F';
+        let mut definition = MazeDefinition::from_vec(grid);
+        for r in 0..30 {
+            for c in 0..30 {
+                if definition.grid[r][c] == 'E' {
+                    definition.cell_entities.insert(
+                        (r, c),
+                        vec![CellEntity::Enemy(EnemyOverride {
+                            enemy_type: Some(EnemyType::Ghost),
+                            damage: Some(2),
+                            move_period_ms: Some(900.0),
+                        })],
+                    );
+                }
+            }
+        }
+        let mut maze = Maze::new(definition);
+        maze.name = "oversized-overrides".to_string();
+        let err = store
+            .create_maze(&owner, &mut maze)
+            .await
+            .expect_err("oversized definition should fail");
+        match err {
+            Error::MazeDefinitionTooLarge { bytes, max } => {
+                assert!(bytes > max, "bytes {bytes} should exceed max {max}");
+                assert_eq!(max, MAX_MAZE_DEFINITION_BYTES);
+            }
+            other => panic!("expected MazeDefinitionTooLarge, got {other:?}"),
         }
     }
 

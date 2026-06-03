@@ -124,6 +124,37 @@ pub fn validate_maze_cell_count(rows: usize, cols: usize, max: usize) -> Result<
 /// ];
 /// assert!(validate_maze_feature_count(&grid, 16).is_ok());
 /// ```
+/// Validates that the serialised maze definition fits within the supplied
+/// per-store byte cap. A store that persists the definition into a
+/// length-bounded column (e.g. `SqlStore`'s `VARCHAR(16000)`) calls this from
+/// `create_maze` / `update_maze` on the exact string it is about to write, so
+/// an over-cap maze is refused with a clear error rather than truncated or
+/// rejected by the database. The cell-count cap is a proxy for size that
+/// assumes plain single-character cells; per-cell entity overrides inflate a
+/// cell well beyond that, so this byte check is the authoritative storage
+/// guard.
+///
+/// # Returns
+///
+/// `Ok(())` if `bytes ≤ max`,
+/// `Err(Error::MazeDefinitionTooLarge { bytes, max })` otherwise.
+///
+/// # Examples
+///
+/// Probe a 12 KB and a 20 KB serialised definition against a 16 KB cap
+/// ```
+/// use storage::validation::validate_maze_definition_size;
+///
+/// assert!(validate_maze_definition_size(12_000, 16_000).is_ok());
+/// assert!(validate_maze_definition_size(20_000, 16_000).is_err());
+/// ```
+pub fn validate_maze_definition_size(bytes: usize, max: usize) -> Result<(), Error> {
+    if bytes > max {
+        return Err(Error::MazeDefinitionTooLarge { bytes, max });
+    }
+    Ok(())
+}
+
 pub fn validate_maze_feature_count(grid: &[Vec<char>], max: usize) -> Result<(), Error> {
     let mut keys = 0usize;
     let mut doors = 0usize;
@@ -251,6 +282,30 @@ mod tests {
         let err = validate_maze_cell_count(usize::MAX, 2, 3_600)
             .expect_err("overflow should not bypass the cap");
         assert!(matches!(err, Error::MazeHasTooManyCells { .. }));
+    }
+
+    // ─── validate_maze_definition_size ───────────────────────────────────
+
+    #[test]
+    fn validate_maze_definition_size_accepts_at_cap() {
+        validate_maze_definition_size(16_000, 16_000).expect("at-cap should pass");
+    }
+
+    #[test]
+    fn validate_maze_definition_size_accepts_under_cap() {
+        validate_maze_definition_size(12_345, 16_000).expect("under-cap should pass");
+    }
+
+    #[test]
+    fn validate_maze_definition_size_rejects_over_cap() {
+        let err = validate_maze_definition_size(16_001, 16_000).expect_err("over-cap should fail");
+        match err {
+            Error::MazeDefinitionTooLarge { bytes, max } => {
+                assert_eq!(bytes, 16_001);
+                assert_eq!(max, 16_000);
+            }
+            other => panic!("expected MazeDefinitionTooLarge, got {other:?}"),
+        }
     }
 
     // ─── validate_maze_feature_count ─────────────────────────────────────

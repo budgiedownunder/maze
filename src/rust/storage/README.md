@@ -220,6 +220,8 @@ Each `MazeStore` impl reports the maximum number of cells (`rows × cols`) it wi
 | `SqlStore`    | `Some(3_600)`      | Bound by the `mazes.definition VARCHAR(16000)` column in [`migrations/0001_initial.sql`](./migrations/0001_initial.sql). With the existing JSON serialisation (`4·N·M + 2·N + 10` chars for an N-row × M-col grid) the 16,000-char column maxes out around 62×62 cells; 60×60 = 3,600 sits inside that with a margin. The same cap applies across SQLite, PostgreSQL, and MySQL — SQLite would ignore the column length declaration, but enforcing the cap uniformly avoids dev-vs-prod divergence when the same data set is later loaded under MySQL or PostgreSQL. |
 | trait default | `None`             | Suits stub implementations and any future store with no practical size limit. Production stores override. |
 
+The cell-count cap assumes plain single-character cells. Per-cell **entity overrides** (an enemy/health/key/door cell serialised as `[{"type":"E",…}]` rather than the bare `"E"`) can inflate individual cells well beyond that, so a maze can sit under the cell-count cap yet still overflow the column. `SqlStore` therefore also enforces an authoritative **byte cap** — `SqlStore::MAX_MAZE_DEFINITION_BYTES = 16_000`, matching the `mazes.definition VARCHAR(16000)` column — on the exact serialised string about to be written. An over-cap maze is refused with `Error::MazeDefinitionTooLarge { bytes, max }` (surfaced by the server as HTTP 422) before the database sees it, rather than being silently truncated. `FileStore` keeps only the cell-count cap (its JSON files have no column-width limit).
+
 
 ## Architecture note: one impl over `AnyPool`
 
