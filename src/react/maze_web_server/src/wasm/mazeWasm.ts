@@ -1,4 +1,10 @@
 import init, { MazeWasm, GenerationAlgorithmWasm, MazeGameWasm, DirectionWasm } from 'maze_wasm'
+import type {
+  DoorStyle,
+  EnemyType,
+  HealthStyle,
+  KeyHolderStyle,
+} from '../utils/play3dCustomLaunchSettings'
 
 export interface MazeDefinition {
   grid: string[][]
@@ -85,6 +91,102 @@ export async function solveMaze(definition: MazeDefinition): Promise<Array<{ row
       } finally {
         solution.free()
       }
+    } catch (ex) { throw toError(ex) }
+  } finally {
+    maze.free()
+  }
+}
+
+// ── Per-cell override (cell-entity) codec ───────────────────────────────────────
+//
+// A maze cell carries an optional override that layers non-default characteristics
+// on a feature cell (enemy / health / key / door). On the wire a cell is either a
+// bare char (default characteristics) or an array-of-one entity object; that
+// char-or-array form is known only to the Rust serializer. JavaScript never parses
+// or builds it — it works with a pure-char grid plus a sparse list of single-entity
+// override objects, translating between the two through the MazeWasm methods below.
+
+// Wire-shape single-entity override objects, mirroring the Rust `#[serde(tag="type")]`
+// `CellEntity` enum and the C# polymorphic `CellEntityInfo` hierarchy. Each variant
+// carries only the fields meaningful to its type, so an invalid field/type
+// combination is unrepresentable. Every field is optional — the canonical form omits
+// any field left at its default.
+export interface EnemyCellEntity  { type: 'E'; enemyType?: EnemyType;     damage?: number; movePeriodMs?: number }
+export interface HealthCellEntity { type: 'H'; healthStyle?: HealthStyle; healAmount?: number }
+export interface KeyCellEntity    { type: 'K'; keyHolder?: KeyHolderStyle }
+export interface DoorCellEntity   { type: 'D'; doorStyle?: DoorStyle }
+export type CellEntity = EnemyCellEntity | HealthCellEntity | KeyCellEntity | DoorCellEntity
+
+/** A per-cell override located at a (row, col) in the grid. */
+export interface CellOverride { row: number; col: number; entity: CellEntity }
+
+// A grid cell on the wire: a bare char, or an array-of-one entity object when
+// overridden (decision: char unless overridden). Produced only by Rust's serializer.
+export type WireCell = string | CellEntity[]
+
+/** The canonical maze definition as serialized by the WASM layer (char-or-array cells). */
+export interface CanonicalMazeDefinition { grid: WireCell[][] }
+
+// MazeCellTypeWasm ordinal → char. Order matches the enum in wasm_common.rs
+// (Empty, Start, Finish, Wall, Key, Door, Enemy, Health).
+const CELL_TYPE_CHARS = [' ', 'S', 'F', 'W', 'K', 'D', 'E', 'H'] as const
+
+/**
+ * Splits a full maze JSON string (`{id, name, definition: {grid}}`) into a pure-char
+ * grid plus a sparse list of per-cell overrides. The cell type is read through the
+ * wasm typed accessor `get_cell().cell_type` and the override through
+ * `get_cell_entity()`, so JavaScript never inspects the char-or-array grid form.
+ */
+export async function splitDefinition(
+  fullMazeJson: string,
+): Promise<{ grid: string[][]; overrides: CellOverride[] }> {
+  await ensureInit()
+  const maze = new MazeWasm()
+  try {
+    try {
+      maze.from_json(fullMazeJson)
+      const rows = maze.get_row_count()
+      const cols = maze.get_col_count()
+      const grid: string[][] = []
+      const overrides: CellOverride[] = []
+      for (let r = 0; r < rows; r++) {
+        const row: string[] = []
+        for (let c = 0; c < cols; c++) {
+          const cellType = (maze.get_cell(r, c) as { cell_type: number }).cell_type
+          row.push(CELL_TYPE_CHARS[cellType] ?? ' ')
+          const entity = maze.get_cell_entity(r, c) as CellEntity | null
+          if (entity !== null) overrides.push({ row: r, col: c, entity })
+        }
+        grid.push(row)
+      }
+      return { grid, overrides }
+    } catch (ex) { throw toError(ex) }
+  } finally {
+    maze.free()
+  }
+}
+
+/**
+ * Builds the canonical maze definition (bare char unless overridden) from a pure-char
+ * grid plus a list of per-cell overrides. The char-or-array cell form is emitted by
+ * Rust's serializer via `to_json()`; JavaScript only ever supplies a plain-char grid
+ * and single-entity objects. Each override's `type` must match its grid cell's char.
+ * A field-less override (no fields beyond `type`) serialises back to a bare char —
+ * the data-model layer normalises it away — so callers needn't pre-filter them.
+ */
+export async function buildDefinitionWithOverrides(
+  grid: string[][],
+  overrides: CellOverride[],
+): Promise<CanonicalMazeDefinition> {
+  await ensureInit()
+  const maze = new MazeWasm()
+  try {
+    try {
+      maze.from_json(JSON.stringify({ id: '', name: '', definition: { grid } }))
+      for (const { row, col, entity } of overrides) {
+        maze.set_cell_entity(row, col, entity)
+      }
+      return (JSON.parse(maze.to_json()) as { definition: CanonicalMazeDefinition }).definition
     } catch (ex) { throw toError(ex) }
   } finally {
     maze.free()
