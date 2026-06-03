@@ -1226,7 +1226,7 @@ function testMazeGameEnemies() {
 
 function testMazeGameEnemiesExpectedOutput() {
     return [
-        "enemies() =  [ { row: 0, col: 1, id: 0 } ]"
+        "enemies() =  [ { row: 0, col: 1, id: 0, damage: 1, movePeriodMs: 1500 } ]"
     ];
 }
 
@@ -1274,6 +1274,79 @@ function testMazeGameTimeUntilNextEventMsExpectedOutput() {
     ];
 }
 
+// Test MazeWasm::get_cell_entity() example
+function testMazeGetCellEntity() {
+    let maze = null;
+    try {
+        maze = new MazeWasm();
+        maze.resize(1, 3);
+        maze.set_enemy_cells(0, 1, 0, 1);
+        maze.set_cell_entity(0, 1, { type: "E", enemyType: "ghost", damage: 2 });
+        console.log("get_cell_entity(0, 1) = ", maze.get_cell_entity(0, 1));
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (maze) maze.free();
+    }
+}
+
+function testMazeGetCellEntityExpectedOutput() {
+    return [
+        "get_cell_entity(0, 1) =  { type: 'E', enemyType: 'ghost', damage: 2 }"
+    ];
+}
+
+// Test MazeWasm::set_cell_entity() example
+function testMazeSetCellEntity() {
+    let maze = null;
+    try {
+        maze = new MazeWasm();
+        maze.resize(1, 3);
+        maze.set_health_cells(0, 1, 0, 1);
+        maze.set_cell_entity(0, 1, { type: "H", healthStyle: "potion", healAmount: 2 });
+        console.log("get_cell_entity(0, 1) = ", maze.get_cell_entity(0, 1));
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (maze) maze.free();
+    }
+}
+
+function testMazeSetCellEntityExpectedOutput() {
+    return [
+        "get_cell_entity(0, 1) =  { type: 'H', healthStyle: 'potion', healAmount: 2 }"
+    ];
+}
+
+// Test MazeWasm::clear_cell_entity() example
+function testMazeClearCellEntity() {
+    let maze = null;
+    try {
+        maze = new MazeWasm();
+        maze.resize(1, 3);
+        maze.set_enemy_cells(0, 1, 0, 1);
+        maze.set_cell_entity(0, 1, { type: "E", damage: 2 });
+        maze.clear_cell_entity(0, 1);
+        console.log("get_cell_entity(0, 1) = ", maze.get_cell_entity(0, 1)); // null
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (maze) maze.free();
+    }
+}
+
+function testMazeClearCellEntityExpectedOutput() {
+    return [
+        "get_cell_entity(0, 1) =  null"
+    ];
+}
+
 // Tests
 const tests = [
     { name: "MazeWasm:new() example", testFunction: testMazeNew, expectedOutput: testMazeNewExpectedOutput },
@@ -1287,6 +1360,9 @@ const tests = [
     { name: "MazeWasm:get_row_count() example", testFunction: testMazeGetRowCount, expectedOutput: testMazeGetRowCountExpectedOutput },
     { name: "MazeWasm:get_col_count() example", testFunction: testMazeGetColCount, expectedOutput: testMazeGetColCountExpectedOutput },
     { name: "MazeWasm:get_cell() example", testFunction: testMazeGetCell, expectedOutput: testMazeGetCellExpectedOutput },
+    { name: "MazeWasm:get_cell_entity() example", testFunction: testMazeGetCellEntity, expectedOutput: testMazeGetCellEntityExpectedOutput },
+    { name: "MazeWasm:set_cell_entity() example", testFunction: testMazeSetCellEntity, expectedOutput: testMazeSetCellEntityExpectedOutput },
+    { name: "MazeWasm:clear_cell_entity() example", testFunction: testMazeClearCellEntity, expectedOutput: testMazeClearCellEntityExpectedOutput },
     { name: "MazeWasm:set_start_cell() example", testFunction: testMazeSetStartCell, expectedOutput: testMazeSetStartCellExpectedOutput },
     { name: "MazeWasm:get_start_cell() example", testFunction: testMazeGetStartCell, expectedOutput: testMazeGetStartCellExpectedOutput },
     { name: "MazeWasm:set_finish_cell() example", testFunction: testMazeSetFinishCell, expectedOutput: testMazeSetFinishCellExpectedOutput },

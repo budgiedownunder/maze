@@ -772,6 +772,82 @@ function registerMazeTests() {
             expect(maze.get_col_count()).to.equal(5);
         });
 
+        // MazeWasm::get_cell_entity() / set_cell_entity() / clear_cell_entity()
+        // The per-cell entity override read/write surface. One data-driven block
+        // covers all four entity types: set the matching cell character, write an
+        // override, read it back, round-trip via to_json()/from_json(), and clear.
+        [
+            { setCells: 'set_enemy_cells', char: 'E', entity: { type: 'E', enemyType: 'ghost', damage: 2, movePeriodMs: 800 } },
+            { setCells: 'set_health_cells', char: 'H', entity: { type: 'H', healthStyle: 'potion', healAmount: 3 } },
+            { setCells: 'set_key_cells', char: 'K', entity: { type: 'K', keyHolder: 'chest' } },
+            { setCells: 'set_door_cells', char: 'D', entity: { type: 'D', doorStyle: 'portcullis' } },
+        ].forEach(function (t) {
+            it(`should expect get_cell_entity() to return null for a ${t.char} cell with no override`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(1, 3);
+                maze[t.setCells](0, 1, 0, 1);
+                expect(maze.get_cell_entity(0, 1)).to.equal(null);
+            });
+
+            it(`should expect set_cell_entity() + get_cell_entity() to round-trip a ${t.char} override`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(1, 3);
+                maze[t.setCells](0, 1, 0, 1);
+                maze.set_cell_entity(0, 1, t.entity);
+                expect(maze.get_cell_entity(0, 1)).to.deep.equal(t.entity);
+            });
+
+            it(`should expect a ${t.char} override to survive a to_json()/from_json() round-trip`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(1, 3);
+                maze[t.setCells](0, 1, 0, 1);
+                maze.set_cell_entity(0, 1, t.entity);
+                let reloaded = track(new MazeWasm());
+                reloaded.from_json(maze.to_json());
+                expect(reloaded.get_cell_entity(0, 1)).to.deep.equal(t.entity);
+            });
+
+            it(`should expect clear_cell_entity() to remove a ${t.char} override`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(1, 3);
+                maze[t.setCells](0, 1, 0, 1);
+                maze.set_cell_entity(0, 1, t.entity);
+                maze.clear_cell_entity(0, 1);
+                expect(maze.get_cell_entity(0, 1)).to.equal(null);
+            });
+
+            it(`should expect set_cell_entity() to fail when the ${t.char} entity type does not match the cell character`, function () {
+                let maze = track(new MazeWasm());
+                maze.resize(1, 3);
+                // Cell (0,1) is left empty, so the typed entity must be rejected.
+                expect(() => maze.set_cell_entity(0, 1, t.entity)).to.throw();
+            });
+        });
+
+        it('should expect to_json() to emit an overridden cell in the array-of-one form', function () {
+            let maze = track(new MazeWasm());
+            maze.resize(1, 3);
+            maze.set_enemy_cells(0, 1, 0, 1);
+            maze.set_cell_entity(0, 1, { type: 'E', damage: 2 });
+            let parsed = JSON.parse(maze.to_json());
+            expect(parsed.definition.grid[0][1]).to.deep.equal([{ type: 'E', damage: 2 }]);
+        });
+
+        it('should expect an override-less cell to stay a bare character in to_json()', function () {
+            let maze = track(new MazeWasm());
+            maze.resize(1, 3);
+            maze.set_enemy_cells(0, 1, 0, 1);
+            let parsed = JSON.parse(maze.to_json());
+            expect(parsed.definition.grid[0][1]).to.equal('E');
+        });
+
+        it('should expect get_cell_entity() to fail when out of bounds', function () {
+            let maze = track(new MazeWasm());
+            maze.resize(1, 3);
+            expect(() => maze.get_cell_entity(5, 0)).to.throw('row out of bounds');
+            expect(() => maze.get_cell_entity(0, 5)).to.throw('column out of bounds');
+        });
+
     });
 }
 
@@ -1034,19 +1110,32 @@ function registerMazeGameTests() {
             expect(game.enemies()).to.deep.equal([]);
         });
 
-        // MazeGame::enemies() — one entry per 'E' cell with id 0
+        // MazeGame::enemies() — one entry per 'E' cell with id 0, carrying the
+        // resolved damage / movePeriodMs (defaults here; no rig override → no
+        // enemyType field).
         it('should expect enemies() to return one entry with id 0 per E cell', function () {
             let game = makeGame('{"grid":[["S","E","F"]]}');
-            expect(game.enemies()).to.deep.equal([{ row: 0, col: 1, id: 0 }]);
+            expect(game.enemies()).to.deep.equal([
+                { row: 0, col: 1, id: 0, damage: 1, movePeriodMs: 1500 },
+            ]);
         });
 
         // MazeGame::enemies() — ids assigned in row-major scan order
         it('should expect enemies() ids to follow row-major scan order across rows', function () {
             let game = makeGame('{"grid":[["S"," ","E"],[" ","E"," "],["E"," ","F"]]}');
             expect(game.enemies()).to.deep.equal([
-                { row: 0, col: 2, id: 0 },
-                { row: 1, col: 1, id: 1 },
-                { row: 2, col: 0, id: 2 },
+                { row: 0, col: 2, id: 0, damage: 1, movePeriodMs: 1500 },
+                { row: 1, col: 1, id: 1, damage: 1, movePeriodMs: 1500 },
+                { row: 2, col: 0, id: 2, damage: 1, movePeriodMs: 1500 },
+            ]);
+        });
+
+        // MazeGame::enemies() — a per-cell enemy override surfaces its resolved
+        // damage / movePeriodMs and its enemyType rig on the live enemy.
+        it('should expect enemies() to surface a per-cell enemy override', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"E","enemyType":"ghost","damage":3,"movePeriodMs":600.0}],"F"]]}');
+            expect(game.enemies()).to.deep.equal([
+                { row: 0, col: 1, id: 0, damage: 3, movePeriodMs: 600, enemyType: 'ghost' },
             ]);
         });
 

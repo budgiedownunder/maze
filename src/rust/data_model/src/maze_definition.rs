@@ -368,12 +368,21 @@ pub enum CellEntity {
 }
 
 impl CellEntity {
-    /// The grid character this override variant belongs on. An override is only
+    /// The grid character this entity belongs on. An entity override is only
     /// meaningful on (and only serialised onto) a cell holding this character;
     /// a stale override left on a non-matching cell — e.g. after an in-place
     /// edit turned an `'E'` into a `'W'` — is dropped on serialisation rather
-    /// than emitted as a malformed entity.
-    fn cell_char(&self) -> char {
+    /// than emitted as a malformed entity. Callers threading overrides through
+    /// other layers use this to check an entity against the cell it sits on.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::{CellEntity, EnemyOverride};
+    /// let entity = CellEntity::Enemy(EnemyOverride::default());
+    /// assert_eq!(entity.cell_char(), 'E');
+    /// ```
+    pub fn cell_char(&self) -> char {
         match self {
             CellEntity::Enemy(_) => 'E',
             CellEntity::Health(_) => 'H',

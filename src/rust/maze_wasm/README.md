@@ -98,7 +98,7 @@ const item    = game.pickup();          // → null (key already collected on wa
 const keys    = game.keys();            // → [{ row, col, id }]  (uncollected keys)
 const doors   = game.doors();           // → [{ row, col, state: 'locked' | 'opening' | 'open' }]
 const bag     = game.bag();             // → [{ type: 'key', id }]  (collected items)
-const enemies = game.enemies();         // → [{ row, col, id }]  (live enemies, stable enemy-id order)
+const enemies = game.enemies();         // → [{ row, col, id, damage, movePeriodMs, enemyType? }]  (live enemies; enemyType present only when the spawn cell overrode the rig)
 const pickups = game.health_pickups(); // → [{ row, col, id }]  (uncollected 'H' cells, row-major order)
 
 // Advance time-based state (opening doors, enemy AI, queued damage / heal events).
