@@ -1,5 +1,5 @@
 use crate::MAX_TOTAL_FEATURES;
-use data_model::MazeDefinition;
+use data_model::{CellEntity, EnemyOverride, EnemyType, HealthOverride, MazeDefinition};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -318,6 +318,11 @@ pub struct Enemy {
     pub accum_ms: f32,
     /// HP inflicted on the player per same-cell collision.
     pub damage: u32,
+    /// Per-cell visual rig override for this enemy, taken from the cell's
+    /// entity override at construction. `None` means the cell carried no rig
+    /// override — the renderer falls back to its per-game default. Renderer-only:
+    /// the chase AI is identical for every rig and never reads this.
+    pub enemy_type: Option<EnemyType>,
 }
 
 impl Enemy {
@@ -444,6 +449,13 @@ pub struct MazeGameOptions {
 #[derive(Debug)]
 pub struct MazeGame {
     grid: Vec<Vec<char>>,
+    /// Per-cell entity overrides carried over from the `MazeDefinition`. The
+    /// engine reads the numeric fields it applies at runtime (a health cell's
+    /// `heal_amount`); enemy numeric/visual overrides are baked into each
+    /// `Enemy` at construction. The static visual overrides
+    /// (`health_style`/`key_holder`/`door_style`) are not consumed here — the
+    /// renderers read those straight from the definition by cell position.
+    cell_entities: HashMap<(usize, usize), Vec<CellEntity>>,
     player_row: usize,
     player_col: usize,
     direction: Direction,
@@ -507,12 +519,42 @@ const DEFAULT_ENEMY_MOVE_PERIOD_MS: f32 = 1500.0;
 /// [`MazeGameOptions`].
 const DEFAULT_ENEMY_DAMAGE: u32 = 1;
 
+/// HP restored by consuming a health pickup (`'H'`) when its cell carries no
+/// per-cell `heal_amount` override.
+const DEFAULT_HEAL_AMOUNT: u32 = 1;
+
 /// Default player maximum HP when no override is supplied via
 /// [`MazeGameOptions`].
 const DEFAULT_MAX_HP: u32 = 3;
 
 /// Real-time duration a door takes to open once unlocking begins, in milliseconds.
 const DOOR_OPEN_MS: f32 = 1000.0;
+
+/// Returns the enemy override on a cell, if its (single, for now) entity is an
+/// enemy. Cells without an entry, or whose entity is a different kind, yield
+/// `None`.
+fn enemy_override_at(
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    cell: (usize, usize),
+) -> Option<&EnemyOverride> {
+    match cell_entities.get(&cell).and_then(|entities| entities.first()) {
+        Some(CellEntity::Enemy(over)) => Some(over),
+        _ => None,
+    }
+}
+
+/// Returns the health override on a cell, if its (single, for now) entity is a
+/// health pickup. Cells without an entry, or whose entity is a different kind,
+/// yield `None`.
+fn health_override_at(
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    cell: (usize, usize),
+) -> Option<&HealthOverride> {
+    match cell_entities.get(&cell).and_then(|entities| entities.first()) {
+        Some(CellEntity::Health(over)) => Some(over),
+        _ => None,
+    }
+}
 
 impl MazeGame {
     /// Creates a game session from a `MazeDefinition` JSON string, placing the
@@ -622,15 +664,22 @@ impl MazeGame {
                     cols,
                 )
                 .unwrap_or((r, c));
+                // Resolve this enemy's tunables: per-cell override first, then
+                // the per-game default. The visual rig is carried straight from
+                // the override (the renderer falls back when it is `None`).
+                let over = enemy_override_at(&definition.cell_entities, (r, c));
                 Enemy {
                     id: idx as u32,
                     row: r,
                     col: c,
                     target_row,
                     target_col,
-                    move_period_ms: default_enemy_move_period_ms,
+                    move_period_ms: over
+                        .and_then(|o| o.move_period_ms)
+                        .unwrap_or(default_enemy_move_period_ms),
                     accum_ms: 0.0,
-                    damage: default_enemy_damage,
+                    damage: over.and_then(|o| o.damage).unwrap_or(default_enemy_damage),
+                    enemy_type: over.and_then(|o| o.enemy_type),
                 }
             })
             .collect();
@@ -645,6 +694,7 @@ impl MazeGame {
 
         Ok(MazeGame {
             grid: definition.grid,
+            cell_entities: definition.cell_entities,
             player_row: start.row,
             player_col: start.col,
             direction: Direction::None,
@@ -797,7 +847,11 @@ impl MazeGame {
                 // health" feedback if it wants.
                 if self.hp < self.max_hp {
                     self.grid[new_row][new_col] = ' ';
-                    let hp_after = (self.hp + 1).min(self.max_hp);
+                    // Per-cell `heal_amount` override first, else the built-in.
+                    let heal_amount = health_override_at(&self.cell_entities, (new_row, new_col))
+                        .and_then(|o| o.heal_amount)
+                        .unwrap_or(DEFAULT_HEAL_AMOUNT);
+                    let hp_after = self.hp.saturating_add(heal_amount).min(self.max_hp);
                     self.hp = hp_after;
                     self.pending_events.push(GameEvent::PlayerHealed {
                         hp_after,
@@ -1181,10 +1235,13 @@ impl MazeGame {
 
     /// Returns the active enemies, ordered by stable id.
     ///
-    /// Each [`Enemy`] carries its current position, its per-game
-    /// `move_period_ms`, the `accum_ms` accumulator drained by
-    /// [`MazeGame::tick`], and the `damage` it inflicts per same-cell
-    /// collision. Enemies are seeded one per `'E'` cell at construction.
+    /// Each [`Enemy`] carries its current position, its `move_period_ms`, the
+    /// `accum_ms` accumulator drained by [`MazeGame::tick`], the `damage` it
+    /// inflicts per same-cell collision, and its `enemy_type` visual rig.
+    /// Enemies are seeded one per `'E'` cell at construction; `move_period_ms`
+    /// and `damage` come from the cell's per-cell override when present (else
+    /// the per-game default), and `enemy_type` carries the cell's rig override
+    /// (`None` when the cell set none).
     ///
     /// # Examples
     ///
@@ -2762,6 +2819,81 @@ mod tests {
     }
 
     #[test]
+    fn per_cell_enemy_override_beats_per_game_default() {
+        // The cell sets damage=4 and movePeriodMs=300; the per-game options set
+        // different values. Resolution order: per-cell wins.
+        let json = r#"{"grid":[["S",[{"type":"E","damage":4,"movePeriodMs":300.0}],"F"]]}"#;
+        let opts = MazeGameOptions {
+            enemy_move_period_ms: Some(9000.0),
+            enemy_damage: Some(9),
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies.len(), 1);
+        assert_eq!(enemies[0].damage, 4);
+        assert_eq!(enemies[0].move_period_ms, 300.0);
+    }
+
+    #[test]
+    fn per_cell_enemy_override_falls_back_per_field_to_per_game_default() {
+        // The cell overrides only damage; movePeriodMs falls back to the
+        // per-game default. enemy_type is unset → None.
+        let json = r#"{"grid":[["S",[{"type":"E","damage":4}],"F"]]}"#;
+        let opts = MazeGameOptions {
+            enemy_move_period_ms: Some(800.0),
+            enemy_damage: Some(9),
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies[0].damage, 4);
+        assert_eq!(enemies[0].move_period_ms, 800.0);
+        assert_eq!(enemies[0].enemy_type, None);
+    }
+
+    #[test]
+    fn enemy_without_override_uses_per_game_default_and_none_rig() {
+        let json = r#"{"grid":[["S","E","F"]]}"#;
+        let opts = MazeGameOptions {
+            enemy_damage: Some(7),
+            ..MazeGameOptions::default()
+        };
+        let game = MazeGame::from_json_with_options(json, opts).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies[0].damage, 7);
+        assert_eq!(enemies[0].move_period_ms, DEFAULT_ENEMY_MOVE_PERIOD_MS);
+        assert_eq!(enemies[0].enemy_type, None);
+    }
+
+    #[test]
+    fn per_cell_enemy_type_surfaces_on_enemy() {
+        let json = r#"{"grid":[["S",[{"type":"E","enemyType":"ghost"}],"F"]]}"#;
+        let game = MazeGame::from_json(json).unwrap();
+        let enemies = game.enemies();
+        assert_eq!(enemies[0].enemy_type, Some(EnemyType::Ghost));
+        // The visual rig override leaves the numeric fields at their defaults.
+        assert_eq!(enemies[0].damage, DEFAULT_ENEMY_DAMAGE);
+        assert_eq!(enemies[0].move_period_ms, DEFAULT_ENEMY_MOVE_PERIOD_MS);
+    }
+
+    #[test]
+    fn per_cell_enemy_damage_override_applies_on_collision() {
+        // Walking onto the enemy's cell deals the overridden damage (3), not
+        // the default 1 — proving the override drives real gameplay, not just
+        // the reported field.
+        let json = r#"{"grid":[["S",[{"type":"E","damage":3}],"F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(5),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.hp(), 5);
+        assert_eq!(game.move_player(Direction::Right), MoveResult::Moved);
+        assert_eq!(game.hp(), 2);
+    }
+
+    #[test]
     fn enemies_collection_sorted_by_id_in_row_major_scan_order() {
         // Three 'E' cells laid out across two rows; ids must be assigned in
         // row-major scan order: (0,1)=0, (0,3)=1, (1,2)=2.
@@ -3240,6 +3372,48 @@ mod tests {
         assert_eq!(game.hp(), 2);
         game.move_player(Direction::Right); // pickup → 3/3 (capped)
         assert_eq!(game.hp(), 3);
+    }
+
+    #[test]
+    fn per_cell_heal_amount_override_heals_that_much() {
+        // Pickup overrides healAmount=3; starting 1/5 → 4/5 in one step.
+        let json = r#"{"grid":[["S",[{"type":"H","healAmount":3}],"F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(5),
+            starting_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        assert_eq!(game.hp(), 1);
+        game.move_player(Direction::Right); // pickup → heal by 3 → 4/5
+        assert_eq!(game.hp(), 4);
+    }
+
+    #[test]
+    fn per_cell_heal_amount_override_is_capped_at_max_hp() {
+        let json = r#"{"grid":[["S",[{"type":"H","healAmount":9}],"F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(3),
+            starting_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        game.move_player(Direction::Right); // heal by 9 but clamp to max 3
+        assert_eq!(game.hp(), 3);
+    }
+
+    #[test]
+    fn health_pickup_without_override_heals_default_one() {
+        // A plain 'H' (no override) still heals the built-in +1.
+        let json = r#"{"grid":[["S","H","F"]]}"#;
+        let opts = MazeGameOptions {
+            max_hp: Some(5),
+            starting_hp: Some(1),
+            ..MazeGameOptions::default()
+        };
+        let mut game = MazeGame::from_json_with_options(json, opts).unwrap();
+        game.move_player(Direction::Right);
+        assert_eq!(game.hp(), 1 + DEFAULT_HEAL_AMOUNT);
     }
 
     #[test]

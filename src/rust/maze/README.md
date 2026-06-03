@@ -21,7 +21,8 @@ The `maze` crate is written in `Rust` and defines an API for calculating maze so
 - `DoorState` - enum representing a door's lifecycle (`Locked`, `Opening`, `Open`)
 - `BagItem` - enum representing an item carried in the player's bag (currently `Key`)
 - `GameEvent` - enum representing a time-based event emitted by `MazeGame::tick` (`DoorOpened`, `EnemyMoved`, `PlayerDamaged`, `PlayerHealed`, `PlayerNotHealed`, `KeyCollected`)
-- `Enemy` - represents an `'E'` cell at runtime: position, planned next-cell target, per-tick move period, damage per same-cell collision
+- `Enemy` - represents an `'E'` cell at runtime: position, planned next-cell target, per-tick move period, damage per same-cell collision, and an optional per-cell visual rig (`enemy_type`)
+- `EnemyType` - per-cell visual rig for an enemy (`goblin` / `ghost`), re-exported from `data_model`; carried on `Enemy` for renderers
 - `PlayerNotHealedReason` - enum carried on `GameEvent::PlayerNotHealed` (currently `AlreadyAtMaxHp`)
 - `MazeGame` - a running game session tracking player position, direction, visited cells, completion, lose state, the player's bag, per-cell door state, HP / max-HP, and the live enemies and health pickups
 
@@ -65,7 +66,7 @@ The `game` module (`maze::game`) provides an interactive cell-based game session
 | `DoorState` | `Locked` \| `Opening { progress }` \| `Open` |
 | `BagItem` | `Key { id }` (serialises as `{"type":"key","id":…}`) |
 | `GameEvent` | `DoorOpened { cell }` \| `EnemyMoved { id, row, col }` \| `PlayerDamaged { hp_after }` \| `PlayerHealed { hp_after, cell }` \| `PlayerNotHealed { cell, reason, message }` \| `KeyCollected { cell, id }` |
-| `Enemy` | `{ id, row, col, target_row, target_col, move_period_ms, accum_ms, damage }` — one per `'E'` cell at construction |
+| `Enemy` | `{ id, row, col, target_row, target_col, move_period_ms, accum_ms, damage, enemy_type }` — one per `'E'` cell at construction |
 | `PlayerNotHealedReason` | `AlreadyAtMaxHp` |
 
 ### Usage
@@ -105,7 +106,7 @@ assert_eq!(game.visited_cells(), &[(0, 0), (0, 1), (0, 2)]);
 | `'D'` (door, locked, key held) | `StartedUnlocking` (key consumed; opens over time via `tick`) |
 | `'D'` (door, locked, no key / still opening) | `BlockedByLockedDoor` |
 | `'E'` (enemy) | `Moved` — or `Killed` if a same-cell enemy collision drops HP to 0. Damage from every enemy on the destination cell sums into a single `GameEvent::PlayerDamaged { hp_after }`. |
-| `'H'` (health pickup) | `Moved`. Auto-pickup: when `hp < max_hp` the cell clears to `' '` and a `GameEvent::PlayerHealed { hp_after, cell }` fires; when `hp == max_hp` the cell stays `'H'` and a `GameEvent::PlayerNotHealed { cell, reason, message }` fires so the host can flash "already at full health" feedback. |
+| `'H'` (health pickup) | `Moved`. Auto-pickup: when `hp < max_hp` the cell clears to `' '` and a `GameEvent::PlayerHealed { hp_after, cell }` fires, restoring the cell's per-cell `heal_amount` override (else the built-in `1`), clamped to `max_hp`; when `hp == max_hp` the cell stays `'H'` and a `GameEvent::PlayerNotHealed { cell, reason, message }` fires so the host can flash "already at full health" feedback. |
 | `'W'` (wall) | `Blocked` |
 | Out of bounds | `Blocked` |
 
@@ -113,7 +114,9 @@ Keys are auto-collected by walking over them — stepping onto a `'K'` cell adds
 
 The game also tracks a lose state: `MazeGame::is_lost()` and `MazeGame::lose_reason()` report whether the session has ended in a loss and why. At each door walk-through the runtime compares the minimum closed-door count on any path to the finish (a lock-blind 0-1 BFS from the player's current cell) against the maximum number of keys the player could ultimately hold (`bag.len()` + a state-space BFS over `(cell, collected, opened)` from the current state, falling back to a lock-blind key reachability count above 16 combined `'K'` + `'D'` cells). When the closed-doors count exceeds the available keys, `LoseReason::Stranded` is set and `move_player` returns `MoveResult::Stranded` at the moment of detection. Host-driven losses such as a wall-clock timeout live entirely in the host (the 3D game owns its own countdown).
 
-Enemies and health are driven through the same `tick(dt_ms)` loop that advances doors. Each `'E'` cell yields one `Enemy` at construction, with an integer move period (default 1500 ms, override via `MazeGameOptions::enemy_move_period_ms`) and a per-collision damage (default 1, override via `MazeGameOptions::enemy_damage`). Every move period the enemy commits a one-cell step toward the player along a wall-aware **BFS shortest path**, with a deterministic `N > E > S > W` tie-break; an enemy fully walled off from the player rests in place. Same-cell collisions deal damage from either side — the player walking onto an enemy's cell, or an enemy stepping onto the player's cell — and `LoseReason::Killed` fires when `hp` reaches `0`. The HP cap (`max_hp`, default `3`) and the starting `hp` (default `= max_hp`) are also `MazeGameOptions` knobs. `MazeGame::hp()` / `MazeGame::max_hp()` expose the current HP state; `MazeGame::enemies()` exposes the live enemy collection. Health pickups remain in-grid as `'H'` cells until consumed (auto-pickup clears them to `' '` on a `PlayerHealed` event), so the live uncollected set is read by scanning the grid for `'H'`.
+Enemies and health are driven through the same `tick(dt_ms)` loop that advances doors. Each `'E'` cell yields one `Enemy` at construction, with a move period (default 1500 ms, per-game override via `MazeGameOptions::enemy_move_period_ms`) and a per-collision damage (default 1, per-game override via `MazeGameOptions::enemy_damage`).
+
+A maze may also carry **per-cell entity overrides** (`MazeDefinition::cell_entities`). The engine applies the numeric ones at construction / pickup time, resolving **per-cell → per-game → built-in**: an `'E'` cell's `damage` / `move_period_ms` seed its `Enemy` (and its `enemy_type` rig is carried on the `Enemy` for renderers), and an `'H'` cell's `heal_amount` sets how much that pickup restores. The remaining overrides are **visual and ride on static cells** (`health_style` on `'H'`, `key_holder` on `'K'`, `door_style` on `'D'`), so this crate does not consume them — renderers read them straight from the `MazeDefinition` by cell position. Only `enemy_type` is surfaced through the engine (on the live `Enemy`), because an enemy moves away from its spawn cell. Every move period the enemy commits a one-cell step toward the player along a wall-aware **BFS shortest path**, with a deterministic `N > E > S > W` tie-break; an enemy fully walled off from the player rests in place. Same-cell collisions deal damage from either side — the player walking onto an enemy's cell, or an enemy stepping onto the player's cell — and `LoseReason::Killed` fires when `hp` reaches `0`. The HP cap (`max_hp`, default `3`) and the starting `hp` (default `= max_hp`) are also `MazeGameOptions` knobs. `MazeGame::hp()` / `MazeGame::max_hp()` expose the current HP state; `MazeGame::enemies()` exposes the live enemy collection. Health pickups remain in-grid as `'H'` cells until consumed (auto-pickup clears them to `' '` on a `PlayerHealed` event), so the live uncollected set is read by scanning the grid for `'H'`.
 
 For host loops that prefer `setTimeout` over frame-rate polling, `MazeGame::time_until_next_event_ms()` reports the number of milliseconds until the next `tick` will fire an event — the soonest enemy commit boundary or door-open completion, or `0` when events queued by a prior `move_player` are waiting to flush, or `None` when no enemies exist, no door is opening, and no events are pending. Sleep until the returned time, call `tick(elapsed)`, repeat.
 
