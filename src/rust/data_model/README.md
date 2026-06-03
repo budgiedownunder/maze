@@ -7,7 +7,16 @@ The `data_model` crate is written in `Rust` and defines the following data model
 - `Error` - represents a data model error
 - `Maze` - represents a maze
 - `MazeCellState` - represents an individual maze cell state
-- `MazeDefinition` - represents a maze definition
+- `MazeDefinition` - represents a maze definition (a character grid plus an optional sparse map of per-cell overrides)
+- `CellEntity` - one entity occupying a cell, with its (optional) override characteristics (an `EnemyOverride`, `HealthOverride`, `KeyOverride` or `DoorOverride`); a cell holds a list of these, capped at one for now
+- `EnemyOverride` - non-default characteristics for an enemy cell (`enemy_type`, `damage`, `move_period_ms`)
+- `HealthOverride` - non-default characteristics for a health-pickup cell (`health_style`, `heal_amount`)
+- `KeyOverride` - non-default characteristics for a key-holder cell (`key_holder`)
+- `DoorOverride` - non-default characteristics for a door cell (`door_style`)
+- `EnemyType` - visual rig for an enemy cell (`goblin` / `ghost`)
+- `HealthStyle` - visual rig for a health-pickup cell (`heart` / `potion`)
+- `KeyHolderStyle` - visual rig for a key-holder cell (`pedestal` / `chest` / `floating_key`)
+- `DoorStyle` - visual open-animation rig for a door cell (`swing` / `slide` / `portcullis` / `dissolve`)
 - `MazePoint` - represents a point within a maze
 - `OAuthIdentity` - represents a link between a user and an external OAuth provider
 - `User` - represents a user (with one or more associated `UserEmail`s)
