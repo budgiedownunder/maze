@@ -1,5 +1,5 @@
 use crate::wasm_common::{new_maze, new_maze_game, to_cell_type_enum, MazeGameWasm, MazeWasm};
-use data_model::MazePoint;
+use data_model::{CellEntity, MazePoint};
 use maze::{MazeSolution, MazeSolver};
 use std::alloc::{alloc, dealloc, Layout};
 use std::ptr;
@@ -629,6 +629,90 @@ pub extern "C" fn maze_wasm_to_json(maze_wasm: *mut MazeWasm) -> u32 {
         Err(error) => create_maze_wasm_error_result(Some(error.to_string().as_str())),
         Ok(json_str) => create_maze_wasm_string_result(json_str.as_str()),
     }
+}
+/// Returns the per-cell entity override at `(row, col)` as a `MazeWasmResult`:
+/// `value_type = String` carrying the entity's wire JSON
+/// (e.g. `{"type":"E","enemyType":"ghost","damage":2}`) when present, or
+/// `value_type = None` when the cell carries no override.
+///
+/// # Returns
+///
+/// Pointer to a `MazeWasmResult`.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_wasm_get_cell_entity(maze_wasm: *mut MazeWasm, row: u32, col: u32) -> u32 {
+    let maze_wasm = unsafe { &mut *maze_wasm };
+    let entity = maze_wasm
+        .maze
+        .definition
+        .cell_entities
+        .get(&(row as usize, col as usize))
+        .and_then(|entities| entities.first());
+    match entity {
+        Some(entity) => match serde_json::to_string(entity) {
+            Ok(json_str) => create_maze_wasm_string_result(json_str.as_str()),
+            Err(error) => create_maze_wasm_error_result(Some(error.to_string().as_str())),
+        },
+        None => to_maze_wasm_result_ptr(MazeWasmResultValueType::None as u8, 0, None),
+    }
+}
+/// Sets the per-cell entity override at `(row, col)` from its wire JSON,
+/// replacing any existing one. The entity `type` must match the cell's current
+/// character.
+///
+/// # Returns
+///
+/// Zero on success, else an error pointer (parse error, out-of-range cell, or
+/// a `type`/cell-character mismatch).
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_wasm_set_cell_entity(
+    maze_wasm: *mut MazeWasm,
+    row: u32,
+    col: u32,
+    json_string_ptr: *mut u8,
+) -> u32 {
+    let maze_wasm = unsafe { &mut *maze_wasm };
+    let json_str = ptr_to_string(json_string_ptr);
+    let entity: CellEntity = match serde_json::from_str(&json_str) {
+        Ok(entity) => entity,
+        Err(error) => return create_maze_wasm_error_ptr(error.to_string().as_str()),
+    };
+    let (r, c) = (row as usize, col as usize);
+    if r >= maze_wasm.maze.definition.row_count() || c >= maze_wasm.maze.definition.col_count() {
+        return create_maze_wasm_error_ptr("cell out of range");
+    }
+    let cell_char = maze_wasm.maze.definition.grid[r][c];
+    if entity.cell_char() != cell_char {
+        return create_maze_wasm_error_ptr(&format!(
+            "cell entity type '{}' does not match cell character '{}'",
+            entity.cell_char(),
+            cell_char
+        ));
+    }
+    maze_wasm
+        .maze
+        .definition
+        .cell_entities
+        .insert((r, c), vec![entity]);
+    0
+}
+/// Clears any per-cell entity override at `(row, col)`. A cell with no override
+/// is unaffected.
+///
+/// # Returns
+///
+/// Zero (always succeeds).
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_wasm_clear_cell_entity(maze_wasm: *mut MazeWasm, row: u32, col: u32) -> u32 {
+    let maze_wasm = unsafe { &mut *maze_wasm };
+    maze_wasm
+        .maze
+        .definition
+        .cell_entities
+        .remove(&(row as usize, col as usize));
+    0
 }
 /// Solves a `MazeWasm` for its solution path
 ///

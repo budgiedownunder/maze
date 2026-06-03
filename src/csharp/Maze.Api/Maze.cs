@@ -587,6 +587,50 @@ namespace Maze.Api
                 return defEl.GetRawText();
             return json;
         }
+
+        // Omit unset (null) override fields on write so the emitted entity matches
+        // the canonical wire form (e.g. {"type":"E","damage":2}); the Rust side
+        // round-trips it. Enum wire strings are mapped by the per-enum converters
+        // on CellEntityInfo.
+        private static readonly System.Text.Json.JsonSerializerOptions _cellEntityJsonOptions = new()
+        {
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        };
+        /// <summary>
+        /// Returns the per-cell entity override at the given location, or <c>null</c> when the cell carries none.
+        /// </summary>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <returns>The cell's entity override, or <c>null</c> when it has none</returns>
+        public CellEntityInfo? GetCellEntity(uint row, uint col)
+        {
+            string? json = Interop.MazeGetCellEntity(_mazePtr, row, col);
+            return json == null
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<CellEntityInfo>(json, _cellEntityJsonOptions);
+        }
+        /// <summary>
+        /// Sets the per-cell entity override at the given location, replacing any existing one.
+        /// The entity's type (its concrete subclass) must match the cell's current character — e.g. an
+        /// <see cref="EnemyCellEntity"/> on an <c>'E'</c> cell (set the cell to the matching kind first); throws otherwise.
+        /// </summary>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <param name="entity">The entity override to set</param>
+        public void SetCellEntity(uint row, uint col, CellEntityInfo entity)
+        {
+            string json = System.Text.Json.JsonSerializer.Serialize(entity, _cellEntityJsonOptions);
+            Interop.MazeSetCellEntity(_mazePtr, row, col, json);
+        }
+        /// <summary>
+        /// Clears any per-cell entity override at the given location. A cell with no override is unaffected.
+        /// </summary>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        public void ClearCellEntity(uint row, uint col)
+        {
+            Interop.MazeClearCellEntity(_mazePtr, row, col);
+        }
         /// <summary>
         /// Solves a maze, else will throw an exception if the operation fails. 
         /// </summary>

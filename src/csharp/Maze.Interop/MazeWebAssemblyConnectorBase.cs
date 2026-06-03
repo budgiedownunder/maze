@@ -94,6 +94,9 @@ namespace Maze.Interop
         protected IWebAssemblyFunction? mazeDeleteCols;
         protected IWebAssemblyFunction? mazeFromJson;
         protected IWebAssemblyFunction? mazeToJson;
+        protected IWebAssemblyFunction? mazeGetCellEntity;
+        protected IWebAssemblyFunction? mazeSetCellEntity;
+        protected IWebAssemblyFunction? mazeClearCellEntity;
         protected IWebAssemblyFunction? mazeSolve;
         protected IWebAssemblyFunction? mazeSolutionGetPathPoints;
         protected IWebAssemblyFunction? freeMazeResult;
@@ -436,6 +439,59 @@ namespace Maze.Interop
                 json = memory.StringPtrToString(result.value_ptr);
             FreeMazeResult(resultPtr, true);
             return json;
+        }
+        /// <summary>
+        /// Returns the per-cell entity override at the given location as its wire JSON, or <c>null</c> when the cell carries none.
+        /// </summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <returns>The entity wire JSON, or <c>null</c> when the cell has no override</returns>
+        public string? MazeGetCellEntity(UIntPtr mazePtr, uint row, uint col)
+        {
+            UInt32 resultPtr = (UInt32)(Int32)(mazeGetCellEntity?.Invoke((long)(uint)mazePtr, row, col) ?? 0);
+            MazeInterop.MazeWasmResult result = memory.ReadMazeWasmResult(resultPtr);
+            if (result.error_ptr != 0)
+            {
+                string errorMessage = GetErrorMessage(result.error_ptr);
+                FreeMazeResult(resultPtr, true);
+                throw new Exception(errorMessage);
+            }
+            // A None result means the cell carries no override.
+            if ((MazeInterop.MazeWasmResultValueType)(result.value_type) != MazeInterop.MazeWasmResultValueType.String)
+            {
+                FreeMazeResult(resultPtr, true);
+                return null;
+            }
+            string? json = result.value_ptr != 0 ? memory.StringPtrToString(result.value_ptr) : null;
+            FreeMazeResult(resultPtr, true);
+            return json;
+        }
+        /// <summary>
+        /// Sets the per-cell entity override at the given location from its wire JSON, replacing any existing one.
+        /// Throws on a parse error, out-of-range cell, or type mismatch.
+        /// </summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <param name="json">The entity override wire JSON</param>
+        public void MazeSetCellEntity(UIntPtr mazePtr, uint row, uint col, string json)
+        {
+            var jsonStrPtr = ToStringPtr(json);
+            UInt32 errorPtr = (UInt32)(Int32)(mazeSetCellEntity?.Invoke((long)(uint)mazePtr, row, col, jsonStrPtr) ?? 0);
+            FreeStringPtr(jsonStrPtr);
+            if (errorPtr != 0)
+                TidyAndThrowError(errorPtr);
+        }
+        /// <summary>
+        /// Clears any per-cell entity override at the given location. A cell with no override is unaffected.
+        /// </summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        public void MazeClearCellEntity(UIntPtr mazePtr, uint row, uint col)
+        {
+            mazeClearCellEntity?.Invoke((long)(uint)mazePtr, row, col);
         }
         /// <summary>
         /// Solves a maze, else will throw an exception if the operation fails.
@@ -1024,17 +1080,31 @@ namespace Maze.Interop
             UInt32 rowOutPtr = AllocateSizedMemory(4);
             UInt32 colOutPtr = AllocateSizedMemory(4);
             UInt32 idOutPtr = AllocateSizedMemory(4);
+            UInt32 damageOutPtr = AllocateSizedMemory(4);
+            UInt32 movePeriodOutPtr = AllocateSizedMemory(4);
+            UInt32 enemyTypeOutPtr = AllocateSizedMemory(4);
             int result = (int)(mazeGameGetEnemy?.Invoke(
                 (long)(uint)gamePtr, index,
                 (long)(uint)(rowOutPtr + 4),
                 (long)(uint)(colOutPtr + 4),
-                (long)(uint)(idOutPtr + 4)) ?? -1);
+                (long)(uint)(idOutPtr + 4),
+                (long)(uint)(damageOutPtr + 4),
+                (long)(uint)(movePeriodOutPtr + 4),
+                (long)(uint)(enemyTypeOutPtr + 4)) ?? -1);
             enemy.Row = memory.ReadUInt32(rowOutPtr + 4);
             enemy.Column = memory.ReadUInt32(colOutPtr + 4);
             enemy.Id = memory.ReadUInt32(idOutPtr + 4);
+            enemy.Damage = memory.ReadUInt32(damageOutPtr + 4);
+            // move_period_ms is an f32 and enemy_type a signed i32; the memory
+            // abstraction only reads raw u32, so reinterpret the bits.
+            enemy.MovePeriodMs = BitConverter.UInt32BitsToSingle(memory.ReadUInt32(movePeriodOutPtr + 4));
+            enemy.EnemyType = (int)memory.ReadUInt32(enemyTypeOutPtr + 4);
             FreeSizedMemory(rowOutPtr);
             FreeSizedMemory(colOutPtr);
             FreeSizedMemory(idOutPtr);
+            FreeSizedMemory(damageOutPtr);
+            FreeSizedMemory(movePeriodOutPtr);
+            FreeSizedMemory(enemyTypeOutPtr);
             return result == 0;
         }
         /// <summary>Returns the number of uncollected health-pickup cells</summary>

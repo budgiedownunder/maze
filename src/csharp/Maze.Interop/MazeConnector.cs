@@ -187,6 +187,31 @@ namespace Maze.Interop
         /// <returns>JSON string</returns>
         public string MazeToJson(UIntPtr mazePtr);
         /// <summary>
+        /// Returns the per-cell entity override at the given location as its wire JSON
+        /// (e.g. <c>{"type":"E","enemyType":"ghost","damage":2}</c>), or <c>null</c> when the cell carries none.
+        /// </summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <returns>The entity wire JSON, or <c>null</c> when the cell has no override</returns>
+        public string? MazeGetCellEntity(UIntPtr mazePtr, uint row, uint col);
+        /// <summary>
+        /// Sets the per-cell entity override at the given location from its wire JSON, replacing any existing one.
+        /// The entity <c>type</c> must match the cell's current character. Throws on a parse error, out-of-range cell, or type mismatch.
+        /// </summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <param name="json">The entity override wire JSON</param>
+        public void MazeSetCellEntity(UIntPtr mazePtr, uint row, uint col, string json);
+        /// <summary>
+        /// Clears any per-cell entity override at the given location. A cell with no override is unaffected.
+        /// </summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        public void MazeClearCellEntity(UIntPtr mazePtr, uint row, uint col);
+        /// <summary>
         /// Solves a maze, else will throw an exception if the operation fails.
         ///
         /// If successful, use <see cref="MazeSolutionGetPathPoints(UIntPtr)">MazeSolutionGetPathPoints()</see> to obtain the

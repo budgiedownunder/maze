@@ -1538,7 +1538,8 @@ namespace Maze.Api.Tests
             Assert.Equal(3u, game.MaxHp);
 
             Assert.Single(game.Enemies);
-            Assert.Equal(new EnemyInfo(0, 1, 0), game.Enemies[0]);
+            // No per-cell override → default damage 1 / move period 1500ms / no rig.
+            Assert.Equal(new EnemyInfo(0, 1, 0, 1, 1500.0f, null), game.Enemies[0]);
             Assert.Single(game.HealthPickups);
             Assert.Equal(new HealthPickupInfo(0, 2), game.HealthPickups[0]);
 
@@ -1552,6 +1553,91 @@ namespace Maze.Api.Tests
             game.Tick(0.0);
             Assert.Equal(3u, game.Hp);
             Assert.Empty(game.HealthPickups);
+        }
+
+        /// <summary>
+        /// A per-cell enemy override surfaces its resolved damage / move period and its
+        /// rig on <see cref="EnemyInfo"/> through the full FFI stack.
+        /// </summary>
+        [Fact]
+        public void MazeGame_Enemies_SurfaceTheirPerCellOverride()
+        {
+            using MazeGame game = MazeGame.Create(
+                """{"grid":[["S",[{"type":"E","enemyType":"ghost","damage":3,"movePeriodMs":600.0}],"F"]]}""");
+            Assert.Single(game.Enemies);
+            EnemyInfo enemy = game.Enemies[0];
+            Assert.Equal(3u, enemy.Damage);
+            Assert.Equal(600.0f, enemy.MovePeriodMs);
+            Assert.Equal(EnemyType.Ghost, enemy.EnemyType);
+        }
+
+        /// <summary>
+        /// <see cref="Maze.GetCellEntity"/> / <see cref="Maze.SetCellEntity"/> /
+        /// <see cref="Maze.ClearCellEntity"/> round-trip a per-cell override across all four
+        /// entity types, and a type/cell-character mismatch is rejected.
+        /// </summary>
+        [Fact]
+        public void Maze_CellEntity_GetSetClear_RoundTrips()
+        {
+            using Maze maze = new Maze(1, 3);
+            maze.SetEnemyCells(0, 1, 0, 1);
+
+            Assert.Null(maze.GetCellEntity(0, 1)); // no override yet
+
+            maze.SetCellEntity(0, 1, new EnemyCellEntity { EnemyType = EnemyType.Ghost, Damage = 2 });
+            EnemyCellEntity got = Assert.IsType<EnemyCellEntity>(maze.GetCellEntity(0, 1));
+            Assert.Equal(EnemyType.Ghost, got.EnemyType);
+            Assert.Equal(2u, got.Damage);
+            Assert.Null(got.MovePeriodMs);
+
+            // Type mismatch (cell is 'E', entity is a door) is rejected.
+            Assert.ThrowsAny<Exception>(() =>
+                maze.SetCellEntity(0, 1, new DoorCellEntity { DoorStyle = DoorStyle.Swing }));
+
+            maze.ClearCellEntity(0, 1);
+            Assert.Null(maze.GetCellEntity(0, 1));
+        }
+
+        /// <summary>
+        /// A health / key / door override round-trips through the typed C# surface — the rig
+        /// enums map to/from their wire strings.
+        /// </summary>
+        [Fact]
+        public void Maze_CellEntity_RoundTripsHealthKeyDoorRigs()
+        {
+            using Maze maze = new Maze(1, 4);
+            maze.SetHealthCells(0, 0, 0, 0);
+            maze.SetKeyCells(0, 1, 0, 1);
+            maze.SetDoorCells(0, 2, 0, 2);
+
+            maze.SetCellEntity(0, 0, new HealthCellEntity { HealthStyle = HealthStyle.Potion, HealAmount = 3 });
+            maze.SetCellEntity(0, 1, new KeyCellEntity { KeyHolder = KeyHolderStyle.FloatingKey });
+            maze.SetCellEntity(0, 2, new DoorCellEntity { DoorStyle = DoorStyle.Portcullis });
+
+            HealthCellEntity health = Assert.IsType<HealthCellEntity>(maze.GetCellEntity(0, 0));
+            Assert.Equal(HealthStyle.Potion, health.HealthStyle);
+            Assert.Equal(3u, health.HealAmount);
+            Assert.Equal(KeyHolderStyle.FloatingKey, Assert.IsType<KeyCellEntity>(maze.GetCellEntity(0, 1)).KeyHolder);
+            Assert.Equal(DoorStyle.Portcullis, Assert.IsType<DoorCellEntity>(maze.GetCellEntity(0, 2)).DoorStyle);
+        }
+
+        /// <summary>
+        /// A maze carrying a per-cell override survives a JSON load -> save round-trip through
+        /// the FFI (the Rust serde handles the char-or-array grid form; C# passes it opaquely).
+        /// </summary>
+        [Fact]
+        public void Maze_WithOverride_SurvivesJsonRoundTrip()
+        {
+            using Maze maze = new Maze(1, 3);
+            maze.SetEnemyCells(0, 1, 0, 1);
+            maze.SetCellEntity(0, 1, new EnemyCellEntity { Damage = 2 });
+
+            string json = maze.ToJson();
+            using Maze reloaded = new Maze(0, 0);
+            reloaded.FromJson(json);
+
+            EnemyCellEntity got = Assert.IsType<EnemyCellEntity>(reloaded.GetCellEntity(0, 1));
+            Assert.Equal(2u, got.Damage);
         }
 
         /// <summary>

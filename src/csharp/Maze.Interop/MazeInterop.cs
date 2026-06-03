@@ -259,6 +259,12 @@ namespace Maze.Interop
             public uint Column;
             /// <summary>Stable identifier assigned at construction in row-major scan order of the `'E'` cells</summary>
             public uint Id;
+            /// <summary>Damage dealt per same-cell collision (resolved: per-cell override else the per-game default)</summary>
+            public uint Damage;
+            /// <summary>Milliseconds between one-cell moves (resolved: per-cell override else the per-game default)</summary>
+            public float MovePeriodMs;
+            /// <summary>Visual-rig override ordinal: <c>-1</c> = none (renderer default), <c>0</c> = goblin, <c>1</c> = ghost</summary>
+            public int EnemyType;
         }
         /// <summary>
         /// One uncollected health-pickup cell. <see cref="Id"/> is always <c>0</c> —
@@ -676,6 +682,32 @@ namespace Maze.Interop
         public string MazeToJson(UIntPtr mazePtr)
         {
             return connector.MazeToJson(mazePtr);
+        }
+        /// <summary>Returns the per-cell entity override at the given location as its wire JSON, or <c>null</c> when the cell carries none.</summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <returns>The entity wire JSON, or <c>null</c> when the cell has no override</returns>
+        public string? MazeGetCellEntity(UIntPtr mazePtr, uint row, uint col)
+        {
+            return connector.MazeGetCellEntity(mazePtr, row, col);
+        }
+        /// <summary>Sets the per-cell entity override at the given location from its wire JSON, replacing any existing one.</summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        /// <param name="json">The entity override wire JSON</param>
+        public void MazeSetCellEntity(UIntPtr mazePtr, uint row, uint col, string json)
+        {
+            connector.MazeSetCellEntity(mazePtr, row, col, json);
+        }
+        /// <summary>Clears any per-cell entity override at the given location.</summary>
+        /// <param name="mazePtr">Pointer to maze</param>
+        /// <param name="row">Row index (zero-based)</param>
+        /// <param name="col">Column index (zero-based)</param>
+        public void MazeClearCellEntity(UIntPtr mazePtr, uint row, uint col)
+        {
+            connector.MazeClearCellEntity(mazePtr, row, col);
         }
         /// <summary>
         /// Solves a maze, else will throw an exception if the operation fails.

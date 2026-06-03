@@ -4298,6 +4298,7 @@ dependencies = [
  "data_model",
  "maze",
  "pretty_assertions",
+ "serde_json",
 ]
 
 [[package]]

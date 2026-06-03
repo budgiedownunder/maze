@@ -291,6 +291,9 @@ namespace Maze.Interop
             mazeDeleteCols = ResolveFunction("maze_wasm_delete_cols");
             mazeFromJson = ResolveFunction("maze_wasm_from_json");
             mazeToJson = ResolveFunction("maze_wasm_to_json");
+            mazeGetCellEntity = ResolveFunction("maze_wasm_get_cell_entity");
+            mazeSetCellEntity = ResolveFunction("maze_wasm_set_cell_entity");
+            mazeClearCellEntity = ResolveFunction("maze_wasm_clear_cell_entity");
             mazeSolve = ResolveFunction("maze_wasm_solve");
             mazeSolutionGetPathPoints = ResolveFunction("maze_wasm_solution_get_path_points");
             freeMazeResult = ResolveFunction("free_maze_wasm_result");

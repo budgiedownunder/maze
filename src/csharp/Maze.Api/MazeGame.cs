@@ -108,11 +108,14 @@ namespace Maze.Api
     /// <param name="Id">Stable identifier derived from the key's origin cell.</param>
     public readonly record struct KeyInfo(uint Row, uint Column, uint Id);
 
-    /// <summary>One enemy's current cell along with its stable id — see <see cref="MazeGame.Enemies"/>.</summary>
+    /// <summary>One enemy's current cell, stable id, and resolved per-enemy characteristics — see <see cref="MazeGame.Enemies"/>.</summary>
     /// <param name="Row">Current row of the enemy.</param>
     /// <param name="Column">Current column of the enemy.</param>
     /// <param name="Id">Stable identifier assigned at construction in row-major scan order of the <c>'E'</c> cells.</param>
-    public readonly record struct EnemyInfo(uint Row, uint Column, uint Id);
+    /// <param name="Damage">Damage dealt per same-cell collision (resolved: per-cell override else the per-game default).</param>
+    /// <param name="MovePeriodMs">Milliseconds between one-cell moves (resolved: per-cell override else the per-game default).</param>
+    /// <param name="EnemyType">Per-cell visual-rig override, or <c>null</c> when the spawn cell set none (the renderer uses its default rig).</param>
+    public readonly record struct EnemyInfo(uint Row, uint Column, uint Id, uint Damage, float MovePeriodMs, EnemyType? EnemyType);
 
     /// <summary>One uncollected health-pickup cell — see <see cref="MazeGame.HealthPickups"/>. The cell coordinate is the natural key (pickups have no stable id).</summary>
     /// <param name="Row">Row of the health-pickup cell.</param>
@@ -318,7 +321,15 @@ namespace Maze.Api
                 for (int i = 0; i < count; i++)
                 {
                     if (Interop.MazeGameGetEnemy(_gamePtr, i, out var e))
-                        enemies.Add(new EnemyInfo(e.Row, e.Column, e.Id));
+                    {
+                        EnemyType? rig = e.EnemyType switch
+                        {
+                            0 => EnemyType.Goblin,
+                            1 => EnemyType.Ghost,
+                            _ => null,
+                        };
+                        enemies.Add(new EnemyInfo(e.Row, e.Column, e.Id, e.Damage, e.MovePeriodMs, rig));
+                    }
                 }
                 return enemies;
             }

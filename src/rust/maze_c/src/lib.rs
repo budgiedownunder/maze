@@ -1,4 +1,4 @@
-use data_model::{Maze, MazeDefinition, MazePoint};
+use data_model::{CellEntity, Maze, MazeDefinition, MazePoint};
 use maze::{Generator, GenerationAlgorithm, GeneratorOptions, MazeSolution, MazeSolver};
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
@@ -1265,6 +1265,108 @@ pub extern "C" fn maze_c_maze_to_json(ptr: *mut MazeC) -> *mut c_char {
             std::ptr::null_mut()
         }
     }
+}
+
+/// Returns the per-cell entity override at `(row, col)` as its wire JSON
+/// (e.g. `{"type":"E","enemyType":"ghost","damage":2}`), or `null` when the
+/// cell carries no override (or is out of range). The caller must free a
+/// non-null result with [`maze_c_free_string`].
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_get_cell_entity(ptr: *mut MazeC, row: u32, col: u32) -> *mut c_char {
+    clear_last_error();
+    let mw = unsafe { &*ptr };
+    let entity = mw
+        .maze
+        .definition
+        .cell_entities
+        .get(&(row as usize, col as usize))
+        .and_then(|entities| entities.first());
+    match entity {
+        Some(entity) => match serde_json::to_string(entity) {
+            Ok(s) => match CString::new(s) {
+                Ok(cs) => cs.into_raw(),
+                Err(e) => {
+                    set_last_error(&e.to_string());
+                    ptr::null_mut()
+                }
+            },
+            Err(e) => {
+                set_last_error(&e.to_string());
+                ptr::null_mut()
+            }
+        },
+        None => ptr::null_mut(),
+    }
+}
+
+/// Sets the per-cell entity override at `(row, col)` from its wire JSON,
+/// replacing any existing one. The entity `type` must match the cell's current
+/// character (set the cell to the matching kind first). Returns `1` on success,
+/// `0` on a null/invalid JSON pointer, a parse error, an out-of-range cell, or
+/// a `type`/cell-character mismatch (see [`maze_c_get_last_error`]).
+///
+/// # Safety
+///
+/// `ptr` must be a non-null pointer returned by [`maze_c_new_maze`]; `json`
+/// must be a valid null-terminated UTF-8 string or null.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub unsafe extern "C" fn maze_c_maze_set_cell_entity(
+    ptr: *mut MazeC,
+    row: u32,
+    col: u32,
+    json: *const c_char,
+) -> u8 {
+    clear_last_error();
+    if json.is_null() {
+        set_last_error("json pointer is null");
+        return 0;
+    }
+    let json_str = match unsafe { CStr::from_ptr(json) }.to_str() {
+        Ok(s) => s,
+        Err(e) => {
+            set_last_error(&e.to_string());
+            return 0;
+        }
+    };
+    let entity: CellEntity = match serde_json::from_str(json_str) {
+        Ok(entity) => entity,
+        Err(e) => {
+            set_last_error(&e.to_string());
+            return 0;
+        }
+    };
+    let mw = unsafe { &mut *ptr };
+    let (r, c) = (row as usize, col as usize);
+    if r >= mw.maze.definition.row_count() || c >= mw.maze.definition.col_count() {
+        set_last_error("cell out of range");
+        return 0;
+    }
+    let cell_char = mw.maze.definition.grid[r][c];
+    if entity.cell_char() != cell_char {
+        set_last_error(&format!(
+            "cell entity type '{}' does not match cell character '{}'",
+            entity.cell_char(),
+            cell_char
+        ));
+        return 0;
+    }
+    mw.maze.definition.cell_entities.insert((r, c), vec![entity]);
+    1
+}
+
+/// Clears any per-cell entity override at `(row, col)`. Returns `1` (a cell
+/// with no override is unaffected).
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+#[no_mangle]
+pub extern "C" fn maze_c_maze_clear_cell_entity(ptr: *mut MazeC, row: u32, col: u32) -> u8 {
+    let mw = unsafe { &mut *ptr };
+    mw.maze
+        .definition
+        .cell_entities
+        .remove(&(row as usize, col as usize));
+    1
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -4331,6 +4433,36 @@ mod tests {
             "override array form missing from round-trip: {round_tripped}"
         );
         unsafe { maze_c_free_string(out) };
+        maze_c_free_maze(maze_ptr);
+    }
+
+    #[test]
+    fn maze_get_set_clear_cell_entity_round_trip() {
+        let maze_ptr = maze_c_new_maze();
+        maze_c_maze_resize(maze_ptr, 1, 3);
+        maze_c_maze_set_enemy_cells(maze_ptr, 0, 1, 0, 1);
+        // No override yet → null.
+        assert!(maze_c_maze_get_cell_entity(maze_ptr, 0, 1).is_null());
+
+        let entity = CString::new(r#"{"type":"E","enemyType":"ghost","damage":2}"#).unwrap();
+        let rc = unsafe { maze_c_maze_set_cell_entity(maze_ptr, 0, 1, entity.as_ptr()) };
+        assert_eq!(rc, 1);
+
+        let got = maze_c_maze_get_cell_entity(maze_ptr, 0, 1);
+        assert!(!got.is_null());
+        let got_str = unsafe { CStr::from_ptr(got) }.to_str().unwrap().to_string();
+        assert!(got_str.contains(r#""type":"E""#), "got: {got_str}");
+        assert!(got_str.contains(r#""enemyType":"ghost""#), "got: {got_str}");
+        assert!(got_str.contains(r#""damage":2"#), "got: {got_str}");
+        unsafe { maze_c_free_string(got) };
+
+        // Type mismatch (cell is 'E', entity claims 'H') is rejected.
+        let mismatch = CString::new(r#"{"type":"H","healAmount":2}"#).unwrap();
+        let rc2 = unsafe { maze_c_maze_set_cell_entity(maze_ptr, 0, 1, mismatch.as_ptr()) };
+        assert_eq!(rc2, 0);
+
+        assert_eq!(maze_c_maze_clear_cell_entity(maze_ptr, 0, 1), 1);
+        assert!(maze_c_maze_get_cell_entity(maze_ptr, 0, 1).is_null());
         maze_c_free_maze(maze_ptr);
     }
 
