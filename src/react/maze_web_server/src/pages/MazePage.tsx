@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { useParams, useNavigate, useBlocker } from 'react-router-dom'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { MazeGrid } from '../components/MazeGrid'
+import { CellOverridePanel } from '../components/CellOverridePanel'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { PromptModal } from '../components/PromptModal'
 import { GenerateMazeModal } from '../components/GenerateMazeModal'
@@ -10,6 +11,7 @@ import { Play3dCustomLaunchModal } from '../components/Play3dCustomLaunchModal'
 import { AlertModal } from '../components/AlertModal'
 import { generateMaze, solveMaze, splitDefinition, buildDefinitionWithOverrides } from '../wasm/mazeWasm'
 import type { GenerateOptions } from '../types/api'
+import type { FeatureChar } from '../types/cellEntities'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { useToken } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -24,6 +26,11 @@ import { launchPlay3dWithSettings } from '../utils/play3dLaunch'
 import { countKeysAndDoors, exceedsKeyDoorCap, MAX_TOTAL_FEATURES } from '../utils/validation'
 
 const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
+
+// Narrows a grid cell char to a feature type that can carry a per-cell override.
+function isFeatureChar(ch: string | undefined): ch is FeatureChar {
+  return ch === 'E' || ch === 'H' || ch === 'K' || ch === 'D'
+}
 
 export function MazePage() {
   const { id } = useParams<{ id?: string }>()
@@ -54,7 +61,7 @@ export function MazePage() {
     insertRowsBefore, deleteRows, insertColsBefore, deleteCols,
     canInsertRows, canInsertColumns,
     applyGenerated, applySolution, clearSolution,
-    getOverridesList,
+    overrides, getOverride, setOverride, clearOverride, getOverridesList,
   } = useMazeEditor()
   const { max_maze_cells } = useAppFeatures()
 
@@ -103,6 +110,19 @@ export function MazePage() {
   const hasUnsavedWork = isDirty || (isNew && mazeId === null)
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
+
+  // Cells carrying a per-cell override, for the grid badge.
+  const overrideCells = useMemo(() => new Set(overrides.keys()), [overrides])
+
+  // The single feature cell (E/H/K/D) whose override panel is shown, or null. Gated to
+  // a single selected feature cell with no solution displayed and the editor idle.
+  const overridePanelCell = useMemo(() => {
+    if (!activeCell || anchorCell !== null) return null
+    if (selectionStatus.hasSolution || isBusy) return null
+    const ch = grid[activeCell.row]?.[activeCell.col]
+    if (!isFeatureChar(ch)) return null
+    return { row: activeCell.row, col: activeCell.col, cellType: ch }
+  }, [activeCell, anchorCell, selectionStatus.hasSolution, isBusy, grid])
 
   useEffect(() => {
     if (isBusy) document.body.classList.add('is-busy')
@@ -773,21 +793,35 @@ export function MazePage() {
         )}
 
         {!isLoading && !notFound && !error && grid.length > 0 && (
-          <MazeGrid
-            ref={gridRef}
-            grid={grid}
-            solution={solution}
-            walkState={walkState}
-            activeCell={activeCell}
-            anchorCell={anchorCell}
-            isRangeMode={isRangeMode}
-            onCellClick={isBusy ? undefined : (row, col, shift) => activateCell(row, col, shift || (isTouchOnly && anchorCell !== null))}
-            onCellDoubleClick={isBusy ? undefined : handleCellDoubleClick}
-            onRowHeaderClick={isBusy ? undefined : (row, shift) => activateRow(row, shift || (isTouchOnly && anchorCell !== null))}
-            onColHeaderClick={isBusy ? undefined : (col, shift) => activateCol(col, shift || (isTouchOnly && anchorCell !== null))}
-            onCornerClick={isBusy ? undefined : () => selectAll()}
-            onKeyDown={handleKeyDown}
-          />
+          <div className="maze-editor-body">
+            <MazeGrid
+              ref={gridRef}
+              grid={grid}
+              solution={solution}
+              walkState={walkState}
+              activeCell={activeCell}
+              anchorCell={anchorCell}
+              isRangeMode={isRangeMode}
+              overrideCells={overrideCells}
+              onCellClick={isBusy ? undefined : (row, col, shift) => activateCell(row, col, shift || (isTouchOnly && anchorCell !== null))}
+              onCellDoubleClick={isBusy ? undefined : handleCellDoubleClick}
+              onRowHeaderClick={isBusy ? undefined : (row, shift) => activateRow(row, shift || (isTouchOnly && anchorCell !== null))}
+              onColHeaderClick={isBusy ? undefined : (col, shift) => activateCol(col, shift || (isTouchOnly && anchorCell !== null))}
+              onCornerClick={isBusy ? undefined : () => selectAll()}
+              onKeyDown={handleKeyDown}
+            />
+            {overridePanelCell && (
+              <CellOverridePanel
+                key={`${overridePanelCell.row},${overridePanelCell.col}`}
+                cellType={overridePanelCell.cellType}
+                row={overridePanelCell.row}
+                col={overridePanelCell.col}
+                override={getOverride(overridePanelCell.row, overridePanelCell.col)}
+                onApply={entity => setOverride(overridePanelCell.row, overridePanelCell.col, entity)}
+                onClear={() => clearOverride(overridePanelCell.row, overridePanelCell.col)}
+              />
+            )}
+          </div>
         )}
 
         {activeCell !== null && (

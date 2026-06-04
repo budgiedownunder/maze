@@ -1210,6 +1210,80 @@
 }
 
 /* ──────────────────────────────────────────────────────────
+   Editor body: grid + per-cell override inspector panel
+────────────────────────────────────────────────────────── */
+
+.maze-editor-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.maze-editor-body .maze-grid-container {
+  flex: 1;
+  min-width: 0;
+}
+
+.cell-override-panel {
+  flex: 0 0 220px;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-input);
+  border-radius: 0.375rem;
+}
+
+.cell-override-title {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.cell-override-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.cell-override-input {
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0.35rem 0.5rem;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--border-input);
+  border-radius: 0.25rem;
+}
+
+.cell-override-reset {
+  align-self: flex-start;
+  margin-top: 0.1rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* On narrow screens there is no room for a side panel — reflow it below the grid. */
+@media (max-width: 700px) {
+  .maze-editor-body {
+    flex-direction: column;
+  }
+  .cell-override-panel {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────
    MazeGrid component
 ────────────────────────────────────────────────────────── */
 
@@ -1220,6 +1294,18 @@
   overflow: auto;
   border: 1px solid #d1d5db;
   border-radius: 0.375rem;
+}
+
+/* Corner marker on editor cells that carry a per-cell override. */
+.maze-cell-override-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
 }
 
 .maze-grid-container:focus {

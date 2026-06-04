@@ -25,6 +25,9 @@ export interface KeyCellEntity    { type: 'K'; keyHolder?: KeyHolderStyle }
 export interface DoorCellEntity   { type: 'D'; doorStyle?: DoorStyle }
 export type CellEntity = EnemyCellEntity | HealthCellEntity | KeyCellEntity | DoorCellEntity
 
+/** The grid chars that can carry an override — derived from the entity discriminators. */
+export type FeatureChar = CellEntity['type']
+
 /** A per-cell override located at a (row, col) in the grid. */
 export interface CellOverride { row: number; col: number; entity: CellEntity }
 

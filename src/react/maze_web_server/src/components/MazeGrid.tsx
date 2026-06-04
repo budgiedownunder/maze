@@ -23,6 +23,10 @@ interface MazeGridProps {
   game?: MazeGameWasm | null
   version?: number
   cellSize?: number
+  // Editor mode only: keys ("row,col") of cells carrying a per-cell override, marked
+  // with a small corner badge so authored overrides (incl. numeric-only ones with no
+  // distinct sprite) are visible at a glance. Omitted in game mode.
+  overrideCells?: Set<string>
 }
 
 function cellImage(cell: string): { src: string; alt: string } | null {
@@ -125,7 +129,7 @@ function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
 
 export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
   function MazeGrid(
-    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version, cellSize = CELL_SIZE },
+    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version, cellSize = CELL_SIZE, overrideCells },
     ref,
   ) {
     const rows = grid.length
@@ -553,6 +557,10 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                         >
                           {enemyCount}
                         </span>
+                      )}
+                      {/* Editor mode: mark cells that carry a per-cell override. */}
+                      {!game && overrideCells?.has(key) && (
+                        <span className="maze-cell-override-badge" aria-label="Has override" title="Has override" />
                       )}
                     </td>
                   )

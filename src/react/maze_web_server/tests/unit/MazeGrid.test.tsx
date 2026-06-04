@@ -590,3 +590,15 @@ describe('MazeGrid game mode — keys & doors', () => {
     expect(screen.queryByAltText('Door')).not.toBeInTheDocument()
   })
 })
+
+describe('MazeGrid override badge (editor mode)', () => {
+  it('marks only the cells listed in overrideCells', () => {
+    renderGrid({ overrideCells: new Set(['0,1']) })
+    expect(screen.getAllByLabelText('Has override')).toHaveLength(1)
+  })
+
+  it('renders no badges when overrideCells is omitted', () => {
+    renderGrid()
+    expect(screen.queryByLabelText('Has override')).not.toBeInTheDocument()
+  })
+})

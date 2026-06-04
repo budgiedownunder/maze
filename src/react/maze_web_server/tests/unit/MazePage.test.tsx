@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
-import { mockMazeAlpha, resetMockMazes } from '../../src/mocks/handlers'
+import { mockMazeAlpha, mockMazeEnemyGauntlet, resetMockMazes } from '../../src/mocks/handlers'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { MazePage } from '../../src/pages/MazePage'
 
@@ -1099,5 +1099,22 @@ describe('MazePage play', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Play in 3D' }))
     expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toBeInTheDocument()
     expect(screen.getByRole('dialog', { name: 'Unsaved Changes' })).toHaveTextContent('Save and play?')
+  })
+})
+
+describe('MazePage per-cell override panel', () => {
+  it('shows the override panel when a single feature cell is selected', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2') // grid ['S','E','E','E','F'] — (0,1) is 'E'
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    expect(screen.getByText('Enemy [1,2]')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Type' })).toBeInTheDocument()
+  })
+
+  it('hides the panel when a non-feature cell is selected', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,1') // (0,0) is 'S'
+    await userEvent.click(screen.getByLabelText('Cell 1,1'))
+    expect(screen.queryByRole('combobox', { name: 'Type' })).not.toBeInTheDocument()
   })
 })
