@@ -1127,3 +1127,61 @@ test('Clear Solution after Walk Solution resets to normal editing state', async 
   await expect(page.getByRole('button', { name: 'Generate' })).toBeEnabled()
   await expect(page.getByRole('button', { name: 'Solve' })).toBeEnabled()
 })
+
+// ──────────────────────────────────────────────────────────────
+// Per-cell override authoring
+// ──────────────────────────────────────────────────────────────
+
+test('authoring a ghost enemy override shows the ghost sprite plus a badge and saves', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Stamp an enemy on the empty cell (0,1), which opens the override panel.
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Enemy' }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).toBeVisible()
+
+  const typeSelect = page.getByRole('combobox', { name: 'Type' })
+  await expect(typeSelect).toBeVisible()
+  await typeSelect.selectOption('ghost')
+  await page.getByRole('spinbutton', { name: 'Damage' }).fill('2')
+
+  // The grid cell now shows the ghost variant sprite and an override badge.
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).toHaveAttribute('src', /ghost\.svg/)
+  await expect(page.getByLabel('Cell 1,2').getByLabel('Has override')).toBeVisible()
+
+  // Saving runs the real build-definition codec; the button disables on success and
+  // no save error appears.
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await expect(page.locator('.error-msg')).not.toBeVisible()
+})
+
+test('a maze saved with a per-cell override loads and renders it', async ({ page }) => {
+  await login(page)
+  // Deep-link to a maze whose stored definition already carries the ghost override.
+  await page.goto('/mazes/maze-override')
+  await expect(page.locator('.maze-grid-container')).toBeVisible()
+
+  // The persisted override round-trips through load -> split and renders.
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Enemy')).toHaveAttribute('src', /ghost\.svg/)
+  await expect(page.getByLabel('Cell 1,2').getByLabel('Has override')).toBeVisible()
+
+  // Selecting the cell re-seeds the panel from the loaded override.
+  await page.getByLabel('Cell 1,2').click()
+  await expect(page.getByRole('combobox', { name: 'Type' })).toHaveValue('ghost')
+  await expect(page.getByRole('spinbutton', { name: 'Damage' })).toHaveValue('2')
+})
+
+test('the override panel is hidden when a non-feature cell is selected', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Enemy' }).click()
+  await expect(page.getByRole('combobox', { name: 'Type' })).toBeVisible()
+
+  // Cell (1,1) is a wall — selecting it hides the override panel.
+  await page.getByLabel('Cell 2,2').click()
+  await expect(page.getByRole('combobox', { name: 'Type' })).not.toBeVisible()
+})

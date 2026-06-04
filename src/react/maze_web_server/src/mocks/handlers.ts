@@ -100,6 +100,18 @@ export const mockMazeEnemyHealth: Maze = {
   },
 }
 
+// A maze persisted WITH a per-cell override: the enemy cell at (0,1) carries the
+// canonical array form. Used to verify the editor loads + renders a saved override.
+// Kept out of `mockMazes`, served by id directly. The array-form cell isn't expressible
+// in the simplified `string[][]` client type, hence the cast.
+export const mockMazeOverride: Maze = {
+  id: 'maze-override',
+  name: 'Override',
+  definition: {
+    grid: [['S', [{ type: 'E', enemyType: 'ghost', damage: 2 }], 'F']],
+  } as unknown as Maze['definition'],
+}
+
 export let mockMazes: Maze[] = [mockMazeAlpha, mockMazeBeta]
 
 export function resetMockMazes(): void {
@@ -295,6 +307,7 @@ export const handlers = [
       ?? (params.id === mockMazeKeyDoor.id ? mockMazeKeyDoor : undefined)
       ?? (params.id === mockMazeEnemyGauntlet.id ? mockMazeEnemyGauntlet : undefined)
       ?? (params.id === mockMazeEnemyHealth.id ? mockMazeEnemyHealth : undefined)
+      ?? (params.id === mockMazeOverride.id ? mockMazeOverride : undefined)
     if (!maze) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json(maze)
   }),

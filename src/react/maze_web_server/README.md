@@ -8,8 +8,12 @@ Browser-based UI for the `maze_web_server` REST API. Features:
 
 - **User accounts** — sign up/in/out, edit profile, change password, manage email addresses, delete account, plus OAuth sign-in (Google, GitHub, Facebook) rendered when the [`maze_web_server`](../../rust/maze_web_server/README.md) has those providers configured
 - **Maze list** — create, open, rename, duplicate, delete, and play mazes
-- **Maze editor** — cell-by-cell editing (walls, start, finish), multi-cell range selection,
-  structural editing (insert/delete rows and columns), keyboard shortcuts
+- **Maze editor** — cell-by-cell editing (walls, start, finish, keys, doors, enemies, health
+  pickups), multi-cell range selection, structural editing (insert/delete rows and columns),
+  keyboard shortcuts, and a per-cell override panel for tuning an individual feature cell's
+  characteristics (an enemy's type/damage/move interval, a health pickup's style/heal amount,
+  a key holder or door style). Variant types such as ghost enemies and potion pickups show
+  their own sprite in the grid, and overridden cells are marked with a corner badge
 - **Maze game** — play a maze at `/play/:id` with keyboard (arrow keys / WASD) or
   on-screen D-pad; visited cells are marked; completion shows a result popup
 - **3D maze game** — a "Play 3D" button on the maze list and maze editor pages
