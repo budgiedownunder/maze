@@ -591,14 +591,30 @@ describe('MazeGrid game mode — keys & doors', () => {
   })
 })
 
-describe('MazeGrid override badge (editor mode)', () => {
-  it('marks only the cells listed in overrideCells', () => {
-    renderGrid({ overrideCells: new Set(['0,1']) })
+describe('MazeGrid override badge + variant sprite (editor mode)', () => {
+  it('marks only the cells present in cellOverrides', () => {
+    renderGrid({ cellOverrides: new Map([['0,1', { type: 'E' }]]) })
     expect(screen.getAllByLabelText('Has override')).toHaveLength(1)
   })
 
-  it('renders no badges when overrideCells is omitted', () => {
+  it('renders no badges when cellOverrides is omitted', () => {
     renderGrid()
     expect(screen.queryByLabelText('Has override')).not.toBeInTheDocument()
+  })
+
+  it('renders the variant sprite for an overridden enemy cell', () => {
+    renderGrid({
+      grid: [['E', ' ', 'F']],
+      cellOverrides: new Map([['0,0', { type: 'E', enemyType: 'ghost' }]]),
+    })
+    expect(screen.getByAltText('Enemy')).toHaveAttribute('src', '/images/maze/ghost.svg')
+  })
+
+  it('renders the generic sprite for a feature cell with no visual override', () => {
+    renderGrid({
+      grid: [['E', ' ', 'F']],
+      cellOverrides: new Map([['0,0', { type: 'E', damage: 3 }]]),
+    })
+    expect(screen.getByAltText('Enemy')).toHaveAttribute('src', '/images/maze/enemy.svg')
   })
 })

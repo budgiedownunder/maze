@@ -3,6 +3,8 @@ import type { CellPoint } from '../hooks/useMazeEditor'
 import type { WalkState } from '../hooks/useWalkAnimation'
 import type { MazeGameWasm } from 'maze_wasm'
 import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies, getHealthPickups } from '../wasm/mazeWasm'
+import { cellSprite } from '../utils/cellSprite'
+import type { CellEntity } from '../types/cellEntities'
 
 export const CELL_SIZE = 32
 export const HEADER_SIZE = 24
@@ -23,21 +25,11 @@ interface MazeGridProps {
   game?: MazeGameWasm | null
   version?: number
   cellSize?: number
-  // Editor mode only: keys ("row,col") of cells carrying a per-cell override, marked
-  // with a small corner badge so authored overrides (incl. numeric-only ones with no
-  // distinct sprite) are visible at a glance. Omitted in game mode.
-  overrideCells?: Set<string>
-}
-
-function cellImage(cell: string): { src: string; alt: string } | null {
-  if (cell === 'W') return { src: '/images/maze/wall.png', alt: 'Wall' }
-  if (cell === 'S') return { src: '/images/maze/start_flag.png', alt: 'Start' }
-  if (cell === 'F') return { src: '/images/maze/finish_flag.png', alt: 'Finish' }
-  if (cell === 'K') return { src: '/images/maze/key.svg', alt: 'Key' }
-  if (cell === 'D') return { src: '/images/maze/door.svg', alt: 'Door' }
-  if (cell === 'E') return { src: '/images/maze/enemy.svg', alt: 'Enemy' }
-  if (cell === 'H') return { src: '/images/maze/health.svg', alt: 'Health' }
-  return null
+  // Editor mode only: per-cell overrides keyed by "row,col". Drives the variant sprite
+  // (e.g. ghost/potion) and a small corner badge so authored overrides — including
+  // numeric-only ones with no distinct sprite — are visible at a glance. Omitted in
+  // game mode (the game resolves its own live variants).
+  cellOverrides?: Map<string, CellEntity>
 }
 
 const FOOTSTEP_IMAGES: Record<string, string> = {
@@ -129,7 +121,7 @@ function buildSolutionMap(solution: Array<CellPoint>): Map<string, string> {
 
 export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
   function MazeGrid(
-    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version, cellSize = CELL_SIZE, overrideCells },
+    { grid, solution, walkState, activeCell, anchorCell, isRangeMode = false, onCellClick, onCellDoubleClick, onRowHeaderClick, onColHeaderClick, onCornerClick, onKeyDown, game, version, cellSize = CELL_SIZE, cellOverrides },
     ref,
   ) {
     const rows = grid.length
@@ -466,7 +458,11 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const solutionImgSrc = solutionMap.get(key)
                   const suppressFootstep = cell === 'S' || cell === 'F' || cell === 'K' || cell === 'D' || cell === 'E' || cell === 'H'
                   const isGamePlayer = game !== null && game !== undefined && playerRow === r && playerCol === c
-                  let img = (isWalker || isGamePlayer) ? null : cellImage(cell)
+                  // Editor mode resolves the per-cell variant sprite (ghost/potion);
+                  // game mode uses the generic sprite (its live variants are Step 9).
+                  let img = (isWalker || isGamePlayer)
+                    ? null
+                    : cellSprite(cell, game ? undefined : cellOverrides?.get(key))
                   let imgStyle: React.CSSProperties | undefined
                   // Game mode: a collected key disappears, an open door disappears, and
                   // a door that is opening is dimmed. A consumed health pickup
@@ -559,7 +555,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                         </span>
                       )}
                       {/* Editor mode: mark cells that carry a per-cell override. */}
-                      {!game && overrideCells?.has(key) && (
+                      {!game && cellOverrides?.has(key) && (
                         <span className="maze-cell-override-badge" aria-label="Has override" title="Has override" />
                       )}
                     </td>

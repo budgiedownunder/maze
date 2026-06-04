@@ -111,9 +111,6 @@ export function MazePage() {
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
 
-  // Cells carrying a per-cell override, for the grid badge.
-  const overrideCells = useMemo(() => new Set(overrides.keys()), [overrides])
-
   // The single feature cell (E/H/K/D) whose override panel is shown, or null. Gated to
   // a single selected feature cell with no solution displayed and the editor idle.
   const overridePanelCell = useMemo(() => {
@@ -802,7 +799,7 @@ export function MazePage() {
               activeCell={activeCell}
               anchorCell={anchorCell}
               isRangeMode={isRangeMode}
-              overrideCells={overrideCells}
+              cellOverrides={overrides}
               onCellClick={isBusy ? undefined : (row, col, shift) => activateCell(row, col, shift || (isTouchOnly && anchorCell !== null))}
               onCellDoubleClick={isBusy ? undefined : handleCellDoubleClick}
               onRowHeaderClick={isBusy ? undefined : (row, shift) => activateRow(row, shift || (isTouchOnly && anchorCell !== null))}

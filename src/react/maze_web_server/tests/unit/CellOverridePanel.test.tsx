@@ -82,6 +82,41 @@ describe('CellOverridePanel', () => {
     expect(onClear).toHaveBeenCalled()
   })
 
+  it('shows a sprite preview reflecting the selected enemy variant', () => {
+    const { container } = render(
+      <CellOverridePanel
+        cellType="E" row={0} col={0}
+        override={{ type: 'E', enemyType: 'ghost' }}
+        onApply={vi.fn()} onClear={vi.fn()}
+      />,
+    )
+    expect(container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/ghost.svg')
+  })
+
+  it('updates the enemy preview live when the type changes', async () => {
+    const { container } = render(
+      <CellOverridePanel
+        cellType="E" row={0} col={0} override={undefined}
+        onApply={vi.fn()} onClear={vi.fn()}
+      />,
+    )
+    // Default selection previews the generic (goblin) sprite.
+    expect(container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/enemy.svg')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'ghost')
+    expect(container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/ghost.svg')
+  })
+
+  it('shows a sprite preview reflecting the selected health variant', () => {
+    const { container } = render(
+      <CellOverridePanel
+        cellType="H" row={0} col={0}
+        override={{ type: 'H', healthStyle: 'potion' }}
+        onApply={vi.fn()} onClear={vi.fn()}
+      />,
+    )
+    expect(container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/potion.svg')
+  })
+
   it('re-seeds the fields to defaults when the override is cleared externally', () => {
     // Mirrors the toolbar re-stamping the same cell type: the override is dropped
     // while the cell stays selected, so the panel is not remounted.

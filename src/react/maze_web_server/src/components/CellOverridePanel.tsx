@@ -6,6 +6,7 @@ import {
   KEY_HOLDER_STYLES,
   titleCaseWire,
 } from '../utils/cellEntityStyles'
+import { cellSprite } from '../utils/cellSprite'
 import type {
   CellEntity,
   DoorStyle,
@@ -152,14 +153,21 @@ export function CellOverridePanel({ cellType, row, col, override, onApply, onCle
         <>
           <label className="cell-override-field">
             <span>Type</span>
-            <select
-              className="cell-override-input"
-              value={enemyType}
-              onChange={e => { setEnemyType(e.target.value); applyEnemy(e.target.value, damage, movePeriodMs) }}
-            >
-              <option value="">Default</option>
-              {ENEMY_TYPES.map(t => <option key={t} value={t}>{titleCaseWire(t)}</option>)}
-            </select>
+            <div className="cell-override-select-row">
+              <img
+                className="cell-override-preview"
+                src={cellSprite('E', { type: 'E', enemyType: enemyType ? (enemyType as EnemyType) : undefined })?.src}
+                alt="" aria-hidden="true"
+              />
+              <select
+                className="cell-override-input"
+                value={enemyType}
+                onChange={e => { setEnemyType(e.target.value); applyEnemy(e.target.value, damage, movePeriodMs) }}
+              >
+                <option value="">Default</option>
+                {ENEMY_TYPES.map(t => <option key={t} value={t}>{titleCaseWire(t)}</option>)}
+              </select>
+            </div>
           </label>
           <label className="cell-override-field">
             <span>Damage</span>
@@ -184,14 +192,21 @@ export function CellOverridePanel({ cellType, row, col, override, onApply, onCle
         <>
           <label className="cell-override-field">
             <span>Style</span>
-            <select
-              className="cell-override-input"
-              value={healthStyle}
-              onChange={e => { setHealthStyle(e.target.value); applyHealth(e.target.value, healAmount) }}
-            >
-              <option value="">Default</option>
-              {HEALTH_STYLES.map(s => <option key={s} value={s}>{titleCaseWire(s)}</option>)}
-            </select>
+            <div className="cell-override-select-row">
+              <img
+                className="cell-override-preview"
+                src={cellSprite('H', { type: 'H', healthStyle: healthStyle ? (healthStyle as HealthStyle) : undefined })?.src}
+                alt="" aria-hidden="true"
+              />
+              <select
+                className="cell-override-input"
+                value={healthStyle}
+                onChange={e => { setHealthStyle(e.target.value); applyHealth(e.target.value, healAmount) }}
+              >
+                <option value="">Default</option>
+                {HEALTH_STYLES.map(s => <option key={s} value={s}>{titleCaseWire(s)}</option>)}
+              </select>
+            </div>
           </label>
           <label className="cell-override-field">
             <span>Heal Amount</span>
