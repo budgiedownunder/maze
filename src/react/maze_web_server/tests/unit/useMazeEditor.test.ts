@@ -4,9 +4,19 @@ import { useMazeEditor } from '../../src/hooks/useMazeEditor'
 import { createElement, type ReactNode } from 'react'
 import { AppFeaturesContext, APP_FEATURES_DEFAULTS } from '../../src/context/AppFeaturesContext'
 import type { MazeDefinition } from '../../src/types/api'
+import type { CellOverride } from '../../src/types/cellEntities'
 
 function makeGrid(rows: number, cols: number, fill = ' '): string[][] {
   return Array.from({ length: rows }, () => Array<string>(cols).fill(fill))
+}
+
+// Initialise the hook with a grid and a list of per-cell overrides.
+function setupHookWithOverrides(grid: string[][], overrides: CellOverride[]) {
+  const { result } = renderHook(() => useMazeEditor())
+  act(() => {
+    result.current.initFromDefinition('maze-1', 'Test', makeDefinition(grid), overrides)
+  })
+  return result
 }
 
 function makeDefinition(grid: string[][]): MazeDefinition {
@@ -934,6 +944,177 @@ describe('deleteRows', () => {
     act(() => result.current.activateRow(0, false))
     act(() => result.current.deleteRows())
     expect(result.current.selectionStatus.hasSolution).toBe(false)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// Per-cell overrides — set / get / clear
+// ──────────────────────────────────────────────────────────────
+
+describe('per-cell overrides: set/get/clear', () => {
+  it('setOverride stores the entity and getOverride returns it', () => {
+    const result = setupHook([['S', 'E', 'F']])
+    act(() => result.current.setOverride(0, 1, { type: 'E', enemyType: 'ghost', damage: 2 }))
+    expect(result.current.getOverride(0, 1)).toEqual({ type: 'E', enemyType: 'ghost', damage: 2 })
+    expect(result.current.overrides.get('0,1')).toEqual({ type: 'E', enemyType: 'ghost', damage: 2 })
+    expect(result.current.isDirty).toBe(true)
+  })
+
+  it('setOverride replaces an existing override on the same cell', () => {
+    const result = setupHook([['S', 'E', 'F']])
+    act(() => result.current.setOverride(0, 1, { type: 'E', enemyType: 'ghost' }))
+    act(() => result.current.setOverride(0, 1, { type: 'E', damage: 5 }))
+    expect(result.current.getOverride(0, 1)).toEqual({ type: 'E', damage: 5 })
+  })
+
+  it('clearOverride removes the override', () => {
+    const result = setupHook([['S', 'E', 'F']])
+    act(() => result.current.setOverride(0, 1, { type: 'E', damage: 2 }))
+    act(() => result.current.clearOverride(0, 1))
+    expect(result.current.getOverride(0, 1)).toBeUndefined()
+    expect(result.current.overrides.size).toBe(0)
+  })
+
+  it('clearOverride on a cell with no override does not mark the maze dirty', () => {
+    const result = setupHook([['S', 'E', 'F']])
+    act(() => result.current.clearOverride(0, 1))
+    expect(result.current.isDirty).toBe(false)
+  })
+
+  it('getOverridesList returns every override as a {row, col, entity} list', () => {
+    const result = setupHook([['S', 'E', 'H']])
+    act(() => result.current.setOverride(0, 1, { type: 'E', enemyType: 'ghost' }))
+    act(() => result.current.setOverride(0, 2, { type: 'H', healAmount: 3 }))
+    expect(result.current.getOverridesList()).toEqual(
+      expect.arrayContaining([
+        { row: 0, col: 1, entity: { type: 'E', enemyType: 'ghost' } },
+        { row: 0, col: 2, entity: { type: 'H', healAmount: 3 } },
+      ]),
+    )
+    expect(result.current.getOverridesList()).toHaveLength(2)
+  })
+
+  it('initFromDefinition populates overrides from the supplied list', () => {
+    const result = setupHookWithOverrides(
+      [['S', 'E', 'F']],
+      [{ row: 0, col: 1, entity: { type: 'E', enemyType: 'ghost', damage: 4 } }],
+    )
+    expect(result.current.getOverride(0, 1)).toEqual({ type: 'E', enemyType: 'ghost', damage: 4 })
+    expect(result.current.isDirty).toBe(false)
+  })
+
+  it('initFromDefinition with no overrides arg starts override-free', () => {
+    const result = setupHook([['S', 'E', 'F']])
+    expect(result.current.overrides.size).toBe(0)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// Per-cell overrides — drop on rewrite
+// ──────────────────────────────────────────────────────────────
+
+describe('per-cell overrides: drop on rewrite', () => {
+  it('re-stamping the same feature char over an overridden cell drops the override', () => {
+    const result = setupHook([['S', 'E', 'F']])
+    act(() => result.current.setOverride(0, 1, { type: 'E', enemyType: 'ghost' }))
+    act(() => result.current.activateCell(0, 1, false))
+    act(() => result.current.setEnemy())
+    expect(result.current.getOverride(0, 1)).toBeUndefined()
+  })
+
+  it('clearing an overridden cell drops the override', () => {
+    const result = setupHook([['S', 'E', 'F']])
+    act(() => result.current.setOverride(0, 1, { type: 'E', damage: 2 }))
+    act(() => result.current.activateCell(0, 1, false))
+    act(() => result.current.clearCell())
+    expect(result.current.getOverride(0, 1)).toBeUndefined()
+  })
+
+  it('setting Start over an overridden cell drops the override', () => {
+    const result = setupHook([[' ', 'E', 'F']])
+    act(() => result.current.setOverride(0, 1, { type: 'E', damage: 2 }))
+    act(() => result.current.activateCell(0, 1, false))
+    act(() => result.current.setStart())
+    expect(result.current.getOverride(0, 1)).toBeUndefined()
+  })
+
+  it('a fill leaves overrides on cells outside the selection untouched', () => {
+    const result = setupHook([['E', 'E', 'E']])
+    act(() => result.current.setOverride(0, 0, { type: 'E', damage: 1 }))
+    act(() => result.current.setOverride(0, 2, { type: 'E', damage: 3 }))
+    act(() => result.current.activateCell(0, 1, false))
+    act(() => result.current.setWall())
+    expect(result.current.getOverride(0, 0)).toEqual({ type: 'E', damage: 1 })
+    expect(result.current.getOverride(0, 2)).toEqual({ type: 'E', damage: 3 })
+  })
+})
+
+// ──────────────────────────────────────────────────────────────
+// Per-cell overrides — remap on structural edits
+// ──────────────────────────────────────────────────────────────
+
+describe('per-cell overrides: remap on structural edits', () => {
+  it('insertRowsBefore shifts overrides at or after the insert point', () => {
+    const result = setupHookWithOverrides(
+      makeGrid(4, 3),
+      [
+        { row: 0, col: 1, entity: { type: 'E', damage: 1 } },
+        { row: 2, col: 1, entity: { type: 'E', damage: 2 } },
+      ],
+    )
+    act(() => result.current.activateRow(1, false))   // insert before row 1
+    act(() => result.current.insertRowsBefore())
+    expect(result.current.getOverride(0, 1)).toEqual({ type: 'E', damage: 1 }) // unchanged
+    expect(result.current.getOverride(3, 1)).toEqual({ type: 'E', damage: 2 }) // 2 → 3
+  })
+
+  it('deleteRows drops overrides in the deleted band and shifts those after it', () => {
+    const result = setupHookWithOverrides(
+      makeGrid(4, 3),
+      [
+        { row: 1, col: 1, entity: { type: 'E', damage: 1 } }, // in deleted band
+        { row: 3, col: 1, entity: { type: 'E', damage: 2 } }, // after band
+      ],
+    )
+    act(() => result.current.activateRow(1, false))   // delete row 1
+    act(() => result.current.deleteRows())
+    expect(result.current.getOverride(1, 1)).toBeUndefined()                  // dropped...
+    expect(result.current.getOverride(2, 1)).toEqual({ type: 'E', damage: 2 }) // 3 → 2
+    expect(result.current.overrides.size).toBe(1)
+  })
+
+  it('insertColsBefore shifts overrides at or after the insert point', () => {
+    const result = setupHookWithOverrides(
+      makeGrid(3, 4),
+      [{ row: 1, col: 2, entity: { type: 'E', damage: 1 } }],
+    )
+    act(() => result.current.activateCol(1, false))   // insert before col 1
+    act(() => result.current.insertColsBefore())
+    expect(result.current.getOverride(1, 3)).toEqual({ type: 'E', damage: 1 }) // 2 → 3
+  })
+
+  it('deleteCols drops overrides in the deleted band and shifts those after it', () => {
+    const result = setupHookWithOverrides(
+      makeGrid(3, 4),
+      [
+        { row: 1, col: 1, entity: { type: 'E', damage: 1 } }, // in deleted band
+        { row: 1, col: 3, entity: { type: 'E', damage: 2 } }, // after band
+      ],
+    )
+    act(() => result.current.activateCol(1, false))   // delete col 1
+    act(() => result.current.deleteCols())
+    expect(result.current.getOverride(1, 1)).toBeUndefined()                  // dropped...
+    expect(result.current.getOverride(1, 2)).toEqual({ type: 'E', damage: 2 }) // 3 → 2
+    expect(result.current.overrides.size).toBe(1)
+  })
+
+  it('applyGenerated clears all overrides', () => {
+    const result = setupHookWithOverrides(
+      makeGrid(3, 3),
+      [{ row: 1, col: 1, entity: { type: 'E', damage: 1 } }],
+    )
+    act(() => result.current.applyGenerated(makeDefinition(makeGrid(3, 3))))
+    expect(result.current.overrides.size).toBe(0)
   })
 })
 
