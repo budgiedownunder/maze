@@ -4,14 +4,18 @@ import {
   ENEMY_TYPES,
   HEALTH_STYLES,
   KEY_HOLDER_STYLES,
+  titleCaseWire,
+} from '../utils/cellEntityStyles'
+import type {
+  DoorStyle,
+  EnemyType,
+  HealthStyle,
+  KeyHolderStyle,
+} from '../types/cellEntities'
+import {
   SKY_TYPES,
   WALL_TYPES,
   loadPlay3dCustomLaunchSettings,
-  titleCaseWire,
-  type DoorStyle,
-  type EnemyType,
-  type HealthStyle,
-  type KeyHolderStyle,
   type Play3dCustomLaunchSettings,
   type SkyType,
   type WallType,

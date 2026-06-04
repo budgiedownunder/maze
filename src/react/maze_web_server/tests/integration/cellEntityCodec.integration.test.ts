@@ -15,11 +15,8 @@ import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { resolve, dirname } from 'path'
 import init from 'maze_wasm'
-import {
-  splitDefinition,
-  buildDefinitionWithOverrides,
-  type CellOverride,
-} from '../../src/wasm/mazeWasm'
+import { splitDefinition, buildDefinitionWithOverrides } from '../../src/wasm/mazeWasm'
+import type { CellOverride } from '../../src/types/cellEntities'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const wasmPath = resolve(__dirname, '../../../../rust/maze_wasm/pkg/maze_wasm_bg.wasm')

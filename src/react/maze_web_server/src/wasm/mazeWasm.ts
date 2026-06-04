@@ -1,10 +1,5 @@
 import init, { MazeWasm, GenerationAlgorithmWasm, MazeGameWasm, DirectionWasm } from 'maze_wasm'
-import type {
-  DoorStyle,
-  EnemyType,
-  HealthStyle,
-  KeyHolderStyle,
-} from '../utils/play3dCustomLaunchSettings'
+import type { CellEntity, CellOverride } from '../types/cellEntities'
 
 export interface MazeDefinition {
   grid: string[][]
@@ -104,21 +99,8 @@ export async function solveMaze(definition: MazeDefinition): Promise<Array<{ row
 // bare char (default characteristics) or an array-of-one entity object; that
 // char-or-array form is known only to the Rust serializer. JavaScript never parses
 // or builds it — it works with a pure-char grid plus a sparse list of single-entity
-// override objects, translating between the two through the MazeWasm methods below.
-
-// Wire-shape single-entity override objects, mirroring the Rust `#[serde(tag="type")]`
-// `CellEntity` enum and the C# polymorphic `CellEntityInfo` hierarchy. Each variant
-// carries only the fields meaningful to its type, so an invalid field/type
-// combination is unrepresentable. Every field is optional — the canonical form omits
-// any field left at its default.
-export interface EnemyCellEntity  { type: 'E'; enemyType?: EnemyType;     damage?: number; movePeriodMs?: number }
-export interface HealthCellEntity { type: 'H'; healthStyle?: HealthStyle; healAmount?: number }
-export interface KeyCellEntity    { type: 'K'; keyHolder?: KeyHolderStyle }
-export interface DoorCellEntity   { type: 'D'; doorStyle?: DoorStyle }
-export type CellEntity = EnemyCellEntity | HealthCellEntity | KeyCellEntity | DoorCellEntity
-
-/** A per-cell override located at a (row, col) in the grid. */
-export interface CellOverride { row: number; col: number; entity: CellEntity }
+// override objects (the `CellEntity` / `CellOverride` types in `utils/cellEntities`),
+// translating between the two through the MazeWasm methods below.
 
 // A grid cell on the wire: a bare char, or an array-of-one entity object when
 // overridden (decision: char unless overridden). Produced only by Rust's serializer.

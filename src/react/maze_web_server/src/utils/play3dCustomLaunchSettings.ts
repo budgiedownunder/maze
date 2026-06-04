@@ -4,23 +4,27 @@
 // `public/game/index.html` reads the same key to build the StartConfig
 // it sends to the wasm boundary.
 
+import {
+  DOOR_STYLES,
+  ENEMY_TYPES,
+  HEALTH_STYLES,
+  KEY_HOLDER_STYLES,
+} from './cellEntityStyles'
+import type {
+  DoorStyle,
+  EnemyType,
+  HealthStyle,
+  KeyHolderStyle,
+} from '../types/cellEntities'
+
+// Sky and wall textures are 3D-scene decor specific to the Play 3D launch; the
+// entity rig styles (door / key-holder / enemy / health) are the shared cell-entity
+// vocabulary and live in `cellEntities.ts`.
 export const SKY_TYPES = ['night', 'sunrise', 'day', 'sunset', 'dungeon', 'chamber'] as const
 export type SkyType = (typeof SKY_TYPES)[number]
 
 export const WALL_TYPES = ['brick', 'dressed_stone', 'wood', 'cobblestone'] as const
 export type WallType = (typeof WALL_TYPES)[number]
-
-export const DOOR_STYLES = ['swing', 'slide', 'portcullis', 'dissolve'] as const
-export type DoorStyle = (typeof DOOR_STYLES)[number]
-
-export const KEY_HOLDER_STYLES = ['pedestal', 'chest', 'floating_key'] as const
-export type KeyHolderStyle = (typeof KEY_HOLDER_STYLES)[number]
-
-export const ENEMY_TYPES = ['goblin', 'ghost'] as const
-export type EnemyType = (typeof ENEMY_TYPES)[number]
-
-export const HEALTH_STYLES = ['heart', 'potion'] as const
-export type HealthStyle = (typeof HEALTH_STYLES)[number]
 
 export interface Play3dCustomLaunchSettings {
   skyType: SkyType
@@ -126,15 +130,4 @@ export function savePlay3dCustomLaunchSettings(settings: Play3dCustomLaunchSetti
     /* localStorage unavailable / quota — ignore; the launch still works
        via the in-memory settings the user just submitted. */
   }
-}
-
-/// Title-cases a wire string for display, replacing underscores with
-/// spaces (so e.g. `dressed_stone` reads as "Dressed Stone" in the
-/// modal's dropdowns).
-export function titleCaseWire(s: string): string {
-  return s
-    .replace(/_/g, ' ')
-    .split(' ')
-    .map(w => (w.length === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)))
-    .join(' ')
 }
