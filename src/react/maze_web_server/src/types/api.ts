@@ -1,3 +1,5 @@
+import type { CanonicalMazeDefinition } from './cellEntities'
+
 export interface UserEmail {
   email: string
   is_primary: boolean
@@ -56,7 +58,9 @@ export interface Maze {
 
 export interface SaveMazeRequest {
   name: string
-  definition: MazeDefinition
+  // The saved definition is the canonical char-or-array form (overridden cells carry
+  // an entity array), so it accepts overrides as well as a plain-char grid.
+  definition: CanonicalMazeDefinition
 }
 
 export interface OAuthProviderPublic {

@@ -27,3 +27,11 @@ export type CellEntity = EnemyCellEntity | HealthCellEntity | KeyCellEntity | Do
 
 /** A per-cell override located at a (row, col) in the grid. */
 export interface CellOverride { row: number; col: number; entity: CellEntity }
+
+// A grid cell on the wire: a bare char, or an array-of-one entity object when the cell
+// is overridden (decision: char unless overridden). This char-or-array form is
+// produced and parsed only by the Rust serializer — JS never constructs it by hand.
+export type WireCell = string | CellEntity[]
+
+/** The canonical maze definition as (de)serialized by the WASM layer (char-or-array cells). */
+export interface CanonicalMazeDefinition { grid: WireCell[][] }

@@ -16,6 +16,13 @@ const { mockGenerateMaze, mockSolveMaze } = vi.hoisted(() => ({
 vi.mock('../../src/wasm/mazeWasm', () => ({
   generateMaze: mockGenerateMaze,
   solveMaze: mockSolveMaze,
+  // Lightweight JS stand-ins for the WASM codec: split parses the full maze JSON and
+  // reports no overrides (mock mazes are pure-char); build echoes back the grid.
+  splitDefinition: vi.fn(async (json: string) => {
+    const parsed = JSON.parse(json) as { definition: { grid: string[][] } }
+    return { grid: parsed.definition.grid, overrides: [] }
+  }),
+  buildDefinitionWithOverrides: vi.fn(async (grid: string[][]) => ({ grid })),
   MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
   MazeGamePlayerMoveResult: { None: 0, Moved: 1, Blocked: 2, Complete: 3 },
 }))

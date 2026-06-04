@@ -1,5 +1,5 @@
 import init, { MazeWasm, GenerationAlgorithmWasm, MazeGameWasm, DirectionWasm } from 'maze_wasm'
-import type { CellEntity, CellOverride } from '../types/cellEntities'
+import type { CellEntity, CellOverride, CanonicalMazeDefinition } from '../types/cellEntities'
 
 export interface MazeDefinition {
   grid: string[][]
@@ -101,13 +101,6 @@ export async function solveMaze(definition: MazeDefinition): Promise<Array<{ row
 // or builds it — it works with a pure-char grid plus a sparse list of single-entity
 // override objects (the `CellEntity` / `CellOverride` types in `utils/cellEntities`),
 // translating between the two through the MazeWasm methods below.
-
-// A grid cell on the wire: a bare char, or an array-of-one entity object when
-// overridden (decision: char unless overridden). Produced only by Rust's serializer.
-export type WireCell = string | CellEntity[]
-
-/** The canonical maze definition as serialized by the WASM layer (char-or-array cells). */
-export interface CanonicalMazeDefinition { grid: WireCell[][] }
 
 // MazeCellTypeWasm ordinal → char. Order matches the enum in wasm_common.rs
 // (Empty, Start, Finish, Wall, Key, Door, Enemy, Health).

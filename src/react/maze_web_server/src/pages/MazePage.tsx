@@ -8,7 +8,7 @@ import { PromptModal } from '../components/PromptModal'
 import { GenerateMazeModal } from '../components/GenerateMazeModal'
 import { Play3dCustomLaunchModal } from '../components/Play3dCustomLaunchModal'
 import { AlertModal } from '../components/AlertModal'
-import { generateMaze, solveMaze } from '../wasm/mazeWasm'
+import { generateMaze, solveMaze, splitDefinition, buildDefinitionWithOverrides } from '../wasm/mazeWasm'
 import type { GenerateOptions } from '../types/api'
 import { useAppFeatures } from '../context/AppFeaturesContext'
 import { useToken } from '../context/AuthContext'
@@ -54,6 +54,7 @@ export function MazePage() {
     insertRowsBefore, deleteRows, insertColsBefore, deleteCols,
     canInsertRows, canInsertColumns,
     applyGenerated, applySolution, clearSolution,
+    getOverridesList,
   } = useMazeEditor()
   const { max_maze_cells } = useAppFeatures()
 
@@ -122,8 +123,11 @@ export function MazePage() {
     setError(null)
     setNotFound(false)
     getMaze(token, id!)
-      .then(maze => {
-        initFromDefinition(maze.id, maze.name, maze.definition)
+      .then(async maze => {
+        // Split the canonical definition (char-or-array grid) into a pure-char grid
+        // plus per-cell overrides via the WASM codec — JS never parses the wire form.
+        const { grid, overrides } = await splitDefinition(JSON.stringify(maze))
+        initFromDefinition(maze.id, maze.name, { grid }, overrides)
       })
       .catch(err => {
         const status = (err as { status?: number }).status
@@ -145,6 +149,13 @@ export function MazePage() {
     )
   }
 
+  // Builds the canonical definition (pure-char grid merged with per-cell overrides)
+  // for persistence. The char-or-array wire form is produced by the WASM codec, not
+  // assembled in JS. Used by every save path so overrides always round-trip.
+  function buildDefinition() {
+    return buildDefinitionWithOverrides(grid, getOverridesList())
+  }
+
   async function handleSaveNew(name: string) {
     if (!token) return
     if (exceedsKeyDoorCap(grid)) {
@@ -154,7 +165,7 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      const saved = await createMaze(token, { name, definition: { grid } })
+      const saved = await createMaze(token, { name, definition: await buildDefinition() })
       flushSync(() => {
         setShowSaveNameModal(false)
         markSaved(saved.id, saved.name)
@@ -176,7 +187,7 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      await updateMaze(token, mazeId, { name: mazeName, definition: { grid } })
+      await updateMaze(token, mazeId, { name: mazeName, definition: await buildDefinition() })
       markSaved(mazeId, mazeName)
     } catch (ex: unknown) {
       setSaveError((ex as { message?: string }).message ?? 'Failed to save.')
@@ -208,7 +219,7 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      await updateMaze(token, mazeId, { name: mazeName, definition: { grid } })
+      await updateMaze(token, mazeId, { name: mazeName, definition: await buildDefinition() })
       markSaved(mazeId, mazeName)
       blocker.proceed?.()
     } catch (ex: unknown) {
@@ -223,7 +234,7 @@ export function MazePage() {
     setIsSaving(true)
     setSaveError(null)
     try {
-      const saved = await createMaze(token, { name, definition: { grid } })
+      const saved = await createMaze(token, { name, definition: await buildDefinition() })
       flushSync(() => {
         setShowBlockerSaveModal(false)
         markSaved(saved.id, saved.name)
@@ -306,7 +317,7 @@ export function MazePage() {
     setSaveError(null)
     let savedId: string | null = null
     try {
-      await updateMaze(token, mazeId, { name: mazeName, definition: { grid } })
+      await updateMaze(token, mazeId, { name: mazeName, definition: await buildDefinition() })
       const id = mazeId
       flushSync(() => { markSaved(id, mazeName) })
       savedId = id
@@ -326,7 +337,8 @@ export function MazePage() {
     setRefreshError(null)
     try {
       const maze = await getMaze(token, mazeId)
-      initFromDefinition(maze.id, maze.name, maze.definition)
+      const { grid: refreshedGrid, overrides } = await splitDefinition(JSON.stringify(maze))
+      initFromDefinition(maze.id, maze.name, { grid: refreshedGrid }, overrides)
     } catch (ex: unknown) {
       setRefreshError((ex as { message?: string }).message ?? 'Failed to refresh.')
     } finally {
