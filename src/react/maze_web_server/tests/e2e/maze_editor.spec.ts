@@ -1078,8 +1078,7 @@ test('after Walk Solution completes the full solution is displayed', async ({ pa
   await login(page)
   await openFirstMaze(page)
   await page.getByRole('button', { name: 'Walk Solution' }).click()
-  // Wait for walk to finish: walker disappears and solution footsteps appear
-  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible({ timeout: 10000 })
+  await expect(page.locator('img[alt="Walker"]')).toHaveAttribute('src', /walker_celebrate/, { timeout: 10000 })
   await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
   await expect(page.getByRole('button', { name: 'Clear Solution' })).toBeEnabled()
   await expect(page.getByRole('button', { name: 'Walk Solution' })).toBeDisabled()
