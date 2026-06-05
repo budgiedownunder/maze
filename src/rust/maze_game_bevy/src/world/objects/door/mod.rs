@@ -110,16 +110,37 @@ pub(crate) fn build_door_assets(
     }
 }
 
-/// `true` when the door cell is a straight corridor — exactly two open edges on
-/// OPPOSING sides (N+S or E+W). Out-of-bounds counts as a wall.
-fn is_straight_corridor(grid: &[Vec<char>], r: usize, c: usize) -> bool {
+/// Which axis a door cell's straight corridor runs along.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum CorridorAxis {
+    /// Passage runs north–south (walls east & west).
+    NorthSouth,
+    /// Passage runs east–west (walls north & south).
+    EastWest,
+}
+
+/// The axis of the door cell's straight corridor, or `None` if it isn't one.
+///
+/// A straight corridor has walls on both sides of one axis and at least one open
+/// passage on the perpendicular axis. Out-of-bounds counts as a wall, so a
+/// corridor capped by the grid edge at one end still qualifies — the swing rig
+/// only needs the two facing walls to anchor its hinge, so whether the far end
+/// is closed by a wall or by the maze boundary is immaterial. Corners, T-/cross-
+/// junctions, and open areas return `None` (any third open side disqualifies it).
+fn corridor_axis(grid: &[Vec<char>], r: usize, c: usize) -> Option<CorridorAxis> {
     let rows = grid.len();
     let cols = grid[r].len();
     let n = r > 0 && grid[r - 1][c] != 'W';
     let s = r + 1 < rows && grid[r + 1][c] != 'W';
     let e = c + 1 < cols && grid[r][c + 1] != 'W';
     let w = c > 0 && grid[r][c - 1] != 'W';
-    (n && s && !e && !w) || (e && w && !n && !s)
+    if !e && !w && (n || s) {
+        Some(CorridorAxis::NorthSouth)
+    } else if !n && !s && (e || w) {
+        Some(CorridorAxis::EastWest)
+    } else {
+        None
+    }
 }
 
 /// The wall material a leaf borrows: the N/S panel material when its face normal
@@ -291,10 +312,14 @@ pub(crate) fn spawn_door_for_cell(
     let kind = wall_kind_for_cell(r, c, rows, cols, config);
 
     // A swinging door only reads well between two facing walls, so it's the one
-    // special case: a single central leaf in a straight corridor. Everything
-    // else seals each open edge with its own leaf.
-    if door_style == DoorStyle::Swing && is_straight_corridor(grid, r, c) {
-        let normal_z = r > 0 && grid[r - 1][c] != 'W'; // N/S corridor → normal along Z
+    // special case: a single central leaf when the cell is a straight corridor
+    // (including one capped at an end by the grid edge). Everything else seals
+    // each open edge with its own leaf.
+    let swing_axis = (door_style == DoorStyle::Swing)
+        .then(|| corridor_axis(grid, r, c))
+        .flatten();
+    if let Some(axis) = swing_axis {
+        let normal_z = axis == CorridorAxis::NorthSouth; // N/S corridor → normal along Z
         let closed_yaw = if normal_z { 0.0 } else { FRAC_PI_2 };
         let edge_centre = Vec3::new(x, 0.0, z);
         let pivot_translation =
@@ -453,7 +478,7 @@ mod tests {
             vec!['W', 'D', 'W'],
             vec!['W', 'F', 'W'],
         ];
-        assert!(is_straight_corridor(&grid, 1, 1));
+        assert_eq!(corridor_axis(&grid, 1, 1), Some(CorridorAxis::NorthSouth));
     }
 
     #[test]
@@ -463,7 +488,7 @@ mod tests {
             vec!['S', 'D', 'F'],
             vec!['W', 'W', 'W'],
         ];
-        assert!(is_straight_corridor(&grid, 1, 1));
+        assert_eq!(corridor_axis(&grid, 1, 1), Some(CorridorAxis::EastWest));
     }
 
     #[test]
@@ -473,7 +498,7 @@ mod tests {
             vec!['W', 'D', 'F'],
             vec!['W', 'W', 'W'],
         ];
-        assert!(!is_straight_corridor(&grid, 1, 1));
+        assert_eq!(corridor_axis(&grid, 1, 1), None);
     }
 
     #[test]
@@ -483,6 +508,41 @@ mod tests {
             vec!['W', 'D', 'F'],
             vec!['W', ' ', 'W'],
         ];
-        assert!(!is_straight_corridor(&grid, 1, 1));
+        assert_eq!(corridor_axis(&grid, 1, 1), None);
+    }
+
+    #[test]
+    fn boundary_capped_ns_corridor_is_a_corridor() {
+        // `W D W` on the top boundary row, open south into the maze. The north
+        // end is capped by the grid edge (counted as a wall), but the door still
+        // has its two facing lateral walls, so it is an N–S straight corridor.
+        let grid = vec![
+            vec!['W', 'D', 'W'],
+            vec!['W', ' ', 'W'],
+        ];
+        assert_eq!(corridor_axis(&grid, 0, 1), Some(CorridorAxis::NorthSouth));
+    }
+
+    #[test]
+    fn boundary_capped_ew_corridor_is_a_corridor() {
+        // Door on the left boundary column, open east, walls north & south. The
+        // west end is capped by the grid edge — still an E–W straight corridor.
+        let grid = vec![
+            vec!['W', 'W'],
+            vec!['D', ' '],
+            vec!['W', 'W'],
+        ];
+        assert_eq!(corridor_axis(&grid, 1, 0), Some(CorridorAxis::EastWest));
+    }
+
+    #[test]
+    fn boundary_corner_is_not_a_corridor() {
+        // A bend at the grid corner — open south and east (adjacent, not
+        // opposing) — must not count as a corridor (it would slide).
+        let grid = vec![
+            vec!['D', ' '],
+            vec![' ', 'W'],
+        ];
+        assert_eq!(corridor_axis(&grid, 0, 0), None);
     }
 }
