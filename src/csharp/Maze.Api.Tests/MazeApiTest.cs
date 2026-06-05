@@ -1622,6 +1622,24 @@ namespace Maze.Api.Tests
         }
 
         /// <summary>
+        /// A wall override round-trips through the typed C# surface — walls are overridable
+        /// too (the <c>wallType</c> per-cell override), covering both a special non-occluding
+        /// type and a solid-texture choice.
+        /// </summary>
+        [Fact]
+        public void Maze_CellEntity_RoundTripsWallType()
+        {
+            using Maze maze = new Maze(1, 3);
+            maze.SetWallCells(0, 1, 0, 1);
+
+            maze.SetCellEntity(0, 1, new WallCellEntity { WallType = WallType.Lava });
+            Assert.Equal(WallType.Lava, Assert.IsType<WallCellEntity>(maze.GetCellEntity(0, 1)).WallType);
+
+            maze.SetCellEntity(0, 1, new WallCellEntity { WallType = WallType.Brick });
+            Assert.Equal(WallType.Brick, Assert.IsType<WallCellEntity>(maze.GetCellEntity(0, 1)).WallType);
+        }
+
+        /// <summary>
         /// A maze carrying a per-cell override survives a JSON load -> save round-trip through
         /// the FFI (the Rust serde handles the char-or-array grid form; C# passes it opaquely).
         /// </summary>

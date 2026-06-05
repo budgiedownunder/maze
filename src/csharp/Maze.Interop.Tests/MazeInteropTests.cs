@@ -1622,6 +1622,30 @@ namespace Maze.Interop.Tests
         }
 
         /// <summary>
+        /// Confirms a wall (<c>'W'</c>) cell's <c>wallType</c> override round-trips through the
+        /// interop layer — walls are overridable, and the type-vs-char check accepts it.
+        /// </summary>
+        [Fact]
+        public void Maze_WallCellEntity_RoundTripsThroughInterop()
+        {
+            MazeInterop interop = GetInterop();
+            UIntPtr mazePtr = CreateNewMaze(1, 3);
+            try
+            {
+                interop.MazeSetWallCells(mazePtr, 0, 1, 0, 1);
+                interop.MazeSetCellEntity(mazePtr, 0, 1, """{"type":"W","wallType":"lava"}""");
+                string? json = interop.MazeGetCellEntity(mazePtr, 0, 1);
+                Assert.NotNull(json);
+                Assert.Contains("\"type\":\"W\"", json);
+                Assert.Contains("\"wallType\":\"lava\"", json);
+            }
+            finally
+            {
+                FreeMaze(mazePtr);
+            }
+        }
+
+        /// <summary>
         /// Confirms a tick surfaces EnemyMoved (payload = enemy id) and PlayerDamaged (payload = HP after)
         /// through the interop tick-event buffer.
         /// </summary>

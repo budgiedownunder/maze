@@ -49,6 +49,32 @@ namespace Maze.Api
     }
 
     /// <summary>
+    /// Visual type for a wall (<c>'W'</c>) cell. Renderer-only; the cell stays
+    /// impassable. Shares its vocabulary with the per-maze <c>wall_type</c> launch
+    /// setting: the solid-wall textures force a specific texture in place of the
+    /// default per-cell variation, and <c>water</c> / <c>lava</c> / <c>iron_fence</c>
+    /// are non-occluding skins (a floor-level pool, or see-through bars).
+    /// </summary>
+    [JsonConverter(typeof(JsonStringEnumConverter<WallType>))]
+    public enum WallType
+    {
+        /// <summary>A brick wall texture.</summary>
+        [JsonStringEnumMemberName("brick")] Brick,
+        /// <summary>A dressed-stone wall texture.</summary>
+        [JsonStringEnumMemberName("dressed_stone")] DressedStone,
+        /// <summary>A wood-plank wall texture.</summary>
+        [JsonStringEnumMemberName("wood")] Wood,
+        /// <summary>A cobblestone wall texture.</summary>
+        [JsonStringEnumMemberName("cobblestone")] Cobblestone,
+        /// <summary>A floor-level pool of water (non-occluding).</summary>
+        [JsonStringEnumMemberName("water")] Water,
+        /// <summary>A floor-level pool of lava (non-occluding).</summary>
+        [JsonStringEnumMemberName("lava")] Lava,
+        /// <summary>A wall of see-through vertical iron bars (non-occluding).</summary>
+        [JsonStringEnumMemberName("iron_fence")] IronFence,
+    }
+
+    /// <summary>
     /// One entity occupying a cell, together with its optional override
     /// characteristics — the typed mirror of the wire entity object
     /// (e.g. <c>{ "type": "E", "enemyType": "ghost", "damage": 2 }</c>).
@@ -65,6 +91,7 @@ namespace Maze.Api
     [JsonDerivedType(typeof(HealthCellEntity), "H")]
     [JsonDerivedType(typeof(KeyCellEntity), "K")]
     [JsonDerivedType(typeof(DoorCellEntity), "D")]
+    [JsonDerivedType(typeof(WallCellEntity), "W")]
     public abstract class CellEntityInfo
     {
     }
@@ -101,5 +128,12 @@ namespace Maze.Api
     {
         /// <summary>Door open-animation rig.</summary>
         [JsonPropertyName("doorStyle")] public DoorStyle? DoorStyle { get; set; }
+    }
+
+    /// <summary>Per-cell override for a wall (<c>'W'</c>) cell.</summary>
+    public sealed class WallCellEntity : CellEntityInfo
+    {
+        /// <summary>Wall visual type.</summary>
+        [JsonPropertyName("wallType")] public WallType? WallType { get; set; }
     }
 }
