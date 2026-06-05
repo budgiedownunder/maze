@@ -129,3 +129,13 @@ npx playwright test --ui          # interactive UI mode
 npx playwright test --headed      # watch the browser as tests run
 npx playwright test auth.spec.ts  # run a single file
 ```
+
+The suite runs differently in CI: [`playwright.config.ts`](playwright.config.ts) enables retries and a single worker when `CI` is set (GitHub Actions sets it automatically). The game/walk tests are timing-sensitive and can flake under parallel-worker CPU contention, so CI trades parallelism for stability. To reproduce CI's settings locally:
+
+```bash
+# bash / macOS / Linux
+CI=true npx playwright test
+
+# PowerShell
+$env:CI='true'; npx playwright test
+```
