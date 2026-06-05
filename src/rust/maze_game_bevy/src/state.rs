@@ -227,10 +227,13 @@ impl SkyType {
     }
 }
 
-/// Wall texture kinds for the per-cell tinted path. Each variant maps
-/// to one of the `WALL_MATERIAL_*` indices in `crate::world::walls`.
-/// Default is `Brick` so a missing or unrecognised wire value preserves
-/// the pre-Step-14 hard-coded look.
+/// Wall types. The four solid-wall textures (`Brick` / `DressedStone` / `Wood` /
+/// `Cobblestone`) each map to a `WALL_MATERIAL_*` index for the panel material;
+/// the three special types (`Water` / `Lava` / `IronFence`) are **non-occluding**
+/// and render their own in-cell geometry (a floor-level pool, or see-through
+/// bars) instead of a solid panel. Shares its wire vocabulary with the
+/// `data_model` `WallType` and the per-cell `wallType` override. Default is
+/// `Brick` so a missing or unrecognised wire value preserves the standard look.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum WallType {
     #[default]
@@ -238,6 +241,9 @@ pub enum WallType {
     DressedStone,
     Wood,
     Cobblestone,
+    Water,
+    Lava,
+    IronFence,
 }
 
 impl WallType {
@@ -249,6 +255,9 @@ impl WallType {
             Self::DressedStone => "dressed_stone",
             Self::Wood => "wood",
             Self::Cobblestone => "cobblestone",
+            Self::Water => "water",
+            Self::Lava => "lava",
+            Self::IronFence => "iron_fence",
         }
     }
 
@@ -260,19 +269,23 @@ impl WallType {
             "dressed_stone" => Self::DressedStone,
             "wood" => Self::Wood,
             "cobblestone" => Self::Cobblestone,
+            "water" => Self::Water,
+            "lava" => Self::Lava,
+            "iron_fence" => Self::IronFence,
             _ => Self::Brick,
         }
     }
 
-    /// Returns the matching `WALL_MATERIAL_*` index used by
-    /// `crate::world::walls`. Single source of truth so no call site
-    /// hard-codes the integer mapping.
-    pub fn to_kind_index(self) -> usize {
+    /// The matching `WALL_MATERIAL_*` index for a solid-wall texture, or `None`
+    /// for a non-occluding type (which has no panel material). Single source of
+    /// truth so no call site hard-codes the integer mapping.
+    pub fn to_kind_index(self) -> Option<usize> {
         match self {
-            Self::Brick => crate::world::walls::WALL_MATERIAL_BRICK,
-            Self::DressedStone => crate::world::walls::WALL_MATERIAL_DRESSED_STONE,
-            Self::Wood => crate::world::walls::WALL_MATERIAL_WOOD,
-            Self::Cobblestone => crate::world::walls::WALL_MATERIAL_COBBLESTONE,
+            Self::Brick => Some(crate::world::walls::WALL_MATERIAL_BRICK),
+            Self::DressedStone => Some(crate::world::walls::WALL_MATERIAL_DRESSED_STONE),
+            Self::Wood => Some(crate::world::walls::WALL_MATERIAL_WOOD),
+            Self::Cobblestone => Some(crate::world::walls::WALL_MATERIAL_COBBLESTONE),
+            Self::Water | Self::Lava | Self::IronFence => None,
         }
     }
 }

@@ -927,16 +927,20 @@ mod tests {
             WALL_MATERIAL_BRICK, WALL_MATERIAL_COBBLESTONE, WALL_MATERIAL_DRESSED_STONE,
             WALL_MATERIAL_WOOD,
         };
-        assert_eq!(WallType::Brick.to_kind_index(), WALL_MATERIAL_BRICK);
+        assert_eq!(WallType::Brick.to_kind_index(), Some(WALL_MATERIAL_BRICK));
         assert_eq!(
             WallType::DressedStone.to_kind_index(),
-            WALL_MATERIAL_DRESSED_STONE
+            Some(WALL_MATERIAL_DRESSED_STONE)
         );
-        assert_eq!(WallType::Wood.to_kind_index(), WALL_MATERIAL_WOOD);
+        assert_eq!(WallType::Wood.to_kind_index(), Some(WALL_MATERIAL_WOOD));
         assert_eq!(
             WallType::Cobblestone.to_kind_index(),
-            WALL_MATERIAL_COBBLESTONE
+            Some(WALL_MATERIAL_COBBLESTONE)
         );
+        // Non-occluding types have no panel material.
+        assert_eq!(WallType::Water.to_kind_index(), None);
+        assert_eq!(WallType::Lava.to_kind_index(), None);
+        assert_eq!(WallType::IronFence.to_kind_index(), None);
     }
 
     #[test]

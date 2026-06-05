@@ -211,7 +211,9 @@ pub(crate) fn wall_kind_for_cell(
     if config.landmarks.wall_material_variation {
         wall_material_index(r, c, rows, cols, config.seed)
     } else {
-        config.wall_type.to_kind_index()
+        // A non-occluding per-maze wall_type has no panel material; fall back to
+        // brick for any solid panel still drawn around it.
+        config.wall_type.to_kind_index().unwrap_or(WALL_MATERIAL_BRICK)
     }
 }
 
@@ -283,11 +285,12 @@ pub(crate) fn spawn_walls_for_cell(
     } else {
         0
     };
-    // The texture kind for the tinted path is now configured per
-    // difficulty via `GameConfig.wall_type` — same set of four kinds the
-    // quadrant-variation path uses, but a single choice for the whole
-    // maze instead of a per-quadrant assignment.
-    let kind = config.wall_type.to_kind_index();
+    // The texture kind for the tinted path is configured per difficulty via
+    // `GameConfig.wall_type` — same set of four kinds the quadrant-variation
+    // path uses, but a single choice for the whole maze. A non-occluding
+    // per-maze type has no panel material; fall back to brick for any solid
+    // panel still drawn around such cells.
+    let kind = config.wall_type.to_kind_index().unwrap_or(WALL_MATERIAL_BRICK);
 
     // North face
     if r == 0 || grid[r - 1][c] == 'W' {
