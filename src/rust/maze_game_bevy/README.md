@@ -131,6 +131,7 @@ src/
 ├── outcome.rs              outcome_watcher_system (win / lose detection from MazeGame state)
 ├── world/                  3D scene construction
 │   ├── mod.rs              spawn_world orchestrator + grid helpers
+│   ├── gallery.rs          MAZE_DEMO rig-gallery demos (focus selector + maze JSON)
 │   ├── textures/           shared procedural world textures
 │   │   ├── mod.rs          module declarations
 │   │   ├── brick.rs        make_brick_texture (consumed by walls)
