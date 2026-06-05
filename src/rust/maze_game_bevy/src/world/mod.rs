@@ -1,5 +1,6 @@
 pub(crate) mod decorations;
 pub(crate) mod floor;
+pub(crate) mod gallery;
 pub(crate) mod objects;
 pub(crate) mod roof;
 pub(crate) mod sky;
@@ -315,10 +316,23 @@ pub(crate) fn spawn_world(
         max_hp: Some(config.max_hp),
         starting_hp: Some(config.starting_hp),
     };
+    // `MAZE_DEMO=<focus>` native run — selects a rig showroom below and relaxes
+    // the round timer so there's no pressure while inspecting the rigs.
+    let gallery_focus = gallery::requested_focus();
     let (game, grid) = match pending.0.as_deref() {
         Some(json) => {
             let game = MazeGame::from_json_with_options(json, game_opts)
                 .expect("maze JSON was validated by the REST API");
+            let grid = game.grid().to_vec();
+            (game, grid)
+        }
+        // `MAZE_DEMO=gallery cargo run` swaps the demo for a rig showroom that
+        // places every entity-rig variant beside its default. Native-only — the
+        // web/WASM path always supplies a maze via `PendingMazeJson`.
+        None if gallery_focus.is_some() => {
+            let json = gallery::json(gallery_focus.as_deref().unwrap_or("gallery"));
+            let game = MazeGame::from_json_with_options(&json, game_opts)
+                .expect("gallery maze is hardcoded and always valid");
             let grid = game.grid().to_vec();
             (game, grid)
         }
@@ -365,9 +379,14 @@ pub(crate) fn spawn_world(
     // Timer comes from `GameConfig.timer_seconds`. The default (60 s, see
     // `GameConfig::default`) is what the no-config / demo path uses, so this
     // single source covers both the configured Play 3D session and the
-    // fallback.
+    // fallback. The rig galleries get a long timer so there's no time pressure
+    // while inspecting the rigs.
     commands.insert_resource(GameClock {
-        remaining_secs: config.timer_seconds.max(0.0),
+        remaining_secs: if gallery_focus.is_some() {
+            3600.0
+        } else {
+            config.timer_seconds.max(0.0)
+        },
         elapsed_secs: 0.0,
         last_displayed_secs: -1,
     });

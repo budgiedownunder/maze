@@ -76,6 +76,37 @@ cd src/rust
 cargo run -p maze_game_bevy
 ```
 
+Set `MAZE_DEMO` to swap the built-in demo for a **rig gallery** — a maze that
+places each entity-rig variant beside its default, for eyeballing the rigs
+without authoring a maze. The value selects which types to show:
+
+| `MAZE_DEMO` | Shows |
+|:------------|:------|
+| `gallery`   | everything (enemy goblin/ghost, health heart/potion, key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve) |
+| `enemies`   | enemy rigs only (goblin, ghost) |
+| `health`    | health rigs only (heart, potion) |
+| `keysdoors` | key + door rigs only (key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve) |
+
+Focused values make it easy to verify one type in isolation. Enemies are
+stationary and harmless so you can inspect them freely; in the key/door galleries
+walk the spine collecting keys, then open each door to see its motion. The
+examples below use `gallery`; substitute any value from the table.
+
+Bash:
+
+```bash
+cd src/rust
+MAZE_DEMO=gallery cargo run -p maze_game_bevy
+```
+
+PowerShell (the variable persists for the session — clear it afterwards with
+`$env:MAZE_DEMO = $null`):
+
+```powershell
+cd src/rust
+$env:MAZE_DEMO = 'gallery'; cargo run -p maze_game_bevy
+```
+
 ### Testing
 
 To test the `maze_game_bevy` crate:
