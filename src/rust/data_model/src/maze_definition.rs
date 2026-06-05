@@ -255,6 +255,79 @@ impl<'de> Deserialize<'de> for DoorStyle {
     }
 }
 
+/// Visual type used to render a wall (`'W'`) cell.
+///
+/// Like [`EnemyType`] this is a per-cell *characteristic*, not a new cell type;
+/// the cell stays impassable and only the renderers read it. It shares its wire
+/// vocabulary with the per-maze `wall_type` launch setting: the solid-wall
+/// textures (`brick` / `dressed_stone` / `wood` / `cobblestone`) force a
+/// specific texture in place of the default per-cell variation, and `water` /
+/// `lava` / `iron_fence` are non-occluding skins (a floor-level pool, or
+/// see-through bars). The wire form is the `snake_case` string; an unrecognised
+/// value falls back to `Brick`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum WallType {
+    /// A brick wall texture.
+    #[default]
+    Brick,
+    /// A dressed-stone wall texture.
+    DressedStone,
+    /// A wood-plank wall texture.
+    Wood,
+    /// A cobblestone wall texture.
+    Cobblestone,
+    /// A floor-level pool of water (non-occluding).
+    Water,
+    /// A floor-level pool of lava (non-occluding).
+    Lava,
+    /// A wall of see-through vertical iron bars (non-occluding).
+    IronFence,
+}
+
+impl WallType {
+    /// Returns the `snake_case` wire string for this wall type.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use data_model::WallType;
+    /// assert_eq!(WallType::Brick.as_wire_str(), "brick");
+    /// assert_eq!(WallType::IronFence.as_wire_str(), "iron_fence");
+    /// ```
+    pub fn as_wire_str(&self) -> &'static str {
+        match self {
+            Self::Brick => "brick",
+            Self::DressedStone => "dressed_stone",
+            Self::Wood => "wood",
+            Self::Cobblestone => "cobblestone",
+            Self::Water => "water",
+            Self::Lava => "lava",
+            Self::IronFence => "iron_fence",
+        }
+    }
+}
+
+impl Serialize for WallType {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_wire_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for WallType {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "dressed_stone" => Self::DressedStone,
+            "wood" => Self::Wood,
+            "cobblestone" => Self::Cobblestone,
+            "water" => Self::Water,
+            "lava" => Self::Lava,
+            "iron_fence" => Self::IronFence,
+            _ => Self::Brick,
+        })
+    }
+}
+
 /// Non-default characteristics for an enemy (`'E'`) cell. Every field is
 /// optional: a `None` field means "inherit the per-game / built-in default".
 /// `enemy_type` is read by the renderers; `damage` and `move_period_ms` are
@@ -337,6 +410,23 @@ impl DoorOverride {
     }
 }
 
+/// Non-default characteristics for a wall (`'W'`) cell. `wall_type` is read by
+/// the renderers; a `None` field means "inherit the per-maze / default per-cell
+/// wall appearance". The wall stays impassable regardless of type.
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WallOverride {
+    /// Visual type for this wall. Renderer-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wall_type: Option<WallType>,
+}
+
+impl WallOverride {
+    fn is_empty(&self) -> bool {
+        self.wall_type.is_none()
+    }
+}
+
 /// One entity occupying a cell, together with its (optional) override
 /// characteristics. A cell holds a list of these (see
 /// [`MazeDefinition::cell_entities`]); today that list is capped at one
@@ -365,6 +455,9 @@ pub enum CellEntity {
     /// Override for a door (`'D'`) cell.
     #[serde(rename = "D")]
     Door(DoorOverride),
+    /// Override for a wall (`'W'`) cell.
+    #[serde(rename = "W")]
+    Wall(WallOverride),
 }
 
 impl CellEntity {
@@ -388,6 +481,7 @@ impl CellEntity {
             CellEntity::Health(_) => 'H',
             CellEntity::Key(_) => 'K',
             CellEntity::Door(_) => 'D',
+            CellEntity::Wall(_) => 'W',
         }
     }
 
@@ -400,6 +494,7 @@ impl CellEntity {
             CellEntity::Health(h) => h.is_empty(),
             CellEntity::Key(k) => k.is_empty(),
             CellEntity::Door(d) => d.is_empty(),
+            CellEntity::Wall(w) => w.is_empty(),
         }
     }
 
@@ -2252,6 +2347,60 @@ mod tests {
     }
 
     #[test]
+    fn wall_type_override_round_trips() {
+        // A special (non-occluding) wall skin on a `W` cell — overrides are now
+        // allowed on walls, not just feature cells.
+        let s = r#"{"grid":[["S",[{"type":"W","wallType":"lava"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'W');
+        match single_override(&d, 0, 1) {
+            CellEntity::Wall(w) => assert_eq!(w.wall_type, Some(WallType::Lava)),
+            other => panic!("expected a wall override, got {other:?}"),
+        }
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn wall_texture_override_round_trips() {
+        // A solid-texture wall override forces a specific texture in place of the
+        // default per-cell variation.
+        let s = r#"{"grid":[["S",[{"type":"W","wallType":"brick"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'W');
+        match single_override(&d, 0, 1) {
+            CellEntity::Wall(w) => assert_eq!(w.wall_type, Some(WallType::Brick)),
+            other => panic!("expected a wall override, got {other:?}"),
+        }
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, s);
+    }
+
+    #[test]
+    fn field_less_wall_array_normalises_to_bare_char() {
+        // A wall array entity that sets no type carries no override and
+        // normalises back to a bare character on write.
+        let s = r#"{"grid":[["S",[{"type":"W"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        assert_eq!(d.grid[0][1], 'W');
+        assert!(d.cell_entities.is_empty());
+        let back = serde_json::to_string(&d).expect("Failed to serialize");
+        assert_eq!(back, r#"{"grid":[["S","W"],[" ","F"]]}"#);
+    }
+
+    #[test]
+    fn unknown_wall_type_falls_back_to_brick() {
+        // Forward tolerance: a wallType from a newer build still loads, falling
+        // back to the default texture rather than erroring.
+        let s = r#"{"grid":[["S",[{"type":"W","wallType":"obsidian"}]],[" ","F"]]}"#;
+        let d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
+        match single_override(&d, 0, 1) {
+            CellEntity::Wall(w) => assert_eq!(w.wall_type, Some(WallType::Brick)),
+            other => panic!("expected a wall override, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn override_less_array_entity_normalises_to_bare_char() {
         // An array entity that sets no field is accepted on read but written
         // back as a bare character (read is tolerant, write is canonical).
@@ -2313,6 +2462,13 @@ mod tests {
         assert_eq!(DoorStyle::Slide.as_wire_str(), "slide");
         assert_eq!(DoorStyle::Portcullis.as_wire_str(), "portcullis");
         assert_eq!(DoorStyle::Dissolve.as_wire_str(), "dissolve");
+        assert_eq!(WallType::Brick.as_wire_str(), "brick");
+        assert_eq!(WallType::DressedStone.as_wire_str(), "dressed_stone");
+        assert_eq!(WallType::Wood.as_wire_str(), "wood");
+        assert_eq!(WallType::Cobblestone.as_wire_str(), "cobblestone");
+        assert_eq!(WallType::Water.as_wire_str(), "water");
+        assert_eq!(WallType::Lava.as_wire_str(), "lava");
+        assert_eq!(WallType::IronFence.as_wire_str(), "iron_fence");
     }
 
     #[test]
@@ -2363,11 +2519,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "unknown variant `W`")]
-    fn cannot_override_non_feature_cell() {
-        // A `type` outside the four override variants (E/H/K/D) is rejected by
-        // the tagged-enum deserialiser — overrides only exist on those cells.
-        let s = r#"{"grid":[["S",[{"type":"W","damage":2}]],[" ","F"]]}"#;
+    #[should_panic(expected = "unknown variant `F`")]
+    fn cannot_override_with_unknown_entity_type() {
+        // A `type` outside the override variants (E/H/K/D/W) is rejected by the
+        // tagged-enum deserialiser — start/finish/empty cells aren't overridable.
+        let s = r#"{"grid":[["S",[{"type":"F"}]],[" ","F"]]}"#;
         let _d: MazeDefinition = serde_json::from_str(s).expect("Failed to deserialize");
     }
 

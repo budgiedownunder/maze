@@ -20,7 +20,7 @@ pub use email_audit::{
 pub use error::{Error, UserValidationError};
 pub use maze_definition::{
     CellEntity, DoorOverride, DoorStyle, EnemyOverride, EnemyType, HealthOverride, HealthStyle,
-    KeyHolderStyle, KeyOverride, MazeDefinition,
+    KeyHolderStyle, KeyOverride, MazeDefinition, WallOverride, WallType,
 };
 pub use maze::Maze;
 pub use maze_cell_state::MazeCellState;
