@@ -416,7 +416,7 @@ pub(crate) fn spawn_world(
             if cell == 'W' {
                 continue;
             }
-            walls::spawn_walls_for_cell(&mut commands, &wall_assets, &grid, r, c, &config);
+            walls::spawn_walls_for_cell(&mut commands, &wall_assets, &grid, &cell_entities, r, c, &config);
             decorations::spawn_decorations_for_cell(
                 &mut commands,
                 &decoration_assets,

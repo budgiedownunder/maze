@@ -1,7 +1,7 @@
 pub(crate) mod ew_panel;
 pub(crate) mod ns_panel;
 
-use crate::state::GameConfig;
+use crate::state::{GameConfig, WallType};
 use crate::world::textures::brick::make_brick_texture;
 use crate::world::textures::cobblestone::make_cobblestone_texture;
 use crate::world::textures::dressed_stone::make_dressed_stone_texture;
@@ -9,7 +9,9 @@ use crate::world::textures::wood::make_wood_texture;
 use crate::world::{CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 use ew_panel::EwPanelAssets;
+use maze::CellEntity;
 use ns_panel::{NsPanelAssets, WallMaterialSpec};
+use std::collections::HashMap;
 
 pub(crate) const WALL_HEIGHT: f32 = 3.0;
 pub(crate) const WALL_THICKNESS: f32 = 0.05;
@@ -217,10 +219,42 @@ pub(crate) fn wall_kind_for_cell(
     }
 }
 
+/// The forced `WALL_MATERIAL_*` index from a `'W'` cell's wall-type override, or
+/// `None` when the cell has no wall override, a field-less one, or a
+/// non-occluding type (which has no panel material). Used to texture an adjacent
+/// open cell's panel from its wall neighbour's override; `None` means "use the
+/// cell's normal default kind", so plain walls keep their variation/per-maze look.
+pub(crate) fn wall_override_kind(entity: Option<&CellEntity>) -> Option<usize> {
+    if let Some(CellEntity::Wall(over)) = entity {
+        if let Some(wt) = over.wall_type {
+            return WallType::from_wire_str(wt.as_wire_str()).to_kind_index();
+        }
+    }
+    None
+}
+
+/// The panel material kind for a face: a `'W'` neighbour's solid wall-type
+/// override forces its texture; otherwise `default_kind` (variation / per-maze).
+/// `neighbour` is `None` for a grid-edge face (no cell beyond it).
+fn face_kind(
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    neighbour: Option<(usize, usize)>,
+    default_kind: usize,
+) -> usize {
+    match neighbour {
+        Some(rc) => {
+            wall_override_kind(cell_entities.get(&rc).and_then(|v| v.first())).unwrap_or(default_kind)
+        }
+        None => default_kind,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_walls_for_cell(
     commands: &mut Commands,
     assets: &WallAssets,
     grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
     r: usize,
     c: usize,
     config: &GameConfig,
@@ -230,47 +264,36 @@ pub(crate) fn spawn_walls_for_cell(
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
 
+    // A face is drawn when its neighbour is a wall (`'W'`) or the grid edge. Its
+    // material is the cell's default kind, unless the neighbouring wall cell
+    // carries a solid wall-type override (then that texture is forced for the
+    // panel facing it). `None` = a grid-edge face, which has no neighbour cell.
+    let north = (r == 0 || grid[r - 1][c] == 'W').then(|| (r > 0).then(|| (r - 1, c)));
+    let south = (r + 1 >= rows || grid[r + 1][c] == 'W').then(|| (r + 1 < rows).then(|| (r + 1, c)));
+    let east = (c + 1 >= cols || grid[r][c + 1] == 'W').then(|| (c + 1 < cols).then(|| (r, c + 1)));
+    let west = (c == 0 || grid[r][c - 1] == 'W').then(|| (c > 0).then(|| (r, c - 1)));
+
     // Material variation supersedes per-cell tint: when on, every wall in
     // this cell takes the quadrant's material kind and the `wall_tint`
     // toggle is bypassed. When off, fall back to the original tinted-brick
     // path (tint index 0 when `wall_tint` is also off).
     if config.landmarks.wall_material_variation {
-        let kind = wall_material_index(r, c, rows, cols, config.seed);
-        // North face
-        if r == 0 || grid[r - 1][c] == 'W' {
-            ns_panel::spawn_ns_face_material(
-                commands,
-                &assets.ns,
-                kind,
-                Vec3::new(x, PANEL_Y, z - HALF_CELL),
-            );
+        let default_kind = wall_material_index(r, c, rows, cols, config.seed);
+        if let Some(n) = north {
+            let kind = face_kind(cell_entities, n, default_kind);
+            ns_panel::spawn_ns_face_material(commands, &assets.ns, kind, Vec3::new(x, PANEL_Y, z - HALF_CELL));
         }
-        // South face
-        if r + 1 >= rows || grid[r + 1][c] == 'W' {
-            ns_panel::spawn_ns_face_material(
-                commands,
-                &assets.ns,
-                kind,
-                Vec3::new(x, PANEL_Y, z + HALF_CELL),
-            );
+        if let Some(n) = south {
+            let kind = face_kind(cell_entities, n, default_kind);
+            ns_panel::spawn_ns_face_material(commands, &assets.ns, kind, Vec3::new(x, PANEL_Y, z + HALF_CELL));
         }
-        // East face
-        if c + 1 >= cols || grid[r][c + 1] == 'W' {
-            ew_panel::spawn_ew_face_material(
-                commands,
-                &assets.ew,
-                kind,
-                Vec3::new(x + HALF_CELL, PANEL_Y, z),
-            );
+        if let Some(n) = east {
+            let kind = face_kind(cell_entities, n, default_kind);
+            ew_panel::spawn_ew_face_material(commands, &assets.ew, kind, Vec3::new(x + HALF_CELL, PANEL_Y, z));
         }
-        // West face
-        if c == 0 || grid[r][c - 1] == 'W' {
-            ew_panel::spawn_ew_face_material(
-                commands,
-                &assets.ew,
-                kind,
-                Vec3::new(x - HALF_CELL, PANEL_Y, z),
-            );
+        if let Some(n) = west {
+            let kind = face_kind(cell_entities, n, default_kind);
+            ew_panel::spawn_ew_face_material(commands, &assets.ew, kind, Vec3::new(x - HALF_CELL, PANEL_Y, z));
         }
         return;
     }
@@ -290,47 +313,23 @@ pub(crate) fn spawn_walls_for_cell(
     // path uses, but a single choice for the whole maze. A non-occluding
     // per-maze type has no panel material; fall back to brick for any solid
     // panel still drawn around such cells.
-    let kind = config.wall_type.to_kind_index().unwrap_or(WALL_MATERIAL_BRICK);
+    let default_kind = config.wall_type.to_kind_index().unwrap_or(WALL_MATERIAL_BRICK);
 
-    // North face
-    if r == 0 || grid[r - 1][c] == 'W' {
-        ns_panel::spawn_ns_face_tinted(
-            commands,
-            &assets.ns,
-            kind,
-            tint,
-            Vec3::new(x, PANEL_Y, z - HALF_CELL),
-        );
+    if let Some(n) = north {
+        let kind = face_kind(cell_entities, n, default_kind);
+        ns_panel::spawn_ns_face_tinted(commands, &assets.ns, kind, tint, Vec3::new(x, PANEL_Y, z - HALF_CELL));
     }
-    // South face
-    if r + 1 >= rows || grid[r + 1][c] == 'W' {
-        ns_panel::spawn_ns_face_tinted(
-            commands,
-            &assets.ns,
-            kind,
-            tint,
-            Vec3::new(x, PANEL_Y, z + HALF_CELL),
-        );
+    if let Some(n) = south {
+        let kind = face_kind(cell_entities, n, default_kind);
+        ns_panel::spawn_ns_face_tinted(commands, &assets.ns, kind, tint, Vec3::new(x, PANEL_Y, z + HALF_CELL));
     }
-    // East face
-    if c + 1 >= cols || grid[r][c + 1] == 'W' {
-        ew_panel::spawn_ew_face_tinted(
-            commands,
-            &assets.ew,
-            kind,
-            tint,
-            Vec3::new(x + HALF_CELL, PANEL_Y, z),
-        );
+    if let Some(n) = east {
+        let kind = face_kind(cell_entities, n, default_kind);
+        ew_panel::spawn_ew_face_tinted(commands, &assets.ew, kind, tint, Vec3::new(x + HALF_CELL, PANEL_Y, z));
     }
-    // West face
-    if c == 0 || grid[r][c - 1] == 'W' {
-        ew_panel::spawn_ew_face_tinted(
-            commands,
-            &assets.ew,
-            kind,
-            tint,
-            Vec3::new(x - HALF_CELL, PANEL_Y, z),
-        );
+    if let Some(n) = west {
+        let kind = face_kind(cell_entities, n, default_kind);
+        ew_panel::spawn_ew_face_tinted(commands, &assets.ew, kind, tint, Vec3::new(x - HALF_CELL, PANEL_Y, z));
     }
 }
 
@@ -338,6 +337,28 @@ pub(crate) fn spawn_walls_for_cell(
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    fn entity(json: &str) -> CellEntity {
+        serde_json::from_str(json).expect("valid cell-entity JSON")
+    }
+
+    #[test]
+    fn wall_override_kind_forces_solid_texture() {
+        let cobble = entity(r#"{ "type": "W", "wallType": "cobblestone" }"#);
+        assert_eq!(wall_override_kind(Some(&cobble)), Some(WALL_MATERIAL_COBBLESTONE));
+        let wood = entity(r#"{ "type": "W", "wallType": "wood" }"#);
+        assert_eq!(wall_override_kind(Some(&wood)), Some(WALL_MATERIAL_WOOD));
+    }
+
+    #[test]
+    fn wall_override_kind_is_none_for_non_panel_cases() {
+        // Non-occluding type has no panel material; a field-less or absent
+        // override, or a non-wall entity, also yields None (use the default kind).
+        assert_eq!(wall_override_kind(Some(&entity(r#"{ "type": "W", "wallType": "lava" }"#))), None);
+        assert_eq!(wall_override_kind(Some(&entity(r#"{ "type": "W" }"#))), None);
+        assert_eq!(wall_override_kind(Some(&entity(r#"{ "type": "E", "enemyType": "ghost" }"#))), None);
+        assert_eq!(wall_override_kind(None), None);
+    }
 
     #[test]
     fn wall_tint_index_is_deterministic() {
