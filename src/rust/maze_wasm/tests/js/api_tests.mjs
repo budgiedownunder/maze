@@ -1160,6 +1160,32 @@ function registerMazeGameTests() {
             ]);
         });
 
+        // MazeGame::grid() — pure-char grid for the host renderer
+        it('should expect grid() to return the pure-char grid', function () {
+            let game = makeGame('{"grid":[["S"," ","F"]]}');
+            expect(game.grid()).to.deep.equal([['S', ' ', 'F']]);
+        });
+
+        // MazeGame::grid() — overridden cells come back as their bare char (not the array form)
+        it('should expect grid() to return chars for overridden cells', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"H","healthStyle":"potion"}],"F"]]}');
+            expect(game.grid()).to.deep.equal([['S', 'H', 'F']]);
+        });
+
+        // MazeGame::cell_overrides() — empty when the maze has no overrides
+        it('should expect cell_overrides() to return an empty array when no overrides exist', function () {
+            let game = makeGame('{"grid":[["S","H","F"]]}');
+            expect(game.cell_overrides()).to.deep.equal([]);
+        });
+
+        // MazeGame::cell_overrides() — surfaces a static per-cell override
+        it('should expect cell_overrides() to surface a per-cell override', function () {
+            let game = makeGame('{"grid":[["S",[{"type":"H","healthStyle":"potion"}],"F"]]}');
+            expect(game.cell_overrides()).to.deep.equal([
+                { row: 0, col: 1, entity: { type: 'H', healthStyle: 'potion' } },
+            ]);
+        });
+
         // Move into an enemy decrements hp by the per-enemy damage value
         it('should expect move into an enemy to decrement hp by the enemy damage', function () {
             let game = makeGame('{"grid":[["S","E","F"]]}');

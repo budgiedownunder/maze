@@ -335,3 +335,25 @@ test.describe('MazeGamePage — mobile (Pixel 7)', () => {
     await expect(page.getByAltText('Player')).toBeVisible()
   })
 })
+
+test.describe('MazeGamePage — per-cell variants', () => {
+  test('a ghost enemy override renders the ghost sprite in the 2D game', async ({ page }) => {
+    await login(page)
+    await page.goto('/play/maze-override')
+    await expect(page.getByAltText('Player')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('img[src*="ghost.svg"]').first()).toBeVisible({ timeout: 15000 })
+  })
+
+  test('static overrides (potion health, key, door) render in the 2D game', async ({ page }) => {
+    await login(page)
+    // maze-override-static stores potion-health / pedestal-key / swing-door cells.
+    await page.goto('/play/maze-override-static')
+    await expect(page.getByAltText('Player')).toBeVisible({ timeout: 15000 })
+    const grid = page.locator('.maze-grid-container')
+    // Health shows the potion variant (HUD uses health.svg, so match the grid by src).
+    await expect(grid.locator('img[src*="potion.svg"]')).toBeVisible({ timeout: 15000 })
+    // Key and door render their generic sprites (no 2D rig variants) — not empty.
+    await expect(grid.getByAltText('Key')).toBeVisible()
+    await expect(grid.getByAltText('Door')).toBeVisible()
+  })
+})

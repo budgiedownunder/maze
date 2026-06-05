@@ -1032,6 +1032,23 @@ impl MazeGame {
         &self.grid
     }
 
+    /// Returns the per-cell overrides retained from the loaded definition, keyed by
+    /// `(row, col)`. Renderers read the static visual rigs (e.g. a health pickup's
+    /// `healthStyle`) from here — the live `Enemy` carries its own `enemy_type`, since
+    /// it moves away from its spawn cell.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use maze::MazeGame;
+    /// let json = r#"{"grid":[["S",[{"type":"H","healthStyle":"potion"}],"F"]]}"#;
+    /// let game = MazeGame::from_json(json).unwrap();
+    /// assert!(game.cell_entities().contains_key(&(0, 1)));
+    /// ```
+    pub fn cell_entities(&self) -> &HashMap<(usize, usize), Vec<CellEntity>> {
+        &self.cell_entities
+    }
+
     /// Advances time-based game state by `dt_ms` milliseconds, returning the
     /// events that occurred.
     ///

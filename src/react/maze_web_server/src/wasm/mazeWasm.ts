@@ -307,6 +307,24 @@ export function getMaxHp(game: MazeGameWasm): number {
 }
 
 /**
+ * Returns the static maze grid as a pure-char `string[][]` (overridden cells come back
+ * as their bare char). Read from the live game object so the page never needs a second
+ * WASM instance or to parse the char-or-array wire form.
+ */
+export function getGameGrid(game: MazeGameWasm): string[][] {
+  return game.grid() as unknown as string[][]
+}
+
+/**
+ * Returns the game's per-cell overrides as `{ row, col, entity }[]`. The renderer uses
+ * these for static visual rigs (e.g. potion health); the moving enemy's rig rides the
+ * live enemy from `getEnemies()`.
+ */
+export function getGameCellOverrides(game: MazeGameWasm): CellOverride[] {
+  return game.cell_overrides() as unknown as CellOverride[]
+}
+
+/**
  * Returns the time in milliseconds until the next tick will produce an event,
  * or null when the game is idle. Lets a setTimeout-driven host loop sleep
  * instead of polling at frame rate. See the Rust doc-banner for the formula.

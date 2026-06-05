@@ -1230,6 +1230,48 @@ function testMazeGameEnemiesExpectedOutput() {
     ];
 }
 
+// Test MazeGameWasm::grid() example
+function testMazeGameGrid() {
+    let game = null;
+    try {
+        game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+        console.log("grid() = ", game.grid());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameGridExpectedOutput() {
+    return [
+        "grid() =  [ [ 'S', ' ', 'F' ] ]"
+    ];
+}
+
+// Test MazeGameWasm::cell_overrides() example
+function testMazeGameCellOverrides() {
+    let game = null;
+    try {
+        game = MazeGameWasm.from_json('{"grid":[["S",[{"type":"H","healthStyle":"potion"}],"F"]]}');
+        console.log("cell_overrides() = ", game.cell_overrides());
+        return true;
+    } catch (e) {
+        console.error("Operation failed: ", e);
+        return false;
+    } finally {
+        if (game) game.free();
+    }
+}
+
+function testMazeGameCellOverridesExpectedOutput() {
+    return [
+        "cell_overrides() =  [ { row: 0, col: 1, entity: { type: 'H', healthStyle: 'potion' } } ]"
+    ];
+}
+
 // Test MazeGameWasm::health_pickups() example
 function testMazeGameHealthPickups() {
     let game = null;
@@ -1396,6 +1438,8 @@ const tests = [
     { name: "MazeGameWasm:hp() example", testFunction: testMazeGameHp, expectedOutput: testMazeGameHpExpectedOutput },
     { name: "MazeGameWasm:max_hp() example", testFunction: testMazeGameMaxHp, expectedOutput: testMazeGameMaxHpExpectedOutput },
     { name: "MazeGameWasm:enemies() example", testFunction: testMazeGameEnemies, expectedOutput: testMazeGameEnemiesExpectedOutput },
+    { name: "MazeGameWasm:grid() example", testFunction: testMazeGameGrid, expectedOutput: testMazeGameGridExpectedOutput },
+    { name: "MazeGameWasm:cell_overrides() example", testFunction: testMazeGameCellOverrides, expectedOutput: testMazeGameCellOverridesExpectedOutput },
     { name: "MazeGameWasm:health_pickups() example", testFunction: testMazeGameHealthPickups, expectedOutput: testMazeGameHealthPickupsExpectedOutput },
     { name: "MazeGameWasm:time_until_next_event_ms() example", testFunction: testMazeGameTimeUntilNextEventMs, expectedOutput: testMazeGameTimeUntilNextEventMsExpectedOutput },
 ];

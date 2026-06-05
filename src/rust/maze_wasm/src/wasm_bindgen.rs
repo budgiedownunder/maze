@@ -879,6 +879,98 @@ impl MazeGameWasm {
         }
         result
     }
+    #[wasm_bindgen]
+    /// Returns the static maze grid as a 2D array of single-character strings
+    /// (`"S"`/`"F"`/`"W"`/`"K"`/`"D"`/`"E"`/`"H"`/`" "`).
+    ///
+    /// The host renders walls, flags and feature-cell sprites from this. Unlike the
+    /// stored definition (where an overridden cell is an array), this is always the
+    /// plain-character form, so callers never parse the char-or-array wire shape.
+    /// Dynamic state (player, enemies, door open/closed, collected keys / consumed
+    /// health) comes from the other getters; per-cell visual overrides come from
+    /// [`MazeGameWasm::cell_overrides`].
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S"," ","F"]]}');
+    ///         console.log("grid() = ", game.grid());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn grid(&self) -> Array {
+        let rows = Array::new();
+        for row in self.game.grid() {
+            let js_row = Array::new();
+            for &ch in row {
+                js_row.push(&JsValue::from_str(&ch.to_string()));
+            }
+            rows.push(&js_row);
+        }
+        rows
+    }
+    #[wasm_bindgen]
+    /// Returns the per-cell overrides as an array of `{ row, col, entity }`, where
+    /// `entity` is the wire-shape override object (a `type` discriminator plus the set
+    /// fields, e.g. `{ type: "H", healthStyle: "potion" }`).
+    ///
+    /// The host reads static visual rigs (health / key / door) from these; the moving
+    /// enemy's rig rides the live enemy object ([`MazeGameWasm::enemies`]) instead,
+    /// since it walks away from its spawn cell. Returns an empty array for a maze with
+    /// no overrides.
+    ///
+    /// # Examples
+    ///
+    /// ```javascript
+    /// // Javascript <script> content:
+    ///
+    /// import init, { MazeGameWasm } from 'maze_wasm.js';
+    ///
+    /// async function run() {
+    ///     await init();
+    ///
+    ///     let game = null;
+    ///     try {
+    ///         game = MazeGameWasm.from_json('{"grid":[["S",[{"type":"H","healthStyle":"potion"}],"F"]]}');
+    ///         console.log("cell_overrides() = ", game.cell_overrides());
+    ///     } catch (e) {
+    ///         console.error("Operation failed: ", e);
+    ///     } finally {
+    ///         if (game) game.free();
+    ///     }
+    /// }
+    /// run();
+    /// ```
+    pub fn cell_overrides(&self) -> Result<Array, JsValue> {
+        let result = Array::new();
+        for ((row, col), entities) in self.game.cell_entities() {
+            if let Some(entity) = entities.first() {
+                let json = serde_json::to_string(entity).map_err(|e| {
+                    JsValue::from_str(&format!("failed to serialise cell entity: {e}"))
+                })?;
+                let obj = Object::new();
+                Reflect::set(&obj, &JsValue::from_str("row"), &JsValue::from_f64(*row as f64))?;
+                Reflect::set(&obj, &JsValue::from_str("col"), &JsValue::from_f64(*col as f64))?;
+                Reflect::set(&obj, &JsValue::from_str("entity"), &JSON::parse(&json)?)?;
+                result.push(&obj);
+            }
+        }
+        Ok(result)
+    }
 
     /// Returns the time in milliseconds until the next [`MazeGameWasm::tick`]
     /// will produce an event, or `null` when the game is idle.

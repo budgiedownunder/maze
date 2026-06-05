@@ -26,6 +26,8 @@ const { mockMove, mockRestart, mockTogglePause, mockUseMazeGame, mockGameInstanc
     max_hp:           vi.fn().mockReturnValue(3),
     enemies:          vi.fn().mockReturnValue([]),
     health_pickups:   vi.fn().mockReturnValue([]),
+    grid:             vi.fn().mockReturnValue([['S', ' ', 'F']]),
+    cell_overrides:   vi.fn().mockReturnValue([]),
     free:             vi.fn(),
   }
   const mockMove = vi.fn()
@@ -45,15 +47,8 @@ vi.mock('../../src/hooks/useMazeGame', () => ({
   MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
 }))
 
-// Mock only splitDefinition (the override codec) — keep the rest of the WASM bridge
-// real so getBag/getHp/getMaxHp still operate on the mock game object.
-const { mockSplitDefinition } = vi.hoisted(() => ({
-  mockSplitDefinition: vi.fn().mockResolvedValue({ grid: [], overrides: [] }),
-}))
-vi.mock('../../src/wasm/mazeWasm', async () => {
-  const actual = await vi.importActual<typeof import('../../src/wasm/mazeWasm')>('../../src/wasm/mazeWasm')
-  return { ...actual, splitDefinition: mockSplitDefinition }
-})
+// The WASM bridge is left real — getBag/getHp/getMaxHp/getGameGrid/getGameCellOverrides
+// all operate on the mock game object (which stubs grid()/cell_overrides()/etc.).
 
 vi.mock('../../src/components/MazeGrid', () => ({
   MazeGrid: (props: Record<string, unknown>) => (
@@ -61,6 +56,7 @@ vi.mock('../../src/components/MazeGrid', () => ({
       data-testid="maze-grid"
       data-version={props.version as number}
       data-grid={JSON.stringify(props.grid)}
+      data-overrides={JSON.stringify(props.cellOverrides ? Array.from((props.cellOverrides as Map<string, unknown>).entries()) : null)}
     />
   ),
 }))
@@ -428,32 +424,37 @@ describe('MazeGamePage', () => {
 })
 
 describe('MazeGamePage per-cell overrides', () => {
-  beforeEach(() => {
-    mockSplitDefinition.mockResolvedValue({ grid: [], overrides: [] })
-  })
-
-  it('hands MazeGrid the pure-char grid (not the array form) for an override maze', async () => {
-    // The stored definition has array-form cells; the codec splits it into a pure-char
-    // grid. MazeGrid must receive the split grid, not the raw array form — the
-    // regression where it received the array form rendered the static cells empty.
-    mockSplitDefinition.mockResolvedValue({
-      grid: [['S', 'H', 'K', 'D', 'F']],
-      overrides: [{ row: 0, col: 1, entity: { type: 'H', healthStyle: 'potion' } }],
-    })
+  it('hands MazeGrid the pure-char grid + variant overrides read from the live game', async () => {
+    // The display grid and overrides come straight from the live game object: grid()
+    // returns a pure-char grid (overridden cells reported as their base char), and
+    // cell_overrides() returns the variant per overridden cell. MazeGrid must receive
+    // both — the regression where static cells rendered empty was the array form
+    // leaking through instead of this pure-char grid.
+    mockGameInstance.grid.mockReturnValue([['S', 'H', 'K', 'D', 'F']])
+    mockGameInstance.cell_overrides.mockReturnValue([
+      { row: 0, col: 1, entity: { type: 'H', healthStyle: 'potion' } },
+    ])
     renderPage(mockMazeOverrideStatic.id)
     await waitForLoad()
 
-    const grid = JSON.parse(screen.getByTestId('maze-grid').getAttribute('data-grid')!) as unknown[][]
+    const gridEl = screen.getByTestId('maze-grid')
+    const grid = JSON.parse(gridEl.getAttribute('data-grid')!) as unknown[][]
     expect(grid.flat().every(c => typeof c === 'string')).toBe(true)
     expect(grid).toEqual([['S', 'H', 'K', 'D', 'F']])
-    expect(mockSplitDefinition).toHaveBeenCalled()
+
+    const overrides = JSON.parse(gridEl.getAttribute('data-overrides')!) as [string, unknown][]
+    expect(overrides).toEqual([['0,1', { type: 'H', healthStyle: 'potion' }]])
   })
 
-  it('does not run the codec for a no-override maze (grid passed through as-is)', async () => {
+  it('passes an empty override map for a no-override maze (pure-char grid)', async () => {
+    mockGameInstance.grid.mockReturnValue([['S', ' ', 'F']])
+    mockGameInstance.cell_overrides.mockReturnValue([])
     renderPage(mockMazeAlpha.id)
     await waitForLoad()
-    expect(mockSplitDefinition).not.toHaveBeenCalled()
-    const grid = JSON.parse(screen.getByTestId('maze-grid').getAttribute('data-grid')!) as unknown[][]
+    const gridEl = screen.getByTestId('maze-grid')
+    const grid = JSON.parse(gridEl.getAttribute('data-grid')!) as unknown[][]
     expect(grid.flat().every(c => typeof c === 'string')).toBe(true)
+    const overrides = JSON.parse(gridEl.getAttribute('data-overrides')!) as [string, unknown][]
+    expect(overrides).toEqual([])
   })
 })
