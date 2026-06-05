@@ -4467,6 +4467,27 @@ mod tests {
     }
 
     #[test]
+    fn maze_set_get_wall_cell_entity_round_trip() {
+        // Wall cells are overridable too (the `wall_type` per-cell override),
+        // and the type-vs-char check accepts a `W` entity on a `W` cell.
+        let maze_ptr = maze_c_new_maze();
+        maze_c_maze_resize(maze_ptr, 1, 3);
+        unsafe { maze_c_maze_set_wall_cells(maze_ptr, 0, 1, 0, 1) };
+
+        let entity = CString::new(r#"{"type":"W","wallType":"lava"}"#).unwrap();
+        let rc = unsafe { maze_c_maze_set_cell_entity(maze_ptr, 0, 1, entity.as_ptr()) };
+        assert_eq!(rc, 1);
+
+        let got = maze_c_maze_get_cell_entity(maze_ptr, 0, 1);
+        assert!(!got.is_null());
+        let got_str = unsafe { CStr::from_ptr(got) }.to_str().unwrap().to_string();
+        assert!(got_str.contains(r#""type":"W""#), "got: {got_str}");
+        assert!(got_str.contains(r#""wallType":"lava""#), "got: {got_str}");
+        unsafe { maze_c_free_string(got) };
+        maze_c_free_maze(maze_ptr);
+    }
+
+    #[test]
     fn game_health_pickup_count_and_get() {
         let json = CString::new(r#"{"grid":[["S","H","F"]]}"#).unwrap();
         let ptr = new_game(&json);

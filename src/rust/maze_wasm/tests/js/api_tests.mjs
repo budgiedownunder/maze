@@ -781,6 +781,7 @@ function registerMazeTests() {
             { setCells: 'set_health_cells', char: 'H', entity: { type: 'H', healthStyle: 'potion', healAmount: 3 } },
             { setCells: 'set_key_cells', char: 'K', entity: { type: 'K', keyHolder: 'chest' } },
             { setCells: 'set_door_cells', char: 'D', entity: { type: 'D', doorStyle: 'portcullis' } },
+            { setCells: 'set_wall_cells', char: 'W', entity: { type: 'W', wallType: 'lava' } },
         ].forEach(function (t) {
             it(`should expect get_cell_entity() to return null for a ${t.char} cell with no override`, function () {
                 let maze = track(new MazeWasm());
