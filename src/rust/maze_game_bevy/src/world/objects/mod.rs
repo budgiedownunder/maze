@@ -4,9 +4,11 @@ pub(crate) mod enemy;
 pub(crate) mod finish;
 pub(crate) mod health;
 pub(crate) mod key_holder;
+pub(crate) mod overrides;
 
 use crate::state::GameConfig;
 use bevy::prelude::*;
+use maze::CellEntity;
 
 pub(crate) struct ObjectAssets {
     pub(crate) finish: finish::FinishAssets,
@@ -47,6 +49,9 @@ pub(crate) fn spawn_objects_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
+    // The cell's override (if any), used to pick a per-cell rig in place of the
+    // per-maze `GameConfig` default.
+    cell_entity: Option<&CellEntity>,
     enemy_id: u32,
 ) {
     finish::spawn_finish_for_cell(commands, &assets.finish, cell, r, c);
@@ -59,7 +64,10 @@ pub(crate) fn spawn_objects_for_cell(
         c,
         config,
     );
-    key_holder::spawn_key_holder_for_cell(commands, &assets.key_holder, config.key_holder, cell, r, c);
-    enemy::spawn_enemy_for_cell(commands, &assets.enemy, config.enemy_type, cell, r, c, enemy_id);
-    health::spawn_health_for_cell(commands, &assets.health, config.health_style, cell, r, c);
+    let key_holder = overrides::resolve_key_holder(cell_entity, config.key_holder);
+    let enemy_type = overrides::resolve_enemy_type(cell_entity, config.enemy_type);
+    let health_style = overrides::resolve_health_style(cell_entity, config.health_style);
+    key_holder::spawn_key_holder_for_cell(commands, &assets.key_holder, key_holder, cell, r, c);
+    enemy::spawn_enemy_for_cell(commands, &assets.enemy, enemy_type, cell, r, c, enemy_id);
+    health::spawn_health_for_cell(commands, &assets.health, health_style, cell, r, c);
 }

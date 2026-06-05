@@ -13,7 +13,7 @@ mod maze_point_offset;
 mod solver;
 
 // Re-export traits and structs
-pub use data_model::EnemyType;
+pub use data_model::{CellEntity, EnemyType};
 pub use error::Error;
 pub use game::{
     BagItem, Direction, DoorState, Enemy, GameEvent, LoseReason, MazeGame, MazeGameOptions,

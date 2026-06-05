@@ -39,7 +39,7 @@ use crate::world::decorations::wall::{
 use crate::world::walls::{wall_kind_for_cell, WallAssets, PANEL_W};
 use crate::world::{CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
-use maze::DoorState;
+use maze::{CellEntity, DoorState};
 use panel::DOOR_THICKNESS;
 use std::f32::consts::{FRAC_PI_2, PI};
 
@@ -277,10 +277,13 @@ pub(crate) fn spawn_door_for_cell(
     r: usize,
     c: usize,
     config: &GameConfig,
+    cell_entity: Option<&CellEntity>,
 ) {
     if cell != 'D' {
         return;
     }
+    // Per-cell `doorStyle` override, else the per-maze default.
+    let door_style = super::overrides::resolve_door_style(cell_entity, config.door_style);
     let rows = grid.len();
     let cols = grid[r].len();
     let x = c as f32 * CELL_SIZE + 1.0;
@@ -290,7 +293,7 @@ pub(crate) fn spawn_door_for_cell(
     // A swinging door only reads well between two facing walls, so it's the one
     // special case: a single central leaf in a straight corridor. Everything
     // else seals each open edge with its own leaf.
-    if config.door_style == DoorStyle::Swing && is_straight_corridor(grid, r, c) {
+    if door_style == DoorStyle::Swing && is_straight_corridor(grid, r, c) {
         let normal_z = r > 0 && grid[r - 1][c] != 'W'; // N/S corridor → normal along Z
         let closed_yaw = if normal_z { 0.0 } else { FRAC_PI_2 };
         let edge_centre = Vec3::new(x, 0.0, z);
@@ -319,7 +322,7 @@ pub(crate) fn spawn_door_for_cell(
 
     // Per-edge leaves. The chosen style's motion applies to each, except a
     // `Swing` style degrades to `Slide` here (no walls to anchor a hinge).
-    let motion = match config.door_style {
+    let motion = match door_style {
         DoorStyle::Swing | DoorStyle::Slide => DoorMotion::Slide,
         DoorStyle::Portcullis => DoorMotion::Portcullis,
         DoorStyle::Dissolve => DoorMotion::Dissolve,

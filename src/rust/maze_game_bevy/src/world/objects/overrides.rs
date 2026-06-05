@@ -1,0 +1,137 @@
+//! Per-cell rig resolution.
+//!
+//! A cell may carry an override choosing a specific visual rig
+//! (`enemyType` / `healthStyle` / `keyHolder` / `doorStyle`) instead of the
+//! single per-maze rig held in [`GameConfig`](crate::state::GameConfig). These
+//! helpers resolve the effective rig for one cell: the per-cell override when
+//! present, otherwise the supplied config default.
+//!
+//! The override carries the engine's (`data_model`) rig enums, which are bridged
+//! to this crate's `state::` rig enums through their shared wire string — the
+//! same lenient `from_wire_str` mapping used everywhere else, so an unknown
+//! value falls back to the rig's default rather than erroring.
+
+use crate::state::{DoorStyle, EnemyType, HealthStyle, KeyHolderStyle};
+use maze::CellEntity;
+
+/// The enemy rig for a cell: the cell's `enemyType` override, else `default`.
+pub(crate) fn resolve_enemy_type(entity: Option<&CellEntity>, default: EnemyType) -> EnemyType {
+    if let Some(CellEntity::Enemy(over)) = entity {
+        if let Some(t) = over.enemy_type {
+            return EnemyType::from_wire_str(t.as_wire_str());
+        }
+    }
+    default
+}
+
+/// The health-pickup rig for a cell: the cell's `healthStyle` override, else `default`.
+pub(crate) fn resolve_health_style(entity: Option<&CellEntity>, default: HealthStyle) -> HealthStyle {
+    if let Some(CellEntity::Health(over)) = entity {
+        if let Some(s) = over.health_style {
+            return HealthStyle::from_wire_str(s.as_wire_str());
+        }
+    }
+    default
+}
+
+/// The key-holder rig for a cell: the cell's `keyHolder` override, else `default`.
+pub(crate) fn resolve_key_holder(entity: Option<&CellEntity>, default: KeyHolderStyle) -> KeyHolderStyle {
+    if let Some(CellEntity::Key(over)) = entity {
+        if let Some(h) = over.key_holder {
+            return KeyHolderStyle::from_wire_str(h.as_wire_str());
+        }
+    }
+    default
+}
+
+/// The door rig for a cell: the cell's `doorStyle` override, else `default`.
+pub(crate) fn resolve_door_style(entity: Option<&CellEntity>, default: DoorStyle) -> DoorStyle {
+    if let Some(CellEntity::Door(over)) = entity {
+        if let Some(s) = over.door_style {
+            return DoorStyle::from_wire_str(s.as_wire_str());
+        }
+    }
+    default
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Build a `CellEntity` from its wire JSON — avoids depending on the
+    // override payload structs directly (they are not part of the `maze`
+    // re-export surface).
+    fn entity(json: &str) -> CellEntity {
+        serde_json::from_str(json).expect("valid cell-entity JSON")
+    }
+
+    #[test]
+    fn enemy_override_picks_the_overridden_rig() {
+        let e = entity(r#"{ "type": "E", "enemyType": "ghost" }"#);
+        assert_eq!(
+            resolve_enemy_type(Some(&e), EnemyType::Goblin),
+            EnemyType::Ghost,
+        );
+    }
+
+    #[test]
+    fn enemy_without_override_field_falls_back_to_default() {
+        // A field-less enemy entity (e.g. a numeric-only override) carries no
+        // rig choice, so the config default wins.
+        let e = entity(r#"{ "type": "E", "damage": 5 }"#);
+        assert_eq!(
+            resolve_enemy_type(Some(&e), EnemyType::Ghost),
+            EnemyType::Ghost,
+        );
+    }
+
+    #[test]
+    fn enemy_with_no_entity_falls_back_to_default() {
+        assert_eq!(resolve_enemy_type(None, EnemyType::Ghost), EnemyType::Ghost);
+    }
+
+    #[test]
+    fn wrong_variant_falls_back_to_default() {
+        // A health override on the lookup must not satisfy an enemy resolve.
+        let h = entity(r#"{ "type": "H", "healthStyle": "potion" }"#);
+        assert_eq!(resolve_enemy_type(Some(&h), EnemyType::Goblin), EnemyType::Goblin);
+    }
+
+    #[test]
+    fn health_override_picks_the_overridden_rig() {
+        let h = entity(r#"{ "type": "H", "healthStyle": "potion" }"#);
+        assert_eq!(
+            resolve_health_style(Some(&h), HealthStyle::Heart),
+            HealthStyle::Potion,
+        );
+        assert_eq!(resolve_health_style(None, HealthStyle::Heart), HealthStyle::Heart);
+    }
+
+    #[test]
+    fn key_override_picks_the_overridden_rig() {
+        let k = entity(r#"{ "type": "K", "keyHolder": "chest" }"#);
+        assert_eq!(
+            resolve_key_holder(Some(&k), KeyHolderStyle::Pedestal),
+            KeyHolderStyle::Chest,
+        );
+        let floating = entity(r#"{ "type": "K", "keyHolder": "floating_key" }"#);
+        assert_eq!(
+            resolve_key_holder(Some(&floating), KeyHolderStyle::Pedestal),
+            KeyHolderStyle::FloatingKey,
+        );
+        assert_eq!(
+            resolve_key_holder(None, KeyHolderStyle::Pedestal),
+            KeyHolderStyle::Pedestal,
+        );
+    }
+
+    #[test]
+    fn door_override_picks_the_overridden_rig() {
+        let d = entity(r#"{ "type": "D", "doorStyle": "portcullis" }"#);
+        assert_eq!(
+            resolve_door_style(Some(&d), DoorStyle::Swing),
+            DoorStyle::Portcullis,
+        );
+        assert_eq!(resolve_door_style(None, DoorStyle::Swing), DoorStyle::Swing);
+    }
+}

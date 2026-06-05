@@ -1110,4 +1110,23 @@ mod tests {
             "Ghost rig must spawn one GhostTag per 'E' cell",
         );
     }
+
+    #[test]
+    fn per_cell_ghost_override_spawns_ghost_under_goblin_default() {
+        // The maze's default enemy rig is Goblin (default `GameConfig`), but the
+        // single `'E'` cell carries a `ghost` per-cell override. The override —
+        // not the config default — must drive the spawned rig.
+        use crate::world::objects::enemy::ghost::GhostTag;
+        let json = r#"{"grid":[["S",[{"type":"E","enemyType":"ghost"}],"F"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let ghost_tag_count = app
+            .world_mut()
+            .query::<&GhostTag>()
+            .iter(app.world())
+            .count();
+        assert_eq!(
+            ghost_tag_count, 1,
+            "a per-cell ghost override must spawn a ghost rig even when the maze default is Goblin",
+        );
+    }
 }

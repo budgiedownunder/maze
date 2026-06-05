@@ -333,6 +333,11 @@ pub(crate) fn spawn_world(
         }
     };
 
+    // Per-cell rig overrides (sparse — only overridden cells appear). Cloned out
+    // before `game` is moved into `GameState`; used during the spawn scan below
+    // to pick a per-cell rig in place of the per-maze `GameConfig` default.
+    let cell_entities = game.cell_entities().clone();
+
     let start_row = game.player_row();
     let start_col = game.player_col();
     let facing = initial_facing(&grid, start_row, start_col);
@@ -403,6 +408,7 @@ pub(crate) fn spawn_world(
                 &config,
             );
             floor::spawn_floor_for_cell(&mut commands, &floor_assets, &grid, cell, r, c);
+            let cell_entity = cell_entities.get(&(r, c)).and_then(|v| v.first());
             objects::spawn_objects_for_cell(
                 &mut commands,
                 &object_assets,
@@ -411,6 +417,7 @@ pub(crate) fn spawn_world(
                 r,
                 c,
                 &config,
+                cell_entity,
                 enemy_id,
             );
             if cell == 'E' {
@@ -430,6 +437,7 @@ pub(crate) fn spawn_world(
                 r,
                 c,
                 &config,
+                cell_entity,
             );
             roof::spawn_roof_for_cell(&mut commands, &roof_assets, &wall_assets, &grid, r, c, &config);
         }
