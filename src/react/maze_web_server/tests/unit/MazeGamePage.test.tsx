@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../src/mocks/server'
-import { mockMazeAlpha } from '../../src/mocks/handlers'
+import { mockMazeAlpha, mockMazeOverrideStatic } from '../../src/mocks/handlers'
 import { ThemeProvider } from '../../src/context/ThemeProvider'
 import { MazeGamePage } from '../../src/pages/MazeGamePage'
 
@@ -45,9 +45,23 @@ vi.mock('../../src/hooks/useMazeGame', () => ({
   MazeGameDirection: { None: 0, Up: 1, Down: 2, Left: 3, Right: 4 },
 }))
 
+// Mock only splitDefinition (the override codec) — keep the rest of the WASM bridge
+// real so getBag/getHp/getMaxHp still operate on the mock game object.
+const { mockSplitDefinition } = vi.hoisted(() => ({
+  mockSplitDefinition: vi.fn().mockResolvedValue({ grid: [], overrides: [] }),
+}))
+vi.mock('../../src/wasm/mazeWasm', async () => {
+  const actual = await vi.importActual<typeof import('../../src/wasm/mazeWasm')>('../../src/wasm/mazeWasm')
+  return { ...actual, splitDefinition: mockSplitDefinition }
+})
+
 vi.mock('../../src/components/MazeGrid', () => ({
   MazeGrid: (props: Record<string, unknown>) => (
-    <div data-testid="maze-grid" data-version={props.version as number} />
+    <div
+      data-testid="maze-grid"
+      data-version={props.version as number}
+      data-grid={JSON.stringify(props.grid)}
+    />
   ),
 }))
 
@@ -410,5 +424,36 @@ describe('MazeGamePage', () => {
     renderPage()
     await waitForLoad()
     expect(screen.queryByTestId('pause-popup')).not.toBeInTheDocument()
+  })
+})
+
+describe('MazeGamePage per-cell overrides', () => {
+  beforeEach(() => {
+    mockSplitDefinition.mockResolvedValue({ grid: [], overrides: [] })
+  })
+
+  it('hands MazeGrid the pure-char grid (not the array form) for an override maze', async () => {
+    // The stored definition has array-form cells; the codec splits it into a pure-char
+    // grid. MazeGrid must receive the split grid, not the raw array form — the
+    // regression where it received the array form rendered the static cells empty.
+    mockSplitDefinition.mockResolvedValue({
+      grid: [['S', 'H', 'K', 'D', 'F']],
+      overrides: [{ row: 0, col: 1, entity: { type: 'H', healthStyle: 'potion' } }],
+    })
+    renderPage(mockMazeOverrideStatic.id)
+    await waitForLoad()
+
+    const grid = JSON.parse(screen.getByTestId('maze-grid').getAttribute('data-grid')!) as unknown[][]
+    expect(grid.flat().every(c => typeof c === 'string')).toBe(true)
+    expect(grid).toEqual([['S', 'H', 'K', 'D', 'F']])
+    expect(mockSplitDefinition).toHaveBeenCalled()
+  })
+
+  it('does not run the codec for a no-override maze (grid passed through as-is)', async () => {
+    renderPage(mockMazeAlpha.id)
+    await waitForLoad()
+    expect(mockSplitDefinition).not.toHaveBeenCalled()
+    const grid = JSON.parse(screen.getByTestId('maze-grid').getAttribute('data-grid')!) as unknown[][]
+    expect(grid.flat().every(c => typeof c === 'string')).toBe(true)
   })
 })

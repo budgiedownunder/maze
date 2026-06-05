@@ -112,6 +112,24 @@ export const mockMazeOverride: Maze = {
   } as unknown as Maze['definition'],
 }
 
+// A maze whose STATIC feature cells (health/key/door) carry overrides, in the
+// canonical array form. Used to verify the 2D game renders the static variant sprites
+// (the regression where MazeGamePage handed the raw array-form grid to MazeGrid showed
+// these cells empty). Layout: S, potion-health, pedestal-key, swing-door, F.
+export const mockMazeOverrideStatic: Maze = {
+  id: 'maze-override-static',
+  name: 'OverrideStatic',
+  definition: {
+    grid: [[
+      'S',
+      [{ type: 'H', healthStyle: 'potion' }],
+      [{ type: 'K', keyHolder: 'pedestal' }],
+      [{ type: 'D', doorStyle: 'swing' }],
+      'F',
+    ]],
+  } as unknown as Maze['definition'],
+}
+
 export let mockMazes: Maze[] = [mockMazeAlpha, mockMazeBeta]
 
 export function resetMockMazes(): void {
@@ -308,6 +326,7 @@ export const handlers = [
       ?? (params.id === mockMazeEnemyGauntlet.id ? mockMazeEnemyGauntlet : undefined)
       ?? (params.id === mockMazeEnemyHealth.id ? mockMazeEnemyHealth : undefined)
       ?? (params.id === mockMazeOverride.id ? mockMazeOverride : undefined)
+      ?? (params.id === mockMazeOverrideStatic.id ? mockMazeOverrideStatic : undefined)
     if (!maze) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json(maze)
   }),

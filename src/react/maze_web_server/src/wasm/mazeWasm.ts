@@ -1,5 +1,5 @@
 import init, { MazeWasm, GenerationAlgorithmWasm, MazeGameWasm, DirectionWasm } from 'maze_wasm'
-import type { CellEntity, CellOverride, CanonicalMazeDefinition } from '../types/cellEntities'
+import type { CellEntity, CellOverride, CanonicalMazeDefinition, EnemyType } from '../types/cellEntities'
 
 export interface MazeDefinition {
   grid: string[][]
@@ -236,7 +236,7 @@ export type MazeBagItemType = typeof MazeBagItemType[keyof typeof MazeBagItemTyp
 // Object shapes returned by the MazeGameWasm accessors.
 export interface MazeDoor { row: number; col: number; state: MazeDoorState }
 export interface MazeKeyCell { row: number; col: number; id: number }
-export interface MazeEnemy { row: number; col: number; id: number }
+export interface MazeEnemy { row: number; col: number; id: number; enemyType?: EnemyType }
 export interface MazeHealthPickup { row: number; col: number; id: number }
 export type MazeBagItem = { type: typeof MazeBagItemType.Key; id: number }
 export type MazeGameEvent =

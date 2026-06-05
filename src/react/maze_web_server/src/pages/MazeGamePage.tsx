@@ -4,7 +4,8 @@ import { getMaze } from '../api/client'
 import { useToken } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useMazeGame, MazeGameDirection } from '../hooks/useMazeGame'
-import { getBag, getHp, getMaxHp, MazeGameLoseReason } from '../wasm/mazeWasm'
+import { getBag, getHp, getMaxHp, MazeGameLoseReason, splitDefinition } from '../wasm/mazeWasm'
+import type { CellEntity } from '../types/cellEntities'
 import { useMenuVariant } from '../hooks/useMenuVariant'
 import { HamburgerMenu } from '../components/HamburgerMenu'
 import { MazeGrid } from '../components/MazeGrid'
@@ -27,11 +28,48 @@ export function MazeGamePage() {
 
   const [maze, setMaze] = useState<Maze | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // A maze with per-cell overrides stores the array form on overridden cells, which the
+  // char-based MazeGrid can't render. Split the definition (via the same WASM codec the
+  // editor uses) into a pure-char display grid + a variant-override map. A no-override
+  // maze needs neither — its definition grid is already pure char (used directly below).
+  // (Live enemy rigs ride the game object, not this map — they render even mid-move.)
+  // Tagged with its source maze so a stale result (from a previously loaded maze) is
+  // ignored at render time without a synchronous reset.
+  const [split, setSplit] = useState<{ maze: Maze; grid: string[][]; overrides: Map<string, CellEntity> } | null>(null)
 
   useEffect(() => {
     if (!id || !token) return
     getMaze(token, id).then(setMaze).catch((e: Error) => setLoadError(e.message))
   }, [id, token])
+
+  // Whether the definition carries any override (an overridden cell is the array form,
+  // not a bare char). A presence check, not a parse — so the no-override maze skips the
+  // codec entirely and does no extra work on load.
+  const hasOverrides = useMemo(() => {
+    if (!maze) return false
+    const grid = maze.definition.grid as unknown as unknown[][]
+    return grid.some(row => row.some(cell => Array.isArray(cell)))
+  }, [maze])
+
+  useEffect(() => {
+    if (!maze || !hasOverrides) return
+    let cancelled = false
+    splitDefinition(JSON.stringify(maze))
+      .then(({ grid, overrides }) => {
+        if (!cancelled) setSplit({ maze, grid, overrides: new Map(overrides.map(o => [`${o.row},${o.col}`, o.entity])) })
+      })
+      // Safety net (unreachable for a maze the game already loaded): render the raw grid
+      // rather than getting stuck on the loading state.
+      .catch(() => { if (!cancelled) setSplit({ maze, grid: maze.definition.grid, overrides: new Map() }) })
+    return () => { cancelled = true }
+  }, [maze, hasOverrides])
+
+  // Pure-char grid + variant overrides for MazeGrid. No-override mazes use the
+  // definition grid directly; override mazes use the split result once it resolves for
+  // the current maze (a split tagged with a different maze is stale → ignored).
+  const currentSplit = split && split.maze === maze ? split : null
+  const displayGrid = hasOverrides ? currentSplit?.grid ?? null : maze?.definition.grid ?? null
+  const cellOverrides = currentSplit?.overrides
 
   const gameCellSize = window.matchMedia('(pointer: coarse)').matches ? 60 : 32
 
@@ -123,11 +161,11 @@ export function MazeGamePage() {
         {loadError && <p className="error-msg" role="alert">{loadError}</p>}
         {error && <p className="error-msg" role="alert">{error}</p>}
 
-        {!loadError && !error && (!maze || !game || loading) && (
+        {!loadError && !error && (!maze || !game || loading || !displayGrid) && (
           <p className="loading-msg" role="status" aria-label="Loading">Loading…</p>
         )}
 
-        {maze && game && !loading && !loadError && !error && (
+        {maze && game && displayGrid && !loading && !loadError && !error && (
           <>
             {damageFlashKey > 0 && (
               <div
@@ -138,13 +176,14 @@ export function MazeGamePage() {
             )}
 
             <MazeGrid
-              grid={maze.definition.grid}
+              grid={displayGrid}
               solution={null}
               activeCell={null}
               anchorCell={null}
               game={game}
               version={version}
               cellSize={gameCellSize}
+              cellOverrides={cellOverrides}
             />
 
             <div className="maze-game-status">

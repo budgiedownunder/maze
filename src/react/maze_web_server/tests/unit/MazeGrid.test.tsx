@@ -353,7 +353,7 @@ function makeGameObj(overrides: Partial<{
   visited_cells: () => Array<{ row: number; col: number }>
   keys: () => Array<{ row: number; col: number; id: number }>
   doors: () => Array<{ row: number; col: number; state: string }>
-  enemies: () => Array<{ row: number; col: number; id: number }>
+  enemies: () => Array<{ row: number; col: number; id: number; enemyType?: string }>
   health_pickups: () => Array<{ row: number; col: number; id: number }>
 }> = {}) {
   return {
@@ -371,7 +371,11 @@ function makeGameObj(overrides: Partial<{
   }
 }
 
-function renderGameGrid(game: ReturnType<typeof makeGameObj>, version = 0) {
+function renderGameGrid(
+  game: ReturnType<typeof makeGameObj>,
+  version = 0,
+  cellOverrides?: Map<string, never>,
+) {
   return render(
     <MazeGrid
       grid={GAME_GRID}
@@ -380,6 +384,7 @@ function renderGameGrid(game: ReturnType<typeof makeGameObj>, version = 0) {
       anchorCell={null}
       game={game as never}
       version={version}
+      cellOverrides={cellOverrides as never}
     />,
   )
 }
@@ -554,6 +559,42 @@ describe('MazeGrid game mode', () => {
     renderGameGrid(game, 1)
     expect(screen.queryByAltText('')).not.toBeInTheDocument()
     expect(screen.getByAltText('Enemy')).toBeInTheDocument()
+  })
+})
+
+describe('MazeGrid game-mode variant sprites', () => {
+  it('renders the ghost sprite for a live enemy with a ghost rig', () => {
+    const game = makeGameObj({
+      enemies: vi.fn().mockReturnValue([{ row: 1, col: 0, id: 0, enemyType: 'ghost' }]),
+    })
+    renderGameGrid(game, 1)
+    expect(screen.getByAltText('Enemy')).toHaveAttribute('src', '/images/maze/ghost.svg')
+  })
+
+  it('renders the generic enemy sprite when the live enemy has no rig override', () => {
+    const game = makeGameObj({
+      enemies: vi.fn().mockReturnValue([{ row: 1, col: 0, id: 0 }]),
+    })
+    renderGameGrid(game, 1)
+    expect(screen.getByAltText('Enemy')).toHaveAttribute('src', '/images/maze/enemy.svg')
+  })
+
+  it('renders the potion sprite for an uncollected health cell with a potion rig', () => {
+    const game = makeGameObj({
+      health_pickups: vi.fn().mockReturnValue([{ row: 0, col: 1, id: 0 }]),
+    })
+    render(
+      <MazeGrid
+        grid={[['S', 'H', 'F']]}
+        solution={null}
+        activeCell={null}
+        anchorCell={null}
+        game={game as never}
+        version={1}
+        cellOverrides={new Map([['0,1', { type: 'H', healthStyle: 'potion' }]]) as never}
+      />,
+    )
+    expect(screen.getByAltText('Health')).toHaveAttribute('src', '/images/maze/potion.svg')
   })
 })
 

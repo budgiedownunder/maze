@@ -4,7 +4,7 @@ import type { WalkState } from '../hooks/useWalkAnimation'
 import type { MazeGameWasm } from 'maze_wasm'
 import { MazeGameDirection, MazeDoorState, getKeys, getDoors, getEnemies, getHealthPickups } from '../wasm/mazeWasm'
 import { cellSprite } from '../utils/cellSprite'
-import type { CellEntity } from '../types/cellEntities'
+import type { CellEntity, EnemyType } from '../types/cellEntities'
 
 export const CELL_SIZE = 32
 export const HEADER_SIZE = 24
@@ -175,6 +175,19 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
         counts.set(key, (counts.get(key) ?? 0) + 1)
       }
       return counts
+    }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Per-cell live enemy rig, so the overlay sprite reflects a `enemyType` override
+    // (e.g. ghost). First enemy wins on a shared cell; `undefined` = default rig. The
+    // override rides the live enemy (it moves), not the static spawn cell.
+    const enemyTypeByCell = useMemo(() => {
+      if (!game) return null
+      const types = new Map<string, EnemyType | undefined>()
+      for (const e of getEnemies(game)) {
+        const key = `${e.row},${e.col}`
+        if (!types.has(key)) types.set(key, e.enemyType)
+      }
+      return types
     }, [version, game]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const solutionMap = useMemo(
@@ -458,11 +471,13 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   const solutionImgSrc = solutionMap.get(key)
                   const suppressFootstep = cell === 'S' || cell === 'F' || cell === 'K' || cell === 'D' || cell === 'E' || cell === 'H'
                   const isGamePlayer = game !== null && game !== undefined && playerRow === r && playerCol === c
-                  // Editor mode resolves the per-cell variant sprite (ghost/potion);
-                  // game mode uses the generic sprite (its live variants are Step 9).
+                  // Per-cell variant sprite (ghost/potion) in both editor and game
+                  // mode. The static cells (health/key/door) read their rig from
+                  // `cellOverrides`; the moving enemy's rig is handled by the overlay
+                  // below (its spawn `'E'` is suppressed in game mode).
                   let img = (isWalker || isGamePlayer)
                     ? null
-                    : cellSprite(cell, game ? undefined : cellOverrides?.get(key))
+                    : cellSprite(cell, cellOverrides?.get(key))
                   let imgStyle: React.CSSProperties | undefined
                   // Game mode: a collected key disappears, an open door disappears, and
                   // a door that is opening is dimmed. A consumed health pickup
@@ -485,6 +500,10 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                   }
                   const enemyCount = game !== null && game !== undefined ? (enemyCountByCell?.get(key) ?? 0) : 0
                   const hasEnemy = enemyCount > 0
+                  // Live enemy overlay sprite, honouring a per-cell `enemyType` rig.
+                  const enemyType = enemyTypeByCell?.get(key)
+                  const enemySrc = cellSprite('E', enemyType ? { type: 'E', enemyType } : undefined)?.src
+                    ?? '/images/maze/enemy.svg'
                   return (
                     <td
                       key={`cell-${r}-${c}`}
@@ -522,7 +541,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                           top-right corner surfaces stacks of 2+ enemies. */}
                       {hasEnemy && !isGamePlayer && (
                         <>
-                          <img src="/images/maze/enemy.svg" alt="Enemy"
+                          <img src={enemySrc} alt="Enemy"
                                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
                           {enemyCount > 1 && (
                             <span className="maze-cell-enemy-stack-count" aria-label={`${enemyCount} enemies`}>
@@ -538,7 +557,7 @@ export const MazeGrid = forwardRef<HTMLDivElement, MazeGridProps>(
                           count chip in the top-right corner surfaces the
                           count when more than one enemy is piled up. */}
                       {isGamePlayer && hasEnemy && (
-                        <img src="/images/maze/enemy.svg" alt={enemyCount === 1 ? 'Enemy on player cell' : `${enemyCount} enemies on player cell`}
+                        <img src={enemySrc} alt={enemyCount === 1 ? 'Enemy on player cell' : `${enemyCount} enemies on player cell`}
                              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', opacity: 0.5, pointerEvents: 'none' }} />
                       )}
                       {isGamePlayer && (
