@@ -1181,7 +1181,31 @@ test('the override panel is hidden when a non-feature cell is selected', async (
   await page.getByRole('button', { name: 'Set Enemy' }).click()
   await expect(page.getByRole('combobox', { name: 'Type' })).toBeVisible()
 
-  // Cell (1,1) is a wall — selecting it hides the override panel.
-  await page.getByLabel('Cell 2,2').click()
+  // Cell (0,0) is the start — not overridable — so selecting it hides the panel.
+  // (Walls are overridable now, so a wall cell would keep the panel open.)
+  await page.getByLabel('Cell 1,1').click()
   await expect(page.getByRole('combobox', { name: 'Type' })).not.toBeVisible()
+})
+
+test('authoring a lava wall override shows the lava sprite plus a badge and saves', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // Stamp a wall on the empty cell (0,1), which opens the two-tier wall panel.
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Wall')).toBeVisible()
+
+  // Choosing the special "Lava" type swaps the sprite and adds an override badge.
+  const typeSelect = page.getByRole('combobox', { name: 'Type' })
+  await expect(typeSelect).toBeVisible()
+  await typeSelect.selectOption('lava')
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Wall')).toHaveAttribute('src', /lava\.svg/)
+  await expect(page.getByLabel('Cell 1,2').getByLabel('Has override')).toBeVisible()
+
+  // Saving runs the real build-definition codec; the button disables on success and
+  // no save error appears.
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await expect(page.locator('.error-msg')).not.toBeVisible()
 })

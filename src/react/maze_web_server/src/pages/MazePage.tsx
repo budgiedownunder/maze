@@ -29,7 +29,7 @@ const BLANK_GRID = Array.from({ length: 5 }, () => Array<string>(5).fill(' '))
 
 // Narrows a grid cell char to a feature type that can carry a per-cell override.
 function isFeatureChar(ch: string | undefined): ch is FeatureChar {
-  return ch === 'E' || ch === 'H' || ch === 'K' || ch === 'D'
+  return ch === 'E' || ch === 'H' || ch === 'K' || ch === 'D' || ch === 'W'
 }
 
 export function MazePage() {
@@ -111,7 +111,7 @@ export function MazePage() {
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
 
-  // The single feature cell (E/H/K/D) whose override panel is shown, or null. Gated to
+  // The single feature cell (E/H/K/D/W) whose override panel is shown, or null. Gated to
   // a single selected feature cell with no solution displayed and the editor idle.
   const overridePanelCell = useMemo(() => {
     if (!activeCell || anchorCell !== null) return null

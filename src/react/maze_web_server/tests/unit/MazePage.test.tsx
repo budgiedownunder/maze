@@ -1117,4 +1117,14 @@ describe('MazePage per-cell override panel', () => {
     await userEvent.click(screen.getByLabelText('Cell 1,1'))
     expect(screen.queryByRole('combobox', { name: 'Type' })).not.toBeInTheDocument()
   })
+
+  it('shows the two-tier wall panel for a single wall cell', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2') // (0,1) is 'E' — stamp it a wall, which keeps it selected
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    await userEvent.click(screen.getByRole('button', { name: 'Set Wall' }))
+    expect(screen.getByText('Wall [1,2]')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Type' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Texture' })).toBeInTheDocument()
+  })
 })

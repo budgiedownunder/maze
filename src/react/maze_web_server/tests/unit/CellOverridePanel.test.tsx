@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { CellOverridePanel } from '../../src/components/CellOverridePanel'
 import type { CellEntity } from '../../src/types/cellEntities'
 
-function setup(cellType: 'E' | 'H' | 'K' | 'D', override?: CellEntity) {
+function setup(cellType: 'E' | 'H' | 'K' | 'D' | 'W', override?: CellEntity) {
   const onApply = vi.fn()
   const onClear = vi.fn()
   render(
@@ -115,6 +115,55 @@ describe('CellOverridePanel', () => {
       />,
     )
     expect(container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/potion.svg')
+  })
+
+  it('renders the wall Type + Texture selects, with Texture shown under "Wall"', () => {
+    setup('W')
+    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('wall')
+    expect(screen.getByRole('combobox', { name: 'Texture' })).toHaveValue('')
+  })
+
+  it('applies a special wall type and hides the Texture select', async () => {
+    const { onApply } = setup('W')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'water')
+    expect(onApply).toHaveBeenLastCalledWith({ type: 'W', wallType: 'water' })
+    expect(screen.queryByRole('combobox', { name: 'Texture' })).not.toBeInTheDocument()
+  })
+
+  it('applies a solid texture chosen under "Wall"', async () => {
+    const { onApply } = setup('W')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Texture' }), 'brick')
+    expect(onApply).toHaveBeenLastCalledWith({ type: 'W', wallType: 'brick' })
+  })
+
+  it('clears the override when Texture returns to Default under "Wall"', async () => {
+    const { onClear } = setup('W', { type: 'W', wallType: 'brick' })
+    expect(screen.getByRole('combobox', { name: 'Texture' })).toHaveValue('brick')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Texture' }), '')
+    expect(onClear).toHaveBeenCalled()
+  })
+
+  it('seeds a special wall type into the Type select (no Texture select)', () => {
+    setup('W', { type: 'W', wallType: 'lava' })
+    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('lava')
+    expect(screen.queryByRole('combobox', { name: 'Texture' })).not.toBeInTheDocument()
+  })
+
+  it('seeds a solid wall texture into the Texture select under "Wall"', () => {
+    setup('W', { type: 'W', wallType: 'dressed_stone' })
+    expect(screen.getByRole('combobox', { name: 'Type' })).toHaveValue('wall')
+    expect(screen.getByRole('combobox', { name: 'Texture' })).toHaveValue('dressed_stone')
+  })
+
+  it('shows a sprite preview reflecting the selected special wall type', () => {
+    const { container } = render(
+      <CellOverridePanel
+        cellType="W" row={0} col={0}
+        override={{ type: 'W', wallType: 'water' }}
+        onApply={vi.fn()} onClear={vi.fn()}
+      />,
+    )
+    expect(container.querySelector('.cell-override-preview')).toHaveAttribute('src', '/images/maze/water.svg')
   })
 
   it('re-seeds the fields to defaults when the override is cleared externally', () => {

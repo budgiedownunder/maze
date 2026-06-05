@@ -10,10 +10,11 @@ Browser-based UI for the `maze_web_server` REST API. Features:
 - **Maze list** — create, open, rename, duplicate, delete, and play mazes
 - **Maze editor** — cell-by-cell editing (walls, start, finish, keys, doors, enemies, health
   pickups), multi-cell range selection, structural editing (insert/delete rows and columns),
-  keyboard shortcuts, and a per-cell override panel for tuning an individual feature cell's
+  keyboard shortcuts, and a per-cell override panel for tuning an individual cell's
   characteristics (an enemy's type/damage/move interval, a health pickup's style/heal amount,
-  a key holder or door style). Variant types such as ghost enemies and potion pickups show
-  their own sprite in the grid, and overridden cells are marked with a corner badge
+  a key holder or door style, or a wall's type — a solid texture or a water / lava / iron-fence
+  skin). Variant types such as ghost enemies, potion pickups, and water/lava/iron-fence walls
+  show their own sprite in the grid, and overridden cells are marked with a corner badge
 - **Maze game** — play a maze at `/play/:id` with keyboard (arrow keys / WASD) or
   on-screen D-pad; visited cells are marked; completion shows a result popup
 - **3D maze game** — a "Play 3D" button on the maze list and maze editor pages

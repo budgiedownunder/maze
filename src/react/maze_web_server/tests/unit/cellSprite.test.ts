@@ -42,4 +42,15 @@ describe('cellSprite', () => {
     expect(cellSprite('K', { type: 'K', keyHolder: 'chest' })?.src).toBe('/images/maze/key.svg')
     expect(cellSprite('D', { type: 'D', doorStyle: 'portcullis' })?.src).toBe('/images/maze/door.svg')
   })
+
+  it('returns the variant sprite for the special wall types', () => {
+    expect(cellSprite('W', { type: 'W', wallType: 'water' })).toEqual({ src: '/images/maze/water.svg', alt: 'Wall' })
+    expect(cellSprite('W', { type: 'W', wallType: 'lava' })).toEqual({ src: '/images/maze/lava.svg', alt: 'Wall' })
+    expect(cellSprite('W', { type: 'W', wallType: 'iron_fence' })).toEqual({ src: '/images/maze/iron_fence.svg', alt: 'Wall' })
+  })
+
+  it('returns the generic wall for a solid-texture override (texture is a 3D concern)', () => {
+    expect(cellSprite('W', { type: 'W', wallType: 'brick' })?.src).toBe('/images/maze/wall.png')
+    expect(cellSprite('W', { type: 'W', wallType: 'cobblestone' })?.src).toBe('/images/maze/wall.png')
+  })
 })

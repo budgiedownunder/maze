@@ -10,9 +10,10 @@ import type {
   EnemyType,
   HealthStyle,
   KeyHolderStyle,
+  WallType,
 } from '../utils/cellEntityStyles'
 
-export type { DoorStyle, EnemyType, HealthStyle, KeyHolderStyle }
+export type { DoorStyle, EnemyType, HealthStyle, KeyHolderStyle, WallType }
 
 // Wire-shape single-entity override objects, mirroring the Rust `#[serde(tag="type")]`
 // `CellEntity` enum and the C# polymorphic `CellEntityInfo` hierarchy. Each variant
@@ -23,7 +24,8 @@ export interface EnemyCellEntity  { type: 'E'; enemyType?: EnemyType;     damage
 export interface HealthCellEntity { type: 'H'; healthStyle?: HealthStyle; healAmount?: number }
 export interface KeyCellEntity    { type: 'K'; keyHolder?: KeyHolderStyle }
 export interface DoorCellEntity   { type: 'D'; doorStyle?: DoorStyle }
-export type CellEntity = EnemyCellEntity | HealthCellEntity | KeyCellEntity | DoorCellEntity
+export interface WallCellEntity   { type: 'W'; wallType?: WallType }
+export type CellEntity = EnemyCellEntity | HealthCellEntity | KeyCellEntity | DoorCellEntity | WallCellEntity
 
 /** The grid chars that can carry an override — derived from the entity discriminators. */
 export type FeatureChar = CellEntity['type']

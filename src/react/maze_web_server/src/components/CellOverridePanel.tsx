@@ -4,6 +4,8 @@ import {
   ENEMY_TYPES,
   HEALTH_STYLES,
   KEY_HOLDER_STYLES,
+  WALL_SOLID_TEXTURES,
+  WALL_SPECIAL_TYPES,
   titleCaseWire,
 } from '../utils/cellEntityStyles'
 import { cellSprite } from '../utils/cellSprite'
@@ -14,6 +16,7 @@ import type {
   FeatureChar,
   HealthStyle,
   KeyHolderStyle,
+  WallType,
 } from '../types/cellEntities'
 
 const TYPE_LABELS: Record<FeatureChar, string> = {
@@ -21,6 +24,13 @@ const TYPE_LABELS: Record<FeatureChar, string> = {
   H: 'Health',
   K: 'Key',
   D: 'Door',
+  W: 'Wall',
+}
+
+// Whether a wall type is one of the special (non-occluding) types — those select
+// directly via the "Type" dropdown; the solid textures sit under "Wall".
+function isSpecialWallType(t: string): boolean {
+  return (WALL_SPECIAL_TYPES as readonly string[]).includes(t)
 }
 
 interface Props {
@@ -67,6 +77,7 @@ export function CellOverridePanel({ cellType, row, col, override, onApply, onCle
   const health = override?.type === 'H' ? override : undefined
   const key = override?.type === 'K' ? override : undefined
   const door = override?.type === 'D' ? override : undefined
+  const wall = override?.type === 'W' ? override : undefined
 
   const [enemyType, setEnemyType] = useState<string>(enemy?.enemyType ?? '')
   const [damage, setDamage] = useState<string>(enemy?.damage?.toString() ?? '')
@@ -75,6 +86,15 @@ export function CellOverridePanel({ cellType, row, col, override, onApply, onCle
   const [healAmount, setHealAmount] = useState<string>(health?.healAmount?.toString() ?? '')
   const [keyHolder, setKeyHolder] = useState<string>(key?.keyHolder ?? '')
   const [doorStyle, setDoorStyle] = useState<string>(door?.doorStyle ?? '')
+  // Wall is two-tier: `wallKind` is 'wall' (a solid texture, chosen via wallTexture) or
+  // one of the special types; `wallTexture` is the solid texture when kind is 'wall'.
+  const initialWallType = wall?.wallType
+  const [wallKind, setWallKind] = useState<string>(
+    initialWallType !== undefined && isSpecialWallType(initialWallType) ? initialWallType : 'wall',
+  )
+  const [wallTexture, setWallTexture] = useState<string>(
+    initialWallType !== undefined && !isSpecialWallType(initialWallType) ? initialWallType : '',
+  )
 
   // Re-seed the fields to defaults when the override is cleared externally (e.g. the
   // toolbar re-stamps the same cell type, which drops the override but keeps the cell
@@ -93,6 +113,8 @@ export function CellOverridePanel({ cellType, row, col, override, onApply, onCle
       setHealAmount('')
       setKeyHolder('')
       setDoorStyle('')
+      setWallKind('wall')
+      setWallTexture('')
     }
   }
 
@@ -132,6 +154,19 @@ export function CellOverridePanel({ cellType, row, col, override, onApply, onCle
     emit(entity)
   }
 
+  // The single flat wallType the two-tier UI resolves to: a special kind directly, or
+  // the chosen solid texture under "Wall" (or none → default).
+  function effectiveWallType(kind: string, texture: string): WallType | undefined {
+    if (kind === 'wall') return texture ? (texture as WallType) : undefined
+    return kind as WallType
+  }
+
+  function applyWall(kind: string, texture: string) {
+    const wallType = effectiveWallType(kind, texture)
+    if (wallType) onApply({ type: 'W', wallType })
+    else onClear() // "Wall" + Default texture = no override (varied default)
+  }
+
   function resetAll() {
     setEnemyType('')
     setDamage('')
@@ -140,6 +175,8 @@ export function CellOverridePanel({ cellType, row, col, override, onApply, onCle
     setHealAmount('')
     setKeyHolder('')
     setDoorStyle('')
+    setWallKind('wall')
+    setWallTexture('')
     onClear()
   }
 
@@ -245,6 +282,42 @@ export function CellOverridePanel({ cellType, row, col, override, onApply, onCle
             {DOOR_STYLES.map(s => <option key={s} value={s}>{titleCaseWire(s)}</option>)}
           </select>
         </label>
+      )}
+
+      {cellType === 'W' && (
+        <>
+          <label className="cell-override-field">
+            <span>Type</span>
+            <div className="cell-override-select-row">
+              <img
+                className="cell-override-preview"
+                src={cellSprite('W', { type: 'W', wallType: effectiveWallType(wallKind, wallTexture) })?.src}
+                alt="" aria-hidden="true"
+              />
+              <select
+                className="cell-override-input"
+                value={wallKind}
+                onChange={e => { setWallKind(e.target.value); applyWall(e.target.value, wallTexture) }}
+              >
+                <option value="wall">Wall</option>
+                {WALL_SPECIAL_TYPES.map(t => <option key={t} value={t}>{titleCaseWire(t)}</option>)}
+              </select>
+            </div>
+          </label>
+          {wallKind === 'wall' && (
+            <label className="cell-override-field">
+              <span>Texture</span>
+              <select
+                className="cell-override-input"
+                value={wallTexture}
+                onChange={e => { setWallTexture(e.target.value); applyWall(wallKind, e.target.value) }}
+              >
+                <option value="">Default</option>
+                {WALL_SOLID_TEXTURES.map(t => <option key={t} value={t}>{titleCaseWire(t)}</option>)}
+              </select>
+            </label>
+          )}
+        </>
       )}
 
       <button type="button" className="cell-override-reset" onClick={resetAll}>

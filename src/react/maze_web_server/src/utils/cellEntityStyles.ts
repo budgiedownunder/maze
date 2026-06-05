@@ -19,6 +19,11 @@ export type KeyHolderStyle = (typeof KEY_HOLDER_STYLES)[number]
 export const DOOR_STYLES = ['swing', 'slide', 'portcullis', 'dissolve'] as const
 export type DoorStyle = (typeof DOOR_STYLES)[number]
 
+export const WALL_SOLID_TEXTURES = ['brick', 'dressed_stone', 'wood', 'cobblestone'] as const
+export const WALL_SPECIAL_TYPES = ['water', 'lava', 'iron_fence'] as const
+export const WALL_TYPES = [...WALL_SOLID_TEXTURES, ...WALL_SPECIAL_TYPES] as const
+export type WallType = (typeof WALL_TYPES)[number]
+
 /**
  * Title-cases a wire string for display, replacing underscores with spaces (so e.g.
  * `dressed_stone` reads as "Dressed Stone" and `floating_key` as "Floating Key").

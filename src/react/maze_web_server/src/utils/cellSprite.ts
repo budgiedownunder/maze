@@ -1,9 +1,10 @@
-import type { CellEntity, EnemyType, HealthStyle } from '../types/cellEntities'
+import type { CellEntity, EnemyType, HealthStyle, WallType } from '../types/cellEntities'
 
 // Resolves a grid cell (its char + optional per-cell override) to the sprite to draw.
 // Shared by the editor grid and the 2D game so the char-or-override → sprite mapping
-// lives in one place. Only enemy/health carry distinct 2D variants (ghost/potion);
-// key/door rigs are a 3D-only concern, so they always render their generic sprite.
+// lives in one place. Enemy/health carry distinct 2D variants (ghost/potion), and the
+// special wall types (water/lava/iron_fence) have their own 2D sprites; key/door rigs
+// and the solid wall textures are a 3D-only concern, so they render their generic sprite.
 
 export interface CellImage {
   src: string
@@ -29,6 +30,13 @@ const ENEMY_VARIANT_SPRITES: Partial<Record<EnemyType, string>> = {
 const HEALTH_VARIANT_SPRITES: Partial<Record<HealthStyle, string>> = {
   potion: '/images/maze/potion.svg',
 }
+// Only the special (non-occluding) wall types get a 2D sprite; the solid textures
+// (brick/dressed_stone/wood/cobblestone) render the generic wall (texture is a 3D concern).
+const WALL_VARIANT_SPRITES: Partial<Record<WallType, string>> = {
+  water: '/images/maze/water.svg',
+  lava: '/images/maze/lava.svg',
+  iron_fence: '/images/maze/iron_fence.svg',
+}
 
 /**
  * The sprite for a cell, honouring a per-cell override's visual variant when one
@@ -44,6 +52,9 @@ export function cellSprite(char: string, entity?: CellEntity): CellImage | null 
     if (src) return { src, alt: base.alt }
   } else if (entity.type === 'H' && entity.healthStyle) {
     const src = HEALTH_VARIANT_SPRITES[entity.healthStyle]
+    if (src) return { src, alt: base.alt }
+  } else if (entity.type === 'W' && entity.wallType) {
+    const src = WALL_VARIANT_SPRITES[entity.wallType]
     if (src) return { src, alt: base.alt }
   }
   return base
