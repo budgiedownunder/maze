@@ -1,12 +1,15 @@
 //! Solid-wall cell rendering: the panels drawn around an open cell facing its
-//! `'W'` neighbours (or the grid edge). The orientation geometry lives in
-//! [`super::ns_panel`] / [`super::ew_panel`]; this module decides which faces to
+//! `'W'` neighbours (or the grid edge). The orientation geometry lives in the
+//! sibling [`ns_panel`] / [`ew_panel`] modules; this module decides which faces to
 //! draw and with which material — per face, honouring a neighbouring wall cell's
 //! solid wall-type override. The per-cell tint and per-quadrant material hashes
 //! that pick the default material also live here.
 
+pub(crate) mod ew_panel;
+pub(crate) mod ns_panel;
+
 use super::{
-    ew_panel, ns_panel, wall_override_kind, WallAssets, PANEL_Y, WALL_MATERIAL_BRICK,
+    is_non_occluding_wall, wall_override_kind, WallAssets, PANEL_Y, WALL_MATERIAL_BRICK,
     WALL_MATERIAL_VARIANTS, WALL_TINT_VARIANTS,
 };
 use crate::state::GameConfig;
@@ -59,6 +62,38 @@ fn face_kind(
     }
 }
 
+/// Decides whether to draw a wall panel on one face of the current cell, and if
+/// so which neighbour supplies its material.
+///
+/// `Some(Some(rc))` draws a panel against the solid `'W'` neighbour `rc` (whose
+/// override textures it); `Some(None)` draws an outer panel at the grid edge;
+/// `None` suppresses the panel. `neighbour` is the in-bounds neighbour cell, or
+/// `None` for the grid edge.
+///
+/// A panel is drawn toward a **solid** wall from any cell, and toward the **grid
+/// edge** only from a *passable* (open) cell — a non-occluding cell at the edge
+/// draws no outer wall, so the skybox shows past it. Panels toward an open or
+/// non-occluding neighbour are always suppressed, so a non-occluding region
+/// knits into one continuous, see-across space.
+fn face(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    current_non_occluding: bool,
+    neighbour: Option<(usize, usize)>,
+) -> Option<Option<(usize, usize)>> {
+    match neighbour {
+        None => (!current_non_occluding).then_some(None),
+        Some((nr, nc)) => {
+            if grid[nr][nc] == 'W' && !is_non_occluding_wall(grid, cell_entities, config, nr, nc) {
+                Some(Some((nr, nc)))
+            } else {
+                None
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_walls_for_cell(
     commands: &mut Commands,
@@ -74,14 +109,19 @@ pub(crate) fn spawn_walls_for_cell(
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
 
-    // A face is drawn when its neighbour is a wall (`'W'`) or the grid edge. Its
-    // material is the cell's default kind, unless the neighbouring wall cell
-    // carries a solid wall-type override (then that texture is forced for the
-    // panel facing it). `None` = a grid-edge face, which has no neighbour cell.
-    let north = (r == 0 || grid[r - 1][c] == 'W').then(|| (r > 0).then(|| (r - 1, c)));
-    let south = (r + 1 >= rows || grid[r + 1][c] == 'W').then(|| (r + 1 < rows).then(|| (r + 1, c)));
-    let east = (c + 1 >= cols || grid[r][c + 1] == 'W').then(|| (c + 1 < cols).then(|| (r, c + 1)));
-    let west = (c == 0 || grid[r][c - 1] == 'W').then(|| (c > 0).then(|| (r, c - 1)));
+    // A face is drawn against a solid `'W'` neighbour (any cell) or the grid edge
+    // (passable cells only — a non-occluding cell shows sky past its edge). Faces
+    // toward open or non-occluding neighbours are suppressed so non-occluding
+    // regions read as continuous. The panel material is the cell's default kind,
+    // unless the neighbouring wall cell carries a solid wall-type override (then
+    // that texture is forced). The inner `Option` is the neighbour cell, or
+    // `None` for a grid-edge face. See [`face`].
+    let current_non_occluding = is_non_occluding_wall(grid, cell_entities, config, r, c);
+    let f = |neighbour| face(grid, cell_entities, config, current_non_occluding, neighbour);
+    let north = f((r > 0).then(|| (r - 1, c)));
+    let south = f((r + 1 < rows).then(|| (r + 1, c)));
+    let east = f((c + 1 < cols).then(|| (r, c + 1)));
+    let west = f((c > 0).then(|| (r, c - 1)));
 
     // Material variation supersedes per-cell tint: when on, every wall in
     // this cell takes the quadrant's material kind and the `wall_tint`
@@ -147,6 +187,76 @@ pub(crate) fn spawn_walls_for_cell(
 mod tests {
     use super::*;
     use std::collections::HashSet;
+
+    /// A `cell_entities` map with a single water (non-occluding) override at `rc`.
+    fn map_with_water(rc: (usize, usize)) -> HashMap<(usize, usize), Vec<CellEntity>> {
+        let mut m = HashMap::new();
+        m.insert(
+            rc,
+            vec![serde_json::from_str::<CellEntity>(r#"{"type":"W","wallType":"water"}"#).unwrap()],
+        );
+        m
+    }
+
+    #[test]
+    fn is_non_occluding_wall_detects_water_override() {
+        let grid = vec![vec!['S', 'W'], vec!['W', 'F']];
+        let config = GameConfig::default();
+        let water = map_with_water((0, 1));
+        assert!(is_non_occluding_wall(&grid, &water, &config, 0, 1));
+        // A plain solid 'W' (no override) occludes.
+        let empty = HashMap::new();
+        assert!(!is_non_occluding_wall(&grid, &empty, &config, 0, 1));
+        // A passable cell is never non-occluding.
+        assert!(!is_non_occluding_wall(&grid, &water, &config, 0, 0));
+    }
+
+    #[test]
+    fn face_passable_cell_draws_outer_wall_at_edge() {
+        let grid = vec![vec!['S']];
+        let config = GameConfig::default();
+        let empty = HashMap::new();
+        assert_eq!(face(&grid, &empty, &config, false, None), Some(None));
+    }
+
+    #[test]
+    fn face_non_occluding_cell_shows_sky_at_edge() {
+        // The grid-edge face of a non-occluding cell is suppressed so the skybox
+        // shows past it.
+        let grid = vec![vec!['W']];
+        let config = GameConfig::default();
+        let empty = HashMap::new();
+        assert_eq!(face(&grid, &empty, &config, true, None), None);
+    }
+
+    #[test]
+    fn face_draws_toward_solid_wall_neighbour() {
+        let grid = vec![vec!['S', 'W']];
+        let config = GameConfig::default();
+        let empty = HashMap::new();
+        // Drawn from a passable cell …
+        assert_eq!(
+            face(&grid, &empty, &config, false, Some((0, 1))),
+            Some(Some((0, 1)))
+        );
+        // … and from a non-occluding cell (a pool still abuts a solid wall).
+        assert_eq!(
+            face(&grid, &empty, &config, true, Some((0, 1))),
+            Some(Some((0, 1)))
+        );
+    }
+
+    #[test]
+    fn face_suppresses_toward_open_and_non_occluding_neighbours() {
+        let grid = vec![vec!['S', ' ', 'W']];
+        let config = GameConfig::default();
+        let empty = HashMap::new();
+        // Open neighbour → no panel.
+        assert_eq!(face(&grid, &empty, &config, false, Some((0, 1))), None);
+        // Non-occluding neighbour → no panel (the region knits together).
+        let water = map_with_water((0, 2));
+        assert_eq!(face(&grid, &water, &config, false, Some((0, 2))), None);
+    }
 
     #[test]
     fn wall_tint_index_is_deterministic() {

@@ -1,9 +1,9 @@
 use super::ns_panel::WallMaterialSpec;
-use super::{
+use crate::palette::EMISSIVE_ONLY_BASE;
+use crate::world::walls::{
     WallCell, PANEL_H, PANEL_W, WALL_MATERIAL_VARIANTS, WALL_THICKNESS, WALL_TINT_OFFSETS,
     WALL_TINT_VARIANTS,
 };
-use crate::palette::EMISSIVE_ONLY_BASE;
 use bevy::math::Affine2;
 use bevy::prelude::*;
 

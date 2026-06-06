@@ -1,4 +1,4 @@
-use super::{
+use crate::world::walls::{
     WallCell, PANEL_H, PANEL_W, WALL_MATERIAL_VARIANTS, WALL_THICKNESS, WALL_TINT_OFFSETS,
     WALL_TINT_VARIANTS,
 };

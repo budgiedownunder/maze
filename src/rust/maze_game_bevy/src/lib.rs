@@ -109,7 +109,10 @@ mod tests {
         },
         roof::RoofCell,
         sky::dome::SkyDome,
-        walls::WallCell,
+        walls::{
+            iron_fence::IronFenceBars, lava::LavaSurface, rim::PoolRim, water::WaterSurface,
+            WallCell,
+        },
         CAMERA_EDGE_OFFSET, CAMERA_FOV_REFERENCE_ASPECT, CAMERA_FOV_VERTICAL_MAX_RADIANS,
         CAMERA_FOV_VERTICAL_RADIANS,
     };
@@ -944,6 +947,25 @@ mod tests {
     }
 
     #[test]
+    fn only_special_wall_types_are_non_occluding() {
+        // The four solid textures occlude; the three special types don't —
+        // exactly the inverse of `to_kind_index` being `Some`.
+        for wt in [
+            WallType::Brick,
+            WallType::DressedStone,
+            WallType::Wood,
+            WallType::Cobblestone,
+        ] {
+            assert!(!wt.is_non_occluding(), "{wt:?} should occlude");
+            assert!(wt.to_kind_index().is_some());
+        }
+        for wt in [WallType::Water, WallType::Lava, WallType::IronFence] {
+            assert!(wt.is_non_occluding(), "{wt:?} should be non-occluding");
+            assert!(wt.to_kind_index().is_none());
+        }
+    }
+
+    #[test]
     fn wall_material_variation_toggle_off_uses_tint_path() {
         // The dispatch branch in `spawn_walls_for_cell` should produce the
         // same wall-panel count whether material variation is on (per-quadrant
@@ -1132,5 +1154,119 @@ mod tests {
             ghost_tag_count, 1,
             "a per-cell ghost override must spawn a ghost rig even when the maze default is Goblin",
         );
+    }
+
+    // ── Non-occluding wall types (water / lava / iron fence) ──────────────────
+
+    #[test]
+    fn water_override_renders_surface_and_no_floor_tile() {
+        // The 'W' cell at (1,1) carries a water override. It renders one water
+        // surface and NO floor tile (the pool serves as the floor); only the
+        // three passable cells get floor tiles.
+        let json = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"water"}],"W"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let water = app.world_mut().query::<&WaterSurface>().iter(app.world()).count();
+        let floors = app.world_mut().query::<&FloorCell>().iter(app.world()).count();
+        assert_eq!(water, 1, "one water surface");
+        assert_eq!(floors, 3, "only the three passable cells get floor tiles");
+    }
+
+    #[test]
+    fn lava_override_renders_surface_and_no_floor_tile() {
+        let json = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"lava"}],"W"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let lava = app.world_mut().query::<&LavaSurface>().iter(app.world()).count();
+        let floors = app.world_mut().query::<&FloorCell>().iter(app.world()).count();
+        assert_eq!(lava, 1, "one lava surface");
+        assert_eq!(floors, 3, "only the three passable cells get floor tiles");
+    }
+
+    #[test]
+    fn iron_fence_override_renders_bars_over_a_floor_tile() {
+        // Unlike the pools, the iron fence stands on a normal floor — so the
+        // four floor tiles are the three passable cells plus the fence's own.
+        let json =
+            r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"iron_fence"}],"W"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let bars = app.world_mut().query::<&IronFenceBars>().iter(app.world()).count();
+        let floors = app.world_mut().query::<&FloorCell>().iter(app.world()).count();
+        assert_eq!(bars, 1, "one iron-fence lattice");
+        assert_eq!(floors, 4, "three passable cells + the iron-fence floor tile");
+    }
+
+    #[test]
+    fn non_occluding_neighbour_suppresses_shared_panels() {
+        // A centre cell ringed by four passable neighbours. As a solid wall it
+        // draws four panels (one per open neighbour). As a non-occluding water
+        // cell those four shared panels are suppressed, and the water cell —
+        // having no solid neighbours and no grid-edge faces — draws none, so the
+        // world has exactly four fewer wall panels.
+        let solid = r#"{"grid":[["S"," "," "],[" ","W"," "],[" "," ","F"]]}"#;
+        let water =
+            r#"{"grid":[["S"," "," "],[" ",[{"type":"W","wallType":"water"}]," "],[" "," ","F"]]}"#;
+        let panels = |json: &str| {
+            let mut app = make_playing_app_with(json);
+            app.world_mut().query::<&WallCell>().iter(app.world()).count()
+        };
+        assert_eq!(panels(solid), panels(water) + 4);
+    }
+
+    #[test]
+    fn non_occluding_edge_cell_draws_no_outer_wall() {
+        // The water cell sits at the bottom-right corner (two grid edges) with
+        // two passable neighbours — so every one of its faces is suppressed and
+        // it contributes zero wall panels. Replacing it with a solid wall makes
+        // its two open neighbours each draw a panel toward it, so the solid
+        // variant has two MORE panels. This proves the edge faces draw no outer
+        // wall (skybox shows past the cell).
+        let solid = r#"{"grid":[["S"," "],["F","W"]]}"#;
+        let water = r#"{"grid":[["S"," "],["F",[{"type":"W","wallType":"water"}]]]}"#;
+        let panels = |json: &str| {
+            let mut app = make_playing_app_with(json);
+            app.world_mut().query::<&WallCell>().iter(app.world()).count()
+        };
+        assert_eq!(panels(solid), panels(water) + 2);
+    }
+
+    #[test]
+    fn non_occluding_side_reshapes_a_corridor_door() {
+        // A door in a straight N–S corridor is a single swing leaf. Turning one
+        // lateral wall into a non-occluding water cell removes the swing anchor
+        // (its panel is suppressed) AND opens that side, so the door instead seals
+        // each open edge with its own leaf — the two passable ends plus the water
+        // side — three leaves in all.
+        let swing = r#"{"grid":[["W","S","W"],["W","D","W"],["W","F","W"]]}"#;
+        let water =
+            r#"{"grid":[["W","S","W"],[[{"type":"W","wallType":"water"}],"D","W"],["W","F","W"]]}"#;
+        let leaves = |json: &str| {
+            let mut app = make_playing_app_with(json);
+            app.world_mut().query::<&DoorMarker>().iter(app.world()).count()
+        };
+        assert_eq!(leaves(swing), 1, "straight corridor → single swing leaf");
+        assert_eq!(
+            leaves(water), 3,
+            "non-occluding lateral → per-edge leaves on the two ends + the water side",
+        );
+    }
+
+    #[test]
+    fn pool_rim_skirts_every_non_pool_edge() {
+        // A lone water cell ringed by four passable cells gets a rim skirt on each
+        // of its four edges (the recess wall up to floor level).
+        let json = r#"{"grid":[["S"," "," "],[" ",[{"type":"W","wallType":"water"}]," "],[" "," ","F"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
+        assert_eq!(rims, 4, "four non-pool edges → four rim skirts");
+    }
+
+    #[test]
+    fn adjacent_pools_share_no_rim() {
+        // Two side-by-side water cells: each rims its three outward edges, but the
+        // shared edge between them is left open so they read as one continuous
+        // basin — six skirts, not eight.
+        let json = r#"{"grid":[["S"," "," "," "],[" ",[{"type":"W","wallType":"water"}],[{"type":"W","wallType":"water"}]," "],[" "," "," ","F"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
+        assert_eq!(rims, 6, "the shared pool-pool edge carries no rim");
     }
 }

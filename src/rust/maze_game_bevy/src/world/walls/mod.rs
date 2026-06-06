@@ -1,19 +1,23 @@
-pub(crate) mod ew_panel;
-pub(crate) mod ns_panel;
+pub(crate) mod iron_fence;
+pub(crate) mod lava;
+pub(crate) mod rim;
 pub(crate) mod solid;
+pub(crate) mod water;
 
 pub(crate) use solid::spawn_walls_for_cell;
 
 use crate::state::{GameConfig, WallType};
+use crate::world::objects::overrides::resolve_wall_type;
 use crate::world::textures::brick::make_brick_texture;
 use crate::world::textures::cobblestone::make_cobblestone_texture;
 use crate::world::textures::dressed_stone::make_dressed_stone_texture;
 use crate::world::textures::wood::make_wood_texture;
 use crate::world::CELL_SIZE;
 use bevy::prelude::*;
-use ew_panel::EwPanelAssets;
 use maze::CellEntity;
-use ns_panel::{NsPanelAssets, WallMaterialSpec};
+use solid::ew_panel::EwPanelAssets;
+use solid::ns_panel::{NsPanelAssets, WallMaterialSpec};
+use std::collections::HashMap;
 
 pub(crate) const WALL_HEIGHT: f32 = 3.0;
 pub(crate) const WALL_THICKNESS: f32 = 0.05;
@@ -160,8 +164,8 @@ pub(crate) fn build_wall_assets(
     ];
 
     WallAssets {
-        ns: ns_panel::build_ns_panel_assets(meshes, materials, &ns_specs),
-        ew: ew_panel::build_ew_panel_assets(meshes, materials, &ew_specs),
+        ns: solid::ns_panel::build_ns_panel_assets(meshes, materials, &ns_specs),
+        ew: solid::ew_panel::build_ew_panel_assets(meshes, materials, &ew_specs),
     }
 }
 
@@ -198,6 +202,136 @@ pub(crate) fn wall_override_kind(entity: Option<&CellEntity>) -> Option<usize> {
         }
     }
     None
+}
+
+/// Whether the `'W'` cell at `(r, c)` is non-occluding (renders an in-cell pool
+/// / bar lattice rather than a solid panel). A non-`'W'` cell is never
+/// non-occluding. Resolves the cell's per-cell `wallType` override against the
+/// per-maze default — the same resolution the spawn loop uses to decide whether
+/// to skip the cell. Shared by the panel-suppression logic ([`solid`]) and the
+/// door corridor / leaf logic ([`crate::world::objects::door`]), which both
+/// treat a non-occluding neighbour as an opening, not a wall (its panel is
+/// suppressed, so a swing has nothing to anchor against and a leaf must seal it).
+pub(crate) fn is_non_occluding_wall(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    r: usize,
+    c: usize,
+) -> bool {
+    grid[r][c] == 'W'
+        && resolve_wall_type(
+            cell_entities.get(&(r, c)).and_then(|v| v.first()),
+            config.wall_type,
+        )
+        .is_non_occluding()
+}
+
+/// `true` when the player can look *across* cell `(r, c)` to whatever lies
+/// beyond — an open/passable cell, or a low water/lava pool seen over its
+/// surface. A solid wall blocks the view, and an iron fence is looked *through*
+/// (between its bars), not across — both are `false`. The iron fence uses this to
+/// pick its edges: it draws a bar grille on an edge facing a looked-across
+/// neighbour (open ground or a pool), and so never between two adjacent fences
+/// (a fence isn't looked across, so the run stays continuous with no inner bars).
+pub(crate) fn can_be_looked_across(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    r: usize,
+    c: usize,
+) -> bool {
+    grid[r][c] != 'W'
+        || matches!(
+            resolve_wall_type(
+                cell_entities.get(&(r, c)).and_then(|v| v.first()),
+                config.wall_type,
+            ),
+            WallType::Water | WallType::Lava
+        )
+}
+
+/// `true` when cell `(r, c)` is a water or lava **pool** — a non-occluding `'W'`
+/// cell whose surface is recessed below floor level. The pool rim
+/// ([`rim::spawn_pool_rim`]) uses this to leave the shared edge between two
+/// adjacent pools open (one continuous basin) while skirting every edge that
+/// meets a non-pool cell.
+pub(crate) fn is_pool(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    r: usize,
+    c: usize,
+) -> bool {
+    grid[r][c] == 'W'
+        && matches!(
+            resolve_wall_type(
+                cell_entities.get(&(r, c)).and_then(|v| v.first()),
+                config.wall_type,
+            ),
+            WallType::Water | WallType::Lava
+        )
+}
+
+/// In-cell geometry for the non-occluding wall types: the water / lava pool
+/// surfaces and the iron-fence bar lattice. Built once per session alongside
+/// [`WallAssets`] and reused for every non-occluding `'W'` cell.
+pub(crate) struct NonOccludingAssets {
+    pub(crate) water: water::WaterAssets,
+    pub(crate) lava: lava::LavaAssets,
+    pub(crate) iron_fence: iron_fence::IronFenceAssets,
+    pub(crate) rim: rim::RimAssets,
+}
+
+pub(crate) fn build_non_occluding_assets(
+    meshes: &mut Option<ResMut<Assets<Mesh>>>,
+    materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
+    images: &mut Option<ResMut<Assets<Image>>>,
+) -> NonOccludingAssets {
+    NonOccludingAssets {
+        water: water::build_water_assets(meshes, materials),
+        lava: lava::build_lava_assets(meshes, materials),
+        iron_fence: iron_fence::build_iron_fence_assets(meshes, materials),
+        rim: rim::build_rim_assets(meshes, materials, images),
+    }
+}
+
+/// Spawns the in-cell geometry for a non-occluding wall cell `(r, c)`. Water and
+/// lava render a floor-level pool surface that doubles as the cell's floor;
+/// iron-fence renders bar grilles on its open edges (its floor tile is spawned
+/// separately by the caller, since — unlike the pools — the fence stands on a
+/// normal floor). A
+/// solid `wall_type` never reaches here: the caller gates on
+/// [`WallType::is_non_occluding`].
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn spawn_non_occluding_for_cell(
+    commands: &mut Commands,
+    assets: &NonOccludingAssets,
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    wall_type: WallType,
+    r: usize,
+    c: usize,
+) {
+    match wall_type {
+        // Water / lava render a recessed surface plus rim skirts filling the band
+        // up to floor level on every edge facing a non-pool cell.
+        WallType::Water => {
+            water::spawn_water(commands, &assets.water, r, c);
+            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c);
+        }
+        WallType::Lava => {
+            lava::spawn_lava(commands, &assets.lava, r, c);
+            rim::spawn_pool_rim(commands, &assets.rim, wall_type, grid, cell_entities, config, r, c);
+        }
+        // The fence needs the grid + overrides to bar only the edges facing a
+        // passable cell or a water/lava pool.
+        WallType::IronFence => {
+            iron_fence::spawn_iron_fence(commands, &assets.iron_fence, grid, cell_entities, config, r, c)
+        }
+        WallType::Brick | WallType::DressedStone | WallType::Wood | WallType::Cobblestone => {}
+    }
 }
 
 #[cfg(test)]

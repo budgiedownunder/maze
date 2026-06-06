@@ -18,6 +18,10 @@
 //!   recorded as a [`DoorMotion`] and applied each frame by
 //!   `door_animation_system`.
 //!
+//! A **non-occluding** wall neighbour (water / lava / iron fence) counts as an
+//! open edge here, not a wall: its panel is suppressed, so a leaf must seal that
+//! side and a swing has no panel to hinge against — see [`open_for_door`].
+//!
 //! The motion rigs live in sibling files: [`swing`] (hinge), [`slide`] (drop
 //! into the floor), [`portcullis`] (rise into a framed gate), and [`dissolve`]
 //! (fade a per-leaf material). The slab is in [`panel`] and the lock in
@@ -36,11 +40,12 @@ use crate::state::{DoorStyle, GameConfig, GameState};
 use crate::world::decorations::wall::{
     wall_decoration_index, WallDecoration, WallDecorationAssets, DECORATION_OFFSET, DECORATION_Y,
 };
-use crate::world::walls::{wall_kind_for_cell, WallAssets, PANEL_W};
+use crate::world::walls::{is_non_occluding_wall, wall_kind_for_cell, WallAssets, PANEL_W};
 use crate::world::{CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
 use maze::{CellEntity, DoorState};
 use panel::DOOR_THICKNESS;
+use std::collections::HashMap;
 use std::f32::consts::{FRAC_PI_2, PI};
 
 /// How a single door leaf opens. Derived from [`DoorStyle`] per leaf (a `Swing`
@@ -119,21 +124,45 @@ enum CorridorAxis {
     EastWest,
 }
 
+/// Whether the in-bounds neighbour `(nr, nc)` reads as a passage opening for door
+/// placement: a passable cell, **or** a non-occluding wall (water / lava / iron
+/// fence). A non-occluding cell has no wall panel, so a door leaf must seal that
+/// side and a swing has nothing to anchor against — exactly like an open
+/// neighbour. Only a *solid* wall counts as a wall here.
+fn open_for_door(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    nr: usize,
+    nc: usize,
+) -> bool {
+    grid[nr][nc] != 'W' || is_non_occluding_wall(grid, cell_entities, config, nr, nc)
+}
+
 /// The axis of the door cell's straight corridor, or `None` if it isn't one.
 ///
-/// A straight corridor has walls on both sides of one axis and at least one open
-/// passage on the perpendicular axis. Out-of-bounds counts as a wall, so a
-/// corridor capped by the grid edge at one end still qualifies — the swing rig
-/// only needs the two facing walls to anchor its hinge, so whether the far end
-/// is closed by a wall or by the maze boundary is immaterial. Corners, T-/cross-
-/// junctions, and open areas return `None` (any third open side disqualifies it).
-fn corridor_axis(grid: &[Vec<char>], r: usize, c: usize) -> Option<CorridorAxis> {
+/// A straight corridor has *solid* walls on both sides of one axis and at least
+/// one open passage on the perpendicular axis. Out-of-bounds counts as a wall, so
+/// a corridor capped by the grid edge at one end still qualifies — the swing rig
+/// only needs the two facing walls to anchor its hinge, so whether the far end is
+/// closed by a wall or by the maze boundary is immaterial. A **non-occluding**
+/// neighbour (water / lava / iron fence) counts as an *opening*, not a wall — its
+/// panel is suppressed, so a swing can't hinge against it (see [`open_for_door`]).
+/// Corners, T-/cross-junctions, and open areas return `None` (any third open side
+/// disqualifies it).
+fn corridor_axis(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    r: usize,
+    c: usize,
+) -> Option<CorridorAxis> {
     let rows = grid.len();
     let cols = grid[r].len();
-    let n = r > 0 && grid[r - 1][c] != 'W';
-    let s = r + 1 < rows && grid[r + 1][c] != 'W';
-    let e = c + 1 < cols && grid[r][c + 1] != 'W';
-    let w = c > 0 && grid[r][c - 1] != 'W';
+    let n = r > 0 && open_for_door(grid, cell_entities, config, r - 1, c);
+    let s = r + 1 < rows && open_for_door(grid, cell_entities, config, r + 1, c);
+    let e = c + 1 < cols && open_for_door(grid, cell_entities, config, r, c + 1);
+    let w = c > 0 && open_for_door(grid, cell_entities, config, r, c - 1);
     if !e && !w && (n || s) {
         Some(CorridorAxis::NorthSouth)
     } else if !n && !s && (e || w) {
@@ -294,6 +323,7 @@ pub(crate) fn spawn_door_for_cell(
     decoration_assets: &WallDecorationAssets,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
     grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
     cell: char,
     r: usize,
     c: usize,
@@ -316,7 +346,7 @@ pub(crate) fn spawn_door_for_cell(
     // (including one capped at an end by the grid edge). Everything else seals
     // each open edge with its own leaf.
     let swing_axis = (door_style == DoorStyle::Swing)
-        .then(|| corridor_axis(grid, r, c))
+        .then(|| corridor_axis(grid, cell_entities, config, r, c))
         .flatten();
     if let Some(axis) = swing_axis {
         let normal_z = axis == CorridorAxis::NorthSouth; // N/S corridor → normal along Z
@@ -352,12 +382,16 @@ pub(crate) fn spawn_door_for_cell(
         DoorStyle::Portcullis => DoorMotion::Portcullis,
         DoorStyle::Dissolve => DoorMotion::Dissolve,
     };
+    // A leaf seals each open edge. An edge is "open" if its neighbour is passable
+    // OR a non-occluding wall (water / lava / iron fence) — that side has no wall
+    // panel, so the door must seal it (see [`open_for_door`]). Out-of-bounds and
+    // solid walls are closed.
     // (open?, closed_yaw, edge centre, decoration face id, normal-along-Z?)
     let edges = [
-        (r > 0 && grid[r - 1][c] != 'W', PI, Vec3::new(x, 0.0, z - HALF_CELL), 0u32, true),
-        (r + 1 < rows && grid[r + 1][c] != 'W', 0.0, Vec3::new(x, 0.0, z + HALF_CELL), 1, true),
-        (c + 1 < cols && grid[r][c + 1] != 'W', FRAC_PI_2, Vec3::new(x + HALF_CELL, 0.0, z), 2, false),
-        (c > 0 && grid[r][c - 1] != 'W', -FRAC_PI_2, Vec3::new(x - HALF_CELL, 0.0, z), 3, false),
+        (r > 0 && open_for_door(grid, cell_entities, config, r - 1, c), PI, Vec3::new(x, 0.0, z - HALF_CELL), 0u32, true),
+        (r + 1 < rows && open_for_door(grid, cell_entities, config, r + 1, c), 0.0, Vec3::new(x, 0.0, z + HALF_CELL), 1, true),
+        (c + 1 < cols && open_for_door(grid, cell_entities, config, r, c + 1), FRAC_PI_2, Vec3::new(x + HALF_CELL, 0.0, z), 2, false),
+        (c > 0 && open_for_door(grid, cell_entities, config, r, c - 1), -FRAC_PI_2, Vec3::new(x - HALF_CELL, 0.0, z), 3, false),
     ];
     for (open, closed_yaw, edge_centre, face_id, normal_z) in edges {
         if !open {
@@ -458,6 +492,22 @@ pub(crate) fn door_animation_system(
 mod tests {
     use super::*;
 
+    /// `corridor_axis` with no per-cell overrides — the common case in the
+    /// topology tests (every `'W'` is a plain solid wall).
+    fn corridor_axis_plain(grid: &[Vec<char>], r: usize, c: usize) -> Option<CorridorAxis> {
+        corridor_axis(grid, &HashMap::new(), &GameConfig::default(), r, c)
+    }
+
+    /// A `cell_entities` map with a single water (non-occluding) override at `rc`.
+    fn map_with_water(rc: (usize, usize)) -> HashMap<(usize, usize), Vec<CellEntity>> {
+        let mut m = HashMap::new();
+        m.insert(
+            rc,
+            vec![serde_json::from_str::<CellEntity>(r#"{"type":"W","wallType":"water"}"#).unwrap()],
+        );
+        m
+    }
+
     #[test]
     fn smoothstep_endpoints_and_midpoint() {
         assert_eq!(smoothstep(0.0), 0.0);
@@ -478,7 +528,7 @@ mod tests {
             vec!['W', 'D', 'W'],
             vec!['W', 'F', 'W'],
         ];
-        assert_eq!(corridor_axis(&grid, 1, 1), Some(CorridorAxis::NorthSouth));
+        assert_eq!(corridor_axis_plain(&grid, 1, 1), Some(CorridorAxis::NorthSouth));
     }
 
     #[test]
@@ -488,7 +538,7 @@ mod tests {
             vec!['S', 'D', 'F'],
             vec!['W', 'W', 'W'],
         ];
-        assert_eq!(corridor_axis(&grid, 1, 1), Some(CorridorAxis::EastWest));
+        assert_eq!(corridor_axis_plain(&grid, 1, 1), Some(CorridorAxis::EastWest));
     }
 
     #[test]
@@ -498,7 +548,7 @@ mod tests {
             vec!['W', 'D', 'F'],
             vec!['W', 'W', 'W'],
         ];
-        assert_eq!(corridor_axis(&grid, 1, 1), None);
+        assert_eq!(corridor_axis_plain(&grid, 1, 1), None);
     }
 
     #[test]
@@ -508,7 +558,7 @@ mod tests {
             vec!['W', 'D', 'F'],
             vec!['W', ' ', 'W'],
         ];
-        assert_eq!(corridor_axis(&grid, 1, 1), None);
+        assert_eq!(corridor_axis_plain(&grid, 1, 1), None);
     }
 
     #[test]
@@ -520,7 +570,7 @@ mod tests {
             vec!['W', 'D', 'W'],
             vec!['W', ' ', 'W'],
         ];
-        assert_eq!(corridor_axis(&grid, 0, 1), Some(CorridorAxis::NorthSouth));
+        assert_eq!(corridor_axis_plain(&grid, 0, 1), Some(CorridorAxis::NorthSouth));
     }
 
     #[test]
@@ -532,7 +582,7 @@ mod tests {
             vec!['D', ' '],
             vec!['W', 'W'],
         ];
-        assert_eq!(corridor_axis(&grid, 1, 0), Some(CorridorAxis::EastWest));
+        assert_eq!(corridor_axis_plain(&grid, 1, 0), Some(CorridorAxis::EastWest));
     }
 
     #[test]
@@ -543,6 +593,50 @@ mod tests {
             vec!['D', ' '],
             vec![' ', 'W'],
         ];
-        assert_eq!(corridor_axis(&grid, 0, 0), None);
+        assert_eq!(corridor_axis_plain(&grid, 0, 0), None);
+    }
+
+    #[test]
+    fn non_occluding_lateral_wall_disqualifies_swing() {
+        // `W D W` corridor open N–S. With both laterals solid it's a straight
+        // corridor (swing). Turning the west lateral into a non-occluding water
+        // cell removes that swing anchor (its panel is suppressed), so it's no
+        // longer a corridor — it falls back to per-edge leaves.
+        let grid = vec![
+            vec!['W', ' ', 'W'],
+            vec!['W', 'D', 'W'],
+            vec!['W', ' ', 'W'],
+        ];
+        let config = GameConfig::default();
+        assert_eq!(
+            corridor_axis_plain(&grid, 1, 1),
+            Some(CorridorAxis::NorthSouth),
+            "plain solid laterals → straight corridor",
+        );
+        let water = map_with_water((1, 0));
+        assert_eq!(
+            corridor_axis(&grid, &water, &config, 1, 1),
+            None,
+            "a non-occluding lateral has no panel to hinge against → not a corridor",
+        );
+    }
+
+    #[test]
+    fn swing_survives_non_occluding_opening_on_perpendicular_axis() {
+        // Walls N & S are solid anchors; the corridor runs E–W with the east end
+        // passable and the west end a non-occluding water cell. The two solid
+        // anchors remain, so it's still a straight E–W corridor (single swing).
+        let grid = vec![
+            vec!['W', 'W', 'W'],
+            vec!['W', 'D', ' '],
+            vec!['W', 'W', 'W'],
+        ];
+        let config = GameConfig::default();
+        let water = map_with_water((1, 0));
+        assert_eq!(
+            corridor_axis(&grid, &water, &config, 1, 1),
+            Some(CorridorAxis::EastWest),
+            "solid N & S anchors + a perpendicular opening → still a swing corridor",
+        );
     }
 }

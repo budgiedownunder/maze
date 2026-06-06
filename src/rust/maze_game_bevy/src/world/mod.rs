@@ -9,7 +9,7 @@ pub(crate) mod walls;
 
 use crate::hud;
 use crate::overlays::pause;
-use crate::state::{GameClock, GameConfig, GameState, GridFacing, PendingMazeJson};
+use crate::state::{GameClock, GameConfig, GameState, GridFacing, PendingMazeJson, WallType};
 use bevy::prelude::*;
 use maze::{GenerationAlgorithm, Generator, GeneratorOptions, MazeGame, MazeGameOptions};
 use std::collections::HashSet;
@@ -401,6 +401,8 @@ pub(crate) fn spawn_world(
     );
 
     let wall_assets = walls::build_wall_assets(&mut meshes, &mut materials, &mut images);
+    let nonoccluding_assets =
+        walls::build_non_occluding_assets(&mut meshes, &mut materials, &mut images);
     let floor_assets = floor::build_floor_assets(&mut meshes, &mut materials, &mut images);
     let decoration_assets =
         decorations::build_decoration_assets(&mut meshes, &mut materials, &mut images);
@@ -413,7 +415,25 @@ pub(crate) fn spawn_world(
     let mut enemy_id: u32 = 0;
     for (r, row) in grid.iter().enumerate() {
         for (c, &cell) in row.iter().enumerate() {
+            let cell_entity = cell_entities.get(&(r, c)).and_then(|v| v.first());
             if cell == 'W' {
+                // A solid wall renders nothing itself — the adjacent open cell
+                // draws the panel. A non-occluding wall (water / lava / iron
+                // fence) is un-skipped: it renders its in-cell geometry plus the
+                // panels facing any solid-wall neighbours (panels toward open /
+                // non-occluding neighbours and the grid edge are suppressed in
+                // `spawn_walls_for_cell`). Water / lava pools double as the floor;
+                // the iron fence stands on a normal tile.
+                let wall_type = objects::overrides::resolve_wall_type(cell_entity, config.wall_type);
+                if !wall_type.is_non_occluding() {
+                    continue;
+                }
+                walls::spawn_walls_for_cell(&mut commands, &wall_assets, &grid, &cell_entities, r, c, &config);
+                walls::spawn_non_occluding_for_cell(&mut commands, &nonoccluding_assets, &grid, &cell_entities, &config, wall_type, r, c);
+                if matches!(wall_type, WallType::IronFence) {
+                    floor::tile::spawn_tile(&mut commands, &floor_assets, r, c);
+                }
+                roof::spawn_roof_for_cell(&mut commands, &roof_assets, &wall_assets, &grid, r, c, &config);
                 continue;
             }
             walls::spawn_walls_for_cell(&mut commands, &wall_assets, &grid, &cell_entities, r, c, &config);
@@ -421,13 +441,13 @@ pub(crate) fn spawn_world(
                 &mut commands,
                 &decoration_assets,
                 &grid,
+                &cell_entities,
                 cell,
                 r,
                 c,
                 &config,
             );
             floor::spawn_floor_for_cell(&mut commands, &floor_assets, &grid, cell, r, c);
-            let cell_entity = cell_entities.get(&(r, c)).and_then(|v| v.first());
             objects::spawn_objects_for_cell(
                 &mut commands,
                 &object_assets,
@@ -452,6 +472,7 @@ pub(crate) fn spawn_world(
                 &decoration_assets.wall,
                 &mut materials,
                 &grid,
+                &cell_entities,
                 cell,
                 r,
                 c,

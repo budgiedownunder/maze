@@ -146,10 +146,16 @@ src/
 │   │   ├── lines.rs        FloorLine, line meshes + material + spawn_lines_for_cell
 │   │   ├── start.rs        StartCell + start material + spawn helper
 │   │   └── finish.rs       FinishCell + finish material + spawn helper
-│   ├── walls/              wall panels
-│   │   ├── mod.rs          per-cell tint hash + WallAssets bundle + spawn_walls_for_cell
-│   │   ├── ns_panel.rs     N/S-facing panel mesh, materials, spawn helper
-│   │   └── ew_panel.rs     E/W-facing panel mesh, materials, spawn helper
+│   ├── walls/              wall panels + non-occluding wall types
+│   │   ├── mod.rs          WallAssets bundle, wall-material kinds + override resolver, wall-type classifiers, non-occluding dispatch
+│   │   ├── solid/          solid-wall panel rendering
+│   │   │   ├── mod.rs      spawn_walls_for_cell + per-cell tint / per-quadrant material hashes + panel suppression (face/edge logic)
+│   │   │   ├── ns_panel.rs N/S-facing panel mesh, materials, spawn helper
+│   │   │   └── ew_panel.rs E/W-facing panel mesh, materials, spawn helper
+│   │   ├── water.rs        WaterSurface — recessed bluish pool that serves as the floor
+│   │   ├── lava.rs         LavaSurface — recessed molten pool that serves as the floor
+│   │   ├── rim.rs          PoolRim — textured basin-wall skirts around recessed pools (water/lava)
+│   │   └── iron_fence.rs   IronFenceBars — see-through vertical bar grilles on the cell's open edges
 │   ├── decorations/        wall decorations + floor accents
 │   │   ├── mod.rs          DecorationAssets bundle + spawn_decorations_for_cell (delegates to wall + floor)
 │   │   ├── wall/           sparse wall decorations

@@ -11,7 +11,7 @@
 //! same lenient `from_wire_str` mapping used everywhere else, so an unknown
 //! value falls back to the rig's default rather than erroring.
 
-use crate::state::{DoorStyle, EnemyType, HealthStyle, KeyHolderStyle};
+use crate::state::{DoorStyle, EnemyType, HealthStyle, KeyHolderStyle, WallType};
 use maze::CellEntity;
 
 /// The enemy rig for a cell: the cell's `enemyType` override, else `default`.
@@ -49,6 +49,19 @@ pub(crate) fn resolve_door_style(entity: Option<&CellEntity>, default: DoorStyle
     if let Some(CellEntity::Door(over)) = entity {
         if let Some(s) = over.door_style {
             return DoorStyle::from_wire_str(s.as_wire_str());
+        }
+    }
+    default
+}
+
+/// The wall type for a `'W'` cell: the cell's `wallType` override, else
+/// `default` (the per-maze `GameConfig.wall_type`). Drives whether the cell
+/// renders a solid panel or non-occluding in-cell geometry — see
+/// [`WallType::is_non_occluding`].
+pub(crate) fn resolve_wall_type(entity: Option<&CellEntity>, default: WallType) -> WallType {
+    if let Some(CellEntity::Wall(over)) = entity {
+        if let Some(wt) = over.wall_type {
+            return WallType::from_wire_str(wt.as_wire_str());
         }
     }
     default
@@ -133,5 +146,25 @@ mod tests {
             DoorStyle::Portcullis,
         );
         assert_eq!(resolve_door_style(None, DoorStyle::Swing), DoorStyle::Swing);
+    }
+
+    #[test]
+    fn wall_override_picks_the_overridden_type() {
+        let lava = entity(r#"{ "type": "W", "wallType": "lava" }"#);
+        assert_eq!(resolve_wall_type(Some(&lava), WallType::Brick), WallType::Lava);
+        let cobble = entity(r#"{ "type": "W", "wallType": "cobblestone" }"#);
+        assert_eq!(
+            resolve_wall_type(Some(&cobble), WallType::Brick),
+            WallType::Cobblestone,
+        );
+    }
+
+    #[test]
+    fn wall_without_override_field_falls_back_to_per_maze_default() {
+        // A field-less wall entity carries no type choice, so the per-maze
+        // default (the config's `wall_type`) wins.
+        let bare = entity(r#"{ "type": "W" }"#);
+        assert_eq!(resolve_wall_type(Some(&bare), WallType::Wood), WallType::Wood);
+        assert_eq!(resolve_wall_type(None, WallType::Wood), WallType::Wood);
     }
 }

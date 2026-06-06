@@ -4,9 +4,11 @@ pub(crate) mod rune;
 pub(crate) mod vent;
 
 use crate::state::GameConfig;
-use crate::world::walls::WALL_THICKNESS;
+use crate::world::walls::{is_non_occluding_wall, WALL_THICKNESS};
 use crate::world::{CELL_SIZE, HALF_CELL};
 use bevy::prelude::*;
+use maze::CellEntity;
+use std::collections::HashMap;
 
 #[derive(Component)]
 pub(crate) struct WallDecoration;
@@ -108,10 +110,12 @@ fn spawn_decoration(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_wall_decorations_for_cell(
     commands: &mut Commands,
     assets: &WallDecorationAssets,
     grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
     r: usize,
     c: usize,
     config: &GameConfig,
@@ -125,8 +129,16 @@ pub(crate) fn spawn_wall_decorations_for_cell(
     let z = r as f32 * CELL_SIZE + 1.0;
     let seed = config.seed;
 
+    // A decoration sits on a panel, so it's drawn only where a solid panel is —
+    // against a solid `'W'` wall or the grid edge. A non-occluding neighbour
+    // (water / lava / iron fence) has its panel suppressed, so it gets no
+    // decoration (otherwise the decoration would float over the pool / fence).
+    let solid_wall = |nr: usize, nc: usize| {
+        grid[nr][nc] == 'W' && !is_non_occluding_wall(grid, cell_entities, config, nr, nc)
+    };
+
     // North face
-    if r == 0 || grid[r - 1][c] == 'W' {
+    if r == 0 || solid_wall(r - 1, c) {
         spawn_decoration(
             commands,
             assets,
@@ -139,7 +151,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
         );
     }
     // South face
-    if r + 1 >= rows || grid[r + 1][c] == 'W' {
+    if r + 1 >= rows || solid_wall(r + 1, c) {
         spawn_decoration(
             commands,
             assets,
@@ -152,7 +164,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
         );
     }
     // East face
-    if c + 1 >= cols || grid[r][c + 1] == 'W' {
+    if c + 1 >= cols || solid_wall(r, c + 1) {
         spawn_decoration(
             commands,
             assets,
@@ -165,7 +177,7 @@ pub(crate) fn spawn_wall_decorations_for_cell(
         );
     }
     // West face
-    if c == 0 || grid[r][c - 1] == 'W' {
+    if c == 0 || solid_wall(r, c - 1) {
         spawn_decoration(
             commands,
             assets,

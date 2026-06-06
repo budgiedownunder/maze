@@ -288,6 +288,17 @@ impl WallType {
             Self::Water | Self::Lava | Self::IronFence => None,
         }
     }
+
+    /// Whether this wall type renders as see-through in-cell geometry (a
+    /// floor-level pool, or vertical bars) instead of a solid occluding panel.
+    /// A non-occluding `'W'` cell is un-skipped in the spawn loop so its
+    /// geometry is drawn, and the wall panel between it and any open or
+    /// non-occluding neighbour is suppressed so the region reads as continuous
+    /// and the player can see across it. The exact inverse of
+    /// [`to_kind_index`](Self::to_kind_index) being `Some`.
+    pub fn is_non_occluding(self) -> bool {
+        matches!(self, Self::Water | Self::Lava | Self::IronFence)
+    }
 }
 
 /// Door open-animation styles. `Swing` only applies to a straight-corridor
