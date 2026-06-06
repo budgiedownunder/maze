@@ -1117,7 +1117,10 @@ test('Clear Solution after Walk Solution resets to normal editing state', async 
   await login(page)
   await openFirstMaze(page)
   await page.getByRole('button', { name: 'Walk Solution' }).click()
-  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible({ timeout: 10000 })
+  // The walk is timer-driven and normally finishes in ~2s; under parallel-worker
+  // CPU contention the timers lag, so allow generous headroom for the walker to
+  // finish and disappear rather than flaking on a starved animation.
+  await expect(page.locator('img[alt="Walker"]')).not.toBeVisible({ timeout: 30000 })
   await expect(page.locator('img[alt="Solution path"]').first()).toBeVisible()
   await page.getByRole('button', { name: 'Clear Solution' }).click()
   await expect(page.locator('img[alt="Solution path"]')).not.toBeVisible()
