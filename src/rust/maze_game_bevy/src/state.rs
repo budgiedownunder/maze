@@ -149,6 +149,14 @@ pub struct GameConfig {
     /// as [`Landmarks::wall_tint`]. Default `Brick` so the pre-Step-14
     /// hard-coded look is preserved.
     pub wall_type: WallType,
+    /// Whether the maze perimeter is walled at the grid edge under an **open**
+    /// sky. Enclosed skies (`Dungeon` / `Chamber`) always wall the perimeter
+    /// regardless of this flag; for open skies, `true` walls the edge (the
+    /// traditional enclosed-maze look) and `false` shows the skybox past it (a
+    /// pool's low rim / a fence's bars still frame the edge). Default `true`.
+    /// Solid border `'W'` cells are unaffected either way (their grid-edge faces
+    /// are never drawn).
+    pub perimeter_walls: bool,
     /// Door open-animation style. Default `Swing`.
     pub door_style: DoorStyle,
     /// Key-holder appearance for `'K'` cells. Default `Pedestal`.
@@ -495,6 +503,7 @@ impl Default for GameConfig {
             landmarks: Landmarks::default(),
             sky_type: SkyType::default(),
             wall_type: WallType::default(),
+            perimeter_walls: true,
             door_style: DoorStyle::default(),
             key_holder: KeyHolderStyle::default(),
             enemy_move_period_ms: 1500.0,

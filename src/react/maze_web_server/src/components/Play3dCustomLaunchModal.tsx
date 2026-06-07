@@ -44,6 +44,7 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
   const [activeTab, setActiveTab] = useState<LaunchTab>('scene')
   const [skyType, setSkyType] = useState<SkyType>(initial.skyType)
   const [wallType, setWallType] = useState<WallType>(initial.wallType)
+  const [perimeterWalls, setPerimeterWalls] = useState(initial.perimeterWalls)
   const [doorStyle, setDoorStyle] = useState<DoorStyle>(initial.doorStyle)
   const [keyHolder, setKeyHolder] = useState<KeyHolderStyle>(initial.keyHolder)
   const [enemyType, setEnemyType] = useState<EnemyType>(initial.enemyType)
@@ -55,6 +56,11 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
   const [floorAccents, setFloorAccents] = useState(initial.floorAccents)
   const [timerSeconds, setTimerSeconds] = useState<string>(String(initial.timerSeconds))
   const [validationError, setValidationError] = useState<string | null>(null)
+
+  // Enclosed skies always wall the maze perimeter, so the toggle is forced on
+  // (checked + disabled) for them; the stored preference is kept and re-applies
+  // when an open sky is chosen again.
+  const skyEnclosed = skyType === 'dungeon' || skyType === 'chamber'
 
   function clearError() {
     if (validationError !== null) setValidationError(null)
@@ -81,6 +87,7 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
     onPlay({
       skyType,
       wallType,
+      perimeterWalls,
       doorStyle,
       keyHolder,
       enemyType,
@@ -178,6 +185,18 @@ export function Play3dCustomLaunchModal({ mazeName, onPlay, onCancel }: Props) {
                   onChange={e => { setWallTint(e.target.checked); clearError() }}
                 />
                 <span>Varied wall tints</span>
+              </label>
+
+              <label className="modal-checkbox">
+                <input
+                  type="checkbox"
+                  // Enclosed skies always wall the perimeter — force the box on
+                  // and disabled for them.
+                  checked={skyEnclosed ? true : perimeterWalls}
+                  disabled={skyEnclosed}
+                  onChange={e => { setPerimeterWalls(e.target.checked); clearError() }}
+                />
+                <span>Perimeter walls</span>
               </label>
             </div>
 

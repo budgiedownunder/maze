@@ -71,13 +71,14 @@ fn face_kind(
 /// `None` for the grid edge.
 ///
 /// A panel is drawn toward a **solid** wall from any cell. At the **grid edge**
-/// (the maze perimeter) a panel is drawn only under an **enclosed** sky (Dungeon /
-/// Chamber), which walls the maze in — floor-upwards, above a pool's rim or in
-/// place of a fence's bars. Under an open sky every edge — whatever the cell type —
-/// shows the skybox instead (a pool's low rim / a fence's bars still frame it; see
-/// [`super::rim`] / [`super::iron_fence`]). Panels toward an open or non-occluding
-/// neighbour are suppressed, so a non-occluding region knits into one continuous,
-/// see-across space.
+/// (the maze perimeter) a panel is drawn when the maze is walled in: always under
+/// an **enclosed** sky (Dungeon / Chamber), and under an open sky when
+/// [`GameConfig::perimeter_walls`] is set. When the edge is walled it's
+/// floor-upwards, above a pool's rim or in place of a fence's bars; otherwise the
+/// skybox shows past the edge (a pool's low rim / a fence's bars still frame it;
+/// see [`super::rim`] / [`super::iron_fence`]). Panels toward an open or
+/// non-occluding neighbour are suppressed, so a non-occluding region knits into
+/// one continuous, see-across space.
 fn face(
     grid: &[Vec<char>],
     cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
@@ -85,7 +86,7 @@ fn face(
     neighbour: Option<(usize, usize)>,
 ) -> Option<Option<(usize, usize)>> {
     match neighbour {
-        None => config.sky_type.is_enclosed().then_some(None),
+        None => (config.sky_type.is_enclosed() || config.perimeter_walls).then_some(None),
         Some((nr, nc)) => {
             if grid[nr][nc] == 'W' && !is_non_occluding_wall(grid, cell_entities, config, nr, nc) {
                 Some(Some((nr, nc)))
@@ -213,22 +214,36 @@ mod tests {
     }
 
     #[test]
-    fn face_edge_shows_sky_under_open_sky() {
-        // Under an open sky, every maze-edge face shows the skybox — no solid wall —
+    fn face_edge_shows_sky_under_open_sky_when_perimeter_walls_off() {
+        // Open sky + perimeter walls off → every maze-edge face shows the skybox,
         // regardless of the cell type.
-        let config = GameConfig::default(); // Night — open sky.
+        let config = GameConfig {
+            perimeter_walls: false,
+            ..GameConfig::default()
+        };
         let empty = HashMap::new();
         assert_eq!(face(&[vec!['S']], &empty, &config, None), None);
         assert_eq!(face(&[vec!['W']], &empty, &config, None), None);
     }
 
     #[test]
+    fn face_edge_walled_under_open_sky_when_perimeter_walls_on() {
+        // Open sky + perimeter walls on (the default) → the maze edge is walled.
+        let config = GameConfig::default(); // Night, perimeter_walls = true.
+        let empty = HashMap::new();
+        assert_eq!(face(&[vec!['S']], &empty, &config, None), Some(None));
+        assert_eq!(face(&[vec!['W']], &empty, &config, None), Some(None));
+    }
+
+    #[test]
     fn face_edge_is_walled_under_enclosed_sky() {
-        // Under Dungeon / Chamber the maze is walled in, so any edge cell gets the
-        // outer wall panel (floor up, above a pool rim / in place of fence bars).
+        // Under Dungeon / Chamber the maze is walled in even with perimeter walls
+        // off — any edge cell gets the outer wall panel (floor up, above a pool rim
+        // / in place of fence bars).
         let empty = HashMap::new();
         let config = GameConfig {
             sky_type: crate::state::SkyType::Dungeon,
+            perimeter_walls: false,
             ..GameConfig::default()
         };
         assert_eq!(face(&[vec!['S']], &empty, &config, None), Some(None));

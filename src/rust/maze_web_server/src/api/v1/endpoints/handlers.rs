@@ -455,11 +455,15 @@ pub struct Play3dConfigResponse {
     pub landmarks: LandmarksResponse,
     /// Sky type. Safely degrades to `night` if unrecognised.
     pub sky_type: String,
-    /// Wall texture kind used by the per-cell tinted path (when
-    /// `landmarks.wallMaterialVariation` is off). One of `brick`,
-    /// `dressed_stone`, `wood`, `cobblestone`. Safely degrades to
-    /// `brick` if unrecognised.
+    /// Per-maze wall type. The solid textures (`brick`, `dressed_stone`, `wood`,
+    /// `cobblestone`) use the per-cell tinted path (when
+    /// `landmarks.wallMaterialVariation` is off); the non-occluding types
+    /// (`water`, `lava`, `iron_fence`) turn every wall cell into a pool / bars.
+    /// Safely degrades to `brick` if unrecognised.
     pub wall_type: String,
+    /// Whether the maze perimeter is walled at the grid edge under an open sky
+    /// (enclosed skies always wall it). Default `true`.
+    pub perimeter_walls: bool,
     /// Door open-animation style. One of `swing`, `slide`, `portcullis`,
     /// `dissolve`. Safely degrades to `swing` if unrecognised.
     pub door_style: String,
@@ -562,6 +566,7 @@ pub async fn get_play3d_config(
         },
         sky_type: preset.sky_type.as_wire_str().to_string(),
         wall_type: preset.wall_type.as_wire_str().to_string(),
+        perimeter_walls: preset.perimeter_walls,
         door_style: preset.door_style.as_wire_str().to_string(),
         key_holder: preset.key_holder.as_wire_str().to_string(),
         door_count: preset.door_count,

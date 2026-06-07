@@ -65,6 +65,18 @@ describe('Play3dCustomLaunchModal', () => {
     expect(wallTint).toBeDisabled()
   })
 
+  it('forces and disables the perimeter-walls checkbox under an enclosed sky', async () => {
+    render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
+    const perimeter = screen.getByLabelText(/perimeter walls/i) as HTMLInputElement
+    // Default open sky (night): on by default and editable.
+    expect(perimeter).toBeChecked()
+    expect(perimeter).not.toBeDisabled()
+    // Enclosed sky always walls the perimeter → forced on and disabled.
+    await userEvent.selectOptions(screen.getByLabelText(/sky/i) as HTMLSelectElement, 'dungeon')
+    expect(perimeter).toBeChecked()
+    expect(perimeter).toBeDisabled()
+  })
+
   it('rejects submission with non-positive time limit and shows an inline error', async () => {
     const onPlay = vi.fn()
     render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={onPlay} />)
@@ -136,6 +148,7 @@ describe('Play3dCustomLaunchModal', () => {
     const stored: Play3dCustomLaunchSettings = {
       skyType: 'day',
       wallType: 'wood',
+      perimeterWalls: false,
       doorStyle: 'dissolve',
       keyHolder: 'floating_key',
       enemyType: 'ghost',
@@ -151,6 +164,8 @@ describe('Play3dCustomLaunchModal', () => {
     render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     expect((screen.getByLabelText(/sky/i) as HTMLSelectElement).value).toBe('day')
     expect((screen.getByLabelText(/wall texture/i) as HTMLSelectElement).value).toBe('wood')
+    // Open sky (day) + stored false → the perimeter-walls box reflects it.
+    expect(screen.getByLabelText(/perimeter walls/i)).not.toBeChecked()
     expect((screen.getByLabelText(/door style/i) as HTMLSelectElement).value).toBe('dissolve')
     expect((screen.getByLabelText(/key holder/i) as HTMLSelectElement).value).toBe('floating_key')
     expect((screen.getByLabelText(/enemy type/i) as HTMLSelectElement).value).toBe('ghost')
@@ -241,6 +256,7 @@ describe('loadPlay3dCustomLaunchSettings', () => {
     const settings: Play3dCustomLaunchSettings = {
       skyType: 'sunset',
       wallType: 'cobblestone',
+      perimeterWalls: false,
       doorStyle: 'slide',
       keyHolder: 'chest',
       enemyType: 'ghost',

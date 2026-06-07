@@ -82,6 +82,12 @@ pub struct Play3dDifficultyConfig {
     /// `brick` so the no-config and pre-Step-14 behaviour is preserved.
     #[serde(default = "default_wall_type")]
     pub wall_type: WallTypeConfig,
+    /// Whether the maze perimeter is walled at the grid edge under an **open**
+    /// sky. Enclosed skies (`dungeon` / `chamber`) always wall the perimeter
+    /// regardless; for open skies, `true` walls the edge (the traditional
+    /// enclosed-maze look) and `false` shows the sky past it. Default `true`.
+    #[serde(default = "default_perimeter_walls")]
+    pub perimeter_walls: bool,
     /// Door open-animation style for this difficulty. Default `swing`.
     #[serde(default = "default_door_style")]
     pub door_style: DoorStyleConfig,
@@ -436,6 +442,7 @@ impl Default for Play3dDifficultyConfig {
             landmarks: LandmarksConfig::default(),
             sky_type: default_sky_type(),
             wall_type: default_wall_type(),
+            perimeter_walls: default_perimeter_walls(),
             door_style: default_door_style(),
             key_holder: default_key_holder(),
             door_count: default_play3d_door_count(),
@@ -513,6 +520,7 @@ impl Default for Play3dConfig {
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
                 wall_type: default_wall_type(),
+                perimeter_walls: default_perimeter_walls(),
                 door_style: default_door_style(),
                 key_holder: default_key_holder(),
                 door_count: 2,
@@ -538,6 +546,7 @@ impl Default for Play3dConfig {
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
                 wall_type: default_wall_type(),
+                perimeter_walls: default_perimeter_walls(),
                 door_style: default_door_style(),
                 key_holder: default_key_holder(),
                 door_count: 3,
@@ -563,6 +572,7 @@ impl Default for Play3dConfig {
                 landmarks: LandmarksConfig::default(),
                 sky_type: default_sky_type(),
                 wall_type: default_wall_type(),
+                perimeter_walls: default_perimeter_walls(),
                 door_style: default_door_style(),
                 key_holder: default_key_holder(),
                 door_count: 4,
@@ -704,6 +714,13 @@ fn default_sky_type() -> SkyTypeConfig {
 /// difficulty via `[game.play3d.<difficulty>] wall_type = "wood"`.
 fn default_wall_type() -> WallTypeConfig {
     WallTypeConfig::Brick
+}
+
+/// The maze perimeter is walled by default (even under an open sky) — the
+/// traditional enclosed-maze look. Operators override per difficulty via
+/// `[game.play3d.<difficulty>] perimeter_walls = false`.
+fn default_perimeter_walls() -> bool {
+    true
 }
 
 /// Door style defaults to swing — the topology-driven look the 3D game shipped
@@ -1061,6 +1078,47 @@ mod tests {
         assert_eq!(cfg.play3d.easy.wall_type, WallTypeConfig::Water);
         assert_eq!(cfg.play3d.tricky.wall_type, WallTypeConfig::Lava);
         assert_eq!(cfg.play3d.hard.wall_type, WallTypeConfig::IronFence);
+    }
+
+    #[test]
+    fn perimeter_walls_round_trips_from_toml_and_defaults_to_true() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            perimeter_walls = false
+
+            [play3d.tricky]
+            rows = 8
+            cols = 8
+            timer_seconds = 50
+            seed = 99
+            min_solution_length = 16
+            # perimeter_walls deliberately omitted — defaults to true
+
+            [play3d.hard]
+            rows = 10
+            cols = 10
+            timer_seconds = 40
+            seed = 7
+            min_solution_length = 20
+            perimeter_walls = true
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("valid game config");
+        assert!(!cfg.play3d.easy.perimeter_walls);
+        assert!(cfg.play3d.tricky.perimeter_walls); // default
+        assert!(cfg.play3d.hard.perimeter_walls);
+        // Built-in defaults are all walled.
+        let default = Play3dConfig::default();
+        assert!(default.easy.perimeter_walls);
+        assert!(default.tricky.perimeter_walls);
+        assert!(default.hard.perimeter_walls);
     }
 
     #[test]

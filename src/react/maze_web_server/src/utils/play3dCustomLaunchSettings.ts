@@ -39,6 +39,9 @@ export type WallType = (typeof WALL_TYPES)[number]
 export interface Play3dCustomLaunchSettings {
   skyType: SkyType
   wallType: WallType
+  /** Whether the maze perimeter is walled at the grid edge under an open sky.
+   * Enclosed skies (dungeon / chamber) always wall it regardless. */
+  perimeterWalls: boolean
   doorStyle: DoorStyle
   keyHolder: KeyHolderStyle
   enemyType: EnemyType
@@ -54,6 +57,8 @@ export interface Play3dCustomLaunchSettings {
 export const PLAY3D_CUSTOM_LAUNCH_DEFAULTS: Play3dCustomLaunchSettings = {
   skyType: 'night',
   wallType: 'brick',
+  // The maze is walled at its perimeter by default (even under an open sky).
+  perimeterWalls: true,
   // Door / key-holder styles default to the topology-driven swing and the
   // stone pedestal — the look the 3D game shipped with.
   doorStyle: 'swing',
@@ -115,6 +120,7 @@ export function loadPlay3dCustomLaunchSettings(): Play3dCustomLaunchSettings {
     return {
       skyType,
       wallType,
+      perimeterWalls: parsed.perimeterWalls ?? PLAY3D_CUSTOM_LAUNCH_DEFAULTS.perimeterWalls,
       doorStyle,
       keyHolder,
       enemyType,

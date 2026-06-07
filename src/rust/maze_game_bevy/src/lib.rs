@@ -160,6 +160,21 @@ mod tests {
         app
     }
 
+    /// A playing app with both a custom maze JSON and a custom `GameConfig`
+    /// (`build_app`'s `init_resource` keeps the pre-inserted config).
+    fn make_playing_app_with_maze_and_config(maze_json: &str, config: GameConfig) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.insert_resource(config);
+        build_app(&mut app, Some(maze_json));
+        app.update();
+        app.world_mut()
+            .resource_mut::<NextState<AppState>>()
+            .set(AppState::Playing);
+        app.update();
+        app
+    }
+
     fn expected_wall_panel_count(grid: &[Vec<char>]) -> usize {
         let rows = grid.len();
         grid.iter()
@@ -918,6 +933,12 @@ mod tests {
     }
 
     #[test]
+    fn default_perimeter_walls_is_true() {
+        // The maze is walled at its perimeter by default (open-sky mazes too).
+        assert!(GameConfig::default().perimeter_walls);
+    }
+
+    #[test]
     fn default_wall_type_is_brick() {
         assert_eq!(GameConfig::default().wall_type, WallType::Brick);
     }
@@ -1231,17 +1252,20 @@ mod tests {
     }
 
     #[test]
-    fn non_occluding_edge_cell_draws_no_outer_wall() {
-        // The water cell sits at the bottom-right corner (two grid edges) with two
-        // passable neighbours — so it draws no *solid wall* panel (the sky still
-        // shows past its edge; its low rim frames it instead), and its two open
-        // neighbours suppress their panels toward it. Replacing it with a solid
-        // wall makes those two neighbours each draw a panel, so the solid variant
-        // has two MORE wall panels.
+    fn non_occluding_edge_cell_draws_no_outer_wall_when_perimeter_open() {
+        // Open sky with perimeter walls off: the corner water cell (two grid edges)
+        // draws no *solid wall* panel (the sky shows past its edge; its low rim
+        // frames it instead), and its two open neighbours suppress their panels
+        // toward it. Replacing it with a solid wall makes those two neighbours each
+        // draw a panel, so the solid variant has two MORE wall panels.
         let solid = r#"{"grid":[["S"," "],["F","W"]]}"#;
         let water = r#"{"grid":[["S"," "],["F",[{"type":"W","wallType":"water"}]]]}"#;
         let panels = |json: &str| {
-            let mut app = make_playing_app_with(json);
+            let config = GameConfig {
+                perimeter_walls: false,
+                ..GameConfig::default()
+            };
+            let mut app = make_playing_app_with_maze_and_config(json, config);
             app.world_mut().query::<&WallCell>().iter(app.world()).count()
         };
         assert_eq!(panels(solid), panels(water) + 2);

@@ -66,6 +66,8 @@ struct StartConfig {
     sky_type: String,
     #[serde(default)]
     wall_type: String,
+    #[serde(default = "default_perimeter_walls")]
+    perimeter_walls: bool,
     #[serde(default)]
     door_style: String,
     #[serde(default)]
@@ -122,6 +124,12 @@ fn default_enemy_type() -> String {
 
 fn default_health_style() -> String {
     "heart".to_string()
+}
+
+/// The maze is walled at its perimeter by default (even under an open sky), so a
+/// host payload that omits the flag gets the traditional enclosed-maze look.
+fn default_perimeter_walls() -> bool {
+    true
 }
 
 /// Shape of the nested `landmarks` object in the host JSON payload —
@@ -262,6 +270,7 @@ pub fn start_with_config(json: &str) -> Result<(), JsValue> {
         },
         sky_type: SkyType::from_wire_str(&cfg.sky_type),
         wall_type: WallType::from_wire_str(&cfg.wall_type),
+        perimeter_walls: cfg.perimeter_walls,
         door_style: DoorStyle::from_wire_str(&cfg.door_style),
         key_holder: KeyHolderStyle::from_wire_str(&cfg.key_holder),
         enemy_move_period_ms: cfg.enemy_move_period_ms,
@@ -304,6 +313,8 @@ mod tests {
         assert_eq!(cfg.mode, "");
         assert_eq!(cfg.sky_type, "");
         assert_eq!(cfg.wall_type, "brick");
+        // Omitting the perimeter flag defaults to walled (the enclosed-maze look).
+        assert!(cfg.perimeter_walls);
         assert_eq!(cfg.door_count, 0);
         assert_eq!(cfg.spare_doors, 0);
         assert_eq!(cfg.spare_keys, 0);

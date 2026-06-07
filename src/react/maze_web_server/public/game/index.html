@@ -394,7 +394,7 @@
   <script type="module">
     import { start, start_with_config, default as init } from './maze_game_bevy_wasm.js';
 
-    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=74';
+    const WASM_URL = './maze_game_bevy_wasm_bg.wasm?v=75';
     const DEFAULT_DIFFICULTY = 'tricky';
 
     let secs = 0;
@@ -444,6 +444,7 @@
       const DEFAULT_LAUNCH_SETTINGS = {
         skyType: 'night',
         wallType: 'brick',
+        perimeterWalls: true,
         doorStyle: 'swing',
         keyHolder: 'pedestal',
         enemyType: 'goblin',
@@ -487,6 +488,7 @@
         return {
           skyType: readStr('skyType', base.skyType),
           wallType: readStr('wallType', base.wallType),
+          perimeterWalls: readBool('perimeterWalls', base.perimeterWalls),
           doorStyle: readStr('doorStyle', base.doorStyle),
           keyHolder: readStr('keyHolder', base.keyHolder),
           enemyType: readStr('enemyType', base.enemyType),
@@ -522,6 +524,7 @@
         mode: truncateMode(maze.name),
         skyType: settings.skyType,
         wallType: settings.wallType,
+        perimeterWalls: settings.perimeterWalls,
         doorStyle: settings.doorStyle,
         keyHolder: settings.keyHolder,
         enemyType: settings.enemyType,

@@ -72,11 +72,12 @@ fn bar_offset(i: usize) -> f32 {
 
 /// Which of the cell's four edges carry a bar grille, as `[north, south, east,
 /// west]`. An edge is barred when its in-bounds neighbour can be looked across (an
-/// open cell or a water/lava pool), or when it's the maze perimeter under an open
-/// sky (sky beyond, seen through the bars). A solid wall and another iron fence
-/// (looked through, not across) yield no grille; and under an **enclosed** sky the
-/// perimeter is walled (a solid panel) instead of barred, so the edge isn't a
-/// grille there either.
+/// open cell or a water/lava pool), or when it's the maze perimeter and that edge
+/// shows sky (so the bars frame the open edge). A solid wall and another iron
+/// fence (looked through, not across) yield no grille; and when the perimeter is
+/// walled — always under an **enclosed** sky, or under an open sky with
+/// [`GameConfig::perimeter_walls`] set — the edge gets a solid panel (from `face`)
+/// instead of a grille.
 fn edges_barred(
     grid: &[Vec<char>],
     cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
@@ -87,9 +88,10 @@ fn edges_barred(
     let rows = grid.len();
     let cols = grid[r].len();
     let across = |nr: usize, nc: usize| can_be_looked_across(grid, cell_entities, config, nr, nc);
-    // The maze perimeter shows bars (sky through them) only under an open sky;
-    // under Dungeon / Chamber it is walled instead (the solid panel from `face`).
-    let perimeter = !config.sky_type.is_enclosed();
+    // The maze perimeter is barred only when that edge shows sky — i.e. an open sky
+    // with perimeter walls off. Otherwise (enclosed, or perimeter walls on) it is
+    // walled by the solid panel from `face`, not a grille.
+    let perimeter = !config.sky_type.is_enclosed() && !config.perimeter_walls;
     [
         if r == 0 { perimeter } else { across(r - 1, c) },
         if r + 1 >= rows { perimeter } else { across(r + 1, c) },
@@ -165,13 +167,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn edges_barred_includes_the_maze_perimeter() {
-        // Fence at the top-left corner: N and W are the grid boundary (barred — sky
-        // through the bars), S and E face open cells (barred). All four barred.
+    fn edges_barred_includes_the_perimeter_under_open_sky_without_perimeter_walls() {
+        // Open sky + perimeter walls off → the N & W grid-boundary edges show sky
+        // and are barred; the S & E open edges are barred too. All four.
+        let grid = vec![vec!['W', ' '], vec![' ', 'F']];
+        let config = GameConfig {
+            perimeter_walls: false,
+            ..GameConfig::default()
+        };
+        let empty = HashMap::new();
+        assert_eq!(edges_barred(&grid, &empty, &config, 0, 0), [true; 4]);
+    }
+
+    #[test]
+    fn edges_barred_walls_the_perimeter_under_open_sky_with_perimeter_walls() {
+        // Open sky (default) + perimeter walls on (default) → the grid-boundary
+        // edges are walled (a solid panel, not a grille); only the open S & E edges
+        // are barred.
         let grid = vec![vec!['W', ' '], vec![' ', 'F']];
         let config = GameConfig::default();
         let empty = HashMap::new();
-        assert_eq!(edges_barred(&grid, &empty, &config, 0, 0), [true; 4]);
+        assert_eq!(
+            edges_barred(&grid, &empty, &config, 0, 0),
+            [false, true, true, false]
+        );
     }
 
     #[test]
@@ -190,13 +209,14 @@ mod tests {
 
     #[test]
     fn edges_barred_walls_the_perimeter_under_enclosed_sky() {
-        // Corner fence under Chamber: the N & W grid-boundary edges are walled (not
-        // barred — a solid panel takes their place), while the S & E open edges
-        // still bar.
+        // Corner fence under Chamber, even with perimeter walls off: the N & W
+        // grid-boundary edges are walled (a solid panel takes their place), while
+        // the S & E open edges still bar.
         let grid = vec![vec!['W', ' '], vec![' ', 'F']];
         let empty = HashMap::new();
         let config = GameConfig {
             sky_type: crate::state::SkyType::Chamber,
+            perimeter_walls: false,
             ..GameConfig::default()
         };
         assert_eq!(

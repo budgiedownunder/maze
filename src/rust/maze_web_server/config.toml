@@ -131,6 +131,11 @@ wall_type = "brick"
 #wall_type = "water"
 #wall_type = "lava"
 #wall_type = "iron_fence"
+# Whether the maze perimeter is walled at the grid edge under an open sky.
+# Enclosed skies ("dungeon" / "chamber") always wall it regardless. true =
+# walled (the traditional enclosed-maze look); false = the skybox shows past the
+# edge (a pool's low rim / a fence's bars still frame it). Default true.
+perimeter_walls = true
 # Door open-animation style — one of "swing" | "slide" | "portcullis" |
 # "dissolve". Default "swing". Applies to the doors auto-placed below (and to
 # doors in authored mazes).
@@ -204,6 +209,7 @@ minimap_cell_px = 10
 minimap_radius = 5
 sky_type = "night"
 wall_type = "brick"
+perimeter_walls = true
 door_count = 3
 spare_doors = 2
 spare_keys = 1
@@ -233,6 +239,7 @@ minimap_cell_px = 10
 minimap_radius = 5
 sky_type = "night"
 wall_type = "brick"
+perimeter_walls = true
 door_count = 4
 spare_doors = 3
 spare_keys = 1
