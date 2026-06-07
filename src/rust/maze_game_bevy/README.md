@@ -152,8 +152,8 @@ src/
 │   │   │   ├── mod.rs      spawn_walls_for_cell + per-cell tint / per-quadrant material hashes + panel suppression (face/edge logic)
 │   │   │   ├── ns_panel.rs N/S-facing panel mesh, materials, spawn helper
 │   │   │   └── ew_panel.rs E/W-facing panel mesh, materials, spawn helper
-│   │   ├── water.rs        WaterSurface — recessed bluish pool that serves as the floor
-│   │   ├── lava.rs         LavaSurface — recessed molten pool that serves as the floor
+│   │   ├── water.rs        WaterSurface + water_animation_system — recessed bluish pool that undulates with scrolling ripples
+│   │   ├── lava.rs         LavaSurface / LavaRock / LavaSteam + lava_(animation|steam)_system — recessed molten pool: scrolling ripples, bobbing rocks, rising steam dots
 │   │   ├── rim.rs          PoolRim — textured basin-wall skirts around recessed pools (water/lava)
 │   │   └── iron_fence.rs   IronFenceBars — see-through vertical bar grilles on the cell's open edges
 │   ├── decorations/        wall decorations + floor accents

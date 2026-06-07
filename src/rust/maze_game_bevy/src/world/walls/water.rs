@@ -5,10 +5,12 @@
 //! [`super::rim`]. The surface is a clear blue and sits low so, with the wall
 //! panels around it suppressed (see [`super::solid::spawn_walls_for_cell`]), the
 //! player sees across it to whatever lies in the cells beyond. It is opaque (like
-//! lava) so adjacent surfaces meet without alpha-blended seams.
+//! lava) so adjacent surfaces meet without alpha-blended seams. [`water_animation_system`]
+//! gently undulates the surface and scrolls a tileable ripple texture across it.
 
 use super::rim::RECESS_DEPTH;
 use crate::world::CELL_SIZE;
+use bevy::math::Affine2;
 use bevy::prelude::*;
 
 // ---------- Tuning constants ----------
@@ -23,11 +25,42 @@ const SURFACE_THICKNESS: f32 = 0.04;
 const SURFACE_Y: f32 = -RECESS_DEPTH;
 
 /// Surface emissive — a clear, saturated blue that reads unmistakably as water
-/// under the dim corridor lighting without lighting the walls around it.
+/// under the dim corridor lighting without lighting the walls around it. A
+/// tileable ripple texture modulates this so the surface shows moving ripples.
 const WATER_EMISSIVE: LinearRgba = LinearRgba::new(0.04, 0.22, 0.70, 1.0);
 
+/// Undulation amplitude (units) — the vertical rise/fall of the surface. Small
+/// relative to [`RECESS_DEPTH`] so the water stays well within its basin.
+const WAVE_AMP: f32 = 0.04;
+/// Spatial frequency of the surface wave (radians/unit) — ≈ a four-cell
+/// wavelength, so the undulation flows visibly across a multi-cell pool.
+const WAVE_K: f32 = 0.785;
+/// Temporal speed of the surface wave (radians/sec) — a slow, calm ripple.
+const WAVE_SPEED: f32 = 0.8;
+
+/// Ripple-texture repeats across one cell. Integer so the pattern tiles
+/// seamlessly into the neighbouring cell (the ripples stay continuous across a
+/// multi-cell pool). Three repeats packs the fine ripples in tighter.
+const RIPPLE_UV: Vec2 = Vec2::new(3.0, 3.0);
+/// Per-second UV scroll of the ripple texture (u, v) — the ripples drift slowly
+/// across the surface, like a light breeze.
+const RIPPLE_SCROLL: Vec2 = Vec2::new(0.018, 0.011);
+
+/// Plane-wave frequencies for the water ripple texture — several higher-frequency
+/// waves at mixed (often diagonal) directions, so the surface reads as many fine
+/// crossing ripples rather than a few broad patches of shade.
+const RIPPLE_WAVES: &[(f32, f32)] = &[
+    (5.0, 1.0),
+    (1.0, 6.0),
+    (4.0, 4.0),
+    (7.0, 3.0),
+    (3.0, 7.0),
+];
+/// Contrast of the ripple texture around its mid grey.
+const RIPPLE_AMP: f32 = 0.24;
+
 /// Marker on a water pool surface. Spawned per non-occluding water `'W'` cell;
-/// the water-animation system (a later step) queries it to undulate the surface.
+/// [`water_animation_system`] queries it to undulate the surface.
 #[derive(Component)]
 pub(crate) struct WaterSurface;
 
@@ -39,18 +72,25 @@ pub(crate) struct WaterAssets {
 pub(crate) fn build_water_assets(
     meshes: &mut Option<ResMut<Assets<Mesh>>>,
     materials: &mut Option<ResMut<Assets<StandardMaterial>>>,
+    images: &mut Option<ResMut<Assets<Image>>>,
 ) -> WaterAssets {
     // Full-cell surface sheet (no border inset) so adjacent pools meet seamlessly.
     let mesh = meshes
         .as_mut()
         .map(|m| m.add(Cuboid::new(CELL_SIZE, SURFACE_THICKNESS, CELL_SIZE)));
+    let ripple = images
+        .as_mut()
+        .map(|imgs| super::ripple_texture(imgs, RIPPLE_WAVES, RIPPLE_AMP));
     let material = materials.as_mut().map(|m| {
         m.add(StandardMaterial {
             // Opaque (like lava) so adjacent surfaces meet without alpha-blended
             // seams; the player still sees *over* it because it is low and
-            // panel-free.
+            // panel-free. The ripple texture (scrolled by water_animation_system)
+            // modulates the emissive into moving ripples.
             base_color: crate::palette::EMISSIVE_ONLY_BASE,
             emissive: WATER_EMISSIVE,
+            emissive_texture: ripple,
+            uv_transform: Affine2::from_scale(RIPPLE_UV),
             ..default()
         })
     });
@@ -73,6 +113,35 @@ pub(crate) fn spawn_water(commands: &mut Commands, assets: &WaterAssets, r: usiz
         }
         _ => {
             commands.spawn((WaterSurface, Transform::from_xyz(x, SURFACE_Y, z)));
+        }
+    }
+}
+
+/// `Update` system: gently undulates every water surface and scrolls the shared
+/// ripple texture. The undulation is phased by each tile's world `(x, z)` (read
+/// straight off its transform, only its Y is animated), so adjacent water tiles
+/// read as one continuous moving sheet — see [`super::pool_wave`]. The ripple
+/// texture is one shared material, so a single UV scroll drifts the ripples
+/// across every water tile in step. Mirrors the per-entity transform animation of
+/// the enemy / health / door systems.
+pub(crate) fn water_animation_system(
+    time: Res<Time>,
+    mut materials: Option<ResMut<Assets<StandardMaterial>>>,
+    mut surfaces: Query<&mut Transform, With<WaterSurface>>,
+    surface_mats: Query<&MeshMaterial3d<StandardMaterial>, With<WaterSurface>>,
+) {
+    let t = time.elapsed_secs();
+    for mut tr in surfaces.iter_mut() {
+        let (dy, rot) = super::pool_wave(tr.translation.x, tr.translation.z, t, WAVE_AMP, WAVE_K, WAVE_SPEED);
+        tr.translation.y = SURFACE_Y + dy;
+        tr.rotation = rot;
+    }
+    // Drift the ripple texture. The surfaces share one material, so updating it
+    // once (off any surface's handle) ripples them all; only the UV translation
+    // changes, preserving the scale set at build time.
+    if let (Some(materials), Some(handle)) = (materials.as_mut(), surface_mats.iter().next()) {
+        if let Some(mat) = materials.get_mut(&handle.0) {
+            mat.uv_transform.translation = RIPPLE_SCROLL * t;
         }
     }
 }

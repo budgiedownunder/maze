@@ -403,6 +403,9 @@ pub(crate) fn spawn_world(
     let wall_assets = walls::build_wall_assets(&mut meshes, &mut materials, &mut images);
     let nonoccluding_assets =
         walls::build_non_occluding_assets(&mut meshes, &mut materials, &mut images);
+    // The lava-steam emitter runs every frame and needs its wisp assets after
+    // spawn_world returns, so they live in a resource rather than a local bundle.
+    commands.insert_resource(walls::lava::build_lava_steam_assets(&mut meshes, &mut materials));
     let floor_assets = floor::build_floor_assets(&mut meshes, &mut materials, &mut images);
     let decoration_assets =
         decorations::build_decoration_assets(&mut meshes, &mut materials, &mut images);

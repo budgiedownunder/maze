@@ -33,6 +33,10 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
             key_holder::{key_collection_system, key_holder_system, key_sparks_system},
         },
         sky, spawn_world,
+        walls::{
+            lava::{lava_animation_system, lava_steam_system},
+            water::water_animation_system,
+        },
     };
 
     // `GameConfig` is the seam the JS host uses (via
@@ -77,6 +81,9 @@ pub fn build_app(app: &mut App, maze_json: Option<&str>) {
         .add_systems(Update, enemy_animation_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, ghost_hem_wave_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, health_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, water_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, lava_animation_system.run_if(in_state(AppState::Playing)))
+        .add_systems(Update, lava_steam_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, bag::bag_hud_system.run_if(in_state(AppState::Playing)))
         .add_systems(Update, hp::hp_hud_system.run_if(in_state(AppState::Playing)))
         // Damage flash runs through pause/lost so an in-flight flash from
@@ -110,7 +117,10 @@ mod tests {
         roof::RoofCell,
         sky::dome::SkyDome,
         walls::{
-            iron_fence::IronFenceBars, lava::LavaSurface, rim::PoolRim, water::WaterSurface,
+            iron_fence::IronFenceBars,
+            lava::{LavaRock, LavaSurface},
+            rim::PoolRim,
+            water::WaterSurface,
             WallCell,
         },
         CAMERA_EDGE_OFFSET, CAMERA_FOV_REFERENCE_ASPECT, CAMERA_FOV_VERTICAL_MAX_RADIANS,
@@ -1257,6 +1267,37 @@ mod tests {
         let mut app = make_playing_app_with(json);
         let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
         assert_eq!(rims, 4, "four non-pool edges → four rim skirts");
+    }
+
+    #[test]
+    fn lava_cell_spawns_bobbing_rocks() {
+        // Each lava cell seeds a small fixed number of dark rocks that the lava
+        // animation system bobs through the surface.
+        let json = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"lava"}],"W"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let rocks = app.world_mut().query::<&LavaRock>().iter(app.world()).count();
+        assert_eq!(rocks, 3, "one lava cell seeds three rocks");
+    }
+
+    #[test]
+    fn pool_animation_systems_displace_the_surfaces() {
+        // After entering Playing, the water/lava animation systems have run, so
+        // each surface carries the position-phased wave's tilt rather than the
+        // identity rotation it was spawned with — a regression guard that the
+        // systems are wired into `build_app` and reach the pool surfaces.
+        let water = r#"{"grid":[["S"," ","F"],["W",[{"type":"W","wallType":"water"}],"W"]]}"#;
+        let mut app = make_playing_app_with(water);
+        let rot = app
+            .world_mut()
+            .query_filtered::<&Transform, With<WaterSurface>>()
+            .iter(app.world())
+            .next()
+            .expect("a water surface")
+            .rotation;
+        assert!(
+            rot.angle_between(Quat::IDENTITY) > 1e-5,
+            "water_animation_system should have tilted the surface",
+        );
     }
 
     #[test]

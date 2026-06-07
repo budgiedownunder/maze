@@ -6,6 +6,7 @@ pub(crate) mod water;
 
 pub(crate) use solid::spawn_walls_for_cell;
 
+use crate::images::make_image;
 use crate::state::{GameConfig, WallType};
 use crate::world::objects::overrides::resolve_wall_type;
 use crate::world::textures::brick::make_brick_texture;
@@ -273,6 +274,67 @@ pub(crate) fn is_pool(
         )
 }
 
+/// Builds a tileable greyscale ripple texture from a set of integer-frequency
+/// plane waves (`(freq_u, freq_v)` cycles across the texture) interfered together.
+/// Integer frequencies keep it seamless across cells. Values sit near the top of
+/// the range so, as a pool material's emissive texture, it gently lightens /
+/// darkens the surface into ripples rather than blacking it out. More /
+/// higher-frequency waves read as finer ripples; fewer / lower as broader swells.
+pub(crate) fn ripple_texture(
+    images: &mut Assets<Image>,
+    waves: &[(f32, f32)],
+    amp: f32,
+) -> Handle<Image> {
+    use std::f32::consts::TAU;
+    const S: u32 = 64;
+    let mut pixels = vec![255u8; (S * S * 4) as usize];
+    for y in 0..S {
+        for x in 0..S {
+            let u = x as f32 / S as f32;
+            let v = y as f32 / S as f32;
+            let sum: f32 = waves
+                .iter()
+                .map(|&(fu, fv)| (u * TAU * fu + v * TAU * fv).sin())
+                .sum();
+            let n = if waves.is_empty() {
+                0.0
+            } else {
+                sum / waves.len() as f32
+            };
+            let val = (0.80 + amp * n).clamp(0.0, 1.0);
+            let p = (val * 255.0) as u8;
+            let idx = ((y * S + x) * 4) as usize;
+            pixels[idx] = p;
+            pixels[idx + 1] = p;
+            pixels[idx + 2] = p;
+            pixels[idx + 3] = 255;
+        }
+    }
+    images.add(make_image(S, S, pixels))
+}
+
+/// A gentle travelling-wave surface displacement for a pool tile centred at world
+/// `(x, z)` at time `t`. Returns the vertical offset to add to the surface's
+/// resting Y, plus a small tilt rotation. The wave is phased purely by **world
+/// position** (not cell index), so adjacent pool tiles read as one continuous
+/// moving surface rather than each bobbing on its own clock; the tilt follows the
+/// local wave gradient so neighbouring tiles' shared edges stay aligned (no step
+/// at the seam). `amp` / `k` (spatial frequency) / `speed` tune the motion — water
+/// passes a gentle set, lava a slightly more agitated one for bubbling.
+pub(crate) fn pool_wave(x: f32, z: f32, t: f32, amp: f32, k: f32, speed: f32) -> (f32, Quat) {
+    // Separable wave: one component travelling along X, one along Z (with a
+    // slightly different temporal rate so the two don't lock into a grid pattern).
+    let px = k * x + speed * t;
+    let pz = k * z + speed * t * 0.8;
+    let y = amp * 0.5 * (px.sin() + pz.sin());
+    // Local slopes → small-angle tilt that orients the flat tile to the wave so
+    // adjacent tiles meet edge-to-edge.
+    let dydx = amp * 0.5 * k * px.cos();
+    let dydz = amp * 0.5 * k * pz.cos();
+    let rot = Quat::from_rotation_z(dydx) * Quat::from_rotation_x(-dydz);
+    (y, rot)
+}
+
 /// In-cell geometry for the non-occluding wall types: the water / lava pool
 /// surfaces and the iron-fence bar lattice. Built once per session alongside
 /// [`WallAssets`] and reused for every non-occluding `'W'` cell.
@@ -289,8 +351,8 @@ pub(crate) fn build_non_occluding_assets(
     images: &mut Option<ResMut<Assets<Image>>>,
 ) -> NonOccludingAssets {
     NonOccludingAssets {
-        water: water::build_water_assets(meshes, materials),
-        lava: lava::build_lava_assets(meshes, materials),
+        water: water::build_water_assets(meshes, materials, images),
+        lava: lava::build_lava_assets(meshes, materials, images),
         iron_fence: iron_fence::build_iron_fence_assets(meshes, materials),
         rim: rim::build_rim_assets(meshes, materials, images),
     }
@@ -358,5 +420,32 @@ mod tests {
         assert_eq!(wall_override_kind(Some(&entity(r#"{ "type": "W" }"#))), None);
         assert_eq!(wall_override_kind(Some(&entity(r#"{ "type": "E", "enemyType": "ghost" }"#))), None);
         assert_eq!(wall_override_kind(None), None);
+    }
+
+    #[test]
+    fn pool_wave_is_bounded_and_position_phased() {
+        let (amp, k, speed) = (0.04, 0.785, 0.8);
+        // The vertical offset never leaves the ±amp band (|sin + sin| * 0.5 ≤ 1),
+        // and the returned tilt is a valid (normalised) rotation.
+        for &(x, z, t) in &[(0.0, 0.0, 0.0), (1.0, 2.0, 0.5), (10.0, 7.0, 3.3)] {
+            let (y, rot) = pool_wave(x, z, t, amp, k, speed);
+            assert!(y.abs() <= amp + 1e-6, "offset {y} exceeds amp {amp}");
+            assert!(rot.is_normalized());
+        }
+        // Phased by world position: two tiles at the same instant displace
+        // differently, so a multi-cell pool reads as a moving surface, not a
+        // single rigid bob.
+        let (y0, _) = pool_wave(0.0, 0.0, 0.0, amp, k, speed);
+        let (y1, _) = pool_wave(3.0, 0.0, 0.0, amp, k, speed);
+        assert!((y0 - y1).abs() > 1e-6, "wave must vary with world x");
+    }
+
+    #[test]
+    fn pool_wave_with_zero_amplitude_is_flat_and_level() {
+        // A degenerate (amp = 0) wave leaves the surface flat and at its resting
+        // level — the tilt collapses to identity.
+        let (y, rot) = pool_wave(3.0, 5.0, 1.0, 0.0, 0.785, 0.8);
+        assert_eq!(y, 0.0);
+        assert!(rot.angle_between(Quat::IDENTITY) < 1e-6);
     }
 }
