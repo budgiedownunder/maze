@@ -82,6 +82,31 @@ describe('CellOverridePanel', () => {
     expect(onClear).toHaveBeenCalled()
   })
 
+  it('shows no Apply-to-all link for a single cell', () => {
+    setup('W')
+    expect(screen.queryByRole('button', { name: /apply to all/i })).not.toBeInTheDocument()
+  })
+
+  it('shows an Apply-to-all link with the selection count for a multi-cell selection', async () => {
+    const onApplyToAll = vi.fn()
+    render(
+      <CellOverridePanel
+        cellType="W"
+        row={1}
+        col={2}
+        override={undefined}
+        onApply={vi.fn()}
+        onClear={vi.fn()}
+        onApplyToAll={onApplyToAll}
+        selectionCount={6}
+      />,
+    )
+    // The title flags the wider selection; the link names the cell count.
+    expect(screen.getByRole('heading', { name: /\+5 more/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to all 6 cells' }))
+    expect(onApplyToAll).toHaveBeenCalledTimes(1)
+  })
+
   it('shows a sprite preview reflecting the selected enemy variant', () => {
     const { container } = render(
       <CellOverridePanel

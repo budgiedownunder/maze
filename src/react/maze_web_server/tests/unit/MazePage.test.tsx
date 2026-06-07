@@ -1127,4 +1127,37 @@ describe('MazePage per-cell override panel', () => {
     expect(screen.getByRole('combobox', { name: 'Type' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Texture' })).toBeInTheDocument()
   })
+
+  // The gauntlet grid is ['S','E','E','E','F'] — cells 1,2 / 1,3 / 1,4 are all 'E'.
+  it('shows the panel + an Apply-to-all link for a uniform-type range', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2')
+    await userEvent.click(screen.getByLabelText('Cell 1,2')) // anchor on (0,1) 'E'
+    fireEvent.click(screen.getByLabelText('Cell 1,4'), { shiftKey: true }) // extend to (0,3) — all 'E'
+    // Panel seeds from the top-left cell and flags the wider selection.
+    expect(screen.getByRole('heading', { name: /Enemy \[1,2\] \+2 more/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Apply to all 3 cells' })).toBeInTheDocument()
+  })
+
+  it('Apply to all stamps every cell in the selection', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2')
+    await userEvent.click(screen.getByLabelText('Cell 1,2'))
+    fireEvent.click(screen.getByLabelText('Cell 1,4'), { shiftKey: true })
+    // The live edit overrides only the top-left cell so far.
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Type' }), 'ghost')
+    expect(screen.getAllByLabelText('Has override')).toHaveLength(1)
+    // Apply-to-all propagates it across the whole 3-cell block.
+    await userEvent.click(screen.getByRole('button', { name: 'Apply to all 3 cells' }))
+    expect(screen.getAllByLabelText('Has override')).toHaveLength(3)
+  })
+
+  it('hides the panel for a mixed-type selection', async () => {
+    renderMazePage(`/mazes/${mockMazeEnemyGauntlet.id}`)
+    await screen.findByLabelText('Cell 1,2')
+    await userEvent.click(screen.getByLabelText('Cell 1,2')) // (0,1) 'E'
+    fireEvent.click(screen.getByLabelText('Cell 1,5'), { shiftKey: true }) // extend to (0,4) 'F' — mixed
+    expect(screen.queryByRole('combobox', { name: 'Type' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /apply to all/i })).not.toBeInTheDocument()
+  })
 })

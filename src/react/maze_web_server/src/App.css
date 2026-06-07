@@ -1291,6 +1291,21 @@
   cursor: pointer;
 }
 
+/* The multi-cell "Apply to all" link — same link styling as Reset, weighted to
+   read as the primary action when a block of cells is selected. */
+.cell-override-apply-all {
+  align-self: flex-start;
+  margin-top: 0.4rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* On narrow screens there is no room for a side panel — reflow it below the grid. */
 @media (max-width: 700px) {
   .maze-editor-body {

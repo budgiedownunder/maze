@@ -111,15 +111,48 @@ export function MazePage() {
   const canSave = hasUnsavedWork
   const canRefresh = isDirty && mazeId !== null
 
-  // The single feature cell (E/H/K/D/W) whose override panel is shown, or null. Gated to
-  // a single selected feature cell with no solution displayed and the editor idle.
-  const overridePanelCell = useMemo(() => {
-    if (!activeCell || anchorCell !== null) return null
+  // What the override panel targets: a single feature cell (E/H/K/D/W), or the
+  // top-left of a rectangular selection whose cells are ALL the same overridable
+  // type (a block of the same feature — e.g. a region of 'W' to make a lava pool).
+  // The panel live-applies to the top-left cell; a multi-cell selection also gets an
+  // "Apply to all" link (see below). Hidden when a solution is shown, the editor is
+  // busy, or the selection is mixed / non-feature.
+  const overridePanelTarget = useMemo(() => {
+    if (!activeCell) return null
     if (selectionStatus.hasSolution || isBusy) return null
-    const ch = grid[activeCell.row]?.[activeCell.col]
-    if (!isFeatureChar(ch)) return null
-    return { row: activeCell.row, col: activeCell.col, cellType: ch }
+    const minRow = anchorCell ? Math.min(activeCell.row, anchorCell.row) : activeCell.row
+    const maxRow = anchorCell ? Math.max(activeCell.row, anchorCell.row) : activeCell.row
+    const minCol = anchorCell ? Math.min(activeCell.col, anchorCell.col) : activeCell.col
+    const maxCol = anchorCell ? Math.max(activeCell.col, anchorCell.col) : activeCell.col
+    const topLeftChar = grid[minRow]?.[minCol]
+    if (!isFeatureChar(topLeftChar)) return null
+    // Every cell in the selection must share that one overridable type.
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        if (grid[r]?.[c] !== topLeftChar) return null
+      }
+    }
+    const count = (maxRow - minRow + 1) * (maxCol - minCol + 1)
+    return { row: minRow, col: minCol, cellType: topLeftChar, minRow, maxRow, minCol, maxCol, count }
   }, [activeCell, anchorCell, selectionStatus.hasSolution, isBusy, grid])
+
+  // Stamp the top-left cell's current override across every cell in the selection
+  // (or clear them all when the top-left has reverted to default), honouring the same
+  // clear-on-default rule as a single cell. The stored entity is shared by reference —
+  // overrides are replaced, never mutated in place, so the cells stay independent.
+  const applyOverrideToSelection = useCallback(
+    (t: NonNullable<typeof overridePanelTarget>) => {
+      const ov = getOverride(t.row, t.col)
+      for (let r = t.minRow; r <= t.maxRow; r++) {
+        for (let c = t.minCol; c <= t.maxCol; c++) {
+          if (r === t.row && c === t.col) continue
+          if (ov) setOverride(r, c, ov)
+          else clearOverride(r, c)
+        }
+      }
+    },
+    [getOverride, setOverride, clearOverride],
+  )
 
   useEffect(() => {
     if (isBusy) document.body.classList.add('is-busy')
@@ -807,15 +840,21 @@ export function MazePage() {
               onCornerClick={isBusy ? undefined : () => selectAll()}
               onKeyDown={handleKeyDown}
             />
-            {overridePanelCell && (
+            {overridePanelTarget && (
               <CellOverridePanel
-                key={`${overridePanelCell.row},${overridePanelCell.col}`}
-                cellType={overridePanelCell.cellType}
-                row={overridePanelCell.row}
-                col={overridePanelCell.col}
-                override={getOverride(overridePanelCell.row, overridePanelCell.col)}
-                onApply={entity => setOverride(overridePanelCell.row, overridePanelCell.col, entity)}
-                onClear={() => clearOverride(overridePanelCell.row, overridePanelCell.col)}
+                key={`${overridePanelTarget.row},${overridePanelTarget.col}`}
+                cellType={overridePanelTarget.cellType}
+                row={overridePanelTarget.row}
+                col={overridePanelTarget.col}
+                override={getOverride(overridePanelTarget.row, overridePanelTarget.col)}
+                onApply={entity => setOverride(overridePanelTarget.row, overridePanelTarget.col, entity)}
+                onClear={() => clearOverride(overridePanelTarget.row, overridePanelTarget.col)}
+                selectionCount={overridePanelTarget.count > 1 ? overridePanelTarget.count : undefined}
+                onApplyToAll={
+                  overridePanelTarget.count > 1
+                    ? () => applyOverrideToSelection(overridePanelTarget)
+                    : undefined
+                }
               />
             )}
           </div>

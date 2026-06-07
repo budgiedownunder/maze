@@ -1212,3 +1212,49 @@ test('authoring a lava wall override shows the lava sprite plus a badge and save
   await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
   await expect(page.locator('.error-msg')).not.toBeVisible()
 })
+
+test('Apply to all stamps a block of wall cells with one override', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page) // Alpha — a 3x3 grid
+
+  // Select a 2x2 block and fill it with walls (Set Wall fills the whole selection),
+  // leaving a uniform 'W' block still selected.
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByLabel('Cell 2,3').click({ modifiers: ['Shift'] })
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+
+  // The two-tier wall panel shows for the block; choosing Lava live-applies to the
+  // top-left cell only.
+  const typeSelect = page.getByRole('combobox', { name: 'Type' })
+  await expect(typeSelect).toBeVisible()
+  await typeSelect.selectOption('lava')
+  await expect(page.getByLabel('Cell 1,2').getByAltText('Wall')).toHaveAttribute('src', /lava\.svg/)
+  await expect(page.getByLabel('Cell 2,3').getByLabel('Has override')).toHaveCount(0)
+
+  // Apply-to-all propagates the lava override across the whole 4-cell block.
+  await page.getByRole('button', { name: 'Apply to all 4 cells' }).click()
+  for (const label of ['Cell 1,2', 'Cell 1,3', 'Cell 2,2', 'Cell 2,3']) {
+    await expect(page.getByLabel(label).getByAltText('Wall')).toHaveAttribute('src', /lava\.svg/)
+    await expect(page.getByLabel(label).getByLabel('Has override')).toBeVisible()
+  }
+
+  // Saving runs the real codec; success disables the button with no error.
+  await page.getByRole('button', { name: 'Save' }).click()
+  await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled()
+  await expect(page.locator('.error-msg')).not.toBeVisible()
+})
+
+test('the override panel is hidden for a mixed-type selection', async ({ page }) => {
+  await login(page)
+  await openFirstMaze(page)
+
+  // A single wall cell opens the two-tier panel...
+  await page.getByLabel('Cell 1,2').click()
+  await page.getByRole('button', { name: 'Set Wall' }).click()
+  await expect(page.getByRole('combobox', { name: 'Type' })).toBeVisible()
+
+  // ...but extending the selection to include the start cell (0,0) makes the block
+  // mixed (S + W), so the panel hides.
+  await page.getByLabel('Cell 1,1').click({ modifiers: ['Shift'] })
+  await expect(page.getByRole('combobox', { name: 'Type' })).not.toBeVisible()
+})

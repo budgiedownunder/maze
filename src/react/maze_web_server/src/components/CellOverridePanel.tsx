@@ -45,6 +45,11 @@ interface Props {
   onApply: (entity: CellEntity) => void
   /** Remove the cell's override (all fields back to default). */
   onClear: () => void
+  /** When editing the top-left of a multi-cell selection, propagate the (live-applied)
+   * override to every selected cell. Omitted for a single cell. */
+  onApplyToAll?: () => void
+  /** Number of cells in the selection (> 1), shown in the Apply-to-all label. */
+  selectionCount?: number
 }
 
 // "" means "Default (inherit)" for a rig select; "" / invalid means inherit for a
@@ -64,15 +69,27 @@ function parseNonNegFloat(s: string): number | undefined {
 }
 
 /**
- * Inline inspector for a single feature cell's per-cell override. Shown to the right
- * of the grid (reflows below it on narrow screens). Edits apply live: each field
- * change writes the override (or clears it when every field is back to default), so
- * there is no Save button — the maze's normal Save persists it.
+ * Inline inspector for a feature cell's per-cell override. Shown to the right of the
+ * grid (reflows below it on narrow screens). Edits apply live: each field change
+ * writes the override (or clears it when every field is back to default), so there is
+ * no Save button — the maze's normal Save persists it.
  *
- * The parent remounts this with a `key` of the active cell, so the field state is
- * seeded from that cell's override once and then owned locally during editing.
+ * The parent remounts this with a `key` of the (top-left) cell, so the field state is
+ * seeded from that cell's override once and then owned locally during editing. When a
+ * rectangular block of same-type cells is selected, the parent passes `onApplyToAll`
+ * + `selectionCount`: the panel seeds from / live-applies to the top-left cell and
+ * shows an "Apply to all" link that propagates that override to the whole block.
  */
-export function CellOverridePanel({ cellType, row, col, override, onApply, onClear }: Props) {
+export function CellOverridePanel({
+  cellType,
+  row,
+  col,
+  override,
+  onApply,
+  onClear,
+  onApplyToAll,
+  selectionCount,
+}: Props) {
   const enemy = override?.type === 'E' ? override : undefined
   const health = override?.type === 'H' ? override : undefined
   const key = override?.type === 'K' ? override : undefined
@@ -184,6 +201,7 @@ export function CellOverridePanel({ cellType, row, col, override, onApply, onCle
     <div className="cell-override-panel" aria-label="Cell overrides">
       <h3 className="cell-override-title">
         {TYPE_LABELS[cellType]} [{row + 1},{col + 1}]
+        {onApplyToAll && ` +${(selectionCount ?? 1) - 1} more`}
       </h3>
 
       {cellType === 'E' && (
@@ -320,6 +338,11 @@ export function CellOverridePanel({ cellType, row, col, override, onApply, onCle
         </>
       )}
 
+      {onApplyToAll && (
+        <button type="button" className="cell-override-apply-all" onClick={onApplyToAll}>
+          Apply to all {selectionCount} cells
+        </button>
+      )}
       <button type="button" className="cell-override-reset" onClick={resetAll}>
         Reset to defaults
       </button>
