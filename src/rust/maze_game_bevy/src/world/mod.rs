@@ -492,6 +492,7 @@ pub(crate) fn spawn_world(
         &config,
         &mut meshes,
         &mut color_materials,
+        &mut images,
     );
     hud::clock::spawn_clock_hud(&mut commands, &window);
     hud::statusbar::spawn_statusbar(&mut commands, &window, &config);

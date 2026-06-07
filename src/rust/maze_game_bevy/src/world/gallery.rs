@@ -1,8 +1,8 @@
 //! Native-only "rig gallery" demos, selected via the `MAZE_DEMO` environment
 //! variable, for eyeballing each entity rig against its default without
 //! authoring a maze through the web stack. `gallery` shows every type in one
-//! maze; the focused values (`enemies`, `health`, `keysdoors`) show one type in
-//! isolation, which keeps verification simple as more rig types are added.
+//! maze; the focused values (`enemies`, `health`, `keysdoors`, `walls`) show one
+//! type in isolation, which keeps verification simple as more rig types are added.
 //!
 //! Enemies are neutralised — stationary (a huge `movePeriodMs`) and harmless
 //! (zero `damage`) — so the rigs can be inspected without being chased or killed;
@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 
 /// Recognised `MAZE_DEMO` values. `gallery` shows everything; the others focus
 /// on a single entity type.
-const FOCUSES: &[&str] = &["gallery", "enemies", "health", "keysdoors"];
+const FOCUSES: &[&str] = &["gallery", "enemies", "health", "keysdoors", "walls"];
 
 /// The requested gallery focus from `MAZE_DEMO`, or `None` when it is unset or
 /// names something other than a known gallery (in which case the caller falls
@@ -54,6 +54,24 @@ pub(crate) fn json(focus: &str) -> String {
             // Heart (default) + potion in alcoves off a short spine.
             let mut g = build(&["WWWWW", "S   F", "WHWHW", "WWWWW"]);
             g[2][3] = json!([{ "type": "H", "healthStyle": "potion" }]);
+            g
+        }
+        "walls" => {
+            // A straight spine flanked by every wall type, each beside default
+            // (brick) walls for contrast. North wall = the solid textures
+            // (dressed stone / wood / cobblestone); south wall = the non-occluding
+            // types (water / lava / iron fence). Plain `'W'` cells stay brick.
+            let mut g = build(&[
+                "WWWWWWWW", // north wall: dressed_stone(1) / wood(3) / cobblestone(5)
+                "S      F", // spine the player walks
+                "WWWWWWWW", // south wall: water(1) / lava(3) / iron_fence(5)
+            ]);
+            g[0][1] = json!([{ "type": "W", "wallType": "dressed_stone" }]);
+            g[0][3] = json!([{ "type": "W", "wallType": "wood" }]);
+            g[0][5] = json!([{ "type": "W", "wallType": "cobblestone" }]);
+            g[2][1] = json!([{ "type": "W", "wallType": "water" }]);
+            g[2][3] = json!([{ "type": "W", "wallType": "lava" }]);
+            g[2][5] = json!([{ "type": "W", "wallType": "iron_fence" }]);
             g
         }
         "keysdoors" => {
@@ -161,5 +179,22 @@ mod tests {
             wire_at(&game, (2, 3)).as_deref(),
             Some(r#"{"type":"E","enemyType":"ghost","damage":0,"movePeriodMs":3600000.0}"#),
         );
+    }
+
+    #[test]
+    fn walls_gallery_overrides_land_on_the_expected_cells() {
+        let game = MazeGame::from_json_with_options(&json("walls"), MazeGameOptions::default())
+            .expect("walls gallery must be a valid, loadable maze");
+        // North wall: the three non-default solid textures.
+        assert_eq!(wire_at(&game, (0, 1)).as_deref(), Some(r#"{"type":"W","wallType":"dressed_stone"}"#));
+        assert_eq!(wire_at(&game, (0, 3)).as_deref(), Some(r#"{"type":"W","wallType":"wood"}"#));
+        assert_eq!(wire_at(&game, (0, 5)).as_deref(), Some(r#"{"type":"W","wallType":"cobblestone"}"#));
+        // South wall: the three non-occluding types.
+        assert_eq!(wire_at(&game, (2, 1)).as_deref(), Some(r#"{"type":"W","wallType":"water"}"#));
+        assert_eq!(wire_at(&game, (2, 3)).as_deref(), Some(r#"{"type":"W","wallType":"lava"}"#));
+        assert_eq!(wire_at(&game, (2, 5)).as_deref(), Some(r#"{"type":"W","wallType":"iron_fence"}"#));
+        // Plain 'W' cells between them stay brick (the default — no override entry).
+        assert_eq!(wire_at(&game, (0, 2)), None, "brick is the default wall");
+        assert_eq!(wire_at(&game, (2, 2)), None, "brick is the default wall");
     }
 }

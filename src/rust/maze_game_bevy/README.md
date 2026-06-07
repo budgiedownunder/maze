@@ -86,6 +86,7 @@ without authoring a maze. The value selects which types to show:
 | `enemies`   | enemy rigs only (goblin, ghost) |
 | `health`    | health rigs only (heart, potion) |
 | `keysdoors` | key + door rigs only (key pedestal/chest/floating-key, door swing/slide/portcullis/dissolve) |
+| `walls`     | wall types only — a spine flanked by the solid textures (brick / dressed stone / wood / cobblestone) and the non-occluding types (water / lava / iron fence) |
 
 Focused values make it easy to verify one type in isolation. Enemies are
 stationary and harmless so you can inspect them freely; in the key/door galleries
