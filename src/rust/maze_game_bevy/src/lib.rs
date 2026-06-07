@@ -909,6 +909,15 @@ mod tests {
     }
 
     #[test]
+    fn only_dungeon_and_chamber_are_enclosed() {
+        assert!(SkyType::Dungeon.is_enclosed());
+        assert!(SkyType::Chamber.is_enclosed());
+        for st in [SkyType::Night, SkyType::Sunrise, SkyType::Day, SkyType::Sunset] {
+            assert!(!st.is_enclosed(), "{st:?} is open-air");
+        }
+    }
+
+    #[test]
     fn default_wall_type_is_brick() {
         assert_eq!(GameConfig::default().wall_type, WallType::Brick);
     }
@@ -1223,12 +1232,12 @@ mod tests {
 
     #[test]
     fn non_occluding_edge_cell_draws_no_outer_wall() {
-        // The water cell sits at the bottom-right corner (two grid edges) with
-        // two passable neighbours — so every one of its faces is suppressed and
-        // it contributes zero wall panels. Replacing it with a solid wall makes
-        // its two open neighbours each draw a panel toward it, so the solid
-        // variant has two MORE panels. This proves the edge faces draw no outer
-        // wall (skybox shows past the cell).
+        // The water cell sits at the bottom-right corner (two grid edges) with two
+        // passable neighbours — so it draws no *solid wall* panel (the sky still
+        // shows past its edge; its low rim frames it instead), and its two open
+        // neighbours suppress their panels toward it. Replacing it with a solid
+        // wall makes those two neighbours each draw a panel, so the solid variant
+        // has two MORE wall panels.
         let solid = r#"{"grid":[["S"," "],["F","W"]]}"#;
         let water = r#"{"grid":[["S"," "],["F",[{"type":"W","wallType":"water"}]]]}"#;
         let panels = |json: &str| {
@@ -1236,6 +1245,17 @@ mod tests {
             app.world_mut().query::<&WallCell>().iter(app.world()).count()
         };
         assert_eq!(panels(solid), panels(water) + 2);
+    }
+
+    #[test]
+    fn pool_rim_walls_the_maze_edge() {
+        // A water cell at the top-right corner: two of its edges are the grid
+        // boundary and two face open cells. All four are rimmed (the maze perimeter
+        // is framed, not left open), so the cell gets four rim skirts.
+        let json = r#"{"grid":[["S",[{"type":"W","wallType":"water"}]],["F"," "]]}"#;
+        let mut app = make_playing_app_with(json);
+        let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
+        assert_eq!(rims, 4, "an edge pool is rimmed on its grid-boundary sides too");
     }
 
     #[test]
@@ -1308,6 +1328,17 @@ mod tests {
         let json = r#"{"grid":[["S"," "," "," "],[" ",[{"type":"W","wallType":"water"}],[{"type":"W","wallType":"water"}]," "],[" "," "," ","F"]]}"#;
         let mut app = make_playing_app_with(json);
         let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
-        assert_eq!(rims, 6, "the shared pool-pool edge carries no rim");
+        assert_eq!(rims, 6, "the shared same-type pool edge carries no rim");
+    }
+
+    #[test]
+    fn adjacent_different_pools_are_divided_by_a_rim() {
+        // A water cell beside a lava cell: the border between *different* pool
+        // types is walled (a skirt from each side) so they don't read as merged —
+        // so every edge is rimmed: four skirts each, eight in all.
+        let json = r#"{"grid":[["S"," "," "," "],[" ",[{"type":"W","wallType":"water"}],[{"type":"W","wallType":"lava"}]," "],[" "," "," ","F"]]}"#;
+        let mut app = make_playing_app_with(json);
+        let rims = app.world_mut().query::<&PoolRim>().iter(app.world()).count();
+        assert_eq!(rims, 8, "a water↔lava border is walled on both sides");
     }
 }

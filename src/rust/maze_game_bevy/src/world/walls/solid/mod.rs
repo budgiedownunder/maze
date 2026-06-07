@@ -70,20 +70,22 @@ fn face_kind(
 /// `None` suppresses the panel. `neighbour` is the in-bounds neighbour cell, or
 /// `None` for the grid edge.
 ///
-/// A panel is drawn toward a **solid** wall from any cell, and toward the **grid
-/// edge** only from a *passable* (open) cell — a non-occluding cell at the edge
-/// draws no outer wall, so the skybox shows past it. Panels toward an open or
-/// non-occluding neighbour are always suppressed, so a non-occluding region
-/// knits into one continuous, see-across space.
+/// A panel is drawn toward a **solid** wall from any cell. At the **grid edge**
+/// (the maze perimeter) a panel is drawn only under an **enclosed** sky (Dungeon /
+/// Chamber), which walls the maze in — floor-upwards, above a pool's rim or in
+/// place of a fence's bars. Under an open sky every edge — whatever the cell type —
+/// shows the skybox instead (a pool's low rim / a fence's bars still frame it; see
+/// [`super::rim`] / [`super::iron_fence`]). Panels toward an open or non-occluding
+/// neighbour are suppressed, so a non-occluding region knits into one continuous,
+/// see-across space.
 fn face(
     grid: &[Vec<char>],
     cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
     config: &GameConfig,
-    current_non_occluding: bool,
     neighbour: Option<(usize, usize)>,
 ) -> Option<Option<(usize, usize)>> {
     match neighbour {
-        None => (!current_non_occluding).then_some(None),
+        None => config.sky_type.is_enclosed().then_some(None),
         Some((nr, nc)) => {
             if grid[nr][nc] == 'W' && !is_non_occluding_wall(grid, cell_entities, config, nr, nc) {
                 Some(Some((nr, nc)))
@@ -109,15 +111,14 @@ pub(crate) fn spawn_walls_for_cell(
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
 
-    // A face is drawn against a solid `'W'` neighbour (any cell) or the grid edge
-    // (passable cells only — a non-occluding cell shows sky past its edge). Faces
-    // toward open or non-occluding neighbours are suppressed so non-occluding
-    // regions read as continuous. The panel material is the cell's default kind,
-    // unless the neighbouring wall cell carries a solid wall-type override (then
-    // that texture is forced). The inner `Option` is the neighbour cell, or
-    // `None` for a grid-edge face. See [`face`].
-    let current_non_occluding = is_non_occluding_wall(grid, cell_entities, config, r, c);
-    let f = |neighbour| face(grid, cell_entities, config, current_non_occluding, neighbour);
+    // A face is drawn against a solid `'W'` neighbour (any cell), or at the grid
+    // edge only under an enclosed sky — under an open sky every maze-edge face shows
+    // the skybox instead (see [`face`]). Faces toward open or non-occluding
+    // neighbours are suppressed so non-occluding regions read as continuous. The
+    // panel material is the cell's default kind, unless the neighbouring wall cell
+    // carries a solid wall-type override (then that texture is forced). The inner
+    // `Option` is the neighbour cell, or `None` for a grid-edge face. See [`face`].
+    let f = |neighbour| face(grid, cell_entities, config, neighbour);
     let north = f((r > 0).then(|| (r - 1, c)));
     let south = f((r + 1 < rows).then(|| (r + 1, c)));
     let east = f((c + 1 < cols).then(|| (r, c + 1)));
@@ -212,21 +213,26 @@ mod tests {
     }
 
     #[test]
-    fn face_passable_cell_draws_outer_wall_at_edge() {
-        let grid = vec![vec!['S']];
-        let config = GameConfig::default();
+    fn face_edge_shows_sky_under_open_sky() {
+        // Under an open sky, every maze-edge face shows the skybox — no solid wall —
+        // regardless of the cell type.
+        let config = GameConfig::default(); // Night — open sky.
         let empty = HashMap::new();
-        assert_eq!(face(&grid, &empty, &config, false, None), Some(None));
+        assert_eq!(face(&[vec!['S']], &empty, &config, None), None);
+        assert_eq!(face(&[vec!['W']], &empty, &config, None), None);
     }
 
     #[test]
-    fn face_non_occluding_cell_shows_sky_at_edge() {
-        // The grid-edge face of a non-occluding cell is suppressed so the skybox
-        // shows past it.
-        let grid = vec![vec!['W']];
-        let config = GameConfig::default();
+    fn face_edge_is_walled_under_enclosed_sky() {
+        // Under Dungeon / Chamber the maze is walled in, so any edge cell gets the
+        // outer wall panel (floor up, above a pool rim / in place of fence bars).
         let empty = HashMap::new();
-        assert_eq!(face(&grid, &empty, &config, true, None), None);
+        let config = GameConfig {
+            sky_type: crate::state::SkyType::Dungeon,
+            ..GameConfig::default()
+        };
+        assert_eq!(face(&[vec!['S']], &empty, &config, None), Some(None));
+        assert_eq!(face(&[vec!['W']], &empty, &config, None), Some(None));
     }
 
     #[test]
@@ -234,16 +240,7 @@ mod tests {
         let grid = vec![vec!['S', 'W']];
         let config = GameConfig::default();
         let empty = HashMap::new();
-        // Drawn from a passable cell …
-        assert_eq!(
-            face(&grid, &empty, &config, false, Some((0, 1))),
-            Some(Some((0, 1)))
-        );
-        // … and from a non-occluding cell (a pool still abuts a solid wall).
-        assert_eq!(
-            face(&grid, &empty, &config, true, Some((0, 1))),
-            Some(Some((0, 1)))
-        );
+        assert_eq!(face(&grid, &empty, &config, Some((0, 1))), Some(Some((0, 1))));
     }
 
     #[test]
@@ -252,10 +249,10 @@ mod tests {
         let config = GameConfig::default();
         let empty = HashMap::new();
         // Open neighbour → no panel.
-        assert_eq!(face(&grid, &empty, &config, false, Some((0, 1))), None);
+        assert_eq!(face(&grid, &empty, &config, Some((0, 1))), None);
         // Non-occluding neighbour → no panel (the region knits together).
         let water = map_with_water((0, 2));
-        assert_eq!(face(&grid, &water, &config, false, Some((0, 2))), None);
+        assert_eq!(face(&grid, &water, &config, Some((0, 2))), None);
     }
 
     #[test]

@@ -3,17 +3,23 @@
 //! A pool surface sits in a recess [`RECESS_DEPTH`] below floor level; with the
 //! wall panels around it suppressed, the vertical band between the waterline and
 //! the floor would otherwise show the black void. A rim skirt is a short vertical
-//! wall filling that band. It is drawn **only on an edge where the pool meets a
-//! non-pool cell** — a solid wall, a door, an iron fence, or open floor — and
-//! never:
-//! - between two adjacent pools (so they stay one continuous sunken basin), nor
-//! - at the grid edge (the skybox shows past a non-occluding edge cell).
+//! wall filling that band. It is drawn on every edge **except** the edge between
+//! two pools **of the same type** (so a run of water — or a run of lava — stays one
+//! continuous sunken basin).
+//!
+//! In particular the border between a water cell and a lava cell **does** get a
+//! rim (one skirt from each side, so the two never read as a single merged pool),
+//! and the **maze perimeter** (grid edge) gets a rim too — framing an edge pool's
+//! basin while the open sky still shows above the low rim (no solid wall is drawn
+//! over a non-occluding edge cell — see [`super::solid::spawn_walls_for_cell`]).
 //!
 //! Each pool type textures its rim distinctly (a cool wet-stone tint for water, a
 //! hot charred-basalt tint for lava) over the shared rough rock texture, so the
-//! basin wall reads apart from the brick / tile edge it borders.
+//! basin wall reads apart from the edge it borders. Skirts are inset half their
+//! thickness into their own cell, so two opposing rims at a water↔lava border sit
+//! back-to-back instead of z-fighting in the same plane.
 
-use super::{is_pool, WALL_THICKNESS};
+use super::{pool_type_at, WALL_THICKNESS};
 use crate::palette::EMISSIVE_ONLY_BASE;
 use crate::state::{GameConfig, WallType};
 use crate::world::textures::rock::make_rock_texture;
@@ -111,9 +117,8 @@ fn spawn_skirt(
 }
 
 /// Spawns the rim skirts around the pool cell `(r, c)`: a short basin wall on
-/// each edge facing a non-pool neighbour (wall / door / fence / open floor), and
-/// none toward another pool or the grid edge. `wall_type` (`Water` or `Lava`)
-/// picks the rim texture tint.
+/// every edge except one facing a same-type pool or the grid edge. `wall_type`
+/// (`Water` or `Lava`) picks the rim texture tint and the same-type test.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_pool_rim(
     commands: &mut Commands,
@@ -134,21 +139,27 @@ pub(crate) fn spawn_pool_rim(
         WallType::Lava => &assets.lava_mat,
         _ => &assets.water_mat,
     };
+    // Inset each skirt half its thickness into the cell so a water↔lava border's
+    // two opposing skirts sit back-to-back rather than coplanar (no z-fight).
+    let inset = WALL_THICKNESS / 2.0;
+    let edge = HALF_CELL - inset;
 
-    // A rim is drawn on an in-bounds edge whose neighbour is NOT a pool — so the
-    // shared edge between two pools stays open (one basin) and the grid edge gets
-    // none (sky shows past it).
-    let rimmed = |nr: usize, nc: usize| !is_pool(grid, cell_entities, config, nr, nc);
-    if r > 0 && rimmed(r - 1, c) {
-        spawn_skirt(commands, assets.ns_mesh.clone(), mat.clone(), Vec3::new(x, y, z - HALF_CELL));
+    // A rim is drawn on every edge unless the neighbour is an in-bounds pool of the
+    // *same* type — so a run of the same liquid stays one basin, while a water↔lava
+    // border (different types) and the maze perimeter (grid edge) are both walled.
+    let rimmed = |nr: usize, nc: usize| {
+        pool_type_at(grid, cell_entities, config, nr, nc) != Some(wall_type)
+    };
+    if r == 0 || rimmed(r - 1, c) {
+        spawn_skirt(commands, assets.ns_mesh.clone(), mat.clone(), Vec3::new(x, y, z - edge));
     }
-    if r + 1 < rows && rimmed(r + 1, c) {
-        spawn_skirt(commands, assets.ns_mesh.clone(), mat.clone(), Vec3::new(x, y, z + HALF_CELL));
+    if r + 1 >= rows || rimmed(r + 1, c) {
+        spawn_skirt(commands, assets.ns_mesh.clone(), mat.clone(), Vec3::new(x, y, z + edge));
     }
-    if c + 1 < cols && rimmed(r, c + 1) {
-        spawn_skirt(commands, assets.ew_mesh.clone(), mat.clone(), Vec3::new(x + HALF_CELL, y, z));
+    if c + 1 >= cols || rimmed(r, c + 1) {
+        spawn_skirt(commands, assets.ew_mesh.clone(), mat.clone(), Vec3::new(x + edge, y, z));
     }
-    if c > 0 && rimmed(r, c - 1) {
-        spawn_skirt(commands, assets.ew_mesh.clone(), mat.clone(), Vec3::new(x - HALF_CELL, y, z));
+    if c == 0 || rimmed(r, c - 1) {
+        spawn_skirt(commands, assets.ew_mesh.clone(), mat.clone(), Vec3::new(x - edge, y, z));
     }
 }

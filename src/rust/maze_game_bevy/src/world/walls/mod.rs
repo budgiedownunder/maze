@@ -252,26 +252,25 @@ pub(crate) fn can_be_looked_across(
         )
 }
 
-/// `true` when cell `(r, c)` is a water or lava **pool** — a non-occluding `'W'`
-/// cell whose surface is recessed below floor level. The pool rim
-/// ([`rim::spawn_pool_rim`]) uses this to leave the shared edge between two
-/// adjacent pools open (one continuous basin) while skirting every edge that
-/// meets a non-pool cell.
-pub(crate) fn is_pool(
+/// The pool type of cell `(r, c)` — `Some(Water)` / `Some(Lava)` for a
+/// non-occluding `'W'` cell whose surface is recessed below floor level, else
+/// `None` (a solid wall, iron fence, or passable cell). The pool rim
+/// ([`rim::spawn_pool_rim`]) uses this to leave the shared edge between two pools
+/// **of the same type** open (one continuous basin) while skirting every other
+/// edge — including the border between *different* pool types, which must not read
+/// as merged.
+pub(crate) fn pool_type_at(
     grid: &[Vec<char>],
     cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
     config: &GameConfig,
     r: usize,
     c: usize,
-) -> bool {
-    grid[r][c] == 'W'
-        && matches!(
-            resolve_wall_type(
-                cell_entities.get(&(r, c)).and_then(|v| v.first()),
-                config.wall_type,
-            ),
-            WallType::Water | WallType::Lava
-        )
+) -> Option<WallType> {
+    if grid[r][c] != 'W' {
+        return None;
+    }
+    let wt = resolve_wall_type(cell_entities.get(&(r, c)).and_then(|v| v.first()), config.wall_type);
+    matches!(wt, WallType::Water | WallType::Lava).then_some(wt)
 }
 
 /// Builds a tileable greyscale ripple texture from a set of integer-frequency

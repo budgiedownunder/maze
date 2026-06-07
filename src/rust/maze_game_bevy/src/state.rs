@@ -225,6 +225,14 @@ impl SkyType {
             _ => Self::Night,
         }
     }
+
+    /// Whether this is an enclosed (roofed-over) world — `Dungeon` or `Chamber`.
+    /// The open-air modes show the skybox; the enclosed modes cap every cell with a
+    /// ceiling and wall the maze in, so a non-occluding cell at the grid edge is
+    /// walled (floor upwards) rather than opened to the sky.
+    pub fn is_enclosed(self) -> bool {
+        matches!(self, Self::Dungeon | Self::Chamber)
+    }
 }
 
 /// Wall types. The four solid-wall textures (`Brick` / `DressedStone` / `Wood` /

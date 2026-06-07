@@ -2,8 +2,9 @@
 //! full wall height, placed on the cell's *open edges* (like a door's leaves)
 //! over a *normal floor* (unlike water/lava, the fence stands on a regular floor
 //! tile, spawned by the caller). A grille is drawn on an edge facing a *passable*
-//! cell or a water/lava **pool** — never toward a solid wall, another iron fence
-//! (the run stays continuous), or the maze perimeter. The bars are sparse enough
+//! cell, a water/lava **pool**, or the **maze perimeter** (sky shows through the
+//! bars) — never toward a solid wall or another iron fence (the run stays
+//! continuous). The bars are sparse enough
 //! to see through, and with the wall panels around the cell suppressed (see
 //! [`super::solid::spawn_walls_for_cell`]) the player sees across the cell to
 //! whatever lies beyond — a visual barrier, not a sight barrier.
@@ -69,9 +70,38 @@ fn bar_offset(i: usize) -> f32 {
     (i as f32 + 0.5) * step - HALF_CELL
 }
 
+/// Which of the cell's four edges carry a bar grille, as `[north, south, east,
+/// west]`. An edge is barred when its in-bounds neighbour can be looked across (an
+/// open cell or a water/lava pool), or when it's the maze perimeter under an open
+/// sky (sky beyond, seen through the bars). A solid wall and another iron fence
+/// (looked through, not across) yield no grille; and under an **enclosed** sky the
+/// perimeter is walled (a solid panel) instead of barred, so the edge isn't a
+/// grille there either.
+fn edges_barred(
+    grid: &[Vec<char>],
+    cell_entities: &HashMap<(usize, usize), Vec<CellEntity>>,
+    config: &GameConfig,
+    r: usize,
+    c: usize,
+) -> [bool; 4] {
+    let rows = grid.len();
+    let cols = grid[r].len();
+    let across = |nr: usize, nc: usize| can_be_looked_across(grid, cell_entities, config, nr, nc);
+    // The maze perimeter shows bars (sky through them) only under an open sky;
+    // under Dungeon / Chamber it is walled instead (the solid panel from `face`).
+    let perimeter = !config.sky_type.is_enclosed();
+    [
+        if r == 0 { perimeter } else { across(r - 1, c) },
+        if r + 1 >= rows { perimeter } else { across(r + 1, c) },
+        if c + 1 >= cols { perimeter } else { across(r, c + 1) },
+        if c == 0 { perimeter } else { across(r, c - 1) },
+    ]
+}
+
 /// Spawns the iron-bar grilles for cell `(r, c)`: one row of bars on each edge
-/// facing a passable cell or a water/lava pool. The caller spawns the floor tile
-/// separately (the fence stands on a normal floor).
+/// facing a passable cell, a water/lava pool, or the maze perimeter (the player
+/// sees sky through the bars there). The caller spawns the floor tile separately
+/// (the fence stands on a normal floor).
 pub(crate) fn spawn_iron_fence(
     commands: &mut Commands,
     assets: &IronFenceAssets,
@@ -81,8 +111,6 @@ pub(crate) fn spawn_iron_fence(
     r: usize,
     c: usize,
 ) {
-    let rows = grid.len();
-    let cols = grid[r].len();
     let x = c as f32 * CELL_SIZE + 1.0;
     let z = r as f32 * CELL_SIZE + 1.0;
     let root = commands
@@ -97,10 +125,7 @@ pub(crate) fn spawn_iron_fence(
         return;
     };
 
-    // An edge is barred when its (in-bounds) neighbour can be looked across — an
-    // open cell or a water/lava pool. A solid wall, another iron fence (looked
-    // through, not across), and the maze perimeter all yield no grille.
-    let barred = |nr: usize, nc: usize| can_be_looked_across(grid, cell_entities, config, nr, nc);
+    let [bar_n, bar_s, bar_e, bar_w] = edges_barred(grid, cell_entities, config, r, c);
 
     // N/S grilles run their bars along local X at z ±HALF_CELL; E/W grilles run
     // along local Z at x ±HALF_CELL. Positions are local to the cell-centre root.
@@ -112,25 +137,71 @@ pub(crate) fn spawn_iron_fence(
                 Transform::from_xyz(lx, 0.0, lz),
             ));
         };
-        if r > 0 && barred(r - 1, c) {
+        if bar_n {
             for i in 0..BARS_PER_EDGE {
                 spawn_bar(bar_offset(i), -HALF_CELL);
             }
         }
-        if r + 1 < rows && barred(r + 1, c) {
+        if bar_s {
             for i in 0..BARS_PER_EDGE {
                 spawn_bar(bar_offset(i), HALF_CELL);
             }
         }
-        if c + 1 < cols && barred(r, c + 1) {
+        if bar_e {
             for i in 0..BARS_PER_EDGE {
                 spawn_bar(HALF_CELL, bar_offset(i));
             }
         }
-        if c > 0 && barred(r, c - 1) {
+        if bar_w {
             for i in 0..BARS_PER_EDGE {
                 spawn_bar(-HALF_CELL, bar_offset(i));
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn edges_barred_includes_the_maze_perimeter() {
+        // Fence at the top-left corner: N and W are the grid boundary (barred — sky
+        // through the bars), S and E face open cells (barred). All four barred.
+        let grid = vec![vec!['W', ' '], vec![' ', 'F']];
+        let config = GameConfig::default();
+        let empty = HashMap::new();
+        assert_eq!(edges_barred(&grid, &empty, &config, 0, 0), [true; 4]);
+    }
+
+    #[test]
+    fn edges_barred_skips_solid_walls() {
+        // A fence walled in on every side by solid 'W' cells: no grille anywhere
+        // (the solid panels are the barrier; nothing to see across or through).
+        let grid = vec![
+            vec!['W', 'W', 'W'],
+            vec!['W', 'W', 'W'],
+            vec!['W', 'W', 'W'],
+        ];
+        let config = GameConfig::default();
+        let empty = HashMap::new();
+        assert_eq!(edges_barred(&grid, &empty, &config, 1, 1), [false; 4]);
+    }
+
+    #[test]
+    fn edges_barred_walls_the_perimeter_under_enclosed_sky() {
+        // Corner fence under Chamber: the N & W grid-boundary edges are walled (not
+        // barred — a solid panel takes their place), while the S & E open edges
+        // still bar.
+        let grid = vec![vec!['W', ' '], vec![' ', 'F']];
+        let empty = HashMap::new();
+        let config = GameConfig {
+            sky_type: crate::state::SkyType::Chamber,
+            ..GameConfig::default()
+        };
+        assert_eq!(
+            edges_barred(&grid, &empty, &config, 0, 0),
+            [false, true, true, false]
+        );
+    }
 }
