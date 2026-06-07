@@ -29,7 +29,26 @@ describe('Play3dCustomLaunchModal', () => {
     render(<Play3dCustomLaunchModal mazeName="My Maze" onCancel={() => {}} onPlay={() => {}} />)
     const wall = screen.getByLabelText(/wall texture/i) as HTMLSelectElement
     const labels = Array.from(wall.options).map(o => o.textContent)
-    expect(labels).toEqual(['Brick', 'Dressed Stone', 'Wood', 'Cobblestone'])
+    const values = Array.from(wall.options).map(o => o.value)
+    // The four solid textures plus the three non-occluding types.
+    expect(labels).toEqual([
+      'Brick',
+      'Dressed Stone',
+      'Wood',
+      'Cobblestone',
+      'Water',
+      'Lava',
+      'Iron Fence',
+    ])
+    expect(values).toEqual([
+      'brick',
+      'dressed_stone',
+      'wood',
+      'cobblestone',
+      'water',
+      'lava',
+      'iron_fence',
+    ])
   })
 
   it('disables wall texture and wall tint when material variation is on', async () => {

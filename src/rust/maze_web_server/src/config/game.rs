@@ -183,11 +183,12 @@ impl<'de> Deserialize<'de> for SkyTypeConfig {
     }
 }
 
-/// Wall texture kind for the per-cell tinted path. Wire form (TOML /
-/// JSON) is `snake_case` (`"brick" | "dressed_stone" | "wood" |
-/// "cobblestone"`). Unknown values deserialise as `Brick` rather than
-/// failing the entire `AppConfig` load — same forgiving policy as
-/// [`SkyTypeConfig`].
+/// Per-maze wall type. Wire form (TOML / JSON) is `snake_case`: the four solid
+/// textures (`"brick" | "dressed_stone" | "wood" | "cobblestone"`) plus the three
+/// non-occluding types (`"water" | "lava" | "iron_fence"`) — a whole maze can be
+/// any of them (every `'W'` cell becomes that type unless a per-cell override
+/// says otherwise). Unknown values deserialise as `Brick` rather than failing the
+/// entire `AppConfig` load — same forgiving policy as [`SkyTypeConfig`].
 #[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum WallTypeConfig {
@@ -196,6 +197,9 @@ pub enum WallTypeConfig {
     DressedStone,
     Wood,
     Cobblestone,
+    Water,
+    Lava,
+    IronFence,
 }
 
 impl WallTypeConfig {
@@ -206,6 +210,9 @@ impl WallTypeConfig {
             Self::DressedStone => "dressed_stone",
             Self::Wood => "wood",
             Self::Cobblestone => "cobblestone",
+            Self::Water => "water",
+            Self::Lava => "lava",
+            Self::IronFence => "iron_fence",
         }
     }
 }
@@ -217,6 +224,9 @@ impl<'de> Deserialize<'de> for WallTypeConfig {
             "dressed_stone" => Self::DressedStone,
             "wood" => Self::Wood,
             "cobblestone" => Self::Cobblestone,
+            "water" => Self::Water,
+            "lava" => Self::Lava,
+            "iron_fence" => Self::IronFence,
             _ => Self::Brick,
         })
     }
@@ -1011,6 +1021,46 @@ mod tests {
         assert_eq!(WallTypeConfig::DressedStone.as_wire_str(), "dressed_stone");
         assert_eq!(WallTypeConfig::Wood.as_wire_str(), "wood");
         assert_eq!(WallTypeConfig::Cobblestone.as_wire_str(), "cobblestone");
+        // The non-occluding types are also valid whole-maze wall types.
+        assert_eq!(WallTypeConfig::Water.as_wire_str(), "water");
+        assert_eq!(WallTypeConfig::Lava.as_wire_str(), "lava");
+        assert_eq!(WallTypeConfig::IronFence.as_wire_str(), "iron_fence");
+    }
+
+    #[test]
+    fn non_occluding_wall_types_round_trip_from_toml() {
+        let toml = r#"
+            [play3d]
+            title = "Maze 3D"
+
+            [play3d.easy]
+            rows = 6
+            cols = 6
+            timer_seconds = 60
+            seed = 42
+            min_solution_length = 12
+            wall_type = "water"
+
+            [play3d.tricky]
+            rows = 8
+            cols = 8
+            timer_seconds = 50
+            seed = 99
+            min_solution_length = 16
+            wall_type = "lava"
+
+            [play3d.hard]
+            rows = 10
+            cols = 10
+            timer_seconds = 40
+            seed = 7
+            min_solution_length = 20
+            wall_type = "iron_fence"
+        "#;
+        let cfg: GameConfig = toml::from_str(toml).expect("valid game config");
+        assert_eq!(cfg.play3d.easy.wall_type, WallTypeConfig::Water);
+        assert_eq!(cfg.play3d.tricky.wall_type, WallTypeConfig::Lava);
+        assert_eq!(cfg.play3d.hard.wall_type, WallTypeConfig::IronFence);
     }
 
     #[test]

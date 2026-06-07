@@ -23,7 +23,17 @@ import type {
 export const SKY_TYPES = ['night', 'sunrise', 'day', 'sunset', 'dungeon', 'chamber'] as const
 export type SkyType = (typeof SKY_TYPES)[number]
 
-export const WALL_TYPES = ['brick', 'dressed_stone', 'wood', 'cobblestone'] as const
+// The four solid textures plus the three non-occluding types (water / lava /
+// iron fence) — a whole maze can be any of them.
+export const WALL_TYPES = [
+  'brick',
+  'dressed_stone',
+  'wood',
+  'cobblestone',
+  'water',
+  'lava',
+  'iron_fence',
+] as const
 export type WallType = (typeof WALL_TYPES)[number]
 
 export interface Play3dCustomLaunchSettings {

@@ -119,10 +119,18 @@ minimap_radius = 5
 # and "chamber" caps it with a ceiling in the wall material, instead of an
 # open sky.
 sky_type = "night"
-# Wall texture kind for the per-cell tinted path (used when the
-# wall_material_variation landmark below is false). One of "brick" |
-# "dressed_stone" | "wood" | "cobblestone". Default "brick".
+# Per-maze wall type. The solid textures — "brick" | "dressed_stone" | "wood" |
+# "cobblestone" — apply on the per-cell tinted path (used when the
+# wall_material_variation landmark below is false). The non-occluding types —
+# "water" | "lava" | "iron_fence" — turn every wall cell into a floor-level pool
+# or see-through bars (not subject to material variation). Default "brick".
 wall_type = "brick"
+#wall_type = "dressed_stone"
+#wall_type = "wood"
+#wall_type = "cobblestone"
+#wall_type = "water"
+#wall_type = "lava"
+#wall_type = "iron_fence"
 # Door open-animation style — one of "swing" | "slide" | "portcullis" |
 # "dissolve". Default "swing". Applies to the doors auto-placed below (and to
 # doors in authored mazes).
